@@ -371,104 +371,212 @@ export function MatchLoggerUI({ match, onExit }: MatchLoggerUIProps) {
           </section>
         </div>
 
-        {/* Right Side - Timeline & Queue Overlay */}
-        <div className="hidden md:flex flex-col w-2/5 lg:w-1/3 bg-black/40 border-l border-white/5 overflow-hidden">
-          {/* Animated Queue Overlay */}
-          <AnimatePresence>
-            {showQueue && (
-                <motion.div 
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    className="absolute inset-0 bg-black/95 z-20 flex flex-col p-8"
-                >
-                    <div className="flex items-center justify-between mb-8">
-                        <div>
-                            <h3 className="font-display text-2xl uppercase italic">Offline Queue</h3>
-                            <p className="text-[10px] font-bold text-white/40 uppercase tracking-widest">Awaiting cloud synchronization</p>
-                        </div>
-                        <button onClick={() => setShowQueue(false)} className="p-2 hover:bg-white/10 rounded-full">
-                            <X size={24} />
-                        </button>
-                    </div>
-
-                    <div className="flex-1 overflow-y-auto space-y-3">
-                        {offlineQueue.length === 0 ? (
-                            <div className="h-full flex flex-col items-center justify-center text-white/10">
-                                <CheckCircleIcon size={64} />
-                                <p className="mt-4 font-black uppercase text-xs tracking-widest">Queue is empty</p>
-                            </div>
-                        ) : (
-                            offlineQueue.map((ev, idx) => (
-                                <div key={ev.id} className="bg-white/5 border border-white/10 p-4 rounded-2xl flex items-center justify-between group">
-                                    <div className="flex items-center gap-4">
-                                        <div className="w-8 h-8 rounded-lg bg-orange-500/20 flex items-center justify-center text-orange-500">
-                                            <Save size={14} />
-                                        </div>
-                                        <div>
-                                            <span className="text-[10px] font-black text-orange-500 tracking-widest">{ev.minute}'</span>
-                                            <p className="text-sm font-bold">{ev.type}: {ev.detail}</p>
-                                        </div>
-                                    </div>
-                                    <button 
-                                        onClick={() => setOfflineQueue(prev => prev.filter(e => e.id !== ev.id))}
-                                        className="p-2 opacity-0 group-hover:opacity-100 hover:text-red-500 transition-all"
-                                    >
-                                        <Trash2 size={16} />
-                                    </button>
-                                </div>
-                            ))
-                        )}
-                    </div>
-
-                    <div className="mt-8 pt-8 border-t border-white/10">
-                        <button 
-                            disabled={offlineQueue.length === 0}
-                            onClick={handleSync}
-                            className="w-full bg-orange-500 text-black font-black uppercase tracking-widest py-5 rounded-2xl hover:scale-[1.02] transition-transform disabled:opacity-20"
-                        >
-                            Force Sync {offlineQueue.length > 0 ? `(${offlineQueue.length})` : ''}
-                        </button>
-                    </div>
-                </motion.div>
-            )}
-          </AnimatePresence>
-
-          <div className="p-6 border-b border-white/5 bg-white/5">
-            <h3 className="text-[10px] font-black uppercase tracking-widest text-white/40 mb-2">Live Logic Feed</h3>
-            <p className="text-xs text-white/40 leading-relaxed font-medium">Automatic summary generation based on chronological event weight and importance.</p>
-          </div>
-          <div className="flex-1 overflow-y-auto p-6 space-y-4">
-             <AnimatePresence initial={false}>
-                {currentMatch.events.map((event, idx) => (
-                  <motion.div
-                    key={event.id}
-                    initial={{ opacity: 0, x: 20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    className="relative pl-6 border-l border-white/10 pb-6 last:pb-0"
+          {/* Right Side - Timeline & Queue Overlay */}
+          <div className="hidden md:flex flex-col w-2/5 lg:w-1/3 bg-black/40 border-l border-white/5 overflow-hidden">
+            {/* Animated Queue Overlay */}
+            <AnimatePresence>
+              {showQueue && (
+                  <motion.div 
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      className="absolute inset-0 bg-black/95 z-20 flex flex-col p-8 font-black"
                   >
-                    <div className="absolute left-[-5px] top-1 w-2.5 h-2.5 bg-primary rounded-full ring-4 ring-[#050505]"></div>
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-[10px] font-black text-primary tracking-widest">{event.minute}'</span>
-                      <span className="text-[8px] font-black uppercase tracking-widest text-white/10">MATCH LOG {event.id.toUpperCase()}</span>
-                    </div>
-                    <p className="text-sm font-bold text-white/80 uppercase tracking-tight">
-                      {event.type}: <span className="text-white">{event.detail}</span>
-                    </p>
-                    {event.isEyePoint && (
-                      <div className="mt-2 flex items-center gap-1.5 text-[10px] font-bold text-primary italic">
-                        <Star size={10} fill="currentColor" />
-                        Exceptional metric assigned
+                      <div className="flex items-center justify-between mb-8">
+                          <div>
+                              <h3 className="font-display text-2xl uppercase italic">Conflict Resolution</h3>
+                              <p className="text-[10px] font-bold text-white/40 uppercase tracking-widest leading-none mt-1">Manual synchronization override</p>
+                          </div>
+                          <button onClick={() => setShowQueue(false)} className="p-2 hover:bg-white/10 rounded-full transition-colors">
+                              <X size={24} />
+                          </button>
                       </div>
-                    )}
+
+                      <div className="flex-1 overflow-y-auto space-y-3 pr-2 scrollbar-hide">
+                          {offlineQueue.length === 0 ? (
+                              <div className="h-full flex flex-col items-center justify-center text-white/10">
+                                  <CheckCircleIcon size={64} />
+                                  <p className="mt-4 font-black uppercase text-xs tracking-widest italic">Protocol synchronized</p>
+                              </div>
+                          ) : (
+                              offlineQueue.map((ev, idx) => (
+                                  <div key={ev.id} className={`p-4 rounded-2xl flex items-center justify-between group transition-all border ${
+                                    ev.status === 'conflict' ? 'bg-red-500/10 border-red-500/30' : 'bg-white/5 border-white/10'
+                                  }`}>
+                                      <div className="flex items-center gap-4">
+                                          <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${ev.status === 'conflict' ? 'bg-red-500 text-white' : 'bg-orange-500 text-black'}`}>
+                                              {ev.status === 'conflict' ? <AlertCircle size={14} /> : <Save size={14} />}
+                                          </div>
+                                          <div>
+                                              <div className="flex items-center gap-2">
+                                                <span className={`text-[10px] font-black tracking-widest ${ev.status === 'conflict' ? 'text-red-500' : 'text-orange-500'}`}>{ev.minute}'</span>
+                                                {ev.status === 'conflict' && <span className="text-[8px] bg-red-500 text-white px-1 rounded tracking-tighter">CONFLICT</span>}
+                                              </div>
+                                              <p className="text-sm font-bold uppercase tracking-tight">{ev.type}: {ev.detail}</p>
+                                          </div>
+                                      </div>
+                                      <div className="flex items-center gap-2">
+                                        <button 
+                                          onClick={() => {
+                                            const updated = [...offlineQueue];
+                                            updated[idx].status = updated[idx].status === 'conflict' ? 'pending' : 'conflict';
+                                            setOfflineQueue(updated);
+                                          }}
+                                          className="p-2 opacity-0 group-hover:opacity-100 hover:bg-white/10 rounded-lg transition-all"
+                                        >
+                                            <RefreshCw size={14} />
+                                        </button>
+                                        <button 
+                                            onClick={() => setOfflineQueue(prev => prev.filter(e => e.id !== ev.id))}
+                                            className="p-2 opacity-0 group-hover:opacity-100 hover:text-red-500 rounded-lg transition-all"
+                                        >
+                                            <Trash2 size={16} />
+                                        </button>
+                                      </div>
+                                  </div>
+                              ))
+                          )}
+                      </div>
+
+                      <div className="mt-8 pt-8 border-t border-white/10 flex gap-4">
+                          <button 
+                             onClick={() => setOfflineQueue([])}
+                             className="flex-1 border border-white/10 text-white/40 font-black uppercase tracking-widest py-5 rounded-2xl hover:text-white transition-colors"
+                          >
+                            Purge All
+                          </button>
+                          <button 
+                              disabled={offlineQueue.length === 0}
+                              onClick={handleSync}
+                              className="flex-[2] bg-orange-500 text-black font-black uppercase tracking-widest py-5 rounded-2xl hover:scale-[1.02] transition-transform disabled:opacity-20 shadow-xl shadow-orange-500/20"
+                          >
+                              Sync Verified protocol ({offlineQueue.length})
+                          </button>
+                      </div>
                   </motion.div>
-                ))}
-             </AnimatePresence>
+              )}
+            </AnimatePresence>
+
+            {/* Sidebar Tabs */}
+            <div className="flex border-b border-white/5 bg-black/40">
+              {['Protocol', 'Stats', 'Summary'].map((tab) => (
+                <button
+                  key={tab}
+                  onClick={() => setActiveTab(tab as any)}
+                  className={`flex-1 py-4 text-[10px] font-black uppercase tracking-widest transition-all relative ${
+                    activeTab === tab ? 'text-primary' : 'text-white/30 hover:text-white'
+                  }`}
+                >
+                  {tab}
+                  {activeTab === tab && (
+                    <motion.div layoutId="tab-active" className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
+                  )}
+                </button>
+              ))}
+            </div>
+
+            <div className="flex-1 overflow-y-auto custom-scrollbar">
+              <AnimatePresence mode="wait">
+                {activeTab === 'Protocol' && (
+                  <motion.div 
+                    key="protocol"
+                    initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                    className="p-6 space-y-4"
+                  >
+                    {currentMatch.events.map((event) => (
+                      <motion.div
+                        key={event.id}
+                        initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}
+                        className="relative pl-6 border-l border-white/10 pb-6 last:pb-0"
+                      >
+                        <div className="absolute left-[-5px] top-1 w-2.5 h-2.5 bg-primary rounded-full ring-4 ring-[#050505]"></div>
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-[10px] font-black text-primary tracking-widest">{event.minute}'</span>
+                          <span className="text-[8px] font-black uppercase tracking-widest text-white/10">{event.id.toUpperCase()}</span>
+                        </div>
+                        <p className="text-sm font-bold text-white/80 uppercase tracking-tight">
+                          {event.type}: <span className="text-white">{event.detail}</span>
+                        </p>
+                        {event.isEyePoint && (
+                          <div className="mt-2 flex items-center gap-1.5 text-[10px] font-bold text-primary italic">
+                            <Star size={10} fill="currentColor" />
+                            EP Award Applied
+                          </div>
+                        )}
+                      </motion.div>
+                    ))}
+                  </motion.div>
+                )}
+
+                {activeTab === 'Stats' && (
+                  <motion.div 
+                    key="stats"
+                    initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                    className="p-6 space-y-8"
+                  >
+                    <div className="space-y-6">
+                      <StatRow label="Possession" values={currentMatch.stats.possession} unit="%" color="bg-primary" />
+                      <StatRow label="Shots (Total)" values={currentMatch.stats.shots} color="bg-white" />
+                      <StatRow label="Corners" values={currentMatch.stats.corners} color="bg-blue-500" />
+                      <StatRow label="Fouls" values={currentMatch.stats.fouls} color="bg-yellow-500" />
+                      <StatRow label="Cards (Y/R)" values={[currentMatch.stats.yellowCards[0] + currentMatch.stats.redCards[0], currentMatch.stats.yellowCards[1] + currentMatch.stats.redCards[1]]} color="bg-red-500" />
+                      {currentMatch.stats.saves && (
+                        <StatRow label="Saves" values={currentMatch.stats.saves} color="bg-green-500" />
+                      )}
+                    </div>
+
+                    <div className="p-4 bg-white/5 border border-white/10 rounded-2xl">
+                      <h4 className="text-[8px] font-black uppercase tracking-widest text-white/20 mb-4">Live Performance Index</h4>
+                      <div className="flex items-center justify-between text-[10px] font-black uppercase tracking-widest">
+                        <span>{homeTeam?.shortName} AVG</span>
+                        <span className="text-primary italic">7.4</span>
+                      </div>
+                      <div className="w-full h-1.5 bg-white/5 rounded-full mt-2 overflow-hidden">
+                        <div className="h-full bg-primary" style={{ width: '74%' }} />
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+
+                {activeTab === 'Summary' && (
+                  <motion.div 
+                    key="summary"
+                    initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                    className="p-8"
+                  >
+                    <div className="prose prose-invert max-w-none">
+                      <h3 className="font-display text-2xl uppercase italic mb-6">Match Intelligence</h3>
+                      <div className="space-y-4 text-sm font-medium leading-relaxed text-white/60 uppercase tracking-tight">
+                        <p>The match at {match.venue} is currently in the {minute}' minute.</p>
+                        <p>Current Scoreline: {homeTeam?.name} {currentMatch.homeScore} - {currentMatch.awayScore} {awayTeam?.name}.</p>
+                        
+                        {currentMatch.events.filter(e => e.type === 'Goal').length > 0 && (
+                          <div className="bg-primary/5 p-4 rounded-xl border border-primary/20">
+                            <p className="text-primary font-bold">Scoring Summary:</p>
+                            <ul className="list-none pl-0 mt-2 space-y-1">
+                              {currentMatch.events.filter(e => e.type === 'Goal').reverse().map(e => (
+                                <li key={e.id} className="text-[10px] font-black">[{e.minute}'] - {e.detail} achieved protocol focus.</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+
+                        <p>Statistical superiority remains with {currentMatch.stats.possession[0] > currentMatch.stats.possession[1] ? homeTeam?.shortName : awayTeam?.shortName} holding {Math.max(...currentMatch.stats.possession)}% tactical control.</p>
+                        
+                        {currentMatch.events.filter(e => e.isEyePoint).length > 0 && (
+                          <p className="text-primary/60 italic">Note: High-performance Eye Points have been awarded to {currentMatch.events.filter(e => e.isEyePoint).length} participants for leadership excellence.</p>
+                        )}
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
           </div>
         </div>
-      </div>
 
-      {/* Footer Controls */}
+        {/* Footer Controls */}
+
       <footer className="bg-black border-t border-white/5 p-4 md:p-6 flex flex-col md:flex-row items-center gap-6 justify-between shrink-0">
          <div className="flex items-center gap-6 w-full md:w-auto">
             <div className="flex items-center gap-3 bg-white/5 px-4 py-2 rounded-2xl border border-white/10 flex-1 md:flex-initial">
