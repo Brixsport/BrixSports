@@ -1,9 +1,10 @@
 'use client';
 
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Search, Trophy, Users, Star, ArrowRight, Bell } from 'lucide-react';
+import { X, Search, Trophy, Users, Star, ArrowRight, Bell, Filter, Heart } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { Player, Team, TEAMS, PLAYERS } from '@/lib/mock-data';
+import { useFavorites } from '@/hooks/useFavorites';
 
 interface SearchOverlayProps {
   onClose: () => void;
@@ -13,35 +14,20 @@ interface SearchOverlayProps {
 
 export function SearchOverlay({ onClose, onSelectTeam, onSelectPlayer }: SearchOverlayProps) {
   const [query, setQuery] = useState('');
-  const [favorites, setFavorites] = useState<{teams: string[], players: string[]}>({
-    teams: [],
-    players: []
+  const [selectedSport, setSelectedSport] = useState<string | null>(null);
+  const { toggleTeam, togglePlayer, isFavoriteTeam, isFavoritePlayer } = useFavorites();
+
+  const filteredTeams = TEAMS.filter(t => {
+    const matchesQuery = t.name.toLowerCase().includes(query.toLowerCase()) || 
+                        t.university.toLowerCase().includes(query.toLowerCase());
+    return matchesQuery;
   });
 
-  useEffect(() => {
-    const saved = localStorage.getItem('brixsport_favorites');
-    if (saved) setFavorites(JSON.parse(saved));
-  }, []);
-
-  const toggleFavorite = (type: 'teams' | 'players', id: string) => {
-    const newFavs = { ...favorites };
-    if (newFavs[type].includes(id)) {
-      newFavs[type] = newFavs[type].filter(fid => fid !== id);
-    } else {
-      newFavs[type].push(id);
-    }
-    setFavorites(newFavs);
-    localStorage.setItem('brixsport_favorites', JSON.stringify(newFavs));
-  };
-
-  const filteredTeams = TEAMS.filter(t => 
-    t.name.toLowerCase().includes(query.toLowerCase()) || 
-    t.university.toLowerCase().includes(query.toLowerCase())
-  );
-
-  const filteredPlayers = PLAYERS.filter(p => 
-    p.name.toLowerCase().includes(query.toLowerCase())
-  );
+  const filteredPlayers = PLAYERS.filter(p => {
+    const matchesQuery = p.name.toLowerCase().includes(query.toLowerCase());
+    const matchesSport = !selectedSport || true; // Players in mock data aren't sport-filtered yet, placeholder
+    return matchesQuery && matchesSport;
+  });
 
   return (
     <motion.div
