@@ -1,18 +1,25 @@
 'use client';
 
 import { useState } from 'react';
-import Image from "next/image";
 import { motion, AnimatePresence } from 'framer-motion';
-import { Trophy, Activity, Calendar, User, Search, Bell, Menu, X, TrendingUp, Zap } from 'lucide-react';
-import { MATCHES } from '@/lib/mock-data';
+import { Trophy, Activity, Calendar, User, Search, Bell, Menu, X, TrendingUp, Zap, Star } from 'lucide-react';
+import { MATCHES, Player, Team, Match } from '@/lib/mock-data';
 import { StandingsGrid } from '@/components/StandingsGrid';
-import { TopPlayers } from '@/components/TopPlayers';
+import { PlayerRow } from '@/components/TopPlayers';
 import { MatchCard, MatchRow } from '@/components/MatchComponents';
 import { FanWall } from '@/components/FanWall';
+import { MatchOverlay } from '@/components/MatchOverlay';
+import { SearchOverlay } from '@/components/SearchOverlay';
+import { PlayerProfileOverlay } from '@/components/PlayerProfileOverlay';
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState('LIVE');
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  
+  // Overlay States
+  const [selectedMatch, setSelectedMatch] = useState<Match | null>(null);
+  const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
 
   const filteredMatches = MATCHES.filter(m => activeTab === 'ALL' || m.status === activeTab);
 
@@ -27,14 +34,16 @@ export default function Home() {
               <span className="font-display text-2xl tracking-tight hidden sm:block">BRIXSPORT</span>
             </div>
             <div className="hidden md:flex items-center gap-6 text-sm font-medium text-white/60">
-              <a href="#" className="text-white">Scores</a>
-              <a href="#" className="hover:text-white transition-colors">News</a>
-              <a href="#" className="hover:text-white transition-colors">Players</a>
               <a href="#" className="hover:text-white transition-colors">Competitions</a>
+              <a href="#" className="hover:text-white transition-colors">Schools</a>
+              <a href="#" className="hover:text-white transition-colors">Draft</a>
             </div>
           </div>
           <div className="flex items-center gap-4">
-            <button className="p-2 hover:bg-white/5 rounded-full transition-colors">
+            <button 
+              onClick={() => setIsSearchOpen(true)}
+              className="p-2 hover:bg-white/5 rounded-full transition-colors"
+            >
               <Search size={20} className="text-white/60" />
             </button>
             <button className="p-2 hover:bg-white/5 rounded-full transition-colors relative">
@@ -43,7 +52,7 @@ export default function Home() {
             </button>
             <button className="hidden sm:flex items-center gap-2 bg-white/5 hover:bg-white/10 px-4 py-2 rounded-full border border-white/10 transition-all">
               <User size={18} />
-              <span className="text-sm">Sign In</span>
+              <span className="text-sm">Profile</span>
             </button>
             <button 
               onClick={() => setIsMenuOpen(!isMenuOpen)}
@@ -72,8 +81,8 @@ export default function Home() {
                       <p className="text-[10px] text-white/40">24.5k watching now</p>
                     </div>
                     <div className="group cursor-pointer">
-                      <p className="text-sm font-bold group-hover:text-primary transition-colors">Tunde Adeyemi: The Eye Point King?</p>
-                      <p className="text-[10px] text-white/40">Interview • 15min read</p>
+                      <p className="text-sm font-bold group-hover:text-primary transition-colors">Eye Point Standings Update</p>
+                      <p className="text-[10px] text-white/40">Article • 5min read</p>
                     </div>
                   </div>
                </div>
@@ -101,7 +110,9 @@ export default function Home() {
                 <div className="space-y-6">
                   <AnimatePresence mode="popLayout">
                     {MATCHES.filter(m => m.status === 'LIVE').map((match) => (
-                      <MatchCard key={match.id} match={match} />
+                      <div key={match.id} onClick={() => setSelectedMatch(match)} className="cursor-pointer">
+                        <MatchCard match={match} />
+                      </div>
                     ))}
                   </AnimatePresence>
                 </div>
@@ -136,7 +147,9 @@ export default function Home() {
                 <div className="space-y-4">
                   {filteredMatches.length > 0 ? (
                     filteredMatches.map((match) => (
-                      <MatchRow key={match.id} match={match} />
+                      <div key={match.id} onClick={() => setSelectedMatch(match)} className="cursor-pointer">
+                        <MatchRow match={match} />
+                      </div>
                     ))
                   ) : (
                     <div className="py-20 text-center border-2 border-dashed border-white/5 rounded-[40px]">
@@ -154,17 +167,50 @@ export default function Home() {
                   <div className="absolute top-0 right-0 p-8 opacity-20 group-hover:scale-110 transition-transform">
                     <Zap size={80} fill="currentColor" />
                   </div>
-                  <h3 className="font-display text-4xl leading-[0.9] italic mb-4">PREMIUM<br/>EXPERIENCE</h3>
-                  <p className="text-xs font-bold leading-relaxed mb-6">Unlock deep analytics, real-time university heatmaps, and exclusive NUGA coverage.</p>
+                  <h3 className="font-display text-4xl leading-[0.9] italic mb-4">SCOUT<br/>DATABASE</h3>
+                  <p className="text-xs font-bold leading-relaxed mb-6">Access deep metrics on every player from UNILAG to UNIBEN. Recruiter access available.</p>
                   <button className="bg-black text-white px-6 py-3 rounded-full text-[10px] font-black tracking-widest uppercase hover:bg-black/90 transition-colors">
-                    GO PRO
+                    EXPLORE
                   </button>
                </div>
-               <TopPlayers />
+               <StandingsGrid className="lg:hidden" />
             </div>
           </div>
         </div>
       </main>
+
+      {/* Overlays */}
+      <AnimatePresence>
+        {selectedMatch && (
+          <MatchOverlay 
+            match={selectedMatch} 
+            onClose={() => setSelectedMatch(null)}
+            onSelectPlayer={(player) => {
+              setSelectedPlayer(player);
+              setSelectedMatch(null);
+            }}
+          />
+        )}
+        {selectedPlayer && (
+          <PlayerProfileOverlay 
+            player={selectedPlayer}
+            onClose={() => setSelectedPlayer(null)}
+          />
+        )}
+        {isSearchOpen && (
+          <SearchOverlay 
+            onClose={() => setIsSearchOpen(false)}
+            onSelectTeam={(team) => {
+              console.log('Selected team:', team);
+              setIsSearchOpen(false);
+            }}
+            onSelectPlayer={(player) => {
+              setSelectedPlayer(player);
+              setIsSearchOpen(false);
+            }}
+          />
+        )}
+      </AnimatePresence>
 
       {/* Mobile Menu */}
       <AnimatePresence>
@@ -177,13 +223,12 @@ export default function Home() {
           >
             <div className="flex flex-col gap-6 text-xl font-display italic tracking-tight uppercase">
               <a href="#" className="text-primary">Scores</a>
-              <a href="#" className="text-white/60 hover:text-white transition-colors">News</a>
-              <a href="#" className="text-white/60 hover:text-white transition-colors">Players</a>
-              <a href="#" className="text-white/60 hover:text-white transition-colors">Competitions</a>
+              <a href="#" className="text-white/60 hover:text-white transition-colors">Schools</a>
+              <a href="#" className="text-white/60 hover:text-white transition-colors">Draft</a>
               <hr className="border-white/5" />
               <button className="flex items-center gap-3 bg-primary text-black px-6 py-4 rounded-2xl font-bold tracking-tight">
                 <User size={24} />
-                SIGN IN
+                PROFILE
               </button>
             </div>
           </motion.div>
