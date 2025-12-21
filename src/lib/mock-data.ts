@@ -198,6 +198,48 @@ export const PLAYERS: Player[] = [
   }
 ];
 
+export interface Standing {
+  teamId: string;
+  played: number;
+  won: number;
+  drawn: number;
+  lost: number;
+  gf: number;
+  ga: number;
+  gd: number;
+  pts: number;
+}
+
+export interface BracketNode {
+  id: string;
+  title: string;
+  matchId?: string;
+  nextMatchId?: string;
+  homeTeamId?: string;
+  awayTeamId?: string;
+  homeScore?: number;
+  awayScore?: number;
+  status: 'PENDING' | 'LIVE' | 'FINISHED';
+}
+
+export const STANDINGS: Standing[] = TEAMS.map(team => ({
+  teamId: team.id,
+  played: team.stats?.played || 0,
+  won: team.stats?.won || 0,
+  drawn: team.stats?.drawn || 0,
+  lost: team.stats?.lost || 0,
+  gf: team.stats?.gf || 0,
+  ga: team.stats?.ga || 0,
+  gd: (team.stats?.gf || 0) - (team.stats?.ga || 0),
+  pts: team.stats?.pts || 0,
+})).sort((a, b) => b.pts - a.pts || b.gd - a.gd);
+
+export const BRACKET: BracketNode[] = [
+  { id: 'f1', title: 'Final', status: 'PENDING' },
+  { id: 'sf1', title: 'Semi-Final 1', nextMatchId: 'f1', homeTeamId: 'unilag', awayTeamId: 'oau', status: 'PENDING' },
+  { id: 'sf2', title: 'Semi-Final 2', nextMatchId: 'f1', homeTeamId: 'uniben', awayTeamId: 'ui', status: 'PENDING' },
+];
+
 export const MATCHES: Match[] = [
   {
     id: 'm1',
