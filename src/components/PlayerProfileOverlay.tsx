@@ -1,8 +1,9 @@
 'use client';
 
 import { motion } from 'framer-motion';
-import { X, Star, Share2, TrendingUp, MapPin, Calendar, Ruler, Weight, Award, Activity } from 'lucide-react';
+import { X, Star, Share2, TrendingUp, MapPin, Calendar, Ruler, Weight, Award, Activity, Heart } from 'lucide-react';
 import { Player, Team, TEAMS } from '@/lib/mock-data';
+import { useFavorites } from '@/hooks/useFavorites';
 
 interface PlayerProfileOverlayProps {
   player: Player;
@@ -11,6 +12,8 @@ interface PlayerProfileOverlayProps {
 
 export function PlayerProfileOverlay({ player, onClose }: PlayerProfileOverlayProps) {
   const team = TEAMS.find(t => t.id === player.teamId);
+  const { isFavoritePlayer, togglePlayer } = useFavorites();
+  const isFav = isFavoritePlayer(player.id);
 
   return (
     <motion.div
