@@ -44,7 +44,54 @@ export interface Match {
 }
 
 export const TEAMS: Team[] = [
-  ...
+  {
+    id: 'unilag',
+    name: 'UNILAG Marines',
+    shortName: 'LAG',
+    logo: '🌊',
+    university: 'University of Lagos',
+    color: '#003366',
+  },
+  {
+    id: 'uniben',
+    name: 'UNIBEN Royals',
+    shortName: 'BEN',
+    logo: '🦁',
+    university: 'University of Benin',
+    color: '#990000',
+  },
+  {
+    id: 'ui',
+    name: 'UI Pioneers',
+    shortName: 'UI',
+    logo: '🎓',
+    university: 'University of Ibadan',
+    color: '#FFD700',
+  },
+  {
+    id: 'oau',
+    name: 'OAU Ife Giants',
+    shortName: 'OAU',
+    logo: '🐘',
+    university: 'Obafemi Awolowo University',
+    color: '#000080',
+  },
+  {
+    id: 'unn',
+    name: 'UNN Lions',
+    shortName: 'UNN',
+    logo: '🦁',
+    university: 'University of Nigeria, Nsukka',
+    color: '#006400',
+  },
+  {
+    id: 'abu',
+    name: 'ABU Zaria Nobles',
+    shortName: 'ABU',
+    logo: '🏰',
+    university: 'Ahmadu Bello University',
+    color: '#008080',
+  },
 ];
 
 export const PLAYERS: Player[] = [
