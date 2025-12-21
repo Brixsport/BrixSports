@@ -4,7 +4,22 @@ import { motion } from 'framer-motion';
 import { Trophy, Activity, ArrowRight, Star } from 'lucide-react';
 import { TEAMS, Match } from '@/lib/mock-data';
 
-import { MatchCard, MatchRow, MatchTimeline } from '@/components/MatchComponents';
+export function MatchTimeline({ events }: { events: any[] }) {
+  return (
+    <div className="space-y-4 py-4">
+      {events.map((event, idx) => (
+        <div key={idx} className="flex items-center gap-4">
+          <span className="text-[10px] font-black tabular-nums text-white/40 w-6">{event.minute}'</span>
+          <div className={`w-2 h-2 rounded-full ${event.isEyePoint ? 'bg-secondary' : 'bg-primary'}`}></div>
+          <div className="flex flex-col">
+            <span className="text-xs font-bold">{event.type}</span>
+            <span className="text-[10px] text-white/60">{event.detail}</span>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 export function MatchCard({ match }: { match: Match }) {
   const homeTeam = TEAMS.find(t => t.id === match.homeTeamId);
@@ -136,22 +151,5 @@ export function MatchRow({ match }: { match: Match }) {
         </button>
       </div>
     </motion.div>
-  );
-}
-
-export function MatchTimeline({ events }: { events: any[] }) {
-  return (
-    <div className="space-y-4 py-4">
-      {events.map((event, idx) => (
-        <div key={idx} className="flex items-center gap-4">
-          <span className="text-[10px] font-black tabular-nums text-white/40 w-6">{event.minute}'</span>
-          <div className={`w-2 h-2 rounded-full ${event.isEyePoint ? 'bg-secondary' : 'bg-primary'}`}></div>
-          <div className="flex flex-col">
-            <span className="text-xs font-bold">{event.type}</span>
-            <span className="text-[10px] text-white/60">{event.detail}</span>
-          </div>
-        </div>
-      ))}
-    </div>
   );
 }
