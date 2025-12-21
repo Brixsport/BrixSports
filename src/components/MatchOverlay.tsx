@@ -1,8 +1,9 @@
 'use client';
 
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Trophy, Activity, Users, BarChart3, Clock, Star, MapPin, ChevronRight, Share2 } from 'lucide-react';
+import { X, Trophy, Activity, Users, BarChart3, Clock, Star, MapPin, ChevronRight, Share2, Heart } from 'lucide-react';
 import { Team, Player, Match, TEAMS, PLAYERS } from '@/lib/mock-data';
+import { useFavorites } from '@/hooks/useFavorites';
 
 interface MatchOverlayProps {
   match: Match;
