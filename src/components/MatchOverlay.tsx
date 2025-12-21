@@ -1,9 +1,11 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Trophy, Activity, Users, BarChart3, Clock, Star, MapPin, ChevronRight, Share2, Heart, RefreshCw, AlertCircle } from 'lucide-react';
-import { Team, Player, Match, TEAMS, PLAYERS } from '@/lib/mock-data';
+import { X, Trophy, Activity, Users, BarChart3, Clock, Star, MapPin, ChevronRight, Share2, Heart, RefreshCw, AlertCircle, TrendingUp } from 'lucide-react';
+import { Team, Player, Match, TEAMS, PLAYERS, MatchEvent } from '@/lib/mock-data';
 import { useFavorites } from '@/hooks/useFavorites';
+import { useNotifications } from './Notifications';
 
 interface MatchOverlayProps {
   match: Match;
@@ -11,10 +13,40 @@ interface MatchOverlayProps {
   onSelectPlayer: (player: Player) => void;
 }
 
-export function MatchOverlay({ match, onClose, onSelectPlayer }: MatchOverlayProps) {
+export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: MatchOverlayProps) {
+  const [match, setMatch] = useState(initialMatch);
   const homeTeam = TEAMS.find(t => t.id === match.homeTeamId);
   const awayTeam = TEAMS.find(t => t.id === match.awayTeamId);
   const { isFavoriteTeam, toggleTeam } = useFavorites();
+  const { addNotification } = useNotifications();
+
+  useEffect(() => {
+    const handleUpdate = (e: any) => {
+      const { matchId, event, updatedMatch } = e.detail;
+      if (matchId === match.id) {
+        setMatch(updatedMatch);
+        
+        // Show notification for significant events
+        if (event.type === 'Goal') {
+          addNotification({
+            title: 'GOAL!',
+            message: `${event.detail} has scored!`,
+            type: 'match'
+          });
+        }
+        if (event.type === 'Eye Point') {
+          addNotification({
+            title: 'EYE POINT AWARDED',
+            message: `Exceptional performance by ${event.detail}`,
+            type: 'scout'
+          });
+        }
+      }
+    };
+
+    window.addEventListener('MATCH_UPDATE', handleUpdate);
+    return () => window.removeEventListener('MATCH_UPDATE', handleUpdate);
+  }, [match.id, addNotification]);
 
   return (
     <motion.div
