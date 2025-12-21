@@ -1,17 +1,18 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Trophy, Activity, Calendar, User, Search, Bell, Menu, X, TrendingUp, Zap, Star } from 'lucide-react';
-import { MATCHES, Player, Team, Match } from '@/lib/mock-data';
+import { MATCHES, Player, Team, Match, TEAMS } from '@/lib/mock-data';
 import { StandingsGrid } from '@/components/StandingsGrid';
-import { PlayerRow } from '@/components/TopPlayers';
 import { MatchCard, MatchRow } from '@/components/MatchComponents';
 import { FanWall } from '@/components/FanWall';
 import { MyFeed } from '@/components/MyFeed';
 import { MatchOverlay } from '@/components/MatchOverlay';
 import { SearchOverlay } from '@/components/SearchOverlay';
 import { PlayerProfileOverlay } from '@/components/PlayerProfileOverlay';
+import { NotificationToast, useNotifications } from '@/components/Notifications';
+import { useFavorites } from '@/hooks/useFavorites';
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState('LIVE');
@@ -22,7 +23,26 @@ export default function Home() {
   const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
 
+  const { notifications, addNotification, removeNotification } = useNotifications();
+  const { favoriteTeams, favoritePlayers } = useFavorites();
+
   const filteredMatches = MATCHES.filter(m => activeTab === 'ALL' || m.status === activeTab);
+
+  // Simulate real-time notifications for followed entities
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (favoriteTeams.length > 0) {
+        const teamName = TEAMS.find(t => t.id === favoriteTeams[0])?.name;
+        addNotification({
+          title: 'Match Update',
+          message: `${teamName} have just scored against OAU!`,
+          type: 'match'
+        });
+      }
+    }, 10000);
+
+    return () => clearTimeout(timer);
+  }, [favoriteTeams]);
 
   return (
     <div className="min-h-screen bg-[#050505] text-white font-sans selection:bg-primary/30">
@@ -49,7 +69,9 @@ export default function Home() {
             </button>
             <button className="p-2 hover:bg-white/5 rounded-full transition-colors relative">
               <Bell size={20} className="text-white/60" />
-              <span className="absolute top-2 right-2 w-2 h-2 bg-primary rounded-full"></span>
+              {notifications.length > 0 && (
+                <span className="absolute top-2 right-2 w-2 h-2 bg-primary rounded-full"></span>
+              )}
             </button>
             <button className="hidden sm:flex items-center gap-2 bg-white/5 hover:bg-white/10 px-4 py-2 rounded-full border border-white/10 transition-all">
               <User size={18} />
@@ -87,6 +109,12 @@ export default function Home() {
                     </div>
                   </div>
                </div>
+               
+               <MyFeed 
+                 onSelectMatch={setSelectedMatch}
+                 onSelectPlayer={setSelectedPlayer}
+               />
+
                <StandingsGrid />
                <FanWall />
             </div>
@@ -213,6 +241,11 @@ export default function Home() {
         )}
       </AnimatePresence>
 
+      <NotificationToast 
+        notifications={notifications} 
+        onClose={removeNotification} 
+      />
+
       {/* Mobile Menu */}
       <AnimatePresence>
         {isMenuOpen && (
@@ -223,10 +256,17 @@ export default function Home() {
             className="fixed inset-0 z-40 bg-black pt-20 px-4 md:hidden"
           >
             <div className="flex flex-col gap-6 text-xl font-display italic tracking-tight uppercase">
-              <a href="#" className="text-primary">Scores</a>
-              <a href="#" className="text-white/60 hover:text-white transition-colors">Schools</a>
-              <a href="#" className="text-white/60 hover:text-white transition-colors">Draft</a>
+              <a href="#" className="text-primary" onClick={() => setIsMenuOpen(false)}>Scores</a>
+              <a href="#" className="text-white/60 hover:text-white transition-colors" onClick={() => setIsMenuOpen(false)}>Schools</a>
+              <a href="#" className="text-white/60 hover:text-white transition-colors" onClick={() => setIsMenuOpen(false)}>Draft</a>
               <hr className="border-white/5" />
+              <button 
+                onClick={() => { setIsSearchOpen(true); setIsMenuOpen(false); }}
+                className="flex items-center gap-3 text-white/60"
+              >
+                <Search size={24} />
+                SEARCH
+              </button>
               <button className="flex items-center gap-3 bg-primary text-black px-6 py-4 rounded-2xl font-bold tracking-tight">
                 <User size={24} />
                 PROFILE
