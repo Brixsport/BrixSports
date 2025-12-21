@@ -3,8 +3,10 @@
 import { useState } from 'react';
 import Image from "next/image";
 import { motion, AnimatePresence } from 'framer-motion';
-import { Trophy, Activity, Calendar, LayoutDashboard, User, Search, Bell, Menu, X, ArrowRight, Star } from 'lucide-react';
+import { Trophy, Activity, Calendar, LayoutDashboard, User, Search, Bell, Menu, X, ArrowRight, Star, TrendingUp, Zap } from 'lucide-react';
 import { TEAMS, MATCHES, Team, Match } from '@/lib/mock-data';
+import { StandingsGrid } from '@/components/StandingsGrid';
+import { TopPlayers } from '@/components/TopPlayers';
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState('LIVE');
@@ -19,7 +21,7 @@ export default function Home() {
         <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center gap-8">
             <div className="flex items-center gap-2">
-              <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center font-display text-xl -skew-x-12">B</div>
+              <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center font-display text-xl -skew-x-12 text-black">B</div>
               <span className="font-display text-2xl tracking-tight hidden sm:block">BRIXSPORT</span>
             </div>
             <div className="hidden md:flex items-center gap-6 text-sm font-medium text-white/60">
@@ -52,75 +54,112 @@ export default function Home() {
       </nav>
 
       {/* Hero / Live Spotlight */}
-      <main className="pt-20 pb-12">
+      <main className="pt-24 pb-12">
         <div className="max-w-7xl mx-auto px-4">
-          <section className="mt-8">
-            <div className="flex items-center justify-between mb-6 leading-none">
-              <div className="flex items-center gap-3">
-                <h2 className="font-display text-3xl tracking-tight italic">LIVE MATCHES</h2>
-                <div className="flex items-center gap-1.5 px-2 py-1 bg-red-500/10 text-red-500 rounded border border-red-500/20 text-[10px] font-bold tracking-widest uppercase animate-pulse">
-                  <Activity size={12} />
-                  LIVE
+          <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
+            {/* Sidebar Left - Info & Quick Links */}
+            <div className="lg:col-span-1 space-y-8 hidden lg:block">
+               <div className="bg-white/5 rounded-[32px] border border-white/10 p-6">
+                  <div className="flex items-center gap-2 mb-4 text-primary">
+                    <TrendingUp size={18} />
+                    <span className="text-xs font-bold uppercase tracking-widest">Trending</span>
+                  </div>
+                  <div className="space-y-4">
+                    <div className="group cursor-pointer">
+                      <p className="text-sm font-bold group-hover:text-primary transition-colors">NUGA Finals: UNILAG vs UNIBEN</p>
+                      <p className="text-[10px] text-white/40">24.5k watching now</p>
+                    </div>
+                    <div className="group cursor-pointer">
+                      <p className="text-sm font-bold group-hover:text-primary transition-colors">Tunde Adeyemi: The Eye Point King?</p>
+                      <p className="text-[10px] text-white/40">Interview • 15min read</p>
+                    </div>
+                  </div>
+               </div>
+               <StandingsGrid />
+            </div>
+
+            {/* Main Content Area */}
+            <div className="lg:col-span-2 space-y-12">
+              <section>
+                <div className="flex items-center justify-between mb-6 leading-none">
+                  <div className="flex items-center gap-3">
+                    <h2 className="font-display text-3xl tracking-tight italic uppercase">LIVE ARENA</h2>
+                    <div className="flex items-center gap-1.5 px-2 py-1 bg-red-500/10 text-red-500 rounded border border-red-500/20 text-[10px] font-bold tracking-widest uppercase animate-pulse">
+                      <Activity size={12} />
+                      LIVE
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-2 h-2 bg-primary rounded-full animate-pulse shadow-[0_0_10px_rgba(var(--primary),0.5)]"></div>
+                    <span className="text-[10px] font-black text-white/40 tracking-widest uppercase">Streaming Now</span>
+                  </div>
                 </div>
-              </div>
-              <button className="text-sm text-white/40 hover:text-white flex items-center gap-1 transition-colors leading-none">
-                View All <ArrowRight size={14} />
-              </button>
+
+                <div className="space-y-6">
+                  <AnimatePresence mode="popLayout">
+                    {MATCHES.filter(m => m.status === 'LIVE').map((match) => (
+                      <MatchCard key={match.id} match={match} />
+                    ))}
+                  </AnimatePresence>
+                </div>
+              </section>
+
+              {/* Filters & Schedule */}
+              <section>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
+                  <div className="flex bg-white/5 p-1 rounded-xl border border-white/10 self-start">
+                    {['LIVE', 'UPCOMING', 'FINISHED', 'ALL'].map((tab) => (
+                      <button
+                        key={tab}
+                        onClick={() => setActiveTab(tab)}
+                        className={`px-4 sm:px-6 py-2 rounded-lg text-xs sm:text-sm font-medium transition-all ${
+                          activeTab === tab 
+                            ? 'bg-primary text-black shadow-lg shadow-primary/20' 
+                            : 'text-white/40 hover:text-white hover:bg-white/5'
+                        }`}
+                      >
+                        {tab}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <div className="hidden sm:flex items-center gap-2 px-4 py-2 bg-white/5 rounded-lg border border-white/10 text-xs italic text-white/60">
+                      <Calendar size={14} />
+                      MARCH 20, 2024
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  {filteredMatches.length > 0 ? (
+                    filteredMatches.map((match) => (
+                      <MatchRow key={match.id} match={match} />
+                    ))
+                  ) : (
+                    <div className="py-20 text-center border-2 border-dashed border-white/5 rounded-[40px]">
+                      <Trophy size={48} className="mx-auto text-white/10 mb-4" />
+                      <p className="text-white/30 font-display text-xl">No {activeTab.toLowerCase()} matches found</p>
+                    </div>
+                  )}
+                </div>
+              </section>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              <AnimatePresence mode="popLayout">
-                {MATCHES.filter(m => m.status === 'LIVE').map((match) => (
-                  <MatchCard key={match.id} match={match} />
-                ))}
-              </AnimatePresence>
-            </div>
-          </section>
-
-          {/* Filters & Schedule */}
-          <section className="mt-16">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
-              <div className="flex bg-white/5 p-1 rounded-xl border border-white/10 self-start">
-                {['LIVE', 'UPCOMING', 'FINISHED', 'ALL'].map((tab) => (
-                  <button
-                    key={tab}
-                    onClick={() => setActiveTab(tab)}
-                    className={`px-6 py-2 rounded-lg text-sm font-medium transition-all ${
-                      activeTab === tab 
-                        ? 'bg-primary text-black shadow-lg shadow-primary/20' 
-                        : 'text-white/40 hover:text-white hover:bg-white/5'
-                    }`}
-                  >
-                    {tab}
+            {/* Sidebar Right - Stats & Players */}
+            <div className="lg:col-span-1 space-y-8">
+               <div className="bg-primary group relative overflow-hidden rounded-[32px] p-8 text-black transition-all hover:scale-[1.02] active:scale-[0.98]">
+                  <div className="absolute top-0 right-0 p-8 opacity-20 group-hover:scale-110 transition-transform">
+                    <Zap size={80} fill="currentColor" />
+                  </div>
+                  <h3 className="font-display text-4xl leading-[0.9] italic mb-4">PREMIUM<br/>EXPERIENCE</h3>
+                  <p className="text-xs font-bold leading-relaxed mb-6">Unlock deep analytics, real-time university heatmaps, and exclusive NUGA coverage.</p>
+                  <button className="bg-black text-white px-6 py-3 rounded-full text-[10px] font-black tracking-widest uppercase hover:bg-black/90 transition-colors">
+                    GO PRO
                   </button>
-                ))}
-              </div>
-              <div className="flex items-center gap-3">
-                <div className="hidden lg:flex items-center gap-2 px-4 py-2 bg-white/5 rounded-lg border border-white/10 text-sm italic text-white/60">
-                  <Calendar size={16} />
-                  MARCH 20, 2024
-                </div>
-                <div className="flex items-center gap-2">
-                   <button className="p-2 bg-white/5 hover:bg-white/10 rounded-lg border border-white/10 transition-colors">
-                      <LayoutDashboard size={18} />
-                   </button>
-                </div>
-              </div>
+               </div>
+               <TopPlayers />
             </div>
-
-            <div className="space-y-4">
-              {filteredMatches.length > 0 ? (
-                filteredMatches.map((match) => (
-                  <MatchRow key={match.id} match={match} />
-                ))
-              ) : (
-                <div className="py-20 text-center border-2 border-dashed border-white/5 rounded-3xl">
-                  <Trophy size={48} className="mx-auto text-white/10 mb-4" />
-                  <p className="text-white/30 font-display text-xl">No {activeTab.toLowerCase()} matches found</p>
-                </div>
-              )}
-            </div>
-          </section>
+          </div>
         </div>
       </main>
 
