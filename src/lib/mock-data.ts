@@ -44,54 +44,14 @@ export interface Match {
 }
 
 export const TEAMS: Team[] = [
-  {
-    id: 'unilag',
-    name: 'UNILAG Marines',
-    shortName: 'LAG',
-    logo: '🌊',
-    university: 'University of Lagos',
-    color: '#003366',
-  },
-  {
-    id: 'uniben',
-    name: 'UNIBEN Royals',
-    shortName: 'BEN',
-    logo: '🦁',
-    university: 'University of Benin',
-    color: '#990000',
-  },
-  {
-    id: 'ui',
-    name: 'UI Pioneers',
-    shortName: 'UI',
-    logo: '🎓',
-    university: 'University of Ibadan',
-    color: '#FFD700',
-  },
-  {
-    id: 'oau',
-    name: 'OAU Ife Giants',
-    shortName: 'OAU',
-    logo: '🐘',
-    university: 'Obafemi Awolowo University',
-    color: '#000080',
-  },
-  {
-    id: 'unn',
-    name: 'UNN Lions',
-    shortName: 'UNN',
-    logo: '🦁',
-    university: 'University of Nigeria, Nsukka',
-    color: '#006400',
-  },
-  {
-    id: 'abu',
-    name: 'ABU Zaria Nobles',
-    shortName: 'ABU',
-    logo: '🏰',
-    university: 'Ahmadu Bello University',
-    color: '#008080',
-  },
+  ...
+];
+
+export const PLAYERS: Player[] = [
+  { id: 'p1', name: 'Tunde Adeyemi', number: 10, teamId: 'unilag', position: 'Forward', rating: 8.5, eyePoints: 2 },
+  { id: 'p2', name: 'Emeka Obi', number: 7, teamId: 'uniben', position: 'Midfielder', rating: 7.8, eyePoints: 0 },
+  { id: 'p3', name: 'Segun Bello', number: 9, teamId: 'unilag', position: 'Forward', rating: 8.2, eyePoints: 1 },
+  { id: 'p4', name: 'Chidi Azikiwe', number: 1, teamId: 'uniben', position: 'Goalkeeper', rating: 7.2, eyePoints: 0 },
 ];
 
 export const MATCHES: Match[] = [
