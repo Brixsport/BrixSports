@@ -142,21 +142,28 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
                     </div>
                     <div className="flex-1 bg-white/5 rounded-2xl p-4 border border-white/5 flex items-center justify-between group hover:border-primary/30 transition-all">
                       <div className="flex items-center gap-3">
-                        <div className={`p-1.5 rounded-lg ${
-                          event.type === 'Goal' ? 'bg-primary/20 text-primary' : 
-                          event.type === 'Yellow Card' ? 'bg-yellow-500/20 text-yellow-500' : 
-                          event.type === 'Red Card' ? 'bg-red-500/20 text-red-500' :
-                          event.type === 'Substitution' ? 'bg-blue-500/20 text-blue-400' :
-                          'bg-white/5 text-white/40'
-                        }`}>
-                           {event.type === 'Goal' ? <Trophy size={14} /> : 
-                            event.type === 'Substitution' ? <RefreshCw size={14} /> : 
-                            <AlertCircle size={14} />}
-                        </div>
-                        <div>
-                          <p className="text-sm font-bold uppercase tracking-tight italic">{event.type}</p>
-                          <p className="text-xs text-white/40">{event.detail}</p>
-                        </div>
+                          <div className={`p-1.5 rounded-lg ${
+                            event.type === 'Goal' ? 'bg-primary/20 text-primary' : 
+                            event.type === 'Yellow Card' ? 'bg-yellow-500/20 text-yellow-500' : 
+                            event.type === 'Red Card' ? 'bg-red-500/20 text-red-500' :
+                            event.type === 'Substitution' ? 'bg-blue-500/20 text-blue-400' :
+                            event.type === 'Eye Point' ? 'bg-secondary/20 text-secondary' :
+                            'bg-white/5 text-white/40'
+                          }`}>
+                             {event.type === 'Goal' ? <Trophy size={14} /> : 
+                              event.type === 'Substitution' ? <RefreshCw size={14} /> : 
+                              event.type === 'Eye Point' ? <Star size={14} fill="currentColor" /> :
+                              <AlertCircle size={14} />}
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <p className="text-sm font-bold uppercase tracking-tight italic">{event.type}</p>
+                              {event.isEyePoint && (
+                                <span className="bg-primary/10 text-primary text-[8px] font-black px-1.5 py-0.5 rounded tracking-widest uppercase">+0.5 RATING</span>
+                              )}
+                            </div>
+                            <p className="text-xs text-white/40">{event.detail}</p>
+                          </div>
                       </div>
                       {event.teamId && (
                         <div className="text-xl opacity-40 group-hover:opacity-100 transition-opacity">
