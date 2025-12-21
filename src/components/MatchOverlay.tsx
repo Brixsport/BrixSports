@@ -40,30 +40,47 @@ export function MatchOverlay({ match, onClose, onSelectPlayer }: MatchOverlayPro
 
         <div className="max-w-4xl mx-auto w-full px-4 py-8 space-y-12 pb-24">
           {/* Scoreboard */}
-          <section className="relative flex items-center justify-between bg-gradient-to-b from-white/5 to-transparent p-8 rounded-[48px] border border-white/10">
-            <div className="flex flex-col items-center gap-4 flex-1">
-              <div className="w-24 h-24 bg-white/5 rounded-3xl flex items-center justify-center text-5xl border border-white/10">
-                {homeTeam?.logo}
+            <section className="relative flex items-center justify-between bg-gradient-to-b from-white/5 to-transparent p-8 rounded-[48px] border border-white/10">
+              <div className="flex flex-col items-center gap-4 flex-1">
+                <div className="relative group">
+                  <div className="w-24 h-24 bg-white/5 rounded-3xl flex items-center justify-center text-5xl border border-white/10 transition-transform group-hover:scale-105">
+                    {homeTeam?.logo}
+                  </div>
+                  <button 
+                    onClick={(e) => { e.stopPropagation(); if(homeTeam) toggleTeam(homeTeam.id); }}
+                    className={`absolute -top-2 -right-2 p-2 rounded-full border border-white/10 transition-all ${isFavoriteTeam(homeTeam?.id || '') ? 'bg-primary text-black' : 'bg-black text-white hover:bg-white/10'}`}
+                  >
+                    <Heart size={14} fill={isFavoriteTeam(homeTeam?.id || '') ? "currentColor" : "none"} />
+                  </button>
+                </div>
+                <h2 className="text-xl font-display italic uppercase tracking-tight text-center">{homeTeam?.name}</h2>
               </div>
-              <h2 className="text-xl font-display italic uppercase tracking-tight text-center">{homeTeam?.name}</h2>
-            </div>
 
-            <div className="flex flex-col items-center gap-2">
-              <div className="text-7xl font-display italic tabular-nums bg-clip-text text-transparent bg-gradient-to-b from-white to-white/40">
-                {match.homeScore} : {match.awayScore}
+              <div className="flex flex-col items-center gap-2">
+                <div className="text-7xl font-display italic tabular-nums bg-clip-text text-transparent bg-gradient-to-b from-white to-white/40">
+                  {match.homeScore} : {match.awayScore}
+                </div>
+                <div className="px-4 py-1.5 bg-primary text-black text-[10px] font-black tracking-widest rounded-full animate-pulse uppercase">
+                  {match.status === 'LIVE' ? "75' LIVE" : match.status}
+                </div>
               </div>
-              <div className="px-4 py-1.5 bg-primary text-black text-[10px] font-black tracking-widest rounded-full animate-pulse uppercase">
-                {match.status === 'LIVE' ? "75' LIVE" : match.status}
-              </div>
-            </div>
 
-            <div className="flex flex-col items-center gap-4 flex-1">
-              <div className="w-24 h-24 bg-white/5 rounded-3xl flex items-center justify-center text-5xl border border-white/10">
-                {awayTeam?.logo}
+              <div className="flex flex-col items-center gap-4 flex-1">
+                <div className="relative group">
+                  <div className="w-24 h-24 bg-white/5 rounded-3xl flex items-center justify-center text-5xl border border-white/10 transition-transform group-hover:scale-105">
+                    {awayTeam?.logo}
+                  </div>
+                  <button 
+                    onClick={(e) => { e.stopPropagation(); if(awayTeam) toggleTeam(awayTeam.id); }}
+                    className={`absolute -top-2 -right-2 p-2 rounded-full border border-white/10 transition-all ${isFavoriteTeam(awayTeam?.id || '') ? 'bg-primary text-black' : 'bg-black text-white hover:bg-white/10'}`}
+                  >
+                    <Heart size={14} fill={isFavoriteTeam(awayTeam?.id || '') ? "currentColor" : "none"} />
+                  </button>
+                </div>
+                <h2 className="text-xl font-display italic uppercase tracking-tight text-center">{awayTeam?.name}</h2>
               </div>
-              <h2 className="text-xl font-display italic uppercase tracking-tight text-center">{awayTeam?.name}</h2>
-            </div>
-          </section>
+            </section>
+
 
           {/* Stats Grid */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
