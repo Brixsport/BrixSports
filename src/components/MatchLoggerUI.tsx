@@ -605,6 +605,32 @@ export function MatchLoggerUI({ match, onExit }: MatchLoggerUIProps) {
   );
 }
 
+function StatRow({ label, values, unit = '', color }: { label: string, values: [number, number], unit?: string, color: string }) {
+  const total = values[0] + values[1] || 1;
+  const p1 = (values[0] / total) * 100;
+  
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between text-[10px] font-black uppercase tracking-widest text-white/40">
+        <span>{label}</span>
+        <div className="flex items-center gap-4 text-white">
+          <span>{values[0]}{unit}</span>
+          <span className="text-white/10">-</span>
+          <span>{values[1]}{unit}</span>
+        </div>
+      </div>
+      <div className="h-1 flex rounded-full overflow-hidden bg-white/5">
+        <motion.div 
+          initial={{ width: 0 }}
+          animate={{ width: `${p1}%` }}
+          className={`${color}`} 
+        />
+        <div className="flex-1" />
+      </div>
+    </div>
+  );
+}
+
 function ActionButton({ label, icon, color, onClick }: { label: string, icon: React.ReactNode, color: string, onClick: () => void }) {
   return (
     <button 
