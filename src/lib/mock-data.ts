@@ -7,6 +7,15 @@ export interface Team {
   logo: string;
   university: string;
   color: string;
+  stats?: {
+    played: number;
+    won: number;
+    drawn: number;
+    lost: number;
+    gf: number;
+    ga: number;
+    pts: number;
+  };
 }
 
 export interface Player {
@@ -17,16 +26,41 @@ export interface Player {
   position: string;
   rating: number;
   eyePoints: number;
+  age?: number;
+  height?: string;
+  weight?: string;
+  nationality?: string;
+  image?: string;
+  marketValue?: string;
+  attributes?: {
+    speed: number;
+    shooting: number;
+    passing: number;
+    dribbling: number;
+    defense: number;
+    physical: number;
+  };
 }
 
 export interface MatchEvent {
   id: string;
-  type: string;
+  type: 'Goal' | 'Yellow Card' | 'Red Card' | 'Substitution' | 'Eye Point' | 'Period Start' | 'Period End';
   minute: number;
   teamId?: string;
   playerId?: string;
+  relatedPlayerId?: string; // e.g., for substitution: outgoing player
   detail?: string;
   isEyePoint?: boolean;
+}
+
+export interface MatchStats {
+  possession: [number, number]; // [home, away]
+  shots: [number, number];
+  shotsOnTarget: [number, number];
+  corners: [number, number];
+  fouls: [number, number];
+  yellowCards: [number, number];
+  redCards: [number, number];
 }
 
 export interface Match {
@@ -41,6 +75,11 @@ export interface Match {
   venue: string;
   competition: string;
   events: MatchEvent[];
+  stats: MatchStats;
+  lineups?: {
+    home: { playerId: string; rating: number; position: string }[];
+    away: { playerId: string; rating: number; position: string }[];
+  };
 }
 
 export const TEAMS: Team[] = [
@@ -51,6 +90,7 @@ export const TEAMS: Team[] = [
     logo: '🌊',
     university: 'University of Lagos',
     color: '#003366',
+    stats: { played: 5, won: 4, drawn: 1, lost: 0, gf: 12, ga: 3, pts: 13 }
   },
   {
     id: 'uniben',
@@ -59,6 +99,7 @@ export const TEAMS: Team[] = [
     logo: '🦁',
     university: 'University of Benin',
     color: '#990000',
+    stats: { played: 5, won: 3, drawn: 1, lost: 1, gf: 8, ga: 5, pts: 10 }
   },
   {
     id: 'ui',
@@ -67,6 +108,7 @@ export const TEAMS: Team[] = [
     logo: '🎓',
     university: 'University of Ibadan',
     color: '#FFD700',
+    stats: { played: 5, won: 2, drawn: 2, lost: 1, gf: 6, ga: 6, pts: 8 }
   },
   {
     id: 'oau',
@@ -75,48 +117,57 @@ export const TEAMS: Team[] = [
     logo: '🐘',
     university: 'Obafemi Awolowo University',
     color: '#000080',
-  },
-  {
-    id: 'unn',
-    name: 'UNN Lions',
-    shortName: 'UNN',
-    logo: '🦁',
-    university: 'University of Nigeria, Nsukka',
-    color: '#006400',
-  },
-  {
-    id: 'abu',
-    name: 'ABU Zaria Nobles',
-    shortName: 'ABU',
-    logo: '🏰',
-    university: 'Ahmadu Bello University',
-    color: '#008080',
-  },
-  {
-    id: 'lasu',
-    name: 'LASU Blazers',
-    shortName: 'LAS',
-    logo: '🔥',
-    university: 'Lagos State University',
-    color: '#E31837',
-  },
-  {
-    id: 'futa',
-    name: 'FUTA Tigers',
-    shortName: 'FUT',
-    logo: '🐯',
-    university: 'Fed Univ of Tech, Akure',
-    color: '#000000',
-  },
+    stats: { played: 5, won: 1, drawn: 2, lost: 2, gf: 4, ga: 7, pts: 5 }
+  }
 ];
 
 export const PLAYERS: Player[] = [
-  { id: 'p1', name: 'Tunde Adeyemi', number: 10, teamId: 'unilag', position: 'Forward', rating: 8.5, eyePoints: 12 },
-  { id: 'p2', name: 'Emeka Obi', number: 7, teamId: 'uniben', position: 'Midfielder', rating: 7.8, eyePoints: 8 },
-  { id: 'p3', name: 'Segun Bello', number: 9, teamId: 'unilag', position: 'Forward', rating: 8.2, eyePoints: 15 },
-  { id: 'p4', name: 'Chidi Azikiwe', number: 1, teamId: 'uniben', position: 'Goalkeeper', rating: 7.2, eyePoints: 5 },
-  { id: 'p5', name: 'Ahmed Musa', number: 11, teamId: 'abu', position: 'Winger', rating: 8.0, eyePoints: 20 },
-  { id: 'p6', name: 'Ibrahim Danlad', number: 8, teamId: 'ui', position: 'PG', rating: 9.1, eyePoints: 25 },
+  { 
+    id: 'p1', 
+    name: 'Tunde Adeyemi', 
+    number: 10, 
+    teamId: 'unilag', 
+    position: 'ST', 
+    rating: 8.5, 
+    eyePoints: 12,
+    age: 21,
+    height: '185cm',
+    nationality: 'Nigeria',
+    attributes: { speed: 88, shooting: 92, passing: 78, dribbling: 85, defense: 45, physical: 80 }
+  },
+  { 
+    id: 'p2', 
+    name: 'Emeka Obi', 
+    number: 7, 
+    teamId: 'uniben', 
+    position: 'CM', 
+    rating: 7.8, 
+    eyePoints: 8,
+    age: 22,
+    attributes: { speed: 75, shooting: 70, passing: 88, dribbling: 82, defense: 72, physical: 75 }
+  },
+  { 
+    id: 'p3', 
+    name: 'Segun Bello', 
+    number: 9, 
+    teamId: 'unilag', 
+    position: 'LW', 
+    rating: 8.2, 
+    eyePoints: 15,
+    age: 20,
+    attributes: { speed: 94, shooting: 80, passing: 75, dribbling: 90, defense: 30, physical: 65 }
+  },
+  {
+    id: 'p4',
+    name: 'Chisom Oke',
+    number: 4,
+    teamId: 'unilag',
+    position: 'CB',
+    rating: 7.5,
+    eyePoints: 3,
+    age: 23,
+    attributes: { speed: 70, shooting: 40, passing: 65, dribbling: 50, defense: 92, physical: 95 }
+  }
 ];
 
 export const MATCHES: Match[] = [
@@ -131,50 +182,31 @@ export const MATCHES: Match[] = [
     startTime: '2024-03-20T16:00:00Z',
     venue: 'UNILAG Sports Center',
     competition: 'NUGA Games 2024',
+    stats: {
+      possession: [58, 42],
+      shots: [12, 7],
+      shotsOnTarget: [5, 3],
+      corners: [6, 2],
+      fouls: [8, 11],
+      yellowCards: [1, 2],
+      redCards: [0, 0]
+    },
+    lineups: {
+      home: [
+        { playerId: 'p1', rating: 8.5, position: 'ST' },
+        { playerId: 'p3', rating: 7.9, position: 'LW' },
+        { playerId: 'p4', rating: 7.2, position: 'CB' }
+      ],
+      away: [
+        { playerId: 'p2', rating: 7.8, position: 'CM' }
+      ]
+    },
     events: [
-      { id: 'e1', type: 'Goal', minute: 15, teamId: 'unilag', detail: 'Tunde Ade' },
-      { id: 'e2', type: 'Goal', minute: 42, teamId: 'uniben', detail: 'Emeka Obi' },
-      { id: 'e3', type: 'Goal', minute: 68, teamId: 'unilag', detail: 'Segun Bello' },
-      { id: 'e4', type: 'Eye Point', minute: 75, teamId: 'unilag', playerId: 'p1', detail: 'Exceptional Hustle', isEyePoint: true },
+      { id: 'e1', type: 'Goal', minute: 15, teamId: 'unilag', playerId: 'p1', detail: 'Tunde Adeyemi' },
+      { id: 'e2', type: 'Goal', minute: 42, teamId: 'uniben', playerId: 'p2', detail: 'Emeka Obi' },
+      { id: 'e3', type: 'Substitution', minute: 60, teamId: 'uniben', playerId: 'p2', relatedPlayerId: 'p5', detail: 'Tactical change' },
+      { id: 'e4', type: 'Goal', minute: 68, teamId: 'unilag', playerId: 'p3', detail: 'Segun Bello' },
+      { id: 'e5', type: 'Eye Point', minute: 75, teamId: 'unilag', playerId: 'p1', detail: 'Exceptional Hustle', isEyePoint: true },
     ],
-  },
-  {
-    id: 'm2',
-    sport: 'Basketball',
-    homeTeamId: 'ui',
-    awayTeamId: 'oau',
-    homeScore: 78,
-    awayScore: 75,
-    status: 'LIVE',
-    startTime: '2024-03-20T18:00:00Z',
-    venue: 'UI Indoor Gym',
-    competition: 'Inter-Varsity Invitational',
-    events: [],
-  },
-  {
-    id: 'm3',
-    sport: 'Football',
-    homeTeamId: 'unn',
-    awayTeamId: 'abu',
-    homeScore: 0,
-    awayScore: 0,
-    status: 'UPCOMING',
-    startTime: '2024-03-21T10:00:00Z',
-    venue: 'UNN Stadium',
-    competition: 'NUGA Games 2024',
-    events: [],
-  },
-  {
-    id: 'm4',
-    sport: 'Football',
-    homeTeamId: 'lasu',
-    awayTeamId: 'futa',
-    homeScore: 1,
-    awayScore: 3,
-    status: 'FINISHED',
-    startTime: '2024-03-19T14:00:00Z',
-    venue: 'LASU Field',
-    competition: 'NUGA Qualifiers',
-    events: [],
-  },
+  }
 ];
