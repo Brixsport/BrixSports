@@ -44,13 +44,20 @@ export interface Player {
 
 export interface MatchEvent {
   id: string;
-  type: 'Goal' | 'Yellow Card' | 'Red Card' | 'Substitution' | 'Eye Point' | 'Period Start' | 'Period End';
+  type: 'Goal' | 'Yellow Card' | 'Red Card' | 'Substitution' | 'Eye Point' | 'Period Start' | 'Period End' | 'Corner' | 'Free Kick' | 'Penalty' | 'Save' | 'Foul' | 'Shot' | 'Possession Change';
   minute: number;
   teamId?: string;
   playerId?: string;
   relatedPlayerId?: string; // e.g., for substitution: outgoing player
   detail?: string;
   isEyePoint?: boolean;
+  value?: any; // For measurements, etc.
+}
+
+export interface Logger {
+  id: string;
+  name: string;
+  assignedMatches: string[];
 }
 
 export interface MatchStats {
@@ -61,6 +68,7 @@ export interface MatchStats {
   fouls: [number, number];
   yellowCards: [number, number];
   redCards: [number, number];
+  saves?: [number, number];
 }
 
 export interface Match {
@@ -77,10 +85,15 @@ export interface Match {
   events: MatchEvent[];
   stats: MatchStats;
   lineups?: {
-    home: { playerId: string; rating: number; position: string }[];
-    away: { playerId: string; rating: number; position: string }[];
+    home: { playerId: string; rating: number; position: string; status: 'playing' | 'bench' }[];
+    away: { playerId: string; rating: number; position: string; status: 'playing' | 'bench' }[];
   };
+  loggerId?: string;
 }
+
+export const LOGGERS: Logger[] = [
+  { id: 'l1', name: 'John Logger', assignedMatches: ['m1', 'm2'] }
+];
 
 export const TEAMS: Team[] = [
   {
