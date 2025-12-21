@@ -8,6 +8,7 @@ import { StandingsGrid } from '@/components/StandingsGrid';
 import { PlayerRow } from '@/components/TopPlayers';
 import { MatchCard, MatchRow } from '@/components/MatchComponents';
 import { FanWall } from '@/components/FanWall';
+import { MyFeed } from '@/components/MyFeed';
 import { MatchOverlay } from '@/components/MatchOverlay';
 import { SearchOverlay } from '@/components/SearchOverlay';
 import { PlayerProfileOverlay } from '@/components/PlayerProfileOverlay';
