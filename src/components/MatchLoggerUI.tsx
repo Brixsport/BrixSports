@@ -11,24 +11,23 @@ interface MatchLoggerUIProps {
 }
 
 const SPORT_EVENTS: Record<SportType, { label: string; type: EventType; color: string; icon: React.ReactNode }[]> = {
-    Football: [
-      { label: 'Goal', type: 'Goal', color: 'bg-primary text-black', icon: <Trophy size={18} /> },
-      { label: 'Assist', type: 'Assist', color: 'bg-primary/20 text-primary', icon: <Zap size={18} /> },
-      { label: 'Save', type: 'Save', color: 'bg-white/10 text-white', icon: <Shield size={18} /> },
-      { label: 'Block', type: 'Block', color: 'bg-white/10 text-white', icon: <Shield size={18} /> },
-      { label: 'Interception', type: 'Interception', color: 'bg-white/10 text-white', icon: <Activity size={18} /> },
-      { label: 'Yellow Card', type: 'Yellow Card', color: 'bg-yellow-500 text-black', icon: <AlertTriangle size={18} /> },
-      { label: 'Red Card', type: 'Red Card', color: 'bg-red-500 text-white', icon: <AlertTriangle size={18} /> },
-      { label: 'Substitution', type: 'Substitution', color: 'bg-blue-500 text-white', icon: <ArrowRightLeft size={18} /> },
-      { label: 'Possession', type: 'Possession', color: 'bg-white/5 text-white/60', icon: <Activity size={18} /> },
-      { label: 'Corner', type: 'Corner', color: 'bg-white/5 text-white/60', icon: <Shield size={18} /> },
-      { label: 'Free Kick', type: 'Free Kick', color: 'bg-white/5 text-white/60', icon: <Zap size={18} /> },
-      { label: 'Goal Kick', type: 'Goal Kick', color: 'bg-white/5 text-white/60', icon: <Activity size={18} /> },
-      { label: 'Penalty', type: 'Penalty', color: 'bg-orange-500 text-white', icon: <Trophy size={18} /> },
-      { label: 'Foul', type: 'Foul', color: 'bg-white/5 text-white/60', icon: <X size={18} /> },
-      { label: 'Eye Point', type: 'Eye Point', color: 'bg-primary/40 text-white', icon: <Star size={18} /> },
-    ],
-
+  Football: [
+    { label: 'Goal', type: 'Goal', color: 'bg-primary text-black', icon: <Trophy size={18} /> },
+    { label: 'Assist', type: 'Assist', color: 'bg-primary/20 text-primary', icon: <Zap size={18} /> },
+    { label: 'Save', type: 'Save', color: 'bg-white/10 text-white', icon: <Shield size={18} /> },
+    { label: 'Block', type: 'Block', color: 'bg-white/10 text-white', icon: <Shield size={18} /> },
+    { label: 'Interception', type: 'Interception', color: 'bg-white/10 text-white', icon: <Activity size={18} /> },
+    { label: 'Yellow Card', type: 'Yellow Card', color: 'bg-yellow-500 text-black', icon: <AlertTriangle size={18} /> },
+    { label: 'Red Card', type: 'Red Card', color: 'bg-red-500 text-white', icon: <AlertTriangle size={18} /> },
+    { label: 'Foul', type: 'Foul', color: 'bg-white/5 text-white/60', icon: <X size={18} /> },
+    { label: 'Substitution', type: 'Substitution', color: 'bg-blue-500 text-white', icon: <ArrowRightLeft size={18} /> },
+    { label: 'Corner', type: 'Corner', color: 'bg-white/5 text-white/60', icon: <Shield size={18} /> },
+    { label: 'Free Kick', type: 'Free Kick', color: 'bg-white/5 text-white/60', icon: <Zap size={18} /> },
+    { label: 'Goal Kick', type: 'Goal Kick', color: 'bg-white/5 text-white/60', icon: <Activity size={18} /> },
+    { label: 'Penalty', type: 'Penalty', color: 'bg-orange-500 text-white', icon: <Trophy size={18} /> },
+    { label: 'Possession', type: 'Possession', color: 'bg-white/5 text-white/60', icon: <Activity size={18} /> },
+    { label: 'Eye Point', type: 'Eye Point', color: 'bg-primary/40 text-white', icon: <Star size={18} /> },
+  ],
   Basketball: [
     { label: 'Field Goal', type: 'Field Goal', color: 'bg-primary text-black', icon: <Trophy size={18} /> },
     { label: '3 Pointer', type: 'Three Pointer', color: 'bg-primary/80 text-black', icon: <Zap size={18} /> },
@@ -40,6 +39,7 @@ const SPORT_EVENTS: Record<SportType, { label: string; type: EventType; color: s
     { label: 'Turnover', type: 'Turnover', color: 'bg-red-500/20 text-red-500', icon: <RotateCcw size={18} /> },
     { label: 'Foul', type: 'Foul', color: 'bg-yellow-500/20 text-yellow-500', icon: <X size={18} /> },
     { label: 'Timeout', type: 'Timeout', color: 'bg-blue-500/20 text-blue-500', icon: <Clock size={18} /> },
+    { label: 'Eye Point', type: 'Eye Point', color: 'bg-primary/40 text-white', icon: <Star size={18} /> },
   ],
   Volleyball: [
     { label: 'Serve', type: 'Serve', color: 'bg-white/10 text-white', icon: <Zap size={18} /> },
@@ -55,9 +55,11 @@ const SPORT_EVENTS: Record<SportType, { label: string; type: EventType; color: s
     { label: 'Lap Time', type: 'Lap Time', color: 'bg-white/10 text-white', icon: <Clock size={18} /> },
     { label: 'Race Finish', type: 'Race Finish', color: 'bg-primary text-black', icon: <Trophy size={18} /> },
     { label: 'False Start', type: 'False Start', color: 'bg-red-500 text-white', icon: <AlertCircle size={18} /> },
+    { label: 'Disqualify', type: 'Disqualification', color: 'bg-red-600 text-white', icon: <X size={18} /> },
+    { label: 'Record Try', type: 'Record Attempt', color: 'bg-yellow-500 text-black', icon: <Star size={18} /> },
     { label: 'Jump', type: 'Jump Attempt', color: 'bg-white/10 text-white', icon: <Activity size={18} /> },
     { label: 'Throw', type: 'Throw Attempt', color: 'bg-white/10 text-white', icon: <Activity size={18} /> },
-    { label: 'Result', type: 'Measurement', color: 'bg-white/10 text-white', icon: <History size={18} /> },
+    { label: 'Measure', type: 'Measurement', color: 'bg-white/10 text-white', icon: <History size={18} /> },
   ],
   'Table Tennis': [
     { label: 'Point', type: 'Point', color: 'bg-primary text-black', icon: <Trophy size={18} /> },
@@ -69,6 +71,7 @@ const SPORT_EVENTS: Record<SportType, { label: string; type: EventType; color: s
     { label: 'Point', type: 'Point', color: 'bg-primary text-black', icon: <Trophy size={18} /> },
     { label: 'Serve', type: 'Serve', color: 'bg-white/10 text-white', icon: <Zap size={18} /> },
     { label: 'Error', type: 'Error', color: 'bg-red-500/20 text-red-500', icon: <X size={18} /> },
+    { label: 'Timeout', type: 'Timeout', color: 'bg-blue-500/20 text-blue-500', icon: <Clock size={18} /> },
   ],
 };
 
