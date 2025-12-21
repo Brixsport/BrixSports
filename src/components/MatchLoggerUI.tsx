@@ -89,32 +89,20 @@ export function MatchLoggerUI({ match, onExit }: MatchLoggerUIProps) {
   const [currentMatch, setCurrentMatch] = useState(match);
   const [history, setHistory] = useState<Match[]>([]);
   const [redoStack, setRedoStack] = useState<Match[]>([]);
-  const [offlineQueue, setOfflineQueue] = useState<MatchEvent[]>([]);
-  const [selectedTeamId, setSelectedTeamId] = useState<string>(match.homeTeamId);
-  const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
-  const [minute, setMinute] = useState(75);
-  const [isSyncing, setIsSyncing] = useState(false);
-  const [isSubbing, setIsSubbing] = useState(false);
-  const [showQueue, setShowQueue] = useState(false);
-
-  const homeTeam = TEAMS.find(t => t.id === match.homeTeamId);
-  const awayTeam = TEAMS.find(t => t.id === match.awayTeamId);
-
-  const teamPlayers = useMemo(() => {
-    return PLAYERS.filter(p => p.teamId === selectedTeamId);
-  }, [selectedTeamId]);
+  const [activeTab, setActiveTab] = useState<'Protocol' | 'Stats' | 'Summary'>('Protocol');
+  const [offlineQueue, setOfflineQueue] = useState<(MatchEvent & { status: 'pending' | 'conflict' })[]>([]);
 
   const addEvent = useCallback((type: EventType, detail?: string, relatedPlayerId?: string) => {
     const newEvent: MatchEvent = {
-      id: Math.random().toString(36).substr(2, 9),
-      type,
-      minute,
-      teamId: selectedTeamId,
-      playerId: selectedPlayerId || undefined,
-      relatedPlayerId,
-      detail: detail || (selectedPlayerId ? PLAYERS.find(p => p.id === selectedPlayerId)?.name : undefined),
-      isEyePoint: type === 'Eye Point'
-    };
+        id: Math.random().toString(36).substr(2, 9),
+        type,
+        minute,
+        teamId: selectedTeamId,
+        playerId: selectedPlayerId || undefined,
+        relatedPlayerId,
+        detail: detail || (selectedPlayerId ? PLAYERS.find(p => p.id === selectedPlayerId)?.name : undefined),
+        isEyePoint: type === 'Eye Point'
+      };
 
     setHistory(prev => [...prev, JSON.parse(JSON.stringify(currentMatch))]);
     setRedoStack([]);
@@ -133,7 +121,7 @@ export function MatchLoggerUI({ match, onExit }: MatchLoggerUIProps) {
 
     // Handle stat updates
     const teamIdx = selectedTeamId === match.homeTeamId ? 0 : 1;
-    if (type === 'Shot') updatedMatch.stats.shots[teamIdx]++;
+    if (type === 'Shot' || type === 'Goal') updatedMatch.stats.shots[teamIdx]++;
     if (type === 'Corner') updatedMatch.stats.corners[teamIdx]++;
     if (type === 'Yellow Card') updatedMatch.stats.yellowCards[teamIdx]++;
     if (type === 'Red Card') updatedMatch.stats.redCards[teamIdx]++;
@@ -151,12 +139,13 @@ export function MatchLoggerUI({ match, onExit }: MatchLoggerUIProps) {
           detail: { matchId: match.id, event: newEvent, updatedMatch } 
         }));
     } else {
-        setOfflineQueue(prev => [...prev, newEvent]);
+        setOfflineQueue(prev => [...prev, { ...newEvent, status: 'pending' }]);
     }
 
     setSelectedPlayerId(null);
     setIsSubbing(false);
   }, [currentMatch, minute, selectedTeamId, selectedPlayerId, match.id, match.homeTeamId]);
+
 
   const undo = () => {
     if (history.length === 0) return;
