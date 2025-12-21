@@ -96,12 +96,13 @@ export function SearchOverlay({ onClose, onSelectTeam, onSelectPlayer }: SearchO
                     <p className="text-[10px] text-white/40 uppercase tracking-wider">{team.university}</p>
                   </div>
                 </button>
-                <button 
-                  onClick={() => toggleFavorite('teams', team.id)}
-                  className={`p-3 rounded-xl transition-colors ${favorites.teams.includes(team.id) ? 'text-primary bg-primary/10' : 'text-white/20 hover:text-white hover:bg-white/10'}`}
-                >
-                  <Star size={20} fill={favorites.teams.includes(team.id) ? "currentColor" : "none"} />
-                </button>
+                  <button 
+                    onClick={() => toggleTeam(team.id)}
+                    className={`p-3 rounded-xl transition-colors ${isFavoriteTeam(team.id) ? 'text-primary bg-primary/10' : 'text-white/20 hover:text-white hover:bg-white/10'}`}
+                  >
+                    <Heart size={20} fill={isFavoriteTeam(team.id) ? "currentColor" : "none"} />
+                  </button>
+
               </div>
             ))}
           </div>
