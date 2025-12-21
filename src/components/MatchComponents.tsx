@@ -4,6 +4,8 @@ import { motion } from 'framer-motion';
 import { Trophy, Activity, ArrowRight, Star } from 'lucide-react';
 import { TEAMS, Match } from '@/lib/mock-data';
 
+import { MatchCard, MatchRow, MatchTimeline } from '@/components/MatchComponents';
+
 export function MatchCard({ match }: { match: Match }) {
   const homeTeam = TEAMS.find(t => t.id === match.homeTeamId);
   const awayTeam = TEAMS.find(t => t.id === match.awayTeamId);
@@ -14,13 +16,13 @@ export function MatchCard({ match }: { match: Match }) {
       initial={{ opacity: 0, scale: 0.9 }}
       animate={{ opacity: 1, scale: 1 }}
       whileHover={{ y: -4 }}
-      className="relative group overflow-hidden bg-gradient-to-br from-white/10 to-white/5 p-6 rounded-[32px] border border-white/10 hover:border-primary/50 transition-all h-[240px] flex flex-col justify-between"
+      className="relative group overflow-hidden bg-gradient-to-br from-white/10 to-white/5 p-6 rounded-[32px] border border-white/10 hover:border-primary/50 transition-all min-h-[240px] flex flex-col justify-between"
     >
       <div className="absolute top-0 right-0 p-8 pointer-events-none opacity-10 group-hover:opacity-20 transition-opacity">
          <Trophy size={140} />
       </div>
 
-      <div>
+      <div className="relative z-10 w-full transition-all group-hover:-translate-y-2">
         <div className="flex items-center justify-between mb-4">
           <span className="text-[10px] font-bold tracking-[0.2em] text-white/40 uppercase bg-white/5 px-3 py-1 rounded-full border border-white/5">
             {match.competition}
@@ -59,7 +61,11 @@ export function MatchCard({ match }: { match: Match }) {
         </div>
       </div>
 
-      <div className="flex items-center justify-between mt-4 pt-4 border-t border-white/5">
+      <div className="hidden group-hover:block transition-all duration-300">
+         <MatchTimeline events={match.events.slice(-2)} />
+      </div>
+
+      <div className="flex items-center justify-between mt-4 pt-4 border-t border-white/5 relative z-10">
         <div className="flex items-center gap-2">
            <Activity size={14} className="text-white/40" />
            <span className="text-[11px] text-white/60 line-clamp-1">{match.venue}</span>
