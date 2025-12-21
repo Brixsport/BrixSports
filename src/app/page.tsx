@@ -18,6 +18,7 @@ import { useFavorites } from '@/hooks/useFavorites';
 export default function Home() {
   const [activeTab, setActiveTab] = useState('LIVE');
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [matches, setMatches] = useState(MATCHES);
   
   // Overlay States
   const [selectedMatch, setSelectedMatch] = useState<Match | null>(null);
@@ -28,7 +29,18 @@ export default function Home() {
   const { notifications, addNotification, removeNotification } = useNotifications();
   const { favoriteTeams, favoritePlayers } = useFavorites();
 
-  const filteredMatches = MATCHES.filter(m => activeTab === 'ALL' || m.status === activeTab);
+  const filteredMatches = matches.filter(m => activeTab === 'ALL' || m.status === activeTab);
+
+  // Global Sync Listener
+  useEffect(() => {
+    const handleGlobalUpdate = (e: any) => {
+      const { matchId, updatedMatch } = e.detail;
+      setMatches(prev => prev.map(m => m.id === matchId ? updatedMatch : m));
+    };
+
+    window.addEventListener('MATCH_UPDATE', handleGlobalUpdate);
+    return () => window.removeEventListener('MATCH_UPDATE', handleGlobalUpdate);
+  }, []);
 
   // Simulate real-time notifications for followed entities
   useEffect(() => {
