@@ -36,8 +36,11 @@ export function PlayerProfileOverlay({ player, onClose }: PlayerProfileOverlayPr
               <span className="text-[10px] font-black tracking-widest text-white/40 uppercase">{player.position}</span>
             </div>
           </div>
-          <button className="p-2 hover:bg-white/10 rounded-full transition-colors text-primary">
-            <Star size={20} />
+          <button 
+            onClick={() => togglePlayer(player.id)}
+            className={`p-2 rounded-full transition-colors ${isFav ? 'bg-primary text-black' : 'hover:bg-white/10 text-primary'}`}
+          >
+            <Heart size={20} fill={isFav ? "currentColor" : "none"} />
           </button>
         </div>
 
