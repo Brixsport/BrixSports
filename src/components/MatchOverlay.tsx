@@ -14,6 +14,7 @@ interface MatchOverlayProps {
 export function MatchOverlay({ match, onClose, onSelectPlayer }: MatchOverlayProps) {
   const homeTeam = TEAMS.find(t => t.id === match.homeTeamId);
   const awayTeam = TEAMS.find(t => t.id === match.awayTeamId);
+  const { isFavoriteTeam, toggleTeam } = useFavorites();
 
   return (
     <motion.div
