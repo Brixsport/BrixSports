@@ -44,7 +44,7 @@ export interface Player {
 
 export type EventType = 
   // Shared
-  | 'Eye Point' | 'Period Start' | 'Period End' | 'Foul' | 'Substitution' | 'Timeout'
+  | 'Eye Point' | 'Period Start' | 'Period End' | 'Foul' | 'Substitution' | 'Timeout' | 'Possession'
   // Football
   | 'Goal' | 'Assist' | 'Save' | 'Block' | 'Interception' | 'Yellow Card' | 'Red Card' | 'Corner' | 'Free Kick' | 'Goal Kick' | 'Penalty' | 'Possession Change' | 'Shot'
   // Basketball
