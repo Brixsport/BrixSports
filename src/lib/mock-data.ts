@@ -206,14 +206,15 @@ export const MATCHES: Match[] = [
     },
     lineups: {
       home: [
-        { playerId: 'p1', rating: 8.5, position: 'ST' },
-        { playerId: 'p3', rating: 7.9, position: 'LW' },
-        { playerId: 'p4', rating: 7.2, position: 'CB' }
+        { playerId: 'p1', rating: 8.5, position: 'ST', status: 'playing' },
+        { playerId: 'p3', rating: 7.9, position: 'LW', status: 'playing' },
+        { playerId: 'p4', rating: 7.2, position: 'CB', status: 'playing' }
       ],
       away: [
-        { playerId: 'p2', rating: 7.8, position: 'CM' }
+        { playerId: 'p2', rating: 7.8, position: 'CM', status: 'playing' }
       ]
     },
+    loggerId: 'l1',
     events: [
       { id: 'e1', type: 'Goal', minute: 15, teamId: 'unilag', playerId: 'p1', detail: 'Tunde Adeyemi' },
       { id: 'e2', type: 'Goal', minute: 42, teamId: 'uniben', playerId: 'p2', detail: 'Emeka Obi' },
@@ -221,5 +222,28 @@ export const MATCHES: Match[] = [
       { id: 'e4', type: 'Goal', minute: 68, teamId: 'unilag', playerId: 'p3', detail: 'Segun Bello' },
       { id: 'e5', type: 'Eye Point', minute: 75, teamId: 'unilag', playerId: 'p1', detail: 'Exceptional Hustle', isEyePoint: true },
     ],
+  },
+  {
+    id: 'm2',
+    sport: 'Track',
+    homeTeamId: 'unilag',
+    awayTeamId: 'ui',
+    homeScore: 0,
+    awayScore: 0,
+    status: 'UPCOMING',
+    startTime: '2024-03-21T10:00:00Z',
+    venue: 'UNILAG Track',
+    competition: 'NUGA Track Finals',
+    stats: {
+      possession: [0, 0],
+      shots: [0, 0],
+      shotsOnTarget: [0, 0],
+      corners: [0, 0],
+      fouls: [0, 0],
+      yellowCards: [0, 0],
+      redCards: [0, 0]
+    },
+    loggerId: 'l1',
+    events: []
   }
 ];
