@@ -60,46 +60,64 @@ export const TEAMS: Team[] = [
     university: 'University of Benin',
     color: '#990000',
   },
-  {
-    id: 'ui',
-    name: 'UI Pioneers',
-    shortName: 'UI',
-    logo: '🎓',
-    university: 'University of Ibadan',
-    color: '#FFD700',
-  },
-  {
-    id: 'oau',
-    name: 'OAU Ife Giants',
-    shortName: 'OAU',
-    logo: '🐘',
-    university: 'Obafemi Awolowo University',
-    color: '#000080',
-  },
-  {
-    id: 'unn',
-    name: 'UNN Lions',
-    shortName: 'UNN',
-    logo: '🦁',
-    university: 'University of Nigeria, Nsukka',
-    color: '#006400',
-  },
-  {
-    id: 'abu',
-    name: 'ABU Zaria Nobles',
-    shortName: 'ABU',
-    logo: '🏰',
-    university: 'Ahmadu Bello University',
-    color: '#008080',
-  },
-];
-
-export const PLAYERS: Player[] = [
-  { id: 'p1', name: 'Tunde Adeyemi', number: 10, teamId: 'unilag', position: 'Forward', rating: 8.5, eyePoints: 2 },
-  { id: 'p2', name: 'Emeka Obi', number: 7, teamId: 'uniben', position: 'Midfielder', rating: 7.8, eyePoints: 0 },
-  { id: 'p3', name: 'Segun Bello', number: 9, teamId: 'unilag', position: 'Forward', rating: 8.2, eyePoints: 1 },
-  { id: 'p4', name: 'Chidi Azikiwe', number: 1, teamId: 'uniben', position: 'Goalkeeper', rating: 7.2, eyePoints: 0 },
-];
+    {
+      id: 'ui',
+      name: 'UI Pioneers',
+      shortName: 'UI',
+      logo: '🎓',
+      university: 'University of Ibadan',
+      color: '#FFD700',
+    },
+    {
+      id: 'oau',
+      name: 'OAU Ife Giants',
+      shortName: 'OAU',
+      logo: '🐘',
+      university: 'Obafemi Awolowo University',
+      color: '#000080',
+    },
+    {
+      id: 'unn',
+      name: 'UNN Lions',
+      shortName: 'UNN',
+      logo: '🦁',
+      university: 'University of Nigeria, Nsukka',
+      color: '#006400',
+    },
+    {
+      id: 'abu',
+      name: 'ABU Zaria Nobles',
+      shortName: 'ABU',
+      logo: '🏰',
+      university: 'Ahmadu Bello University',
+      color: '#008080',
+    },
+    {
+      id: 'lasu',
+      name: 'LASU Blazers',
+      shortName: 'LAS',
+      logo: '🔥',
+      university: 'Lagos State University',
+      color: '#E31837',
+    },
+    {
+      id: 'futa',
+      name: 'FUTA Tigers',
+      shortName: 'FUT',
+      logo: '🐯',
+      university: 'Fed Univ of Tech, Akure',
+      color: '#000000',
+    },
+  ];
+  
+  export const PLAYERS: Player[] = [
+    { id: 'p1', name: 'Tunde Adeyemi', number: 10, teamId: 'unilag', position: 'Forward', rating: 8.5, eyePoints: 12 },
+    { id: 'p2', name: 'Emeka Obi', number: 7, teamId: 'uniben', position: 'Midfielder', rating: 7.8, eyePoints: 8 },
+    { id: 'p3', name: 'Segun Bello', number: 9, teamId: 'unilag', position: 'Forward', rating: 8.2, eyePoints: 15 },
+    { id: 'p4', name: 'Chidi Azikiwe', number: 1, teamId: 'uniben', position: 'Goalkeeper', rating: 7.2, eyePoints: 5 },
+    { id: 'p5', name: 'Ahmed Musa', number: 11, teamId: 'abu', position: 'Winger', rating: 8.0, eyePoints: 20 },
+    { id: 'p6', name: 'Ibrahim Danlad', number: 8, teamId: 'ui', position: 'PG', rating: 9.1, eyePoints: 25 },
+  ];
 
 export const MATCHES: Match[] = [
   {
