@@ -37,16 +37,32 @@ export function SearchOverlay({ onClose, onSelectTeam, onSelectPlayer }: SearchO
       className="fixed inset-0 z-[110] bg-black/98 backdrop-blur-xl flex flex-col"
     >
       <div className="p-4 border-b border-white/10 flex items-center gap-4 bg-black/50">
-        <div className="flex-1 relative">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-white/40" size={20} />
-          <input 
-            autoFocus
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search teams, players, or universities..."
-            className="w-full bg-white/5 border border-white/10 rounded-2xl py-4 pl-12 pr-4 focus:outline-none focus:border-primary/50 text-lg transition-all"
-          />
-        </div>
+          <div className="flex-1 relative">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-white/40" size={20} />
+            <input 
+              autoFocus
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search teams, players, or universities..."
+              className="w-full bg-white/5 border border-white/10 rounded-2xl py-4 pl-12 pr-4 focus:outline-none focus:border-primary/50 text-lg transition-all"
+            />
+          </div>
+          <div className="hidden md:flex items-center gap-2 bg-white/5 p-1 rounded-2xl border border-white/10">
+            {['All', 'Football', 'Basketball'].map(sport => (
+              <button
+                key={sport}
+                onClick={() => setSelectedSport(sport === 'All' ? null : sport)}
+                className={`px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-widest transition-all ${
+                  (sport === 'All' && !selectedSport) || selectedSport === sport
+                    ? 'bg-primary text-black'
+                    : 'text-white/40 hover:text-white'
+                }`}
+              >
+                {sport}
+              </button>
+            ))}
+          </div>
+
         <button onClick={onClose} className="p-4 hover:bg-white/10 rounded-2xl transition-colors">
           <X size={24} />
         </button>
