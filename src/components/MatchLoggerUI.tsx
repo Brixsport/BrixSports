@@ -11,20 +11,24 @@ interface MatchLoggerUIProps {
 }
 
 const SPORT_EVENTS: Record<SportType, { label: string; type: EventType; color: string; icon: React.ReactNode }[]> = {
-  Football: [
-    { label: 'Goal', type: 'Goal', color: 'bg-primary text-black', icon: <Trophy size={18} /> },
-    { label: 'Assist', type: 'Assist', color: 'bg-primary/20 text-primary', icon: <Zap size={18} /> },
-    { label: 'Save', type: 'Save', color: 'bg-white/10 text-white', icon: <Shield size={18} /> },
-    { label: 'Block', type: 'Block', color: 'bg-white/10 text-white', icon: <Shield size={18} /> },
-    { label: 'Interception', type: 'Interception', color: 'bg-white/10 text-white', icon: <Activity size={18} /> },
-    { label: 'Yellow Card', type: 'Yellow Card', color: 'bg-yellow-500 text-black', icon: <AlertTriangle size={18} /> },
-    { label: 'Red Card', type: 'Red Card', color: 'bg-red-500 text-white', icon: <AlertTriangle size={18} /> },
-    { label: 'Substitution', type: 'Substitution', color: 'bg-blue-500 text-white', icon: <ArrowRightLeft size={18} /> },
-    { label: 'Corner', type: 'Corner', color: 'bg-white/5 text-white/60', icon: <Shield size={18} /> },
-    { label: 'Free Kick', type: 'Free Kick', color: 'bg-white/5 text-white/60', icon: <Zap size={18} /> },
-    { label: 'Penalty', type: 'Penalty', color: 'bg-orange-500 text-white', icon: <Trophy size={18} /> },
-    { label: 'Foul', type: 'Foul', color: 'bg-white/5 text-white/60', icon: <X size={18} /> },
-  ],
+    Football: [
+      { label: 'Goal', type: 'Goal', color: 'bg-primary text-black', icon: <Trophy size={18} /> },
+      { label: 'Assist', type: 'Assist', color: 'bg-primary/20 text-primary', icon: <Zap size={18} /> },
+      { label: 'Save', type: 'Save', color: 'bg-white/10 text-white', icon: <Shield size={18} /> },
+      { label: 'Block', type: 'Block', color: 'bg-white/10 text-white', icon: <Shield size={18} /> },
+      { label: 'Interception', type: 'Interception', color: 'bg-white/10 text-white', icon: <Activity size={18} /> },
+      { label: 'Yellow Card', type: 'Yellow Card', color: 'bg-yellow-500 text-black', icon: <AlertTriangle size={18} /> },
+      { label: 'Red Card', type: 'Red Card', color: 'bg-red-500 text-white', icon: <AlertTriangle size={18} /> },
+      { label: 'Substitution', type: 'Substitution', color: 'bg-blue-500 text-white', icon: <ArrowRightLeft size={18} /> },
+      { label: 'Possession', type: 'Possession', color: 'bg-white/5 text-white/60', icon: <Activity size={18} /> },
+      { label: 'Corner', type: 'Corner', color: 'bg-white/5 text-white/60', icon: <Shield size={18} /> },
+      { label: 'Free Kick', type: 'Free Kick', color: 'bg-white/5 text-white/60', icon: <Zap size={18} /> },
+      { label: 'Goal Kick', type: 'Goal Kick', color: 'bg-white/5 text-white/60', icon: <Activity size={18} /> },
+      { label: 'Penalty', type: 'Penalty', color: 'bg-orange-500 text-white', icon: <Trophy size={18} /> },
+      { label: 'Foul', type: 'Foul', color: 'bg-white/5 text-white/60', icon: <X size={18} /> },
+      { label: 'Eye Point', type: 'Eye Point', color: 'bg-primary/40 text-white', icon: <Star size={18} /> },
+    ],
+
   Basketball: [
     { label: 'Field Goal', type: 'Field Goal', color: 'bg-primary text-black', icon: <Trophy size={18} /> },
     { label: '3 Pointer', type: 'Three Pointer', color: 'bg-primary/80 text-black', icon: <Zap size={18} /> },
