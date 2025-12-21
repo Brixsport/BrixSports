@@ -12,6 +12,7 @@ import { MatchOverlay } from '@/components/MatchOverlay';
 import { SearchOverlay } from '@/components/SearchOverlay';
 import { PlayerProfileOverlay } from '@/components/PlayerProfileOverlay';
 import { NotificationToast, useNotifications } from '@/components/Notifications';
+import { SettingsOverlay } from '@/components/SettingsOverlay';
 import { useFavorites } from '@/hooks/useFavorites';
 
 export default function Home() {
@@ -22,6 +23,7 @@ export default function Home() {
   const [selectedMatch, setSelectedMatch] = useState<Match | null>(null);
   const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   const { notifications, addNotification, removeNotification } = useNotifications();
   const { favoriteTeams, favoritePlayers } = useFavorites();
@@ -51,13 +53,13 @@ export default function Home() {
         <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center gap-8">
             <div className="flex items-center gap-2">
-              <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center font-display text-xl -skew-x-12 text-black">B</div>
+              <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center font-display text-xl -skew-x-12 text-black transition-transform hover:rotate-12">B</div>
               <span className="font-display text-2xl tracking-tight hidden sm:block">BRIXSPORT</span>
             </div>
-            <div className="hidden md:flex items-center gap-6 text-sm font-medium text-white/60">
-              <a href="#" className="hover:text-white transition-colors">Competitions</a>
-              <a href="#" className="hover:text-white transition-colors">Schools</a>
-              <a href="#" className="hover:text-white transition-colors">Draft</a>
+            <div className="hidden md:flex items-center gap-6 text-[10px] font-black uppercase tracking-widest text-white/40">
+              <a href="#" className="hover:text-primary transition-colors">Competitions</a>
+              <a href="#" className="hover:text-primary transition-colors">Schools</a>
+              <a href="#" className="hover:text-primary transition-colors">Draft</a>
             </div>
           </div>
           <div className="flex items-center gap-4">
@@ -67,7 +69,10 @@ export default function Home() {
             >
               <Search size={20} className="text-white/60" />
             </button>
-            <button className="p-2 hover:bg-white/5 rounded-full transition-colors relative">
+            <button 
+              onClick={() => setIsSettingsOpen(true)}
+              className="p-2 hover:bg-white/5 rounded-full transition-colors relative"
+            >
               <Bell size={20} className="text-white/60" />
               {notifications.length > 0 && (
                 <span className="absolute top-2 right-2 w-2 h-2 bg-primary rounded-full"></span>
@@ -75,7 +80,7 @@ export default function Home() {
             </button>
             <button className="hidden sm:flex items-center gap-2 bg-white/5 hover:bg-white/10 px-4 py-2 rounded-full border border-white/10 transition-all">
               <User size={18} />
-              <span className="text-sm">Profile</span>
+              <span className="text-[10px] font-black uppercase tracking-widest">Sign In</span>
             </button>
             <button 
               onClick={() => setIsMenuOpen(!isMenuOpen)}
@@ -96,15 +101,15 @@ export default function Home() {
                <div className="bg-white/5 rounded-[32px] border border-white/10 p-6">
                   <div className="flex items-center gap-2 mb-4 text-primary">
                     <TrendingUp size={18} />
-                    <span className="text-xs font-bold uppercase tracking-widest">Trending</span>
+                    <span className="text-xs font-bold uppercase tracking-widest">Pulse</span>
                   </div>
                   <div className="space-y-4">
                     <div className="group cursor-pointer">
-                      <p className="text-sm font-bold group-hover:text-primary transition-colors">NUGA Finals: UNILAG vs UNIBEN</p>
+                      <p className="text-sm font-bold group-hover:text-primary transition-colors">UNILAG vs UNIBEN</p>
                       <p className="text-[10px] text-white/40">24.5k watching now</p>
                     </div>
                     <div className="group cursor-pointer">
-                      <p className="text-sm font-bold group-hover:text-primary transition-colors">Eye Point Standings Update</p>
+                      <p className="text-sm font-bold group-hover:text-primary transition-colors">Eye Point Update</p>
                       <p className="text-[10px] text-white/40">Article • 5min read</p>
                     </div>
                   </div>
@@ -132,7 +137,7 @@ export default function Home() {
                   </div>
                   <div className="flex items-center gap-2">
                     <div className="w-2 h-2 bg-primary rounded-full animate-pulse shadow-[0_0_10px_rgba(var(--primary),0.5)]"></div>
-                    <span className="text-[10px] font-black text-white/40 tracking-widest uppercase">Streaming Now</span>
+                    <span className="text-[10px] font-black text-white/40 tracking-widest uppercase">Streaming</span>
                   </div>
                 </div>
 
@@ -155,7 +160,7 @@ export default function Home() {
                       <button
                         key={tab}
                         onClick={() => setActiveTab(tab)}
-                        className={`px-4 sm:px-6 py-2 rounded-lg text-xs sm:text-sm font-medium transition-all ${
+                        className={`px-4 sm:px-6 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${
                           activeTab === tab 
                             ? 'bg-primary text-black shadow-lg shadow-primary/20' 
                             : 'text-white/40 hover:text-white hover:bg-white/5'
@@ -166,7 +171,7 @@ export default function Home() {
                     ))}
                   </div>
                   <div className="flex items-center gap-3">
-                    <div className="hidden sm:flex items-center gap-2 px-4 py-2 bg-white/5 rounded-lg border border-white/10 text-xs italic text-white/60">
+                    <div className="hidden sm:flex items-center gap-2 px-4 py-2 bg-white/5 rounded-lg border border-white/10 text-[10px] font-black uppercase italic text-white/60">
                       <Calendar size={14} />
                       MARCH 20, 2024
                     </div>
@@ -183,7 +188,7 @@ export default function Home() {
                   ) : (
                     <div className="py-20 text-center border-2 border-dashed border-white/5 rounded-[40px]">
                       <Trophy size={48} className="mx-auto text-white/10 mb-4" />
-                      <p className="text-white/30 font-display text-xl">No {activeTab.toLowerCase()} matches found</p>
+                      <p className="text-white/30 font-display text-xl uppercase italic">No {activeTab.toLowerCase()} matches</p>
                     </div>
                   )}
                 </div>
@@ -196,10 +201,10 @@ export default function Home() {
                   <div className="absolute top-0 right-0 p-8 opacity-20 group-hover:scale-110 transition-transform">
                     <Zap size={80} fill="currentColor" />
                   </div>
-                  <h3 className="font-display text-4xl leading-[0.9] italic mb-4">SCOUT<br/>DATABASE</h3>
-                  <p className="text-xs font-bold leading-relaxed mb-6">Access deep metrics on every player from UNILAG to UNIBEN. Recruiter access available.</p>
+                  <h3 className="font-display text-4xl leading-[0.9] italic mb-4 uppercase">SCOUT<br/>QUERY</h3>
+                  <p className="text-[11px] font-bold leading-relaxed mb-6">Deep metrics for recursive recruiting. Access every high school and university data point.</p>
                   <button className="bg-black text-white px-6 py-3 rounded-full text-[10px] font-black tracking-widest uppercase hover:bg-black/90 transition-colors">
-                    EXPLORE
+                    ACCESS DATA
                   </button>
                </div>
                <StandingsGrid className="lg:hidden" />
@@ -239,6 +244,11 @@ export default function Home() {
             }}
           />
         )}
+        {isSettingsOpen && (
+          <SettingsOverlay 
+            onClose={() => setIsSettingsOpen(false)}
+          />
+        )}
       </AnimatePresence>
 
       <NotificationToast 
@@ -267,9 +277,16 @@ export default function Home() {
                 <Search size={24} />
                 SEARCH
               </button>
+              <button 
+                onClick={() => { setIsSettingsOpen(true); setIsMenuOpen(false); }}
+                className="flex items-center gap-3 text-white/60"
+              >
+                <Bell size={24} />
+                ALERTS
+              </button>
               <button className="flex items-center gap-3 bg-primary text-black px-6 py-4 rounded-2xl font-bold tracking-tight">
                 <User size={24} />
-                PROFILE
+                SIGN IN
               </button>
             </div>
           </motion.div>
