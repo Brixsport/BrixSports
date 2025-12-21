@@ -1,4 +1,4 @@
-export type SportType = 'Football' | 'Basketball' | 'Volleyball' | 'Track';
+export type SportType = 'Football' | 'Basketball' | 'Volleyball' | 'Track' | 'Table Tennis' | 'Badminton';
 
 export interface Team {
   id: string;
@@ -42,16 +42,31 @@ export interface Player {
   };
 }
 
+export type EventType = 
+  // Shared
+  | 'Eye Point' | 'Period Start' | 'Period End' | 'Foul' | 'Substitution' | 'Timeout'
+  // Football
+  | 'Goal' | 'Assist' | 'Save' | 'Block' | 'Interception' | 'Yellow Card' | 'Red Card' | 'Corner' | 'Free Kick' | 'Goal Kick' | 'Penalty' | 'Possession Change' | 'Shot'
+  // Basketball
+  | 'Field Goal' | 'Three Pointer' | 'Free Throw' | 'Rebound' | 'Steal' | 'Turnover'
+  // Track
+  | 'Race Start' | 'Lap Time' | 'Race Finish' | 'False Start' | 'Disqualification' | 'Record Attempt' | 'Jump Attempt' | 'Throw Attempt' | 'Measurement'
+  // Volleyball
+  | 'Serve' | 'Spike' | 'Dig' | 'Set' | 'Ace' | 'Error'
+  // Racket Sports
+  | 'Point';
+
 export interface MatchEvent {
   id: string;
-  type: 'Goal' | 'Yellow Card' | 'Red Card' | 'Substitution' | 'Eye Point' | 'Period Start' | 'Period End' | 'Corner' | 'Free Kick' | 'Penalty' | 'Save' | 'Foul' | 'Shot' | 'Possession Change';
+  type: EventType;
   minute: number;
+  second?: number; // More precision for track/basketball
   teamId?: string;
   playerId?: string;
-  relatedPlayerId?: string; // e.g., for substitution: outgoing player
+  relatedPlayerId?: string; 
   detail?: string;
   isEyePoint?: boolean;
-  value?: any; // For measurements, etc.
+  value?: any; 
 }
 
 export interface Logger {
