@@ -518,6 +518,7 @@ export default function FootballPage() {
             {selectedTeam && (
                 <TeamProfileOverlay
                     team={selectedTeam}
+                    sport="Football"
                     onClose={() => setSelectedTeam(null)}
                     onSelectPlayer={(player) => {
                         setSelectedPlayer(player);

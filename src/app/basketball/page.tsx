@@ -249,15 +249,15 @@ export default function BasketballPage() {
                                         <table className="w-full">
                                             <thead className="bg-white/5">
                                                 <tr className="text-xs font-bold uppercase tracking-widest text-white/60">
-                                                    <th className="px-6 py-4 text-left">Pos</th>
-                                                    <th className="px-6 py-4 text-left">Team</th>
-                                                    <th className="px-6 py-4 text-center">P</th>
-                                                    <th className="px-6 py-4 text-center">W</th>
-                                                    <th className="px-6 py-4 text-center">L</th>
-                                                    <th className="px-6 py-4 text-center">PF</th>
-                                                    <th className="px-6 py-4 text-center">PA</th>
-                                                    <th className="px-6 py-4 text-center">PD</th>
-                                                    <th className="px-6 py-4 text-center">Pts</th>
+                                                    <th className="px-2 md:px-6 py-4 text-left">Pos</th>
+                                                    <th className="px-2 md:px-6 py-4 text-left">Team</th>
+                                                    <th className="px-1 md:px-6 py-4 text-center">P</th>
+                                                    <th className="px-1 md:px-6 py-4 text-center">W</th>
+                                                    <th className="px-1 md:px-6 py-4 text-center">L</th>
+                                                    <th className="px-1 md:px-6 py-4 text-center hidden sm:table-cell">PF</th>
+                                                    <th className="px-1 md:px-6 py-4 text-center hidden sm:table-cell">PA</th>
+                                                    <th className="px-1 md:px-6 py-4 text-center">PD</th>
+                                                    <th className="px-2 md:px-6 py-4 text-center">Pts</th>
                                                 </tr>
                                             </thead>
                                             <tbody>
@@ -267,14 +267,14 @@ export default function BasketballPage() {
                                                         onClick={() => standing.team && setSelectedTeam(standing.team)}
                                                         className="border-t border-white/5 hover:bg-white/5 transition-colors cursor-pointer"
                                                     >
-                                                        <td className="px-6 py-4">
+                                                        <td className="px-2 md:px-6 py-4">
                                                             <span className={`text-lg font-bold ${index === 0 ? 'text-primary' : ''}`}>
                                                                 {index + 1}
                                                             </span>
                                                         </td>
-                                                        <td className="px-6 py-4">
+                                                        <td className="px-2 md:px-6 py-4">
                                                             <div className="flex items-center gap-3">
-                                                                <div className="w-10 h-10 relative rounded-lg overflow-hidden bg-white/5">
+                                                                <div className="w-8 h-8 md:w-10 md:h-10 relative rounded-lg overflow-hidden bg-white/5 flex-shrink-0">
                                                                     <Image
                                                                         src={standing.team?.logo || '/assests/Logos/BRIX-SPORT-LOGO.png'}
                                                                         alt={standing.team?.name || 'Team'}
@@ -283,21 +283,21 @@ export default function BasketballPage() {
                                                                     />
                                                                 </div>
                                                                 <div>
-                                                                    <p className="font-bold">{standing.team?.name}</p>
-                                                                    <p className="text-xs text-white/40">{standing.team?.shortName}</p>
+                                                                    <p className="font-bold text-sm md:text-base">{standing.team?.name}</p>
+                                                                    <p className="text-[10px] md:text-xs text-white/40">{standing.team?.shortName}</p>
                                                                 </div>
                                                             </div>
                                                         </td>
-                                                        <td className="px-6 py-4 text-center font-semibold">{standing.played}</td>
-                                                        <td className="px-6 py-4 text-center font-semibold text-blue-500">{standing.won}</td>
-                                                        <td className="px-6 py-4 text-center font-semibold text-red-500">{standing.lost}</td>
-                                                        <td className="px-6 py-4 text-center font-semibold">{standing.goalsFor}</td>
-                                                        <td className="px-6 py-4 text-center font-semibold">{standing.goalsAgainst}</td>
-                                                        <td className={`px-6 py-4 text-center font-semibold ${standing.goalDifference > 0 ? 'text-blue-500' : standing.goalDifference < 0 ? 'text-red-500' : ''}`}>
+                                                        <td className="px-1 md:px-6 py-4 text-center font-semibold text-sm md:text-base">{standing.played}</td>
+                                                        <td className="px-1 md:px-6 py-4 text-center font-semibold text-blue-500 text-sm md:text-base">{standing.won}</td>
+                                                        <td className="px-1 md:px-6 py-4 text-center font-semibold text-red-500 text-sm md:text-base">{standing.lost}</td>
+                                                        <td className="px-1 md:px-6 py-4 text-center font-semibold text-sm md:text-base hidden sm:table-cell">{standing.goalsFor}</td>
+                                                        <td className="px-1 md:px-6 py-4 text-center font-semibold text-sm md:text-base hidden sm:table-cell">{standing.goalsAgainst}</td>
+                                                        <td className={`px-1 md:px-6 py-4 text-center font-semibold text-sm md:text-base ${standing.goalDifference > 0 ? 'text-blue-500' : standing.goalDifference < 0 ? 'text-red-500' : ''}`}>
                                                             {standing.goalDifference > 0 ? '+' : ''}{standing.goalDifference}
                                                         </td>
-                                                        <td className="px-6 py-4 text-center">
-                                                            <span className="px-3 py-1 bg-primary/20 text-primary rounded-full text-sm font-bold">
+                                                        <td className="px-2 md:px-6 py-4 text-center">
+                                                            <span className="px-2 md:px-3 py-1 bg-primary/20 text-primary rounded-full text-xs md:text-sm font-bold">
                                                                 {standing.points}
                                                             </span>
                                                         </td>
@@ -516,6 +516,7 @@ export default function BasketballPage() {
             {selectedTeam && (
                 <TeamProfileOverlay
                     team={selectedTeam}
+                    sport="Basketball"
                     onClose={() => setSelectedTeam(null)}
                     onSelectPlayer={(player) => {
                         setSelectedPlayer(player);

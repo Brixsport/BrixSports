@@ -35,7 +35,7 @@ export function InstallPrompt() {
             // Show prompt after 30 seconds
             setTimeout(() => {
                 setShowPrompt(true);
-            }, 30000);
+            }, 5000);
         });
 
         return cleanup;

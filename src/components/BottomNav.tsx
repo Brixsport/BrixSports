@@ -26,12 +26,7 @@ export function BottomNav() {
     }, []);
 
     const navItems: NavItem[] = [
-        {
-            id: 'fixtures',
-            label: 'Fixtures',
-            icon: Calendar,
-            path: '/fixtures',
-        },
+
         {
             id: 'competitions',
             label: 'Competitions',
@@ -109,8 +104,8 @@ export function BottomNav() {
                                             <Icon
                                                 size={24}
                                                 className={`transition-colors ${active
-                                                        ? 'text-primary'
-                                                        : 'text-white/40'
+                                                    ? 'text-primary'
+                                                    : 'text-white/40'
                                                     }`}
                                                 strokeWidth={active ? 2.5 : 2}
                                             />
@@ -133,8 +128,8 @@ export function BottomNav() {
                                     {/* Label */}
                                     <span
                                         className={`text-[10px] font-bold uppercase tracking-wider transition-colors ${active
-                                                ? 'text-primary'
-                                                : 'text-white/40'
+                                            ? 'text-primary'
+                                            : 'text-white/40'
                                             }`}
                                     >
                                         {item.label}

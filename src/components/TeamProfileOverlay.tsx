@@ -61,11 +61,11 @@ const isValidImagePath = (path: string | undefined): boolean => {
     return path.startsWith('/') || path.startsWith('http');
 };
 
-export function TeamProfileOverlay({ team, onClose, onSelectPlayer }: TeamProfileOverlayProps) {
+export function TeamProfileOverlay({ team, onClose, onSelectPlayer, sport = 'Basketball' }: TeamProfileOverlayProps & { sport?: string }) {
     const [activeTab, setActiveTab] = useState('overview');
     const [players, setPlayers] = useState<Player[]>([]);
     const [matches, setMatches] = useState<Match[]>([]);
-    const [standing, setStanding] = useState<Standing | null>(null);
+    const [standing, setStanding] = useState<Standing & { drawn?: number } | null>(null);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
@@ -75,10 +75,11 @@ export function TeamProfileOverlay({ team, onClose, onSelectPlayer }: TeamProfil
     const fetchTeamData = async () => {
         try {
             setLoading(true);
+            const apiSport = sport.toLowerCase();
             const [playersRes, matchesRes, standingsRes] = await Promise.all([
-                fetch(`/api/basketball/players?teamId=${team.id}`),
-                fetch(`/api/basketball/matches?teamId=${team.id}`),
-                fetch('/api/basketball/standings')
+                fetch(`/api/${apiSport}/players?teamId=${team.id}`),
+                fetch(`/api/${apiSport}/matches?teamId=${team.id}`),
+                fetch(`/api/${apiSport}/standings`)
             ]);
 
             const [playersData, matchesData, standingsData] = await Promise.all([
@@ -100,13 +101,18 @@ export function TeamProfileOverlay({ team, onClose, onSelectPlayer }: TeamProfil
             }
 
             if (standingsData.success) {
-                const teamStanding = standingsData.standings.find(
-                    (s: any) => s.team?.id === team.id
+                // Handle both array format and object format
+                const allStandings = Array.isArray(standingsData.standings) ? standingsData.standings : (Array.isArray(standingsData) ? standingsData : []);
+
+                const teamStanding = allStandings.find(
+                    (s: any) => s.team?.id === team.id || s.teamId === team.id
                 );
+
                 if (teamStanding) {
                     setStanding({
                         played: teamStanding.played,
                         won: teamStanding.won,
+                        drawn: teamStanding.drawn || 0,
                         lost: teamStanding.lost,
                         goalsFor: teamStanding.goalsFor,
                         goalsAgainst: teamStanding.goalsAgainst,
@@ -131,6 +137,7 @@ export function TeamProfileOverlay({ team, onClose, onSelectPlayer }: TeamProfil
 
     const recentMatches = matches.slice(0, 5);
     const winPercentage = standing ? ((standing.won / (standing.played || 1)) * 100).toFixed(1) : '0.0';
+    const isFootball = sport.toLowerCase() === 'football';
 
     return (
         <motion.div
@@ -179,14 +186,22 @@ export function TeamProfileOverlay({ team, onClose, onSelectPlayer }: TeamProfil
                                             <p className="text-lg font-bold text-primary leading-none">{standing.won}</p>
                                             <p className="text-[10px] text-white/40 uppercase">W</p>
                                         </div>
+                                        {isFootball && (
+                                            <div className="text-right">
+                                                <p className="text-lg font-bold text-yellow-500 leading-none">{standing.drawn}</p>
+                                                <p className="text-[10px] text-white/40 uppercase">D</p>
+                                            </div>
+                                        )}
                                         <div className="text-right">
                                             <p className="text-lg font-bold text-red-500 leading-none">{standing.lost}</p>
                                             <p className="text-[10px] text-white/40 uppercase">L</p>
                                         </div>
-                                        <div className="text-right">
-                                            <p className="text-lg font-bold leading-none">{winPercentage}%</p>
-                                            <p className="text-[10px] text-white/40 uppercase">Win%</p>
-                                        </div>
+                                        {!isFootball && (
+                                            <div className="text-right">
+                                                <p className="text-lg font-bold leading-none">{winPercentage}%</p>
+                                                <p className="text-[10px] text-white/40 uppercase">Win%</p>
+                                            </div>
+                                        )}
                                     </div>
                                 )}
                             </div>
@@ -245,11 +260,11 @@ export function TeamProfileOverlay({ team, onClose, onSelectPlayer }: TeamProfil
                                                 </div>
                                                 <div>
                                                     <p className="text-2xl font-bold">{standing.goalsFor}</p>
-                                                    <p className="text-xs text-white/40">Points For</p>
+                                                    <p className="text-xs text-white/40">{isFootball ? 'Goals For' : 'Points For'}</p>
                                                 </div>
                                                 <div>
                                                     <p className="text-2xl font-bold">{standing.goalsAgainst}</p>
-                                                    <p className="text-xs text-white/40">Points Against</p>
+                                                    <p className="text-xs text-white/40">{isFootball ? 'Goals Against' : 'Points Against'}</p>
                                                 </div>
                                             </div>
                                         </div>
@@ -279,7 +294,7 @@ export function TeamProfileOverlay({ team, onClose, onSelectPlayer }: TeamProfil
                                                                         ? 'bg-blue-500/20 text-blue-500'
                                                                         : result === 'L'
                                                                             ? 'bg-red-500/20 text-red-500'
-                                                                            : 'bg-white/10'
+                                                                            : 'bg-yellow-500/20 text-yellow-500'
                                                                         }`}
                                                                 >
                                                                     {result}
@@ -359,7 +374,10 @@ export function TeamProfileOverlay({ team, onClose, onSelectPlayer }: TeamProfil
                                     {matches.length > 0 ? (
                                         matches.map((match) => {
                                             const isHome = match.homeTeamId === team.id;
+                                            // Handle potential missing awayTeam/homeTeam by checking match data or passed team
                                             const opponent = isHome ? match.awayTeam : match.homeTeam;
+                                            // Fallback if opponent team data is missing in match object
+                                            const opponentName = opponent?.name || 'Opponent';
 
                                             return (
                                                 <div
@@ -371,7 +389,7 @@ export function TeamProfileOverlay({ team, onClose, onSelectPlayer }: TeamProfil
                                                             <p className="text-xs text-white/40 mb-2">{match.competition}</p>
                                                             <div className="flex items-center gap-3">
                                                                 <span className="font-semibold">
-                                                                    {isHome ? 'vs' : '@'} {opponent?.name}
+                                                                    {isHome ? 'vs' : '@'} {opponentName}
                                                                 </span>
                                                             </div>
                                                             <p className="text-xs text-white/40 mt-2">
@@ -430,13 +448,13 @@ export function TeamProfileOverlay({ team, onClose, onSelectPlayer }: TeamProfil
 
                                         <div className="grid grid-cols-2 gap-4">
                                             <div className="bg-white/5 rounded-xl p-4">
-                                                <p className="text-xs text-white/40 mb-1">Average Points For</p>
+                                                <p className="text-xs text-white/40 mb-1">{isFootball ? 'Avg Goals For' : 'Avg Points For'}</p>
                                                 <p className="text-2xl font-bold">
                                                     {(standing.goalsFor / (standing.played || 1)).toFixed(1)}
                                                 </p>
                                             </div>
                                             <div className="bg-white/5 rounded-xl p-4">
-                                                <p className="text-xs text-white/40 mb-1">Average Points Against</p>
+                                                <p className="text-xs text-white/40 mb-1">{isFootball ? 'Avg Goals Against' : 'Avg Points Against'}</p>
                                                 <p className="text-2xl font-bold">
                                                     {(standing.goalsAgainst / (standing.played || 1)).toFixed(1)}
                                                 </p>
@@ -444,7 +462,7 @@ export function TeamProfileOverlay({ team, onClose, onSelectPlayer }: TeamProfil
                                         </div>
 
                                         <div className="bg-white/5 rounded-xl p-4">
-                                            <p className="text-xs text-white/40 mb-1">Point Differential</p>
+                                            <p className="text-xs text-white/40 mb-1">{isFootball ? 'Goal Difference' : 'Point Differential'}</p>
                                             <p className={`text-3xl font-bold ${standing.goalDifference > 0 ? 'text-blue-500' : standing.goalDifference < 0 ? 'text-red-500' : ''}`}>
                                                 {standing.goalDifference > 0 ? '+' : ''}{standing.goalDifference}
                                             </p>
