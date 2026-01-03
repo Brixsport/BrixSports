@@ -1,12 +1,28 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import VisualEditsMessenger from "../visual-edits/VisualEditsMessenger";
 import ErrorReporter from "@/components/ErrorReporter";
 import Script from "next/script";
+import { BottomNav } from "@/components/BottomNav";
+import { PWAProvider } from "@/components/pwa/PWAProvider";
 
 export const metadata: Metadata = {
   title: "Brixsport | Nigerian University Sports Live",
   description: "Real-time scoring and sports management for Nigerian universities.",
+  manifest: "/manifest-user.json",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "Brixsport",
+  },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#8b5cf6",
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 5,
+  userScalable: true,
 };
 
 export default function RootLayout({
@@ -16,6 +32,12 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
+      <head>
+        <link rel="apple-touch-icon" href="/icons/icon-192x192.png" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+        <meta name="apple-mobile-web-app-title" content="Brixsport" />
+      </head>
       <body className="antialiased">
         <Script
           id="orchids-browser-logs"
@@ -34,7 +56,10 @@ export default function RootLayout({
           data-debug="true"
           data-custom-data='{"appName": "YourApp", "version": "1.0.0", "greeting": "hi"}'
         />
-        {children}
+        <PWAProvider swPath="/sw-user.js">
+          {children}
+          <BottomNav />
+        </PWAProvider>
         <VisualEditsMessenger />
       </body>
     </html>

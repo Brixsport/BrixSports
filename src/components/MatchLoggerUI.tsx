@@ -51,7 +51,7 @@ const SPORT_EVENTS: Record<SportType, { label: string; type: EventType; color: s
     { label: 'Error', type: 'Error', color: 'bg-red-500/20 text-red-500', icon: <X size={18} /> },
   ],
   Track: [
-    { label: 'Race Start', type: 'Race Start', color: 'bg-green-500 text-black', icon: <Zap size={18} /> },
+    { label: 'Race Start', type: 'Race Start', color: 'bg-blue-500 text-black', icon: <Zap size={18} /> },
     { label: 'Lap Time', type: 'Lap Time', color: 'bg-white/10 text-white', icon: <Clock size={18} /> },
     { label: 'Race Finish', type: 'Race Finish', color: 'bg-primary text-black', icon: <Trophy size={18} /> },
     { label: 'False Start', type: 'False Start', color: 'bg-red-500 text-white', icon: <AlertCircle size={18} /> },
@@ -92,17 +92,30 @@ export function MatchLoggerUI({ match, onExit }: MatchLoggerUIProps) {
   const [activeTab, setActiveTab] = useState<'Protocol' | 'Stats' | 'Summary'>('Protocol');
   const [offlineQueue, setOfflineQueue] = useState<(MatchEvent & { status: 'pending' | 'conflict' })[]>([]);
 
+  // Missing state variables
+  const [minute, setMinute] = useState(0);
+  const [selectedTeamId, setSelectedTeamId] = useState<string>(match.homeTeamId);
+  const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
+  const [isSubbing, setIsSubbing] = useState(false);
+  const [showQueue, setShowQueue] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
+
+  // Computed values
+  const homeTeam = useMemo(() => TEAMS.find(t => t.id === match.homeTeamId), [match.homeTeamId]);
+  const awayTeam = useMemo(() => TEAMS.find(t => t.id === match.awayTeamId), [match.awayTeamId]);
+  const teamPlayers = useMemo(() => PLAYERS.filter(p => p.teamId === selectedTeamId), [selectedTeamId]);
+
   const addEvent = useCallback((type: EventType, detail?: string, relatedPlayerId?: string) => {
     const newEvent: MatchEvent = {
-        id: Math.random().toString(36).substr(2, 9),
-        type,
-        minute,
-        teamId: selectedTeamId,
-        playerId: selectedPlayerId || undefined,
-        relatedPlayerId,
-        detail: detail || (selectedPlayerId ? PLAYERS.find(p => p.id === selectedPlayerId)?.name : undefined),
-        isEyePoint: type === 'Eye Point'
-      };
+      id: Math.random().toString(36).substr(2, 9),
+      type,
+      minute,
+      teamId: selectedTeamId,
+      playerId: selectedPlayerId || undefined,
+      relatedPlayerId,
+      detail: detail || (selectedPlayerId ? PLAYERS.find(p => p.id === selectedPlayerId)?.name : undefined),
+      isEyePoint: type === 'Eye Point'
+    };
 
     setHistory(prev => [...prev, JSON.parse(JSON.stringify(currentMatch))]);
     setRedoStack([]);
@@ -115,8 +128,8 @@ export function MatchLoggerUI({ match, onExit }: MatchLoggerUIProps) {
       if (selectedTeamId === match.homeTeamId) updatedMatch.homeScore++;
       else updatedMatch.awayScore++;
     } else if (type === 'Three Pointer') {
-        if (selectedTeamId === match.homeTeamId) updatedMatch.homeScore += 3;
-        else updatedMatch.awayScore += 3;
+      if (selectedTeamId === match.homeTeamId) updatedMatch.homeScore += 3;
+      else updatedMatch.awayScore += 3;
     }
 
     // Handle stat updates
@@ -127,19 +140,19 @@ export function MatchLoggerUI({ match, onExit }: MatchLoggerUIProps) {
     if (type === 'Red Card') updatedMatch.stats.redCards[teamIdx]++;
     if (type === 'Foul') updatedMatch.stats.fouls[teamIdx]++;
     if (type === 'Save') updatedMatch.stats.saves = updatedMatch.stats.saves ? [
-        teamIdx === 0 ? updatedMatch.stats.saves[0] + 1 : updatedMatch.stats.saves[0],
-        teamIdx === 1 ? updatedMatch.stats.saves[1] + 1 : updatedMatch.stats.saves[1]
+      teamIdx === 0 ? updatedMatch.stats.saves[0] + 1 : updatedMatch.stats.saves[0],
+      teamIdx === 1 ? updatedMatch.stats.saves[1] + 1 : updatedMatch.stats.saves[1]
     ] : [teamIdx === 0 ? 1 : 0, teamIdx === 1 ? 1 : 0];
 
     setCurrentMatch(updatedMatch);
-    
+
     // Simulating offline/online behavior
     if (navigator.onLine) {
-        window.dispatchEvent(new CustomEvent('MATCH_UPDATE', { 
-          detail: { matchId: match.id, event: newEvent, updatedMatch } 
-        }));
+      window.dispatchEvent(new CustomEvent('MATCH_UPDATE', {
+        detail: { matchId: match.id, event: newEvent, updatedMatch }
+      }));
     } else {
-        setOfflineQueue(prev => [...prev, { ...newEvent, status: 'pending' }]);
+      setOfflineQueue(prev => [...prev, { ...newEvent, status: 'pending' }]);
     }
 
     setSelectedPlayerId(null);
@@ -190,45 +203,43 @@ export function MatchLoggerUI({ match, onExit }: MatchLoggerUIProps) {
               </h2>
             </div>
             <div className="hidden sm:flex items-center gap-4 border-l border-white/10 pl-6">
-                <div className="text-center">
-                    <span className="block text-[8px] font-black text-white/30 uppercase">Shots</span>
-                    <span className="text-sm font-bold">{currentMatch.stats.shots[0]} - {currentMatch.stats.shots[1]}</span>
-                </div>
-                <div className="text-center">
-                    <span className="block text-[8px] font-black text-white/30 uppercase">Fouls</span>
-                    <span className="text-sm font-bold">{currentMatch.stats.fouls[0]} - {currentMatch.stats.fouls[1]}</span>
-                </div>
+              <div className="text-center">
+                <span className="block text-[8px] font-black text-white/30 uppercase">Shots</span>
+                <span className="text-sm font-bold">{currentMatch.stats.shots[0]} - {currentMatch.stats.shots[1]}</span>
+              </div>
+              <div className="text-center">
+                <span className="block text-[8px] font-black text-white/30 uppercase">Fouls</span>
+                <span className="text-sm font-bold">{currentMatch.stats.fouls[0]} - {currentMatch.stats.fouls[1]}</span>
+              </div>
             </div>
           </div>
         </div>
         <div className="flex items-center gap-3">
-          <button 
+          <button
             onClick={() => setShowQueue(!showQueue)}
-            className={`relative p-2 rounded-xl border transition-all ${
-              offlineQueue.length > 0 ? 'bg-orange-500/10 border-orange-500/20 text-orange-500' : 'bg-white/5 border-white/10 text-white/40'
-            }`}
+            className={`relative p-2 rounded-xl border transition-all ${offlineQueue.length > 0 ? 'bg-orange-500/10 border-orange-500/20 text-orange-500' : 'bg-white/5 border-white/10 text-white/40'
+              }`}
           >
             <History size={20} />
             {offlineQueue.length > 0 && (
-                <span className="absolute -top-1 -right-1 w-4 h-4 bg-orange-500 text-black text-[8px] font-black rounded-full flex items-center justify-center">
-                    {offlineQueue.length}
-                </span>
+              <span className="absolute -top-1 -right-1 w-4 h-4 bg-orange-500 text-black text-[8px] font-black rounded-full flex items-center justify-center">
+                {offlineQueue.length}
+              </span>
             )}
           </button>
           <div className="hidden md:flex flex-col items-end mr-2">
             <span className="text-[10px] font-black uppercase tracking-widest text-white/30">Sync Status</span>
-            <span className={`text-[10px] font-black uppercase tracking-widest ${offlineQueue.length > 0 ? 'text-orange-500' : 'text-green-500'}`}>
+            <span className={`text-[10px] font-black uppercase tracking-widest ${offlineQueue.length > 0 ? 'text-orange-500' : 'text-blue-500'}`}>
               {offlineQueue.length > 0 ? 'Queue Pending' : 'All Synced'}
             </span>
           </div>
-          <button 
+          <button
             onClick={handleSync}
             disabled={isSyncing || offlineQueue.length === 0}
-            className={`flex items-center gap-2 px-6 py-3 rounded-xl border font-black uppercase tracking-widest text-[10px] transition-all ${
-              offlineQueue.length > 0 
-                ? 'bg-primary text-black border-primary shadow-lg shadow-primary/20' 
+            className={`flex items-center gap-2 px-6 py-3 rounded-xl border font-black uppercase tracking-widest text-[10px] transition-all ${offlineQueue.length > 0
+                ? 'bg-primary text-black border-primary shadow-lg shadow-primary/20'
                 : 'bg-white/5 border-white/10 text-white/20'
-            }`}
+              }`}
           >
             {isSyncing ? <RefreshCw className="animate-spin" size={14} /> : <Save size={14} />}
             Push Batch
@@ -239,20 +250,20 @@ export function MatchLoggerUI({ match, onExit }: MatchLoggerUIProps) {
       <div className="flex-1 flex overflow-hidden relative">
         {/* Undo/Redo Floating Controls */}
         <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10 flex items-center gap-1 bg-black/60 backdrop-blur-md border border-white/10 p-1 rounded-full">
-            <button 
-                onClick={undo}
-                disabled={history.length === 0}
-                className="p-2 hover:bg-white/10 rounded-full disabled:opacity-20 transition-all"
-            >
-                <Undo2 size={16} />
-            </button>
-            <button 
-                onClick={redo}
-                disabled={redoStack.length === 0}
-                className="p-2 hover:bg-white/10 rounded-full disabled:opacity-20 transition-all"
-            >
-                <Redo2 size={16} />
-            </button>
+          <button
+            onClick={undo}
+            disabled={history.length === 0}
+            className="p-2 hover:bg-white/10 rounded-full disabled:opacity-20 transition-all"
+          >
+            <Undo2 size={16} />
+          </button>
+          <button
+            onClick={redo}
+            disabled={redoStack.length === 0}
+            className="p-2 hover:bg-white/10 rounded-full disabled:opacity-20 transition-all"
+          >
+            <Redo2 size={16} />
+          </button>
         </div>
 
         {/* Left Side - Control Panel */}
@@ -266,20 +277,19 @@ export function MatchLoggerUI({ match, onExit }: MatchLoggerUIProps) {
                 <button
                   key={id}
                   onClick={() => {
-                      setSelectedTeamId(id);
-                      setSelectedPlayerId(null);
-                      setIsSubbing(false);
+                    setSelectedTeamId(id);
+                    setSelectedPlayerId(null);
+                    setIsSubbing(false);
                   }}
-                  className={`flex-1 py-4 px-2 rounded-2xl flex flex-col items-center gap-2 transition-all relative ${
-                    isActive ? 'text-black z-10' : 'text-white/40 hover:text-white'
-                  }`}
+                  className={`flex-1 py-4 px-2 rounded-2xl flex flex-col items-center gap-2 transition-all relative ${isActive ? 'text-black z-10' : 'text-white/40 hover:text-white'
+                    }`}
                 >
                   {isActive && (
-                      <motion.div 
-                        layoutId="team-active"
-                        className="absolute inset-0 bg-primary -z-10 rounded-2xl"
-                        transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
-                      />
+                    <motion.div
+                      layoutId="team-active"
+                      className="absolute inset-0 bg-primary -z-10 rounded-2xl"
+                      transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
+                    />
                   )}
                   <span className="text-2xl">{team?.logo}</span>
                   <span className="text-[10px] font-black uppercase tracking-widest truncate w-full text-center">{team?.name}</span>
@@ -290,35 +300,35 @@ export function MatchLoggerUI({ match, onExit }: MatchLoggerUIProps) {
 
           {/* Quick Actions Grid */}
           <section className="space-y-4">
-             <div className="flex items-center justify-between px-2">
-                <h3 className="text-[10px] font-black uppercase tracking-widest text-white/40">Event Protocol</h3>
-                <span className="text-[10px] font-bold text-primary/60 italic">Sport: {match.sport}</span>
-             </div>
-             <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-2">
-                {sportEvents.map((ev, idx) => (
-                    <ActionButton 
-                        key={idx}
-                        label={ev.label} 
-                        icon={ev.icon} 
-                        color={ev.color} 
-                        onClick={() => {
-                            if (ev.type === 'Substitution') setIsSubbing(true);
-                            else addEvent(ev.type);
-                        }} 
-                    />
-                ))}
-             </div>
+            <div className="flex items-center justify-between px-2">
+              <h3 className="text-[10px] font-black uppercase tracking-widest text-white/40">Event Protocol</h3>
+              <span className="text-[10px] font-bold text-primary/60 italic">Sport: {match.sport}</span>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-2">
+              {sportEvents.map((ev, idx) => (
+                <ActionButton
+                  key={idx}
+                  label={ev.label}
+                  icon={ev.icon}
+                  color={ev.color}
+                  onClick={() => {
+                    if (ev.type === 'Substitution') setIsSubbing(true);
+                    else addEvent(ev.type);
+                  }}
+                />
+              ))}
+            </div>
           </section>
 
           {/* Player Selection & Eye Points */}
           <section className="space-y-4">
-             <div className="flex items-center justify-between px-2">
-                <h3 className="text-[10px] font-black uppercase tracking-widest text-white/40">
-                    {isSubbing ? 'Select Outgoing Player' : 'Active Roster'}
-                </h3>
-                <AnimatePresence>
+            <div className="flex items-center justify-between px-2">
+              <h3 className="text-[10px] font-black uppercase tracking-widest text-white/40">
+                {isSubbing ? 'Select Outgoing Player' : 'Active Roster'}
+              </h3>
+              <AnimatePresence>
                 {(selectedPlayerId && !isSubbing) && (
-                  <motion.button 
+                  <motion.button
                     initial={{ opacity: 0, scale: 0.9, x: 20 }}
                     animate={{ opacity: 1, scale: 1, x: 0 }}
                     exit={{ opacity: 0, scale: 0.9, x: 20 }}
@@ -330,276 +340,273 @@ export function MatchLoggerUI({ match, onExit }: MatchLoggerUIProps) {
                   </motion.button>
                 )}
                 {isSubbing && (
-                    <motion.button 
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        onClick={() => setIsSubbing(false)}
-                        className="text-[10px] font-black uppercase tracking-widest text-white/40 hover:text-white"
-                    >
-                        Cancel Selection
-                    </motion.button>
-                )}
-                </AnimatePresence>
-             </div>
-             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
-                {teamPlayers.map(player => (
-                  <button
-                    key={player.id}
-                    onClick={() => {
-                        if (isSubbing) {
-                            addEvent('Substitution', `Out: ${player.name}`);
-                        } else {
-                            setSelectedPlayerId(player.id === selectedPlayerId ? null : player.id);
-                        }
-                    }}
-                    className={`p-4 rounded-[24px] border transition-all text-left flex flex-col gap-1 relative ${
-                      selectedPlayerId === player.id 
-                        ? 'bg-primary/10 border-primary text-primary' 
-                        : isSubbing ? 'bg-blue-500/10 border-blue-500/30 text-blue-500' : 'bg-white/5 border-white/10 text-white/60 hover:border-white/20'
-                    }`}
+                  <motion.button
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    onClick={() => setIsSubbing(false)}
+                    className="text-[10px] font-black uppercase tracking-widest text-white/40 hover:text-white"
                   >
-                    <span className="text-[10px] font-black uppercase opacity-60">#{player.number} • {player.position}</span>
-                    <span className="text-sm font-bold truncate">{player.name}</span>
-                    <div className="flex items-center gap-2 mt-2">
-                      <span className="text-[8px] font-black bg-white/10 px-1.5 py-0.5 rounded uppercase tracking-tighter">EP {player.eyePoints}</span>
-                      <span className="text-[8px] font-black bg-white/10 px-1.5 py-0.5 rounded uppercase tracking-tighter">Rate {player.rating}</span>
-                    </div>
-                  </button>
-                ))}
-             </div>
-          </section>
-        </div>
-
-          {/* Right Side - Timeline & Queue Overlay */}
-          <div className="hidden md:flex flex-col w-2/5 lg:w-1/3 bg-black/40 border-l border-white/5 overflow-hidden">
-            {/* Animated Queue Overlay */}
-            <AnimatePresence>
-              {showQueue && (
-                  <motion.div 
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      exit={{ opacity: 0 }}
-                      className="absolute inset-0 bg-black/95 z-20 flex flex-col p-8 font-black"
-                  >
-                      <div className="flex items-center justify-between mb-8">
-                          <div>
-                              <h3 className="font-display text-2xl uppercase italic">Conflict Resolution</h3>
-                              <p className="text-[10px] font-bold text-white/40 uppercase tracking-widest leading-none mt-1">Manual synchronization override</p>
-                          </div>
-                          <button onClick={() => setShowQueue(false)} className="p-2 hover:bg-white/10 rounded-full transition-colors">
-                              <X size={24} />
-                          </button>
-                      </div>
-
-                      <div className="flex-1 overflow-y-auto space-y-3 pr-2 scrollbar-hide">
-                          {offlineQueue.length === 0 ? (
-                              <div className="h-full flex flex-col items-center justify-center text-white/10">
-                                  <CheckCircleIcon size={64} />
-                                  <p className="mt-4 font-black uppercase text-xs tracking-widest italic">Protocol synchronized</p>
-                              </div>
-                          ) : (
-                              offlineQueue.map((ev, idx) => (
-                                  <div key={ev.id} className={`p-4 rounded-2xl flex items-center justify-between group transition-all border ${
-                                    ev.status === 'conflict' ? 'bg-red-500/10 border-red-500/30' : 'bg-white/5 border-white/10'
-                                  }`}>
-                                      <div className="flex items-center gap-4">
-                                          <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${ev.status === 'conflict' ? 'bg-red-500 text-white' : 'bg-orange-500 text-black'}`}>
-                                              {ev.status === 'conflict' ? <AlertCircle size={14} /> : <Save size={14} />}
-                                          </div>
-                                          <div>
-                                              <div className="flex items-center gap-2">
-                                                <span className={`text-[10px] font-black tracking-widest ${ev.status === 'conflict' ? 'text-red-500' : 'text-orange-500'}`}>{ev.minute}'</span>
-                                                {ev.status === 'conflict' && <span className="text-[8px] bg-red-500 text-white px-1 rounded tracking-tighter">CONFLICT</span>}
-                                              </div>
-                                              <p className="text-sm font-bold uppercase tracking-tight">{ev.type}: {ev.detail}</p>
-                                          </div>
-                                      </div>
-                                      <div className="flex items-center gap-2">
-                                        <button 
-                                          onClick={() => {
-                                            const updated = [...offlineQueue];
-                                            updated[idx].status = updated[idx].status === 'conflict' ? 'pending' : 'conflict';
-                                            setOfflineQueue(updated);
-                                          }}
-                                          className="p-2 opacity-0 group-hover:opacity-100 hover:bg-white/10 rounded-lg transition-all"
-                                        >
-                                            <RefreshCw size={14} />
-                                        </button>
-                                        <button 
-                                            onClick={() => setOfflineQueue(prev => prev.filter(e => e.id !== ev.id))}
-                                            className="p-2 opacity-0 group-hover:opacity-100 hover:text-red-500 rounded-lg transition-all"
-                                        >
-                                            <Trash2 size={16} />
-                                        </button>
-                                      </div>
-                                  </div>
-                              ))
-                          )}
-                      </div>
-
-                      <div className="mt-8 pt-8 border-t border-white/10 flex gap-4">
-                          <button 
-                             onClick={() => setOfflineQueue([])}
-                             className="flex-1 border border-white/10 text-white/40 font-black uppercase tracking-widest py-5 rounded-2xl hover:text-white transition-colors"
-                          >
-                            Purge All
-                          </button>
-                          <button 
-                              disabled={offlineQueue.length === 0}
-                              onClick={handleSync}
-                              className="flex-[2] bg-orange-500 text-black font-black uppercase tracking-widest py-5 rounded-2xl hover:scale-[1.02] transition-transform disabled:opacity-20 shadow-xl shadow-orange-500/20"
-                          >
-                              Sync Verified protocol ({offlineQueue.length})
-                          </button>
-                      </div>
-                  </motion.div>
-              )}
-            </AnimatePresence>
-
-            {/* Sidebar Tabs */}
-            <div className="flex border-b border-white/5 bg-black/40">
-              {['Protocol', 'Stats', 'Summary'].map((tab) => (
-                <button
-                  key={tab}
-                  onClick={() => setActiveTab(tab as any)}
-                  className={`flex-1 py-4 text-[10px] font-black uppercase tracking-widest transition-all relative ${
-                    activeTab === tab ? 'text-primary' : 'text-white/30 hover:text-white'
-                  }`}
-                >
-                  {tab}
-                  {activeTab === tab && (
-                    <motion.div layoutId="tab-active" className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
-                  )}
-                </button>
-              ))}
-            </div>
-
-            <div className="flex-1 overflow-y-auto custom-scrollbar">
-              <AnimatePresence mode="wait">
-                {activeTab === 'Protocol' && (
-                  <motion.div 
-                    key="protocol"
-                    initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                    className="p-6 space-y-4"
-                  >
-                    {currentMatch.events.map((event) => (
-                      <motion.div
-                        key={event.id}
-                        initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}
-                        className="relative pl-6 border-l border-white/10 pb-6 last:pb-0"
-                      >
-                        <div className="absolute left-[-5px] top-1 w-2.5 h-2.5 bg-primary rounded-full ring-4 ring-[#050505]"></div>
-                        <div className="flex items-center justify-between mb-1">
-                          <span className="text-[10px] font-black text-primary tracking-widest">{event.minute}'</span>
-                          <span className="text-[8px] font-black uppercase tracking-widest text-white/10">{event.id.toUpperCase()}</span>
-                        </div>
-                        <p className="text-sm font-bold text-white/80 uppercase tracking-tight">
-                          {event.type}: <span className="text-white">{event.detail}</span>
-                        </p>
-                        {event.isEyePoint && (
-                          <div className="mt-2 flex items-center gap-1.5 text-[10px] font-bold text-primary italic">
-                            <Star size={10} fill="currentColor" />
-                            EP Award Applied
-                          </div>
-                        )}
-                      </motion.div>
-                    ))}
-                  </motion.div>
-                )}
-
-                {activeTab === 'Stats' && (
-                  <motion.div 
-                    key="stats"
-                    initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                    className="p-6 space-y-8"
-                  >
-                    <div className="space-y-6">
-                      <StatRow label="Possession" values={currentMatch.stats.possession} unit="%" color="bg-primary" />
-                      <StatRow label="Shots (Total)" values={currentMatch.stats.shots} color="bg-white" />
-                      <StatRow label="Corners" values={currentMatch.stats.corners} color="bg-blue-500" />
-                      <StatRow label="Fouls" values={currentMatch.stats.fouls} color="bg-yellow-500" />
-                      <StatRow label="Cards (Y/R)" values={[currentMatch.stats.yellowCards[0] + currentMatch.stats.redCards[0], currentMatch.stats.yellowCards[1] + currentMatch.stats.redCards[1]]} color="bg-red-500" />
-                      {currentMatch.stats.saves && (
-                        <StatRow label="Saves" values={currentMatch.stats.saves} color="bg-green-500" />
-                      )}
-                    </div>
-
-                    <div className="p-4 bg-white/5 border border-white/10 rounded-2xl">
-                      <h4 className="text-[8px] font-black uppercase tracking-widest text-white/20 mb-4">Live Performance Index</h4>
-                      <div className="flex items-center justify-between text-[10px] font-black uppercase tracking-widest">
-                        <span>{homeTeam?.shortName} AVG</span>
-                        <span className="text-primary italic">7.4</span>
-                      </div>
-                      <div className="w-full h-1.5 bg-white/5 rounded-full mt-2 overflow-hidden">
-                        <div className="h-full bg-primary" style={{ width: '74%' }} />
-                      </div>
-                    </div>
-                  </motion.div>
-                )}
-
-                {activeTab === 'Summary' && (
-                  <motion.div 
-                    key="summary"
-                    initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                    className="p-8"
-                  >
-                    <div className="prose prose-invert max-w-none">
-                      <h3 className="font-display text-2xl uppercase italic mb-6">Match Intelligence</h3>
-                      <div className="space-y-4 text-sm font-medium leading-relaxed text-white/60 uppercase tracking-tight">
-                        <p>The match at {match.venue} is currently in the {minute}' minute.</p>
-                        <p>Current Scoreline: {homeTeam?.name} {currentMatch.homeScore} - {currentMatch.awayScore} {awayTeam?.name}.</p>
-                        
-                        {currentMatch.events.filter(e => e.type === 'Goal').length > 0 && (
-                          <div className="bg-primary/5 p-4 rounded-xl border border-primary/20">
-                            <p className="text-primary font-bold">Scoring Summary:</p>
-                            <ul className="list-none pl-0 mt-2 space-y-1">
-                              {currentMatch.events.filter(e => e.type === 'Goal').reverse().map(e => (
-                                <li key={e.id} className="text-[10px] font-black">[{e.minute}'] - {e.detail} achieved protocol focus.</li>
-                              ))}
-                            </ul>
-                          </div>
-                        )}
-
-                        <p>Statistical superiority remains with {currentMatch.stats.possession[0] > currentMatch.stats.possession[1] ? homeTeam?.shortName : awayTeam?.shortName} holding {Math.max(...currentMatch.stats.possession)}% tactical control.</p>
-                        
-                        {currentMatch.events.filter(e => e.isEyePoint).length > 0 && (
-                          <p className="text-primary/60 italic">Note: High-performance Eye Points have been awarded to {currentMatch.events.filter(e => e.isEyePoint).length} participants for leadership excellence.</p>
-                        )}
-                      </div>
-                    </div>
-                  </motion.div>
+                    Cancel Selection
+                  </motion.button>
                 )}
               </AnimatePresence>
             </div>
-          </div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
+              {teamPlayers.map(player => (
+                <button
+                  key={player.id}
+                  onClick={() => {
+                    if (isSubbing) {
+                      addEvent('Substitution', `Out: ${player.name}`);
+                    } else {
+                      setSelectedPlayerId(player.id === selectedPlayerId ? null : player.id);
+                    }
+                  }}
+                  className={`p-4 rounded-[24px] border transition-all text-left flex flex-col gap-1 relative ${selectedPlayerId === player.id
+                      ? 'bg-primary/10 border-primary text-primary'
+                      : isSubbing ? 'bg-blue-500/10 border-blue-500/30 text-blue-500' : 'bg-white/5 border-white/10 text-white/60 hover:border-white/20'
+                    }`}
+                >
+                  <span className="text-[10px] font-black uppercase opacity-60">#{player.number} • {player.position}</span>
+                  <span className="text-sm font-bold truncate">{player.name}</span>
+                  <div className="flex items-center gap-2 mt-2">
+                    <span className="text-[8px] font-black bg-white/10 px-1.5 py-0.5 rounded uppercase tracking-tighter">EP {player.eyePoints}</span>
+                    <span className="text-[8px] font-black bg-white/10 px-1.5 py-0.5 rounded uppercase tracking-tighter">Rate {player.rating}</span>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </section>
         </div>
 
-        {/* Footer Controls */}
+        {/* Right Side - Timeline & Queue Overlay */}
+        <div className="hidden md:flex flex-col w-2/5 lg:w-1/3 bg-black/40 border-l border-white/5 overflow-hidden">
+          {/* Animated Queue Overlay */}
+          <AnimatePresence>
+            {showQueue && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="absolute inset-0 bg-black/95 z-20 flex flex-col p-8 font-black"
+              >
+                <div className="flex items-center justify-between mb-8">
+                  <div>
+                    <h3 className="font-display text-2xl uppercase italic">Conflict Resolution</h3>
+                    <p className="text-[10px] font-bold text-white/40 uppercase tracking-widest leading-none mt-1">Manual synchronization override</p>
+                  </div>
+                  <button onClick={() => setShowQueue(false)} className="p-2 hover:bg-white/10 rounded-full transition-colors">
+                    <X size={24} />
+                  </button>
+                </div>
+
+                <div className="flex-1 overflow-y-auto space-y-3 pr-2 scrollbar-hide">
+                  {offlineQueue.length === 0 ? (
+                    <div className="h-full flex flex-col items-center justify-center text-white/10">
+                      <CheckCircleIcon size={64} />
+                      <p className="mt-4 font-black uppercase text-xs tracking-widest italic">Protocol synchronized</p>
+                    </div>
+                  ) : (
+                    offlineQueue.map((ev, idx) => (
+                      <div key={ev.id} className={`p-4 rounded-2xl flex items-center justify-between group transition-all border ${ev.status === 'conflict' ? 'bg-red-500/10 border-red-500/30' : 'bg-white/5 border-white/10'
+                        }`}>
+                        <div className="flex items-center gap-4">
+                          <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${ev.status === 'conflict' ? 'bg-red-500 text-white' : 'bg-orange-500 text-black'}`}>
+                            {ev.status === 'conflict' ? <AlertCircle size={14} /> : <Save size={14} />}
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className={`text-[10px] font-black tracking-widest ${ev.status === 'conflict' ? 'text-red-500' : 'text-orange-500'}`}>{ev.minute}'</span>
+                              {ev.status === 'conflict' && <span className="text-[8px] bg-red-500 text-white px-1 rounded tracking-tighter">CONFLICT</span>}
+                            </div>
+                            <p className="text-sm font-bold uppercase tracking-tight">{ev.type}: {ev.detail}</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => {
+                              const updated = [...offlineQueue];
+                              updated[idx].status = updated[idx].status === 'conflict' ? 'pending' : 'conflict';
+                              setOfflineQueue(updated);
+                            }}
+                            className="p-2 opacity-0 group-hover:opacity-100 hover:bg-white/10 rounded-lg transition-all"
+                          >
+                            <RefreshCw size={14} />
+                          </button>
+                          <button
+                            onClick={() => setOfflineQueue(prev => prev.filter(e => e.id !== ev.id))}
+                            className="p-2 opacity-0 group-hover:opacity-100 hover:text-red-500 rounded-lg transition-all"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+
+                <div className="mt-8 pt-8 border-t border-white/10 flex gap-4">
+                  <button
+                    onClick={() => setOfflineQueue([])}
+                    className="flex-1 border border-white/10 text-white/40 font-black uppercase tracking-widest py-5 rounded-2xl hover:text-white transition-colors"
+                  >
+                    Purge All
+                  </button>
+                  <button
+                    disabled={offlineQueue.length === 0}
+                    onClick={handleSync}
+                    className="flex-[2] bg-orange-500 text-black font-black uppercase tracking-widest py-5 rounded-2xl hover:scale-[1.02] transition-transform disabled:opacity-20 shadow-xl shadow-orange-500/20"
+                  >
+                    Sync Verified protocol ({offlineQueue.length})
+                  </button>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Sidebar Tabs */}
+          <div className="flex border-b border-white/5 bg-black/40">
+            {['Protocol', 'Stats', 'Summary'].map((tab) => (
+              <button
+                key={tab}
+                onClick={() => setActiveTab(tab as any)}
+                className={`flex-1 py-4 text-[10px] font-black uppercase tracking-widest transition-all relative ${activeTab === tab ? 'text-primary' : 'text-white/30 hover:text-white'
+                  }`}
+              >
+                {tab}
+                {activeTab === tab && (
+                  <motion.div layoutId="tab-active" className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
+                )}
+              </button>
+            ))}
+          </div>
+
+          <div className="flex-1 overflow-y-auto custom-scrollbar">
+            <AnimatePresence mode="wait">
+              {activeTab === 'Protocol' && (
+                <motion.div
+                  key="protocol"
+                  initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                  className="p-6 space-y-4"
+                >
+                  {currentMatch.events.map((event) => (
+                    <motion.div
+                      key={event.id}
+                      initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}
+                      className="relative pl-6 border-l border-white/10 pb-6 last:pb-0"
+                    >
+                      <div className="absolute left-[-5px] top-1 w-2.5 h-2.5 bg-primary rounded-full ring-4 ring-[#050505]"></div>
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-[10px] font-black text-primary tracking-widest">{event.minute}'</span>
+                        <span className="text-[8px] font-black uppercase tracking-widest text-white/10">{event.id.toUpperCase()}</span>
+                      </div>
+                      <p className="text-sm font-bold text-white/80 uppercase tracking-tight">
+                        {event.type}: <span className="text-white">{event.detail}</span>
+                      </p>
+                      {event.isEyePoint && (
+                        <div className="mt-2 flex items-center gap-1.5 text-[10px] font-bold text-primary italic">
+                          <Star size={10} fill="currentColor" />
+                          EP Award Applied
+                        </div>
+                      )}
+                    </motion.div>
+                  ))}
+                </motion.div>
+              )}
+
+              {activeTab === 'Stats' && (
+                <motion.div
+                  key="stats"
+                  initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                  className="p-6 space-y-8"
+                >
+                  <div className="space-y-6">
+                    <StatRow label="Possession" values={currentMatch.stats.possession} unit="%" color="bg-primary" />
+                    <StatRow label="Shots (Total)" values={currentMatch.stats.shots} color="bg-white" />
+                    <StatRow label="Corners" values={currentMatch.stats.corners} color="bg-blue-500" />
+                    <StatRow label="Fouls" values={currentMatch.stats.fouls} color="bg-yellow-500" />
+                    <StatRow label="Cards (Y/R)" values={[currentMatch.stats.yellowCards[0] + currentMatch.stats.redCards[0], currentMatch.stats.yellowCards[1] + currentMatch.stats.redCards[1]]} color="bg-red-500" />
+                    {currentMatch.stats.saves && (
+                      <StatRow label="Saves" values={currentMatch.stats.saves} color="bg-blue-500" />
+                    )}
+                  </div>
+
+                  <div className="p-4 bg-white/5 border border-white/10 rounded-2xl">
+                    <h4 className="text-[8px] font-black uppercase tracking-widest text-white/20 mb-4">Live Performance Index</h4>
+                    <div className="flex items-center justify-between text-[10px] font-black uppercase tracking-widest">
+                      <span>{homeTeam?.shortName} AVG</span>
+                      <span className="text-primary italic">7.4</span>
+                    </div>
+                    <div className="w-full h-1.5 bg-white/5 rounded-full mt-2 overflow-hidden">
+                      <div className="h-full bg-primary" style={{ width: '74%' }} />
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+
+              {activeTab === 'Summary' && (
+                <motion.div
+                  key="summary"
+                  initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                  className="p-8"
+                >
+                  <div className="prose prose-invert max-w-none">
+                    <h3 className="font-display text-2xl uppercase italic mb-6">Match Intelligence</h3>
+                    <div className="space-y-4 text-sm font-medium leading-relaxed text-white/60 uppercase tracking-tight">
+                      <p>The match at {match.venue} is currently in the {minute}' minute.</p>
+                      <p>Current Scoreline: {homeTeam?.name} {currentMatch.homeScore} - {currentMatch.awayScore} {awayTeam?.name}.</p>
+
+                      {currentMatch.events.filter(e => e.type === 'Goal').length > 0 && (
+                        <div className="bg-primary/5 p-4 rounded-xl border border-primary/20">
+                          <p className="text-primary font-bold">Scoring Summary:</p>
+                          <ul className="list-none pl-0 mt-2 space-y-1">
+                            {currentMatch.events.filter(e => e.type === 'Goal').reverse().map(e => (
+                              <li key={e.id} className="text-[10px] font-black">[{e.minute}'] - {e.detail} achieved protocol focus.</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+
+                      <p>Statistical superiority remains with {currentMatch.stats.possession[0] > currentMatch.stats.possession[1] ? homeTeam?.shortName : awayTeam?.shortName} holding {Math.max(...currentMatch.stats.possession)}% tactical control.</p>
+
+                      {currentMatch.events.filter(e => e.isEyePoint).length > 0 && (
+                        <p className="text-primary/60 italic">Note: High-performance Eye Points have been awarded to {currentMatch.events.filter(e => e.isEyePoint).length} participants for leadership excellence.</p>
+                      )}
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+        </div>
+      </div>
+
+      {/* Footer Controls */}
 
       <footer className="bg-black border-t border-white/5 p-4 md:p-6 flex flex-col md:flex-row items-center gap-6 justify-between shrink-0">
-         <div className="flex items-center gap-6 w-full md:w-auto">
-            <div className="flex items-center gap-3 bg-white/5 px-4 py-2 rounded-2xl border border-white/10 flex-1 md:flex-initial">
-              <Clock size={16} className="text-white/20" />
-              <input 
-                type="range" 
-                min="0" 
-                max="90" 
-                value={minute}
-                onChange={(e) => setMinute(parseInt(e.target.value))}
-                className="w-full md:w-48 h-1 bg-white/10 rounded-full appearance-none accent-primary cursor-pointer"
-              />
-              <span className="text-[10px] font-black uppercase tracking-widest w-12 text-center">{minute}'</span>
-            </div>
-            <div className="flex items-center gap-2">
-                <button onClick={() => setMinute(m => Math.max(0, m - 1))} className="p-2 hover:bg-white/5 rounded-full">-</button>
-                <button onClick={() => setMinute(m => Math.min(99, m + 1))} className="p-2 hover:bg-white/5 rounded-full">+</button>
-            </div>
-         </div>
-         <div className="flex items-center gap-3 w-full md:w-auto">
-            <button className="flex-1 md:flex-initial bg-white/5 text-white/40 border border-white/10 px-8 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:text-white transition-colors">Abort</button>
-            <button className="flex-1 md:flex-initial bg-white text-black px-12 py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-primary transition-all shadow-xl shadow-white/5 active:scale-95">Finish Protocol</button>
-         </div>
+        <div className="flex items-center gap-6 w-full md:w-auto">
+          <div className="flex items-center gap-3 bg-white/5 px-4 py-2 rounded-2xl border border-white/10 flex-1 md:flex-initial">
+            <Clock size={16} className="text-white/20" />
+            <input
+              type="range"
+              min="0"
+              max="90"
+              value={minute}
+              onChange={(e) => setMinute(parseInt(e.target.value))}
+              className="w-full md:w-48 h-1 bg-white/10 rounded-full appearance-none accent-primary cursor-pointer"
+            />
+            <span className="text-[10px] font-black uppercase tracking-widest w-12 text-center">{minute}'</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button onClick={() => setMinute(m => Math.max(0, m - 1))} className="p-2 hover:bg-white/5 rounded-full">-</button>
+            <button onClick={() => setMinute(m => Math.min(99, m + 1))} className="p-2 hover:bg-white/5 rounded-full">+</button>
+          </div>
+        </div>
+        <div className="flex items-center gap-3 w-full md:w-auto">
+          <button className="flex-1 md:flex-initial bg-white/5 text-white/40 border border-white/10 px-8 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:text-white transition-colors">Abort</button>
+          <button className="flex-1 md:flex-initial bg-white text-black px-12 py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-primary transition-all shadow-xl shadow-white/5 active:scale-95">Finish Protocol</button>
+        </div>
       </footer>
     </div>
   );
@@ -608,7 +615,7 @@ export function MatchLoggerUI({ match, onExit }: MatchLoggerUIProps) {
 function StatRow({ label, values, unit = '', color }: { label: string, values: [number, number], unit?: string, color: string }) {
   const total = values[0] + values[1] || 1;
   const p1 = (values[0] / total) * 100;
-  
+
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between text-[10px] font-black uppercase tracking-widest text-white/40">
@@ -620,10 +627,10 @@ function StatRow({ label, values, unit = '', color }: { label: string, values: [
         </div>
       </div>
       <div className="h-1 flex rounded-full overflow-hidden bg-white/5">
-        <motion.div 
+        <motion.div
           initial={{ width: 0 }}
           animate={{ width: `${p1}%` }}
-          className={`${color}`} 
+          className={`${color}`}
         />
         <div className="flex-1" />
       </div>
@@ -633,7 +640,7 @@ function StatRow({ label, values, unit = '', color }: { label: string, values: [
 
 function ActionButton({ label, icon, color, onClick }: { label: string, icon: React.ReactNode, color: string, onClick: () => void }) {
   return (
-    <button 
+    <button
       onClick={onClick}
       className={`${color} flex flex-col items-center justify-center gap-2 p-4 rounded-[24px] hover:scale-105 transition-all active:scale-95 border border-white/5`}
     >
@@ -646,9 +653,10 @@ function ActionButton({ label, icon, color, onClick }: { label: string, icon: Re
 function CheckCircleIcon({ size }: { size: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
-        <polyline points="22 4 12 14.01 9 11.01" />
+      <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+      <polyline points="22 4 12 14.01 9 11.01" />
     </svg>
   );
 }
+
 
