@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Save, Send, Trash2, AlertCircle, CheckCircle, Users, ArrowLeft } from 'lucide-react';
 import * as htmlToImage from 'html-to-image';
 import download from 'downloadjs';
@@ -419,18 +419,24 @@ export default function LineupBuilderPage() {
                         />
 
                         {/* Main Content */}
-                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 pb-40 lg:pb-0">
                             {/* Player Pool */}
                             <div className="lg:col-span-1">
                                 <PlayerPool
                                     players={players}
                                     selectedPlayerIds={selectedPlayerIds}
-                                    onSelectPlayer={setSelectedPlayerForAssignment}
+                                    onSelectPlayer={(player) => {
+                                        setSelectedPlayerForAssignment(player);
+                                        // On mobile, scroll to pitch
+                                        if (window.innerWidth < 1024 && pitchRef.current) {
+                                            pitchRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                        }
+                                    }}
                                     teamSide={selectedTeam!}
                                 />
 
                                 {selectedPlayerForAssignment && (
-                                    <div className="mt-4 p-4 bg-primary/10 border border-primary/30 rounded-xl">
+                                    <div className="hidden lg:block mt-4 p-4 bg-primary/10 border border-primary/30 rounded-xl">
                                         <p className="text-xs font-black uppercase tracking-wider text-primary mb-2">
                                             Selected Player
                                         </p>
@@ -467,6 +473,41 @@ export default function LineupBuilderPage() {
                                 )}
                             </div>
                         </div>
+
+                        {/* Mobile Sticky Selected Player Banner */}
+                        <AnimatePresence>
+                            {selectedPlayerForAssignment && (
+                                <motion.div
+                                    initial={{ y: 100, opacity: 0 }}
+                                    animate={{ y: 0, opacity: 1 }}
+                                    exit={{ y: 100, opacity: 0 }}
+                                    className="fixed bottom-0 left-0 right-0 z-[60] bg-[#111] border-t border-white/10 p-4 lg:hidden pb-8 shadow-2xl"
+                                >
+                                    <div className="flex items-center justify-between mb-2">
+                                        <div className="flex items-center gap-3">
+                                            <div className="w-10 h-10 bg-primary/20 rounded-lg flex items-center justify-center font-display font-bold text-primary border border-primary/20">
+                                                {selectedPlayerForAssignment.number}
+                                            </div>
+                                            <div>
+                                                <p className="text-[10px] font-black uppercase tracking-wider text-primary">Assigning Player</p>
+                                                <p className="text-sm font-bold text-white max-w-[150px] truncate">{selectedPlayerForAssignment.name}</p>
+                                            </div>
+                                        </div>
+                                        <button
+                                            onClick={() => setSelectedPlayerForAssignment(null)}
+                                            className="p-2 bg-white/10 rounded-full hover:bg-white/20 transition-colors"
+                                        >
+                                            <Trash2 size={16} className="text-white/60" />
+                                        </button>
+                                    </div>
+                                    <p className="text-xs text-center text-white/40 bg-white/5 py-1.5 rounded-lg border border-white/5">
+                                        Tap a position on the pitch to assign
+                                    </p>
+                                    {/* Safe area spacer */}
+                                    <div className="h-4" />
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
                     </>
                 )}
             </div>

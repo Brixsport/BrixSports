@@ -89,7 +89,7 @@ export function PlayerPool({ players, selectedPlayerIds, onSelectPlayer, teamSid
             </div>
 
             {/* Players List */}
-            <div className="space-y-2 max-h-[500px] overflow-y-auto scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
+            <div className="space-y-2 max-h-[300px] lg:max-h-[600px] overflow-y-auto scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
                 {sortedPlayers.length === 0 ? (
                     <div className="text-center py-8 text-white/40 text-sm">
                         No players found
@@ -128,12 +128,12 @@ function PlayerCard({ player, isSelected, onClick, teamSide }: {
         >
             {/* Jersey Number */}
             <div className={`w-10 h-10 rounded-lg flex items-center justify-center font-display text-sm font-bold border ${teamSide === 'combined'
-                    ? player.originalTeam === 'home'
-                        ? 'bg-blue-500/20 border-blue-500/30 text-blue-400'
-                        : 'bg-red-500/20 border-red-500/30 text-red-400'
-                    : teamSide === 'home'
-                        ? 'bg-blue-500/20 border-blue-500/30 text-blue-400'
-                        : 'bg-red-500/20 border-red-500/30 text-red-400'
+                ? player.originalTeam === 'home'
+                    ? 'bg-blue-500/20 border-blue-500/30 text-blue-400'
+                    : 'bg-red-500/20 border-red-500/30 text-red-400'
+                : teamSide === 'home'
+                    ? 'bg-blue-500/20 border-blue-500/30 text-blue-400'
+                    : 'bg-red-500/20 border-red-500/30 text-red-400'
                 }`}>
                 {player.number}
             </div>
