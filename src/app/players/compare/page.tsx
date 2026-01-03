@@ -32,9 +32,9 @@ function PlayerCompareContent() {
     const router = useRouter();
     const searchParams = useSearchParams();
 
-
     const player1Id = searchParams.get('player1');
     const player2Id = searchParams.get('player2');
+    const sport = searchParams.get('sport');
 
     const [player1, setPlayer1] = useState<any>(null);
     const [player2, setPlayer2] = useState<any>(null);
@@ -82,7 +82,11 @@ function PlayerCompareContent() {
         else setSearching2(true);
 
         try {
-            const res = await fetch(`/api/search?q=${encodeURIComponent(query)}&category=players&limit=10`);
+            let url = `/api/search?q=${encodeURIComponent(query)}&category=players&limit=10`;
+            if (sport) {
+                url += `&sport=${sport}`;
+            }
+            const res = await fetch(url);
             const data = await res.json();
 
             if (playerSlot === 1) {
@@ -131,7 +135,10 @@ function PlayerCompareContent() {
 
     const swapPlayers = () => {
         if (!player1Id || !player2Id) return;
-        router.push(`/players/compare?player1=${player2Id}&player2=${player1Id}`);
+        const params = new URLSearchParams(searchParams.toString());
+        params.set('player1', player2Id);
+        params.set('player2', player1Id);
+        router.push(`/players/compare?${params.toString()}`);
     };
 
     const shareComparison = async () => {

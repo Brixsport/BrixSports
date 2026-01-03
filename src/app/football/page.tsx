@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, Trophy, Users, Activity, Star, Award, Zap, Shield, Goal } from 'lucide-react';
+import { ArrowLeft, Trophy, Users, Activity, Star, Award, Zap, Shield, Goal, GitCompare } from 'lucide-react';
 import { PlayerProfileOverlay } from '@/components/PlayerProfileOverlay';
 import { TeamProfileOverlay } from '@/components/TeamProfileOverlay';
 import { MatchOverlay } from '@/components/MatchOverlay';
@@ -453,6 +453,15 @@ export default function FootballPage() {
                                 animate={{ opacity: 1, y: 0 }}
                                 exit={{ opacity: 0, y: -20 }}
                             >
+                                <div className="flex justify-end mb-6">
+                                    <Link
+                                        href="/players/compare?sport=Football"
+                                        className="flex items-center gap-2 px-4 py-2 bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20 hover:border-primary/50 rounded-xl transition-all font-bold text-sm uppercase tracking-wider"
+                                    >
+                                        <GitCompare size={18} />
+                                        Compare Players
+                                    </Link>
+                                </div>
                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                                     {players.map((player: any, index: number) => (
                                         <div

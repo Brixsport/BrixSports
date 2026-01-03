@@ -43,23 +43,34 @@ export async function GET(request: NextRequest) {
                 like(teams.shortName, searchPattern),
             ];
 
+            const whereClause = sport
+                ? and(or(...teamFilters), eq(teams.sport, sport))
+                : or(...teamFilters);
+
             results.teams = await db
                 .select()
                 .from(teams)
-                .where(or(...teamFilters))
+                .where(whereClause)
                 .limit(limit);
         }
 
         // Search Players
         if (!category || category === 'all' || category === 'players') {
-            const playerResults = await db
+            let queryBuilder = db
                 .select({
                     player: players,
                     team: teams,
                 })
                 .from(players)
-                .leftJoin(teams, eq(players.teamId, teams.id))
-                .where(like(players.name, searchPattern))
+                .leftJoin(teams, eq(players.teamId, teams.id));
+
+            const whereConditions = [like(players.name, searchPattern)];
+            if (sport) {
+                whereConditions.push(eq(teams.sport, sport));
+            }
+
+            const playerResults = await queryBuilder
+                .where(and(...whereConditions))
                 .limit(limit);
 
             results.players = playerResults.map(r => ({
@@ -68,10 +79,18 @@ export async function GET(request: NextRequest) {
             }));
         }
 
-
-
         // Search Matches (by team names or competition)
         if (!category || category === 'all' || category === 'matches') {
+            const matchFilters = or(
+                like(teams.name, searchPattern),
+                like(teams.shortName, searchPattern),
+                like(matches.competition, searchPattern)
+            );
+
+            const matchWhere = sport
+                ? and(matchFilters, eq(matches.sport, sport))
+                : matchFilters;
+
             const matchResults = await db
                 .select({
                     match: matches,
@@ -79,13 +98,7 @@ export async function GET(request: NextRequest) {
                 })
                 .from(matches)
                 .leftJoin(teams, eq(matches.homeTeamId, teams.id))
-                .where(
-                    or(
-                        like(teams.name, searchPattern),
-                        like(teams.shortName, searchPattern),
-                        like(matches.competition, searchPattern)
-                    )
-                )
+                .where(matchWhere)
                 .limit(limit);
 
             // Get away teams
@@ -105,11 +118,6 @@ export async function GET(request: NextRequest) {
             );
 
             results.matches = matchesWithTeams;
-
-            // Filter by sport if specified
-            if (sport) {
-                results.matches = results.matches.filter((m: any) => m.sport === sport);
-            }
         }
 
         // Calculate total results
