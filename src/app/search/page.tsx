@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Search, Users, TrendingUp, Trophy, Calendar, ArrowLeft, Filter } from 'lucide-react';
@@ -14,6 +14,20 @@ interface SearchResults {
 }
 
 export default function SearchPage() {
+    return (
+        <div className="min-h-screen bg-[#050505] text-white pb-20">
+            <React.Suspense fallback={
+                <div className="flex items-center justify-center py-20">
+                    <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
+                </div>
+            }>
+                <SearchContent />
+            </React.Suspense>
+        </div>
+    );
+}
+
+function SearchContent() {
     const searchParams = useSearchParams();
     const router = useRouter();
     const query = searchParams.get('q') || '';
@@ -66,7 +80,7 @@ export default function SearchPage() {
     };
 
     return (
-        <div className="min-h-screen bg-[#050505] text-white pb-20">
+        <>
             {/* Header */}
             <div className="sticky top-0 z-50 bg-[#050505]/95 backdrop-blur-xl border-b border-white/10">
                 <div className="max-w-7xl mx-auto px-4 py-6">
@@ -90,8 +104,8 @@ export default function SearchPage() {
                         <button
                             onClick={() => setActiveTab('all')}
                             className={`px-4 py-2 rounded-lg font-medium transition-all whitespace-nowrap ${activeTab === 'all'
-                                    ? 'bg-primary text-white'
-                                    : 'bg-white/5 text-white/60 hover:bg-white/10'
+                                ? 'bg-primary text-white'
+                                : 'bg-white/5 text-white/60 hover:bg-white/10'
                                 }`}
                         >
                             All ({getTotalResults()})
@@ -99,8 +113,8 @@ export default function SearchPage() {
                         <button
                             onClick={() => setActiveTab('teams')}
                             className={`px-4 py-2 rounded-lg font-medium transition-all whitespace-nowrap ${activeTab === 'teams'
-                                    ? 'bg-primary text-white'
-                                    : 'bg-white/5 text-white/60 hover:bg-white/10'
+                                ? 'bg-primary text-white'
+                                : 'bg-white/5 text-white/60 hover:bg-white/10'
                                 }`}
                         >
                             <Users className="w-4 h-4 inline mr-2" />
@@ -109,8 +123,8 @@ export default function SearchPage() {
                         <button
                             onClick={() => setActiveTab('players')}
                             className={`px-4 py-2 rounded-lg font-medium transition-all whitespace-nowrap ${activeTab === 'players'
-                                    ? 'bg-primary text-white'
-                                    : 'bg-white/5 text-white/60 hover:bg-white/10'
+                                ? 'bg-primary text-white'
+                                : 'bg-white/5 text-white/60 hover:bg-white/10'
                                 }`}
                         >
                             <TrendingUp className="w-4 h-4 inline mr-2" />
@@ -119,8 +133,8 @@ export default function SearchPage() {
                         <button
                             onClick={() => setActiveTab('matches')}
                             className={`px-4 py-2 rounded-lg font-medium transition-all whitespace-nowrap ${activeTab === 'matches'
-                                    ? 'bg-primary text-white'
-                                    : 'bg-white/5 text-white/60 hover:bg-white/10'
+                                ? 'bg-primary text-white'
+                                : 'bg-white/5 text-white/60 hover:bg-white/10'
                                 }`}
                         >
                             <Calendar className="w-4 h-4 inline mr-2" />
@@ -129,8 +143,8 @@ export default function SearchPage() {
                         <button
                             onClick={() => setActiveTab('competitions')}
                             className={`px-4 py-2 rounded-lg font-medium transition-all whitespace-nowrap ${activeTab === 'competitions'
-                                    ? 'bg-primary text-white'
-                                    : 'bg-white/5 text-white/60 hover:bg-white/10'
+                                ? 'bg-primary text-white'
+                                : 'bg-white/5 text-white/60 hover:bg-white/10'
                                 }`}
                         >
                             <Trophy className="w-4 h-4 inline mr-2" />
@@ -145,8 +159,8 @@ export default function SearchPage() {
                                 key={sport}
                                 onClick={() => setSelectedSport(selectedSport === sport ? null : sport)}
                                 className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${selectedSport === sport
-                                        ? 'bg-purple-600 text-white'
-                                        : 'bg-white/5 text-white/60 hover:bg-white/10'
+                                    ? 'bg-purple-600 text-white'
+                                    : 'bg-white/5 text-white/60 hover:bg-white/10'
                                     }`}
                             >
                                 {sport === 'Football' ? '⚽' : sport === 'Basketball' ? '🏀' : '🏃'} {sport}
@@ -336,6 +350,6 @@ export default function SearchPage() {
                     </div>
                 )}
             </div>
-        </div>
+        </>
     );
 }

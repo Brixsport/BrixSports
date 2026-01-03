@@ -19,6 +19,7 @@ interface Match {
     awayTeam: Team;
     startTime: string;
     competition: string;
+    sport: string;
 }
 
 interface PredictionStats {
@@ -45,6 +46,11 @@ export function MatchPredictionCard({ match, onPredictionSubmit }: MatchPredicti
     const [userPrediction, setUserPrediction] = useState<any>(null);
     const [stats, setStats] = useState<PredictionStats | null>(null);
     const [showStats, setShowStats] = useState(false);
+
+    // Determine max score based on sport
+    const isBasketball = match.sport?.toLowerCase() === 'basketball';
+    const maxScore = isBasketball ? 200 : 20;
+    const scoreStep = isBasketball ? 1 : 1; // Can be adjusted if needed
 
     // Fetch user's existing prediction and stats
     useEffect(() => {
@@ -219,7 +225,7 @@ export function MatchPredictionCard({ match, onPredictionSubmit }: MatchPredicti
                         {/* Score Input */}
                         <div className="flex items-center gap-2">
                             <button
-                                onClick={() => setHomeScore(Math.max(0, homeScore - 1))}
+                                onClick={() => setHomeScore(Math.max(0, homeScore - scoreStep))}
                                 disabled={submitted}
                                 className="w-8 h-8 bg-gray-700 hover:bg-gray-600 disabled:bg-gray-800 disabled:cursor-not-allowed text-white rounded-lg font-bold transition-colors"
                             >
@@ -229,7 +235,7 @@ export function MatchPredictionCard({ match, onPredictionSubmit }: MatchPredicti
                                 <span className="text-2xl font-bold text-white">{homeScore}</span>
                             </div>
                             <button
-                                onClick={() => setHomeScore(Math.min(20, homeScore + 1))}
+                                onClick={() => setHomeScore(Math.min(maxScore, homeScore + scoreStep))}
                                 disabled={submitted}
                                 className="w-8 h-8 bg-gray-700 hover:bg-gray-600 disabled:bg-gray-800 disabled:cursor-not-allowed text-white rounded-lg font-bold transition-colors"
                             >
@@ -256,7 +262,7 @@ export function MatchPredictionCard({ match, onPredictionSubmit }: MatchPredicti
                         {/* Score Input */}
                         <div className="flex items-center gap-2">
                             <button
-                                onClick={() => setAwayScore(Math.max(0, awayScore - 1))}
+                                onClick={() => setAwayScore(Math.max(0, awayScore - scoreStep))}
                                 disabled={submitted}
                                 className="w-8 h-8 bg-gray-700 hover:bg-gray-600 disabled:bg-gray-800 disabled:cursor-not-allowed text-white rounded-lg font-bold transition-colors"
                             >
@@ -266,7 +272,7 @@ export function MatchPredictionCard({ match, onPredictionSubmit }: MatchPredicti
                                 <span className="text-2xl font-bold text-white">{awayScore}</span>
                             </div>
                             <button
-                                onClick={() => setAwayScore(Math.min(20, awayScore + 1))}
+                                onClick={() => setAwayScore(Math.min(maxScore, awayScore + scoreStep))}
                                 disabled={submitted}
                                 className="w-8 h-8 bg-gray-700 hover:bg-gray-600 disabled:bg-gray-800 disabled:cursor-not-allowed text-white rounded-lg font-bold transition-colors"
                             >

@@ -426,6 +426,37 @@ export default function Home() {
             </div>
           </div>
 
+          {/* Football Hub Banner */}
+          {activeSport === 'FOOTBALL' && (
+            <Link href="/football">
+              <motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="mb-6 bg-gradient-to-r from-green-600/20 to-green-400/20 border border-green-500/20 rounded-2xl p-4 hover:border-green-500/50 transition-all cursor-pointer group"
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 bg-gradient-to-br from-green-500 to-green-600 rounded-xl flex items-center justify-center shadow-lg shadow-green-500/20">
+                      <Trophy size={24} className="text-white" />
+                    </div>
+                    <div>
+                      <h3 className="font-display font-bold text-lg flex items-center gap-2 text-white">
+                        BUSA LEAGUE FOOTBALL
+                        <span className="text-[10px] bg-green-500/20 text-green-400 px-2 py-0.5 rounded border border-green-500/20">OFFICIAL HUB</span>
+                      </h3>
+                      <p className="text-sm text-white/60 group-hover:text-white/80 transition-colors">
+                        View standings, stats leaders, teams, and player profiles
+                      </p>
+                    </div>
+                  </div>
+                  <div className="bg-white/5 p-2 rounded-full group-hover:bg-white/10 transition-colors">
+                    <ChevronRight size={20} className="text-white/40 group-hover:text-white transition-colors" />
+                  </div>
+                </div>
+              </motion.div>
+            </Link>
+          )}
+
           {/* Basketball Hub Banner */}
           {activeSport === 'BASKETBALL' && (
             <Link href="/basketball">

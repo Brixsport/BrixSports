@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -17,8 +17,21 @@ import Link from 'next/link';
 import { PlayerComparison, PlayerComparisonEmpty } from '@/components/PlayerComparison';
 
 export default function PlayerComparePage() {
+    return (
+        <Suspense fallback={
+            <div className="min-h-screen bg-black text-white flex items-center justify-center">
+                <div className="w-16 h-16 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
+            </div>
+        }>
+            <PlayerCompareContent />
+        </Suspense>
+    );
+}
+
+function PlayerCompareContent() {
     const router = useRouter();
     const searchParams = useSearchParams();
+
 
     const player1Id = searchParams.get('player1');
     const player2Id = searchParams.get('player2');

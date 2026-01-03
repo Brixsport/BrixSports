@@ -526,6 +526,7 @@ export default function MatchDetailPage() {
                                     awayTeam: match.awayTeam,
                                     startTime: match.startTime,
                                     competition: match.competition,
+                                    sport: match.sport,
                                 }}
                             />
                             <MatchVotePoll
