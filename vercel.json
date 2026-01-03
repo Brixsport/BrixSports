@@ -1,0 +1,19 @@
+{
+    "crons": [
+        {
+            "path": "/api/reminders/check",
+            "schedule": "* * * * *"
+        }
+    ],
+    "headers": [
+        {
+            "source": "/api/(.*)",
+            "headers": [
+                {
+                    "key": "Access-Control-Allow-Origin",
+                    "value": "*"
+                }
+            ]
+        }
+    ]
+}
