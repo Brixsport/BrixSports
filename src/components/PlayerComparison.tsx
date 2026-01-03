@@ -22,13 +22,13 @@ export function PlayerComparison({ player1, player2, sport }: PlayerComparisonPr
             </div>
 
             {/* Players Header */}
-            <div className="grid grid-cols-3 gap-4 items-center">
+            <div className="grid grid-cols-[1fr_auto_1fr] gap-4 items-center">
                 {/* Player 1 */}
                 <PlayerHeader player={player1} align="left" />
 
                 {/* VS */}
                 <div className="text-center">
-                    <div className="text-4xl font-display italic text-white/20">VS</div>
+                    <div className="text-2xl md:text-4xl font-display italic text-white/20">VS</div>
                 </div>
 
                 {/* Player 2 */}
@@ -81,15 +81,15 @@ function PlayerHeader({ player, align }: { player: Player; align: 'left' | 'righ
                 <img
                     src={player.image}
                     alt={player.name}
-                    className="w-20 h-20 rounded-full object-cover mx-auto mb-2 border-2 border-primary"
+                    className="w-16 h-16 md:w-20 md:h-20 rounded-full object-cover mx-auto mb-2 border-2 border-primary"
                 />
             ) : (
-                <div className="w-20 h-20 rounded-full bg-primary/20 flex items-center justify-center mx-auto mb-2 border-2 border-primary">
-                    <span className="text-3xl font-display italic">{player.number}</span>
+                <div className="w-16 h-16 md:w-20 md:h-20 rounded-full bg-primary/20 flex items-center justify-center mx-auto mb-2 border-2 border-primary">
+                    <span className="text-2xl md:text-3xl font-display italic">{player.number}</span>
                 </div>
             )}
-            <p className="text-sm font-black uppercase tracking-tight">{player.name}</p>
-            <p className="text-xs text-white/60 font-bold">{player.position}</p>
+            <p className="text-xs md:text-sm font-black uppercase tracking-tight truncate max-w-[100px] md:max-w-none mx-auto">{player.name}</p>
+            <p className="text-[10px] md:text-xs text-white/60 font-bold">{player.position}</p>
         </div>
     );
 }

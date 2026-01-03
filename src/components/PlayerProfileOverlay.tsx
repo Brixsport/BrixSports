@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { X, Star, Share2, TrendingUp, MapPin, Calendar, Ruler, Weight, Award, Activity, Heart } from 'lucide-react';
+import { X, Star, Share2, TrendingUp, MapPin, Calendar, Ruler, Weight, Award, Activity, Heart, GitCompare } from 'lucide-react';
 import { useFavorites } from '@/hooks/useFavorites';
 
 interface PlayerProfileOverlayProps {
@@ -80,12 +80,21 @@ export function PlayerProfileOverlay({ player: initialPlayer, onClose }: PlayerP
               <span className="text-[10px] font-black tracking-widest text-white/40 uppercase">{playerSport === 'Basketball' ? '🏀' : '⚽'} {playerSport}</span>
             </div>
           </div>
-          <button
-            onClick={() => togglePlayer(String(player.id))}
-            className={`p-2 rounded-full transition-colors ${isFav ? 'bg-primary text-black' : 'hover:bg-white/10 text-primary'}`}
-          >
-            <Heart size={20} fill={isFav ? "currentColor" : "none"} />
-          </button>
+          <div className="flex items-center gap-2">
+            <a
+              href={`/players/compare?player1=${player.id}&sport=${playerSport}`}
+              className="p-2 rounded-full hover:bg-white/10 text-white/60 hover:text-white transition-colors"
+              title="Compare Player"
+            >
+              <GitCompare size={20} />
+            </a>
+            <button
+              onClick={() => togglePlayer(String(player.id))}
+              className={`p-2 rounded-full transition-colors ${isFav ? 'bg-primary text-black' : 'hover:bg-white/10 text-primary'}`}
+            >
+              <Heart size={20} fill={isFav ? "currentColor" : "none"} />
+            </button>
+          </div>
         </div>
 
         <div className="max-w-4xl mx-auto w-full px-4 py-12 space-y-12 pb-32">
