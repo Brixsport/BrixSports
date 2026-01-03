@@ -4,6 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Search, Users, TrendingUp, Trophy, Calendar, ArrowLeft, Filter } from 'lucide-react';
+import { PlayerProfileOverlay } from '@/components/PlayerProfileOverlay';
 import Link from 'next/link';
 
 interface SearchResults {
@@ -36,6 +37,7 @@ function SearchContent() {
     const [loading, setLoading] = useState(true);
     const [activeTab, setActiveTab] = useState<'all' | 'teams' | 'players' | 'matches' | 'competitions'>('all');
     const [selectedSport, setSelectedSport] = useState<string | null>(null);
+    const [selectedPlayer, setSelectedPlayer] = useState<any | null>(null);
 
     useEffect(() => {
         if (query) {
@@ -240,7 +242,7 @@ function SearchContent() {
                                             animate={{ opacity: 1, y: 0 }}
                                             transition={{ delay: index * 0.05 }}
                                         >
-                                            <Link href={`/players/${player.id}`}>
+                                            <div onClick={() => setSelectedPlayer(player)}>
                                                 <div className="p-4 bg-white/5 hover:bg-white/10 rounded-xl border border-white/10 hover:border-white/20 transition-all cursor-pointer">
                                                     <div className="flex items-center gap-3">
                                                         <div className="w-14 h-14 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0">
@@ -262,7 +264,7 @@ function SearchContent() {
                                                         )}
                                                     </div>
                                                 </div>
-                                            </Link>
+                                            </div>
                                         </motion.div>
                                     ))}
                                 </div>
@@ -350,6 +352,16 @@ function SearchContent() {
                     </div>
                 )}
             </div>
+
+            <AnimatePresence>
+                {/* @ts-ignore */}
+                {selectedPlayer && (
+                    <PlayerProfileOverlay
+                        player={selectedPlayer}
+                        onClose={() => setSelectedPlayer(null)}
+                    />
+                )}
+            </AnimatePresence>
         </>
     );
 }
