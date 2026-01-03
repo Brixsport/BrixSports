@@ -5,7 +5,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
-import { players, playerStats, teams } from '@/db/schema';
+import { players, playerStats, footballPlayerStats, basketballPlayerStats, teams } from '@/db/schema';
 import { eq, and } from 'drizzle-orm';
 
 /**
@@ -55,70 +55,97 @@ export async function GET(request: NextRequest) {
             .from(teams)
             .where(eq(teams.id, player2.teamId));
 
-        // Get player statistics
-        let stats1Query = db
-            .select()
-            .from(playerStats);
+        // Helper to fetch stats based on sport
+        const getStats = async (playerId: string, team: any) => {
+            const sport = team?.sport || 'Football';
 
-        let stats2Query = db
-            .select()
-            .from(playerStats);
+            if (sport === 'Basketball') {
+                let query = db
+                    .select()
+                    .from(basketballPlayerStats)
+                    .where(eq(basketballPlayerStats.playerId, playerId));
 
-        if (competition) {
-            stats1Query = stats1Query.where(
-                and(
-                    eq(playerStats.playerId, player1Id),
-                    eq(playerStats.competition, competition)
-                )
-            ) as any;
-            stats2Query = stats2Query.where(
-                and(
-                    eq(playerStats.playerId, player2Id),
-                    eq(playerStats.competition, competition)
-                )
-            ) as any;
+                const [stats] = await query;
+                if (!stats) return {};
+
+                // Map to frontend keys
+                return {
+                    appearances: stats.gamesPlayed || 0,
+                    minutesPlayed: stats.minutesPlayed || 0,
+                    totalPoints: stats.totalPoints || 0,
+                    totalAssists: stats.assists || 0, // Map assists to totalAssists
+                    rebounds: stats.totalRebounds || 0, // Map totalRebounds to rebounds
+                    steals: stats.steals || 0,
+                    blocks: stats.blocks || 0,
+                    rating: player1.rating // Pass rating if needed, though usually on player object
+                };
+            } else {
+                // Football (default)
+                let query = db
+                    .select()
+                    .from(footballPlayerStats)
+                    .where(eq(footballPlayerStats.playerId, playerId));
+
+                // If specific competition filtering is needed, it would be added here
+                // Note: current schema for footballPlayerStats doesn't strictly link to competition in the same way generic playerStats did, 
+                // but usually we want total season stats.
+
+                const [stats] = await query;
+                if (!stats) return {};
+
+                return {
+                    ...stats,
+                    // Ensure keys match what FootballComparison expects
+                    goals: stats.goals || 0,
+                    assists: stats.assists || 0,
+                    appearances: stats.appearances || 0,
+                    minutesPlayed: stats.minutesPlayed || 0,
+                    yellowCards: stats.yellowCards || 0,
+                    redCards: stats.redCards || 0,
+                };
+            }
+        };
+
+        const stats1 = await getStats(player1Id, team1);
+        const stats2 = await getStats(player2Id, team2);
+
+        // Determine comparison summary based on primary sport
+        const primarySport = team1?.sport || 'Football';
+        let summary: any = {};
+
+        // Cast to any to avoid TS union type errors since we know the sport matches the stats structure
+        const s1 = stats1 as any;
+        const s2 = stats2 as any;
+
+        if (primarySport === 'Basketball') {
+            summary = {
+                betterScorer: (s1.totalPoints || 0) > (s2.totalPoints || 0) ? player1.name : player2.name,
+                betterPlaymaker: (s1.totalAssists || 0) > (s2.totalAssists || 0) ? player1.name : player2.name,
+                betterRebounder: (s1.rebounds || 0) > (s2.rebounds || 0) ? player1.name : player2.name,
+                higherRated: (player1.rating || 0) > (player2.rating || 0) ? player1.name : player2.name,
+            };
         } else {
-            stats1Query = stats1Query.where(eq(playerStats.playerId, player1Id)) as any;
-            stats2Query = stats2Query.where(eq(playerStats.playerId, player2Id)) as any;
+            summary = {
+                betterGoalScorer: (s1.goals || 0) > (s2.goals || 0) ? player1.name : player2.name,
+                betterPlaymaker: (s1.assists || 0) > (s2.assists || 0) ? player1.name : player2.name,
+                moreExperienced: (s1.appearances || 0) > (s2.appearances || 0) ? player1.name : player2.name,
+                higherRated: (player1.rating || 0) > (player2.rating || 0) ? player1.name : player2.name,
+            };
         }
 
-        const [stats1] = await stats1Query;
-        const [stats2] = await stats2Query;
-
-        // Calculate comparison metrics
+        // Construct response
         const comparison = {
             player1: {
                 ...player1,
                 team: team1,
-                stats: stats1 || {
-                    goals: 0,
-                    assists: 0,
-                    appearances: 0,
-                    minutesPlayed: 0,
-                    yellowCards: 0,
-                    redCards: 0,
-                    averageRating: player1.rating || 7.0,
-                },
+                stats: stats1,
             },
             player2: {
                 ...player2,
                 team: team2,
-                stats: stats2 || {
-                    goals: 0,
-                    assists: 0,
-                    appearances: 0,
-                    minutesPlayed: 0,
-                    yellowCards: 0,
-                    redCards: 0,
-                    averageRating: player2.rating || 7.0,
-                },
+                stats: stats2,
             },
-            summary: {
-                betterGoalScorer: (stats1?.goals || 0) > (stats2?.goals || 0) ? player1.name : player2.name,
-                betterPlaymaker: (stats1?.assists || 0) > (stats2?.assists || 0) ? player1.name : player2.name,
-                moreExperienced: (stats1?.appearances || 0) > (stats2?.appearances || 0) ? player1.name : player2.name,
-                higherRated: (player1.rating || 0) > (player2.rating || 0) ? player1.name : player2.name,
-            },
+            summary,
         };
 
         return NextResponse.json(comparison);
