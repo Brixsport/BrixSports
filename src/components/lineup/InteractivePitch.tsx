@@ -71,13 +71,20 @@ export function InteractivePitch({
             {/* Team Side Label */}
             <div className="absolute top-4 left-4">
                 <div className={`px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider ${teamSide === 'combined'
-                        ? 'bg-gradient-to-r from-purple-500/20 to-primary/20 text-primary border border-primary/30'
-                        : teamSide === 'home'
-                            ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
-                            : 'bg-red-500/20 text-red-400 border border-red-500/30'
+                    ? 'bg-gradient-to-r from-purple-500/20 to-primary/20 text-primary border border-primary/30'
+                    : teamSide === 'home'
+                        ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
+                        : 'bg-red-500/20 text-red-400 border border-red-500/30'
                     }`}>
                     {teamSide === 'combined' ? 'Combined XI' : `${teamSide} Team`}
                 </div>
+            </div>
+
+            {/* Branding Tag */}
+            <div className="absolute bottom-4 right-4 pointer-events-none">
+                <h1 className="font-display text-3xl md:text-4xl italic font-black uppercase tracking-tighter text-white/20 select-none">
+                    BrixSport
+                </h1>
             </div>
         </div>
     );
