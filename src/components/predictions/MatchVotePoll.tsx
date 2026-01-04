@@ -197,50 +197,50 @@ export function MatchVotePoll({ match, compact = false }: MatchVotePollProps) {
     return (
         <div className="bg-white/5 rounded-xl border border-white/10 overflow-hidden">
             {/* Header */}
-            <div className="bg-white/5 border-b border-white/10 px-6 py-4">
+            <div className="bg-white/5 border-b border-white/10 px-4 md:px-6 py-3 md:py-4">
                 <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                        <div className="p-2 bg-primary/20 rounded-lg">
-                            <BarChart3 className="w-5 h-5 text-primary" />
+                    <div className="flex items-center gap-2 md:gap-3">
+                        <div className="p-1.5 md:p-2 bg-primary/20 rounded-lg">
+                            <BarChart3 className="w-4 h-4 md:w-5 md:h-5 text-primary" />
                         </div>
                         <div>
-                            <h3 className="text-white font-bold text-lg">Match Poll</h3>
-                            <p className="text-white/60 text-sm">Vote for the winner!</p>
+                            <h3 className="text-white font-bold text-base md:text-lg">Match Poll</h3>
+                            <p className="text-white/60 text-xs md:text-sm hidden sm:block">Vote for the winner!</p>
                         </div>
                     </div>
 
-                    <div className="flex items-center gap-2 bg-white/10 text-white px-4 py-2 rounded-lg">
-                        <Users className="w-4 h-4" />
-                        <span className="text-sm font-semibold">
-                            {pollData.totalVotes} votes
+                    <div className="flex items-center gap-1 md:gap-2 bg-white/10 text-white px-2 md:px-4 py-1.5 md:py-2 rounded-lg">
+                        <Users className="w-3 h-3 md:w-4 md:h-4" />
+                        <span className="text-xs md:text-sm font-semibold">
+                            {pollData.totalVotes}
                         </span>
                     </div>
                 </div>
             </div>
 
-            <div className="p-6 space-y-6">
+            <div className="p-4 md:p-6 space-y-4 md:space-y-6">
                 {!showResults && isAuthenticated ? (
                     <>
-                        <p className="text-center text-gray-400">Who do you think will win this match?</p>
+                        <p className="text-center text-white/60 text-sm">Who do you think will win this match?</p>
 
-                        <div className="grid grid-cols-1 gap-4">
+                        <div className="grid grid-cols-1 gap-3 md:gap-4">
                             {/* Home Team Vote */}
                             <button
                                 onClick={() => handleVote('home')}
                                 disabled={voting}
-                                className="group relative bg-white/5 hover:bg-white/10 border-2 border-white/10 hover:border-primary/50 disabled:border-white/5 disabled:bg-white/5 rounded-xl p-6 transition-all transform hover:scale-[1.02] disabled:cursor-not-allowed"
+                                className="group relative bg-white/5 hover:bg-white/10 border-2 border-white/10 hover:border-primary/50 disabled:border-white/5 disabled:bg-white/5 rounded-xl p-4 md:p-6 transition-all transform hover:scale-[1.02] disabled:cursor-not-allowed"
                             >
-                                <div className="flex items-center gap-4">
+                                <div className="flex items-center gap-3 md:gap-4">
                                     <img
                                         src={match.homeTeam.logo}
                                         alt={match.homeTeam.name}
-                                        className="w-16 h-16 object-contain"
+                                        className="w-12 h-12 md:w-16 md:h-16 object-contain"
                                     />
                                     <div className="flex-1 text-left">
-                                        <h4 className="text-xl font-bold text-white">{match.homeTeam.name}</h4>
-                                        <p className="text-sm text-white/70">Home Team</p>
+                                        <h4 className="text-lg md:text-xl font-bold text-white">{match.homeTeam.name}</h4>
+                                        <p className="text-xs md:text-sm text-white/70">Home Team</p>
                                     </div>
-                                    <CheckCircle className="w-6 h-6 text-white/50 group-hover:text-white transition-colors" />
+                                    <CheckCircle className="w-5 h-5 md:w-6 md:h-6 text-white/50 group-hover:text-white transition-colors" />
                                 </div>
                             </button>
 
@@ -248,17 +248,17 @@ export function MatchVotePoll({ match, compact = false }: MatchVotePollProps) {
                             <button
                                 onClick={() => handleVote('draw')}
                                 disabled={voting}
-                                className="group relative bg-white/5 hover:bg-white/10 border-2 border-white/10 hover:border-primary/50 disabled:border-white/5 disabled:bg-white/5 rounded-xl p-6 transition-all transform hover:scale-[1.02] disabled:cursor-not-allowed"
+                                className="group relative bg-white/5 hover:bg-white/10 border-2 border-white/10 hover:border-primary/50 disabled:border-white/5 disabled:bg-white/5 rounded-xl p-4 md:p-6 transition-all transform hover:scale-[1.02] disabled:cursor-not-allowed"
                             >
-                                <div className="flex items-center gap-4">
-                                    <div className="w-16 h-16 bg-white/10 rounded-full flex items-center justify-center">
-                                        <TrendingUp className="w-8 h-8 text-white" />
+                                <div className="flex items-center gap-3 md:gap-4">
+                                    <div className="w-12 h-12 md:w-16 md:h-16 bg-white/10 rounded-full flex items-center justify-center">
+                                        <TrendingUp className="w-6 h-6 md:w-8 md:h-8 text-white" />
                                     </div>
                                     <div className="flex-1 text-left">
-                                        <h4 className="text-xl font-bold text-white">Draw</h4>
-                                        <p className="text-sm text-white/70">Equal Score</p>
+                                        <h4 className="text-lg md:text-xl font-bold text-white">Draw</h4>
+                                        <p className="text-xs md:text-sm text-white/70">Equal Score</p>
                                     </div>
-                                    <CheckCircle className="w-6 h-6 text-white/50 group-hover:text-white transition-colors" />
+                                    <CheckCircle className="w-5 h-5 md:w-6 md:h-6 text-white/50 group-hover:text-white transition-colors" />
                                 </div>
                             </button>
 
@@ -266,19 +266,19 @@ export function MatchVotePoll({ match, compact = false }: MatchVotePollProps) {
                             <button
                                 onClick={() => handleVote('away')}
                                 disabled={voting}
-                                className="group relative bg-white/5 hover:bg-white/10 border-2 border-white/10 hover:border-primary/50 disabled:border-white/5 disabled:bg-white/5 rounded-xl p-6 transition-all transform hover:scale-[1.02] disabled:cursor-not-allowed"
+                                className="group relative bg-white/5 hover:bg-white/10 border-2 border-white/10 hover:border-primary/50 disabled:border-white/5 disabled:bg-white/5 rounded-xl p-4 md:p-6 transition-all transform hover:scale-[1.02] disabled:cursor-not-allowed"
                             >
-                                <div className="flex items-center gap-4">
+                                <div className="flex items-center gap-3 md:gap-4">
                                     <img
                                         src={match.awayTeam.logo}
                                         alt={match.awayTeam.name}
-                                        className="w-16 h-16 object-contain"
+                                        className="w-12 h-12 md:w-16 md:h-16 object-contain"
                                     />
                                     <div className="flex-1 text-left">
-                                        <h4 className="text-xl font-bold text-white">{match.awayTeam.name}</h4>
-                                        <p className="text-sm text-white/70">Away Team</p>
+                                        <h4 className="text-lg md:text-xl font-bold text-white">{match.awayTeam.name}</h4>
+                                        <p className="text-xs md:text-sm text-white/70">Away Team</p>
                                     </div>
-                                    <CheckCircle className="w-6 h-6 text-white/50 group-hover:text-white transition-colors" />
+                                    <CheckCircle className="w-5 h-5 md:w-6 md:h-6 text-white/50 group-hover:text-white transition-colors" />
                                 </div>
                             </button>
                         </div>
