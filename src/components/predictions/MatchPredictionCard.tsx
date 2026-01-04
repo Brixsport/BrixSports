@@ -300,7 +300,7 @@ export function MatchPredictionCard({ match, onPredictionSubmit }: MatchPredicti
                         disabled={submitted}
                         className="w-full h-2 bg-white/10 rounded-lg appearance-none cursor-pointer disabled:cursor-not-allowed"
                         style={{
-                            background: `linear-gradient(to right, #8b5cf6 0%, #ec4899 ${confidence}%, #ffffff20 ${confidence}%, #ffffff20 100%)`
+                            background: `linear-gradient(to right, var(--primary) 0%, var(--primary) ${confidence}%, #ffffff20 ${confidence}%, #ffffff20 100%)`
                         }}
                     />
                     <div className="flex justify-between text-xs text-white/40">
