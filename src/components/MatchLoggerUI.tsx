@@ -3,12 +3,18 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Trophy, Activity, Users, Star, Zap, Save, RefreshCw, Clock, ArrowRightLeft, Shield, AlertTriangle, ChevronLeft, Undo2, Redo2, History, RotateCcw, AlertCircle, Trash2 } from 'lucide-react';
-import { Match, MatchEvent, Player, TEAMS, PLAYERS, SportType, EventType } from '@/lib/mock-data';
+import { MatchEvent, SportType } from '@/types';
+import { Match, Logger, Player, Team } from '@/db/schema';
 
 interface MatchLoggerUIProps {
   match: Match;
   onExit: () => void;
+  currentLogger?: Logger | null;
+  teams: Team[];
+  players: Player[];
 }
+
+type EventType = string;
 
 const SPORT_EVENTS: Record<SportType, { label: string; type: EventType; color: string; icon: React.ReactNode }[]> = {
   Football: [
@@ -85,10 +91,71 @@ function HandIcon({ size }: { size: number }) {
   );
 }
 
-export function MatchLoggerUI({ match, onExit }: MatchLoggerUIProps) {
-  const [currentMatch, setCurrentMatch] = useState(match);
-  const [history, setHistory] = useState<Match[]>([]);
-  const [redoStack, setRedoStack] = useState<Match[]>([]);
+export function MatchLoggerUI({ match, onExit, currentLogger, teams, players }: MatchLoggerUIProps) {
+  // Parse stats if they exist
+  const initialStats = useMemo(() => {
+    try {
+      if (typeof match.stats === 'string') return JSON.parse(match.stats);
+      return match.stats || {
+        possession: [50, 50],
+        shots: [0, 0],
+        corners: [0, 0],
+        fouls: [0, 0],
+        yellowCards: [0, 0],
+        redCards: [0, 0],
+        saves: [0, 0]
+      };
+    } catch (e) {
+      return {
+        possession: [50, 50],
+        shots: [0, 0],
+        corners: [0, 0],
+        fouls: [0, 0],
+        yellowCards: [0, 0],
+        redCards: [0, 0],
+        saves: [0, 0]
+      };
+    }
+  }, [match.stats]);
+
+  const [events, setEvents] = useState<MatchEvent[]>([]);
+  const [stats, setStats] = useState(initialStats);
+  const [currentMatch, setCurrentMatch] = useState({
+    ...match,
+    events: events,
+    stats: initialStats
+  });
+
+  // Sync currentMatch when events or stats change
+  useEffect(() => {
+    setCurrentMatch(prev => ({
+      ...prev,
+      events,
+      stats
+    }));
+  }, [events, stats]);
+
+  useEffect(() => {
+    // Fetch events
+    const fetchEvents = async () => {
+      try {
+        const res = await fetch(`/api/matches/${match.id}/events`);
+        const data = await res.json();
+        if (data.events) {
+          setEvents(data.events.map((e: any) => ({
+            ...e,
+            isEyePoint: e.isEyePoint
+          })));
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    };
+    fetchEvents();
+  }, [match.id]);
+
+  const [history, setHistory] = useState<any[]>([]);
+  const [redoStack, setRedoStack] = useState<any[]>([]);
   const [activeTab, setActiveTab] = useState<'Protocol' | 'Stats' | 'Summary'>('Protocol');
   const [offlineQueue, setOfflineQueue] = useState<(MatchEvent & { status: 'pending' | 'conflict' })[]>([]);
 
@@ -101,11 +168,11 @@ export function MatchLoggerUI({ match, onExit }: MatchLoggerUIProps) {
   const [isSyncing, setIsSyncing] = useState(false);
 
   // Computed values
-  const homeTeam = useMemo(() => TEAMS.find(t => t.id === match.homeTeamId), [match.homeTeamId]);
-  const awayTeam = useMemo(() => TEAMS.find(t => t.id === match.awayTeamId), [match.awayTeamId]);
-  const teamPlayers = useMemo(() => PLAYERS.filter(p => p.teamId === selectedTeamId), [selectedTeamId]);
+  const homeTeam = useMemo(() => teams.find(t => t.id === match.homeTeamId), [teams, match.homeTeamId]);
+  const awayTeam = useMemo(() => teams.find(t => t.id === match.awayTeamId), [teams, match.awayTeamId]);
+  const teamPlayers = useMemo(() => players.filter(p => p.teamId === selectedTeamId), [players, selectedTeamId]);
 
-  const addEvent = useCallback((type: EventType, detail?: string, relatedPlayerId?: string) => {
+  const addEvent = useCallback(async (type: EventType, detail?: string, relatedPlayerId?: string) => {
     const newEvent: MatchEvent = {
       id: Math.random().toString(36).substr(2, 9),
       type,
@@ -113,51 +180,85 @@ export function MatchLoggerUI({ match, onExit }: MatchLoggerUIProps) {
       teamId: selectedTeamId,
       playerId: selectedPlayerId || undefined,
       relatedPlayerId,
-      detail: detail || (selectedPlayerId ? PLAYERS.find(p => p.id === selectedPlayerId)?.name : undefined),
+      detail: detail || (selectedPlayerId ? players.find(p => p.id === selectedPlayerId)?.name || 'Unknown' : ''),
       isEyePoint: type === 'Eye Point'
-    };
+    } as unknown as MatchEvent;
 
+    // OPTIMISTIC UPDATE (Keep existing logic)
     setHistory(prev => [...prev, JSON.parse(JSON.stringify(currentMatch))]);
     setRedoStack([]);
 
     const updatedMatch = { ...currentMatch };
     updatedMatch.events = [newEvent, ...updatedMatch.events];
 
-    // Handle score updates
+    // Handle score updates locally
+    let points = 0;
     if (type === 'Goal' || type === 'Point' || type === 'Field Goal') {
-      if (selectedTeamId === match.homeTeamId) updatedMatch.homeScore++;
-      else updatedMatch.awayScore++;
+      if (selectedTeamId === match.homeTeamId) updatedMatch.homeScore = (updatedMatch.homeScore || 0) + 1;
+      else updatedMatch.awayScore = (updatedMatch.awayScore || 0) + 1;
+      points = 1 || 2; // Defaulting to simple logic for now
     } else if (type === 'Three Pointer') {
-      if (selectedTeamId === match.homeTeamId) updatedMatch.homeScore += 3;
-      else updatedMatch.awayScore += 3;
+      if (selectedTeamId === match.homeTeamId) updatedMatch.homeScore = (updatedMatch.homeScore || 0) + 3;
+      else updatedMatch.awayScore = (updatedMatch.awayScore || 0) + 3;
+      points = 3;
     }
 
-    // Handle stat updates
+    // Handle stat updates locally... (omitted for brevity, keep existing logic)
     const teamIdx = selectedTeamId === match.homeTeamId ? 0 : 1;
-    if (type === 'Shot' || type === 'Goal') updatedMatch.stats.shots[teamIdx]++;
-    if (type === 'Corner') updatedMatch.stats.corners[teamIdx]++;
-    if (type === 'Yellow Card') updatedMatch.stats.yellowCards[teamIdx]++;
-    if (type === 'Red Card') updatedMatch.stats.redCards[teamIdx]++;
-    if (type === 'Foul') updatedMatch.stats.fouls[teamIdx]++;
-    if (type === 'Save') updatedMatch.stats.saves = updatedMatch.stats.saves ? [
-      teamIdx === 0 ? updatedMatch.stats.saves[0] + 1 : updatedMatch.stats.saves[0],
-      teamIdx === 1 ? updatedMatch.stats.saves[1] + 1 : updatedMatch.stats.saves[1]
-    ] : [teamIdx === 0 ? 1 : 0, teamIdx === 1 ? 1 : 0];
 
-    setCurrentMatch(updatedMatch);
+    // Update stats
+    const newStats = { ...stats };
+    if (type === 'Goal' || type === 'Shot') newStats.shots[teamIdx]++;
+    if (type === 'Corner') newStats.corners[teamIdx]++;
+    if (type === 'Yellow Card') newStats.yellowCards[teamIdx]++;
+    if (type === 'Red Card') newStats.redCards[teamIdx]++;
+    if (type === 'Foul') newStats.fouls[teamIdx]++;
 
-    // Simulating offline/online behavior
-    if (navigator.onLine) {
-      window.dispatchEvent(new CustomEvent('MATCH_UPDATE', {
-        detail: { matchId: match.id, event: newEvent, updatedMatch }
-      }));
-    } else {
-      setOfflineQueue(prev => [...prev, { ...newEvent, status: 'pending' }]);
-    }
+    setStats(newStats);
 
+    // Update Scores in State
+    setCurrentMatch(prev => ({
+      ...prev,
+      homeScore: updatedMatch.homeScore,
+      awayScore: updatedMatch.awayScore
+    }));
+
+    // Events are handled by separate state and effect
+    setEvents(prev => [newEvent, ...prev]);
     setSelectedPlayerId(null);
     setIsSubbing(false);
-  }, [currentMatch, minute, selectedTeamId, selectedPlayerId, match.id, match.homeTeamId]);
+
+    // API CALL (Real-time Broadcast)
+    try {
+      const payload = {
+        type,
+        minute,
+        second: 0,
+        teamId: selectedTeamId,
+        playerId: selectedPlayerId,
+        relatedPlayerId,
+        detail: newEvent.detail,
+        isEyePoint: type === 'Eye Point',
+        value: points,
+        loggerId: currentLogger?.id,
+        loggerName: currentLogger?.name
+      };
+
+      const response = await fetch(`/api/matches/${match.id}/events`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      if (!response.ok) {
+        console.error('Failed to sync event to server');
+        setOfflineQueue(prev => [...prev, { ...newEvent, status: 'pending' }]);
+      }
+    } catch (error) {
+      console.error('Network error syncing event:', error);
+      setOfflineQueue(prev => [...prev, { ...newEvent, status: 'pending' }]);
+    }
+  }, [currentMatch, minute, selectedTeamId, selectedPlayerId, match.id, match.homeTeamId, currentLogger]);
 
 
   const undo = () => {
@@ -185,7 +286,7 @@ export function MatchLoggerUI({ match, onExit }: MatchLoggerUIProps) {
     }, 1500);
   };
 
-  const sportEvents = SPORT_EVENTS[match.sport] || SPORT_EVENTS.Football;
+  const sportEvents = SPORT_EVENTS[match.sport as SportType] || SPORT_EVENTS.Football;
 
   return (
     <div className="fixed inset-0 bg-[#050505] text-white z-50 flex flex-col overflow-hidden">
@@ -237,8 +338,8 @@ export function MatchLoggerUI({ match, onExit }: MatchLoggerUIProps) {
             onClick={handleSync}
             disabled={isSyncing || offlineQueue.length === 0}
             className={`flex items-center gap-2 px-6 py-3 rounded-xl border font-black uppercase tracking-widest text-[10px] transition-all ${offlineQueue.length > 0
-                ? 'bg-primary text-black border-primary shadow-lg shadow-primary/20'
-                : 'bg-white/5 border-white/10 text-white/20'
+              ? 'bg-primary text-black border-primary shadow-lg shadow-primary/20'
+              : 'bg-white/5 border-white/10 text-white/20'
               }`}
           >
             {isSyncing ? <RefreshCw className="animate-spin" size={14} /> : <Save size={14} />}
@@ -271,7 +372,7 @@ export function MatchLoggerUI({ match, onExit }: MatchLoggerUIProps) {
           {/* Team Selection */}
           <div className="flex bg-white/5 p-1 rounded-[24px] border border-white/10 overflow-hidden">
             {[match.homeTeamId, match.awayTeamId].map(id => {
-              const team = TEAMS.find(t => t.id === id);
+              const team = teams.find(t => t.id === id);
               const isActive = selectedTeamId === id;
               return (
                 <button
@@ -364,8 +465,8 @@ export function MatchLoggerUI({ match, onExit }: MatchLoggerUIProps) {
                     }
                   }}
                   className={`p-4 rounded-[24px] border transition-all text-left flex flex-col gap-1 relative ${selectedPlayerId === player.id
-                      ? 'bg-primary/10 border-primary text-primary'
-                      : isSubbing ? 'bg-blue-500/10 border-blue-500/30 text-blue-500' : 'bg-white/5 border-white/10 text-white/60 hover:border-white/20'
+                    ? 'bg-primary/10 border-primary text-primary'
+                    : isSubbing ? 'bg-blue-500/10 border-blue-500/30 text-blue-500' : 'bg-white/5 border-white/10 text-white/60 hover:border-white/20'
                     }`}
                 >
                   <span className="text-[10px] font-black uppercase opacity-60">#{player.number} • {player.position}</span>

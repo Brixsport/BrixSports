@@ -3,11 +3,14 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { X, Activity, Save, Clock, Users, Trophy, Timer, Flag } from 'lucide-react';
-import { Match, Player, TEAMS, PLAYERS } from '@/lib/mock-data';
+import { Match, Team, Player } from '@/db/schema';
+import { MatchEvent } from '@/types';
 
 interface TrackLoggerProps {
     match: Match;
     onExit: () => void;
+    teams: Team[];
+    players: Player[];
 }
 
 type TrackEventType = 'Race Start' | 'Lap Time' | 'Race Finish' | 'False Start' | 'Disqualification' | 'Record Attempt';
@@ -19,16 +22,28 @@ interface RaceResult {
     splits?: string[];
 }
 
-export function TrackLogger({ match, onExit }: TrackLoggerProps) {
+export function TrackLogger({ match, onExit, teams, players }: TrackLoggerProps) {
     const [eventType, setEventType] = useState<'Sprint' | 'Distance' | 'Relay' | 'Field'>('Sprint');
     const [raceStatus, setRaceStatus] = useState<'Ready' | 'Running' | 'Finished'>('Ready');
     const [results, setResults] = useState<RaceResult[]>([]);
     const [currentTime, setCurrentTime] = useState('00:00.00');
-    const [events, setEvents] = useState(match.events);
+    // events from schema is string in some versions but we will assume it is handled or not present on schema Match like this?
+    // Actually Match from schema has events as generic json usually?
+    // But here we are using local state.
+    const [events, setEvents] = useState<any[]>(() => {
+        if (typeof (match as any).events === 'string') {
+            try {
+                return JSON.parse((match as any).events);
+            } catch (e) {
+                return [];
+            }
+        }
+        return (match as any).events || [];
+    });
 
-    const homeTeam = TEAMS.find(t => t.id === match.homeTeamId);
-    const awayTeam = TEAMS.find(t => t.id === match.awayTeamId);
-    const allPlayers = [...PLAYERS.filter(p => p.teamId === match.homeTeamId), ...PLAYERS.filter(p => p.teamId === match.awayTeamId)];
+    const homeTeam = teams.find(t => t.id === match.homeTeamId);
+    const awayTeam = teams.find(t => t.id === match.awayTeamId);
+    const allPlayers = players.filter(p => p.teamId === match.homeTeamId || p.teamId === match.awayTeamId);
 
     const addResult = (playerId: string, time: string, position: number) => {
         const newResult: RaceResult = {
@@ -44,7 +59,7 @@ export function TrackLogger({ match, onExit }: TrackLoggerProps) {
             type: 'Race Finish' as const,
             minute: 0,
             second: parseFloat(time.replace(':', '.')),
-            teamId: PLAYERS.find(p => p.id === playerId)?.teamId || '',
+            teamId: players.find(p => p.id === playerId)?.teamId || '',
             playerId,
             detail: `Position ${position} - ${time}`,
             value: { position, time }
@@ -110,8 +125,8 @@ export function TrackLogger({ match, onExit }: TrackLoggerProps) {
                         <div className="text-center">
                             <p className="text-[10px] font-black uppercase tracking-widest text-white/40 mb-4">Race Status</p>
                             <div className={`inline-flex items-center gap-2 px-6 py-3 rounded-2xl font-black uppercase tracking-widest ${raceStatus === 'Ready' ? 'bg-yellow-500/20 text-yellow-500' :
-                                    raceStatus === 'Running' ? 'bg-blue-500/20 text-blue-500 animate-pulse' :
-                                        'bg-blue-500/20 text-blue-500'
+                                raceStatus === 'Running' ? 'bg-blue-500/20 text-blue-500 animate-pulse' :
+                                    'bg-blue-500/20 text-blue-500'
                                 }`}>
                                 <Activity size={16} />
                                 {raceStatus}
@@ -171,7 +186,7 @@ export function TrackLogger({ match, onExit }: TrackLoggerProps) {
                         </h3>
                         <div className="space-y-3">
                             {allPlayers.slice(0, 8).map((player, idx) => {
-                                const team = TEAMS.find(t => t.id === player.teamId);
+                                const team = teams.find(t => t.id === player.teamId);
                                 const result = results.find(r => r.playerId === player.id);
 
                                 return (
@@ -247,8 +262,8 @@ export function TrackLogger({ match, onExit }: TrackLoggerProps) {
                         <div className="space-y-2">
                             {results.length > 0 ? (
                                 results.map((result) => {
-                                    const player = PLAYERS.find(p => p.id === result.playerId);
-                                    const team = TEAMS.find(t => t.id === player?.teamId);
+                                    const player = players.find(p => p.id === result.playerId);
+                                    const team = teams.find(t => t.id === player?.teamId);
 
                                     return (
                                         <motion.div
@@ -256,17 +271,17 @@ export function TrackLogger({ match, onExit }: TrackLoggerProps) {
                                             initial={{ opacity: 0, x: -20 }}
                                             animate={{ opacity: 1, x: 0 }}
                                             className={`border rounded-2xl p-4 ${result.position === 1 ? 'bg-yellow-500/10 border-yellow-500/30' :
-                                                    result.position === 2 ? 'bg-gray-400/10 border-gray-400/30' :
-                                                        result.position === 3 ? 'bg-orange-500/10 border-orange-500/30' :
-                                                            'bg-white/5 border-white/10'
+                                                result.position === 2 ? 'bg-gray-400/10 border-gray-400/30' :
+                                                    result.position === 3 ? 'bg-orange-500/10 border-orange-500/30' :
+                                                        'bg-white/5 border-white/10'
                                                 }`}
                                         >
                                             <div className="flex items-center justify-between mb-2">
                                                 <div className="flex items-center gap-3">
                                                     <div className={`w-8 h-8 rounded-full flex items-center justify-center font-display text-lg font-bold ${result.position === 1 ? 'bg-yellow-500 text-black' :
-                                                            result.position === 2 ? 'bg-gray-400 text-black' :
-                                                                result.position === 3 ? 'bg-orange-500 text-black' :
-                                                                    'bg-white/10 text-white'
+                                                        result.position === 2 ? 'bg-gray-400 text-black' :
+                                                            result.position === 3 ? 'bg-orange-500 text-black' :
+                                                                'bg-white/10 text-white'
                                                         }`}>
                                                         {result.position}
                                                     </div>
@@ -295,9 +310,9 @@ export function TrackLogger({ match, onExit }: TrackLoggerProps) {
                             Event Log
                         </h3>
                         <div className="space-y-2 max-h-[300px] overflow-y-auto">
-                            {events.slice().reverse().map((event) => {
-                                const team = TEAMS.find(t => t.id === event.teamId);
-                                const player = PLAYERS.find(p => p.id === event.playerId);
+                            {events.slice().reverse().map((event: any) => {
+                                const team = teams.find(t => t.id === event.teamId);
+                                const player = players.find(p => p.id === event.playerId);
                                 return (
                                     <div
                                         key={event.id}

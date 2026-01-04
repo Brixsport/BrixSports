@@ -8,14 +8,7 @@ import { BasketballLogger } from '@/components/BasketballLogger';
 import { FootballLogger } from '@/components/FootballLogger';
 import { TrackLogger } from '@/components/TrackLogger';
 
-import { Match } from '@/db/schema';
-
-interface Logger {
-  id: string;
-  name: string;
-  email: string;
-  role: string;
-}
+import { Match, Logger } from '@/db/schema';
 
 export default function LoggerPage() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -28,6 +21,7 @@ export default function LoggerPage() {
   const [logger, setLogger] = useState<Logger | null>(null);
   const [assignedMatches, setAssignedMatches] = useState<Match[]>([]);
   const [teams, setTeams] = useState<any[]>([]);
+  const [players, setPlayers] = useState<any[]>([]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -75,7 +69,10 @@ export default function LoggerPage() {
   // Fetch teams when logged in
   useEffect(() => {
     if (isLoggedIn) {
-      fetchTeams();
+      if (isLoggedIn) {
+        fetchTeams();
+        fetchPlayers();
+      }
     }
   }, [isLoggedIn]);
 
@@ -96,6 +93,16 @@ export default function LoggerPage() {
       setTeams(data);
     } catch (err) {
       console.error('Failed to fetch teams:', err);
+    }
+  };
+
+  const fetchPlayers = async () => {
+    try {
+      const response = await fetch('/api/players');
+      const data = await response.json();
+      setPlayers(data);
+    } catch (err) {
+      console.error('Failed to fetch players:', err);
     }
   };
 
@@ -182,11 +189,11 @@ export default function LoggerPage() {
       return <BasketballLogger match={match} onExit={() => setSelectedMatchId(null)} currentLogger={logger} />;
     } else if (match.sport === 'Football') {
       return <FootballLogger match={match} onExit={() => setSelectedMatchId(null)} currentLogger={logger} />;
-    } else if (match.sport === 'Track') {
-      return <TrackLogger match={match} onExit={() => setSelectedMatchId(null)} />;
+    } else if (match.sport === 'Track' || match.sport === 'Track & Field') {
+      return <TrackLogger match={match} onExit={() => setSelectedMatchId(null)} teams={teams} players={players} />;
     } else {
       // Default to generic logger for other sports
-      return <MatchLoggerUI match={match} onExit={() => setSelectedMatchId(null)} />;
+      return <MatchLoggerUI match={match} onExit={() => setSelectedMatchId(null)} currentLogger={logger} teams={teams} players={players} />;
     }
   }
 

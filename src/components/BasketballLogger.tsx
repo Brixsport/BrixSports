@@ -8,43 +8,8 @@ import { MultiLoggerStatus } from '@/components/MultiLoggerStatus';
 import type { SyncEvent } from '@/lib/multiLogger';
 
 
-interface Team {
-    id: string;
-    name: string;
-    shortName: string;
-    logo: string;
-    color: string;
-}
-
-interface Player {
-    id: string;
-    name: string;
-    number: number;
-    teamId: string;
-    position: string;
-}
-
-interface Match {
-    id: string;
-    sport: string;
-    homeTeamId: string;
-    awayTeamId: string;
-    homeScore: number | null;
-    awayScore: number | null;
-    status: string;
-    startTime: string;
-    venue: string;
-    competition: string;
-    homeTeam?: Team;
-    awayTeam?: Team;
-}
-
-interface Logger {
-    id: string;
-    name: string;
-    email: string;
-    role: string;
-}
+import { MatchEvent } from '@/types';
+import { Match, Logger, Player, Team } from '@/db/schema';
 
 interface BasketballLoggerProps {
     match: Match;

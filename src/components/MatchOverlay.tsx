@@ -13,6 +13,7 @@ import { LivestreamChat } from '@/components/livestream/LivestreamChat';
 import { LivestreamPlayer } from '@/components/livestream/LivestreamPlayer';
 import { FootballPitch } from '@/components/FootballPitch';
 import { FullPitchLineups } from '@/components/FullPitchLineups';
+import { useMatchEvents, useMatchStatus, usePlayerRatings } from '@/hooks/useWebSocket';
 
 interface MatchOverlayProps {
   match: Match;
@@ -38,7 +39,12 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
   const [isScrolled, setIsScrolled] = useState(false);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
-  // Ratings state
+  // Real-time WebSocket Data
+  const { status: liveStatus, score: liveScore } = useMatchStatus(match.id);
+  const { events: liveEvents, latestEvent } = useMatchEvents(match.id);
+  const liveRatings = usePlayerRatings(match.id);
+
+  // Ratings state (merge initial API fetch with live updates)
   const [ratings, setRatings] = useState<Record<string, { autoRating: number; finalRating: number | null; isMotM: boolean; notes: string | null }>>({});
   const [loadingRatings, setLoadingRatings] = useState(false);
   const [ratingsFetched, setRatingsFetched] = useState(false);
@@ -48,6 +54,60 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
   const awayTeam = match.awayTeam;
   const { isFavoriteTeam, toggleTeam } = useFavorites();
   const { addNotification } = useNotifications();
+
+  // Update match state from live socket data
+  useEffect(() => {
+    if (liveStatus && liveStatus !== match.status) {
+      setMatch(prev => ({ ...prev, status: liveStatus as import('@/types').MatchStatus }));
+    }
+    if (liveScore) {
+      setMatch(prev => ({ ...prev, homeScore: liveScore.home, awayScore: liveScore.away }));
+    }
+  }, [liveStatus, liveScore, match.status]);
+
+  // Handle new live events
+  useEffect(() => {
+    if (latestEvent) {
+      // Show notification for significant events
+      if (latestEvent.type === 'Goal') {
+        addNotification({
+          title: 'GOAL!',
+          message: `${latestEvent.detail} has scored!`,
+          type: 'match'
+        });
+      }
+      if (latestEvent.isEyePoint) {
+        addNotification({
+          title: 'EYE POINT AWARDED',
+          message: `Exceptional performance by ${latestEvent.detail}`,
+          type: 'scout'
+        });
+      }
+    }
+  }, [latestEvent, addNotification]);
+
+  // Update ratings from live socket data
+  useEffect(() => {
+    if (Object.keys(liveRatings).length > 0) {
+      setRatings(prev => {
+        const newRatings = { ...prev };
+        Object.entries(liveRatings).forEach(([playerId, rating]) => {
+          if (newRatings[playerId]) {
+            newRatings[playerId].autoRating = rating;
+          } else {
+            // Create basic entry if not exists
+            newRatings[playerId] = {
+              autoRating: rating,
+              finalRating: null,
+              isMotM: false,
+              notes: null
+            };
+          }
+        });
+        return newRatings;
+      });
+    }
+  }, [liveRatings]);
 
   const tabs = [
     ...(match.isStreaming ? [{ id: 'watch', label: 'Watch Live', icon: Play }] : []),
@@ -66,33 +126,7 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
     ] : []),
   ];
 
-  useEffect(() => {
-    const handleUpdate = (e: any) => {
-      const { matchId, event, updatedMatch } = e.detail;
-      if (matchId === match.id) {
-        setMatch(updatedMatch);
 
-        // Show notification for significant events
-        if (event.type === 'Goal') {
-          addNotification({
-            title: 'GOAL!',
-            message: `${event.detail} has scored!`,
-            type: 'match'
-          });
-        }
-        if (event.type === 'Eye Point') {
-          addNotification({
-            title: 'EYE POINT AWARDED',
-            message: `Exceptional performance by ${event.detail}`,
-            type: 'scout'
-          });
-        }
-      }
-    };
-
-    window.addEventListener('MATCH_UPDATE', handleUpdate);
-    return () => window.removeEventListener('MATCH_UPDATE', handleUpdate);
-  }, [match.id, addNotification]);
 
   // Fetch player data when lineups or scout tab is opened
   useEffect(() => {
