@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Image from 'next/image';
 import { Play, X, Trophy, Users, BarChart3, Clock, Star, MapPin, Calendar, Share2, Heart, RefreshCw, AlertCircle, Target, MessageSquare, Table } from 'lucide-react';
@@ -34,6 +34,9 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
   const [loadingStandings, setLoadingStandings] = useState(false);
   const [playersFetched, setPlayersFetched] = useState(false);
   const [standingsFetched, setStandingsFetched] = useState(false);
+  const [isScrolled, setIsScrolled] = useState(false);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+
   // Use team data from match object (already populated by API)
   const homeTeam = match.homeTeam;
   const awayTeam = match.awayTeam;
@@ -154,9 +157,26 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
     fetchStandings();
   }, [activeTab, match.competition, standingsFetched]);
 
-  const [isScrolled, setIsScrolled] = useState(false);
+  // Handle scroll with debouncing to prevent jitter
+  useEffect(() => {
+    const scrollContainer = scrollContainerRef.current;
+    if (!scrollContainer) return;
 
-  // ... (previous useEffects)
+    let ticking = false;
+    const handleScroll = () => {
+      if (!ticking) {
+        window.requestAnimationFrame(() => {
+          const scrollTop = scrollContainer.scrollTop;
+          setIsScrolled(scrollTop > 50);
+          ticking = false;
+        });
+        ticking = true;
+      }
+    };
+
+    scrollContainer.addEventListener('scroll', handleScroll, { passive: true });
+    return () => scrollContainer.removeEventListener('scroll', handleScroll);
+  }, []);
 
   return (
     <motion.div
@@ -314,10 +334,8 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
 
         {/* Content */}
         <div
+          ref={scrollContainerRef}
           className="max-w-5xl mx-auto w-full px-4 py-8 overflow-y-auto flex-1"
-          onScroll={(e) => {
-            setIsScrolled(e.currentTarget.scrollTop > 50);
-          }}
         >
           <AnimatePresence mode="wait">
             {/* Watch Tab - For Live Streaming */}

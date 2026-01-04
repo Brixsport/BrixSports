@@ -18,7 +18,7 @@ export function useAuth() {
         // Check for user session
         const checkAuth = async () => {
             try {
-                const response = await fetch('/api/auth/session');
+                const response = await fetch('/api/auth/me');
                 if (response.ok) {
                     const data = await response.json();
                     setUser(data.user);
