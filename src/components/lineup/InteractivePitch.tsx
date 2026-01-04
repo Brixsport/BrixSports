@@ -14,7 +14,7 @@ interface InteractivePitchProps {
     onSetCaptain: (playerId: string) => void;
     onSetViceCaptain: (playerId: string) => void;
     teamSide: 'home' | 'away' | 'combined';
-    playerDetails: Record<string, { name: string; jerseyName?: string; rating: number }>;
+    playerDetails: Record<string, { name: string; jerseyName?: string; rating: number; originalTeam?: 'home' | 'away' }>;
     selectedPlayer?: any;
 }
 
@@ -150,7 +150,7 @@ function PositionSlot({
 }: {
     position: any;
     player?: LineupPlayer;
-    playerDetails?: { name: string; jerseyName?: string; rating: number };
+    playerDetails?: { name: string; jerseyName?: string; rating: number; originalTeam?: 'home' | 'away' };
     onRemove: () => void;
     onAssign: () => void;
     onSetCaptain: () => void;
@@ -176,9 +176,13 @@ function PositionSlot({
                     {/* Player Card */}
                     <button
                         onClick={() => setShowMenu(!showMenu)}
-                        className={`relative w-16 h-20 rounded-xl border-2 transition-all ${teamSide === 'home'
-                            ? 'bg-blue-500/90 border-blue-400'
-                            : 'bg-red-500/90 border-red-400'
+                        className={`relative w-16 h-20 rounded-xl border-2 transition-all ${teamSide === 'combined'
+                            ? playerDetails?.originalTeam === 'home'
+                                ? 'bg-blue-500/90 border-blue-400'
+                                : 'bg-red-500/90 border-red-400'
+                            : teamSide === 'home'
+                                ? 'bg-blue-500/90 border-blue-400'
+                                : 'bg-red-500/90 border-red-400'
                             } hover:scale-110 shadow-lg`}
                     >
                         {/* Captain/Vice-Captain Badge */}

@@ -263,9 +263,9 @@ export default function LineupBuilderPage() {
 
     // Get player details for display
     const playerDetails = players.reduce((acc, player) => {
-        acc[player.id] = { name: player.name, jerseyName: player.jerseyName, rating: player.rating };
+        acc[player.id] = { name: player.name, jerseyName: player.jerseyName, rating: player.rating, originalTeam: player.originalTeam };
         return acc;
-    }, {} as Record<string, { name: string; jerseyName?: string; rating: number }>);
+    }, {} as Record<string, { name: string; jerseyName?: string; rating: number; originalTeam?: 'home' | 'away' }>);
 
     const selectedPlayerIds = lineup ? lineup.starters.map(p => p.playerId) : [];
 
