@@ -36,9 +36,21 @@ export function MatchSelector({ onSelectMatch, selectedMatchId }: MatchSelectorP
             setLoading(true);
             const response = await fetch('/api/matches?status=UPCOMING');
             const data = await response.json();
-            setMatches(data);
+
+            // Handle different API response formats
+            if (Array.isArray(data)) {
+                setMatches(data);
+            } else if (data.matches && Array.isArray(data.matches)) {
+                setMatches(data.matches);
+            } else if (data.success && Array.isArray(data.data)) {
+                setMatches(data.data);
+            } else {
+                console.error('Unexpected API response format:', data);
+                setMatches([]);
+            }
         } catch (error) {
             console.error('Error fetching matches:', error);
+            setMatches([]);
         } finally {
             setLoading(false);
         }
