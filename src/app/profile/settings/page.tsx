@@ -1,18 +1,24 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import {
     Settings, User, Bell, Lock, Globe, Palette, Eye, Shield,
-    Mail, Smartphone, Moon, Sun, Volume2, VolumeX, Save, ChevronRight
+    Mail, Smartphone, Moon, Sun, Volume2, VolumeX, Save, ChevronRight, Loader2
 } from 'lucide-react';
+import { useAuth } from '@/hooks/useAuth';
+import { toast } from 'sonner';
 
 export default function SettingsPage() {
+    const { user, loading: authLoading } = useAuth();
+    const [loading, setLoading] = useState(true);
+    const [saving, setSaving] = useState(false);
+
     const [settings, setSettings] = useState({
         // Account
-        name: 'Alex Johnson',
-        email: 'alex.johnson@example.com',
-        phone: '+234 801 234 5678',
+        name: '',
+        email: '',
+        phone: '',
 
         // Preferences
         theme: 'dark',
@@ -38,9 +44,125 @@ export default function SettingsPage() {
         compactMode: false,
     });
 
+    // Load user data and preferences
+    useEffect(() => {
+        const loadSettings = async () => {
+            if (!user?.id) return;
+
+            try {
+                setLoading(true);
+
+                // Fetch user data
+                const userResponse = await fetch(`/api/users/${user.id}`);
+                if (userResponse.ok) {
+                    const userData = await userResponse.json();
+                    setSettings(prev => ({
+                        ...prev,
+                        name: userData.user.name || '',
+                        email: userData.user.email || '',
+                    }));
+                }
+
+                // Fetch user preferences
+                const prefsResponse = await fetch(`/api/users/${user.id}/preferences`);
+                if (prefsResponse.ok) {
+                    const prefsData = await prefsResponse.json();
+                    if (prefsData.preferences) {
+                        setSettings(prev => ({
+                            ...prev,
+                            theme: prefsData.preferences.theme || 'dark',
+                            language: prefsData.preferences.language || 'en',
+                            timezone: prefsData.preferences.timezone || 'Africa/Lagos',
+                            defaultView: prefsData.preferences.defaultView || 'standings',
+                            emailNotifications: prefsData.preferences.emailNotifications ?? true,
+                            pushNotifications: prefsData.preferences.notifications ?? true,
+                        }));
+                    }
+                }
+            } catch (error) {
+                console.error('Error loading settings:', error);
+                toast.error('Failed to load settings');
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        loadSettings();
+    }, [user]);
+
     const updateSetting = (key: string, value: any) => {
         setSettings(prev => ({ ...prev, [key]: value }));
     };
+
+    const handleSave = async () => {
+        if (!user?.id) {
+            toast.error('You must be logged in to save settings');
+            return;
+        }
+
+        try {
+            setSaving(true);
+
+            // Update user profile
+            const profileResponse = await fetch(`/api/users/${user.id}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    name: settings.name,
+                }),
+            });
+
+            if (!profileResponse.ok) {
+                throw new Error('Failed to update profile');
+            }
+
+            // Update user preferences
+            const prefsResponse = await fetch(`/api/users/${user.id}/preferences`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    theme: settings.theme,
+                    language: settings.language,
+                    timezone: settings.timezone,
+                    defaultView: settings.defaultView,
+                    notifications: settings.pushNotifications,
+                    emailNotifications: settings.emailNotifications,
+                }),
+            });
+
+            if (!prefsResponse.ok) {
+                throw new Error('Failed to update preferences');
+            }
+
+            toast.success('Settings saved successfully!');
+        } catch (error) {
+            console.error('Error saving settings:', error);
+            toast.error('Failed to save settings');
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    if (authLoading || loading) {
+        return (
+            <div className="min-h-screen bg-[#050505] text-white flex items-center justify-center">
+                <div className="flex flex-col items-center gap-4">
+                    <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                    <p className="text-white/60">Loading settings...</p>
+                </div>
+            </div>
+        );
+    }
+
+    if (!user) {
+        return (
+            <div className="min-h-screen bg-[#050505] text-white flex items-center justify-center">
+                <div className="flex flex-col items-center gap-4">
+                    <p className="text-white/60">Please sign in to access settings</p>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="min-h-screen bg-[#050505] text-white p-6 md:p-12">
@@ -74,16 +196,9 @@ export default function SettingsPage() {
                             <input
                                 type="email"
                                 value={settings.email}
-                                onChange={(e) => updateSetting('email', e.target.value)}
-                                className="bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-sm font-bold outline-none focus:border-primary transition-all w-full max-w-xs"
-                            />
-                        </SettingRow>
-                        <SettingRow label="Phone Number">
-                            <input
-                                type="tel"
-                                value={settings.phone}
-                                onChange={(e) => updateSetting('phone', e.target.value)}
-                                className="bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-sm font-bold outline-none focus:border-primary transition-all w-full max-w-xs"
+                                disabled
+                                className="bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-sm font-bold outline-none opacity-50 cursor-not-allowed w-full max-w-xs"
+                                title="Email cannot be changed"
                             />
                         </SettingRow>
                     </SettingsSection>
@@ -156,6 +271,8 @@ export default function SettingsPage() {
                                 <option value="Africa/Lagos">Lagos (GMT+1)</option>
                                 <option value="UTC">UTC</option>
                                 <option value="America/New_York">New York (EST)</option>
+                                <option value="Europe/London">London (GMT)</option>
+                                <option value="Asia/Tokyo">Tokyo (JST)</option>
                             </select>
                         </SettingRow>
                         <SettingRow label="Default View">
@@ -250,9 +367,22 @@ export default function SettingsPage() {
 
                 {/* Save Button */}
                 <div className="flex justify-end">
-                    <button className="px-8 py-4 bg-primary text-black rounded-2xl hover:scale-105 transition-all flex items-center gap-2 font-black uppercase tracking-widest shadow-lg shadow-primary/20">
-                        <Save size={20} />
-                        Save Changes
+                    <button
+                        onClick={handleSave}
+                        disabled={saving}
+                        className="px-8 py-4 bg-primary text-black rounded-2xl hover:scale-105 transition-all flex items-center gap-2 font-black uppercase tracking-widest shadow-lg shadow-primary/20 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
+                    >
+                        {saving ? (
+                            <>
+                                <Loader2 size={20} className="animate-spin" />
+                                Saving...
+                            </>
+                        ) : (
+                            <>
+                                <Save size={20} />
+                                Save Changes
+                            </>
+                        )}
                     </button>
                 </div>
             </div>
@@ -319,8 +449,8 @@ function ThemeButton({ icon, label, active, onClick }: {
         <button
             onClick={onClick}
             className={`flex items-center gap-2 px-4 py-2 rounded-xl transition-all ${active
-                    ? 'bg-primary text-black'
-                    : 'bg-white/5 border border-white/10 text-white/60 hover:bg-white/10'
+                ? 'bg-primary text-black'
+                : 'bg-white/5 border border-white/10 text-white/60 hover:bg-white/10'
                 }`}
         >
             {icon}
