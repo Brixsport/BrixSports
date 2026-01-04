@@ -163,12 +163,13 @@ function AdminLoggersPageContent() {
         l.email.toLowerCase().includes(searchTerm.toLowerCase())
     );
 
+    const activeMatches = matches.filter(m => m.status !== 'FINISHED');
     const coverageStats = {
-        total: matches.length,
-        assigned: matches.filter(m => m.loggerId).length,
-        unassigned: matches.filter(m => !m.loggerId).length,
-        live: matches.filter(m => m.status === 'LIVE').length,
-        liveAssigned: matches.filter(m => m.status === 'LIVE' && m.loggerId).length
+        total: activeMatches.length,
+        assigned: activeMatches.filter(m => m.loggerId).length,
+        unassigned: activeMatches.filter(m => !m.loggerId).length,
+        live: activeMatches.filter(m => m.status === 'LIVE').length,
+        liveAssigned: activeMatches.filter(m => m.status === 'LIVE' && m.loggerId).length
     };
 
     if (loading && !loggers.length) {
@@ -330,14 +331,14 @@ function AdminLoggersPageContent() {
                                                         </td>
                                                         <td className="p-6">
                                                             <div className="flex -space-x-2">
-                                                                {logger.assignedMatches?.slice(0, 3).map((m, i) => (
+                                                                {logger.assignedMatches?.filter(m => m.status !== 'FINISHED').slice(0, 3).map((m, i) => (
                                                                     <div key={i} className="w-6 h-6 rounded-full bg-black border border-white/20 flex items-center justify-center text-[10px] font-bold" title={m.competition}>
                                                                         {m.sport[0]}
                                                                     </div>
                                                                 ))}
-                                                                {logger.assignedMatches?.length > 3 && (
-                                                                    <div className="w-6 h-6 rounded-full bg-white/5 border border-white/20 flex items-center justify-center text-[10px] font-bold text-white/40">
-                                                                        +{logger.assignedMatches.length - 3}
+                                                                {logger.assignedMatches?.filter(m => m.status !== 'FINISHED').length > 3 && (
+                                                                    <div className="w-6 h-6 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-[10px] font-bold text-white/40">
+                                                                        +{logger.assignedMatches.filter(m => m.status !== 'FINISHED').length - 3}
                                                                     </div>
                                                                 )}
                                                             </div>
@@ -379,13 +380,13 @@ function AdminLoggersPageContent() {
                                             </span>
                                         </div>
                                         <div className="space-y-4">
-                                            {matches.filter(m => !m.loggerId).length === 0 ? (
+                                            {activeMatches.filter(m => !m.loggerId).length === 0 ? (
                                                 <div className="bg-white/5 border border-white/10 rounded-3xl p-12 text-center">
                                                     <CheckCircle2 size={32} className="text-primary mx-auto mb-4 opacity-20" />
                                                     <p className="text-xs font-bold uppercase tracking-widest text-white/40 italic">All matches covered</p>
                                                 </div>
                                             ) : (
-                                                matches.filter(m => !m.loggerId).map((match) => (
+                                                activeMatches.filter(m => !m.loggerId).map((match) => (
                                                     <div key={match.id} className="bg-white/5 border border-white/10 rounded-3xl p-6 hover:border-white/20 transition-all group">
                                                         <div className="flex items-center justify-between">
                                                             <div className="flex items-center gap-4">
@@ -420,7 +421,7 @@ function AdminLoggersPageContent() {
                                     <div className="space-y-6">
                                         <h3 className="font-display italic uppercase tracking-tighter text-2xl">Covered Matches</h3>
                                         <div className="space-y-4">
-                                            {matches.filter(m => m.loggerId).slice(0, 5).map((match) => {
+                                            {activeMatches.filter(m => m.loggerId).slice(0, 5).map((match) => {
                                                 const logger = loggers.find(l => l.id === match.loggerId);
                                                 return (
                                                     <div key={match.id} className="bg-white/5 border border-white/10 rounded-3xl p-6 opacity-60 hover:opacity-100 transition-all">
@@ -552,7 +553,7 @@ function AdminLoggersPageContent() {
                                             </div>
                                             <div className="text-left">
                                                 <p className="text-sm font-bold italic group-hover:text-primary transition-colors">{logger.name}</p>
-                                                <p className="text-[10px] text-white/30 font-bold uppercase">{logger.assignedMatches.length} Matches Assigned</p>
+                                                <p className="text-[10px] text-white/30 font-bold uppercase">{logger.assignedMatches.filter(m => m.status !== 'FINISHED').length} Active Matches</p>
                                             </div>
                                         </div>
                                         <ChevronRight size={16} className="text-white/20 group-hover:text-primary transition-colors" />

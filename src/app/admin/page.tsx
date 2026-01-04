@@ -104,9 +104,9 @@ export default function AdminPage() {
               subValue={`${loggers.filter(l => l.isAvailable).length} Available`}
             />
             <StatCard
-              label="Total Matches"
-              value={matches.length.toString()}
-              subValue={`${matches.filter(m => m.loggerId).length} Assigned`}
+              label="Active Matches"
+              value={matches.filter(m => m.status !== 'FINISHED').length.toString()}
+              subValue={`${matches.filter(m => m.loggerId && m.status !== 'FINISHED').length} Assigned`}
             />
             <StatCard
               label="Total Teams"
@@ -125,7 +125,7 @@ export default function AdminPage() {
               <h3 className="font-display italic uppercase tracking-tighter text-2xl">Assignment Monitor</h3>
               <div className="flex gap-4">
                 <span className="text-[10px] font-black uppercase tracking-widest text-primary px-3 py-1 bg-primary/10 rounded border border-primary/20">
-                  {matches.filter(m => !m.loggerId).length} Unassigned matches
+                  {matches.filter(m => !m.loggerId && m.status !== 'FINISHED').length} Unassigned active matches
                 </span>
                 <Link href="/admin/loggers" className="text-[10px] font-black uppercase tracking-widest text-white/40 hover:text-white transition-colors">Manage All Loggers →</Link>
               </div>
@@ -156,7 +156,7 @@ export default function AdminPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-white/5">
-                    {matches.map((match) => {
+                    {matches.filter(m => m.status !== 'FINISHED').map((match) => {
                       const homeTeam = teams.find(t => t.id === match.homeTeamId);
                       const awayTeam = teams.find(t => t.id === match.awayTeamId);
                       const logger = loggers.find(l => l.id === match.loggerId);
@@ -234,7 +234,7 @@ export default function AdminPage() {
                     <p className="text-xs text-white/40 text-center py-4">No active loggers</p>
                   ) : (
                     loggers.filter(l => l.status === 'active').slice(0, 5).map(logger => {
-                      const loggerMatches = matches.filter(m => m.loggerId === logger.id);
+                      const loggerMatches = matches.filter(m => m.loggerId === logger.id && m.status !== 'FINISHED');
                       return (
                         <div key={logger.id} className="flex items-center gap-4">
                           <div className="w-8 h-8 rounded-full bg-primary text-black flex items-center justify-center text-[10px] font-black italic">
@@ -243,10 +243,10 @@ export default function AdminPage() {
                           <div className="flex-1 space-y-1">
                             <div className="flex justify-between text-[10px] font-black uppercase">
                               <span>{logger.name}</span>
-                              <span>{loggerMatches.length} matches</span>
+                              <span>{loggerMatches.length} active</span>
                             </div>
                             <div className="h-0.5 bg-white/10 rounded-full overflow-hidden">
-                              <div className="h-full bg-primary" style={{ width: `${Math.min((loggerMatches.length / Math.max(matches.length, 1)) * 100, 100)}%` }}></div>
+                              <div className="h-full bg-primary" style={{ width: `${Math.min((loggerMatches.length / Math.max(matches.filter(m => m.status !== 'FINISHED').length, 1)) * 100, 100)}%` }}></div>
                             </div>
                           </div>
                         </div>
