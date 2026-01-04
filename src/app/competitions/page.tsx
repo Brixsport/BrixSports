@@ -92,7 +92,7 @@ export default function CompetitionsPage() {
     const fetchDetails = async () => {
       try {
         // Fetch Standings
-        const standingsRes = await fetch(`/api/basketball/standings?competition=${encodeURIComponent(selectedComp)}`);
+        const standingsRes = await fetch(`/api/${selectedSport.toLowerCase()}/standings?competition=${encodeURIComponent(selectedComp)}`);
         const sData = await standingsRes.json();
         if (sData.success) {
           setStandings(sData.standings);
@@ -115,7 +115,12 @@ export default function CompetitionsPage() {
     fetchDetails();
   }, [selectedComp, selectedSport]);
 
-  const filteredCompetitions = competitions.filter(c => c.sport === selectedSport);
+  // Filter and de-duplicate competitions by name
+  const filteredCompetitions = competitions
+    .filter(c => c.sport === selectedSport)
+    .filter((comp, index, self) =>
+      index === self.findIndex((t) => t.name === comp.name)
+    );
 
   if (loading) {
     return (
@@ -181,7 +186,7 @@ export default function CompetitionsPage() {
             </div>
           </div>
 
-          {filteredCompetitions.length > 1 && (
+          {filteredCompetitions.length > 0 && (
             <div className="flex justify-center gap-2 overflow-x-auto pb-2">
               {filteredCompetitions.map((comp) => (
                 <button
@@ -209,56 +214,58 @@ export default function CompetitionsPage() {
             className="bg-white/5 border border-white/10 rounded-[40px] overflow-hidden"
           >
             {standings.length > 0 ? (
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="border-b border-white/10 bg-white/5">
-                    <th className="px-8 py-6 text-[10px] font-black uppercase tracking-widest text-white/40">Pos</th>
-                    <th className="px-8 py-6 text-[10px] font-black uppercase tracking-widest text-white/40">Institution</th>
-                    <th className="px-4 py-6 text-[10px] font-black uppercase tracking-widest text-white/40 text-center">P</th>
-                    <th className="px-4 py-6 text-[10px] font-black uppercase tracking-widest text-white/40 text-center">W</th>
-                    <th className="px-4 py-6 text-[10px] font-black uppercase tracking-widest text-white/40 text-center">D/L</th>
-                    <th className="px-4 py-6 text-[10px] font-black uppercase tracking-widest text-white/40 text-center">GD</th>
-                    <th className="px-8 py-6 text-[10px] font-black uppercase tracking-widest text-primary text-center">Pts</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {standings.map((row, idx) => (
-                    <motion.tr
-                      key={row.id}
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      transition={{ delay: idx * 0.05 }}
-                      className="border-b border-white/5 hover:bg-white/5 transition-colors group"
-                    >
-                      <td className="px-8 py-6">
-                        <span className={`text-lg font-display italic ${idx < 3 ? 'text-primary' : 'text-white/20'}`}>
-                          {idx + 1}
-                        </span>
-                      </td>
-                      <td className="px-8 py-6">
-                        <div className="flex items-center gap-4">
-                          <div className="w-10 h-10 relative">
-                            <img src={row.team.logo} alt={row.team.name} className="w-full h-full object-contain" />
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse min-w-[600px]">
+                  <thead>
+                    <tr className="border-b border-white/10 bg-white/5">
+                      <th className="px-8 py-6 text-[10px] font-black uppercase tracking-widest text-white/40">Pos</th>
+                      <th className="px-8 py-6 text-[10px] font-black uppercase tracking-widest text-white/40">Institution</th>
+                      <th className="px-4 py-6 text-[10px] font-black uppercase tracking-widest text-white/40 text-center">P</th>
+                      <th className="px-4 py-6 text-[10px] font-black uppercase tracking-widest text-white/40 text-center">W</th>
+                      <th className="px-4 py-6 text-[10px] font-black uppercase tracking-widest text-white/40 text-center">D/L</th>
+                      <th className="px-4 py-6 text-[10px] font-black uppercase tracking-widest text-white/40 text-center">GD</th>
+                      <th className="px-8 py-6 text-[10px] font-black uppercase tracking-widest text-primary text-center">Pts</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {standings.map((row, idx) => (
+                      <motion.tr
+                        key={row.id}
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        transition={{ delay: idx * 0.05 }}
+                        className="border-b border-white/5 hover:bg-white/5 transition-colors group"
+                      >
+                        <td className="px-8 py-6">
+                          <span className={`text-lg font-display italic ${idx < 3 ? 'text-primary' : 'text-white/20'}`}>
+                            {idx + 1}
+                          </span>
+                        </td>
+                        <td className="px-8 py-6">
+                          <div className="flex items-center gap-4">
+                            <div className="w-10 h-10 relative">
+                              <img src={row.team.logo} alt={row.team.name} className="w-full h-full object-contain" />
+                            </div>
+                            <div>
+                              <p className="text-sm font-black uppercase tracking-tight">{row.team.shortName}</p>
+                              <p className="text-[10px] text-white/40 font-bold uppercase tracking-widest">{row.team.university}</p>
+                            </div>
                           </div>
-                          <div>
-                            <p className="text-sm font-black uppercase tracking-tight">{row.team.shortName}</p>
-                            <p className="text-[10px] text-white/40 font-bold uppercase tracking-widest">{row.team.university}</p>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-4 py-6 text-center font-bold">{row.played}</td>
-                      <td className="px-4 py-6 text-center font-bold">{row.won}</td>
-                      <td className="px-4 py-6 text-center font-bold">{selectedSport === 'Basketball' ? row.lost : row.drawn}</td>
-                      <td className="px-4 py-6 text-center font-bold text-white/40">{row.goalDifference > 0 ? `+${row.goalDifference}` : row.goalDifference}</td>
-                      <td className="px-8 py-6 text-center">
-                        <span className="bg-primary/10 text-primary px-4 py-2 rounded-xl font-display italic text-lg border border-primary/20">
-                          {row.points}
-                        </span>
-                      </td>
-                    </motion.tr>
-                  ))}
-                </tbody>
-              </table>
+                        </td>
+                        <td className="px-4 py-6 text-center font-bold">{row.played}</td>
+                        <td className="px-4 py-6 text-center font-bold">{row.won}</td>
+                        <td className="px-4 py-6 text-center font-bold">{selectedSport === 'Basketball' ? row.lost : row.drawn}</td>
+                        <td className="px-4 py-6 text-center font-bold text-white/40">{row.goalDifference > 0 ? `+${row.goalDifference}` : row.goalDifference}</td>
+                        <td className="px-8 py-6 text-center">
+                          <span className="bg-primary/10 text-primary px-4 py-2 rounded-xl font-display italic text-lg border border-primary/20">
+                            {row.points}
+                          </span>
+                        </td>
+                      </motion.tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             ) : (
               <div className="p-24 text-center">
                 <AlertCircle className="w-12 h-12 text-white/10 mx-auto mb-4" />

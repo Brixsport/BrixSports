@@ -324,13 +324,14 @@ export default function FootballPage() {
                                         onClick={() => setSelectedMatch(match)}
                                         className="bg-white/5 rounded-2xl border border-white/10 p-6 hover:border-primary/50 transition-all cursor-pointer"
                                     >
-                                        <div className="flex items-center justify-between">
-                                            <div className="flex-1 flex items-center justify-end gap-4">
-                                                <div className="text-right">
-                                                    <p className="font-bold text-lg">{match.homeTeam?.name}</p>
-                                                    <p className="text-xs text-white/40">{match.homeTeam?.shortName}</p>
+                                        <div className="flex flex-col md:flex-row items-center justify-between gap-6 md:gap-0">
+                                            {/* Home Team */}
+                                            <div className="flex-1 flex items-center justify-between md:justify-end gap-4 w-full md:w-auto">
+                                                <div className="text-left md:text-right order-2 md:order-1">
+                                                    <p className="font-bold text-base md:text-lg leading-tight">{match.homeTeam?.name}</p>
+                                                    <p className="text-[10px] md:text-xs text-white/40">{match.homeTeam?.shortName}</p>
                                                 </div>
-                                                <div className="w-12 h-12 relative rounded-lg overflow-hidden bg-white/5">
+                                                <div className="w-10 h-10 md:w-12 md:h-12 relative rounded-lg overflow-hidden bg-white/5 flex-shrink-0 order-1 md:order-2">
                                                     <Image
                                                         src={match.homeTeam?.logo || '/assests/Logos/BRIX-SPORT-LOGO.png'}
                                                         alt={match.homeTeam?.name || 'Team'}
@@ -339,22 +340,32 @@ export default function FootballPage() {
                                                     />
                                                 </div>
                                             </div>
-                                            <div className="px-8 text-center">
-                                                <div className="flex items-center gap-4">
-                                                    <span className={`text-4xl font-bold ${match.homeScore > match.awayScore ? 'text-primary' : match.status === 'UPCOMING' ? 'text-white' : 'text-white/40'}`}>
-                                                        {match.status === 'UPCOMING' ? '-' : match.homeScore}
-                                                    </span>
-                                                    <span className="text-white/20">-</span>
-                                                    <span className={`text-4xl font-bold ${match.awayScore > match.homeScore ? 'text-primary' : match.status === 'UPCOMING' ? 'text-white' : 'text-white/40'}`}>
-                                                        {match.status === 'UPCOMING' ? '-' : match.awayScore}
-                                                    </span>
+
+                                            {/* Score / Status */}
+                                            <div className="px-4 md:px-8 text-center w-full md:w-auto flex md:flex-col items-center justify-between md:justify-center border-y md:border-0 border-white/5 py-3 md:py-0">
+                                                <span className="md:hidden text-[10px] font-black uppercase text-white/20">Final Score</span>
+                                                <div className="flex flex-col items-center">
+                                                    <div className="flex items-center gap-4">
+                                                        <span className={`text-3xl md:text-4xl font-black font-display italic ${match.status === 'UPCOMING' ? 'text-white' : match.homeScore > match.awayScore ? 'text-primary' : 'text-white/40'}`}>
+                                                            {match.status === 'UPCOMING' ? '-' : match.homeScore}
+                                                        </span>
+                                                        <span className="text-white/20 font-black">-</span>
+                                                        <span className={`text-3xl md:text-4xl font-black font-display italic ${match.status === 'UPCOMING' ? 'text-white' : match.awayScore > match.homeScore ? 'text-primary' : 'text-white/40'}`}>
+                                                            {match.status === 'UPCOMING' ? '-' : match.awayScore}
+                                                        </span>
+                                                    </div>
+                                                    <p className="hidden md:block text-[10px] text-white/40 mt-2 uppercase tracking-widest font-black">
+                                                        {match.status === 'LIVE' ? <span className="text-red-500 font-bold animate-pulse">LIVE</span> : match.status}
+                                                    </p>
                                                 </div>
-                                                <p className="text-xs text-white/40 mt-2 uppercase tracking-widest">
-                                                    {match.status === 'LIVE' ? <span className="text-red-500 font-bold animate-pulse">LIVE</span> : match.status}
-                                                </p>
+                                                <span className="md:hidden px-3 py-1 bg-white/5 rounded-lg text-[10px] font-black uppercase text-white/40 tracking-widest">
+                                                    {match.status === 'LIVE' ? <span className="text-red-500 font-bold">LIVE</span> : match.status}
+                                                </span>
                                             </div>
-                                            <div className="flex-1 flex items-center gap-4">
-                                                <div className="w-12 h-12 relative rounded-lg overflow-hidden bg-white/5">
+
+                                            {/* Away Team */}
+                                            <div className="flex-1 flex items-center justify-between md:justify-start gap-4 w-full md:w-auto">
+                                                <div className="w-10 h-10 md:w-12 md:h-12 relative rounded-lg overflow-hidden bg-white/5 flex-shrink-0">
                                                     <Image
                                                         src={match.awayTeam?.logo || '/assests/Logos/BRIX-SPORT-LOGO.png'}
                                                         alt={match.awayTeam?.name || 'Team'}
@@ -362,9 +373,9 @@ export default function FootballPage() {
                                                         className="object-cover"
                                                     />
                                                 </div>
-                                                <div>
-                                                    <p className="font-bold text-lg">{match.awayTeam?.name}</p>
-                                                    <p className="text-xs text-white/40">{match.awayTeam?.shortName}</p>
+                                                <div className="text-right md:text-left">
+                                                    <p className="font-bold text-base md:text-lg leading-tight">{match.awayTeam?.name}</p>
+                                                    <p className="text-[10px] md:text-xs text-white/40">{match.awayTeam?.shortName}</p>
                                                 </div>
                                             </div>
                                         </div>
