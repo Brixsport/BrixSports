@@ -70,7 +70,8 @@ function AdminMatchesPageContent() {
         competitionLevel: 'busa-league',
         friendlyType: 'internal',
         friendlyDescription: '',
-        status: 'UPCOMING'
+        status: 'UPCOMING',
+        livestreamEnabled: false
     });
 
     useEffect(() => {
@@ -133,7 +134,8 @@ function AdminMatchesPageContent() {
                     competitionLevel: 'busa-league',
                     friendlyType: 'internal',
                     friendlyDescription: '',
-                    status: 'UPCOMING'
+                    status: 'UPCOMING',
+                    livestreamEnabled: false
                 });
                 success('Match created successfully!');
             } else {
@@ -490,6 +492,19 @@ function AdminMatchesPageContent() {
                                     placeholder="e.g., Bells University Main Pitch"
                                     required
                                 />
+                            </div>
+
+                            <div className="flex items-center gap-3 bg-white/5 border border-white/10 rounded-lg px-4 py-3">
+                                <input
+                                    type="checkbox"
+                                    id="livestreamEnabled"
+                                    checked={formData.livestreamEnabled}
+                                    onChange={(e) => setFormData({ ...formData, livestreamEnabled: e.target.checked })}
+                                    className="w-5 h-5 rounded border-white/10 text-primary focus:ring-primary bg-transparent"
+                                />
+                                <label htmlFor="livestreamEnabled" className="text-sm font-semibold select-none cursor-pointer">
+                                    Enable Main Pitch Livestream
+                                </label>
                             </div>
 
                             <div className="flex gap-3 pt-4">
