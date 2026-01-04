@@ -163,13 +163,10 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="fixed inset-0 z-[100] bg-black/95 backdrop-blur-md overflow-y-auto"
+      className="fixed inset-0 z-[100] bg-black/95 backdrop-blur-md flex flex-col"
       onClick={onClose}
-      onScroll={(e) => {
-        setIsScrolled(e.currentTarget.scrollTop > 50);
-      }}
     >
-      <div className="min-h-screen flex flex-col" onClick={(e) => e.stopPropagation()}>
+      <div className="flex flex-col h-full" onClick={(e) => e.stopPropagation()}>
         {/* Header */}
         <div className={`sticky top-0 z-10 bg-[#0a0a0a] border-b border-white/10 transition-all duration-300 ${isScrolled ? 'py-2 shadow-xl' : 'py-4'}`}>
           <div className="max-w-5xl mx-auto px-4">
@@ -316,7 +313,12 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
         </div>
 
         {/* Content */}
-        <div className="max-w-5xl mx-auto w-full px-4 py-8">
+        <div
+          className="max-w-5xl mx-auto w-full px-4 py-8 overflow-y-auto flex-1"
+          onScroll={(e) => {
+            setIsScrolled(e.currentTarget.scrollTop > 50);
+          }}
+        >
           <AnimatePresence mode="wait">
             {/* Watch Tab - For Live Streaming */}
             {activeTab === 'watch' && match.isStreaming && match.streamUrl && (
@@ -650,29 +652,22 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -20 }}
               >
-                <div className="bg-white/5 rounded-2xl border border-white/10 p-6">
-                  <div className="flex items-center gap-3 mb-6">
-                    <Target className="text-primary" size={24} />
-                    <div>
-                      <h3 className="font-bold text-lg">Predict the Score</h3>
-                      <p className="text-sm text-white/60">Make your prediction and earn points!</p>
-                    </div>
+                {match.homeTeam && match.awayTeam ? (
+                  <MatchPredictionCard
+                    match={{
+                      id: match.id,
+                      homeTeam: match.homeTeam,
+                      awayTeam: match.awayTeam,
+                      startTime: match.startTime,
+                      competition: match.competition,
+                      sport: match.sport,
+                    }}
+                  />
+                ) : (
+                  <div className="bg-white/5 rounded-xl border border-white/10 p-12 text-center">
+                    <p className="text-white/40">Team data not available</p>
                   </div>
-                  {match.homeTeam && match.awayTeam ? (
-                    <MatchPredictionCard
-                      match={{
-                        id: match.id,
-                        homeTeam: match.homeTeam,
-                        awayTeam: match.awayTeam,
-                        startTime: match.startTime,
-                        competition: match.competition,
-                        sport: match.sport,
-                      }}
-                    />
-                  ) : (
-                    <div className="py-8 text-center text-white/40">Team data not available</div>
-                  )}
-                </div>
+                )}
               </motion.div>
             )}
 
@@ -684,28 +679,21 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -20 }}
               >
-                <div className="bg-white/5 rounded-2xl border border-white/10 p-6">
-                  <div className="flex items-center gap-3 mb-6">
-                    <BarChart3 className="text-primary" size={24} />
-                    <div>
-                      <h3 className="font-bold text-lg">Fan Poll</h3>
-                      <p className="text-sm text-white/60">Vote for your prediction!</p>
-                    </div>
+                {match.homeTeam && match.awayTeam ? (
+                  <MatchVotePoll
+                    match={{
+                      id: match.id,
+                      homeTeam: match.homeTeam,
+                      awayTeam: match.awayTeam,
+                      startTime: match.startTime,
+                      sport: match.sport,
+                    }}
+                  />
+                ) : (
+                  <div className="bg-white/5 rounded-xl border border-white/10 p-12 text-center">
+                    <p className="text-white/40">Team data not available</p>
                   </div>
-                  {match.homeTeam && match.awayTeam ? (
-                    <MatchVotePoll
-                      match={{
-                        id: match.id,
-                        homeTeam: match.homeTeam,
-                        awayTeam: match.awayTeam,
-                        startTime: match.startTime,
-                        sport: match.sport,
-                      }}
-                    />
-                  ) : (
-                    <div className="py-8 text-center text-white/40">Team data not available</div>
-                  )}
-                </div>
+                )}
               </motion.div>
             )}
 

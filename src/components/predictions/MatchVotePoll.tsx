@@ -195,21 +195,21 @@ export function MatchVotePoll({ match, compact = false }: MatchVotePollProps) {
     }
 
     return (
-        <div className="bg-gradient-to-br from-gray-900 to-gray-800 rounded-xl border border-gray-700 overflow-hidden">
+        <div className="bg-white/5 rounded-xl border border-white/10 overflow-hidden">
             {/* Header */}
-            <div className="bg-gradient-to-r from-blue-600 to-purple-600 px-6 py-4">
+            <div className="bg-white/5 border-b border-white/10 px-6 py-4">
                 <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                        <div className="p-2 bg-white/20 rounded-lg backdrop-blur-sm">
-                            <BarChart3 className="w-5 h-5 text-white" />
+                        <div className="p-2 bg-primary/20 rounded-lg">
+                            <BarChart3 className="w-5 h-5 text-primary" />
                         </div>
                         <div>
                             <h3 className="text-white font-bold text-lg">Match Poll</h3>
-                            <p className="text-white/80 text-sm">Vote for the winner!</p>
+                            <p className="text-white/60 text-sm">Vote for the winner!</p>
                         </div>
                     </div>
 
-                    <div className="flex items-center gap-2 bg-white/20 text-white px-4 py-2 rounded-lg backdrop-blur-sm">
+                    <div className="flex items-center gap-2 bg-white/10 text-white px-4 py-2 rounded-lg">
                         <Users className="w-4 h-4" />
                         <span className="text-sm font-semibold">
                             {pollData.totalVotes} votes
@@ -228,7 +228,7 @@ export function MatchVotePoll({ match, compact = false }: MatchVotePollProps) {
                             <button
                                 onClick={() => handleVote('home')}
                                 disabled={voting}
-                                className="group relative bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 disabled:from-gray-700 disabled:to-gray-800 rounded-xl p-6 transition-all transform hover:scale-[1.02] disabled:cursor-not-allowed"
+                                className="group relative bg-white/5 hover:bg-white/10 border-2 border-white/10 hover:border-primary/50 disabled:border-white/5 disabled:bg-white/5 rounded-xl p-6 transition-all transform hover:scale-[1.02] disabled:cursor-not-allowed"
                             >
                                 <div className="flex items-center gap-4">
                                     <img
@@ -248,7 +248,7 @@ export function MatchVotePoll({ match, compact = false }: MatchVotePollProps) {
                             <button
                                 onClick={() => handleVote('draw')}
                                 disabled={voting}
-                                className="group relative bg-gradient-to-r from-gray-600 to-gray-700 hover:from-gray-700 hover:to-gray-800 disabled:from-gray-700 disabled:to-gray-800 rounded-xl p-6 transition-all transform hover:scale-[1.02] disabled:cursor-not-allowed"
+                                className="group relative bg-white/5 hover:bg-white/10 border-2 border-white/10 hover:border-primary/50 disabled:border-white/5 disabled:bg-white/5 rounded-xl p-6 transition-all transform hover:scale-[1.02] disabled:cursor-not-allowed"
                             >
                                 <div className="flex items-center gap-4">
                                     <div className="w-16 h-16 bg-white/10 rounded-full flex items-center justify-center">
@@ -266,7 +266,7 @@ export function MatchVotePoll({ match, compact = false }: MatchVotePollProps) {
                             <button
                                 onClick={() => handleVote('away')}
                                 disabled={voting}
-                                className="group relative bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 disabled:from-gray-700 disabled:to-gray-800 rounded-xl p-6 transition-all transform hover:scale-[1.02] disabled:cursor-not-allowed"
+                                className="group relative bg-white/5 hover:bg-white/10 border-2 border-white/10 hover:border-primary/50 disabled:border-white/5 disabled:bg-white/5 rounded-xl p-6 transition-all transform hover:scale-[1.02] disabled:cursor-not-allowed"
                             >
                                 <div className="flex items-center gap-4">
                                     <img
@@ -314,13 +314,13 @@ export function MatchVotePoll({ match, compact = false }: MatchVotePollProps) {
                                         key={option.choice}
                                         className={cn(
                                             "relative rounded-xl overflow-hidden border-2 transition-all",
-                                            isWinning ? "border-yellow-500" : "border-gray-700",
-                                            isUserVote && "ring-2 ring-green-500"
+                                            isWinning ? "border-primary" : "border-white/10",
+                                            isUserVote && "ring-2 ring-primary"
                                         )}
                                     >
                                         {/* Background Bar */}
                                         <div
-                                            className={cn("absolute inset-0 bg-gradient-to-r opacity-20 transition-all duration-500", option.color)}
+                                            className="absolute inset-0 bg-primary/20 transition-all duration-500"
                                             style={{ width: `${percentage}%` }}
                                         />
 
@@ -337,8 +337,8 @@ export function MatchVotePoll({ match, compact = false }: MatchVotePollProps) {
                                                 <div>
                                                     <p className="font-bold text-white flex items-center gap-2">
                                                         {option.label}
-                                                        {isWinning && <span className="text-yellow-500">👑</span>}
-                                                        {isUserVote && <span className="text-green-500">✓</span>}
+                                                        {isWinning && <span className="text-primary">👑</span>}
+                                                        {isUserVote && <span className="text-primary">✓</span>}
                                                     </p>
                                                     <p className="text-sm text-gray-400">{option.votes} votes</p>
                                                 </div>
@@ -354,8 +354,8 @@ export function MatchVotePoll({ match, compact = false }: MatchVotePollProps) {
 
                         {!isAuthenticated && (
                             <div className="text-center pt-4">
-                                <p className="text-sm text-gray-400">
-                                    <a href="/auth/login" className="text-purple-500 hover:text-purple-400 font-semibold">
+                                <p className="text-sm text-white/40">
+                                    <a href="/auth/login" className="text-primary hover:text-primary/80 font-semibold">
                                         Sign in
                                     </a>
                                     {' '}to vote!

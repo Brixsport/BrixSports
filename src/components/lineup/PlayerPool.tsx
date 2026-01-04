@@ -129,8 +129,8 @@ function PlayerCard({ player, isSelected, onClick, teamSide }: {
             {/* Jersey Number */}
             <div className={`w-10 h-10 rounded-lg flex items-center justify-center font-display text-sm font-bold border ${teamSide === 'combined'
                 ? player.originalTeam === 'home'
-                    ? 'bg-blue-500/20 border-blue-500/30 text-blue-400'
-                    : 'bg-red-500/20 border-red-500/30 text-red-400'
+                    ? 'bg-cyan-500/20 border-cyan-500/40 text-cyan-400'
+                    : 'bg-pink-500/20 border-pink-500/40 text-pink-400'
                 : teamSide === 'home'
                     ? 'bg-blue-500/20 border-blue-500/30 text-blue-400'
                     : 'bg-red-500/20 border-red-500/30 text-red-400'

@@ -178,8 +178,8 @@ function PositionSlot({
                         onClick={() => setShowMenu(!showMenu)}
                         className={`relative w-16 h-20 rounded-xl border-2 transition-all ${teamSide === 'combined'
                             ? playerDetails?.originalTeam === 'home'
-                                ? 'bg-blue-500/90 border-blue-400'
-                                : 'bg-red-500/90 border-red-400'
+                                ? 'bg-gradient-to-br from-cyan-500 to-blue-600 border-cyan-400 shadow-cyan-500/50'
+                                : 'bg-gradient-to-br from-pink-500 to-rose-600 border-pink-400 shadow-pink-500/50'
                             : teamSide === 'home'
                                 ? 'bg-blue-500/90 border-blue-400'
                                 : 'bg-red-500/90 border-red-400'
@@ -220,6 +220,20 @@ function PositionSlot({
                                 </span>
                             </div>
                         </div>
+
+                        {/* Team Indicator for Combined XI */}
+                        {teamSide === 'combined' && (
+                            <div className="absolute bottom-1 left-1">
+                                <div className={`w-4 h-4 rounded-full flex items-center justify-center border ${playerDetails?.originalTeam === 'home'
+                                        ? 'bg-cyan-500 border-cyan-300'
+                                        : 'bg-pink-500 border-pink-300'
+                                    }`}>
+                                    <span className="text-white text-[6px] font-black">
+                                        {playerDetails?.originalTeam === 'home' ? 'H' : 'A'}
+                                    </span>
+                                </div>
+                            </div>
+                        )}
                     </button>
 
                     {/* ... rest of context menu ... */}

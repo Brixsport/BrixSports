@@ -180,29 +180,29 @@ export function MatchPredictionCard({ match, onPredictionSubmit }: MatchPredicti
 
             {/* Prediction Stats (Collapsible) */}
             {showStats && stats && stats.totalPredictions > 0 && (
-                <div className="px-6 py-4 bg-gray-800/50 border-b border-gray-700">
+                <div className="px-6 py-4 bg-white/5 border-b border-white/10">
                     <div className="grid grid-cols-3 gap-4 text-center">
                         <div>
-                            <div className="text-2xl font-bold text-blue-500">
+                            <div className="text-2xl font-bold text-primary">
                                 {stats.homeWinPercentage.toFixed(0)}%
                             </div>
-                            <div className="text-xs text-gray-400 mt-1">{match.homeTeam.shortName} Win</div>
+                            <div className="text-xs text-white/40 mt-1">{match.homeTeam.shortName} Win</div>
                         </div>
                         <div>
-                            <div className="text-2xl font-bold text-gray-400">
+                            <div className="text-2xl font-bold text-white/60">
                                 {stats.drawPercentage.toFixed(0)}%
                             </div>
-                            <div className="text-xs text-gray-400 mt-1">Draw</div>
+                            <div className="text-xs text-white/40 mt-1">Draw</div>
                         </div>
                         <div>
-                            <div className="text-2xl font-bold text-red-500">
+                            <div className="text-2xl font-bold text-primary">
                                 {stats.awayWinPercentage.toFixed(0)}%
                             </div>
-                            <div className="text-xs text-gray-400 mt-1">{match.awayTeam.shortName} Win</div>
+                            <div className="text-xs text-white/40 mt-1">{match.awayTeam.shortName} Win</div>
                         </div>
                     </div>
 
-                    <div className="mt-4 flex items-center justify-center gap-2 text-sm text-gray-400">
+                    <div className="mt-4 flex items-center justify-center gap-2 text-sm text-white/40">
                         <Users className="w-4 h-4" />
                         <span>Average prediction: {stats.averageHomeScore.toFixed(1)} - {stats.averageAwayScore.toFixed(1)}</span>
                     </div>
@@ -227,17 +227,17 @@ export function MatchPredictionCard({ match, onPredictionSubmit }: MatchPredicti
                             <button
                                 onClick={() => setHomeScore(Math.max(0, homeScore - scoreStep))}
                                 disabled={submitted}
-                                className="w-8 h-8 bg-gray-700 hover:bg-gray-600 disabled:bg-gray-800 disabled:cursor-not-allowed text-white rounded-lg font-bold transition-colors"
+                                className="w-8 h-8 bg-white/10 hover:bg-white/20 disabled:bg-white/5 disabled:cursor-not-allowed text-white rounded-lg font-bold transition-colors"
                             >
                                 -
                             </button>
-                            <div className="w-16 h-12 bg-gray-800 rounded-lg flex items-center justify-center">
+                            <div className="w-16 h-12 bg-white/10 rounded-lg flex items-center justify-center">
                                 <span className="text-2xl font-bold text-white">{homeScore}</span>
                             </div>
                             <button
                                 onClick={() => setHomeScore(Math.min(maxScore, homeScore + scoreStep))}
                                 disabled={submitted}
-                                className="w-8 h-8 bg-gray-700 hover:bg-gray-600 disabled:bg-gray-800 disabled:cursor-not-allowed text-white rounded-lg font-bold transition-colors"
+                                className="w-8 h-8 bg-white/10 hover:bg-white/20 disabled:bg-white/5 disabled:cursor-not-allowed text-white rounded-lg font-bold transition-colors"
                             >
                                 +
                             </button>
@@ -264,17 +264,17 @@ export function MatchPredictionCard({ match, onPredictionSubmit }: MatchPredicti
                             <button
                                 onClick={() => setAwayScore(Math.max(0, awayScore - scoreStep))}
                                 disabled={submitted}
-                                className="w-8 h-8 bg-gray-700 hover:bg-gray-600 disabled:bg-gray-800 disabled:cursor-not-allowed text-white rounded-lg font-bold transition-colors"
+                                className="w-8 h-8 bg-white/10 hover:bg-white/20 disabled:bg-white/5 disabled:cursor-not-allowed text-white rounded-lg font-bold transition-colors"
                             >
                                 -
                             </button>
-                            <div className="w-16 h-12 bg-gray-800 rounded-lg flex items-center justify-center">
+                            <div className="w-16 h-12 bg-white/10 rounded-lg flex items-center justify-center">
                                 <span className="text-2xl font-bold text-white">{awayScore}</span>
                             </div>
                             <button
                                 onClick={() => setAwayScore(Math.min(maxScore, awayScore + scoreStep))}
                                 disabled={submitted}
-                                className="w-8 h-8 bg-gray-700 hover:bg-gray-600 disabled:bg-gray-800 disabled:cursor-not-allowed text-white rounded-lg font-bold transition-colors"
+                                className="w-8 h-8 bg-white/10 hover:bg-white/20 disabled:bg-white/5 disabled:cursor-not-allowed text-white rounded-lg font-bold transition-colors"
                             >
                                 +
                             </button>
@@ -285,8 +285,8 @@ export function MatchPredictionCard({ match, onPredictionSubmit }: MatchPredicti
                 {/* Confidence Slider */}
                 <div className="space-y-3">
                     <div className="flex items-center justify-between">
-                        <label className="text-sm font-semibold text-gray-300 flex items-center gap-2">
-                            <Zap className="w-4 h-4 text-yellow-500" />
+                        <label className="text-sm font-semibold text-white/60 flex items-center gap-2">
+                            <Zap className="w-4 h-4 text-primary" />
                             Confidence Level
                         </label>
                         <span className="text-lg font-bold text-white">{confidence}%</span>
@@ -298,32 +298,32 @@ export function MatchPredictionCard({ match, onPredictionSubmit }: MatchPredicti
                         value={confidence}
                         onChange={(e) => setConfidence(parseInt(e.target.value))}
                         disabled={submitted}
-                        className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer disabled:cursor-not-allowed"
+                        className="w-full h-2 bg-white/10 rounded-lg appearance-none cursor-pointer disabled:cursor-not-allowed"
                         style={{
-                            background: `linear-gradient(to right, #8b5cf6 0%, #ec4899 ${confidence}%, #374151 ${confidence}%, #374151 100%)`
+                            background: `linear-gradient(to right, #8b5cf6 0%, #ec4899 ${confidence}%, #ffffff20 ${confidence}%, #ffffff20 100%)`
                         }}
                     />
-                    <div className="flex justify-between text-xs text-gray-500">
+                    <div className="flex justify-between text-xs text-white/40">
                         <span>Not Sure</span>
                         <span>Very Confident</span>
                     </div>
                 </div>
 
                 {/* Prediction Summary */}
-                <div className="bg-gradient-to-r from-purple-900/30 to-pink-900/30 border border-purple-500/30 rounded-lg p-4">
+                <div className="bg-white/5 border border-white/10 rounded-lg p-4">
                     <div className="flex items-center justify-between">
                         <div>
-                            <p className="text-sm text-gray-400">Your Prediction</p>
+                            <p className="text-sm text-white/60">Your Prediction</p>
                             <p className="text-xl font-bold text-white mt-1">
                                 {getWinnerText()} to win
                             </p>
-                            <p className="text-sm text-gray-400 mt-1">
+                            <p className="text-sm text-white/40 mt-1">
                                 Score: {homeScore} - {awayScore}
                             </p>
                         </div>
                         <div className="text-right">
-                            <p className="text-sm text-gray-400">Potential Points</p>
-                            <p className="text-2xl font-bold text-yellow-500 mt-1">
+                            <p className="text-sm text-white/60">Potential Points</p>
+                            <p className="text-2xl font-bold text-primary mt-1">
                                 {Math.round(confidence * 1.5)}
                             </p>
                         </div>
@@ -358,7 +358,7 @@ export function MatchPredictionCard({ match, onPredictionSubmit }: MatchPredicti
                         </div>
                         <button
                             onClick={handleUpdate}
-                            className="w-full bg-gray-700 hover:bg-gray-600 text-white py-3 rounded-lg font-semibold transition-colors"
+                            className="w-full bg-white/10 hover:bg-white/20 text-white py-3 rounded-lg font-semibold transition-colors"
                         >
                             Update Prediction
                         </button>
@@ -370,8 +370,8 @@ export function MatchPredictionCard({ match, onPredictionSubmit }: MatchPredicti
                         className={cn(
                             "w-full py-4 rounded-lg font-bold text-white transition-all transform hover:scale-[1.02]",
                             submitting
-                                ? "bg-gray-700 cursor-not-allowed"
-                                : "bg-red-600 hover:bg-red-700 shadow-lg shadow-red-500/20"
+                                ? "bg-white/10 cursor-not-allowed"
+                                : "bg-primary hover:bg-primary/90 shadow-lg shadow-primary/20"
                         )}
                     >
                         {submitting ? (
