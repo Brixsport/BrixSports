@@ -29,8 +29,8 @@ interface Match {
     sport: string;
     homeTeamId: string;
     awayTeamId: string;
-    homeScore: number;
-    awayScore: number;
+    homeScore: number | null;
+    awayScore: number | null;
     status: string;
     startTime: string;
     venue: string;
@@ -65,8 +65,8 @@ type FootballEventType =
     | 'Shot' | 'Shot on Target' | 'Shot off Target' | 'Offside' | 'Substitution';
 
 export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerProps) {
-    const [homeScore, setHomeScore] = useState(match.homeScore);
-    const [awayScore, setAwayScore] = useState(match.awayScore);
+    const [homeScore, setHomeScore] = useState(match.homeScore || 0);
+    const [awayScore, setAwayScore] = useState(match.awayScore || 0);
     const [half, setHalf] = useState(1);
     const [minute, setMinute] = useState(0);
     const [extraTime, setExtraTime] = useState(0); // For injury/stoppage time (e.g., 45+2)
@@ -660,7 +660,7 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                                     <Trophy className="text-primary" size={16} />
                                     Scoring
                                 </h3>
-                                <div className="grid grid-cols-3 gap-3">
+                                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                                     <ActionButton
                                         label="Goal"
                                         icon={<Trophy size={18} />}
@@ -703,7 +703,7 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                                     <Shield className="text-primary" size={16} />
                                     Defense
                                 </h3>
-                                <div className="grid grid-cols-3 gap-3">
+                                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                                     <SimpleActionButton label="Block" onClick={() => handleEventClick('Block')} matchStarted={matchStarted} matchEnded={matchEnded} />
                                     <SimpleActionButton label="Interception" onClick={() => handleEventClick('Interception')} matchStarted={matchStarted} matchEnded={matchEnded} />
                                     <SimpleActionButton label="Clearance" onClick={() => handleEventClick('Clearance')} matchStarted={matchStarted} matchEnded={matchEnded} />
@@ -717,7 +717,7 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                                     <Target className="text-primary" size={16} />
                                     Shooting
                                 </h3>
-                                <div className="grid grid-cols-3 gap-3">
+                                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                                     <SimpleActionButton label="Shot" onClick={() => handleEventClick('Shot')} matchStarted={matchStarted} matchEnded={matchEnded} />
                                     <SimpleActionButton label="Shot on Target" onClick={() => handleEventClick('Shot on Target')} matchStarted={matchStarted} matchEnded={matchEnded} />
                                     <SimpleActionButton label="Shot off Target" onClick={() => handleEventClick('Shot off Target')} matchStarted={matchStarted} matchEnded={matchEnded} />
@@ -730,7 +730,7 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                                     <Activity className="text-primary" size={16} />
                                     Set Pieces
                                 </h3>
-                                <div className="grid grid-cols-3 gap-3">
+                                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                                     <SimpleActionButton label="Corner" onClick={() => handleEventClick('Corner')} matchStarted={matchStarted} matchEnded={matchEnded} />
                                     <SimpleActionButton label="Free Kick" onClick={() => handleEventClick('Free Kick')} matchStarted={matchStarted} matchEnded={matchEnded} />
                                     <SimpleActionButton label="Throw In" onClick={() => handleEventClick('Throw In')} matchStarted={matchStarted} matchEnded={matchEnded} />
@@ -745,7 +745,7 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                                     <AlertTriangle className="text-orange-500" size={16} />
                                     Discipline
                                 </h3>
-                                <div className="grid grid-cols-3 gap-3">
+                                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                                     <SimpleActionButton label="Foul" onClick={() => handleEventClick('Foul')} matchStarted={matchStarted} matchEnded={matchEnded} />
                                     <SimpleActionButton label="Push" onClick={() => handleEventClick('Push')} matchStarted={matchStarted} matchEnded={matchEnded} />
                                     <SimpleActionButton label="Handball" onClick={() => handleEventClick('Handball')} matchStarted={matchStarted} matchEnded={matchEnded} />

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
-import { users, matches } from '@/db/schema';
-import { eq } from 'drizzle-orm';
+import { loggers, matches } from '@/db/schema';
+import { eq, or } from 'drizzle-orm';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 
@@ -9,39 +9,31 @@ import jwt from 'jsonwebtoken';
 export async function POST(request: NextRequest) {
     try {
         const body = await request.json();
-        const { email, password } = body;
+        const { email, password } = body; // 'email' here contains the input (username or email)
 
         if (!email || !password) {
             return NextResponse.json(
-                { error: 'Email and password are required' },
+                { error: 'Identifier and password are required' },
                 { status: 400 }
             );
         }
 
-        // Find user by email (loggers are users with role='logger' or 'admin')
-        const user = await db
+        // Find logger by email OR name
+        const logger = await db
             .select()
-            .from(users)
-            .where(eq(users.email, email))
+            .from(loggers)
+            .where(or(eq(loggers.email, email), eq(loggers.name, email)))
             .limit(1);
 
-        if (user.length === 0) {
+        if (logger.length === 0) {
             return NextResponse.json(
                 { error: 'Invalid credentials' },
                 { status: 401 }
             );
         }
 
-        // Check if user has logger or admin role
-        if (user[0].role !== 'logger' && user[0].role !== 'admin') {
-            return NextResponse.json(
-                { error: 'Access denied. Logger credentials required.' },
-                { status: 403 }
-            );
-        }
-
         // Check password using bcrypt
-        const isPasswordValid = await bcrypt.compare(password, user[0].password || '');
+        const isPasswordValid = await bcrypt.compare(password, logger[0].password || '');
         if (!isPasswordValid) {
             return NextResponse.json(
                 { error: 'Invalid credentials' },
@@ -49,30 +41,29 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        // Get assigned matches (for now, return all matches - you can filter by loggerId later)
+        // Get assigned matches
         const assignedMatches = await db
             .select()
             .from(matches)
-            .where(eq(matches.loggerId, user[0].id));
+            .where(eq(matches.loggerId, logger[0].id));
 
         // Generate JWT token
         const token = jwt.sign(
             {
-                id: user[0].id,
-                email: user[0].email,
-                role: user[0].role,
+                id: logger[0].id,
+                email: logger[0].email,
+                role: logger[0].role,
             },
             process.env.JWT_SECRET || 'your-secret-key-change-in-production',
             { expiresIn: '7d' }
         );
 
-        // In production, generate JWT token here
         return NextResponse.json({
             logger: {
-                id: user[0].id,
-                name: user[0].name,
-                email: user[0].email,
-                role: user[0].role,
+                id: logger[0].id,
+                name: logger[0].name,
+                email: logger[0].email,
+                role: logger[0].role,
             },
             assignedMatches,
             token,

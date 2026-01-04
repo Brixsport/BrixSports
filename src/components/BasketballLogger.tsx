@@ -29,8 +29,8 @@ interface Match {
     sport: string;
     homeTeamId: string;
     awayTeamId: string;
-    homeScore: number;
-    awayScore: number;
+    homeScore: number | null;
+    awayScore: number | null;
     status: string;
     startTime: string;
     venue: string;
@@ -55,8 +55,8 @@ interface BasketballLoggerProps {
 type BasketballEventType = 'Field Goal' | 'Three Pointer' | 'Free Throw' | 'Rebound' | 'Assist' | 'Steal' | 'Block' | 'Turnover' | 'Foul' | 'Substitution' | 'Timeout';
 
 export function BasketballLogger({ match, onExit, currentLogger }: BasketballLoggerProps) {
-    const [homeScore, setHomeScore] = useState(match.homeScore);
-    const [awayScore, setAwayScore] = useState(match.awayScore);
+    const [homeScore, setHomeScore] = useState(match.homeScore || 0);
+    const [awayScore, setAwayScore] = useState(match.awayScore || 0);
     const [quarter, setQuarter] = useState(1);
     const [time, setTime] = useState('12:00');
     const [events, setEvents] = useState<any[]>([]);
@@ -748,7 +748,7 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                                     <Target className="text-primary" size={16} />
                                     Scoring
                                 </h3>
-                                <div className="grid grid-cols-3 gap-3">
+                                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                                     <ActionButton
                                         label="2 Points Made"
                                         value="2PT"
@@ -794,7 +794,7 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                                     <Activity className="text-primary" size={16} />
                                     Defense
                                 </h3>
-                                <div className="grid grid-cols-3 gap-3">
+                                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                                     <SimpleActionButton label="Steal" onClick={() => handleEventClick('Steal')} matchStarted={matchStarted} matchEnded={matchEnded} />
                                     <SimpleActionButton label="Block" onClick={() => handleEventClick('Block')} matchStarted={matchStarted} matchEnded={matchEnded} />
                                     <SimpleActionButton label="Deflection" onClick={() => handleEventClick('Block')} matchStarted={matchStarted} matchEnded={matchEnded} />
@@ -819,7 +819,7 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                                     <Activity className="text-orange-500" size={16} />
                                     Fouls
                                 </h3>
-                                <div className="grid grid-cols-3 gap-3">
+                                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                                     <SimpleActionButton label="Personal Foul" onClick={() => handleEventClick('Foul')} matchStarted={matchStarted} matchEnded={matchEnded} />
                                     <SimpleActionButton label="Technical Foul" onClick={() => handleEventClick('Foul')} matchStarted={matchStarted} matchEnded={matchEnded} />
                                     <SimpleActionButton label="Flagrant Foul" onClick={() => handleEventClick('Foul')} matchStarted={matchStarted} matchEnded={matchEnded} />

@@ -8,7 +8,7 @@ import { BasketballLogger } from '@/components/BasketballLogger';
 import { FootballLogger } from '@/components/FootballLogger';
 import { TrackLogger } from '@/components/TrackLogger';
 
-import { Match, SportType } from '@/lib/mock-data';
+import { Match } from '@/db/schema';
 
 interface Logger {
   id: string;
@@ -105,7 +105,7 @@ export default function LoggerPage() {
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="w-full max-w-md bg-white/5 border border-white/10 rounded-[40px] p-8 md:p-12 relative overflow-hidden"
+          className="w-full max-w-md bg-white/5 border border-white/10 rounded-[40px] p-6 md:p-12 relative overflow-hidden"
         >
           <div className="absolute top-0 right-0 w-32 h-32 bg-primary/10 blur-[80px] -z-10"></div>
 
@@ -124,7 +124,7 @@ export default function LoggerPage() {
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
                   className="w-full bg-white/5 border border-white/10 rounded-2xl py-4 pl-12 pr-4 focus:border-primary outline-none transition-all font-medium"
-                  placeholder="Username"
+                  placeholder="Username or Email"
                 />
               </div>
             </div>
@@ -198,9 +198,9 @@ export default function LoggerPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#050505] text-white p-6 md:p-12">
-      <div className="max-w-4xl mx-auto space-y-12">
-        <header className="flex items-center justify-between">
+    <div className="min-h-screen bg-[#050505] text-white p-4 md:p-12">
+      <div className="max-w-4xl mx-auto space-y-8 md:space-y-12">
+        <header className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
           <div>
             <div className="flex items-center gap-3 mb-2">
               <span className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></span>
@@ -208,20 +208,20 @@ export default function LoggerPage() {
                 Active Session: {logger?.name || 'Logger'}
               </span>
             </div>
-            <h1 className="font-display text-4xl tracking-tight italic uppercase leading-none">Match Assignment</h1>
+            <h1 className="font-display text-3xl md:text-4xl tracking-tight italic uppercase leading-none">Match Assignment</h1>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 w-full md:w-auto">
             <button
               onClick={() => setIsOffline(!isOffline)}
-              className={`flex items-center gap-2 px-4 py-2 rounded-full border text-[10px] font-black uppercase tracking-widest transition-all ${isOffline ? 'bg-orange-500/10 border-orange-500/20 text-orange-500' : 'bg-blue-500/10 border-blue-500/20 text-blue-500'
+              className={`flex-1 md:flex-none flex items-center justify-center gap-2 px-4 py-3 md:py-2 rounded-full border text-[10px] font-black uppercase tracking-widest transition-all ${isOffline ? 'bg-orange-500/10 border-orange-500/20 text-orange-500' : 'bg-blue-500/10 border-blue-500/20 text-blue-500'
                 }`}
             >
               {isOffline ? <WifiOff size={14} /> : <Globe size={14} />}
-              {isOffline ? 'Offline Mode' : 'Online Sync'}
+              {isOffline ? 'Offline' : 'Online Sync'}
             </button>
             <button
               onClick={handleLogout}
-              className="px-4 py-2 rounded-full border border-red-500/20 bg-red-500/10 text-red-500 text-[10px] font-black uppercase tracking-widest hover:bg-red-500/20 transition-all"
+              className="flex-1 md:flex-none px-4 py-3 md:py-2 rounded-full border border-red-500/20 bg-red-500/10 text-red-500 text-[10px] font-black uppercase tracking-widest hover:bg-red-500/20 transition-all text-center"
             >
               Logout
             </button>
@@ -232,32 +232,32 @@ export default function LoggerPage() {
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="bg-gradient-to-br from-primary/10 via-primary/5 to-transparent border border-primary/20 rounded-[32px] p-8 relative overflow-hidden"
+          className="bg-gradient-to-br from-primary/10 via-primary/5 to-transparent border border-primary/20 rounded-[32px] p-6 md:p-8 relative overflow-hidden"
         >
           <div className="absolute top-0 right-0 w-64 h-64 bg-primary/5 blur-[100px] -z-10"></div>
 
-          <div className="flex items-start justify-between mb-6">
-            <div className="flex items-center gap-4">
+          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6 mb-6">
+            <div className="flex items-center gap-4 w-full">
               {/* Avatar */}
-              <div className="w-20 h-20 bg-gradient-to-br from-primary to-primary/50 rounded-2xl flex items-center justify-center text-black font-display text-3xl italic uppercase shadow-lg shadow-primary/20">
+              <div className="w-16 h-16 md:w-20 md:h-20 bg-gradient-to-br from-primary to-primary/50 rounded-2xl flex items-center justify-center text-black font-display text-2xl md:text-3xl italic uppercase shadow-lg shadow-primary/20 shrink-0">
                 {logger?.name?.charAt(0) || 'L'}
               </div>
 
               {/* Logger Info */}
               <div>
-                <div className="flex items-center gap-2 mb-1">
-                  <h2 className="text-2xl font-display italic uppercase tracking-tight">{logger?.name || 'Logger'}</h2>
-                  <span className="px-2 py-1 bg-primary/20 text-primary border border-primary/30 rounded-lg text-[9px] font-black uppercase tracking-widest">
+                <div className="flex flex-wrap items-center gap-2 mb-1">
+                  <h2 className="text-xl md:text-2xl font-display italic uppercase tracking-tight">{logger?.name || 'Logger'}</h2>
+                  <span className="px-2 py-1 bg-primary/20 text-primary border border-primary/30 rounded-lg text-[9px] font-black uppercase tracking-widest whitespace-nowrap">
                     {logger?.role || 'Logger'}
                   </span>
                 </div>
-                <p className="text-sm text-white/60 font-medium">{logger?.email}</p>
+                <p className="text-sm text-white/60 font-medium truncate max-w-[200px] md:max-w-none">{logger?.email}</p>
                 <p className="text-[10px] text-white/40 font-black uppercase tracking-widest mt-1">ID: {logger?.id}</p>
               </div>
             </div>
 
             {/* Stats Badge */}
-            <div className="bg-white/5 border border-white/10 rounded-2xl p-4 text-center min-w-[120px]">
+            <div className="bg-white/5 border border-white/10 rounded-2xl p-4 text-center w-full md:w-auto min-w-[120px]">
               <p className="text-[9px] font-black uppercase tracking-widest text-white/40 mb-1">Assigned Matches</p>
               <p className="text-3xl font-display italic text-primary">{assignedMatches.length}</p>
               <p className="text-[9px] text-white/40 mt-1">
@@ -267,23 +267,23 @@ export default function LoggerPage() {
           </div>
 
           {/* Quick Stats Row */}
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-3 gap-3 md:gap-4">
             <div className="bg-white/5 border border-white/10 rounded-xl p-3 text-center">
               <p className="text-[9px] font-black uppercase tracking-widest text-white/40 mb-1">Total Events</p>
-              <p className="text-xl font-display italic text-white">-</p>
+              <p className="text-lg md:text-xl font-display italic text-white">-</p>
             </div>
             <div className="bg-white/5 border border-white/10 rounded-xl p-3 text-center">
               <p className="text-[9px] font-black uppercase tracking-widest text-white/40 mb-1">Logged Matches</p>
-              <p className="text-xl font-display italic text-white">-</p>
+              <p className="text-lg md:text-xl font-display italic text-white">-</p>
             </div>
             <div className="bg-white/5 border border-white/10 rounded-xl p-3 text-center">
               <p className="text-[9px] font-black uppercase tracking-widest text-white/40 mb-1">Active Since</p>
-              <p className="text-xl font-display italic text-white">Today</p>
+              <p className="text-lg md:text-xl font-display italic text-white">Today</p>
             </div>
           </div>
         </motion.div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
           {assignedMatches.map((match) => {
             const homeTeam = teams.find(t => t.id === match.homeTeamId);
             const awayTeam = teams.find(t => t.id === match.awayTeamId);
@@ -294,12 +294,12 @@ export default function LoggerPage() {
                 key={match.id}
                 whileHover={isLoggable ? { y: -5 } : {}}
                 onClick={() => isLoggable && setSelectedMatchId(match.id)}
-                className={`bg-white/5 border border-white/10 rounded-[32px] p-8 transition-all ${isLoggable
+                className={`bg-white/5 border border-white/10 rounded-[32px] p-5 md:p-8 transition-all ${isLoggable
                   ? 'cursor-pointer group hover:bg-white/10 hover:border-primary/50'
                   : 'opacity-50 cursor-not-allowed'
                   }`}
               >
-                <div className="flex justify-between items-start mb-8">
+                <div className="flex justify-between items-start mb-6 md:mb-8">
                   <div className="flex items-center gap-2">
                     <div className="flex items-center gap-2 px-3 py-1 bg-white/5 rounded border border-white/10 text-[10px] font-black uppercase tracking-widest">
                       <Activity size={12} className="text-primary" />
@@ -312,32 +312,32 @@ export default function LoggerPage() {
                       {match.status}
                     </div>
                   </div>
-                  <span className="text-[10px] font-black uppercase tracking-widest text-white/30">{match.competition}</span>
+                  <span className="text-[10px] font-black uppercase tracking-widest text-white/30 truncate max-w-[100px]">{match.competition}</span>
                 </div>
 
-                <div className="flex items-center justify-between mb-8">
-                  <div className="text-center flex-1">
+                <div className="flex items-center justify-between gap-2 mb-6 md:mb-8">
+                  <div className="text-center flex-1 min-w-0">
                     {homeTeam?.logo ? (
-                      <img src={homeTeam.logo} alt={homeTeam.name} className="w-16 h-16 mx-auto mb-2 object-contain" />
+                      <img src={homeTeam.logo} alt={homeTeam.name} className="w-12 h-12 md:w-16 md:h-16 mx-auto mb-2 object-contain" />
                     ) : (
-                      <span className="text-4xl mb-2 block">🏀</span>
+                      <span className="text-3xl md:text-4xl mb-2 block">⚽</span>
                     )}
-                    <p className="text-xs font-black uppercase tracking-widest truncate">{homeTeam?.shortName || 'HOME'}</p>
+                    <p className="text-[10px] md:text-xs font-black uppercase tracking-widest truncate">{homeTeam?.shortName || 'HOME'}</p>
                   </div>
-                  <div className="flex flex-col items-center gap-1">
-                    <span className="text-2xl font-display italic text-white/20">VS</span>
+                  <div className="flex flex-col items-center gap-1 shrink-0">
+                    <span className="text-xl md:text-2xl font-display italic text-white/20">VS</span>
                     <span className="text-[10px] font-bold text-primary">
                       {match.status === 'LIVE' ? `${match.homeScore}-${match.awayScore}` :
                         match.status === 'FINISHED' ? `${match.homeScore}-${match.awayScore}` : '00:00'}
                     </span>
                   </div>
-                  <div className="text-center flex-1">
+                  <div className="text-center flex-1 min-w-0">
                     {awayTeam?.logo ? (
-                      <img src={awayTeam.logo} alt={awayTeam.name} className="w-16 h-16 mx-auto mb-2 object-contain" />
+                      <img src={awayTeam.logo} alt={awayTeam.name} className="w-12 h-12 md:w-16 md:h-16 mx-auto mb-2 object-contain" />
                     ) : (
-                      <span className="text-4xl mb-2 block">🏀</span>
+                      <span className="text-3xl md:text-4xl mb-2 block">⚽</span>
                     )}
-                    <p className="text-xs font-black uppercase tracking-widest truncate">{awayTeam?.shortName || 'AWAY'}</p>
+                    <p className="text-[10px] md:text-xs font-black uppercase tracking-widest truncate">{awayTeam?.shortName || 'AWAY'}</p>
                   </div>
                 </div>
 
