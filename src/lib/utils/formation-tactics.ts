@@ -187,6 +187,31 @@ export const FORMATION_TACTICS: Record<string, FormationTactics> = {
         defensiveRating: 9,
         balanceRating: 7,
     },
+    '4-4-2-diamond': {
+        name: '4-4-2 Diamond',
+        description: 'A variation of the 4-4-2 with a midfield diamond (one CDM, two CMs, one CAM). Focuses on controlling the center of the pitch.',
+        strengths: [
+            'Dominates central midfield',
+            'CAM links midfield and attack',
+            'Solid cover from CDM',
+            'Two strikers provide threat',
+        ],
+        weaknesses: [
+            'Very narrow',
+            'Vulnerable in wide areas',
+            'Requires fit, attacking full-backs',
+        ],
+        playStyle: 'Possession-oriented, central attacks',
+        bestFor: [
+            'Teams with great central midfielders',
+            'Possession-based systems',
+            'Countering teams with weak centers',
+        ],
+        difficulty: 'Medium',
+        offensiveRating: 8,
+        defensiveRating: 7,
+        balanceRating: 7,
+    },
 };
 
 export function getFormationTactics(formation: string): FormationTactics | null {

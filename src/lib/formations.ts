@@ -180,6 +180,29 @@ export const footballFormations: Formation[] = [
             { id: 'lst', position: 'ST', x: 40, y: 20, zone: 'FWD' },
             { id: 'rst', position: 'ST', x: 60, y: 20, zone: 'FWD' },
         ]
+    },
+    {
+        id: '4-4-2-diamond',
+        name: '4-4-2 Diamond',
+        sport: 'Football',
+        description: 'Narrow formation with a midfield diamond',
+        positions: [
+            // Goalkeeper
+            { id: 'gk', position: 'GK', x: 50, y: 95, zone: 'GK' },
+            // Defenders
+            { id: 'lb', position: 'LB', x: 20, y: 75, zone: 'DEF' },
+            { id: 'lcb', position: 'CB', x: 40, y: 80, zone: 'DEF' },
+            { id: 'rcb', position: 'CB', x: 60, y: 80, zone: 'DEF' },
+            { id: 'rb', position: 'RB', x: 80, y: 75, zone: 'DEF' },
+            // Midfielders (Diamond)
+            { id: 'cdm', position: 'CDM', x: 50, y: 65, zone: 'MID' },
+            { id: 'lcm', position: 'CM', x: 35, y: 50, zone: 'MID' },
+            { id: 'rcm', position: 'CM', x: 65, y: 50, zone: 'MID' },
+            { id: 'cam', position: 'CAM', x: 50, y: 35, zone: 'MID' },
+            // Forwards
+            { id: 'lst', position: 'ST', x: 40, y: 20, zone: 'FWD' },
+            { id: 'rst', position: 'ST', x: 60, y: 20, zone: 'FWD' },
+        ]
     }
 ];
 
