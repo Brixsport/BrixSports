@@ -260,32 +260,38 @@ export async function POST(request: NextRequest) {
         }
 
         // Update match score for scoring events
-        if (['GOAL', 'FIELD_GOAL', 'THREE_POINTER', 'FREE_THROW'].includes(type)) {
+        let finalHomeScore = match.homeScore || 0;
+        let finalAwayScore = match.awayScore || 0;
+
+        if (['GOAL', 'FIELD_GOAL', 'THREE_POINTER', 'FREE_THROW'].includes(type) || type === 'UNDO_GOAL') {
             const allEvents = await db
                 .select()
                 .from(matchEvents)
                 .where(eq(matchEvents.matchId, matchId));
 
-            let homeScore = 0;
-            let awayScore = 0;
+            let calculatedHomeScore = 0;
+            let calculatedAwayScore = 0;
 
             allEvents.forEach(event => {
                 if (event.teamId === match.homeTeamId) {
-                    if (event.type === 'GOAL') homeScore++;
-                    if (event.type === 'FIELD_GOAL') homeScore += 2;
-                    if (event.type === 'THREE_POINTER') homeScore += 3;
-                    if (event.type === 'FREE_THROW') homeScore += 1;
+                    if (event.type === 'GOAL') calculatedHomeScore++;
+                    if (event.type === 'FIELD_GOAL') calculatedHomeScore += 2;
+                    if (event.type === 'THREE_POINTER') calculatedHomeScore += 3;
+                    if (event.type === 'FREE_THROW') calculatedHomeScore += 1;
                 } else if (event.teamId === match.awayTeamId) {
-                    if (event.type === 'GOAL') awayScore++;
-                    if (event.type === 'FIELD_GOAL') awayScore += 2;
-                    if (event.type === 'THREE_POINTER') awayScore += 3;
-                    if (event.type === 'FREE_THROW') awayScore += 1;
+                    if (event.type === 'GOAL') calculatedAwayScore++;
+                    if (event.type === 'FIELD_GOAL') calculatedAwayScore += 2;
+                    if (event.type === 'THREE_POINTER') calculatedAwayScore += 3;
+                    if (event.type === 'FREE_THROW') calculatedAwayScore += 1;
                 }
             });
 
+            finalHomeScore = calculatedHomeScore;
+            finalAwayScore = calculatedAwayScore;
+
             await db
                 .update(matches)
-                .set({ homeScore, awayScore })
+                .set({ homeScore: finalHomeScore, awayScore: finalAwayScore })
                 .where(eq(matches.id, matchId));
         }
 
@@ -293,8 +299,8 @@ export async function POST(request: NextRequest) {
         broadcastMatchEvent(matchId, newEvent);
 
         // Broadcast score update if scores changed
-        if (homeScore !== match.homeScore || awayScore !== match.awayScore) {
-            broadcastScoreUpdate(matchId, homeScore, awayScore);
+        if (finalHomeScore !== (match.homeScore || 0) || finalAwayScore !== (match.awayScore || 0)) {
+            broadcastScoreUpdate(matchId, finalHomeScore, finalAwayScore);
         }
 
         // Broadcast rating updates

@@ -206,20 +206,20 @@ export function usePlayerRatings(matchId: string) {
         const handleRatingUpdate = (data: {
             matchId: string;
             playerId: string;
-            newRating: number;
+            rating: number;
         }) => {
             if (data.matchId === matchId) {
                 setRatings(prev => ({
                     ...prev,
-                    [data.playerId]: data.newRating,
+                    [data.playerId]: data.rating,
                 }));
             }
         };
 
-        on('rating:update', handleRatingUpdate);
+        on('rating:updated', handleRatingUpdate);
 
         return () => {
-            off('rating:update', handleRatingUpdate);
+            off('rating:updated', handleRatingUpdate);
         };
     }, [matchId, on, off]);
 
@@ -251,10 +251,10 @@ export function useTeamStats(matchId: string) {
             }
         };
 
-        on('stats:update', handleStatsUpdate);
+        on('stats:updated', handleStatsUpdate);
 
         return () => {
-            off('stats:update', handleStatsUpdate);
+            off('stats:updated', handleStatsUpdate);
         };
     }, [matchId, on, off]);
 
@@ -277,19 +277,44 @@ export function useMatchStatus(matchId: string) {
         const handleStatusUpdate = (data: {
             matchId: string;
             status: string;
+        }) => {
+            if (data.matchId === matchId) {
+                setStatus(data.status);
+            }
+        };
+
+        const handleScoreUpdate = (data: {
+            matchId: string;
             homeScore: number;
             awayScore: number;
         }) => {
             if (data.matchId === matchId) {
-                setStatus(data.status);
                 setScore({ home: data.homeScore, away: data.awayScore });
             }
         };
 
-        on('match:status', handleStatusUpdate);
+        const handleMatchUpdate = (data: {
+            matchId: string;
+            status?: string;
+            homeScore?: number;
+            awayScore?: number;
+        }) => {
+            if (data.matchId === matchId) {
+                if (data.status) setStatus(data.status);
+                if (data.homeScore !== undefined && data.awayScore !== undefined) {
+                    setScore({ home: data.homeScore, away: data.awayScore });
+                }
+            }
+        };
+
+        on('match:status:changed', handleStatusUpdate);
+        on('match:score:updated', handleScoreUpdate);
+        on('match:updated', handleMatchUpdate);
 
         return () => {
-            off('match:status', handleStatusUpdate);
+            off('match:status:changed', handleStatusUpdate);
+            off('match:score:updated', handleScoreUpdate);
+            off('match:updated', handleMatchUpdate);
         };
     }, [matchId, on, off]);
 
