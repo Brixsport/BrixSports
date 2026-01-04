@@ -163,10 +163,10 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="fixed inset-0 z-[100] bg-black/95 backdrop-blur-md flex flex-col"
+      className="fixed inset-0 z-[100] bg-black/95 backdrop-blur-md flex flex-col overflow-hidden"
       onClick={onClose}
     >
-      <div className="flex flex-col h-full" onClick={(e) => e.stopPropagation()}>
+      <div className="flex flex-col min-h-full" onClick={(e) => e.stopPropagation()}>
         {/* Header */}
         <div className={`sticky top-0 z-10 bg-[#0a0a0a] border-b border-white/10 transition-all duration-300 ${isScrolled ? 'py-2 shadow-xl' : 'py-4'}`}>
           <div className="max-w-5xl mx-auto px-4">
