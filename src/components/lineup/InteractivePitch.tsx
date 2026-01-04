@@ -80,6 +80,15 @@ export function InteractivePitch({
                 </div>
             </div>
 
+            {/* Formation Name */}
+            <div className="absolute top-4 right-4">
+                <div className="px-3 py-1 bg-black/40 rounded-lg backdrop-blur-sm border border-white/10">
+                    <span className="text-xs font-display italic font-bold text-white uppercase tracking-wider">
+                        {formationData.name}
+                    </span>
+                </div>
+            </div>
+
             {/* Branding Tag */}
             <div className="absolute bottom-4 right-4 pointer-events-none">
                 <h1 className="font-display text-3xl md:text-4xl italic font-black uppercase tracking-tighter text-white/20 select-none">

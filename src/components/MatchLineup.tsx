@@ -3,6 +3,7 @@
 import { motion } from 'framer-motion';
 import { Users, Shield, Target, TrendingUp, Star, Activity, ChevronDown } from 'lucide-react';
 import { useState } from 'react';
+import { getFormationById } from '@/lib/formations';
 
 interface LineupPlayer {
     id: string;
@@ -57,8 +58,8 @@ export function MatchLineup({
                 <button
                     onClick={() => setView('visual')}
                     className={`px-4 py-2 rounded-xl font-bold text-xs uppercase tracking-wider transition-all ${view === 'visual'
-                            ? 'bg-primary text-black'
-                            : 'bg-white/5 text-white/60 hover:bg-white/10'
+                        ? 'bg-primary text-black'
+                        : 'bg-white/5 text-white/60 hover:bg-white/10'
                         }`}
                 >
                     Visual
@@ -66,8 +67,8 @@ export function MatchLineup({
                 <button
                     onClick={() => setView('list')}
                     className={`px-4 py-2 rounded-xl font-bold text-xs uppercase tracking-wider transition-all ${view === 'list'
-                            ? 'bg-primary text-black'
-                            : 'bg-white/5 text-white/60 hover:bg-white/10'
+                        ? 'bg-primary text-black'
+                        : 'bg-white/5 text-white/60 hover:bg-white/10'
                         }`}
                 >
                     List
@@ -82,12 +83,14 @@ export function MatchLineup({
                         team={homeTeam}
                         formation={homeFormation}
                         label="Home"
+                        sport={sport}
                     />
                     <FormationView
                         lineup={awayLineup}
                         team={awayTeam}
                         formation={awayFormation}
                         label="Away"
+                        sport={sport}
                     />
                 </div>
             ) : (
@@ -100,62 +103,23 @@ export function MatchLineup({
     );
 }
 
-// Formation positions for football
-const FORMATIONS: Record<string, { position: string; x: number; y: number }[]> = {
-    '4-3-3': [
-        { position: 'GK', x: 50, y: 95 },
-        { position: 'LB', x: 20, y: 75 },
-        { position: 'CB', x: 40, y: 75 },
-        { position: 'CB', x: 60, y: 75 },
-        { position: 'RB', x: 80, y: 75 },
-        { position: 'CM', x: 30, y: 50 },
-        { position: 'CM', x: 50, y: 50 },
-        { position: 'CM', x: 70, y: 50 },
-        { position: 'LW', x: 20, y: 25 },
-        { position: 'ST', x: 50, y: 20 },
-        { position: 'RW', x: 80, y: 25 },
-    ],
-    '4-4-2': [
-        { position: 'GK', x: 50, y: 95 },
-        { position: 'LB', x: 20, y: 75 },
-        { position: 'CB', x: 40, y: 75 },
-        { position: 'CB', x: 60, y: 75 },
-        { position: 'RB', x: 80, y: 75 },
-        { position: 'LM', x: 20, y: 50 },
-        { position: 'CM', x: 40, y: 50 },
-        { position: 'CM', x: 60, y: 50 },
-        { position: 'RM', x: 80, y: 50 },
-        { position: 'ST', x: 40, y: 20 },
-        { position: 'ST', x: 60, y: 20 },
-    ],
-    '3-5-2': [
-        { position: 'GK', x: 50, y: 95 },
-        { position: 'CB', x: 30, y: 75 },
-        { position: 'CB', x: 50, y: 75 },
-        { position: 'CB', x: 70, y: 75 },
-        { position: 'LWB', x: 15, y: 50 },
-        { position: 'CM', x: 35, y: 50 },
-        { position: 'CM', x: 50, y: 50 },
-        { position: 'CM', x: 65, y: 50 },
-        { position: 'RWB', x: 85, y: 50 },
-        { position: 'ST', x: 40, y: 20 },
-        { position: 'ST', x: 60, y: 20 },
-    ],
-};
+
 
 function FormationView({
     lineup,
     team,
     formation,
     label,
+    sport
 }: {
     lineup: LineupPlayer[];
     team: any;
     formation: string;
     label: string;
+    sport: 'Football' | 'Basketball' | 'Track';
 }) {
-    const formationData = FORMATIONS[formation] || FORMATIONS['4-3-3'];
-    const startingEleven = lineup.slice(0, 11);
+    const formationData = getFormationById(formation, sport as 'Football' | 'Basketball')?.positions || getFormationById('4-3-3', 'Football')?.positions || [];
+    const startingEleven = lineup.slice(0, sport === 'Basketball' ? 5 : 11);
 
     return (
         <div className="bg-white/5 border border-white/10 rounded-[32px] p-6">
