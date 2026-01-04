@@ -18,6 +18,7 @@ interface Match {
     homeTeam: Team;
     awayTeam: Team;
     startTime: string;
+    sport?: string;
 }
 
 interface PollData {

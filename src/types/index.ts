@@ -66,6 +66,9 @@ export interface Match {
         home: LineupEntry[];
         away: LineupEntry[];
     };
+    isStreaming?: boolean;
+    streamUrl?: string;
+    streamType?: 'youtube' | 'twitch' | 'facebook' | 'hls' | 'dash' | 'custom';
 }
 
 export interface MatchEvent {

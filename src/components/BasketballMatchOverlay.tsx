@@ -8,6 +8,7 @@ import { Match } from '@/types';
 import { MatchPredictionCard } from '@/components/predictions/MatchPredictionCard';
 import { MatchVotePoll } from '@/components/predictions/MatchVotePoll';
 import { LivestreamChat } from '@/components/livestream/LivestreamChat';
+import { LivestreamPlayer } from '@/components/livestream/LivestreamPlayer';
 
 interface BasketballMatchOverlayProps {
     match: Match;
@@ -23,7 +24,7 @@ const isValidImagePath = (path: string | undefined): boolean => {
 };
 
 export function BasketballMatchOverlay({ match, onClose, onSelectTeam, onSelectPlayer }: BasketballMatchOverlayProps) {
-    const [activeTab, setActiveTab] = useState('overview');
+    const [activeTab, setActiveTab] = useState(match.isStreaming ? 'watch' : 'overview');
     const [standings, setStandings] = useState<any[]>([]);
     const [mvpLeaders, setMvpLeaders] = useState<any[]>([]);
     const [matchDetails, setMatchDetails] = useState<any>(null);
@@ -99,6 +100,7 @@ export function BasketballMatchOverlay({ match, onClose, onSelectTeam, onSelectP
     };
 
     const tabs = [
+        ...(match.isStreaming ? [{ id: 'watch', label: 'Watch Live', icon: Play }] : []),
         { id: 'overview', label: 'Overview', icon: Trophy },
         { id: 'lineups', label: 'Lineups', icon: Star },
         { id: 'stats', label: 'Stats', icon: BarChart3 },
@@ -114,6 +116,10 @@ export function BasketballMatchOverlay({ match, onClose, onSelectTeam, onSelectP
         ] : []),
     ];
 
+    const [isScrolled, setIsScrolled] = useState(false);
+
+    // ... (tabs definition)
+
     return (
         <motion.div
             initial={{ opacity: 0 }}
@@ -121,38 +127,66 @@ export function BasketballMatchOverlay({ match, onClose, onSelectTeam, onSelectP
             exit={{ opacity: 0 }}
             className="fixed inset-0 z-[100] bg-black/95 backdrop-blur-md overflow-y-auto"
             onClick={onClose}
+            onScroll={(e) => setIsScrolled(e.currentTarget.scrollTop > 50)}
         >
             <div className="min-h-screen flex flex-col" onClick={(e) => e.stopPropagation()}>
                 {/* Header */}
-                <div className="sticky top-0 z-10 bg-[#0a0a0a] border-b border-white/10">
-                    <div className="max-w-5xl mx-auto px-4 py-4">
-                        <div className="flex items-center justify-between mb-4">
-                            <button onClick={onClose} className="p-2 hover:bg-white/5 rounded-lg transition-colors">
-                                <X size={20} />
-                            </button>
-                            <div className="flex flex-col items-center text-center">
-                                <span className="text-xs font-bold uppercase tracking-wider text-primary">
-                                    {match.competition}
-                                    {(() => {
-                                        try {
-                                            const stats = typeof match.stats === 'string' ? JSON.parse(match.stats) : match.stats;
-                                            return stats?.round ? ` • Round ${stats.round}` : '';
-                                        } catch (e) { return ''; }
-                                    })()}
-                                </span>
-                                <div className="flex items-center gap-2 text-xs text-white/40 mt-1">
-                                    <MapPin size={12} />
-                                    <span>{match.venue}</span>
-                                    <span>•</span>
-                                    <Calendar size={12} />
-                                    <span>{new Date(match.startTime).toLocaleDateString()}</span>
-                                </div>
+                <div className={`sticky top-0 z-10 bg-[#0a0a0a] border-b border-white/10 transition-all duration-300 ${isScrolled ? 'py-2 shadow-xl' : 'py-4'}`}>
+                    <div className="max-w-5xl mx-auto px-4">
+                        <div className={`flex items-center justify-between ${isScrolled ? 'mb-2' : 'mb-4'} transition-all duration-300`}>
+                            <div className="flex items-center gap-3">
+                                <button onClick={onClose} className="p-2 hover:bg-white/5 rounded-lg transition-colors">
+                                    <X size={20} />
+                                </button>
+                                {isScrolled && (
+                                    <div className="flex items-center gap-3">
+                                        <div className="flex items-center gap-2">
+                                            <div className="w-6 h-6 relative rounded overflow-hidden bg-white/5">
+                                                {isValidImagePath(match.homeTeam?.logo) && match.homeTeam && (
+                                                    <Image src={match.homeTeam.logo} alt={match.homeTeam.name} fill className="object-cover" />
+                                                )}
+                                            </div>
+                                            <span className={`text-lg font-bold ${match.homeScore > match.awayScore ? 'text-primary' : 'text-white'}`}>{match.homeScore}</span>
+                                        </div>
+                                        <span className="text-white/20 text-sm">-</span>
+                                        <div className="flex items-center gap-2">
+                                            <span className={`text-lg font-bold ${match.awayScore > match.homeScore ? 'text-primary' : 'text-white'}`}>{match.awayScore}</span>
+                                            <div className="w-6 h-6 relative rounded overflow-hidden bg-white/5">
+                                                {isValidImagePath(match.awayTeam?.logo) && match.awayTeam && (
+                                                    <Image src={match.awayTeam.logo} alt={match.awayTeam.name} fill className="object-cover" />
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
                             </div>
+
+                            {!isScrolled && (
+                                <div className="flex flex-col items-center text-center">
+                                    <span className="text-xs font-bold uppercase tracking-wider text-primary">
+                                        {match.competition}
+                                        {(() => {
+                                            try {
+                                                const stats = typeof match.stats === 'string' ? JSON.parse(match.stats) : match.stats;
+                                                return stats?.round ? ` • Round ${stats.round}` : '';
+                                            } catch (e) { return ''; }
+                                        })()}
+                                    </span>
+                                    <div className="flex items-center gap-2 text-xs text-white/40 mt-1">
+                                        <MapPin size={12} />
+                                        <span>{match.venue}</span>
+                                        <span>•</span>
+                                        <Calendar size={12} />
+                                        <span>{new Date(match.startTime).toLocaleDateString()}</span>
+                                    </div>
+                                </div>
+                            )}
+
                             <div className="w-10"></div>
                         </div>
 
-                        {/* Score Display */}
-                        <div className="flex items-center justify-between mb-6">
+                        {/* Score Display (Full Size) - Hidden when scrolled */}
+                        <div className={`flex items-center justify-between overflow-hidden transition-all duration-500 ease-in-out ${isScrolled ? 'max-h-0 opacity-0 mb-0' : 'max-h-40 opacity-100 mb-6'}`}>
                             {/* Home Team */}
                             <div
                                 className="flex-1 flex flex-col items-center gap-3 cursor-pointer hover:opacity-80 transition-opacity"
@@ -234,6 +268,26 @@ export function BasketballMatchOverlay({ match, onClose, onSelectTeam, onSelectP
                 {/* Content */}
                 <div className="max-w-5xl mx-auto w-full px-4 py-8">
                     <AnimatePresence mode="wait">
+                        {/* Watch Tab - For Live Streaming */}
+                        {activeTab === 'watch' && match.isStreaming && match.streamUrl && (
+                            <motion.div
+                                key="watch"
+                                initial={{ opacity: 0, y: 20 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                exit={{ opacity: 0, y: -20 }}
+                                className="space-y-6"
+                            >
+                                <div className="bg-white/5 rounded-2xl border border-white/10 overflow-hidden">
+                                    <LivestreamPlayer
+                                        streamUrl={match.streamUrl}
+                                        streamType={match.streamType || 'youtube'}
+                                        matchTitle={`${match.homeTeam?.name} vs ${match.awayTeam?.name}`}
+                                        isLive={match.status === 'LIVE'}
+                                    />
+                                </div>
+                            </motion.div>
+                        )}
+
                         {/* Overview Tab */}
                         {activeTab === 'overview' && (
                             <motion.div
@@ -733,6 +787,7 @@ export function BasketballMatchOverlay({ match, onClose, onSelectTeam, onSelectP
                                             awayTeam: match.awayTeam || { id: '', name: 'Away', shortName: 'AWY', logo: '', color: '#000' },
                                             startTime: match.startTime,
                                             competition: match.competition,
+                                            sport: 'Basketball',
                                         }}
                                     />
                                 </div>
@@ -761,6 +816,7 @@ export function BasketballMatchOverlay({ match, onClose, onSelectTeam, onSelectP
                                             homeTeam: match.homeTeam || { id: '', name: 'Home', shortName: 'HOM', logo: '', color: '#000' },
                                             awayTeam: match.awayTeam || { id: '', name: 'Away', shortName: 'AWY', logo: '', color: '#000' },
                                             startTime: match.startTime,
+                                            sport: 'Basketball',
                                         }}
                                     />
                                 </div>

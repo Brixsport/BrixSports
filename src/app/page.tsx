@@ -612,6 +612,11 @@ export default function Home() {
 
                           {/* Status */}
                           <div className="ml-4 text-right">
+                            {match.isStreaming && (
+                              <div className="mb-2 inline-flex items-center gap-1 bg-red-600/20 text-red-500 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider animate-pulse border border-red-500/20">
+                                <span>●</span> LIVE STREAM
+                              </div>
+                            )}
                             {match.status === 'LIVE' && (
                               <div className="flex items-center gap-1.5 text-red-500 text-xs font-bold mb-1">
                                 <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse"></span>
