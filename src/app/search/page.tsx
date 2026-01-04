@@ -358,6 +358,7 @@ function SearchContent() {
                 {selectedPlayer && (
                     <PlayerProfileOverlay
                         player={selectedPlayer}
+                        sport={selectedPlayer.team?.sport}
                         onClose={() => setSelectedPlayer(null)}
                     />
                 )}
