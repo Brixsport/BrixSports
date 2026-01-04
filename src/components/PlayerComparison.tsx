@@ -2,11 +2,26 @@
 
 import { motion } from 'framer-motion';
 import { Trophy, Target, TrendingUp, Shield, Star, Award, Activity, Zap } from 'lucide-react';
-import { Player } from '@/db/schema';
+
+interface PlayerWithDetails {
+    id: string;
+    name: string;
+    number: number;
+    position: string;
+    rating?: number;
+    image?: string;
+    team?: {
+        id: string;
+        name: string;
+        sport: string;
+        logo?: string;
+    };
+    stats?: any;
+}
 
 interface PlayerComparisonProps {
-    player1: Player & { stats?: any };
-    player2: Player & { stats?: any };
+    player1: PlayerWithDetails;
+    player2: PlayerWithDetails;
     sport: 'Football' | 'Basketball' | 'Track';
 }
 
@@ -74,7 +89,7 @@ export function PlayerComparison({ player1, player2, sport }: PlayerComparisonPr
     );
 }
 
-function PlayerHeader({ player, align }: { player: Player; align: 'left' | 'right' }) {
+function PlayerHeader({ player, align }: { player: PlayerWithDetails; align: 'left' | 'right' }) {
     return (
         <div className={`text-${align}`}>
             {player.image ? (
