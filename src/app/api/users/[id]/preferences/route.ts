@@ -35,6 +35,15 @@ export async function GET(
                 language: 'en',
                 notifications: true,
                 emailNotifications: true,
+                matchReminders: true,
+                favoriteTeamUpdates: true,
+                weeklyDigest: false,
+                profileVisibility: 'public',
+                showStats: true,
+                showActivity: true,
+                soundEffects: true,
+                animations: true,
+                compactMode: false,
                 favoriteSports: JSON.stringify(['Football']),
                 defaultView: 'standings',
                 timezone: 'UTC',
@@ -90,6 +99,15 @@ export async function PATCH(
         if (body.language !== undefined) updateData.language = body.language;
         if (body.notifications !== undefined) updateData.notifications = body.notifications;
         if (body.emailNotifications !== undefined) updateData.emailNotifications = body.emailNotifications;
+        if (body.matchReminders !== undefined) updateData.matchReminders = body.matchReminders;
+        if (body.favoriteTeamUpdates !== undefined) updateData.favoriteTeamUpdates = body.favoriteTeamUpdates;
+        if (body.weeklyDigest !== undefined) updateData.weeklyDigest = body.weeklyDigest;
+        if (body.profileVisibility !== undefined) updateData.profileVisibility = body.profileVisibility;
+        if (body.showStats !== undefined) updateData.showStats = body.showStats;
+        if (body.showActivity !== undefined) updateData.showActivity = body.showActivity;
+        if (body.soundEffects !== undefined) updateData.soundEffects = body.soundEffects;
+        if (body.animations !== undefined) updateData.animations = body.animations;
+        if (body.compactMode !== undefined) updateData.compactMode = body.compactMode;
         if (body.favoriteSports !== undefined) {
             updateData.favoriteSports = JSON.stringify(body.favoriteSports);
         }

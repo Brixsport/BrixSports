@@ -41,6 +41,10 @@ app.prepare().then(() => {
             socket.join(`match:${matchId}`);
             console.log(`[Socket.IO] Client ${socket.id} subscribed to match ${matchId}`);
             socket.emit('match:subscribed', { matchId });
+
+            // Broadcast new viewer count
+            const roomSize = io.sockets.adapter.rooms.get(`match:${matchId}`)?.size || 0;
+            io.to(`match:${matchId}`).emit('match:viewers', { matchId, count: roomSize });
         });
 
         // Unsubscribe from match
@@ -48,6 +52,10 @@ app.prepare().then(() => {
             socket.leave(`match:${matchId}`);
             console.log(`[Socket.IO] Client ${socket.id} unsubscribed from match ${matchId}`);
             socket.emit('match:unsubscribed', { matchId });
+
+            // Broadcast new viewer count
+            const roomSize = io.sockets.adapter.rooms.get(`match:${matchId}`)?.size || 0;
+            io.to(`match:${matchId}`).emit('match:viewers', { matchId, count: roomSize });
         });
 
         // Log event (from logger)
@@ -60,6 +68,17 @@ app.prepare().then(() => {
                     ...data,
                     timestamp: new Date().toISOString(),
                 });
+
+                // GLOBAL NOTIFICATION: If it's a Goal, broadcast to EVERYONE connected (e.g. for "Goal in other match" toasts)
+                if (data.type === 'Goal') {
+                    io.emit('notification:global', {
+                        type: 'GOAL',
+                        matchId: data.matchId,
+                        detail: data.detail,
+                        teamId: data.teamId,
+                        message: `GOAL! ${data.detail} scores!`
+                    });
+                }
 
                 // Acknowledge to sender
                 socket.emit('event:logged', {
@@ -109,6 +128,59 @@ app.prepare().then(() => {
         socket.on('match:status:change', (data) => {
             console.log(`[Socket.IO] Match status change:`, data);
             io.to(`match:${data.matchId}`).emit('match:status:changed', data);
+        });
+
+        // Chat: Join Room
+        socket.on('chat:join', ({ matchId }) => {
+            socket.join(`chat:${matchId}`);
+            console.log(`[Socket.IO] Client ${socket.id} joined chat for match ${matchId}`);
+        });
+
+        // Chat: Leave Room
+        socket.on('chat:leave', ({ matchId }) => {
+            socket.leave(`chat:${matchId}`);
+            console.log(`[Socket.IO] Client ${socket.id} left chat for match ${matchId}`);
+        });
+
+        // Chat: Message
+        socket.on('chat:message', (data) => {
+            // data should include: matchId, userId, userName, message, timestamp
+            console.log(`[Socket.IO] Chat message in match ${data.matchId}:`, data.message);
+            io.to(`chat:${data.matchId}`).emit('chat:message', data);
+        });
+
+        // Admin: Subscribe to Logger Updates
+        socket.on('admin:subscribe', () => {
+            socket.join('admin:loggers');
+            console.log(`[Socket.IO] Client ${socket.id} subscribed to admin:loggers`);
+        });
+
+        // Admin: Subscribe to Livestream Updates
+        socket.on('admin:livestream:subscribe', () => {
+            socket.join('admin:livestreams');
+            console.log(`[Socket.IO] Client ${socket.id} subscribed to admin:livestreams`);
+        });
+
+        // Logger: Status Update (broadcast to admin)
+        socket.on('logger:status:update', (data) => {
+            // data: loggerId, status, isAvailable, etc.
+            io.to('admin:loggers').emit('logger:updated', data);
+        });
+
+        // Poll: New Vote
+        socket.on('poll:vote', (data) => {
+            // data: matchId, optionId
+            console.log(`[Socket.IO] New vote in match ${data.matchId}`);
+            // Broadcast to update charts for everyone
+            io.to(`match:${data.matchId}`).emit('poll:updated', data);
+        });
+
+        // Prediction: New Submission
+        socket.on('prediction:submit', (data) => {
+            // data: matchId
+            console.log(`[Socket.IO] New prediction in match ${data.matchId}`);
+            // Broadcast to update stats for everyone
+            io.to(`match:${data.matchId}`).emit('prediction:updated', data);
         });
 
         // Ping/Pong for connection health

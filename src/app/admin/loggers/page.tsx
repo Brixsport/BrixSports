@@ -14,6 +14,7 @@ import { ToastContainer } from '@/components/admin/Toast';
 import ConfirmDialog from '@/components/admin/ConfirmDialog';
 import SkeletonLoader from '@/components/admin/SkeletonLoader';
 import ErrorBoundary from '@/components/admin/ErrorBoundary';
+import { useWebSocket } from '@/hooks/useWebSocket';
 
 interface Logger {
     id: string;
@@ -57,6 +58,32 @@ function AdminLoggersPageContent() {
     });
     const [isRegistering, setIsRegistering] = useState(false);
     const { toasts, removeToast, success, error } = useToast();
+    const { socket, isConnected } = useWebSocket({ autoConnect: true });
+
+    useEffect(() => {
+        if (isConnected && socket) {
+            socket.emit('admin:subscribe');
+
+            const handleUpdate = (data: any) => {
+                setLoggers(prev => prev.map(l => {
+                    if (l.id === data.loggerId) {
+                        return {
+                            ...l,
+                            status: data.status || l.status,
+                            isAvailable: data.isAvailable !== undefined ? data.isAvailable : l.isAvailable
+                        };
+                    }
+                    return l;
+                }));
+            };
+
+            socket.on('logger:updated', handleUpdate);
+
+            return () => {
+                socket.off('logger:updated', handleUpdate);
+            };
+        }
+    }, [isConnected, socket]);
 
     useEffect(() => {
         fetchData();

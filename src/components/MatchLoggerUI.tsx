@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { X, Trophy, Activity, Users, Star, Zap, Save, RefreshCw, Clock, ArrowRightLeft, Shield, AlertTriangle, ChevronLeft, Undo2, Redo2, History, RotateCcw, AlertCircle, Trash2 } from 'lucide-react';
 import { MatchEvent, SportType } from '@/types';
 import { Match, Logger, Player, Team } from '@/db/schema';
+import { useWebSocket } from '@/hooks/useWebSocket';
 
 interface MatchLoggerUIProps {
   match: Match;
@@ -166,6 +167,34 @@ export function MatchLoggerUI({ match, onExit, currentLogger, teams, players }: 
   const [isSubbing, setIsSubbing] = useState(false);
   const [showQueue, setShowQueue] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
+
+  // WebSocket for Logger Status
+  const { socket, isConnected: isSocketConnected } = useWebSocket({
+    autoConnect: true,
+  });
+
+  useEffect(() => {
+    if (isSocketConnected && currentLogger) {
+      // Notify admin that logger is active on this match
+      socket?.emit('logger:status:update', {
+        loggerId: currentLogger.id,
+        status: 'active',
+        matchId: match.id,
+        isAvailable: false // Busy with this match
+      });
+    }
+
+    return () => {
+      if (isSocketConnected && currentLogger) {
+        socket?.emit('logger:status:update', {
+          loggerId: currentLogger.id,
+          status: 'inactive', // or available if they just left the match
+          matchId: null,
+          isAvailable: true
+        });
+      }
+    };
+  }, [isSocketConnected, currentLogger, match.id, socket]);
 
   // Computed values
   const homeTeam = useMemo(() => teams.find(t => t.id === match.homeTeamId), [teams, match.homeTeamId]);

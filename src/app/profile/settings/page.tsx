@@ -14,6 +14,8 @@ export default function SettingsPage() {
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
 
+    const [showPasswordModal, setShowPasswordModal] = useState(false);
+
     const [settings, setSettings] = useState({
         // Account
         name: '',
@@ -76,6 +78,15 @@ export default function SettingsPage() {
                             defaultView: prefsData.preferences.defaultView || 'standings',
                             emailNotifications: prefsData.preferences.emailNotifications ?? true,
                             pushNotifications: prefsData.preferences.notifications ?? true,
+                            matchReminders: prefsData.preferences.matchReminders ?? true,
+                            favoriteTeamUpdates: prefsData.preferences.favoriteTeamUpdates ?? true,
+                            weeklyDigest: prefsData.preferences.weeklyDigest ?? false,
+                            profileVisibility: prefsData.preferences.profileVisibility || 'public',
+                            showStats: prefsData.preferences.showStats ?? true,
+                            showActivity: prefsData.preferences.showActivity ?? true,
+                            soundEffects: prefsData.preferences.soundEffects ?? true,
+                            animations: prefsData.preferences.animations ?? true,
+                            compactMode: prefsData.preferences.compactMode ?? false,
                         }));
                     }
                 }
@@ -127,6 +138,15 @@ export default function SettingsPage() {
                     defaultView: settings.defaultView,
                     notifications: settings.pushNotifications,
                     emailNotifications: settings.emailNotifications,
+                    matchReminders: settings.matchReminders,
+                    favoriteTeamUpdates: settings.favoriteTeamUpdates,
+                    weeklyDigest: settings.weeklyDigest,
+                    profileVisibility: settings.profileVisibility,
+                    showStats: settings.showStats,
+                    showActivity: settings.showActivity,
+                    soundEffects: settings.soundEffects,
+                    animations: settings.animations,
+                    compactMode: settings.compactMode,
                 }),
             });
 
@@ -143,29 +163,10 @@ export default function SettingsPage() {
         }
     };
 
-    if (authLoading || loading) {
-        return (
-            <div className="min-h-screen bg-[#050505] text-white flex items-center justify-center">
-                <div className="flex flex-col items-center gap-4">
-                    <Loader2 className="w-8 h-8 animate-spin text-primary" />
-                    <p className="text-white/60">Loading settings...</p>
-                </div>
-            </div>
-        );
-    }
-
-    if (!user) {
-        return (
-            <div className="min-h-screen bg-[#050505] text-white flex items-center justify-center">
-                <div className="flex flex-col items-center gap-4">
-                    <p className="text-white/60">Please sign in to access settings</p>
-                </div>
-            </div>
-        );
-    }
-
     return (
         <div className="min-h-screen bg-[#050505] text-white p-6 md:p-12">
+            {/* ... (Header and other sections remain the same) */}
+
             <div className="max-w-5xl mx-auto space-y-8">
                 {/* Header */}
                 <div>
@@ -357,7 +358,10 @@ export default function SettingsPage() {
                             />
                         </SettingRow>
                         <SettingRow label="Change Password">
-                            <button className="px-4 py-2 bg-white/5 border border-white/10 rounded-xl hover:bg-white/10 transition-all text-sm font-bold flex items-center gap-2">
+                            <button
+                                onClick={() => setShowPasswordModal(true)}
+                                className="px-4 py-2 bg-white/5 border border-white/10 rounded-xl hover:bg-white/10 transition-all text-sm font-bold flex items-center gap-2"
+                            >
                                 <Lock size={14} />
                                 Update
                             </button>
@@ -386,6 +390,11 @@ export default function SettingsPage() {
                     </button>
                 </div>
             </div>
+
+            {/* Change Password Modal */}
+            {showPasswordModal && (
+                <ChangePasswordModal onClose={() => setShowPasswordModal(false)} />
+            )}
         </div>
     );
 }
@@ -396,6 +405,7 @@ function SettingsSection({ icon, title, description, children }: {
     description: string;
     children: React.ReactNode;
 }) {
+    // ... (implementation remains same)
     return (
         <div className="bg-white/5 border border-white/10 rounded-[32px] p-6 md:p-8">
             <div className="flex items-start gap-4 mb-6">
@@ -415,6 +425,7 @@ function SettingsSection({ icon, title, description, children }: {
 }
 
 function SettingRow({ label, children }: { label: string; children: React.ReactNode }) {
+    // ... (implementation remains same)
     return (
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 py-3 border-b border-white/5 last:border-0">
             <span className="text-sm font-bold text-white/80">{label}</span>
@@ -424,6 +435,7 @@ function SettingRow({ label, children }: { label: string; children: React.ReactN
 }
 
 function Toggle({ enabled, onChange }: { enabled: boolean; onChange: (val: boolean) => void }) {
+    // ... (implementation remains same)
     return (
         <button
             onClick={() => onChange(!enabled)}
@@ -445,6 +457,7 @@ function ThemeButton({ icon, label, active, onClick }: {
     active: boolean;
     onClick: () => void;
 }) {
+    // ... (implementation remains same)
     return (
         <button
             onClick={onClick}
@@ -458,3 +471,118 @@ function ThemeButton({ icon, label, active, onClick }: {
         </button>
     );
 }
+
+function ChangePasswordModal({ onClose }: { onClose: () => void }) {
+    const [currentPassword, setCurrentPassword] = useState('');
+    const [newPassword, setNewPassword] = useState('');
+    const [confirmPassword, setConfirmPassword] = useState('');
+    const [loading, setLoading] = useState(false);
+
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+
+        if (newPassword !== confirmPassword) {
+            toast.error('New passwords do not match');
+            return;
+        }
+
+        if (newPassword.length < 6) {
+            toast.error('New password must be at least 6 characters');
+            return;
+        }
+
+        try {
+            setLoading(true);
+            const response = await fetch('/api/auth/change-password', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ currentPassword, newPassword }),
+            });
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(data.error || 'Failed to update password');
+            }
+
+            toast.success('Password updated successfully');
+            onClose();
+        } catch (error: any) {
+            toast.error(error.message);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+            <motion.div
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className="bg-[#050505] border border-white/10 rounded-2xl p-6 w-full max-w-md shadow-2xl space-y-6"
+            >
+                <div className="flex justify-between items-center">
+                    <h2 className="text-xl font-display uppercase tracking-tight">Change Password</h2>
+                    <button onClick={onClose} className="text-white/40 hover:text-white">
+                        <VolumeX className="w-5 h-5" style={{ transform: 'rotate(45deg)' }} /> {/* Using VolumeX as generic close icon - or check imports */}
+                    </button>
+                </div>
+
+                <form onSubmit={handleSubmit} className="space-y-4">
+                    <div>
+                        <label className="block text-xs font-bold uppercase tracking-wider text-white/40 mb-1">Current Password</label>
+                        <input
+                            type="password"
+                            value={currentPassword}
+                            onChange={(e) => setCurrentPassword(e.target.value)}
+                            className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm font-bold outline-none focus:border-primary transition-all"
+                            placeholder="Enter current password"
+                            required
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-xs font-bold uppercase tracking-wider text-white/40 mb-1">New Password</label>
+                        <input
+                            type="password"
+                            value={newPassword}
+                            onChange={(e) => setNewPassword(e.target.value)}
+                            className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm font-bold outline-none focus:border-primary transition-all"
+                            placeholder="Enter new password"
+                            required
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-xs font-bold uppercase tracking-wider text-white/40 mb-1">Confirm New Password</label>
+                        <input
+                            type="password"
+                            value={confirmPassword}
+                            onChange={(e) => setConfirmPassword(e.target.value)}
+                            className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm font-bold outline-none focus:border-primary transition-all"
+                            placeholder="Confirm new password"
+                            required
+                        />
+                    </div>
+
+                    <div className="flex gap-3 pt-2">
+                        <button
+                            type="button"
+                            onClick={onClose}
+                            className="flex-1 py-3 rounded-xl bg-white/5 hover:bg-white/10 text-sm font-bold transition-all"
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            type="submit"
+                            disabled={loading}
+                            className="flex-1 py-3 rounded-xl bg-primary text-black hover:bg-primary/90 text-sm font-bold transition-all disabled:opacity-50"
+                        >
+                            {loading ? 'Updating...' : 'Update Password'}
+                        </button>
+                    </div>
+                </form>
+            </motion.div>
+        </div>
+    );
+}
+
+

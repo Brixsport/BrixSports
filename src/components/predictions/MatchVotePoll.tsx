@@ -34,8 +34,12 @@ interface MatchVotePollProps {
     compact?: boolean;
 }
 
+import { useWebSocket } from '@/hooks/useWebSocket';
+
 export function MatchVotePoll({ match, compact = false }: MatchVotePollProps) {
     const { user, isAuthenticated } = useAuth();
+    const { socket, isConnected } = useWebSocket({ autoConnect: true });
+    // ... existing state ...
     const [pollData, setPollData] = useState<PollData>({
         totalVotes: 0,
         homeVotes: 0,
@@ -45,6 +49,24 @@ export function MatchVotePoll({ match, compact = false }: MatchVotePollProps) {
     });
     const [voting, setVoting] = useState(false);
     const [showResults, setShowResults] = useState(false);
+
+    // Listen for real-time updates
+    useEffect(() => {
+        if (isConnected && socket) {
+            const handlePollUpdate = (data: any) => {
+                if (data.matchId === match.id) {
+                    // Refetch full data to ensure accuracy or update locally if data payload is sufficient
+                    fetchPollData();
+                }
+            };
+
+            socket.on('poll:updated', handlePollUpdate);
+
+            return () => {
+                socket.off('poll:updated', handlePollUpdate);
+            };
+        }
+    }, [isConnected, socket, match.id]);
 
     useEffect(() => {
         fetchPollData();
@@ -100,6 +122,8 @@ export function MatchVotePoll({ match, compact = false }: MatchVotePollProps) {
             if (response.ok) {
                 await fetchPollData();
                 setShowResults(true);
+                // Notify server of new vote
+                socket?.emit('poll:vote', { matchId: match.id });
             }
         } catch (error) {
             console.error('Error voting:', error);

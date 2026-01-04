@@ -247,6 +247,15 @@ export const userPreferences = sqliteTable('user_preferences', {
     language: text('language').default('en'),
     notifications: integer('notifications', { mode: 'boolean' }).default(true),
     emailNotifications: integer('email_notifications', { mode: 'boolean' }).default(true),
+    matchReminders: integer('match_reminders', { mode: 'boolean' }).default(true),
+    favoriteTeamUpdates: integer('favorite_team_updates', { mode: 'boolean' }).default(true),
+    weeklyDigest: integer('weekly_digest', { mode: 'boolean' }).default(false),
+    profileVisibility: text('profile_visibility').default('public'), // 'public' | 'friends' | 'private'
+    showStats: integer('show_stats', { mode: 'boolean' }).default(true),
+    showActivity: integer('show_activity', { mode: 'boolean' }).default(true),
+    soundEffects: integer('sound_effects', { mode: 'boolean' }).default(true),
+    animations: integer('animations', { mode: 'boolean' }).default(true),
+    compactMode: integer('compact_mode', { mode: 'boolean' }).default(false),
     favoriteSports: text('favorite_sports'), // JSON array: ['Football', 'Basketball']
     defaultView: text('default_view').default('standings'), // 'standings' | 'brackets' | 'matches'
     timezone: text('timezone').default('UTC'),

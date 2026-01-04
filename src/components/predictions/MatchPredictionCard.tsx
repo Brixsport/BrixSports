@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { TrendingUp, Trophy, Users, Target, Zap, CheckCircle2, AlertCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
+import { useWebSocket } from '@/hooks/useWebSocket';
 
 interface Team {
     id: string;
@@ -46,6 +47,20 @@ export function MatchPredictionCard({ match, onPredictionSubmit }: MatchPredicti
     const [userPrediction, setUserPrediction] = useState<any>(null);
     const [stats, setStats] = useState<PredictionStats | null>(null);
     const [showStats, setShowStats] = useState(false);
+    const { socket, isConnected } = useWebSocket({ autoConnect: true });
+
+    // Listen for real-time stats updates
+    useEffect(() => {
+        if (isConnected && socket) {
+            const handlePredictionUpdate = (data: any) => {
+                if (data.matchId === match.id) {
+                    fetchPredictionStats();
+                }
+            };
+            socket.on('prediction:updated', handlePredictionUpdate);
+            return () => socket.off('prediction:updated', handlePredictionUpdate);
+        }
+    }, [isConnected, socket, match.id]);
 
     // Determine max score based on sport
     const isBasketball = match.sport?.toLowerCase() === 'basketball';
@@ -119,6 +134,7 @@ export function MatchPredictionCard({ match, onPredictionSubmit }: MatchPredicti
             if (response.ok) {
                 setSubmitted(true);
                 await fetchPredictionStats();
+                socket?.emit('prediction:submit', { matchId: match.id });
                 onPredictionSubmit?.();
             } else {
                 const error = await response.json();

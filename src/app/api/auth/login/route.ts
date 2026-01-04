@@ -11,10 +11,12 @@ export async function POST(request: NextRequest) {
         const body = await request.json();
         const { email, password } = body;
 
-        // Validate input
         if (!email || !password) {
             return NextResponse.json(
-                { error: 'Email and password are required' },
+                {
+                    error: 'Email and password are required',
+                    code: 'AUTH_MISSING_CREDENTIALS'
+                },
                 { status: 400 }
             );
         }
@@ -28,7 +30,10 @@ export async function POST(request: NextRequest) {
 
         if (!user) {
             return NextResponse.json(
-                { error: 'Invalid email or password' },
+                {
+                    error: 'Invalid email or password',
+                    code: 'AUTH_INVALID_CREDENTIALS'
+                },
                 { status: 401 }
             );
         }
@@ -36,7 +41,10 @@ export async function POST(request: NextRequest) {
         // Check if user has a password (might be OAuth user)
         if (!user.password) {
             return NextResponse.json(
-                { error: 'Please use social login for this account' },
+                {
+                    error: 'Please use social login for this account',
+                    code: 'AUTH_SOCIAL_LOGIN_REQUIRED'
+                },
                 { status: 401 }
             );
         }
@@ -46,7 +54,10 @@ export async function POST(request: NextRequest) {
 
         if (!isValidPassword) {
             return NextResponse.json(
-                { error: 'Invalid email or password' },
+                {
+                    error: 'Invalid email or password',
+                    code: 'AUTH_INVALID_CREDENTIALS'
+                },
                 { status: 401 }
             );
         }
@@ -82,7 +93,10 @@ export async function POST(request: NextRequest) {
     } catch (error) {
         console.error('Login error:', error);
         return NextResponse.json(
-            { error: 'Login failed. Please try again.' },
+            {
+                error: 'Login failed. Please try again.',
+                code: 'AUTH_INTERNAL_ERROR'
+            },
             { status: 500 }
         );
     }

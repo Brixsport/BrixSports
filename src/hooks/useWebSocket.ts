@@ -156,7 +156,7 @@ export function useMatchEvents(matchId: string) {
     const [events, setEvents] = useState<MatchEvent[]>([]);
     const [latestEvent, setLatestEvent] = useState<MatchEvent | null>(null);
 
-    const { isConnected, on, off } = useWebSocket({
+    const { isConnected, on, off, socket } = useWebSocket({
         matchId,
         autoConnect: true,
     });
@@ -188,6 +188,7 @@ export function useMatchEvents(matchId: string) {
         events,
         latestEvent,
         isConnected,
+        socket
     };
 }
 
@@ -319,4 +320,32 @@ export function useMatchStatus(matchId: string) {
     }, [matchId, on, off]);
 
     return { status, score };
+}
+
+/**
+ * Hook for subscribing to live viewer count
+ */
+export function useMatchViewers(matchId: string) {
+    const [viewerCount, setViewerCount] = useState<number>(0);
+
+    const { on, off } = useWebSocket({
+        matchId,
+        autoConnect: true,
+    });
+
+    useEffect(() => {
+        const handleViewersUpdate = (data: { matchId: string; count: number }) => {
+            if (data.matchId === matchId) {
+                setViewerCount(data.count);
+            }
+        };
+
+        on('match:viewers', handleViewersUpdate);
+
+        return () => {
+            off('match:viewers', handleViewersUpdate);
+        };
+    }, [matchId, on, off]);
+
+    return viewerCount;
 }

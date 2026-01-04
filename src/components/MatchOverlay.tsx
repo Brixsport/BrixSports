@@ -13,7 +13,7 @@ import { LivestreamChat } from '@/components/livestream/LivestreamChat';
 import { LivestreamPlayer } from '@/components/livestream/LivestreamPlayer';
 import { FootballPitch } from '@/components/FootballPitch';
 import { FullPitchLineups } from '@/components/FullPitchLineups';
-import { useMatchEvents, useMatchStatus, usePlayerRatings } from '@/hooks/useWebSocket';
+import { useMatchEvents, useMatchStatus, usePlayerRatings, useMatchViewers } from '@/hooks/useWebSocket';
 
 interface MatchOverlayProps {
   match: Match;
@@ -43,6 +43,7 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
   const { status: liveStatus, score: liveScore } = useMatchStatus(match.id);
   const { events: liveEvents, latestEvent } = useMatchEvents(match.id);
   const liveRatings = usePlayerRatings(match.id);
+  const viewerCount = useMatchViewers(match.id);
 
   // Ratings state (merge initial API fetch with live updates)
   const [ratings, setRatings] = useState<Record<string, { autoRating: number; finalRating: number | null; isMotM: boolean; notes: string | null }>>({});
@@ -85,6 +86,28 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
       }
     }
   }, [latestEvent, addNotification]);
+
+  // Global Goal Notifications (Goals from OTHER matches)
+  const { socket, isConnected } = useMatchEvents(match.id); // Reuse socket connection
+  useEffect(() => {
+    if (isConnected && socket) {
+      const handleGlobalNotification = (data: { type: string, matchId: string, message: string }) => {
+        // Only show if it's NOT the current match
+        if (data.type === 'GOAL' && data.matchId !== match.id) {
+          addNotification({
+            title: 'GOAL UPDATE',
+            message: data.message, // e.g. "GOAL! Manchester United scores!"
+            type: 'match' // Distinct style?
+          });
+        }
+      };
+
+      socket.on('notification:global', handleGlobalNotification);
+      return () => {
+        socket.off('notification:global', handleGlobalNotification);
+      };
+    }
+  }, [isConnected, socket, match.id, addNotification]);
 
   // Update ratings from live socket data
   useEffect(() => {
@@ -297,6 +320,11 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
                     {match.competition}
                   </span>
                   <div className="flex items-center gap-2 text-xs text-white/40 mt-1">
+                    <div className="flex items-center gap-1 text-red-500 animate-pulse">
+                      <Users size={12} />
+                      <span className="font-bold">{viewerCount} Live</span>
+                    </div>
+                    <span>•</span>
                     <MapPin size={12} />
                     <span>{match.venue}</span>
                     <span>•</span>

@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Send, Smile, MoreVertical, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
+import { useWebSocket } from '@/hooks/useWebSocket';
 
 interface ChatMessage {
     id: string;
@@ -24,7 +25,7 @@ interface LivestreamChatProps {
 export function LivestreamChat({ matchId, enabled = true, className }: LivestreamChatProps) {
     const [messages, setMessages] = useState<ChatMessage[]>([]);
     const [inputMessage, setInputMessage] = useState('');
-    const [isConnected, setIsConnected] = useState(false);
+
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const { user } = useAuth();
 
@@ -37,54 +38,60 @@ export function LivestreamChat({ matchId, enabled = true, className }: Livestrea
         scrollToBottom();
     }, [messages]);
 
-    // Simulate WebSocket connection (replace with actual WebSocket in production)
+    const { isConnected, emit, on, off } = useWebSocket({
+        autoConnect: enabled,
+    });
+
     useEffect(() => {
-        if (!enabled) return;
-
-        // Simulate connection
-        setIsConnected(true);
-
-        // Add welcome message
-        setMessages([
-            {
-                id: '1',
-                userId: 'system',
-                userName: 'System',
-                message: 'Welcome to the live chat! Be respectful and enjoy the match! 🎉',
-                timestamp: new Date(),
-                isSystemMessage: true
-            }
-        ]);
-
-        // Simulate incoming messages
-        const interval = setInterval(() => {
-            const sampleMessages = [
-                'Great play! 🔥',
-                'Let\'s go! ⚽',
-                'Amazing defense!',
-                'What a goal! 🎯',
-                'This match is intense! 💪'
-            ];
-
-            const randomMessage = sampleMessages[Math.floor(Math.random() * sampleMessages.length)];
-
-            setMessages(prev => [
-                ...prev,
-                {
-                    id: Date.now().toString(),
-                    userId: `user-${Math.random()}`,
-                    userName: `Fan${Math.floor(Math.random() * 1000)}`,
-                    message: randomMessage,
-                    timestamp: new Date()
-                }
-            ]);
-        }, 15000); // New message every 15 seconds
+        if (isConnected && enabled && matchId) {
+            emit('chat:join', { matchId });
+            console.log('Joined chat for match:', matchId);
+        }
 
         return () => {
-            clearInterval(interval);
-            setIsConnected(false);
+            if (isConnected && matchId) {
+                emit('chat:leave', { matchId });
+            }
         };
-    }, [enabled, matchId]);
+    }, [isConnected, enabled, matchId, emit]);
+
+    // Listen for incoming messages
+    useEffect(() => {
+        const handleNewMessage = (data: ChatMessage) => {
+            if (data.id) {
+                // Check if message already exists to avoid duplicates
+                setMessages(prev => {
+                    if (prev.some(m => m.id === data.id)) return prev;
+                    return [...prev, {
+                        ...data,
+                        timestamp: new Date(data.timestamp) // Ensure date object
+                    }];
+                });
+            }
+        };
+
+        on('chat:message', handleNewMessage);
+
+        return () => {
+            off('chat:message', handleNewMessage);
+        };
+    }, [on, off]);
+
+    // Initial Welcome Message
+    useEffect(() => {
+        if (enabled && messages.length === 0) {
+            setMessages([
+                {
+                    id: 'system-welcome',
+                    userId: 'system',
+                    userName: 'System',
+                    message: 'Welcome to the live chat! Be respectful and enjoy the match! 🎉',
+                    timestamp: new Date(),
+                    isSystemMessage: true
+                }
+            ]);
+        }
+    }, [enabled]);
 
     const handleSendMessage = (e: React.FormEvent) => {
         e.preventDefault();
@@ -93,17 +100,23 @@ export function LivestreamChat({ matchId, enabled = true, className }: Livestrea
 
         const newMessage: ChatMessage = {
             id: Date.now().toString(),
-            userId: user.id,
-            userName: user.name,
+            userId: user.id || 'anonymous',
+            userName: user.name || 'Anonymous',
             userAvatar: user.avatar,
             message: inputMessage.trim(),
             timestamp: new Date()
         };
 
-        setMessages(prev => [...prev, newMessage]);
-        setInputMessage('');
-
-        // TODO: Send to WebSocket server
+        // Emit to server
+        if (isConnected) {
+            emit('chat:message', {
+                matchId,
+                ...newMessage
+            });
+            setInputMessage('');
+        } else {
+            console.error('Cannot send message: Socket not connected');
+        }
     };
 
     const formatTime = (date: Date) => {

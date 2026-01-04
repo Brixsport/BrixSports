@@ -29,6 +29,24 @@ import {
     CardTitle,
 } from "@/components/ui/card";
 
+const STRENGTH_LABELS = {
+    0: "Enter Password",
+    1: "Weak",
+    2: "Fair",
+    3: "Good",
+    4: "Strong",
+};
+
+const calculateStrength = (password: string) => {
+    let score = 0;
+    if (!password) return 0;
+    if (password.length > 5) score += 1;
+    if (password.length > 7) score += 1;
+    if (/[0-9]/.test(password)) score += 1;
+    if (/[^a-zA-Z0-9]/.test(password)) score += 1;
+    return score;
+};
+
 const formSchema = z
     .object({
         password: z.string().min(6, {
@@ -156,6 +174,34 @@ function ResetPasswordForm() {
                                     {...field}
                                 />
                             </FormControl>
+
+                            {/* Password Strength Meter */}
+                            {field.value && (
+                                <div className="space-y-1.5 mt-2">
+                                    <div className="flex gap-1 h-1.5 w-full">
+                                        {[1, 2, 3, 4].map((level) => {
+                                            const strength = calculateStrength(field.value);
+                                            return (
+                                                <div
+                                                    key={level}
+                                                    className={`h-full flex-1 rounded-full transition-colors duration-300 ${strength >= level
+                                                            ? strength <= 2
+                                                                ? "bg-red-500"
+                                                                : strength === 3
+                                                                    ? "bg-yellow-500"
+                                                                    : "bg-emerald-500"
+                                                            : "bg-primary/20"
+                                                        }`}
+                                                />
+                                            );
+                                        })}
+                                    </div>
+                                    <p className="text-[10px] uppercase font-bold tracking-wider text-right text-muted-foreground">
+                                        {Object.values(STRENGTH_LABELS)[calculateStrength(field.value)]}
+                                    </p>
+                                </div>
+                            )}
+
                             <FormMessage />
                         </FormItem>
                     )}

@@ -11,6 +11,24 @@ import { Loader2, Mail, Lock, User, CheckCircle2, Eye, EyeOff } from "lucide-rea
 import { toast } from "sonner";
 import { OnboardingModal } from "@/components/OnboardingModal";
 
+const STRENGTH_LABELS = {
+    0: "Enter Password",
+    1: "Weak",
+    2: "Fair",
+    3: "Good",
+    4: "Strong",
+};
+
+const calculateStrength = (password: string) => {
+    let score = 0;
+    if (!password) return 0;
+    if (password.length > 5) score += 1;
+    if (password.length > 7) score += 1;
+    if (/[0-9]/.test(password)) score += 1;
+    if (/[^a-zA-Z0-9]/.test(password)) score += 1;
+    return score;
+};
+
 const formSchema = z
     .object({
         name: z.string().min(2, {
@@ -218,16 +236,48 @@ export default function SignupPage() {
                                     {...form.register("password")}
                                     type={showPassword ? "text" : "password"}
                                     placeholder="Create a password"
-                                    className="w-full bg-white/5 border border-white/10 rounded-xl pl-12 pr-12 py-3 text-white placeholder:text-white/30 focus:outline-none focus:border-primary/50 focus:bg-white/10 transition-all text-sm"
+                                    className="w-full bg-white/5 border border-white/10 rounded-xl pl-12 pr-12 py-3 text-white placeholder:text-white/30 focus:outline-none focus:border-primary/50 focus:bg-white/10 transition-all text-sm mb-2"
+                                    onChange={(e) => {
+                                        form.register("password").onChange(e);
+                                    }}
                                 />
                                 <button
                                     type="button"
                                     onClick={() => setShowPassword(!showPassword)}
                                     className="absolute right-4 top-1/2 -translate-y-1/2 text-white/40 hover:text-white/60 transition-colors"
+                                    style={{ marginTop: "-4px" }}
                                 >
                                     {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                                 </button>
                             </div>
+
+                            {/* Password Strength Meter */}
+                            {form.watch("password") && (
+                                <div className="space-y-1.5 mb-2">
+                                    <div className="flex gap-1 h-1.5 w-full">
+                                        {[1, 2, 3, 4].map((level) => {
+                                            const strength = calculateStrength(form.watch("password"));
+                                            return (
+                                                <div
+                                                    key={level}
+                                                    className={`h-full flex-1 rounded-full transition-colors duration-300 ${strength >= level
+                                                        ? strength <= 2
+                                                            ? "bg-red-500"
+                                                            : strength === 3
+                                                                ? "bg-yellow-500"
+                                                                : "bg-emerald-500"
+                                                        : "bg-white/10"
+                                                        }`}
+                                                />
+                                            );
+                                        })}
+                                    </div>
+                                    <p className="text-[10px] uppercase font-bold tracking-wider text-right text-gray-400">
+                                        {Object.values(STRENGTH_LABELS)[calculateStrength(form.watch("password"))]}
+                                    </p>
+                                </div>
+                            )}
+
                             {form.formState.errors.password && (
                                 <p className="text-xs text-red-500">{form.formState.errors.password.message}</p>
                             )}
