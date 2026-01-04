@@ -11,6 +11,10 @@ export const metadata: Metadata = {
   title: "Brixsport | Nigerian University Sports Live",
   description: "Real-time scoring and sports management for Nigerian universities.",
   manifest: "/manifest-user.json",
+  icons: {
+    icon: '/assests/Logos/BRIX-SPORT-LOGO.png',
+    apple: '/assests/Logos/BRIX-SPORT-LOGO.png',
+  },
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
@@ -34,7 +38,8 @@ export default function RootLayout({
   return (
     <html lang="en">
       <head>
-        <link rel="apple-touch-icon" href="/icons/icon-192x192.png" />
+        <link rel="icon" href="/assests/Logos/BRIX-SPORT-LOGO.png" type="image/png" />
+        <link rel="apple-touch-icon" href="/assests/Logos/BRIX-SPORT-LOGO.png" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
         <meta name="apple-mobile-web-app-title" content="Brixsport" />
