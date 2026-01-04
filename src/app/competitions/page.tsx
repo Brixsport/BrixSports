@@ -131,42 +131,44 @@ export default function CompetitionsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#050505] text-white p-6 md:p-12">
-      <div className="max-w-5xl mx-auto space-y-12">
-        <header className="flex flex-col md:flex-row md:items-end justify-between gap-6">
+    <div className="min-h-screen bg-[#050505] text-white p-4 md:p-12">
+      <div className="max-w-5xl mx-auto space-y-6 md:space-y-12">
+        <header className="flex flex-col md:flex-row md:items-end justify-between gap-4 md:gap-6">
           <div>
-            <div className="flex items-center gap-3 mb-2">
-              <Trophy size={16} className="text-primary" />
-              <span className="text-[10px] font-black uppercase tracking-widest text-white/40">
+            <div className="flex items-center gap-2 mb-2">
+              <Trophy size={14} className="text-primary" />
+              <span className="text-[9px] md:text-[10px] font-black uppercase tracking-widest text-white/40">
                 {selectedComp || 'Select a Competition'}
               </span>
             </div>
-            <h1 className="font-display text-5xl tracking-tighter italic uppercase leading-none">Intelligence Hub</h1>
+            <h1 className="font-display text-2xl md:text-5xl tracking-tighter italic uppercase leading-none">Intelligence Hub</h1>
           </div>
 
           <div className="flex bg-white/5 p-1 rounded-2xl border border-white/10">
             <button
               onClick={() => setView('standings')}
-              className={`flex items-center gap-2 px-6 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${view === 'standings' ? 'bg-primary text-black' : 'text-white/40 hover:text-white'
+              className={`flex items-center gap-1.5 px-3 md:px-6 py-2 md:py-3 rounded-xl text-[9px] md:text-[10px] font-black uppercase tracking-widest transition-all ${view === 'standings' ? 'bg-primary text-black' : 'text-white/40 hover:text-white'
                 }`}
             >
-              <ListOrdered size={14} />
-              Standings
+              <ListOrdered size={12} className="md:w-[14px] md:h-[14px]" />
+              <span className="hidden sm:inline">Standings</span>
+              <span className="sm:hidden">Stand</span>
             </button>
             <button
               onClick={() => setView('brackets')}
-              className={`flex items-center gap-2 px-6 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${view === 'brackets' ? 'bg-primary text-black' : 'text-white/40 hover:text-white'
+              className={`flex items-center gap-1.5 px-3 md:px-6 py-2 md:py-3 rounded-xl text-[9px] md:text-[10px] font-black uppercase tracking-widest transition-all ${view === 'brackets' ? 'bg-primary text-black' : 'text-white/40 hover:text-white'
                 }`}
             >
-              <LayoutGrid size={14} />
-              Brackets
+              <LayoutGrid size={12} className="md:w-[14px] md:h-[14px]" />
+              <span className="hidden sm:inline">Brackets</span>
+              <span className="sm:hidden">Brack</span>
             </button>
           </div>
         </header>
 
         {/* Sport & Competition Selector */}
-        <div className="space-y-6">
-          <div className="flex justify-center">
+        <div className="space-y-4 md:space-y-6">
+          <div className="flex justify-center overflow-x-auto">
             <div className="inline-flex bg-white/5 p-1 rounded-2xl border border-white/10 gap-1">
               {(['Football', 'Basketball', 'Track'] as SportType[]).map((sport) => (
                 <button
@@ -176,10 +178,10 @@ export default function CompetitionsPage() {
                     const firstForSport = competitions.find(c => c.sport === sport);
                     setSelectedComp(firstForSport ? firstForSport.name : null);
                   }}
-                  className={`flex items-center gap-2 px-6 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${selectedSport === sport ? 'bg-primary text-black' : 'text-white/40 hover:text-white'
+                  className={`flex items-center gap-1.5 px-3 md:px-6 py-2 md:py-3 rounded-xl text-[9px] md:text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${selectedSport === sport ? 'bg-primary text-black' : 'text-white/40 hover:text-white'
                     }`}
                 >
-                  <Activity size={14} />
+                  <Activity size={12} className="md:w-[14px] md:h-[14px]" />
                   {sport}
                 </button>
               ))}
@@ -215,16 +217,16 @@ export default function CompetitionsPage() {
           >
             {standings.length > 0 ? (
               <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse min-w-[600px]">
+                <table className="w-full text-left border-collapse min-w-[500px]">
                   <thead>
                     <tr className="border-b border-white/10 bg-white/5">
-                      <th className="px-8 py-6 text-[10px] font-black uppercase tracking-widest text-white/40">Pos</th>
-                      <th className="px-8 py-6 text-[10px] font-black uppercase tracking-widest text-white/40">Institution</th>
-                      <th className="px-4 py-6 text-[10px] font-black uppercase tracking-widest text-white/40 text-center">P</th>
-                      <th className="px-4 py-6 text-[10px] font-black uppercase tracking-widest text-white/40 text-center">W</th>
-                      <th className="px-4 py-6 text-[10px] font-black uppercase tracking-widest text-white/40 text-center">D/L</th>
-                      <th className="px-4 py-6 text-[10px] font-black uppercase tracking-widest text-white/40 text-center">GD</th>
-                      <th className="px-8 py-6 text-[10px] font-black uppercase tracking-widest text-primary text-center">Pts</th>
+                      <th className="px-3 md:px-8 py-3 md:py-6 text-[9px] md:text-[10px] font-black uppercase tracking-widest text-white/40">Pos</th>
+                      <th className="px-3 md:px-8 py-3 md:py-6 text-[9px] md:text-[10px] font-black uppercase tracking-widest text-white/40">Team</th>
+                      <th className="px-2 md:px-4 py-3 md:py-6 text-[9px] md:text-[10px] font-black uppercase tracking-widest text-white/40 text-center">P</th>
+                      <th className="px-2 md:px-4 py-3 md:py-6 text-[9px] md:text-[10px] font-black uppercase tracking-widest text-white/40 text-center">W</th>
+                      <th className="px-2 md:px-4 py-3 md:py-6 text-[9px] md:text-[10px] font-black uppercase tracking-widest text-white/40 text-center">D/L</th>
+                      <th className="px-2 md:px-4 py-3 md:py-6 text-[9px] md:text-[10px] font-black uppercase tracking-widest text-white/40 text-center">GD</th>
+                      <th className="px-3 md:px-8 py-3 md:py-6 text-[9px] md:text-[10px] font-black uppercase tracking-widest text-primary text-center">Pts</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -236,28 +238,28 @@ export default function CompetitionsPage() {
                         transition={{ delay: idx * 0.05 }}
                         className="border-b border-white/5 hover:bg-white/5 transition-colors group"
                       >
-                        <td className="px-8 py-6">
-                          <span className={`text-lg font-display italic ${idx < 3 ? 'text-primary' : 'text-white/20'}`}>
+                        <td className="px-3 md:px-8 py-3 md:py-6">
+                          <span className={`text-sm md:text-lg font-display italic ${idx < 3 ? 'text-primary' : 'text-white/20'}`}>
                             {idx + 1}
                           </span>
                         </td>
-                        <td className="px-8 py-6">
-                          <div className="flex items-center gap-4">
-                            <div className="w-10 h-10 relative">
+                        <td className="px-3 md:px-8 py-3 md:py-6">
+                          <div className="flex items-center gap-2 md:gap-4">
+                            <div className="w-8 h-8 md:w-10 md:h-10 relative flex-shrink-0">
                               <img src={row.team.logo} alt={row.team.name} className="w-full h-full object-contain" />
                             </div>
-                            <div>
-                              <p className="text-sm font-black uppercase tracking-tight">{row.team.shortName}</p>
-                              <p className="text-[10px] text-white/40 font-bold uppercase tracking-widest">{row.team.university}</p>
+                            <div className="min-w-0">
+                              <p className="text-xs md:text-sm font-black uppercase tracking-tight truncate">{row.team.shortName}</p>
+                              <p className="text-[9px] md:text-[10px] text-white/40 font-bold uppercase tracking-widest hidden md:block">{row.team.university}</p>
                             </div>
                           </div>
                         </td>
-                        <td className="px-4 py-6 text-center font-bold">{row.played}</td>
-                        <td className="px-4 py-6 text-center font-bold">{row.won}</td>
-                        <td className="px-4 py-6 text-center font-bold">{selectedSport === 'Basketball' ? row.lost : row.drawn}</td>
-                        <td className="px-4 py-6 text-center font-bold text-white/40">{row.goalDifference > 0 ? `+${row.goalDifference}` : row.goalDifference}</td>
-                        <td className="px-8 py-6 text-center">
-                          <span className="bg-primary/10 text-primary px-4 py-2 rounded-xl font-display italic text-lg border border-primary/20">
+                        <td className="px-2 md:px-4 py-3 md:py-6 text-center text-xs md:text-base font-bold">{row.played}</td>
+                        <td className="px-2 md:px-4 py-3 md:py-6 text-center text-xs md:text-base font-bold">{row.won}</td>
+                        <td className="px-2 md:px-4 py-3 md:py-6 text-center text-xs md:text-base font-bold">{selectedSport === 'Basketball' ? row.lost : row.drawn}</td>
+                        <td className="px-2 md:px-4 py-3 md:py-6 text-center text-xs md:text-base font-bold text-white/40">{row.goalDifference > 0 ? `+${row.goalDifference}` : row.goalDifference}</td>
+                        <td className="px-3 md:px-8 py-3 md:py-6 text-center">
+                          <span className="bg-primary/10 text-primary px-2 md:px-4 py-1 md:py-2 rounded-lg md:rounded-xl font-display italic text-sm md:text-lg border border-primary/20">
                             {row.points}
                           </span>
                         </td>
@@ -267,7 +269,7 @@ export default function CompetitionsPage() {
                 </table>
               </div>
             ) : (
-              <div className="p-24 text-center">
+              <div className="p-12 md:p-24 text-center">
                 <AlertCircle className="w-12 h-12 text-white/10 mx-auto mb-4" />
                 <p className="text-white/20 font-black uppercase tracking-widest text-xs italic">No standings data available for this competition</p>
               </div>
@@ -319,10 +321,10 @@ export default function CompetitionsPage() {
                 </div>
               </div>
             ) : (
-              <div className="py-24 text-center bg-white/5 border border-white/10 rounded-[40px]">
+              <div className="py-12 md:py-24 px-4 text-center bg-white/5 border border-white/10 rounded-[40px]">
                 <AlertCircle className="w-12 h-12 text-white/10 mx-auto mb-4" />
                 <p className="text-white/20 font-black uppercase tracking-widest text-xs italic">No bracket data created yet for this competition</p>
-                <p className="text-white/10 text-[10px] mt-2 italic px-12">Tournament brackets will appear here once the knockout phases are established.</p>
+                <p className="text-white/10 text-[10px] mt-2 italic px-4 md:px-12">Tournament brackets will appear here once the knockout phases are established.</p>
               </div>
             )}
           </div>

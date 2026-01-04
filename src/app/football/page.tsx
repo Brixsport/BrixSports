@@ -29,6 +29,23 @@ interface Standing {
     team?: Team;
 }
 
+interface BracketNode {
+    id: string;
+    title: string;
+    status: string;
+    matchId: string | null;
+    homeTeam: any;
+    awayTeam: any;
+    homeScore: number | null;
+    awayScore: number | null;
+    match: any;
+}
+
+interface BracketRound {
+    round: string;
+    matches: BracketNode[];
+}
+
 export default function FootballPage() {
     const [activeTab, setActiveTab] = useState('STANDINGS');
     const [matches, setMatches] = useState<Match[]>([]);
@@ -42,6 +59,7 @@ export default function FootballPage() {
         yellowCards: [],
         rating: []
     });
+    const [brackets, setBrackets] = useState<BracketRound[]>([]);
     const [loading, setLoading] = useState(true);
     const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
     const [selectedTeam, setSelectedTeam] = useState<Team | null>(null);
@@ -54,7 +72,7 @@ export default function FootballPage() {
     const fetchFootballData = async () => {
         try {
             setLoading(true);
-            const [matchesRes, standingsRes, teamsRes, playersRes, goalsRes, assistsRes, cleanSheetsRes, yellowCardsRes, ratingRes] = await Promise.all([
+            const [matchesRes, standingsRes, teamsRes, playersRes, goalsRes, assistsRes, cleanSheetsRes, yellowCardsRes, ratingRes, bracketRes] = await Promise.all([
                 fetch('/api/football/matches'),
                 fetch('/api/football/standings'),
                 fetch('/api/football/teams'),
@@ -63,10 +81,11 @@ export default function FootballPage() {
                 fetch('/api/players/stats/leaders?sport=Football&type=assists&limit=10'),
                 fetch('/api/players/stats/leaders?sport=Football&type=cleanSheets&limit=10'),
                 fetch('/api/players/stats/leaders?sport=Football&type=yellowCards&limit=10'),
-                fetch('/api/players/stats/leaders?sport=Football&type=rating&limit=10')
+                fetch('/api/players/stats/leaders?sport=Football&type=rating&limit=10'),
+                fetch('/api/brackets?sport=Football&competition=BUSA LEAGUE FOOTBALL')
             ]);
 
-            const [matchesData, standingsData, teamsData, playersData, goalsData, assistsData, cleanSheetsData, yellowCardsData, ratingData] = await Promise.all([
+            const [matchesData, standingsData, teamsData, playersData, goalsData, assistsData, cleanSheetsData, yellowCardsData, ratingData, bracketData] = await Promise.all([
                 matchesRes.json(),
                 standingsRes.json(),
                 teamsRes.json(),
@@ -75,7 +94,8 @@ export default function FootballPage() {
                 assistsRes.json(),
                 cleanSheetsRes.json(),
                 yellowCardsRes.json(),
-                ratingRes.json()
+                ratingRes.json(),
+                bracketRes.json()
             ]);
 
             if (matchesData.success) {
@@ -124,6 +144,10 @@ export default function FootballPage() {
                 yellowCards: yellowCardsData.leaders || [],
                 rating: ratingData.leaders || []
             });
+
+            if (bracketData.rounds) {
+                setBrackets(bracketData.rounds);
+            }
 
         } catch (error) {
             console.error('Error fetching football data:', error);
@@ -184,21 +208,21 @@ export default function FootballPage() {
         <div className="min-h-screen bg-[#050505] text-white">
             {/* Header */}
             <div className="border-b border-white/10 bg-black/50 backdrop-blur-xl sticky top-0 z-40">
-                <div className="max-w-7xl mx-auto px-6 py-4">
+                <div className="max-w-7xl mx-auto px-6 py-3">
                     <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-4">
+                        <div className="flex items-center gap-3">
                             <Link href="/" className="p-2 hover:bg-white/5 rounded-lg transition-colors">
-                                <ArrowLeft size={20} />
+                                <ArrowLeft size={18} />
                             </Link>
                             <div>
-                                <h1 className="text-3xl font-display font-bold flex items-center gap-3">
+                                <h1 className="text-xl md:text-2xl font-display font-bold flex items-center gap-2">
                                     ⚽ BUSA LEAGUE FOOTBALL
                                 </h1>
-                                <p className="text-sm text-white/60">2025/2026 Season</p>
+                                <p className="text-xs text-white/60">2025/2026 Season</p>
                             </div>
                         </div>
-                        <div className="flex items-center gap-2 px-4 py-2 bg-primary/10 text-primary rounded-lg border border-primary/20">
-                            <Trophy size={18} />
+                        <div className="flex items-center gap-2 px-3 py-1.5 bg-primary/10 text-primary rounded-lg border border-primary/20">
+                            <Trophy size={16} />
                             <span className="text-xs font-bold uppercase tracking-widest">{teams.length} Teams</span>
                         </div>
                     </div>
@@ -209,7 +233,7 @@ export default function FootballPage() {
             <div className="max-w-7xl mx-auto px-6 py-8">
                 {/* Tabs */}
                 <div className="flex bg-white/5 p-1 rounded-xl border border-white/10 mb-8 overflow-x-auto">
-                    {['STANDINGS', 'MATCHES', 'STATS', 'TEAMS', 'PLAYERS'].map((tab) => (
+                    {['STANDINGS', 'MATCHES', 'BRACKET', 'STATS', 'TEAMS', 'PLAYERS'].map((tab) => (
                         <button
                             key={tab}
                             onClick={() => setActiveTab(tab)}
@@ -385,6 +409,116 @@ export default function FootballPage() {
                                         </div>
                                     </div>
                                 ))}
+                            </motion.div>
+                        )}
+
+                        {/* BRACKET TAB */}
+                        {activeTab === 'BRACKET' && (
+                            <motion.div
+                                key="bracket"
+                                initial={{ opacity: 0, y: 20 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                exit={{ opacity: 0, y: -20 }}
+                            >
+                                {brackets.length > 0 ? (
+                                    <div className="relative overflow-x-auto pb-8 scrollbar-hide">
+                                        <div className="min-w-[1000px] relative p-8">
+                                            {/* Bracket Connectors Overlay (Simplified SVG) */}
+                                            <div className="absolute inset-0 pointer-events-none">
+                                                {/* Add SVG paths if needed for visual connectors */}
+                                            </div>
+
+                                            <div className="flex justify-around items-stretch gap-12">
+                                                {brackets.map((round, roundIdx) => (
+                                                    <div key={round.round} className="flex-1 flex flex-col">
+                                                        <div className="text-center mb-12">
+                                                            <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-primary/60 mb-1">
+                                                                {round.round.replace('_', ' ')}
+                                                            </h3>
+                                                            <div className="h-1 w-8 bg-primary/20 mx-auto rounded-full" />
+                                                        </div>
+
+                                                        <div className="flex-1 flex flex-col justify-around gap-8">
+                                                            {round.matches.map((bracketMatch) => {
+                                                                // Find the full match object from the matches array
+                                                                const fullMatch = bracketMatch.matchId
+                                                                    ? matches.find(m => m.id === bracketMatch.matchId)
+                                                                    : null;
+
+                                                                return (
+                                                                    <div
+                                                                        key={bracketMatch.id}
+                                                                        onClick={() => fullMatch && setSelectedMatch(fullMatch)}
+                                                                        className="relative group"
+                                                                    >
+                                                                        <div className="bg-white/5 border border-white/10 rounded-2xl p-4 hover:border-primary/40 hover:bg-white/[0.07] transition-all cursor-pointer relative z-10 backdrop-blur-sm">
+                                                                            <div className="flex justify-between items-center mb-3">
+                                                                                <span className="text-[8px] font-black uppercase tracking-widest text-white/30">{bracketMatch.title}</span>
+                                                                                <span className={`text-[8px] px-2 py-0.5 rounded font-black ${bracketMatch.status === 'LIVE' ? 'bg-red-500 animate-pulse text-white' : 'bg-white/10 text-white/40'}`}>
+                                                                                    {bracketMatch.status}
+                                                                                </span>
+                                                                            </div>
+                                                                            <div className="space-y-3">
+                                                                                <div className="flex justify-between items-center">
+                                                                                    <div className="flex items-center gap-2">
+                                                                                        <div className="w-6 h-6 rounded bg-white/5 p-1 flex items-center justify-center">
+                                                                                            {bracketMatch.homeTeam?.logo ? (
+                                                                                                <img src={bracketMatch.homeTeam.logo} className="w-full h-full object-contain" />
+                                                                                            ) : (
+                                                                                                <div className="w-full h-full border border-white/10 rounded-sm flex items-center justify-center text-[8px] text-white/20">?</div>
+                                                                                            )}
+                                                                                        </div>
+                                                                                        <span className={`text-[10px] font-bold uppercase ${bracketMatch.homeScore !== null && bracketMatch.awayScore !== null && bracketMatch.homeScore > bracketMatch.awayScore ? 'text-white' : 'text-white/60'}`}>
+                                                                                            {bracketMatch.homeTeam?.name || 'TBD'}
+                                                                                        </span>
+                                                                                    </div>
+                                                                                    <span className={`font-display italic text-lg ${bracketMatch.homeScore !== null && bracketMatch.awayScore !== null && bracketMatch.homeScore > bracketMatch.awayScore ? 'text-primary' : 'text-white/40'}`}>
+                                                                                        {bracketMatch.homeScore ?? '-'}
+                                                                                    </span>
+                                                                                </div>
+
+                                                                                <div className="h-px bg-white/5 mx-2" />
+
+                                                                                <div className="flex justify-between items-center">
+                                                                                    <div className="flex items-center gap-2">
+                                                                                        <div className="w-6 h-6 rounded bg-white/5 p-1 flex items-center justify-center">
+                                                                                            {bracketMatch.awayTeam?.logo ? (
+                                                                                                <img src={bracketMatch.awayTeam.logo} className="w-full h-full object-contain" />
+                                                                                            ) : (
+                                                                                                <div className="w-full h-full border border-white/10 rounded-sm flex items-center justify-center text-[8px] text-white/20">?</div>
+                                                                                            )}
+                                                                                        </div>
+                                                                                        <span className={`text-[10px] font-bold uppercase ${bracketMatch.awayScore !== null && bracketMatch.homeScore !== null && bracketMatch.awayScore > bracketMatch.homeScore ? 'text-white' : 'text-white/60'}`}>
+                                                                                            {bracketMatch.awayTeam?.name || 'TBD'}
+                                                                                        </span>
+                                                                                    </div>
+                                                                                    <span className={`font-display italic text-lg ${bracketMatch.awayScore !== null && bracketMatch.homeScore !== null && bracketMatch.awayScore > bracketMatch.homeScore ? 'text-primary' : 'text-white/40'}`}>
+                                                                                        {bracketMatch.awayScore ?? '-'}
+                                                                                    </span>
+                                                                                </div>
+                                                                            </div>
+
+                                                                            {/* Visual Highlight on Hover */}
+                                                                            <div className="absolute inset-0 rounded-2xl bg-primary/5 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
+                                                                        </div>
+                                                                    </div>
+                                                                );
+                                                            })}
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <div className="py-24 text-center bg-white/5 border border-white/10 rounded-[40px]">
+                                        <Trophy className="w-16 h-16 text-white/5 mx-auto mb-6" />
+                                        <h3 className="text-xl font-display italic uppercase font-bold text-white/40 mb-2">Bracket Not Established</h3>
+                                        <p className="text-white/20 font-black uppercase tracking-widest text-[10px] max-w-sm mx-auto leading-relaxed">
+                                            Tournament brackets will appear here once the knockout phases are confirmed.
+                                        </p>
+                                    </div>
+                                )}
                             </motion.div>
                         )}
 
