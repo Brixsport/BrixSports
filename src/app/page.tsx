@@ -662,11 +662,11 @@ export default function Home() {
               match={selectedMatch}
               onClose={() => setSelectedMatch(null)}
               onSelectTeam={(team) => {
-                setSelectedTeam(team);
+                setSelectedTeam({ ...team, sport: 'Basketball' });
                 setSelectedMatch(null);
               }}
               onSelectPlayer={(player) => {
-                setSelectedPlayer(player);
+                setSelectedPlayer({ ...player, sport: 'Basketball' });
                 setSelectedMatch(null);
               }}
             />
@@ -675,7 +675,7 @@ export default function Home() {
               match={selectedMatch}
               onClose={() => setSelectedMatch(null)}
               onSelectPlayer={(player) => {
-                setSelectedPlayer(player);
+                setSelectedPlayer({ ...player, sport: 'Football' });
                 setSelectedMatch(null);
               }}
             />
@@ -684,15 +684,17 @@ export default function Home() {
         {selectedPlayer && (
           <PlayerProfileOverlay
             player={selectedPlayer}
+            sport={selectedPlayer.sport}
             onClose={() => setSelectedPlayer(null)}
           />
         )}
         {selectedTeam && (
           <TeamProfileOverlay
             team={selectedTeam}
+            sport={(selectedTeam as any).sport || 'Football'}
             onClose={() => setSelectedTeam(null)}
             onSelectPlayer={(player) => {
-              setSelectedPlayer(player);
+              setSelectedPlayer({ ...player, sport: (selectedTeam as any).sport || 'Football' });
               setSelectedTeam(null);
             }}
           />

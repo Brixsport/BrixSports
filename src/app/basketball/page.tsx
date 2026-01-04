@@ -509,6 +509,7 @@ export default function BasketballPage() {
                 <PlayerProfileOverlay
                     player={selectedPlayer}
                     onClose={() => setSelectedPlayer(null)}
+                    sport="Basketball"
                 />
             )}
 

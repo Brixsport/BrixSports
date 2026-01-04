@@ -8,9 +8,10 @@ import { useFavorites } from '@/hooks/useFavorites';
 interface PlayerProfileOverlayProps {
   player: any;
   onClose: () => void;
+  sport?: string;
 }
 
-export function PlayerProfileOverlay({ player: initialPlayer, onClose }: PlayerProfileOverlayProps) {
+export function PlayerProfileOverlay({ player: initialPlayer, onClose, sport }: PlayerProfileOverlayProps) {
   const [playerData, setPlayerData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
@@ -50,7 +51,7 @@ export function PlayerProfileOverlay({ player: initialPlayer, onClose }: PlayerP
   };
 
   const team = player.team;
-  const playerSport = team?.sport || 'Football';
+  const playerSport = sport || team?.sport || 'Football';
   const stats = playerData?.stats || {};
   const recentMatches = playerData?.recentMatches || [];
 

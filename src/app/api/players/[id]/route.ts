@@ -85,10 +85,14 @@ export async function GET(
             }));
 
         // Get player stats from specialized tables or generic table
-        // Determine sport from player's matches (since teams table doesn't have sport column)
-        let playerSport = 'Football'; // default
-        if (playerEvents.length > 0 && playerEvents[0].match) {
-            playerSport = playerEvents[0].match.sport || 'Football';
+        // Determine sport from team or matches
+        const basketballTeamNames = ['TBK', 'Titans', 'Storm', 'Rim Reapers', 'Vikings', 'Siberia'];
+        let playerSport = (team && basketballTeamNames.includes(team.name)) ? 'Basketball' : (team?.sport || 'Football');
+
+        if (!playerSport || (playerSport === 'Football' && !team?.sport)) {
+            if (playerEvents.length > 0 && playerEvents[0].match) {
+                playerSport = playerEvents[0].match.sport || 'Football';
+            }
         }
 
         // Basketball-specific stats from specialized table
