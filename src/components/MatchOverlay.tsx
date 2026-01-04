@@ -12,6 +12,7 @@ import { MatchVotePoll } from '@/components/predictions/MatchVotePoll';
 import { LivestreamChat } from '@/components/livestream/LivestreamChat';
 import { LivestreamPlayer } from '@/components/livestream/LivestreamPlayer';
 import { FootballPitch } from '@/components/FootballPitch';
+import { FullPitchLineups } from '@/components/FullPitchLineups';
 
 interface MatchOverlayProps {
   match: Match;
@@ -430,29 +431,30 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
                     <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
                     <p className="text-white/40">Loading lineups...</p>
                   </div>
+                ) : match.lineups?.home && match.lineups?.away ? (
+                  /* Full Pitch View - Both teams facing each other */
+                  <FullPitchLineups
+                    homeTeam={{
+                      name: homeTeam?.name || 'Home',
+                      logo: homeTeam?.logo || '',
+                      color: homeTeam?.color || '#3B82F6'
+                    }}
+                    awayTeam={{
+                      name: awayTeam?.name || 'Away',
+                      logo: awayTeam?.logo || '',
+                      color: awayTeam?.color || '#EF4444'
+                    }}
+                    homePlayers={players}
+                    awayPlayers={players}
+                    homeLineup={match.lineups.home}
+                    awayLineup={match.lineups.away}
+                    onPlayerClick={onSelectPlayer}
+                  />
                 ) : (
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                    {/* Home Team Formation */}
-                    {match.lineups?.home && (
-                      <FootballPitch
-                        players={players}
-                        lineup={match.lineups.home}
-                        teamName={homeTeam?.name || 'Home'}
-                        onPlayerClick={onSelectPlayer}
-                        isHome={true}
-                      />
-                    )}
-
-                    {/* Away Team Formation */}
-                    {match.lineups?.away && (
-                      <FootballPitch
-                        players={players}
-                        lineup={match.lineups.away}
-                        teamName={awayTeam?.name || 'Away'}
-                        onPlayerClick={onSelectPlayer}
-                        isHome={false}
-                      />
-                    )}
+                  <div className="bg-white/5 rounded-xl border border-white/10 p-12 text-center">
+                    <Users className="mx-auto mb-4 text-white/40" size={48} />
+                    <p className="text-white/60 mb-2">No lineups available yet</p>
+                    <p className="text-white/40 text-sm">Lineups will be published before the match starts</p>
                   </div>
                 )}
               </motion.div>

@@ -1,0 +1,473 @@
+'use client';
+
+import { useState, useEffect } from 'react';
+import { useAuth } from '@/hooks/useAuth';
+import { useRouter } from 'next/navigation';
+import { Shield, Calendar, Users, CheckCircle, AlertCircle, Save } from 'lucide-react';
+
+interface Match {
+    id: string;
+    sport: string;
+    homeTeamId: string;
+    awayTeamId: string;
+    homeTeam: { name: string; shortName: string; logo: string };
+    awayTeam: { name: string; shortName: string; logo: string };
+    startTime: string;
+    venue: string;
+    competition: string;
+    status: string;
+    loggerId?: string;
+}
+
+interface Player {
+    id: string;
+    name: string;
+    jerseyName?: string;
+    number: number;
+    position: string;
+    teamId: string;
+}
+
+export default function AdminMatchLineupsPage() {
+    const { user, loading, isAuthenticated } = useAuth();
+    const router = useRouter();
+    const [matches, setMatches] = useState<Match[]>([]);
+    const [selectedMatch, setSelectedMatch] = useState<Match | null>(null);
+    const [homeRoster, setHomeRoster] = useState<Player[]>([]);
+    const [awayRoster, setAwayRoster] = useState<Player[]>([]);
+    const [homeStarters, setHomeStarters] = useState<string[]>([]);
+    const [awayStarters, setAwayStarters] = useState<string[]>([]);
+    const [homeFormation, setHomeFormation] = useState('4-3-3');
+    const [awayFormation, setAwayFormation] = useState('4-3-3');
+    const [homeCaptain, setHomeCaptain] = useState('');
+    const [awayCaptain, setAwayCaptain] = useState('');
+    const [saving, setSaving] = useState(false);
+    const [loadingData, setLoadingData] = useState(false);
+
+    // Check authentication and role
+    useEffect(() => {
+        if (!loading && (!isAuthenticated || (user?.role !== 'admin' && user?.role !== 'logger'))) {
+            router.push('/');
+        }
+    }, [loading, isAuthenticated, user, router]);
+
+    // Load matches assigned to logger or all matches for admin
+    useEffect(() => {
+        if (user) {
+            loadMatches();
+        }
+    }, [user]);
+
+    const loadMatches = async () => {
+        try {
+            const response = await fetch('/api/admin/assigned-matches');
+            const data = await response.json();
+            if (data.success) {
+                setMatches(data.matches);
+            }
+        } catch (error) {
+            console.error('Error loading matches:', error);
+        }
+    };
+
+    const loadRosters = async (match: Match) => {
+        setLoadingData(true);
+        try {
+            const [homeResponse, awayResponse] = await Promise.all([
+                fetch(`/api/players?teamId=${match.homeTeamId}`),
+                fetch(`/api/players?teamId=${match.awayTeamId}`)
+            ]);
+
+            const homeData = await homeResponse.json();
+            const awayData = await awayResponse.json();
+
+            setHomeRoster(homeData.players || homeData);
+            setAwayRoster(awayData.players || awayData);
+
+            // Load existing lineups if any
+            const lineupResponse = await fetch(`/api/matches/${match.id}/lineup`);
+            const lineupData = await lineupResponse.json();
+
+            if (lineupData.success && lineupData.lineups) {
+                if (lineupData.lineups.home) {
+                    setHomeStarters(lineupData.lineups.home.starters.map((s: any) => s.playerId));
+                    setHomeFormation(lineupData.lineups.home.formation);
+                    const captain = lineupData.lineups.home.starters.find((s: any) => s.isCaptain);
+                    if (captain) setHomeCaptain(captain.playerId);
+                }
+                if (lineupData.lineups.away) {
+                    setAwayStarters(lineupData.lineups.away.starters.map((s: any) => s.playerId));
+                    setAwayFormation(lineupData.lineups.away.formation);
+                    const captain = lineupData.lineups.away.starters.find((s: any) => s.isCaptain);
+                    if (captain) setAwayCaptain(captain.playerId);
+                }
+            }
+        } catch (error) {
+            console.error('Error loading rosters:', error);
+        } finally {
+            setLoadingData(false);
+        }
+    };
+
+    const handleMatchSelect = (match: Match) => {
+        setSelectedMatch(match);
+        loadRosters(match);
+    };
+
+    const toggleStarter = (playerId: string, team: 'home' | 'away') => {
+        if (team === 'home') {
+            setHomeStarters(prev =>
+                prev.includes(playerId)
+                    ? prev.filter(id => id !== playerId)
+                    : prev.length < 11
+                        ? [...prev, playerId]
+                        : prev
+            );
+        } else {
+            setAwayStarters(prev =>
+                prev.includes(playerId)
+                    ? prev.filter(id => id !== playerId)
+                    : prev.length < 11
+                        ? [...prev, playerId]
+                        : prev
+            );
+        }
+    };
+
+    const publishLineups = async () => {
+        if (!selectedMatch) return;
+
+        if (homeStarters.length !== 11 || awayStarters.length !== 11) {
+            alert('Both teams must have exactly 11 starters');
+            return;
+        }
+
+        if (!homeCaptain || !awayCaptain) {
+            alert('Please select captains for both teams');
+            return;
+        }
+
+        setSaving(true);
+        try {
+            // Prepare home lineup
+            const homeLineup = {
+                formation: homeFormation,
+                starters: homeStarters.map(playerId => {
+                    const player = homeRoster.find(p => p.id === playerId)!;
+                    return {
+                        playerId,
+                        position: player.position,
+                        jerseyNumber: player.number,
+                        jerseyName: player.jerseyName,
+                        isCaptain: playerId === homeCaptain,
+                        isViceCaptain: false
+                    };
+                }),
+                substitutes: homeRoster
+                    .filter(p => !homeStarters.includes(p.id))
+                    .map(player => ({
+                        playerId: player.id,
+                        jerseyNumber: player.number,
+                        jerseyName: player.jerseyName
+                    })),
+                status: 'published'
+            };
+
+            // Prepare away lineup
+            const awayLineup = {
+                formation: awayFormation,
+                starters: awayStarters.map(playerId => {
+                    const player = awayRoster.find(p => p.id === playerId)!;
+                    return {
+                        playerId,
+                        position: player.position,
+                        jerseyNumber: player.number,
+                        jerseyName: player.jerseyName,
+                        isCaptain: playerId === awayCaptain,
+                        isViceCaptain: false
+                    };
+                }),
+                substitutes: awayRoster
+                    .filter(p => !awayStarters.includes(p.id))
+                    .map(player => ({
+                        playerId: player.id,
+                        jerseyNumber: player.number,
+                        jerseyName: player.jerseyName
+                    })),
+                status: 'published'
+            };
+
+            // Save both lineups
+            await Promise.all([
+                fetch(`/api/admin/match-lineups/${selectedMatch.id}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ team: 'home', lineup: homeLineup })
+                }),
+                fetch(`/api/admin/match-lineups/${selectedMatch.id}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ team: 'away', lineup: awayLineup })
+                })
+            ]);
+
+            alert('Lineups published successfully!');
+        } catch (error) {
+            console.error('Error publishing lineups:', error);
+            alert('Failed to publish lineups');
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    if (loading) {
+        return (
+            <div className="min-h-screen bg-[#050505] flex items-center justify-center">
+                <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
+            </div>
+        );
+    }
+
+    if (!isAuthenticated || (user?.role !== 'admin' && user?.role !== 'logger')) {
+        return null;
+    }
+
+    return (
+        <div className="min-h-screen bg-[#050505] text-white p-6">
+            <div className="max-w-7xl mx-auto">
+                {/* Header */}
+                <div className="mb-8">
+                    <div className="flex items-center gap-3 mb-2">
+                        <Shield className="text-primary" size={32} />
+                        <h1 className="font-display text-4xl tracking-tighter italic uppercase">
+                            Official Match Lineups
+                        </h1>
+                    </div>
+                    <p className="text-white/60">
+                        Publish official team lineups for your assigned matches
+                    </p>
+                </div>
+
+                {!selectedMatch ? (
+                    /* Match Selection */
+                    <div className="space-y-4">
+                        <h2 className="text-xl font-bold mb-4">Select a Match</h2>
+                        {matches.length === 0 ? (
+                            <div className="bg-white/5 rounded-xl border border-white/10 p-12 text-center">
+                                <Calendar className="mx-auto mb-4 text-white/40" size={48} />
+                                <p className="text-white/60">No matches assigned to you</p>
+                            </div>
+                        ) : (
+                            matches.map(match => (
+                                <button
+                                    key={match.id}
+                                    onClick={() => handleMatchSelect(match)}
+                                    className="w-full bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl p-6 transition-colors text-left"
+                                >
+                                    <div className="flex items-center justify-between">
+                                        <div className="flex-1">
+                                            <div className="flex items-center gap-4 mb-2">
+                                                <span className="font-bold">{match.homeTeam.name}</span>
+                                                <span className="text-white/40">vs</span>
+                                                <span className="font-bold">{match.awayTeam.name}</span>
+                                            </div>
+                                            <div className="text-sm text-white/60">
+                                                {match.competition} • {new Date(match.startTime).toLocaleString()}
+                                            </div>
+                                        </div>
+                                        <div className={`px-3 py-1 rounded-full text-xs font-bold ${match.status === 'UPCOMING' ? 'bg-blue-500/20 text-blue-400' :
+                                                match.status === 'LIVE' ? 'bg-green-500/20 text-green-400' :
+                                                    'bg-white/10 text-white/60'
+                                            }`}>
+                                            {match.status}
+                                        </div>
+                                    </div>
+                                </button>
+                            ))
+                        )}
+                    </div>
+                ) : (
+                    /* Lineup Builder */
+                    <div className="space-y-6">
+                        {/* Match Info */}
+                        <div className="bg-white/5 rounded-xl border border-white/10 p-6">
+                            <div className="flex items-center justify-between mb-4">
+                                <div>
+                                    <h2 className="text-2xl font-bold mb-1">
+                                        {selectedMatch.homeTeam.shortName} vs {selectedMatch.awayTeam.shortName}
+                                    </h2>
+                                    <p className="text-white/60 text-sm">
+                                        {selectedMatch.competition} • {new Date(selectedMatch.startTime).toLocaleString()}
+                                    </p>
+                                </div>
+                                <button
+                                    onClick={() => setSelectedMatch(null)}
+                                    className="text-white/60 hover:text-white"
+                                >
+                                    ← Back to matches
+                                </button>
+                            </div>
+
+                            {/* Validation Status */}
+                            <div className="flex items-center gap-4 text-sm">
+                                <div className={`flex items-center gap-2 ${homeStarters.length === 11 ? 'text-green-400' : 'text-orange-400'}`}>
+                                    {homeStarters.length === 11 ? <CheckCircle size={16} /> : <AlertCircle size={16} />}
+                                    Home: {homeStarters.length}/11 starters
+                                </div>
+                                <div className={`flex items-center gap-2 ${awayStarters.length === 11 ? 'text-green-400' : 'text-orange-400'}`}>
+                                    {awayStarters.length === 11 ? <CheckCircle size={16} /> : <AlertCircle size={16} />}
+                                    Away: {awayStarters.length}/11 starters
+                                </div>
+                            </div>
+                        </div>
+
+                        {loadingData ? (
+                            <div className="py-20 text-center">
+                                <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+                                <p className="text-white/40">Loading rosters...</p>
+                            </div>
+                        ) : (
+                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                                {/* Home Team */}
+                                <TeamLineupBuilder
+                                    team={selectedMatch.homeTeam}
+                                    roster={homeRoster}
+                                    starters={homeStarters}
+                                    formation={homeFormation}
+                                    captain={homeCaptain}
+                                    onToggleStarter={(id) => toggleStarter(id, 'home')}
+                                    onFormationChange={setHomeFormation}
+                                    onCaptainChange={setHomeCaptain}
+                                />
+
+                                {/* Away Team */}
+                                <TeamLineupBuilder
+                                    team={selectedMatch.awayTeam}
+                                    roster={awayRoster}
+                                    starters={awayStarters}
+                                    formation={awayFormation}
+                                    captain={awayCaptain}
+                                    onToggleStarter={(id) => toggleStarter(id, 'away')}
+                                    onFormationChange={setAwayFormation}
+                                    onCaptainChange={setAwayCaptain}
+                                />
+                            </div>
+                        )}
+
+                        {/* Publish Button */}
+                        <div className="flex justify-center">
+                            <button
+                                onClick={publishLineups}
+                                disabled={saving || homeStarters.length !== 11 || awayStarters.length !== 11 || !homeCaptain || !awayCaptain}
+                                className="px-8 py-4 bg-primary hover:bg-primary/90 disabled:bg-white/10 disabled:cursor-not-allowed text-black disabled:text-white/40 rounded-xl font-bold text-lg flex items-center gap-3 transition-colors"
+                            >
+                                <Save size={20} />
+                                {saving ? 'Publishing...' : 'Publish Official Lineups'}
+                            </button>
+                        </div>
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+}
+
+function TeamLineupBuilder({
+    team,
+    roster,
+    starters,
+    formation,
+    captain,
+    onToggleStarter,
+    onFormationChange,
+    onCaptainChange
+}: {
+    team: any;
+    roster: Player[];
+    starters: string[];
+    formation: string;
+    captain: string;
+    onToggleStarter: (id: string) => void;
+    onFormationChange: (formation: string) => void;
+    onCaptainChange: (id: string) => void;
+}) {
+    const formations = ['4-3-3', '4-4-2', '4-2-3-1', '3-5-2', '3-4-3', '5-3-2'];
+
+    return (
+        <div className="bg-white/5 rounded-xl border border-white/10 p-6">
+            <h3 className="text-xl font-bold mb-4">{team.name}</h3>
+
+            {/* Formation Selector */}
+            <div className="mb-4">
+                <label className="text-sm text-white/60 mb-2 block">Formation</label>
+                <select
+                    value={formation}
+                    onChange={(e) => onFormationChange(e.target.value)}
+                    className="w-full bg-white/10 border border-white/20 rounded-lg px-4 py-2 text-white"
+                >
+                    {formations.map(f => (
+                        <option key={f} value={f}>{f}</option>
+                    ))}
+                </select>
+            </div>
+
+            {/* Player List */}
+            <div className="space-y-2 max-h-[500px] overflow-y-auto">
+                {roster.map(player => {
+                    const isStarter = starters.includes(player.id);
+                    const isCaptain = captain === player.id;
+
+                    return (
+                        <div
+                            key={player.id}
+                            className={`flex items-center justify-between p-3 rounded-lg border transition-all ${isStarter
+                                    ? 'bg-primary/20 border-primary/40'
+                                    : 'bg-white/5 border-white/10 hover:bg-white/10'
+                                }`}
+                        >
+                            <div className="flex items-center gap-3">
+                                <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold ${isStarter ? 'bg-primary text-black' : 'bg-white/10'
+                                    }`}>
+                                    {player.number}
+                                </div>
+                                <div>
+                                    <div className="font-semibold">{player.name}</div>
+                                    <div className="text-xs text-white/60">{player.position}</div>
+                                </div>
+                            </div>
+
+                            <div className="flex items-center gap-2">
+                                {isStarter && (
+                                    <button
+                                        onClick={() => onCaptainChange(player.id)}
+                                        className={`px-2 py-1 rounded text-xs font-bold ${isCaptain
+                                                ? 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/40'
+                                                : 'bg-white/10 text-white/60 hover:bg-white/20'
+                                            }`}
+                                    >
+                                        {isCaptain ? '★ Captain' : 'Set Captain'}
+                                    </button>
+                                )}
+                                <button
+                                    onClick={() => onToggleStarter(player.id)}
+                                    className={`px-3 py-1 rounded font-bold text-xs ${isStarter
+                                            ? 'bg-red-500/20 text-red-400 hover:bg-red-500/30'
+                                            : 'bg-green-500/20 text-green-400 hover:bg-green-500/30'
+                                        }`}
+                                >
+                                    {isStarter ? 'Remove' : 'Add'}
+                                </button>
+                            </div>
+                        </div>
+                    );
+                })}
+            </div>
+
+            {/* Summary */}
+            <div className="mt-4 pt-4 border-t border-white/10 text-sm text-white/60">
+                <div>Starters: {starters.length}/11</div>
+                <div>Substitutes: {roster.length - starters.length}</div>
+            </div>
+        </div>
+    );
+}

@@ -105,4 +105,5 @@ export interface LineupEntry {
     rating: number;
     position?: string;
     isStarter?: boolean;
+    isCaptain?: boolean;
 }

@@ -704,6 +704,9 @@ export { matchPredictions, predictionLeaderboard, predictionComments } from './s
 // Export XI schemas
 export { userXI, userXILikes, userXIComments } from './schema-xi';
 
+// Export User Lineups schemas
+export { userLineups, userLineupLikes, userLineupComments } from './schema-user-lineups';
+
 // Export FPL schemas
 export {
     fplGameweeks,
