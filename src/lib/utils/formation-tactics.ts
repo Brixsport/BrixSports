@@ -137,6 +137,56 @@ export const FORMATION_TACTICS: Record<string, FormationTactics> = {
         defensiveRating: 6,
         balanceRating: 6,
     },
+    '4-2-2-2': {
+        name: '4-2-2-2',
+        description: 'A box midfield formation that uses two defensive midfielders and two attacking midfielders to control the center of the pitch.',
+        strengths: [
+            'Dominates central areas',
+            'Strong defensive screen',
+            'Good support for strikers',
+            'Compact shape',
+        ],
+        weaknesses: [
+            'Lack of natural width',
+            'Relies heavily on full-backs',
+            'Can become congested vertically',
+        ],
+        playStyle: 'Narrow, quick passing through the middle',
+        bestFor: [
+            'Teams with athletic full-backs',
+            'Sides with strong technical midfielders',
+            'Teams who want to control the center',
+        ],
+        difficulty: 'Hard',
+        offensiveRating: 7,
+        defensiveRating: 8,
+        balanceRating: 7,
+    },
+    '3-5-2-dp': {
+        name: '3-5-2 (Double Pivot)',
+        description: 'A defensive variation of the 3-5-2 with two holding midfielders to provide maximum protection for the back three.',
+        strengths: [
+            'Exceptional defensive solidity',
+            'Difficult to break down',
+            'Good for counter-attacking',
+            'Protects the back three',
+        ],
+        weaknesses: [
+            'Can lack creativity',
+            'Large gap between midfield and attack',
+            'Isolated strikers',
+        ],
+        playStyle: 'Defensive, counter-attacking',
+        bestFor: [
+            'Underdogs or defensive teams',
+            'Protecting a lead',
+            'Teams with limited creative midfielders',
+        ],
+        difficulty: 'Medium',
+        offensiveRating: 6,
+        defensiveRating: 9,
+        balanceRating: 7,
+    },
 };
 
 export function getFormationTactics(formation: string): FormationTactics | null {
