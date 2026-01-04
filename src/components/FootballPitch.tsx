@@ -180,22 +180,34 @@ interface PlayerDotProps {
 }
 
 function PlayerDot({ player, rating, position, style, onClick, isGoalkeeper }: PlayerDotProps) {
+    // Check if Man of the Match (rating 9.0+)
+    const isMotM = rating >= 9.0;
+
     return (
         <div
             className="absolute cursor-pointer group"
             style={style}
             onClick={onClick}
         >
+            {/* Man of the Match star */}
+            {isMotM && (
+                <div className="absolute -top-2 left-1/2 -translate-x-1/2 z-20">
+                    <div className="relative">
+                        <div className="absolute inset-0 bg-yellow-400 blur-md opacity-60 animate-pulse"></div>
+                        <svg className="w-5 h-5 relative z-10" viewBox="0 0 24 24" fill="gold" stroke="black" strokeWidth="1">
+                            <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+                        </svg>
+                    </div>
+                </div>
+            )}
             {/* Player circle */}
-            <div className={`relative w-12 h-12 rounded-full border-2 flex items-center justify-center transition-all group-hover:scale-110 ${isGoalkeeper
-                    ? 'bg-yellow-500/90 border-yellow-300'
-                    : rating >= 8
+            <div className={`relative w-12 h-12 rounded-full border-2 flex items-center justify-center transition-all group-hover:scale-110 ${rating >= 7.0
+                    ? 'bg-green-500/90 border-green-300'
+                    : rating >= 6.0
                         ? 'bg-blue-500/90 border-blue-300'
-                        : rating >= 7
-                            ? 'bg-primary/90 border-primary'
-                            : 'bg-white/90 border-white/60'
-                }`}>
-                <span className={`text-xs font-black ${isGoalkeeper || rating >= 7 ? 'text-black' : 'text-gray-800'}`}>
+                        : 'bg-red-500/90 border-red-300'
+                } ${isGoalkeeper ? 'ring-2 ring-yellow-400/50' : ''}`}>
+                <span className={`text-xs font-black ${rating >= 6.0 ? 'text-black' : 'text-white'}`}>
                     {player.number}
                 </span>
             </div>
@@ -206,12 +218,17 @@ function PlayerDot({ player, rating, position, style, onClick, isGoalkeeper }: P
                     <p className="text-xs font-bold text-white">{player.name}</p>
                     <div className="flex items-center gap-2 mt-1">
                         <span className="text-[10px] text-white/60 uppercase">{position}</span>
-                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${rating >= 8 ? 'bg-blue-500/20 text-blue-400' :
-                                rating >= 7 ? 'bg-primary/20 text-primary' :
-                                    'bg-white/20 text-white/60'
+                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${rating >= 7.0 ? 'bg-green-500/20 text-green-400' :
+                            rating >= 6.0 ? 'bg-blue-500/20 text-blue-400' :
+                                'bg-red-500/20 text-red-400'
                             }`}>
                             {rating.toFixed(1)}
                         </span>
+                        {isMotM && (
+                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-yellow-400/20 text-yellow-300 flex items-center gap-0.5">
+                                ⭐ MOTM
+                            </span>
+                        )}
                     </div>
                 </div>
             </div>

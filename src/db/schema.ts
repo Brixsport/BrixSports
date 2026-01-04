@@ -707,6 +707,9 @@ export { userXI, userXILikes, userXIComments } from './schema-xi';
 // Export User Lineups schemas
 export { userLineups, userLineupLikes, userLineupComments } from './schema-user-lineups';
 
+// Export Rating schemas
+export { playerRatings, ratingHistory } from './schema-ratings';
+
 // Export FPL schemas
 export {
     fplGameweeks,

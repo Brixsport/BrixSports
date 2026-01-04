@@ -106,4 +106,5 @@ export interface LineupEntry {
     position?: string;
     isStarter?: boolean;
     isCaptain?: boolean;
+    isMotM?: boolean; // Man of the Match - highest rated player
 }

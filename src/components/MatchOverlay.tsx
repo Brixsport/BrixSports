@@ -38,6 +38,11 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
   const [isScrolled, setIsScrolled] = useState(false);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
+  // Ratings state
+  const [ratings, setRatings] = useState<Record<string, { autoRating: number; finalRating: number | null; isMotM: boolean; notes: string | null }>>({});
+  const [loadingRatings, setLoadingRatings] = useState(false);
+  const [ratingsFetched, setRatingsFetched] = useState(false);
+
   // Use team data from match object (already populated by API)
   const homeTeam = match.homeTeam;
   const awayTeam = match.awayTeam;
@@ -157,6 +162,39 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
 
     fetchStandings();
   }, [activeTab, match.competition, standingsFetched]);
+
+  // Fetch ratings when lineups tab is active or match is finished
+  useEffect(() => {
+    const needsRatings = (activeTab === 'lineups' || match.status === 'FINISHED') && match.lineups;
+    if (!needsRatings || loadingRatings || ratingsFetched) return;
+
+    const fetchRatings = async () => {
+      setLoadingRatings(true);
+      try {
+        const response = await fetch(`/api/matches/${match.id}/ratings`);
+        if (response.ok) {
+          const data = await response.json();
+          const ratingsMap: Record<string, any> = {};
+          data.ratings.forEach((r: any) => {
+            ratingsMap[r.playerId] = {
+              autoRating: r.autoRating,
+              finalRating: r.finalRating,
+              isMotM: r.isMotM,
+              notes: r.adjustmentNotes
+            };
+          });
+          setRatings(ratingsMap);
+          setRatingsFetched(true);
+        }
+      } catch (error) {
+        console.error('Error fetching ratings:', error);
+      } finally {
+        setLoadingRatings(false);
+      }
+    };
+
+    fetchRatings();
+  }, [activeTab, match.id, match.lineups, match.status, loadingRatings, ratingsFetched]);
 
   // Handle scroll with debouncing to prevent jitter
   useEffect(() => {
@@ -446,8 +484,16 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
                     }}
                     homePlayers={players}
                     awayPlayers={players}
-                    homeLineup={match.lineups.home}
-                    awayLineup={match.lineups.away}
+                    homeLineup={match.lineups.home.map(entry => ({
+                      ...entry,
+                      rating: ratings[entry.playerId]?.finalRating || ratings[entry.playerId]?.autoRating || entry.rating || 6.0,
+                      isMotM: ratings[entry.playerId]?.isMotM || false
+                    }))}
+                    awayLineup={match.lineups.away.map(entry => ({
+                      ...entry,
+                      rating: ratings[entry.playerId]?.finalRating || ratings[entry.playerId]?.autoRating || entry.rating || 6.0,
+                      isMotM: ratings[entry.playerId]?.isMotM || false
+                    }))}
                     onPlayerClick={onSelectPlayer}
                   />
                 ) : (

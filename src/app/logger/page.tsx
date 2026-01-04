@@ -288,15 +288,19 @@ export default function LoggerPage() {
             const homeTeam = teams.find(t => t.id === match.homeTeamId);
             const awayTeam = teams.find(t => t.id === match.awayTeamId);
             const isLoggable = match.status === 'UPCOMING' || match.status === 'LIVE';
+            const isRateable = match.status === 'FINISHED';
 
             return (
               <motion.div
                 key={match.id}
-                whileHover={isLoggable ? { y: -5 } : {}}
-                onClick={() => isLoggable && setSelectedMatchId(match.id)}
+                whileHover={isLoggable || isRateable ? { y: -5 } : {}}
+                onClick={() => {
+                  if (isLoggable) setSelectedMatchId(match.id);
+                  // For finished matches, we'll use a direct link button instead of clicking the card
+                }}
                 className={`bg-white/5 border border-white/10 rounded-[32px] p-5 md:p-8 transition-all ${isLoggable
                   ? 'cursor-pointer group hover:bg-white/10 hover:border-primary/50'
-                  : 'opacity-50 cursor-not-allowed'
+                  : 'opacity-75' // Less opacity for finished but fully visible
                   }`}
               >
                 <div className="flex justify-between items-start mb-6 md:mb-8">
@@ -351,6 +355,15 @@ export default function LoggerPage() {
                       Start Input
                       <ChevronRight size={14} />
                     </div>
+                  ) : isRateable ? (
+                    <a
+                      href={`/admin/match-ratings/${match.id}`}
+                      className="flex items-center gap-2 px-3 py-2 bg-primary/20 hover:bg-primary/30 text-primary rounded-lg transition-colors border border-primary/20"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <span>Adjust Ratings</span>
+                      <ChevronRight size={14} />
+                    </a>
                   ) : (
                     <span className="text-gray-500">Match Ended</span>
                   )}

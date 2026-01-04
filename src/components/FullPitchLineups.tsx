@@ -70,9 +70,9 @@ const getPositionOnPitch = (position: string, index: number, totalInPosition: nu
 // Group players by position type
 const groupPlayersByPosition = (
     players: Record<string, Player>,
-    lineup: Array<{ playerId: string; rating: number; position?: string; isCaptain?: boolean }>
+    lineup: Array<{ playerId: string; rating: number; position?: string; isCaptain?: boolean; isMotM?: boolean }>
 ) => {
-    const groups: Record<string, Array<{ player: Player; rating: number; position: string; isCaptain: boolean }>> = {
+    const groups: Record<string, Array<{ player: Player; rating: number; position: string; isCaptain: boolean; isMotM: boolean }>> = {
         GK: [],
         DEF: [],
         MID: [],
@@ -86,15 +86,15 @@ const groupPlayersByPosition = (
         const pos = (entry.position || player.position || '').toLowerCase();
 
         if (pos.includes('gk') || pos.includes('goalkeeper')) {
-            groups.GK.push({ player, rating: entry.rating, position: entry.position || player.position, isCaptain: entry.isCaptain || false });
+            groups.GK.push({ player, rating: entry.rating, position: entry.position || player.position, isCaptain: entry.isCaptain || false, isMotM: entry.isMotM || false });
         } else if (pos.includes('def') || pos.includes('cb') || pos.includes('lb') || pos.includes('rb')) {
-            groups.DEF.push({ player, rating: entry.rating, position: entry.position || player.position, isCaptain: entry.isCaptain || false });
+            groups.DEF.push({ player, rating: entry.rating, position: entry.position || player.position, isCaptain: entry.isCaptain || false, isMotM: entry.isMotM || false });
         } else if (pos.includes('mid') || pos.includes('cm') || pos.includes('dm') || pos.includes('am') || pos.includes('lm') || pos.includes('rm')) {
-            groups.MID.push({ player, rating: entry.rating, position: entry.position || player.position, isCaptain: entry.isCaptain || false });
+            groups.MID.push({ player, rating: entry.rating, position: entry.position || player.position, isCaptain: entry.isCaptain || false, isMotM: entry.isMotM || false });
         } else if (pos.includes('fw') || pos.includes('st') || pos.includes('cf') || pos.includes('lw') || pos.includes('rw') || pos.includes('forward') || pos.includes('striker')) {
-            groups.FWD.push({ player, rating: entry.rating, position: entry.position || player.position, isCaptain: entry.isCaptain || false });
+            groups.FWD.push({ player, rating: entry.rating, position: entry.position || player.position, isCaptain: entry.isCaptain || false, isMotM: entry.isMotM || false });
         } else {
-            groups.MID.push({ player, rating: entry.rating, position: entry.position || player.position, isCaptain: entry.isCaptain || false });
+            groups.MID.push({ player, rating: entry.rating, position: entry.position || player.position, isCaptain: entry.isCaptain || false, isMotM: entry.isMotM || false });
         }
     });
 
@@ -169,6 +169,7 @@ export function FullPitchLineups({
                                     rating={item.rating}
                                     position={item.position}
                                     isCaptain={item.isCaptain}
+                                    isMotM={item.isMotM}
                                     style={position}
                                     onClick={() => onPlayerClick(item.player)}
                                     teamColor={homeTeam.color}
@@ -191,6 +192,7 @@ export function FullPitchLineups({
                                     rating={item.rating}
                                     position={item.position}
                                     isCaptain={item.isCaptain}
+                                    isMotM={item.isMotM}
                                     style={position}
                                     onClick={() => onPlayerClick(item.player)}
                                     teamColor={awayTeam.color}
@@ -223,19 +225,32 @@ interface PlayerDotProps {
     rating: number;
     position: string;
     isCaptain: boolean;
+    isMotM: boolean;
     style: { top: string; left: string };
     onClick: () => void;
     teamColor: string;
     isGoalkeeper?: boolean;
 }
 
-function PlayerDot({ player, rating, position, isCaptain, style, onClick, teamColor, isGoalkeeper }: PlayerDotProps) {
+function PlayerDot({ player, rating, position, isCaptain, isMotM, style, onClick, teamColor, isGoalkeeper }: PlayerDotProps) {
     return (
         <div
             className="absolute cursor-pointer group z-10"
             style={{ ...style, transform: 'translate(-50%, -50%)' }}
             onClick={onClick}
         >
+            {/* Man of the Match star */}
+            {isMotM && (
+                <div className="absolute -top-2 left-1/2 -translate-x-1/2 z-20">
+                    <div className="relative">
+                        <div className="absolute inset-0 bg-yellow-400 blur-md opacity-60 animate-pulse"></div>
+                        <svg className="w-5 h-5 relative z-10" viewBox="0 0 24 24" fill="gold" stroke="black" strokeWidth="1">
+                            <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+                        </svg>
+                    </div>
+                </div>
+            )}
+
             {/* Captain armband */}
             {isCaptain && (
                 <div className="absolute -top-1 -right-1 w-4 h-4 bg-yellow-400 rounded-full flex items-center justify-center z-20 border-2 border-black">
@@ -245,19 +260,14 @@ function PlayerDot({ player, rating, position, isCaptain, style, onClick, teamCo
 
             {/* Player circle */}
             <div
-                className={`relative w-11 h-11 md:w-12 md:h-12 rounded-full border-2 flex items-center justify-center transition-all group-hover:scale-125 group-hover:z-30 shadow-lg ${isGoalkeeper
-                        ? 'bg-yellow-500/95 border-yellow-300'
-                        : rating >= 8
-                            ? 'bg-blue-500/95 border-blue-300'
-                            : rating >= 7
-                                ? 'bg-primary/95 border-primary'
-                                : 'bg-white/95 border-white/70'
-                    }`}
-                style={{
-                    backgroundColor: !isGoalkeeper && rating < 7 ? teamColor : undefined
-                }}
+                className={`relative w-11 h-11 md:w-12 md:h-12 rounded-full border-2 flex items-center justify-center transition-all group-hover:scale-125 group-hover:z-30 shadow-lg ${rating >= 7.0
+                    ? 'bg-green-500/95 border-green-300'
+                    : rating >= 6.0
+                        ? 'bg-blue-500/95 border-blue-300'
+                        : 'bg-red-500/95 border-red-300'
+                    } ${isGoalkeeper ? 'ring-2 ring-yellow-400/50' : ''}`}
             >
-                <span className={`text-xs md:text-sm font-black ${isGoalkeeper || rating >= 7 ? 'text-black' : 'text-white'}`}>
+                <span className={`text-xs md:text-sm font-black ${rating >= 6.0 ? 'text-black' : 'text-white'}`}>
                     {player.number}
                 </span>
             </div>
@@ -268,12 +278,17 @@ function PlayerDot({ player, rating, position, isCaptain, style, onClick, teamCo
                     <p className="text-xs font-bold text-white">{player.name}</p>
                     <div className="flex items-center gap-2 mt-1">
                         <span className="text-[10px] text-white/60 uppercase">{position}</span>
-                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${rating >= 8 ? 'bg-blue-500/20 text-blue-400' :
-                                rating >= 7 ? 'bg-primary/20 text-primary' :
-                                    'bg-white/20 text-white/60'
+                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${rating >= 7.0 ? 'bg-green-500/20 text-green-400' :
+                            rating >= 6.0 ? 'bg-blue-500/20 text-blue-400' :
+                                'bg-red-500/20 text-red-400'
                             }`}>
                             {rating.toFixed(1)}
                         </span>
+                        {isMotM && (
+                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-yellow-400/20 text-yellow-300 flex items-center gap-0.5">
+                                ⭐ MOTM
+                            </span>
+                        )}
                         {isCaptain && (
                             <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-yellow-500/20 text-yellow-400">
                                 CAPTAIN

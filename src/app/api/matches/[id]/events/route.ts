@@ -134,6 +134,19 @@ export async function POST(
             await updatePlayerStats(match.sport, playerId, type, value);
         }
 
+        // Auto-calculate ratings after event (for live matches)
+        if (match.status === 'LIVE') {
+            try {
+                await fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/matches/${matchId}/ratings/calculate`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+            } catch (error) {
+                console.error('Error auto-calculating ratings:', error);
+                // Don't fail event creation if rating calculation fails
+            }
+        }
+
         return NextResponse.json({
             success: true,
             message: 'Event created successfully',

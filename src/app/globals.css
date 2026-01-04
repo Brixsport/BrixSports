@@ -132,4 +132,49 @@
     -ms-overflow-style: none;
     scrollbar-width: none;
   }
+  
+  /* Custom slider styles for rating adjustment */
+  input[type="range"].slider {
+    -webkit-appearance: none;
+    appearance: none;
+  }
+  
+  input[type="range"].slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: var(--primary);
+    cursor: pointer;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  }
+  
+  input[type="range"].slider::-moz-range-thumb {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: var(--primary);
+    cursor: pointer;
+    border: none;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  }
+  
+  input[type="range"].slider::-webkit-slider-track {
+    background: linear-gradient(to right, 
+      oklch(0.6 0.2 25) 0%, 
+      oklch(0.6 0.2 250) 50%, 
+      oklch(0.7 0.2 140) 100%
+    );
+    border-radius: 4px;
+  }
+  
+  input[type="range"].slider::-moz-range-track {
+    background: linear-gradient(to right, 
+      oklch(0.6 0.2 25) 0%, 
+      oklch(0.6 0.2 250) 50%, 
+      oklch(0.7 0.2 140) 100%
+    );
+    border-radius: 4px;
+  }
 }
