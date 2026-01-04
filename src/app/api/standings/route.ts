@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/db';
 import { standings } from '@/db/schema';
-import { eq, desc } from 'drizzle-orm';
+import { eq, desc, and, sql } from 'drizzle-orm';
 
 export async function GET(request: Request) {
     try {
@@ -9,17 +9,18 @@ export async function GET(request: Request) {
         const sport = searchParams.get('sport');
         const competition = searchParams.get('competition');
 
-        let query = db.select().from(standings).orderBy(desc(standings.points), desc(standings.goalDifference));
+        const whereConditions = [];
+        if (sport) whereConditions.push(eq(standings.sport, sport));
+        if (competition) whereConditions.push(eq(standings.competition, competition));
 
-        if (sport) {
-            query = query.where(eq(standings.sport, sport)) as any;
-        }
+        const allStandings = await db.query.standings.findMany({
+            where: whereConditions.length > 0 ? and(...whereConditions) : undefined,
+            with: {
+                team: true
+            },
+            orderBy: [desc(standings.points), desc(standings.goalDifference)]
+        });
 
-        if (competition) {
-            query = query.where(eq(standings.competition, competition)) as any;
-        }
-
-        const allStandings = await query;
         return NextResponse.json(allStandings);
     } catch (error) {
         console.error('Error fetching standings:', error);
