@@ -1,7 +1,7 @@
 'use client';
 
 import { motion } from 'framer-motion';
-import { Clock, MapPin, TrendingUp, Zap, Eye } from 'lucide-react';
+import { Clock, MapPin, TrendingUp, Zap, Eye, Video } from 'lucide-react';
 import Link from 'next/link';
 import { format } from 'date-fns';
 import MatchStatusBadge from './MatchStatusBadge';
@@ -36,6 +36,7 @@ interface LiveMatchCardProps {
         };
         events?: any[];
         stats?: any;
+        livestreamEnabled?: boolean;
     };
 }
 
@@ -53,8 +54,8 @@ export default function LiveMatchCard({ match }: LiveMatchCardProps) {
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
                 className={`relative overflow-hidden rounded-2xl border transition-all cursor-pointer ${isLive
-                        ? 'bg-gradient-to-br from-red-500/10 via-purple-500/10 to-pink-500/10 border-red-500/30 shadow-lg shadow-red-500/20'
-                        : 'bg-white/5 border-white/10 hover:border-white/20'
+                    ? 'bg-gradient-to-br from-red-500/10 via-purple-500/10 to-pink-500/10 border-red-500/30 shadow-lg shadow-red-500/20'
+                    : 'bg-white/5 border-white/10 hover:border-white/20'
                     }`}
             >
                 {/* Live Indicator */}
@@ -119,6 +120,12 @@ export default function LiveMatchCard({ match }: LiveMatchCardProps) {
                                     <div className="text-sm font-medium">
                                         {format(new Date(match.startTime), 'HH:mm')}
                                     </div>
+                                    {match.livestreamEnabled && (
+                                        <div className="flex items-center justify-center gap-1 mt-1 text-red-500 animate-pulse">
+                                            <Video className="w-3 h-3" />
+                                            <span className="text-xs font-bold">LIVE STREAM</span>
+                                        </div>
+                                    )}
                                 </div>
                             ) : (
                                 <div className="flex items-center gap-3">
