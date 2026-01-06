@@ -547,7 +547,7 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                         <div className="flex items-center gap-4">
                             {!matchStarted && (
                                 <button
-                                    onClick={() => {
+                                    onClick={async () => {
                                         console.log('🔘 Button clicked! lineupSet:', lineupSet);
                                         console.log('📋 Home players:', homePlayers.length, 'Away players:', awayPlayers.length);
                                         if (!lineupSet) {
@@ -556,6 +556,26 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                                         } else {
                                             console.log('▶️ Starting match...');
                                             setMatchStarted(true);
+
+                                            // Update match status in database to LIVE
+                                            try {
+                                                const response = await fetch(`/api/matches/${match.id}`, {
+                                                    method: 'PATCH',
+                                                    headers: { 'Content-Type': 'application/json' },
+                                                    body: JSON.stringify({
+                                                        status: 'LIVE',
+                                                    }),
+                                                });
+
+                                                if (response.ok) {
+                                                    console.log('✅ Match status updated to LIVE in database');
+                                                } else {
+                                                    console.error('❌ Failed to update match status');
+                                                }
+                                            } catch (error) {
+                                                console.error('❌ Error updating match status:', error);
+                                            }
+
                                             // Dispatch WebSocket event for match start
                                             if (typeof window !== 'undefined') {
                                                 window.dispatchEvent(new CustomEvent('MATCH_STATUS_CHANGE', {

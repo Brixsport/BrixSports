@@ -28,6 +28,7 @@ export interface Player {
     number: number;
     position: string;
     teamId: string;
+    sport?: SportType;
     avatar?: string;
     stats?: {
         appearances: number;

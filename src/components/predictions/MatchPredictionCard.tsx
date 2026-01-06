@@ -21,6 +21,7 @@ interface Match {
     startTime: string;
     competition: string;
     sport: string;
+    status?: 'UPCOMING' | 'LIVE' | 'FINISHED';
 }
 
 interface PredictionStats {
@@ -58,7 +59,9 @@ export function MatchPredictionCard({ match, onPredictionSubmit }: MatchPredicti
                 }
             };
             socket.on('prediction:updated', handlePredictionUpdate);
-            return () => socket.off('prediction:updated', handlePredictionUpdate);
+            return () => {
+                socket.off('prediction:updated', handlePredictionUpdate);
+            };
         }
     }, [isConnected, socket, match.id]);
 
@@ -225,6 +228,26 @@ export function MatchPredictionCard({ match, onPredictionSubmit }: MatchPredicti
                 </div>
             )}
 
+            {/* Match Status Warning */}
+            {match.status === 'LIVE' && (
+                <div className="px-6 py-4 bg-red-900/20 border-b border-red-500/20">
+                    <div className="flex items-center gap-3">
+                        <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
+                        <p className="text-sm font-semibold text-red-200">
+                            Match is currently LIVE - Predictions are closed
+                        </p>
+                    </div>
+                </div>
+            )}
+
+            {match.status === 'FINISHED' && (
+                <div className="px-6 py-4 bg-white/5 border-b border-white/10">
+                    <p className="text-sm font-semibold text-white/60 text-center">
+                        Match has ended - Predictions are closed
+                    </p>
+                </div>
+            )}
+
             {/* Prediction Form */}
             <div className="p-4 md:p-6 space-y-4 md:space-y-6">
                 {/* Score Prediction */}
@@ -242,7 +265,7 @@ export function MatchPredictionCard({ match, onPredictionSubmit }: MatchPredicti
                         <div className="flex items-center gap-1 md:gap-2">
                             <button
                                 onClick={() => setHomeScore(Math.max(0, homeScore - scoreStep))}
-                                disabled={submitted}
+                                disabled={submitted || match.status === 'LIVE' || match.status === 'FINISHED'}
                                 className="w-7 h-7 md:w-8 md:h-8 bg-white/10 hover:bg-white/20 disabled:bg-white/5 disabled:cursor-not-allowed text-white rounded-lg font-bold transition-colors text-sm md:text-base"
                             >
                                 -
@@ -252,7 +275,7 @@ export function MatchPredictionCard({ match, onPredictionSubmit }: MatchPredicti
                             </div>
                             <button
                                 onClick={() => setHomeScore(Math.min(maxScore, homeScore + scoreStep))}
-                                disabled={submitted}
+                                disabled={submitted || match.status === 'LIVE' || match.status === 'FINISHED'}
                                 className="w-7 h-7 md:w-8 md:h-8 bg-white/10 hover:bg-white/20 disabled:bg-white/5 disabled:cursor-not-allowed text-white rounded-lg font-bold transition-colors text-sm md:text-base"
                             >
                                 +
@@ -279,7 +302,7 @@ export function MatchPredictionCard({ match, onPredictionSubmit }: MatchPredicti
                         <div className="flex items-center gap-1 md:gap-2">
                             <button
                                 onClick={() => setAwayScore(Math.max(0, awayScore - scoreStep))}
-                                disabled={submitted}
+                                disabled={submitted || match.status === 'LIVE' || match.status === 'FINISHED'}
                                 className="w-7 h-7 md:w-8 md:h-8 bg-white/10 hover:bg-white/20 disabled:bg-white/5 disabled:cursor-not-allowed text-white rounded-lg font-bold transition-colors text-sm md:text-base"
                             >
                                 -
@@ -289,7 +312,7 @@ export function MatchPredictionCard({ match, onPredictionSubmit }: MatchPredicti
                             </div>
                             <button
                                 onClick={() => setAwayScore(Math.min(maxScore, awayScore + scoreStep))}
-                                disabled={submitted}
+                                disabled={submitted || match.status === 'LIVE' || match.status === 'FINISHED'}
                                 className="w-7 h-7 md:w-8 md:h-8 bg-white/10 hover:bg-white/20 disabled:bg-white/5 disabled:cursor-not-allowed text-white rounded-lg font-bold transition-colors text-sm md:text-base"
                             >
                                 +
@@ -313,7 +336,7 @@ export function MatchPredictionCard({ match, onPredictionSubmit }: MatchPredicti
                         max="100"
                         value={confidence}
                         onChange={(e) => setConfidence(parseInt(e.target.value))}
-                        disabled={submitted}
+                        disabled={submitted || match.status === 'LIVE' || match.status === 'FINISHED'}
                         className="w-full h-2 bg-white/10 rounded-lg appearance-none cursor-pointer disabled:cursor-not-allowed"
                         style={{
                             background: `linear-gradient(to right, var(--primary) 0%, var(--primary) ${confidence}%, #ffffff20 ${confidence}%, #ffffff20 100%)`

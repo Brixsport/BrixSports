@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Activity, Save, Undo2, Clock, Users, TrendingUp, Target, Play, Settings, Trophy, Zap, Shield, AlertTriangle, ArrowRightLeft } from 'lucide-react';
+import { X, Activity, Save, Undo2, Clock, Users, TrendingUp, Target, Play, Pause, Settings, Trophy, Zap, Shield, AlertTriangle, ArrowRightLeft } from 'lucide-react';
 import { useMultiLogger } from '@/hooks/useMultiLogger';
 import { MultiLoggerStatus } from '@/components/MultiLoggerStatus';
 import type { SyncEvent } from '@/lib/multiLogger';
@@ -69,6 +69,9 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
     // Settings
     const [showSettingsModal, setShowSettingsModal] = useState(false);
 
+    // Timer control
+    const [timerRunning, setTimerRunning] = useState(false);
+
     // Multi-logger support
     const {
         activeLoggers,
@@ -97,6 +100,24 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
             awayStartersCount: awayStarters.length
         });
     }, [showLineupModal, lineupSet, homePlayers.length, awayPlayers.length, homeStarters.length, awayStarters.length]);
+
+    // Auto-timer: Increment minute every second when running
+    useEffect(() => {
+        if (timerRunning && matchStarted && !matchEnded) {
+            const interval = setInterval(() => {
+                setMinute((prev) => {
+                    if (prev >= halfDuration) {
+                        // At half duration, start counting extra time
+                        setExtraTime((et) => et + 1);
+                        return prev;
+                    }
+                    return prev + 1;
+                });
+            }, 1000); // Increment every second (real-time)
+
+            return () => clearInterval(interval);
+        }
+    }, [timerRunning, matchStarted, matchEnded, halfDuration]);
 
     // Fetch teams, players, and existing events
     useEffect(() => {
@@ -434,26 +455,51 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                         <div className="flex items-center gap-4">
                             {!matchStarted && (
                                 <button
-                                    onClick={() => {
-                                        console.log('⚽ [FOOTBALL] Start Match button clicked!');
-                                        console.log('📋 [FOOTBALL] Players - Home:', homePlayers.length, 'Away:', awayPlayers.length);
-                                        setMatchStarted(true);
-                                        // Dispatch WebSocket event for match start
-                                        if (typeof window !== 'undefined') {
-                                            window.dispatchEvent(new CustomEvent('MATCH_STATUS_CHANGE', {
-                                                detail: {
-                                                    matchId: match.id,
-                                                    status: 'LIVE',
-                                                    homeTeamId: match.homeTeamId,
-                                                    awayTeamId: match.awayTeamId
+                                    onClick={async () => {
+                                        console.log('⚽ [FOOTBALL] Button clicked! lineupSet:', lineupSet);
+                                        if (!lineupSet) {
+                                            console.log('✅ [FOOTBALL] Opening lineup modal...');
+                                            setShowLineupModal(true);
+                                        } else {
+                                            console.log('▶️ [FOOTBALL] Starting match...');
+                                            setMatchStarted(true);
+
+                                            // Update match status in database to LIVE
+                                            try {
+                                                const response = await fetch(`/api/matches/${match.id}`, {
+                                                    method: 'PATCH',
+                                                    headers: { 'Content-Type': 'application/json' },
+                                                    body: JSON.stringify({
+                                                        status: 'LIVE',
+                                                    }),
+                                                });
+
+                                                if (response.ok) {
+                                                    console.log('✅ Match status updated to LIVE in database');
+                                                } else {
+                                                    console.error('❌ Failed to update match status');
                                                 }
-                                            }));
+                                            } catch (error) {
+                                                console.error('❌ Error updating match status:', error);
+                                            }
+
+                                            // Dispatch WebSocket event for match start
+                                            if (typeof window !== 'undefined') {
+                                                window.dispatchEvent(new CustomEvent('MATCH_STATUS_CHANGE', {
+                                                    detail: {
+                                                        matchId: match.id,
+                                                        status: 'LIVE',
+                                                        homeTeamId: match.homeTeamId,
+                                                        awayTeamId: match.awayTeamId
+                                                    }
+                                                }));
+                                            }
                                         }
                                     }}
                                     className="px-6 py-3 bg-green-500 text-black rounded-2xl hover:scale-105 transition-all flex items-center gap-2 font-black uppercase tracking-widest"
                                 >
                                     <Play size={16} />
-                                    Start Match
+                                    {lineupSet ? 'Start Match' : 'Set Lineup & Start'}
                                 </button>
                             )}
 
@@ -543,9 +589,22 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                                 </div>
                             </div>
                             <div className="flex flex-col items-center gap-2">
-                                <div className="flex items-center justify-center gap-2 text-4xl font-display italic">
+                                <div className="flex items-center justify-center gap-3 text-4xl font-display italic">
                                     <Clock size={32} className="text-primary" />
                                     {minute}'{extraTime > 0 && <span className="text-2xl text-orange-500">+{extraTime}</span>}
+                                    {matchStarted && !matchEnded && (
+                                        <button
+                                            onClick={() => setTimerRunning(!timerRunning)}
+                                            className="ml-2 p-2 bg-white/10 hover:bg-white/20 rounded-lg transition-colors"
+                                            title={timerRunning ? 'Pause Timer' : 'Start Timer'}
+                                        >
+                                            {timerRunning ? (
+                                                <Pause size={20} className="text-primary" />
+                                            ) : (
+                                                <Play size={20} className="text-primary" />
+                                            )}
+                                        </button>
+                                    )}
                                 </div>
                                 <input
                                     type="range"
@@ -839,6 +898,197 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                     }}
                 />
             )}
+
+            {/* Lineup Selection Modal - Football (11 players) */}
+            <AnimatePresence>
+                {showLineupModal && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 bg-black/90 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto"
+                        onClick={() => !lineupSet && setShowLineupModal(false)}
+                    >
+                        <motion.div
+                            initial={{ scale: 0.9, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            exit={{ scale: 0.9, opacity: 0 }}
+                            onClick={(e) => e.stopPropagation()}
+                            className="bg-[#0a0a0a] border border-white/10 rounded-[32px] p-8 max-w-6xl w-full max-h-[90vh] overflow-y-auto"
+                        >
+                            <div className="flex items-center justify-between mb-6">
+                                <div>
+                                    <h2 className="text-3xl font-display italic uppercase mb-2">Set Starting Lineup</h2>
+                                    <p className="text-sm text-white/40">Select 11 starters for each team before starting the match</p>
+                                </div>
+                                {!lineupSet && (
+                                    <button
+                                        onClick={() => setShowLineupModal(false)}
+                                        className="p-2 hover:bg-white/10 rounded-full transition-colors"
+                                    >
+                                        <X size={20} />
+                                    </button>
+                                )}
+                            </div>
+
+                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                                {/* Home Team Lineup */}
+                                <div className="bg-white/5 border border-white/10 rounded-[24px] p-6">
+                                    <div className="flex items-center gap-3 mb-6">
+                                        {homeTeam?.logo ? (
+                                            <img src={homeTeam.logo} alt={homeTeam.name} className="w-12 h-12 object-contain" />
+                                        ) : (
+                                            <span className="text-3xl">⚽</span>
+                                        )}
+                                        <div>
+                                            <h3 className="text-xl font-black uppercase">{homeTeam?.name}</h3>
+                                            <p className="text-xs text-white/40">
+                                                {homeStarters.length}/11 Starters Selected
+                                            </p>
+                                        </div>
+                                    </div>
+
+                                    <div className="space-y-2 max-h-[500px] overflow-y-auto pr-2">
+                                        {homePlayers.map((player) => {
+                                            const isStarter = homeStarters.includes(player.id);
+                                            return (
+                                                <button
+                                                    key={player.id}
+                                                    onClick={() => {
+                                                        if (isStarter) {
+                                                            setHomeStarters(homeStarters.filter(id => id !== player.id));
+                                                        } else if (homeStarters.length < 11) {
+                                                            setHomeStarters([...homeStarters, player.id]);
+                                                            setHomeSubs(homeSubs.filter(id => id !== player.id));
+                                                        }
+                                                    }}
+                                                    className={`w-full border rounded-xl p-4 transition-all text-left ${isStarter
+                                                        ? 'bg-green-500/20 border-green-500'
+                                                        : 'bg-white/5 border-white/10 hover:bg-white/10'
+                                                        }`}
+                                                >
+                                                    <div className="flex items-center justify-between">
+                                                        <div className="flex items-center gap-3">
+                                                            <div
+                                                                className="w-10 h-10 rounded-full flex items-center justify-center font-display text-lg font-bold border-2"
+                                                                style={{
+                                                                    backgroundColor: homeTeam?.color,
+                                                                    borderColor: isStarter ? '#22c55e' : 'rgba(255,255,255,0.3)',
+                                                                }}
+                                                            >
+                                                                {player.number}
+                                                            </div>
+                                                            <div>
+                                                                <p className="text-sm font-black uppercase">{player.name}</p>
+                                                                <p className="text-xs text-white/40">{player.position}</p>
+                                                            </div>
+                                                        </div>
+                                                        {isStarter && (
+                                                            <span className="text-xs font-black uppercase tracking-widest text-green-500">STARTER</span>
+                                                        )}
+                                                    </div>
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+
+                                {/* Away Team Lineup */}
+                                <div className="bg-white/5 border border-white/10 rounded-[24px] p-6">
+                                    <div className="flex items-center gap-3 mb-6">
+                                        {awayTeam?.logo ? (
+                                            <img src={awayTeam.logo} alt={awayTeam.name} className="w-12 h-12 object-contain" />
+                                        ) : (
+                                            <span className="text-3xl">⚽</span>
+                                        )}
+                                        <div>
+                                            <h3 className="text-xl font-black uppercase">{awayTeam?.name}</h3>
+                                            <p className="text-xs text-white/40">
+                                                {awayStarters.length}/11 Starters Selected
+                                            </p>
+                                        </div>
+                                    </div>
+
+                                    <div className="space-y-2 max-h-[500px] overflow-y-auto pr-2">
+                                        {awayPlayers.map((player) => {
+                                            const isStarter = awayStarters.includes(player.id);
+                                            return (
+                                                <button
+                                                    key={player.id}
+                                                    onClick={() => {
+                                                        if (isStarter) {
+                                                            setAwayStarters(awayStarters.filter(id => id !== player.id));
+                                                        } else if (awayStarters.length < 11) {
+                                                            setAwayStarters([...awayStarters, player.id]);
+                                                            setAwaySubs(awaySubs.filter(id => id !== player.id));
+                                                        }
+                                                    }}
+                                                    className={`w-full border rounded-xl p-4 transition-all text-left ${isStarter
+                                                        ? 'bg-green-500/20 border-green-500'
+                                                        : 'bg-white/5 border-white/10 hover:bg-white/10'
+                                                        }`}
+                                                >
+                                                    <div className="flex items-center justify-between">
+                                                        <div className="flex items-center gap-3">
+                                                            <div
+                                                                className="w-10 h-10 rounded-full flex items-center justify-center font-display text-lg font-bold border-2"
+                                                                style={{
+                                                                    backgroundColor: awayTeam?.color,
+                                                                    borderColor: isStarter ? '#22c55e' : 'rgba(255,255,255,0.3)',
+                                                                }}
+                                                            >
+                                                                {player.number}
+                                                            </div>
+                                                            <div>
+                                                                <p className="text-sm font-black uppercase">{player.name}</p>
+                                                                <p className="text-xs text-white/40">{player.position}</p>
+                                                            </div>
+                                                        </div>
+                                                        {isStarter && (
+                                                            <span className="text-xs font-black uppercase tracking-widest text-green-500">STARTER</span>
+                                                        )}
+                                                    </div>
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="mt-8 flex items-center justify-between gap-4">
+                                <div className="flex-1 bg-green-500/10 border border-green-500/20 rounded-xl p-4">
+                                    <p className="text-xs font-black uppercase tracking-widest text-green-500 mb-2">Lineup Status</p>
+                                    <div className="grid grid-cols-2 gap-4 text-sm">
+                                        <div>
+                                            <p className="text-white/40 text-xs">{homeTeam?.shortName} Starters</p>
+                                            <p className="font-bold text-white">{homeStarters.length}/11</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-white/40 text-xs">{awayTeam?.shortName} Starters</p>
+                                            <p className="font-bold text-white">{awayStarters.length}/11</p>
+                                        </div>
+                                    </div>
+                                </div>
+                                <button
+                                    onClick={() => {
+                                        if (homeStarters.length === 11 && awayStarters.length === 11) {
+                                            // Set remaining players as subs
+                                            setHomeSubs(homePlayers.filter(p => !homeStarters.includes(p.id)).map(p => p.id));
+                                            setAwaySubs(awayPlayers.filter(p => !awayStarters.includes(p.id)).map(p => p.id));
+                                            setLineupSet(true);
+                                            setShowLineupModal(false);
+                                        }
+                                    }}
+                                    disabled={homeStarters.length !== 11 || awayStarters.length !== 11}
+                                    className="px-8 py-4 bg-green-500 text-black rounded-xl font-black uppercase tracking-widest hover:scale-105 transition-transform disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
+                                >
+                                    Confirm Lineup & Start
+                                </button>
+                            </div>
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
 
             {/* Settings Modal */}
             {showSettingsModal && (

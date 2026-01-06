@@ -148,6 +148,116 @@ export default function Home() {
     fetchMatches();
   }, []);
 
+  // Listen for match status changes from logger
+  useEffect(() => {
+    const handleMatchStatusChange = (event: any) => {
+      console.log('🔄 Match status changed, refreshing matches...', event.detail);
+      // Refetch matches to get updated status
+      const fetchMatches = async () => {
+        try {
+          const [basketballResponse, footballResponse] = await Promise.all([
+            fetch('/api/basketball/matches'),
+            fetch('/api/football/matches')
+          ]);
+
+          const basketballData = await basketballResponse.json();
+          const footballData = await footballResponse.json();
+
+          const allMatches = [];
+
+          if (basketballData.success && basketballData.matches) {
+            const basketballMatches = basketballData.matches.map((match: any) => {
+              let dbStats = {};
+              try {
+                dbStats = typeof match.stats === 'string' ? JSON.parse(match.stats) : (match.stats || {});
+              } catch (e) {
+                console.error('Error parsing match stats:', e);
+              }
+
+              return {
+                id: match.id,
+                homeTeamId: match.homeTeamId,
+                awayTeamId: match.awayTeamId,
+                homeScore: match.homeScore || 0,
+                awayScore: match.awayScore || 0,
+                status: match.status,
+                startTime: match.startTime,
+                venue: match.venue,
+                competition: match.competition,
+                sport: 'Basketball',
+                matchType: 'competition',
+                homeTeam: match.homeTeam,
+                awayTeam: match.awayTeam,
+                events: [],
+                stats: {
+                  possession: [0, 0],
+                  shots: [0, 0],
+                  shotsOnTarget: [0, 0],
+                  corners: [0, 0],
+                  fouls: [0, 0],
+                  yellowCards: [0, 0],
+                  redCards: [0, 0],
+                  ...dbStats
+                }
+              };
+            });
+            allMatches.push(...basketballMatches);
+          }
+
+          if (footballData.success && footballData.matches) {
+            const footballMatches = footballData.matches.map((match: any) => {
+              let dbStats = {};
+              try {
+                dbStats = typeof match.stats === 'string' ? JSON.parse(match.stats) : (match.stats || {});
+              } catch (e) {
+                console.error('Error parsing match stats:', e);
+              }
+
+              return {
+                id: match.id,
+                homeTeamId: match.homeTeamId,
+                awayTeamId: match.awayTeamId,
+                homeScore: match.homeScore || 0,
+                awayScore: match.awayScore || 0,
+                status: match.status,
+                startTime: match.startTime,
+                venue: match.venue,
+                competition: match.competition,
+                sport: 'Football',
+                matchType: 'competition',
+                homeTeam: match.homeTeam,
+                awayTeam: match.awayTeam,
+                events: [],
+                stats: dbStats
+              };
+            });
+            allMatches.push(...footballMatches);
+          }
+
+          setMatches(allMatches);
+
+          // Show notification
+          addNotification({
+            title: 'Match Started!',
+            message: `A match is now LIVE`,
+            type: 'info'
+          });
+        } catch (error) {
+          console.error('Error refreshing matches:', error);
+        }
+      };
+
+      fetchMatches();
+    };
+
+    // Listen for custom event from logger
+    window.addEventListener('MATCH_STATUS_CHANGE', handleMatchStatusChange);
+
+    return () => {
+      window.removeEventListener('MATCH_STATUS_CHANGE', handleMatchStatusChange);
+    };
+  }, [addNotification]);
+
   // Check for existing auth on mount
   useEffect(() => {
     const token = localStorage.getItem('authToken');
