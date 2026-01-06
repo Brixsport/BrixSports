@@ -165,9 +165,17 @@ export default function AdminPage() {
                         <tr key={match.id} className="group hover:bg-white/5 transition-colors">
                           <td className="p-6">
                             <div className="flex items-center gap-3">
-                              <span className="text-xl">{homeTeam?.logo || '⚽'}</span>
+                              {homeTeam?.logo ? (
+                                <img src={homeTeam.logo} alt={homeTeam.name} className="w-6 h-6 object-contain" />
+                              ) : (
+                                <span className="text-xl">⚽</span>
+                              )}
                               <span className="text-xs font-bold italic text-white/40">VS</span>
-                              <span className="text-xl">{awayTeam?.logo || '⚽'}</span>
+                              {awayTeam?.logo ? (
+                                <img src={awayTeam.logo} alt={awayTeam.name} className="w-6 h-6 object-contain" />
+                              ) : (
+                                <span className="text-xl">⚽</span>
+                              )}
                               <div className="ml-2">
                                 <p className="text-sm font-bold truncate">{homeTeam?.shortName || 'TBD'} vs {awayTeam?.shortName || 'TBD'}</p>
                                 <p className="text-[10px] text-white/20 uppercase tracking-widest">{match.competition || 'N/A'}</p>
