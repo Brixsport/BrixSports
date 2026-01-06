@@ -87,6 +87,18 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
         enabled: !!currentLogger,
     });
 
+    // Debug: Monitor lineup modal state
+    useEffect(() => {
+        console.log('🎭 Lineup Modal State Changed:', showLineupModal);
+        console.log('📊 Current State:', {
+            showLineupModal,
+            lineupSet,
+            homePlayersCount: homePlayers.length,
+            awayPlayersCount: awayPlayers.length,
+            homeStartersCount: homeStarters.length,
+            awayStartersCount: awayStarters.length
+        });
+    }, [showLineupModal, lineupSet, homePlayers.length, awayPlayers.length, homeStarters.length, awayStarters.length]);
 
     // Dynamic Player Rating Calculation
     const calculatePlayerRating = (playerId: string, currentEvents: any[] = events) => {
@@ -536,9 +548,13 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                             {!matchStarted && (
                                 <button
                                     onClick={() => {
+                                        console.log('🔘 Button clicked! lineupSet:', lineupSet);
+                                        console.log('📋 Home players:', homePlayers.length, 'Away players:', awayPlayers.length);
                                         if (!lineupSet) {
+                                            console.log('✅ Opening lineup modal...');
                                             setShowLineupModal(true);
                                         } else {
+                                            console.log('▶️ Starting match...');
                                             setMatchStarted(true);
                                             // Dispatch WebSocket event for match start
                                             if (typeof window !== 'undefined') {

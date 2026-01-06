@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
     BookOpen, Code, Database, Rocket, Settings, Users,
     FileCode, GitBranch, Terminal, Package, Layers,
@@ -50,6 +50,11 @@ export default function DocsPage() {
     const [activeSection, setActiveSection] = useState('getting-started');
     const [searchQuery, setSearchQuery] = useState('');
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+    const [isMounted, setIsMounted] = useState(false);
+
+    useEffect(() => {
+        setIsMounted(true);
+    }, []);
 
     const sections: DocSection[] = [
         {
@@ -758,7 +763,7 @@ git push origin feature/your-feature-name
                 <div className="flex flex-col lg:flex-row gap-8">
                     {/* Sidebar */}
                     <AnimatePresence>
-                        {(mobileMenuOpen || window.innerWidth >= 1024) && (
+                        {(mobileMenuOpen || (isMounted && window.innerWidth >= 1024)) && (
                             <motion.aside
                                 initial={{ x: -300, opacity: 0 }}
                                 animate={{ x: 0, opacity: 1 }}
@@ -790,8 +795,8 @@ git push origin feature/your-feature-name
                                                         setMobileMenuOpen(false);
                                                     }}
                                                     className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all ${activeSection === section.id
-                                                            ? 'bg-gradient-to-r from-blue-500/20 to-purple-500/20 border border-blue-500/30 text-white'
-                                                            : 'hover:bg-white/5 text-gray-400 hover:text-white'
+                                                        ? 'bg-gradient-to-r from-blue-500/20 to-purple-500/20 border border-blue-500/30 text-white'
+                                                        : 'hover:bg-white/5 text-gray-400 hover:text-white'
                                                         }`}
                                                 >
                                                     <Icon className="w-5 h-5" />

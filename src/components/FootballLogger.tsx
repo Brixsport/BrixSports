@@ -85,6 +85,19 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
         enabled: !!currentLogger,
     });
 
+    // Debug: Monitor lineup modal state
+    useEffect(() => {
+        console.log('⚽ [FOOTBALL] Lineup Modal State Changed:', showLineupModal);
+        console.log('📊 [FOOTBALL] Current State:', {
+            showLineupModal,
+            lineupSet,
+            homePlayersCount: homePlayers.length,
+            awayPlayersCount: awayPlayers.length,
+            homeStartersCount: homeStarters.length,
+            awayStartersCount: awayStarters.length
+        });
+    }, [showLineupModal, lineupSet, homePlayers.length, awayPlayers.length, homeStarters.length, awayStarters.length]);
+
     // Fetch teams, players, and existing events
     useEffect(() => {
         const fetchData = async () => {
@@ -422,9 +435,13 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                             {!matchStarted && (
                                 <button
                                     onClick={() => {
+                                        console.log('⚽ [FOOTBALL] Button clicked! lineupSet:', lineupSet);
+                                        console.log('📋 [FOOTBALL] Home players:', homePlayers.length, 'Away players:', awayPlayers.length);
                                         if (!lineupSet) {
+                                            console.log('✅ [FOOTBALL] Opening lineup modal...');
                                             setShowLineupModal(true);
                                         } else {
+                                            console.log('▶️ [FOOTBALL] Starting match...');
                                             setMatchStarted(true);
                                             // Dispatch WebSocket event for match start
                                             if (typeof window !== 'undefined') {
