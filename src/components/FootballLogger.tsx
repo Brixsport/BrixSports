@@ -435,31 +435,25 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                             {!matchStarted && (
                                 <button
                                     onClick={() => {
-                                        console.log('⚽ [FOOTBALL] Button clicked! lineupSet:', lineupSet);
-                                        console.log('📋 [FOOTBALL] Home players:', homePlayers.length, 'Away players:', awayPlayers.length);
-                                        if (!lineupSet) {
-                                            console.log('✅ [FOOTBALL] Opening lineup modal...');
-                                            setShowLineupModal(true);
-                                        } else {
-                                            console.log('▶️ [FOOTBALL] Starting match...');
-                                            setMatchStarted(true);
-                                            // Dispatch WebSocket event for match start
-                                            if (typeof window !== 'undefined') {
-                                                window.dispatchEvent(new CustomEvent('MATCH_STATUS_CHANGE', {
-                                                    detail: {
-                                                        matchId: match.id,
-                                                        status: 'LIVE',
-                                                        homeTeamId: match.homeTeamId,
-                                                        awayTeamId: match.awayTeamId
-                                                    }
-                                                }));
-                                            }
+                                        console.log('⚽ [FOOTBALL] Start Match button clicked!');
+                                        console.log('📋 [FOOTBALL] Players - Home:', homePlayers.length, 'Away:', awayPlayers.length);
+                                        setMatchStarted(true);
+                                        // Dispatch WebSocket event for match start
+                                        if (typeof window !== 'undefined') {
+                                            window.dispatchEvent(new CustomEvent('MATCH_STATUS_CHANGE', {
+                                                detail: {
+                                                    matchId: match.id,
+                                                    status: 'LIVE',
+                                                    homeTeamId: match.homeTeamId,
+                                                    awayTeamId: match.awayTeamId
+                                                }
+                                            }));
                                         }
                                     }}
                                     className="px-6 py-3 bg-green-500 text-black rounded-2xl hover:scale-105 transition-all flex items-center gap-2 font-black uppercase tracking-widest"
                                 >
                                     <Play size={16} />
-                                    {lineupSet ? 'Start Match' : 'Set Lineup & Start'}
+                                    Start Match
                                 </button>
                             )}
 
