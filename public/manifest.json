@@ -57,18 +57,6 @@
             "purpose": "any maskable"
         }
     ],
-    "screenshots": [
-        {
-            "src": "/screenshots/home.png",
-            "sizes": "1280x720",
-            "type": "image/png"
-        },
-        {
-            "src": "/screenshots/live.png",
-            "sizes": "1280x720",
-            "type": "image/png"
-        }
-    ],
     "categories": [
         "sports",
         "news"

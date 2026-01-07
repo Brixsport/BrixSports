@@ -54,10 +54,24 @@ export function useWebSocket(options: UseWebSocketOptions = {}): UseWebSocketRet
         if (!autoConnect) return;
 
         // Initialize Socket.IO connection
-        let socketUrl = process.env.NEXT_PUBLIC_WS_URL || '';
+        let socketUrl = process.env.NEXT_PUBLIC_WS_URL;
+
+        // Determine if we are on localhost
+        const isLocalhost = typeof window !== 'undefined' && window.location.hostname === 'localhost';
+
+        // If no URL is provided and we are NOT on localhost, do not attempt to connect to avoiding polling Vercel
+        if (!socketUrl && !isLocalhost) {
+            console.warn('WebSocket URL not configured. Real-time features disabled.');
+            return;
+        }
+
+        // If on localhost and no URL, default to current origin (handled by server.js)
+        if (!socketUrl) {
+            socketUrl = '';
+        }
 
         // Safety check: specific fix for local development to avoid connecting to production
-        if (typeof window !== 'undefined' && window.location.hostname === 'localhost') {
+        if (isLocalhost) {
             if (socketUrl.includes('vercel.app') || socketUrl.includes('herokuapp.com')) {
                 console.warn('⚠️ Dev mode detected: Ignoring production WS URL to prevent connection errors. Using local origin.');
                 socketUrl = ''; // Use current origin (relative path)

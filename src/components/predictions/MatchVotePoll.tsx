@@ -39,6 +39,11 @@ import { useWebSocket } from '@/hooks/useWebSocket';
 export function MatchVotePoll({ match, compact = false }: MatchVotePollProps) {
     const { user, isAuthenticated, openAuthModal } = useAuth();
     const { socket, isConnected } = useWebSocket({ autoConnect: true });
+    const [mounted, setMounted] = useState(false);
+
+    useEffect(() => {
+        setMounted(true);
+    }, []);
     // ... existing state ...
     const [pollData, setPollData] = useState<PollData>({
         totalVotes: 0,
@@ -157,7 +162,7 @@ export function MatchVotePoll({ match, compact = false }: MatchVotePollProps) {
                     </span>
                 </div>
 
-                {!showResults && isAuthenticated ? (
+                {mounted && !showResults && isAuthenticated ? (
                     <div className="grid grid-cols-3 gap-2">
                         <button
                             onClick={() => handleVote('home')}
@@ -243,7 +248,7 @@ export function MatchVotePoll({ match, compact = false }: MatchVotePollProps) {
             </div>
 
             <div className="p-4 md:p-6 space-y-4 md:space-y-6">
-                {!showResults && isAuthenticated ? (
+                {mounted && !showResults && isAuthenticated ? (
                     <>
                         <p className="text-center text-white/60 text-sm">Who do you think will win this match?</p>
 
@@ -376,7 +381,7 @@ export function MatchVotePoll({ match, compact = false }: MatchVotePollProps) {
                             })}
                         </div>
 
-                        {!isAuthenticated && (
+                        {mounted && !isAuthenticated && (
                             <div className="text-center pt-4">
                                 <p className="text-sm text-white/40">
                                     <button
