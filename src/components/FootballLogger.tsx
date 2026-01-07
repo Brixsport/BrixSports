@@ -97,6 +97,7 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
     const [pendingEvent, setPendingEvent] = useState<{ type: FootballEventType; isGoal?: boolean } | null>(null);
     const [selectedEventPlayer, setSelectedEventPlayer] = useState<string | null>(null);
     const [showAssistModal, setShowAssistModal] = useState(false);
+    const [showFinishModal, setShowFinishModal] = useState(false);
 
     // Lineup Management
     const [showLineupModal, setShowLineupModal] = useState(false);
@@ -391,7 +392,8 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
         const player = allPlayers.find(p => p.id === playerId);
         const assistPlayer = assistPlayerId ? allPlayers.find(p => p.id === assistPlayerId) : null;
 
-        const isGoal = type === 'Goal';
+        const isScoringEvent = ['Goal', 'Penalty', 'Own Goal'].includes(type);
+
         const newEvent = {
             id: `e${events.length + 1}`,
             type,
@@ -404,7 +406,7 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                 ? `${assistPlayer.name} IN for ${player?.name || 'Unknown'}`
                 : player?.name || '',
             assistDetail: type === 'Substitution' ? undefined : assistPlayer?.name,
-            value: isGoal ? 1 : undefined,
+            value: isScoringEvent ? 1 : undefined,
             loggerId: currentLogger?.id,
             loggerName: currentLogger?.name,
             createdAt: new Date(),
@@ -414,15 +416,28 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
         setEvents([...events, newEvent]);
 
         // Calculate new scores
-        const newHomeScore = selectedTeam === 'home' && isGoal ? homeScore + 1 : homeScore;
-        const newAwayScore = selectedTeam === 'away' && isGoal ? awayScore + 1 : awayScore;
+        let newHomeScore = homeScore;
+        let newAwayScore = awayScore;
 
-        // Update scores for scoring events
-        if (isGoal) {
-            if (selectedTeam === 'home') {
-                setHomeScore(newHomeScore);
+        if (isScoringEvent) {
+            if (type === 'Own Goal') {
+                // Own goal scores for the OPPONENT
+                if (selectedTeam === 'home') {
+                    newAwayScore = awayScore + 1;
+                    setAwayScore(newAwayScore);
+                } else {
+                    newHomeScore = homeScore + 1;
+                    setHomeScore(newHomeScore);
+                }
             } else {
-                setAwayScore(newAwayScore);
+                // Goal/Penalty scores for the SELECTED team
+                if (selectedTeam === 'home') {
+                    newHomeScore = homeScore + 1;
+                    setHomeScore(newHomeScore);
+                } else {
+                    newAwayScore = awayScore + 1;
+                    setAwayScore(newAwayScore);
+                }
             }
         }
 
@@ -448,7 +463,7 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                     playerId,
                     relatedPlayerId: assistPlayerId || null,
                     detail: newEvent.detail,
-                    value: isGoal ? 1 : null,
+                    value: isScoringEvent ? 1 : null,
                     loggerId: currentLogger?.id,
                     loggerName: currentLogger?.name,
                 }),
@@ -481,7 +496,7 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                 }
             });
 
-            if (isGoal) {
+            if (isScoringEvent) {
                 emit('match:score:updated', {
                     matchId: match.id,
                     homeScore: newHomeScore,
@@ -499,12 +514,22 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
         if (events.length === 0) return;
         const lastEvent = events[events.length - 1];
 
-        // Revert score if it was a goal
-        if (lastEvent.type === 'Goal') {
-            if (lastEvent.teamId === match.homeTeamId) {
-                setHomeScore(homeScore - 1);
+        // Revert score if it was a scoring event
+        if (['Goal', 'Penalty', 'Own Goal'].includes(lastEvent.type)) {
+            if (lastEvent.type === 'Own Goal') {
+                // Revert OPPONENT score
+                if (lastEvent.teamId === match.homeTeamId) {
+                    setAwayScore(awayScore - 1);
+                } else {
+                    setHomeScore(homeScore - 1);
+                }
             } else {
-                setAwayScore(awayScore - 1);
+                // Revert TEAM score
+                if (lastEvent.teamId === match.homeTeamId) {
+                    setHomeScore(homeScore - 1);
+                } else {
+                    setAwayScore(awayScore - 1);
+                }
             }
         }
 
@@ -811,6 +836,13 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                                             -
                                         </button>
                                         <span className="text-lg font-display text-orange-500 w-8 text-center">+{extraTime}</span>
+                                        <button
+                                            onClick={() => setShowFinishModal(true)}
+                                            className="bg-blue-500 text-white px-6 py-3 rounded-2xl hover:scale-105 transition-all font-black uppercase tracking-widest flex items-center justify-center gap-2"
+                                        >
+                                            <Trophy size={20} />
+                                            Finish
+                                        </button>
                                         <button
                                             onClick={() => setExtraTime(extraTime + 1)}
                                             className="w-8 h-8 bg-white/5 border border-white/10 rounded-lg hover:bg-white/10 transition-all flex items-center justify-center"
@@ -1367,6 +1399,44 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                     setHalfDuration={setHalfDuration}
                     onClose={() => setShowSettingsModal(false)}
                 />
+            )}
+
+            {/* Finish Match Confirmation Modal */}
+            {showFinishModal && (
+                <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                    <motion.div
+                        initial={{ opacity: 0, scale: 0.95 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        className="bg-[#0a0a0a] border border-white/10 rounded-[32px] p-8 max-w-md w-full text-center"
+                    >
+                        <div className="flex justify-center mb-4">
+                            <div className="w-16 h-16 bg-blue-500/20 text-blue-500 rounded-full flex items-center justify-center">
+                                <Trophy size={32} />
+                            </div>
+                        </div>
+                        <h3 className="text-2xl font-display italic uppercase mb-2">Finish Match?</h3>
+                        <p className="text-white/60 mb-8">
+                            Are you sure you want to finish this match? This action cannot be undone.
+                        </p>
+                        <div className="grid grid-cols-2 gap-4">
+                            <button
+                                onClick={() => setShowFinishModal(false)}
+                                className="bg-white/5 text-white border border-white/10 py-4 rounded-xl font-black uppercase tracking-widest hover:bg-white/10 transition-all"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={() => {
+                                    finalizeMatch();
+                                    setShowFinishModal(false);
+                                }}
+                                className="bg-blue-500 text-white py-4 rounded-xl font-black uppercase tracking-widest hover:scale-105 transition-all"
+                            >
+                                Confirm Finish
+                            </button>
+                        </div>
+                    </motion.div>
+                </div>
             )}
         </div>
     );
