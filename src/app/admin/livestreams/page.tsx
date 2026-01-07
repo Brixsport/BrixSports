@@ -55,12 +55,26 @@ export default function LivestreamsAdminPage() {
                 const data = await response.json();
                 console.log('Fetched matches:', data);
 
-                // Accept all matches, not just UPCOMING and LIVE
-                const allMatches = data.matches || data || [];
-                setMatches(Array.isArray(allMatches) ? allMatches : []);
+                // Handle different API response formats
+                let allMatches = [];
+                if (Array.isArray(data)) {
+                    allMatches = data;
+                } else if (data.matches && Array.isArray(data.matches)) {
+                    allMatches = data.matches;
+                } else if (data.data && Array.isArray(data.data)) {
+                    allMatches = data.data;
+                }
 
-                if (allMatches.length === 0) {
-                    setErrorMessage('No matches found in the database. Please create matches first.');
+                // Filter for UPCOMING and LIVE matches only
+                const filteredMatches = allMatches.filter(
+                    (match: any) => match.status === 'UPCOMING' || match.status === 'LIVE'
+                );
+
+                console.log('Filtered matches (UPCOMING/LIVE):', filteredMatches);
+                setMatches(filteredMatches);
+
+                if (filteredMatches.length === 0) {
+                    setErrorMessage('No upcoming or live matches found. Only UPCOMING and LIVE matches can have livestreams configured.');
                 }
             } else {
                 const errorData = await response.json();
@@ -410,10 +424,10 @@ export default function LivestreamsAdminPage() {
                                         <td colSpan={7} className="px-6 py-12 text-center">
                                             <div className="flex flex-col items-center gap-3">
                                                 <Video className="w-12 h-12 text-gray-600" />
-                                                <p className="text-gray-400 font-semibold">No matches available</p>
-                                                <p className="text-sm text-gray-500">Create matches in the admin panel to manage livestreams</p>
+                                                <p className="text-gray-400 font-semibold">No upcoming or live matches</p>
+                                                <p className="text-sm text-gray-500">Only UPCOMING and LIVE matches can have livestreams configured</p>
                                                 <a href="/admin/matches" className="mt-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-sm font-semibold transition-colors">
-                                                    Go to Matches
+                                                    Manage Matches
                                                 </a>
                                             </div>
                                         </td>
