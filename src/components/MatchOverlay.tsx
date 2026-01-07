@@ -79,6 +79,48 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
     return () => window.removeEventListener('MATCH_TIME_UPDATE', handleTimeUpdate);
   }, [match.id]);
 
+  // Listen for football events from logger (goals, cards, clearances, etc.)
+  useEffect(() => {
+    const handleFootballEvent = (event: any) => {
+      if (event.detail.matchId === match.id) {
+        const { event: newEvent, homeScore, awayScore, status } = event.detail;
+
+        // Update match with new event
+        setMatch(prev => ({
+          ...prev,
+          events: [...prev.events, newEvent],
+          homeScore: homeScore ?? prev.homeScore,
+          awayScore: awayScore ?? prev.awayScore,
+          status: status ?? prev.status,
+        }));
+
+        // Show notification for significant events
+        if (newEvent.type === 'Goal' || newEvent.type === 'Penalty') {
+          addNotification({
+            title: 'GOAL!',
+            message: `${newEvent.detail} has scored!`,
+            type: 'match'
+          });
+        } else if (newEvent.type === 'Red Card') {
+          addNotification({
+            title: 'RED CARD!',
+            message: `${newEvent.detail} has been sent off!`,
+            type: 'match'
+          });
+        } else if (newEvent.type === 'Yellow Card') {
+          addNotification({
+            title: 'YELLOW CARD',
+            message: `${newEvent.detail} has been booked`,
+            type: 'match'
+          });
+        }
+      }
+    };
+
+    window.addEventListener('FOOTBALL_EVENT', handleFootballEvent);
+    return () => window.removeEventListener('FOOTBALL_EVENT', handleFootballEvent);
+  }, [match.id, addNotification]);
+
   // Update match state from live socket data
   useEffect(() => {
     if (liveStatus && liveStatus !== match.status) {

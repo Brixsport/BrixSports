@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import Link from 'next/link';
 import { Send, Smile, MoreVertical, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
@@ -239,9 +240,9 @@ export function LivestreamChat({ matchId, enabled = true, className }: Livestrea
                 ) : (
                     <div className="text-center py-2">
                         <p className="text-sm text-gray-400">
-                            <a href="/auth/login" className="text-red-500 hover:text-red-400 font-semibold">
+                            <Link href="/login" className="text-red-500 hover:text-red-400 font-semibold">
                                 Sign in
-                            </a>
+                            </Link>
                             {' '}to join the chat
                         </p>
                     </div>

@@ -1442,38 +1442,100 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
 
                                             // Publish lineups to server
                                             try {
+                                                // Prepare home lineup with proper structure
+                                                const homeLineupData = {
+                                                    formation: '4-3-3', // Default formation
+                                                    starters: homeStarters.map((id, index) => {
+                                                        const player = homePlayers.find(p => p.id === id);
+                                                        return {
+                                                            playerId: id,
+                                                            position: player?.position || 'Unknown',
+                                                            jerseyNumber: player?.number || 0,
+                                                            isCaptain: index === 0, // First player is captain by default
+                                                            isViceCaptain: false,
+                                                            jerseyName: player?.jerseyName || player?.name
+                                                        };
+                                                    }),
+                                                    substitutes: homeSubIds.map(id => {
+                                                        const player = homePlayers.find(p => p.id === id);
+                                                        return {
+                                                            playerId: id,
+                                                            position: player?.position || 'Unknown',
+                                                            jerseyNumber: player?.number || 0,
+                                                            jerseyName: player?.jerseyName || player?.name
+                                                        };
+                                                    }),
+                                                    status: 'published',
+                                                    publishedAt: new Date().toISOString()
+                                                };
+
+                                                // Prepare away lineup with proper structure
+                                                const awayLineupData = {
+                                                    formation: '4-3-3', // Default formation
+                                                    starters: awayStarters.map((id, index) => {
+                                                        const player = awayPlayers.find(p => p.id === id);
+                                                        return {
+                                                            playerId: id,
+                                                            position: player?.position || 'Unknown',
+                                                            jerseyNumber: player?.number || 0,
+                                                            isCaptain: index === 0, // First player is captain by default
+                                                            isViceCaptain: false,
+                                                            jerseyName: player?.jerseyName || player?.name
+                                                        };
+                                                    }),
+                                                    substitutes: awaySubIds.map(id => {
+                                                        const player = awayPlayers.find(p => p.id === id);
+                                                        return {
+                                                            playerId: id,
+                                                            position: player?.position || 'Unknown',
+                                                            jerseyNumber: player?.number || 0,
+                                                            jerseyName: player?.jerseyName || player?.name
+                                                        };
+                                                    }),
+                                                    status: 'published',
+                                                    publishedAt: new Date().toISOString()
+                                                };
+
                                                 // Save and publish home lineup
-                                                await fetch(`/api/matches/${match.id}/lineup`, {
+                                                const homeResponse = await fetch(`/api/matches/${match.id}/lineup`, {
                                                     method: 'POST',
                                                     headers: { 'Content-Type': 'application/json' },
                                                     body: JSON.stringify({
                                                         team: 'home',
-                                                        lineup: {
-                                                            starters: homeStarters.map(id => ({ playerId: id, isCaptain: false })), // Add captain logic if needed
-                                                            subs: homeSubIds.map(id => ({ playerId: id })),
-                                                            status: 'published'
-                                                        }
+                                                        lineup: homeLineupData
                                                     })
                                                 });
 
                                                 // Save and publish away lineup
-                                                await fetch(`/api/matches/${match.id}/lineup`, {
+                                                const awayResponse = await fetch(`/api/matches/${match.id}/lineup`, {
                                                     method: 'POST',
                                                     headers: { 'Content-Type': 'application/json' },
                                                     body: JSON.stringify({
                                                         team: 'away',
-                                                        lineup: {
-                                                            starters: awayStarters.map(id => ({ playerId: id, isCaptain: false })),
-                                                            subs: awaySubIds.map(id => ({ playerId: id })),
-                                                            status: 'published'
-                                                        }
+                                                        lineup: awayLineupData
                                                     })
                                                 });
 
-                                                console.log('Lineups published successfully');
+                                                if (homeResponse.ok && awayResponse.ok) {
+                                                    console.log('✅ Lineups published successfully');
+
+                                                    // Broadcast lineup update event
+                                                    if (typeof window !== 'undefined') {
+                                                        window.dispatchEvent(new CustomEvent('LINEUP_PUBLISHED', {
+                                                            detail: {
+                                                                matchId: match.id,
+                                                                home: homeLineupData,
+                                                                away: awayLineupData
+                                                            }
+                                                        }));
+                                                    }
+                                                } else {
+                                                    console.error('❌ Failed to publish lineups');
+                                                    alert('Failed to publish lineups. Please try again.');
+                                                }
                                             } catch (error) {
                                                 console.error('Error publishing lineups:', error);
-                                                // Optional: Show error toast
+                                                alert('Error publishing lineups. Please check console for details.');
                                             }
                                         }
                                     }}

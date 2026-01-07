@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { BarChart3, TrendingUp, Users, CheckCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
@@ -379,9 +380,9 @@ export function MatchVotePoll({ match, compact = false }: MatchVotePollProps) {
                         {!isAuthenticated && (
                             <div className="text-center pt-4">
                                 <p className="text-sm text-white/40">
-                                    <a href="/auth/login" className="text-primary hover:text-primary/80 font-semibold">
+                                    <Link href="/login" className="text-primary hover:text-primary/80 font-semibold">
                                         Sign in
-                                    </a>
+                                    </Link>
                                     {' '}to vote!
                                 </p>
                             </div>

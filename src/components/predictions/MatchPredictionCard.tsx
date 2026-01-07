@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { TrendingUp, Trophy, Users, Target, Zap, CheckCircle2, AlertCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
@@ -386,9 +387,9 @@ export function MatchPredictionCard({ match, onPredictionSubmit }: MatchPredicti
                         <AlertCircle className="w-5 h-5 text-yellow-500 flex-shrink-0" />
                         <div className="flex-1">
                             <p className="text-sm text-yellow-200">
-                                <a href="/auth/login" className="font-semibold underline hover:text-yellow-100">
+                                <Link href="/login" className="font-semibold underline hover:text-yellow-100">
                                     Sign in
-                                </a>
+                                </Link>
                                 {' '}to make predictions and compete on the leaderboard!
                             </p>
                         </div>
