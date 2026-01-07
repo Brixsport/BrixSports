@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { useAuth } from '@/hooks/useAuth';
 import { useRouter } from 'next/navigation';
 import { Shield, Calendar, Users, CheckCircle, AlertCircle, Save } from 'lucide-react';
@@ -46,8 +47,14 @@ export default function AdminMatchLineupsPage() {
 
     // Check authentication and role
     useEffect(() => {
-        if (!loading && (!isAuthenticated || (user?.role !== 'admin' && user?.role !== 'logger'))) {
-            router.push('/');
+        if (!loading) {
+            if (!isAuthenticated) {
+                // Redirect to login if not authenticated
+                router.push('/login');
+            } else if (user?.role !== 'admin' && user?.role !== 'logger') {
+                // Show error if authenticated but not authorized
+                router.push('/admin');
+            }
         }
     }, [loading, isAuthenticated, user, router]);
 
@@ -229,7 +236,23 @@ export default function AdminMatchLineupsPage() {
     }
 
     if (!isAuthenticated || (user?.role !== 'admin' && user?.role !== 'logger')) {
-        return null;
+        return (
+            <div className="min-h-screen bg-[#050505] flex items-center justify-center p-6">
+                <div className="bg-white/5 border border-white/10 rounded-2xl p-8 max-w-md text-center">
+                    <Shield className="mx-auto mb-4 text-red-500" size={48} />
+                    <h2 className="text-2xl font-bold mb-2">Access Restricted</h2>
+                    <p className="text-white/60 mb-4">
+                        This page is only accessible to admins and loggers.
+                    </p>
+                    <Link
+                        href="/admin"
+                        className="inline-block bg-primary text-black px-6 py-3 rounded-lg font-bold hover:bg-primary/90 transition-colors"
+                    >
+                        Back to Admin
+                    </Link>
+                </div>
+            </div>
+        );
     }
 
     return (
@@ -276,8 +299,8 @@ export default function AdminMatchLineupsPage() {
                                             </div>
                                         </div>
                                         <div className={`px-3 py-1 rounded-full text-xs font-bold ${match.status === 'UPCOMING' ? 'bg-blue-500/20 text-blue-400' :
-                                                match.status === 'LIVE' ? 'bg-green-500/20 text-green-400' :
-                                                    'bg-white/10 text-white/60'
+                                            match.status === 'LIVE' ? 'bg-green-500/20 text-green-400' :
+                                                'bg-white/10 text-white/60'
                                             }`}>
                                             {match.status}
                                         </div>
@@ -421,8 +444,8 @@ function TeamLineupBuilder({
                         <div
                             key={player.id}
                             className={`flex items-center justify-between p-3 rounded-lg border transition-all ${isStarter
-                                    ? 'bg-primary/20 border-primary/40'
-                                    : 'bg-white/5 border-white/10 hover:bg-white/10'
+                                ? 'bg-primary/20 border-primary/40'
+                                : 'bg-white/5 border-white/10 hover:bg-white/10'
                                 }`}
                         >
                             <div className="flex items-center gap-3">
@@ -441,8 +464,8 @@ function TeamLineupBuilder({
                                     <button
                                         onClick={() => onCaptainChange(player.id)}
                                         className={`px-2 py-1 rounded text-xs font-bold ${isCaptain
-                                                ? 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/40'
-                                                : 'bg-white/10 text-white/60 hover:bg-white/20'
+                                            ? 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/40'
+                                            : 'bg-white/10 text-white/60 hover:bg-white/20'
                                             }`}
                                     >
                                         {isCaptain ? '★ Captain' : 'Set Captain'}
@@ -451,8 +474,8 @@ function TeamLineupBuilder({
                                 <button
                                     onClick={() => onToggleStarter(player.id)}
                                     className={`px-3 py-1 rounded font-bold text-xs ${isStarter
-                                            ? 'bg-red-500/20 text-red-400 hover:bg-red-500/30'
-                                            : 'bg-green-500/20 text-green-400 hover:bg-green-500/30'
+                                        ? 'bg-red-500/20 text-red-400 hover:bg-red-500/30'
+                                        : 'bg-green-500/20 text-green-400 hover:bg-green-500/30'
                                         }`}
                                 >
                                     {isStarter ? 'Remove' : 'Add'}
