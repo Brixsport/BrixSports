@@ -80,16 +80,46 @@ export default function AdminMatchLineupsPage() {
     const loadRosters = async (match: Match) => {
         setLoadingData(true);
         try {
+            console.log('Loading rosters for match:', match.id);
+            console.log('Home Team ID:', match.homeTeamId);
+            console.log('Away Team ID:', match.awayTeamId);
+
             const [homeResponse, awayResponse] = await Promise.all([
                 fetch(`/api/players?teamId=${match.homeTeamId}`),
                 fetch(`/api/players?teamId=${match.awayTeamId}`)
             ]);
 
+            console.log('Home response status:', homeResponse.status);
+            console.log('Away response status:', awayResponse.status);
+
             const homeData = await homeResponse.json();
             const awayData = await awayResponse.json();
 
-            setHomeRoster(homeData.players || homeData);
-            setAwayRoster(awayData.players || awayData);
+            console.log('Home data:', homeData);
+            console.log('Away data:', awayData);
+
+            // Handle different response formats
+            const homePlayers = Array.isArray(homeData)
+                ? homeData
+                : (homeData.players || homeData.data || []);
+
+            const awayPlayers = Array.isArray(awayData)
+                ? awayData
+                : (awayData.players || awayData.data || []);
+
+            console.log('Processed home players:', homePlayers);
+            console.log('Processed away players:', awayPlayers);
+
+            setHomeRoster(homePlayers);
+            setAwayRoster(awayPlayers);
+
+            // Alert if no players found
+            if (homePlayers.length === 0) {
+                alert(`No players found for ${match.homeTeam.name}. Please add players to this team first.`);
+            }
+            if (awayPlayers.length === 0) {
+                alert(`No players found for ${match.awayTeam.name}. Please add players to this team first.`);
+            }
 
             // Load existing lineups if any
             const lineupResponse = await fetch(`/api/matches/${match.id}/lineup`);
@@ -111,6 +141,7 @@ export default function AdminMatchLineupsPage() {
             }
         } catch (error) {
             console.error('Error loading rosters:', error);
+            alert('Failed to load player rosters. Please check the console for details.');
         } finally {
             setLoadingData(false);
         }

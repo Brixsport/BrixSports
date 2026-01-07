@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
-import { Activity, Shield, Users, Server, Globe, Settings, Eye, AlertCircle, CheckCircle2, MoreVertical, Search, Filter, Newspaper, TrendingUp, Trophy, Calendar, Video } from 'lucide-react';
+import { Activity, Shield, Users, Server, Globe, Settings, Eye, AlertCircle, CheckCircle2, MoreVertical, Search, Filter, Newspaper, TrendingUp, Trophy, Calendar, Video, Timer } from 'lucide-react';
 
 
 export default function AdminPage() {
@@ -53,6 +53,7 @@ export default function AdminPage() {
           <NavItem icon={<Activity size={18} />} label="Live Monitor" active href="/admin" />
           <NavItem icon={<Trophy size={18} />} label="Competitions" href="/admin/competitions" />
           <NavItem icon={<Calendar size={18} />} label="Matches" href="/admin/matches" />
+          <NavItem icon={<Timer size={18} />} label="Track Events" href="/admin/track-events" />
           <NavItem icon={<Video size={18} />} label="Livestreams" href="/admin/livestreams" />
           <NavItem icon={<Newspaper size={18} />} label="News" href="/admin/news" />
           <NavItem icon={<TrendingUp size={18} />} label="Transfers" href="/admin/transfers" />
