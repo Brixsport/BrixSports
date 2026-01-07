@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Plus, Calendar, Users, MapPin, Trophy, Edit, Trash2, Eye, Filter } from 'lucide-react';
+import { ArrowLeft, Plus, Calendar, Users, MapPin, Trophy, Edit, Trash2, Eye, Filter, ClipboardList, Star } from 'lucide-react';
 import { nanoid } from 'nanoid';
 import { useToast } from '@/hooks/useToast';
 import { ToastContainer } from '@/components/admin/Toast';
@@ -339,8 +339,33 @@ function AdminMatchesPageContent() {
                                         </div>
 
                                         <div className="flex items-center gap-2">
-                                            <Link href={`/logger?matchId=${match.id}`} className="p-2 hover:bg-white/10 rounded-lg transition-colors">
+                                            <Link
+                                                href={`/admin/match-lineups`}
+                                                className="p-2 hover:bg-blue-500/20 text-blue-400 rounded-lg transition-colors group relative"
+                                                title="Manage Lineups"
+                                            >
+                                                <ClipboardList size={18} />
+                                                <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-black text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
+                                                    Lineups
+                                                </span>
+                                            </Link>
+                                            {match.status === 'FINISHED' && (
+                                                <Link
+                                                    href={`/admin/match-ratings/${match.id}`}
+                                                    className="p-2 hover:bg-yellow-500/20 text-yellow-400 rounded-lg transition-colors group relative"
+                                                    title="Adjust Ratings"
+                                                >
+                                                    <Star size={18} />
+                                                    <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-black text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
+                                                        Ratings
+                                                    </span>
+                                                </Link>
+                                            )}
+                                            <Link href={`/logger?matchId=${match.id}`} className="p-2 hover:bg-white/10 rounded-lg transition-colors group relative">
                                                 <Eye size={18} />
+                                                <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-black text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
+                                                    Logger
+                                                </span>
                                             </Link>
                                             <button className="p-2 hover:bg-white/10 rounded-lg transition-colors">
                                                 <Edit size={18} />
