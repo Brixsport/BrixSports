@@ -174,7 +174,9 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                     if (newSecond >= 60) {
                         // Minute rollover
                         setMinute((prevMinute) => {
-                            if (prevMinute < halfDuration) {
+                            // Check if we're still in regular time (before half duration)
+                            if (prevMinute < halfDuration - 1) {
+                                // Still in regular time, increment minute
                                 const nextMinute = prevMinute + 1;
 
                                 if (typeof window !== 'undefined') {
@@ -188,15 +190,29 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                                     }));
                                 }
                                 return nextMinute;
-                            } else {
-                                // Increment extra time
+                            } else if (prevMinute === halfDuration - 1) {
+                                // Reached the last minute of regular time, move to halfDuration
+                                const nextMinute = halfDuration;
+                                if (typeof window !== 'undefined') {
+                                    window.dispatchEvent(new CustomEvent('MATCH_TIME_UPDATE', {
+                                        detail: {
+                                            matchId: match.id,
+                                            minute: nextMinute,
+                                            extraTime: 0,
+                                            half,
+                                        }
+                                    }));
+                                }
+                                return nextMinute;
+                            } else if (prevMinute === halfDuration && extraTime === 0) {
+                                // At half duration with no extra time set - enter extra time mode
                                 setExtraTime((prevExtra) => {
                                     const nextExtra = prevExtra + 1;
                                     if (typeof window !== 'undefined') {
                                         window.dispatchEvent(new CustomEvent('MATCH_TIME_UPDATE', {
                                             detail: {
                                                 matchId: match.id,
-                                                minute: prevMinute,
+                                                minute: halfDuration,
                                                 extraTime: nextExtra,
                                                 half,
                                             }
@@ -204,7 +220,38 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                                     }
                                     return nextExtra;
                                 });
-                                return prevMinute;
+                                return halfDuration; // Keep minute at halfDuration
+                            } else if (prevMinute === halfDuration && extraTime > 0) {
+                                // In extra time mode - increment extra time
+                                setExtraTime((prevExtra) => {
+                                    const nextExtra = prevExtra + 1;
+                                    if (typeof window !== 'undefined') {
+                                        window.dispatchEvent(new CustomEvent('MATCH_TIME_UPDATE', {
+                                            detail: {
+                                                matchId: match.id,
+                                                minute: halfDuration,
+                                                extraTime: nextExtra,
+                                                half,
+                                            }
+                                        }));
+                                    }
+                                    return nextExtra;
+                                });
+                                return halfDuration; // Keep minute at halfDuration
+                            } else {
+                                // Past half duration (36, 37, 38...) - continue incrementing normally
+                                const nextMinute = prevMinute + 1;
+                                if (typeof window !== 'undefined') {
+                                    window.dispatchEvent(new CustomEvent('MATCH_TIME_UPDATE', {
+                                        detail: {
+                                            matchId: match.id,
+                                            minute: nextMinute,
+                                            extraTime: 0,
+                                            half,
+                                        }
+                                    }));
+                                }
+                                return nextMinute;
                             }
                         });
                         return 0;
@@ -761,13 +808,17 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                                             key={h}
                                             onClick={() => {
                                                 setHalf(h);
+                                                // Reset time when changing halves
+                                                setMinute(0);
+                                                setSecond(0);
+                                                setExtraTime(0);
                                                 // Broadcast time update when half changes
                                                 if (typeof window !== 'undefined') {
                                                     window.dispatchEvent(new CustomEvent('MATCH_TIME_UPDATE', {
                                                         detail: {
                                                             matchId: match.id,
-                                                            minute,
-                                                            extraTime,
+                                                            minute: 0,
+                                                            extraTime: 0,
                                                             half: h,
                                                         }
                                                     }));
@@ -808,6 +859,7 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                                         const newMinute = parseInt(e.target.value);
                                         setMinute(newMinute);
                                         // Reset extra time if going back below half duration
+                                        const newExtraTime = newMinute < halfDuration ? 0 : extraTime;
                                         if (newMinute < halfDuration) {
                                             setExtraTime(0);
                                         }
@@ -817,7 +869,7 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                                                 detail: {
                                                     matchId: match.id,
                                                     minute: newMinute,
-                                                    extraTime: newMinute < halfDuration ? 0 : extraTime,
+                                                    extraTime: newExtraTime,
                                                     half,
                                                 }
                                             }));
@@ -830,21 +882,65 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                                     <div className="flex items-center gap-2 mt-2">
                                         <span className="text-[10px] font-black uppercase tracking-widest text-white/40">Injury Time:</span>
                                         <button
-                                            onClick={() => setExtraTime(Math.max(0, extraTime - 1))}
+                                            onClick={() => {
+                                                const newExtraTime = Math.max(0, extraTime - 1);
+                                                setExtraTime(newExtraTime);
+                                                // Broadcast time update
+                                                if (typeof window !== 'undefined') {
+                                                    window.dispatchEvent(new CustomEvent('MATCH_TIME_UPDATE', {
+                                                        detail: {
+                                                            matchId: match.id,
+                                                            minute: halfDuration,
+                                                            extraTime: newExtraTime,
+                                                            half,
+                                                        }
+                                                    }));
+                                                }
+                                            }}
                                             className="w-8 h-8 bg-white/5 border border-white/10 rounded-lg hover:bg-white/10 transition-all flex items-center justify-center"
                                         >
                                             -
                                         </button>
                                         <span className="text-lg font-display text-orange-500 w-8 text-center">+{extraTime}</span>
                                         <button
-                                            onClick={() => setShowFinishModal(true)}
-                                            className="bg-blue-500 text-white px-6 py-3 rounded-2xl hover:scale-105 transition-all font-black uppercase tracking-widest flex items-center justify-center gap-2"
+                                            onClick={() => {
+                                                // Continue past extra time - move to next minute
+                                                const newMinute = halfDuration + 1;
+                                                setMinute(newMinute);
+                                                setExtraTime(0);
+                                                // Broadcast time update
+                                                if (typeof window !== 'undefined') {
+                                                    window.dispatchEvent(new CustomEvent('MATCH_TIME_UPDATE', {
+                                                        detail: {
+                                                            matchId: match.id,
+                                                            minute: newMinute,
+                                                            extraTime: 0,
+                                                            half,
+                                                        }
+                                                    }));
+                                                }
+                                            }}
+                                            className="bg-green-500 text-black px-6 py-3 rounded-2xl hover:scale-105 transition-all font-black uppercase tracking-widest flex items-center justify-center gap-2"
                                         >
-                                            <Trophy size={20} />
-                                            Finish
+                                            <Play size={20} />
+                                            Continue
                                         </button>
                                         <button
-                                            onClick={() => setExtraTime(extraTime + 1)}
+                                            onClick={() => {
+                                                const newExtraTime = extraTime + 1;
+                                                setExtraTime(newExtraTime);
+                                                // Broadcast time update
+                                                if (typeof window !== 'undefined') {
+                                                    window.dispatchEvent(new CustomEvent('MATCH_TIME_UPDATE', {
+                                                        detail: {
+                                                            matchId: match.id,
+                                                            minute: halfDuration,
+                                                            extraTime: newExtraTime,
+                                                            half,
+                                                        }
+                                                    }));
+                                                }
+                                            }}
                                             className="w-8 h-8 bg-white/5 border border-white/10 rounded-lg hover:bg-white/10 transition-all flex items-center justify-center"
                                         >
                                             +

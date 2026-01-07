@@ -6,6 +6,7 @@ import Script from "next/script";
 import { BottomNav } from "@/components/BottomNav";
 import { PWAProvider } from "@/components/pwa/PWAProvider";
 import SessionProvider from "@/components/providers/SessionProvider";
+import { NotificationProvider } from "@/components/NotificationProvider";
 
 export const metadata: Metadata = {
   title: "Brixsport | Nigerian University Sports Live",
@@ -64,8 +65,10 @@ export default function RootLayout({
         />
         <PWAProvider swPath="/sw-user.js">
           <SessionProvider>
-            {children}
-            <BottomNav />
+            <NotificationProvider>
+              {children}
+              <BottomNav />
+            </NotificationProvider>
           </SessionProvider>
         </PWAProvider>
         <VisualEditsMessenger />
