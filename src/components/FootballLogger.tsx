@@ -504,8 +504,8 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     type,
-                    minute: half,
-                    second: minute * 60,
+                    minute: minute,  // Actual match minute
+                    second: second,  // Actual match second
                     teamId: selectedTeam === 'home' ? match.homeTeamId : match.awayTeamId,
                     playerId,
                     relatedPlayerId: assistPlayerId || null,
