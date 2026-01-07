@@ -31,12 +31,48 @@ type FootballEventType =
     | 'Shot' | 'Shot on Target' | 'Shot off Target' | 'Offside' | 'Substitution';
 
 export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerProps) {
-    const [homeScore, setHomeScore] = useState(match.homeScore || 0);
-    const [awayScore, setAwayScore] = useState(match.awayScore || 0);
-    const [half, setHalf] = useState(1);
-    const [minute, setMinute] = useState(0);
-    const [second, setSecond] = useState(0);
-    const [extraTime, setExtraTime] = useState(0); // For injury/stoppage time (e.g., 45+2)
+    const [homeScore, setHomeScore] = useState(() => {
+        if (typeof window !== 'undefined') {
+            const saved = localStorage.getItem(`match_${match.id}_homeScore`);
+            return saved ? parseInt(saved) : (match.homeScore || 0);
+        }
+        return match.homeScore || 0;
+    });
+    const [awayScore, setAwayScore] = useState(() => {
+        if (typeof window !== 'undefined') {
+            const saved = localStorage.getItem(`match_${match.id}_awayScore`);
+            return saved ? parseInt(saved) : (match.awayScore || 0);
+        }
+        return match.awayScore || 0;
+    });
+    const [half, setHalf] = useState(() => {
+        if (typeof window !== 'undefined') {
+            const saved = localStorage.getItem(`match_${match.id}_half`);
+            return saved ? parseInt(saved) : 1;
+        }
+        return 1;
+    });
+    const [minute, setMinute] = useState(() => {
+        if (typeof window !== 'undefined') {
+            const saved = localStorage.getItem(`match_${match.id}_minute`);
+            return saved ? parseInt(saved) : 0;
+        }
+        return 0;
+    });
+    const [second, setSecond] = useState(() => {
+        if (typeof window !== 'undefined') {
+            const saved = localStorage.getItem(`match_${match.id}_second`);
+            return saved ? parseInt(saved) : 0;
+        }
+        return 0;
+    });
+    const [extraTime, setExtraTime] = useState(() => {
+        if (typeof window !== 'undefined') {
+            const saved = localStorage.getItem(`match_${match.id}_extraTime`);
+            return saved ? parseInt(saved) : 0;
+        }
+        return 0;
+    });
     const [halfDuration, setHalfDuration] = useState(35); // Default 35 minutes for school football
     const [events, setEvents] = useState<any[]>([]);
     const [selectedTeam, setSelectedTeam] = useState<'home' | 'away'>('home');
@@ -78,7 +114,25 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
     const [showSettingsModal, setShowSettingsModal] = useState(false);
 
     // Timer control
-    const [timerRunning, setTimerRunning] = useState(false);
+    const [timerRunning, setTimerRunning] = useState(() => {
+        if (typeof window !== 'undefined') {
+            const saved = localStorage.getItem(`match_${match.id}_timerRunning`);
+            return saved === 'true';
+        }
+        return false;
+    });
+
+    // Persist state to localStorage
+    useEffect(() => {
+        if (typeof window === 'undefined') return;
+        localStorage.setItem(`match_${match.id}_homeScore`, homeScore.toString());
+        localStorage.setItem(`match_${match.id}_awayScore`, awayScore.toString());
+        localStorage.setItem(`match_${match.id}_half`, half.toString());
+        localStorage.setItem(`match_${match.id}_minute`, minute.toString());
+        localStorage.setItem(`match_${match.id}_second`, second.toString());
+        localStorage.setItem(`match_${match.id}_extraTime`, extraTime.toString());
+        localStorage.setItem(`match_${match.id}_timerRunning`, timerRunning.toString());
+    }, [match.id, homeScore, awayScore, half, minute, second, extraTime, timerRunning]);
 
     // Multi-logger support
     const {
@@ -1115,7 +1169,7 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                                                                 {player.number}
                                                             </div>
                                                             <div>
-                                                                <p className="text-sm font-black uppercase">{player.name}</p>
+                                                                <p className="text-sm font-black uppercase">{player.jerseyName || player.name}</p>
                                                                 <p className="text-xs text-white/40">{player.position}</p>
                                                             </div>
                                                         </div>
@@ -1176,7 +1230,7 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                                                                 {player.number}
                                                             </div>
                                                             <div>
-                                                                <p className="text-sm font-black uppercase">{player.name}</p>
+                                                                <p className="text-sm font-black uppercase">{player.jerseyName || player.name}</p>
                                                                 <p className="text-xs text-white/40">{player.position}</p>
                                                             </div>
                                                         </div>

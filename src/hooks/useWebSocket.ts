@@ -54,7 +54,17 @@ export function useWebSocket(options: UseWebSocketOptions = {}): UseWebSocketRet
         if (!autoConnect) return;
 
         // Initialize Socket.IO connection
-        const socket = io(process.env.NEXT_PUBLIC_WS_URL || '', {
+        let socketUrl = process.env.NEXT_PUBLIC_WS_URL || '';
+
+        // Safety check: specific fix for local development to avoid connecting to production
+        if (typeof window !== 'undefined' && window.location.hostname === 'localhost') {
+            if (socketUrl.includes('vercel.app') || socketUrl.includes('herokuapp.com')) {
+                console.warn('⚠️ Dev mode detected: Ignoring production WS URL to prevent connection errors. Using local origin.');
+                socketUrl = ''; // Use current origin (relative path)
+            }
+        }
+
+        const socket = io(socketUrl, {
             path: '/api/socket',
             transports: ['websocket', 'polling'],
             reconnection: true,

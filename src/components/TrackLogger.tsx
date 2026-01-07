@@ -36,7 +36,7 @@ import {
     X, Activity, Save, Clock, Users, Trophy, Timer, Flag, Wind,
     Thermometer, Zap, AlertTriangle, CheckCircle, XCircle, Play,
     Pause, RotateCcw, Plus, Minus, TrendingUp, Award, Target,
-    MapPin, Ruler, ChevronDown, ChevronUp, Settings, History
+    MapPin, Ruler, ChevronDown, ChevronUp, Settings, History, Search
 } from 'lucide-react';
 import { Match, Team, Player } from '@/db/schema';
 
@@ -121,12 +121,25 @@ export function TrackLogger({ match, onExit, teams, players }: TrackLoggerProps)
     // UI State
     const [viewMode, setViewMode] = useState<'live' | 'results' | 'history'>('live');
     const [showSettings, setShowSettings] = useState(false);
-    const [selectedAthlete, setSelectedAthlete] = useState<string | null>(null);
-    const [events, setEvents] = useState<any[]>([]);
+    const [athleteSearch, setAthleteSearch] = useState('');
 
     const homeTeam = teams.find(t => t.id === match.homeTeamId);
     const awayTeam = teams.find(t => t.id === match.awayTeamId);
-    const allPlayers = players.filter(p => p.teamId === match.homeTeamId || p.teamId === match.awayTeamId);
+
+    // Check if competition is Inter-College or Inter-University
+    const isInterCompetition = /inter[\s-]?(college|university)/i.test(match.competition || '');
+
+    // If Inter-Competition, restrict to match teams. Otherwise allow all players.
+    const eligiblePlayers = isInterCompetition
+        ? players.filter(p => p.teamId === match.homeTeamId || p.teamId === match.awayTeamId)
+        : players;
+
+    const filteredPlayers = eligiblePlayers.filter(p =>
+        p.name.toLowerCase().includes(athleteSearch.toLowerCase()) ||
+        (isInterCompetition && teams.find(t => t.id === p.teamId)?.shortName?.toLowerCase().includes(athleteSearch.toLowerCase()))
+    );
+
+    const [events, setEvents] = useState<any[]>([]);
 
     // Event Distance Options
     const eventDistances = {
@@ -168,7 +181,7 @@ export function TrackLogger({ match, onExit, teams, players }: TrackLoggerProps)
 
     // Add athlete to race
     const addAthlete = (playerId: string, lane: number) => {
-        const player = allPlayers.find(p => p.id === playerId);
+        const player = eligiblePlayers.find(p => p.id === playerId);
         if (!player) return;
 
         const newAthlete: AthleteEntry = {
@@ -242,7 +255,7 @@ export function TrackLogger({ match, onExit, teams, players }: TrackLoggerProps)
         // Update state with calculated positions
         setAthletes(updatedAthletes);
 
-        const player = allPlayers.find(p => p.id === playerId);
+        const player = eligiblePlayers.find(p => p.id === playerId);
         const position = finishedAthletes.find(a => a.playerId === playerId)?.position || 0;
         logEvent('Finish', `${player?.name} - Position ${position} - ${formatTime(finishTime)}`);
     };
@@ -255,7 +268,7 @@ export function TrackLogger({ match, onExit, teams, players }: TrackLoggerProps)
                 : a
         ));
 
-        const player = allPlayers.find(p => p.id === playerId);
+        const player = eligiblePlayers.find(p => p.id === playerId);
         logEvent('Disqualification', `${player?.name} - ${reason}`);
     };
 
@@ -274,7 +287,7 @@ export function TrackLogger({ match, onExit, teams, players }: TrackLoggerProps)
 
         setFieldAttempts([...fieldAttempts, newAttempt]);
 
-        const player = allPlayers.find(p => p.id === playerId);
+        const player = eligiblePlayers.find(p => p.id === playerId);
         logEvent(
             'Field Attempt',
             `${player?.name} - Attempt ${attemptNumber}: ${isFoul ? 'FOUL' : `${measurement}m`}`
@@ -294,7 +307,7 @@ export function TrackLogger({ match, onExit, teams, players }: TrackLoggerProps)
 
     // Get field event rankings (for jumps/throws)
     const getFieldEventRankings = () => {
-        const athleteResults = allPlayers.slice(0, 8).map(player => {
+        const athleteResults = eligiblePlayers.slice(0, 8).map(player => {
             const best = getBestAttempt(player.id);
             const attempts = fieldAttempts.filter(a => a.playerId === player.id);
             return {
@@ -628,7 +641,19 @@ export function TrackLogger({ match, onExit, teams, players }: TrackLoggerProps)
                                             Add Athletes to Race
                                         </h3>
                                         <div className="space-y-3">
-                                            {allPlayers.slice(0, 8).map((player, idx) => {
+                                            {/* Search Input */}
+                                            <div className="relative mb-4">
+                                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-white/40" size={14} />
+                                                <input
+                                                    type="text"
+                                                    value={athleteSearch}
+                                                    onChange={(e) => setAthleteSearch(e.target.value)}
+                                                    placeholder="Search athletes..."
+                                                    className="w-full bg-white/5 border border-white/10 rounded-xl pl-9 pr-3 py-2 text-sm font-bold outline-none focus:border-primary transition-all"
+                                                />
+                                            </div>
+
+                                            {filteredPlayers.slice(0, 8).map((player, idx) => {
                                                 const team = teams.find(t => t.id === player.teamId);
                                                 const isAdded = athletes.some(a => a.playerId === player.id);
 
@@ -638,10 +663,12 @@ export function TrackLogger({ match, onExit, teams, players }: TrackLoggerProps)
                                                         className="bg-white/5 border border-white/10 rounded-2xl p-4 flex items-center justify-between hover:bg-white/10 transition-all"
                                                     >
                                                         <div className="flex items-center gap-3">
-                                                            {team?.logo && <img src={team.logo} alt={team.name} className="w-8 h-8 object-contain" />}
+                                                            {isInterCompetition && team?.logo && <img src={team.logo} alt={team.name} className="w-8 h-8 object-contain" />}
                                                             <div>
                                                                 <p className="text-sm font-black uppercase tracking-tight">{player.name}</p>
-                                                                <p className="text-[10px] text-white/40 font-bold uppercase">{team?.shortName}</p>
+                                                                {isInterCompetition && (
+                                                                    <p className="text-[10px] text-white/40 font-bold uppercase">{team?.shortName}</p>
+                                                                )}
                                                             </div>
                                                         </div>
                                                         {!isAdded ? (
@@ -662,6 +689,11 @@ export function TrackLogger({ match, onExit, teams, players }: TrackLoggerProps)
                                                     </div>
                                                 );
                                             })}
+                                            {filteredPlayers.length === 0 && (
+                                                <div className="text-center py-4 text-white/40 text-xs font-bold uppercase tracking-widest">
+                                                    No athletes found
+                                                </div>
+                                            )}
                                         </div>
                                     </div>
                                 )}
@@ -675,7 +707,7 @@ export function TrackLogger({ match, onExit, teams, players }: TrackLoggerProps)
                                         </h3>
                                         <div className="space-y-3">
                                             {athletes.map((athlete) => {
-                                                const player = allPlayers.find(p => p.id === athlete.playerId);
+                                                const player = eligiblePlayers.find(p => p.id === athlete.playerId);
                                                 const team = teams.find(t => t.id === player?.teamId);
 
                                                 return (
@@ -692,10 +724,12 @@ export function TrackLogger({ match, onExit, teams, players }: TrackLoggerProps)
                                                                 <div className="w-12 h-12 bg-white/10 rounded-xl flex items-center justify-center font-display text-2xl">
                                                                     {athlete.lane}
                                                                 </div>
-                                                                {team?.logo && <img src={team.logo} alt={team.name} className="w-8 h-8 object-contain" />}
+                                                                {isInterCompetition && team?.logo && <img src={team.logo} alt={team.name} className="w-8 h-8 object-contain" />}
                                                                 <div>
                                                                     <p className="text-sm font-black uppercase tracking-tight">{player?.name}</p>
-                                                                    <p className="text-[10px] text-white/40 font-bold uppercase">{team?.shortName}</p>
+                                                                    {isInterCompetition && (
+                                                                        <p className="text-[10px] text-white/40 font-bold uppercase">{team?.shortName}</p>
+                                                                    )}
                                                                 </div>
                                                             </div>
 
@@ -749,8 +783,19 @@ export function TrackLogger({ match, onExit, teams, players }: TrackLoggerProps)
                                             <Target className="text-primary" size={16} />
                                             Field Event - Round {currentRound}
                                         </h3>
+                                        {/* Search Input for Field Events */}
+                                        <div className="relative mb-4">
+                                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-white/40" size={14} />
+                                            <input
+                                                type="text"
+                                                value={athleteSearch}
+                                                onChange={(e) => setAthleteSearch(e.target.value)}
+                                                placeholder="Search athletes..."
+                                                className="w-full bg-white/5 border border-white/10 rounded-xl pl-9 pr-3 py-2 text-sm font-bold outline-none focus:border-primary transition-all"
+                                            />
+                                        </div>
                                         <div className="space-y-4">
-                                            {allPlayers.slice(0, 8).map((player) => {
+                                            {filteredPlayers.slice(0, 8).map((player) => {
                                                 const team = teams.find(t => t.id === player.teamId);
                                                 const attempts = fieldAttempts.filter(a => a.playerId === player.id);
                                                 const best = getBestAttempt(player.id);
@@ -759,10 +804,12 @@ export function TrackLogger({ match, onExit, teams, players }: TrackLoggerProps)
                                                     <div key={player.id} className="bg-white/5 border border-white/10 rounded-2xl p-4">
                                                         <div className="flex items-center justify-between mb-3">
                                                             <div className="flex items-center gap-3">
-                                                                {team?.logo && <img src={team.logo} alt={team.name} className="w-8 h-8 object-contain" />}
+                                                                {isInterCompetition && team?.logo && <img src={team.logo} alt={team.name} className="w-8 h-8 object-contain" />}
                                                                 <div>
                                                                     <p className="text-sm font-black uppercase tracking-tight">{player.name}</p>
-                                                                    <p className="text-[10px] text-white/40 font-bold uppercase">{team?.shortName}</p>
+                                                                    {isInterCompetition && (
+                                                                        <p className="text-[10px] text-white/40 font-bold uppercase">{team?.shortName}</p>
+                                                                    )}
                                                                 </div>
                                                             </div>
                                                             {best && (
@@ -836,7 +883,7 @@ export function TrackLogger({ match, onExit, teams, players }: TrackLoggerProps)
                                         .filter(a => a.finalTime)
                                         .sort((a, b) => (a.finalTime || 0) - (b.finalTime || 0))
                                         .map((athlete, idx) => {
-                                            const player = allPlayers.find(p => p.id === athlete.playerId);
+                                            const player = players.find(p => p.id === athlete.playerId);
                                             const team = teams.find(t => t.id === player?.teamId);
                                             const position = idx + 1;
 
@@ -860,10 +907,12 @@ export function TrackLogger({ match, onExit, teams, players }: TrackLoggerProps)
                                                                 }`}>
                                                                 {position}
                                                             </div>
-                                                            {team?.logo && <img src={team.logo} alt={team.name} className="w-8 h-8 object-contain" />}
+                                                            {isInterCompetition && team?.logo && <img src={team.logo} alt={team.name} className="w-8 h-8 object-contain" />}
                                                             <div>
                                                                 <p className="text-sm font-black uppercase tracking-tight">{player?.name}</p>
-                                                                <p className="text-[10px] text-white/40 font-bold uppercase">{team?.shortName}</p>
+                                                                {isInterCompetition && (
+                                                                    <p className="text-[10px] text-white/40 font-bold uppercase">{team?.shortName}</p>
+                                                                )}
                                                             </div>
                                                         </div>
                                                         <div className="text-right">
