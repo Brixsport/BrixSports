@@ -45,14 +45,16 @@ export async function GET(
         const matchId = params.id;
         console.log('[Ratings Adjust] Fetching match:', matchId);
 
-        // Get match details
-        const match = await db
-            .select()
-            .from(matches)
-            .where(eq(matches.id, matchId))
-            .limit(1);
+        // Get match details with teams
+        const match = await db.query.matches.findFirst({
+            where: eq(matches.id, matchId),
+            with: {
+                homeTeam: true,
+                awayTeam: true
+            }
+        });
 
-        if (match.length === 0) {
+        if (!match) {
             console.error('[Ratings Adjust] Match not found:', matchId);
             return NextResponse.json(
                 {
@@ -64,16 +66,16 @@ export async function GET(
             );
         }
 
-        console.log('[Ratings Adjust] Match status:', match[0].status);
+        console.log('[Ratings Adjust] Match status:', match.status);
 
         // Only allow adjustment for finished matches
-        if (match[0].status !== 'FINISHED') {
+        if (match.status !== 'FINISHED') {
             return NextResponse.json(
                 {
                     error: 'Invalid match status',
-                    message: `Can only adjust ratings for finished matches. Current status: ${match[0].status}`,
+                    message: `Can only adjust ratings for finished matches. Current status: ${match.status}`,
                     code: 'INVALID_MATCH_STATUS',
-                    currentStatus: match[0].status
+                    currentStatus: match.status
                 },
                 { status: 400 }
             );
@@ -106,13 +108,13 @@ export async function GET(
         }
 
         // Get lineups for team context
-        const lineups = match[0].lineups ? JSON.parse(match[0].lineups) : null;
+        const lineups = match.lineups ? JSON.parse(match.lineups) : null;
 
         // Add suggestions for each player
         const ratingsWithSuggestions = ratings.map(r => {
             const position = r.player?.position || '';
-            const homeScore = match[0].homeScore ?? 0;
-            const awayScore = match[0].awayScore ?? 0;
+            const homeScore = match.homeScore ?? 0;
+            const awayScore = match.awayScore ?? 0;
             const teamCleanSheet = homeScore === 0 || awayScore === 0;
             const teamWon = homeScore > awayScore || awayScore > homeScore;
 
@@ -132,7 +134,7 @@ export async function GET(
 
         return NextResponse.json({
             matchId,
-            match: match[0],
+            match: match,
             ratings: ratingsWithSuggestions,
             lineups
         });
