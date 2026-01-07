@@ -12,7 +12,7 @@ const JWT_SECRET = new TextEncoder().encode(
 export async function POST(request: NextRequest) {
     try {
         // Get token from cookie
-        const token = request.cookies.get('auth-token')?.value;
+        const token = request.cookies.get('authToken')?.value;
 
         if (!token) {
             return NextResponse.json(
@@ -69,7 +69,7 @@ export async function POST(request: NextRequest) {
         });
 
         // Set new token in cookie
-        response.cookies.set('auth-token', newToken, {
+        response.cookies.set('authToken', newToken, {
             httpOnly: true,
             secure: process.env.NODE_ENV === 'production',
             sameSite: 'lax',

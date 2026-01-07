@@ -67,7 +67,7 @@ export async function PATCH(
         const body = await request.json();
 
         // Admin authentication check
-        const token = request.cookies.get('auth-token')?.value;
+        const token = request.cookies.get('authToken')?.value;
 
         if (!token) {
             return NextResponse.json(

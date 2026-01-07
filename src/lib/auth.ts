@@ -32,11 +32,19 @@ export async function verifyAuth(request: NextRequest): Promise<AuthUser | null>
     try {
         const authHeader = request.headers.get('authorization');
 
-        if (!authHeader || !authHeader.startsWith('Bearer ')) {
-            return null;
-        }
+        let token = '';
 
-        const token = authHeader.substring(7);
+        if (authHeader && authHeader.startsWith('Bearer ')) {
+            token = authHeader.substring(7);
+        } else {
+            // Check cookie
+            const cookieToken = request.cookies.get('authToken')?.value;
+            if (cookieToken) {
+                token = cookieToken;
+            } else {
+                return null;
+            }
+        }
 
         const decoded = jwt.verify(
             token,
