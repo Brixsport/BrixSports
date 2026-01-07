@@ -1075,7 +1075,6 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
             {/* Assist Modal */}
             {showAssistModal && (
                 <AssistModal
-
                     players={
                         selectedTeam === 'home'
                             ? homePlayers.filter(p => homeStarters.includes(p.id))
@@ -1086,6 +1085,24 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                         setShowAssistModal(false);
                         handleAssistSelect(null);
                     }}
+                />
+            )}
+
+            {/* Sub In Modal - Select incoming player */}
+            {showSubInModal && (
+                <PlayerSelectionModal
+                    players={
+                        selectedTeam === 'home'
+                            ? homePlayers.filter(p => !homeStarters.includes(p.id))
+                            : awayPlayers.filter(p => !awayStarters.includes(p.id))
+                    }
+                    onSelect={handleSubIn}
+                    onClose={() => {
+                        setShowSubInModal(false);
+                        setPlayerComingOut(null);
+                        setPendingEvent(null);
+                    }}
+                    title="Select Player Coming IN"
                 />
             )}
 
