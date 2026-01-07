@@ -16,14 +16,34 @@ export async function GET(
 ) {
     try {
         const user = await getAuthUser(request);
-        if (!user || (user.role !== 'admin' && user.role !== 'logger')) {
+
+        console.log('[Ratings Adjust] User:', user?.email, 'Role:', user?.role);
+
+        if (!user) {
             return NextResponse.json(
-                { error: 'Unauthorized - Only loggers and admins can adjust ratings' },
+                {
+                    error: 'Authentication required',
+                    message: 'Please log in to access match ratings',
+                    code: 'AUTH_REQUIRED'
+                },
                 { status: 401 }
             );
         }
 
+        if (user.role !== 'admin' && user.role !== 'logger') {
+            return NextResponse.json(
+                {
+                    error: 'Insufficient permissions',
+                    message: 'Only loggers and admins can adjust ratings',
+                    code: 'INSUFFICIENT_PERMISSIONS',
+                    userRole: user.role
+                },
+                { status: 403 }
+            );
+        }
+
         const matchId = params.id;
+        console.log('[Ratings Adjust] Fetching match:', matchId);
 
         // Get match details
         const match = await db
@@ -33,16 +53,28 @@ export async function GET(
             .limit(1);
 
         if (match.length === 0) {
+            console.error('[Ratings Adjust] Match not found:', matchId);
             return NextResponse.json(
-                { error: 'Match not found' },
+                {
+                    error: 'Match not found',
+                    message: `No match found with ID: ${matchId}`,
+                    code: 'MATCH_NOT_FOUND'
+                },
                 { status: 404 }
             );
         }
 
+        console.log('[Ratings Adjust] Match status:', match[0].status);
+
         // Only allow adjustment for finished matches
         if (match[0].status !== 'FINISHED') {
             return NextResponse.json(
-                { error: 'Can only adjust ratings for finished matches' },
+                {
+                    error: 'Invalid match status',
+                    message: `Can only adjust ratings for finished matches. Current status: ${match[0].status}`,
+                    code: 'INVALID_MATCH_STATUS',
+                    currentStatus: match[0].status
+                },
                 { status: 400 }
             );
         }
@@ -56,6 +88,22 @@ export async function GET(
             .from(playerRatings)
             .leftJoin(players, eq(playerRatings.playerId, players.id))
             .where(eq(playerRatings.matchId, matchId));
+
+        console.log('[Ratings Adjust] Found ratings:', ratings.length);
+
+        // Check if ratings exist
+        if (ratings.length === 0) {
+            return NextResponse.json(
+                {
+                    error: 'No ratings found',
+                    message: 'No player ratings have been calculated for this match yet. Please ensure ratings are initialized first.',
+                    code: 'NO_RATINGS',
+                    matchId,
+                    suggestion: 'Try calculating ratings first using the logger interface or POST /api/matches/' + matchId + '/ratings'
+                },
+                { status: 404 }
+            );
+        }
 
         // Get lineups for team context
         const lineups = match[0].lineups ? JSON.parse(match[0].lineups) : null;
@@ -80,6 +128,8 @@ export async function GET(
             };
         });
 
+        console.log('[Ratings Adjust] Returning', ratingsWithSuggestions.length, 'ratings with suggestions');
+
         return NextResponse.json({
             matchId,
             match: match[0],
@@ -88,9 +138,13 @@ export async function GET(
         });
 
     } catch (error) {
-        console.error('Error fetching ratings for adjustment:', error);
+        console.error('[Ratings Adjust] Error:', error);
         return NextResponse.json(
-            { error: 'Failed to fetch ratings' },
+            {
+                error: 'Internal server error',
+                message: error instanceof Error ? error.message : 'Failed to fetch ratings',
+                code: 'INTERNAL_ERROR'
+            },
             { status: 500 }
         );
     }

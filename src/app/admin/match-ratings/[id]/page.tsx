@@ -54,8 +54,29 @@ export default function MatchRatingsAdjustPage() {
 
     const fetchRatings = async () => {
         try {
+            setError(null);
             const response = await fetch(`/api/matches/${matchId}/ratings/adjust`);
-            if (!response.ok) throw new Error('Failed to fetch ratings');
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                console.error('Ratings fetch error:', errorData);
+
+                // Handle specific error codes
+                switch (errorData.code) {
+                    case 'AUTH_REQUIRED':
+                        throw new Error('Please log in to access match ratings');
+                    case 'INSUFFICIENT_PERMISSIONS':
+                        throw new Error(`Access denied. You need admin or logger role. Your current role: ${errorData.userRole || 'unknown'}`);
+                    case 'MATCH_NOT_FOUND':
+                        throw new Error(`Match not found (ID: ${matchId})`);
+                    case 'INVALID_MATCH_STATUS':
+                        throw new Error(`This match is ${errorData.currentStatus}. Ratings can only be adjusted for FINISHED matches.`);
+                    case 'NO_RATINGS':
+                        throw new Error('No ratings have been calculated yet. Please calculate ratings first using the logger interface.');
+                    default:
+                        throw new Error(errorData.message || 'Failed to fetch ratings');
+                }
+            }
 
             const data = await response.json();
             setMatch(data.match);
@@ -73,8 +94,31 @@ export default function MatchRatingsAdjustPage() {
             setAdjustedRatings(initial);
 
         } catch (err) {
-            setError(err instanceof Error ? err.message : 'Failed to load ratings');
+            const errorMessage = err instanceof Error ? err.message : 'Failed to load ratings';
+            setError(errorMessage);
+            console.error('Error in fetchRatings:', err);
         } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleCalculateRatings = async () => {
+        setLoading(true);
+        setError(null);
+        try {
+            const response = await fetch(`/api/matches/${matchId}/ratings`, {
+                method: 'POST'
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || 'Failed to calculate ratings');
+            }
+
+            // Success - reload ratings
+            fetchRatings();
+        } catch (err) {
+            setError(err instanceof Error ? err.message : 'Failed to calculate ratings');
             setLoading(false);
         }
     };
@@ -164,16 +208,65 @@ export default function MatchRatingsAdjustPage() {
     }
 
     if (error) {
+        const isAuthError = error.includes('log in') || error.includes('Access denied');
+        const isNoRatings = error.includes('No ratings') || error.includes('not been calculated');
+        const isInvalidStatus = error.includes('can only be adjusted');
+
         return (
-            <div className="min-h-screen bg-background flex items-center justify-center">
-                <div className="text-center">
-                    <p className="text-red-400 mb-4">❌ {error}</p>
-                    <button
-                        onClick={() => router.back()}
-                        className="px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg"
-                    >
-                        Go Back
-                    </button>
+            <div className="min-h-screen bg-background flex items-center justify-center p-4">
+                <div className="max-w-md w-full bg-white/5 backdrop-blur-sm rounded-xl p-8 border border-white/10 text-center">
+                    <div className="w-16 h-16 rounded-full bg-red-500/20 flex items-center justify-center mx-auto mb-4">
+                        <span className="text-3xl">❌</span>
+                    </div>
+
+                    <h2 className="text-xl font-bold text-white mb-2">
+                        {isAuthError ? 'Authentication Required' :
+                            isNoRatings ? 'No Ratings Available' :
+                                isInvalidStatus ? 'Invalid Match Status' :
+                                    'Error Loading Ratings'}
+                    </h2>
+
+                    <p className="text-red-400 mb-6">{error}</p>
+
+                    <div className="flex gap-3 justify-center">
+                        <button
+                            onClick={() => router.back()}
+                            className="px-6 py-2 bg-white/10 hover:bg-white/20 rounded-lg transition-colors"
+                        >
+                            ← Go Back
+                        </button>
+
+                        {isAuthError && (
+                            <button
+                                onClick={() => router.push('/login')}
+                                className="px-6 py-2 bg-primary hover:bg-primary/90 text-black font-bold rounded-lg transition-colors"
+                            >
+                                Login
+                            </button>
+                        )}
+
+                        {isNoRatings && (
+                            <button
+                                onClick={handleCalculateRatings}
+                                className="px-6 py-2 bg-primary hover:bg-primary/90 text-black font-bold rounded-lg transition-colors"
+                            >
+                                ⚡ Generate Ratings
+                            </button>
+                        )}
+
+                        {!isAuthError && !isNoRatings && (
+                            <button
+                                onClick={() => {
+                                    setError(null);
+                                    setLoading(true);
+                                    fetchRatings();
+                                }}
+                                className="px-6 py-2 bg-primary hover:bg-primary/90 text-black font-bold rounded-lg transition-colors"
+                            >
+                                Retry
+                            </button>
+                        )}
+                    </div>
                 </div>
             </div>
         );
@@ -245,10 +338,10 @@ export default function MatchRatingsAdjustPage() {
                             <div
                                 key={rating.playerId}
                                 className={`bg-white/5 backdrop-blur-sm rounded-xl p-6 border transition-all ${rating.needsReview
-                                        ? 'border-yellow-500/50'
-                                        : hasChanged
-                                            ? 'border-green-500/50'
-                                            : 'border-white/10'
+                                    ? 'border-yellow-500/50'
+                                    : hasChanged
+                                        ? 'border-green-500/50'
+                                        : 'border-white/10'
                                     }`}
                             >
                                 {/* Player Info */}

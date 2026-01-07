@@ -1,10 +1,9 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import Link from 'next/link';
 import { BarChart3, TrendingUp, Users, CheckCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useAuth } from '@/hooks/useAuth';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface Team {
     id: string;
@@ -38,7 +37,7 @@ interface MatchVotePollProps {
 import { useWebSocket } from '@/hooks/useWebSocket';
 
 export function MatchVotePoll({ match, compact = false }: MatchVotePollProps) {
-    const { user, isAuthenticated } = useAuth();
+    const { user, isAuthenticated, openAuthModal } = useAuth();
     const { socket, isConnected } = useWebSocket({ autoConnect: true });
     // ... existing state ...
     const [pollData, setPollData] = useState<PollData>({
@@ -380,9 +379,12 @@ export function MatchVotePoll({ match, compact = false }: MatchVotePollProps) {
                         {!isAuthenticated && (
                             <div className="text-center pt-4">
                                 <p className="text-sm text-white/40">
-                                    <Link href="/login" className="text-primary hover:text-primary/80 font-semibold">
+                                    <button
+                                        onClick={() => openAuthModal()}
+                                        className="text-primary hover:text-primary/80 font-semibold cursor-pointer"
+                                    >
                                         Sign in
-                                    </Link>
+                                    </button>
                                     {' '}to vote!
                                 </p>
                             </div>

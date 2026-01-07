@@ -1,10 +1,9 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import Link from 'next/link';
 import { Send, Smile, MoreVertical, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useAuth } from '@/hooks/useAuth';
+import { useAuth } from '@/contexts/AuthContext';
 import { useWebSocket } from '@/hooks/useWebSocket';
 
 interface ChatMessage {
@@ -28,7 +27,7 @@ export function LivestreamChat({ matchId, enabled = true, className }: Livestrea
     const [inputMessage, setInputMessage] = useState('');
 
     const messagesEndRef = useRef<HTMLDivElement>(null);
-    const { user } = useAuth();
+    const { user, openAuthModal } = useAuth();
 
     // Auto-scroll to bottom
     const scrollToBottom = () => {
@@ -240,9 +239,12 @@ export function LivestreamChat({ matchId, enabled = true, className }: Livestrea
                 ) : (
                     <div className="text-center py-2">
                         <p className="text-sm text-gray-400">
-                            <Link href="/login" className="text-red-500 hover:text-red-400 font-semibold">
+                            <button
+                                onClick={() => openAuthModal()}
+                                className="text-red-500 hover:text-red-400 font-semibold cursor-pointer"
+                            >
                                 Sign in
-                            </Link>
+                            </button>
                             {' '}to join the chat
                         </p>
                     </div>

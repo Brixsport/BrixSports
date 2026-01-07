@@ -1,10 +1,9 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import Link from 'next/link';
 import { TrendingUp, Trophy, Users, Target, Zap, CheckCircle2, AlertCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useAuth } from '@/hooks/useAuth';
+import { useAuth } from '@/contexts/AuthContext';
 import { useWebSocket } from '@/hooks/useWebSocket';
 
 interface Team {
@@ -40,7 +39,7 @@ interface MatchPredictionCardProps {
 }
 
 export function MatchPredictionCard({ match, onPredictionSubmit }: MatchPredictionCardProps) {
-    const { user, isAuthenticated, loading } = useAuth();
+    const { user, isAuthenticated, loading, openAuthModal } = useAuth();
     const [homeScore, setHomeScore] = useState(0);
     const [awayScore, setAwayScore] = useState(0);
     const [confidence, setConfidence] = useState(50);
@@ -387,9 +386,12 @@ export function MatchPredictionCard({ match, onPredictionSubmit }: MatchPredicti
                         <AlertCircle className="w-5 h-5 text-yellow-500 flex-shrink-0" />
                         <div className="flex-1">
                             <p className="text-sm text-yellow-200">
-                                <Link href="/login" className="font-semibold underline hover:text-yellow-100">
+                                <button
+                                    onClick={() => openAuthModal()}
+                                    className="font-semibold underline hover:text-yellow-100 cursor-pointer"
+                                >
                                     Sign in
-                                </Link>
+                                </button>
                                 {' '}to make predictions and compete on the leaderboard!
                             </p>
                         </div>

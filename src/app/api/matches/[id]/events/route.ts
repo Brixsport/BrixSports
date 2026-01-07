@@ -137,7 +137,7 @@ export async function POST(
         // Auto-calculate ratings after event (for live matches)
         if (match.status === 'LIVE') {
             try {
-                await fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/matches/${matchId}/ratings/calculate`, {
+                await fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/matches/${matchId}/ratings`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' }
                 });
