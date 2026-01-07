@@ -34,6 +34,7 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
     const [awayScore, setAwayScore] = useState(match.awayScore || 0);
     const [half, setHalf] = useState(1);
     const [minute, setMinute] = useState(0);
+    const [second, setSecond] = useState(0);
     const [extraTime, setExtraTime] = useState(0); // For injury/stoppage time (e.g., 45+2)
     const [halfDuration, setHalfDuration] = useState(35); // Default 35 minutes for school football
     const [events, setEvents] = useState<any[]>([]);
@@ -105,46 +106,54 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
     useEffect(() => {
         if (timerRunning && matchStarted && !matchEnded) {
             const interval = setInterval(() => {
-                setMinute((prev) => {
-                    const newMinute = prev >= halfDuration ? prev : prev + 1;
+                setSecond((prevSecond) => {
+                    const newSecond = prevSecond + 1;
 
-                    if (prev >= halfDuration) {
-                        setExtraTime((et) => {
-                            const newExtraTime = et + 1;
-                            // Broadcast time update
-                            if (typeof window !== 'undefined') {
-                                window.dispatchEvent(new CustomEvent('MATCH_TIME_UPDATE', {
-                                    detail: {
-                                        matchId: match.id,
-                                        minute: newMinute,
-                                        extraTime: newExtraTime,
-                                        half,
-                                    }
-                                }));
-                            }
-                            return newExtraTime;
-                        });
-                    } else {
-                        // Broadcast time update
-                        if (typeof window !== 'undefined') {
-                            window.dispatchEvent(new CustomEvent('MATCH_TIME_UPDATE', {
-                                detail: {
-                                    matchId: match.id,
-                                    minute: newMinute,
-                                    extraTime,
-                                    half,
+                    if (newSecond >= 60) {
+                        // Minute rollover
+                        setMinute((prevMinute) => {
+                            if (prevMinute < halfDuration) {
+                                const nextMinute = prevMinute + 1;
+
+                                if (typeof window !== 'undefined') {
+                                    window.dispatchEvent(new CustomEvent('MATCH_TIME_UPDATE', {
+                                        detail: {
+                                            matchId: match.id,
+                                            minute: nextMinute,
+                                            extraTime: 0,
+                                            half,
+                                        }
+                                    }));
                                 }
-                            }));
-                        }
+                                return nextMinute;
+                            } else {
+                                // Increment extra time
+                                setExtraTime((prevExtra) => {
+                                    const nextExtra = prevExtra + 1;
+                                    if (typeof window !== 'undefined') {
+                                        window.dispatchEvent(new CustomEvent('MATCH_TIME_UPDATE', {
+                                            detail: {
+                                                matchId: match.id,
+                                                minute: prevMinute,
+                                                extraTime: nextExtra,
+                                                half,
+                                            }
+                                        }));
+                                    }
+                                    return nextExtra;
+                                });
+                                return prevMinute;
+                            }
+                        });
+                        return 0;
                     }
-
-                    return newMinute;
+                    return newSecond;
                 });
             }, 1000); // Increment every second (real-time)
 
             return () => clearInterval(interval);
         }
-    }, [timerRunning, matchStarted, matchEnded, halfDuration, match.id, half, extraTime]);
+    }, [timerRunning, matchStarted, matchEnded, halfDuration, match.id, half]);
 
     // Fetch teams, players, and existing events
     useEffect(() => {
@@ -325,8 +334,8 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
         const newEvent = {
             id: `e${events.length + 1}`,
             type,
-            minute: half,
-            second: minute * 60,
+            minute: minute,
+            second: second,
             teamId: selectedTeam === 'home' ? match.homeTeamId : match.awayTeamId,
             playerId,
             assistPlayerId: assistPlayerId || undefined,
@@ -649,7 +658,7 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                             <div className="flex flex-col items-center gap-2">
                                 <div className="flex items-center justify-center gap-3 text-4xl font-display italic">
                                     <Clock size={32} className="text-primary" />
-                                    {minute}'{extraTime > 0 && <span className="text-2xl text-orange-500">+{extraTime}</span>}
+                                    {minute}:{second.toString().padStart(2, '0')}{extraTime > 0 && <span className="text-2xl text-orange-500">+{extraTime}</span>}
                                     {matchStarted && !matchEnded && (
                                         <button
                                             onClick={() => setTimerRunning(!timerRunning)}
@@ -947,7 +956,11 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
             {/* Player Selection Modal */}
             {showPlayerModal && (
                 <PlayerSelectionModal
-                    players={selectedTeam === 'home' ? homePlayers : awayPlayers}
+                    players={
+                        selectedTeam === 'home'
+                            ? homePlayers.filter(p => homeStarters.includes(p.id))
+                            : awayPlayers.filter(p => awayStarters.includes(p.id))
+                    }
                     onSelect={handlePlayerSelect}
                     onClose={() => {
                         setShowPlayerModal(false);
@@ -958,9 +971,15 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
             )}
 
             {/* Assist Modal */}
+            {/* Assist Modal */}
             {showAssistModal && (
                 <AssistModal
-                    players={selectedTeam === 'home' ? homePlayers : awayPlayers}
+
+                    players={
+                        selectedTeam === 'home'
+                            ? homePlayers.filter(p => homeStarters.includes(p.id))
+                            : awayPlayers.filter(p => awayStarters.includes(p.id))
+                    }
                     onSelect={handleAssistSelect}
                     onClose={() => {
                         setShowAssistModal(false);
@@ -1220,7 +1239,7 @@ function PlayerSelectionModal({ players, onSelect, onClose, title }: any) {
                             className="p-4 bg-white/5 border border-white/10 rounded-[20px] hover:bg-primary/10 hover:border-primary transition-all text-left"
                         >
                             <p className="text-[10px] font-black uppercase text-white/40 mb-1">#{player.number} • {player.position}</p>
-                            <p className="text-sm font-bold">{player.name}</p>
+                            <p className="text-sm font-bold">{player.jerseyName || player.name}</p>
                         </button>
                     ))}
                 </div>
@@ -1257,7 +1276,7 @@ function AssistModal({ players, onSelect, onClose }: any) {
                             className="p-4 bg-white/5 border border-white/10 rounded-[20px] hover:bg-primary/10 hover:border-primary transition-all text-left"
                         >
                             <p className="text-[10px] font-black uppercase text-white/40 mb-1">#{player.number} • {player.position}</p>
-                            <p className="text-sm font-bold">{player.name}</p>
+                            <p className="text-sm font-bold">{player.jerseyName || player.name}</p>
                         </button>
                     ))}
                 </div>

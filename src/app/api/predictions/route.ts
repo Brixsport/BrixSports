@@ -8,6 +8,7 @@ export async function GET(request: NextRequest) {
     try {
         const { searchParams } = new URL(request.url);
         const userId = searchParams.get('userId');
+        const matchId = searchParams.get('matchId');
 
         if (!userId) {
             return NextResponse.json(
@@ -16,6 +17,25 @@ export async function GET(request: NextRequest) {
             );
         }
 
+        // If matchId is provided, get specific prediction
+        if (matchId) {
+            const prediction = await db
+                .select()
+                .from(matchPredictions)
+                .where(
+                    and(
+                        eq(matchPredictions.userId, userId),
+                        eq(matchPredictions.matchId, matchId)
+                    )
+                )
+                .limit(1);
+
+            return NextResponse.json({
+                prediction: prediction[0] || null,
+            });
+        }
+
+        // Otherwise get all predictions for user
         const predictions = await db
             .select()
             .from(matchPredictions)
@@ -121,6 +141,73 @@ export async function POST(request: NextRequest) {
         );
     }
 }
+
+// PUT /api/predictions - Update an existing prediction
+export async function PUT(request: NextRequest) {
+    try {
+        const body = await request.json();
+        const {
+            userId,
+            matchId,
+            predictedHomeScore,
+            predictedAwayScore,
+            predictedWinner,
+            confidence,
+        } = body;
+
+        if (!userId || !matchId || predictedHomeScore === undefined || predictedAwayScore === undefined) {
+            return NextResponse.json(
+                { error: 'Missing required fields' },
+                { status: 400 }
+            );
+        }
+
+        // Find existing prediction
+        const existing = await db
+            .select()
+            .from(matchPredictions)
+            .where(
+                and(
+                    eq(matchPredictions.userId, userId),
+                    eq(matchPredictions.matchId, matchId)
+                )
+            )
+            .limit(1);
+
+        if (!existing || existing.length === 0) {
+            return NextResponse.json(
+                { error: 'Prediction not found' },
+                { status: 404 }
+            );
+        }
+
+        // Update prediction
+        const updated = await db
+            .update(matchPredictions)
+            .set({
+                predictedHomeScore,
+                predictedAwayScore,
+                predictedWinner,
+                confidence: confidence || 50,
+                updatedAt: new Date(),
+            })
+            .where(eq(matchPredictions.id, existing[0].id))
+            .returning();
+
+        return NextResponse.json({
+            success: true,
+            prediction: updated[0],
+            message: 'Prediction updated successfully',
+        });
+    } catch (error) {
+        console.error('[Predictions API] Error:', error);
+        return NextResponse.json(
+            { error: 'Failed to update prediction' },
+            { status: 500 }
+        );
+    }
+}
+
 
 async function updateLeaderboard(userId: string) {
     try {

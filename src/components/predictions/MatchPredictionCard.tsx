@@ -39,7 +39,7 @@ interface MatchPredictionCardProps {
 }
 
 export function MatchPredictionCard({ match, onPredictionSubmit }: MatchPredictionCardProps) {
-    const { user, isAuthenticated } = useAuth();
+    const { user, isAuthenticated, loading } = useAuth();
     const [homeScore, setHomeScore] = useState(0);
     const [awayScore, setAwayScore] = useState(0);
     const [confidence, setConfidence] = useState(50);
@@ -110,7 +110,6 @@ export function MatchPredictionCard({ match, onPredictionSubmit }: MatchPredicti
 
     const handleSubmit = async () => {
         if (!isAuthenticated || !user) {
-            alert('Please sign in to make predictions');
             return;
         }
 
@@ -121,6 +120,7 @@ export function MatchPredictionCard({ match, onPredictionSubmit }: MatchPredicti
                     awayScore > homeScore ? 'away' :
                         'draw';
 
+            // Use POST for both create and update (upsert logic in backend)
             const response = await fetch('/api/predictions', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -135,6 +135,8 @@ export function MatchPredictionCard({ match, onPredictionSubmit }: MatchPredicti
             });
 
             if (response.ok) {
+                const data = await response.json();
+                setUserPrediction(data.prediction);
                 setSubmitted(true);
                 await fetchPredictionStats();
                 socket?.emit('prediction:submit', { matchId: match.id });
@@ -151,7 +153,7 @@ export function MatchPredictionCard({ match, onPredictionSubmit }: MatchPredicti
         }
     };
 
-    const handleUpdate = async () => {
+    const handleEdit = () => {
         setSubmitted(false);
     };
 
@@ -168,8 +170,17 @@ export function MatchPredictionCard({ match, onPredictionSubmit }: MatchPredicti
         return 'Draw';
     };
 
+    if (loading) {
+        return (
+            <div className="bg-white/5 rounded-xl border border-white/10 p-6 flex flex-col items-center justify-center gap-2">
+                <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                <p className="text-sm text-white/40">Loading...</p>
+            </div>
+        );
+    }
+
     return (
-        <div className="bg-white/5 rounded-xl border border-white/10 overflow-hidden">
+        <div className="bg-white/5 rounded-xl border border-white/10">
             {/* Header */}
             <div className="px-4 md:px-6 py-3 md:py-4 border-b border-white/10">
                 <div className="flex items-center justify-between">
@@ -396,10 +407,11 @@ export function MatchPredictionCard({ match, onPredictionSubmit }: MatchPredicti
                             </div>
                         </div>
                         <button
-                            onClick={handleUpdate}
-                            className="w-full bg-white/10 hover:bg-white/20 text-white py-3 rounded-lg font-semibold transition-colors"
+                            onClick={handleEdit}
+                            disabled={match.status === 'LIVE' || match.status === 'FINISHED'}
+                            className="w-full bg-white/10 hover:bg-white/20 disabled:bg-white/5 disabled:cursor-not-allowed text-white py-3 rounded-lg font-semibold transition-colors"
                         >
-                            Update Prediction
+                            Edit Prediction
                         </button>
                     </div>
                 ) : (
@@ -416,12 +428,12 @@ export function MatchPredictionCard({ match, onPredictionSubmit }: MatchPredicti
                         {submitting ? (
                             <div className="flex items-center justify-center gap-2">
                                 <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                                <span>Submitting...</span>
+                                <span>{userPrediction ? 'Updating...' : 'Submitting...'}</span>
                             </div>
                         ) : (
                             <div className="flex items-center justify-center gap-2">
                                 <Trophy className="w-5 h-5" />
-                                <span>Submit Prediction</span>
+                                <span>{userPrediction ? 'Update Prediction' : 'Submit Prediction'}</span>
                             </div>
                         )}
                     </button>
