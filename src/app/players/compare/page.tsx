@@ -86,16 +86,22 @@ function PlayerCompareContent() {
             if (sport) {
                 url += `&sport=${sport}`;
             }
+            console.log('🔍 Searching players:', { query, sport, url });
+
             const res = await fetch(url);
             const data = await res.json();
 
+            console.log('✅ Search response:', data);
+
             if (playerSlot === 1) {
                 setSearchResults1(data.results?.players || []);
+                console.log('📊 Player 1 results:', data.results?.players?.length || 0);
             } else {
                 setSearchResults2(data.results?.players || []);
+                console.log('📊 Player 2 results:', data.results?.players?.length || 0);
             }
         } catch (error) {
-            console.error('Error searching players:', error);
+            console.error('❌ Error searching players:', error);
         } finally {
             if (playerSlot === 1) setSearching1(false);
             else setSearching2(false);

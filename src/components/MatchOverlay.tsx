@@ -56,6 +56,29 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
   const { isFavoriteTeam, toggleTeam } = useFavorites();
   const { addNotification } = useNotifications();
 
+  // Match time tracking (synced from logger)
+  const [matchTime, setMatchTime] = useState<{ minute: number; extraTime: number; half: number }>({
+    minute: 0,
+    extraTime: 0,
+    half: 1,
+  });
+
+  // Listen for match time updates from logger
+  useEffect(() => {
+    const handleTimeUpdate = (event: any) => {
+      if (event.detail.matchId === match.id) {
+        setMatchTime({
+          minute: event.detail.minute,
+          extraTime: event.detail.extraTime,
+          half: event.detail.half,
+        });
+      }
+    };
+
+    window.addEventListener('MATCH_TIME_UPDATE', handleTimeUpdate);
+    return () => window.removeEventListener('MATCH_TIME_UPDATE', handleTimeUpdate);
+  }, [match.id]);
+
   // Update match state from live socket data
   useEffect(() => {
     if (liveStatus && liveStatus !== match.status) {
@@ -380,7 +403,16 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
                     {match.awayScore}
                   </span>
                 </div>
-                <div className="px-3 py-1 bg-white/10 rounded-full text-xs font-bold uppercase tracking-wider">
+                <div className="px-3 py-1 bg-white/10 rounded-full text-xs font-bold uppercase tracking-wider flex items-center gap-2">
+                  {match.status === 'LIVE' && (
+                    <>
+                      <Clock size={12} className="text-primary" />
+                      <span className="text-primary">{matchTime.minute}'{matchTime.extraTime > 0 && `+${matchTime.extraTime}`}</span>
+                      <span className="text-white/40">•</span>
+                      <span>H{matchTime.half}</span>
+                      <span className="text-white/40">•</span>
+                    </>
+                  )}
                   {match.status === 'FINISHED' ? 'FT' : match.status === 'LIVE' ? "LIVE" : match.status}
                 </div>
               </div>

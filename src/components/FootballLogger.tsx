@@ -106,18 +106,45 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
         if (timerRunning && matchStarted && !matchEnded) {
             const interval = setInterval(() => {
                 setMinute((prev) => {
+                    const newMinute = prev >= halfDuration ? prev : prev + 1;
+
                     if (prev >= halfDuration) {
-                        // At half duration, start counting extra time
-                        setExtraTime((et) => et + 1);
-                        return prev;
+                        setExtraTime((et) => {
+                            const newExtraTime = et + 1;
+                            // Broadcast time update
+                            if (typeof window !== 'undefined') {
+                                window.dispatchEvent(new CustomEvent('MATCH_TIME_UPDATE', {
+                                    detail: {
+                                        matchId: match.id,
+                                        minute: newMinute,
+                                        extraTime: newExtraTime,
+                                        half,
+                                    }
+                                }));
+                            }
+                            return newExtraTime;
+                        });
+                    } else {
+                        // Broadcast time update
+                        if (typeof window !== 'undefined') {
+                            window.dispatchEvent(new CustomEvent('MATCH_TIME_UPDATE', {
+                                detail: {
+                                    matchId: match.id,
+                                    minute: newMinute,
+                                    extraTime,
+                                    half,
+                                }
+                            }));
+                        }
                     }
-                    return prev + 1;
+
+                    return newMinute;
                 });
             }, 1000); // Increment every second (real-time)
 
             return () => clearInterval(interval);
         }
-    }, [timerRunning, matchStarted, matchEnded, halfDuration]);
+    }, [timerRunning, matchStarted, matchEnded, halfDuration, match.id, half, extraTime]);
 
     // Fetch teams, players, and existing events
     useEffect(() => {
@@ -579,7 +606,20 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                                     {[1, 2].map((h) => (
                                         <button
                                             key={h}
-                                            onClick={() => setHalf(h)}
+                                            onClick={() => {
+                                                setHalf(h);
+                                                // Broadcast time update when half changes
+                                                if (typeof window !== 'undefined') {
+                                                    window.dispatchEvent(new CustomEvent('MATCH_TIME_UPDATE', {
+                                                        detail: {
+                                                            matchId: match.id,
+                                                            minute,
+                                                            extraTime,
+                                                            half: h,
+                                                        }
+                                                    }));
+                                                }
+                                            }}
                                             className={`w-12 h-12 rounded-xl font-display text-xl transition-all ${half === h ? 'bg-primary text-black' : 'bg-white/5 text-white/40'
                                                 }`}
                                         >
@@ -612,10 +652,22 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                                     max={halfDuration}
                                     value={minute}
                                     onChange={(e) => {
-                                        setMinute(parseInt(e.target.value));
+                                        const newMinute = parseInt(e.target.value);
+                                        setMinute(newMinute);
                                         // Reset extra time if going back below half duration
-                                        if (parseInt(e.target.value) < halfDuration) {
+                                        if (newMinute < halfDuration) {
                                             setExtraTime(0);
+                                        }
+                                        // Broadcast time update
+                                        if (typeof window !== 'undefined') {
+                                            window.dispatchEvent(new CustomEvent('MATCH_TIME_UPDATE', {
+                                                detail: {
+                                                    matchId: match.id,
+                                                    minute: newMinute,
+                                                    extraTime: newMinute < halfDuration ? 0 : extraTime,
+                                                    half,
+                                                }
+                                            }));
                                         }
                                     }}
                                     className="w-full h-1 bg-white/10 rounded-full appearance-none accent-primary cursor-pointer"
