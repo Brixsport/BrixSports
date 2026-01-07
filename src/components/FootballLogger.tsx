@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Activity, Save, Undo2, Clock, Users, TrendingUp, Target, Play, Pause, Settings, Trophy, Zap, Shield, AlertTriangle, ArrowRightLeft } from 'lucide-react';
 import { useMultiLogger } from '@/hooks/useMultiLogger';
+import { useWebSocket } from '@/hooks/useWebSocket';
 import { MultiLoggerStatus } from '@/components/MultiLoggerStatus';
 import type { SyncEvent } from '@/lib/multiLogger';
 
@@ -48,6 +49,12 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
     const [matchEnded, setMatchEnded] = useState(match.status === 'FINISHED');
     const [viewMode, setViewMode] = useState<'logger' | 'stats' | 'history'>('logger');
     const [isSaving, setIsSaving] = useState(false);
+
+    // WebSocket connection for broadcasting events explicitly
+    const { emit } = useWebSocket({
+        matchId: match.id,
+        autoConnect: true,
+    });
 
     // Player selection modals
     const [showPlayerModal, setShowPlayerModal] = useState(false);
@@ -410,6 +417,23 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                     status: 'LIVE',
                 }
             }));
+
+            // Emit to socket server for remote clients
+            emit('event:new', {
+                matchId: match.id,
+                event: {
+                    ...newEvent,
+                    createdAt: new Date(newEvent.createdAt).toISOString()
+                }
+            });
+
+            if (isGoal) {
+                emit('match:score:updated', {
+                    matchId: match.id,
+                    homeScore: newHomeScore,
+                    awayScore: newAwayScore
+                });
+            }
         }
 
         // Reset state
@@ -451,6 +475,24 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
 
             if (response.ok) {
                 setMatchEnded(true);
+
+                // Emit final status
+                if (typeof window !== 'undefined') {
+                    window.dispatchEvent(new CustomEvent('MATCH_STATUS_CHANGE', {
+                        detail: {
+                            matchId: match.id,
+                            status: 'FINISHED',
+                            homeTeamId: match.homeTeamId,
+                            awayTeamId: match.awayTeamId
+                        }
+                    }));
+
+                    emit('match:status:changed', {
+                        matchId: match.id,
+                        status: 'FINISHED'
+                    });
+                }
+
                 alert('Match finalized successfully! All events have been saved.');
             } else {
                 alert('Failed to finalize match. Please try again.');
@@ -547,6 +589,11 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                                                         awayTeamId: match.awayTeamId
                                                     }
                                                 }));
+
+                                                emit('match:status:changed', {
+                                                    matchId: match.id,
+                                                    status: 'LIVE'
+                                                });
                                             }
                                         }
                                     }}
@@ -1159,13 +1206,52 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                                     </div>
                                 </div>
                                 <button
-                                    onClick={() => {
+                                    onClick={async () => {
                                         if (homeStarters.length === 11 && awayStarters.length === 11) {
                                             // Set remaining players as subs
-                                            setHomeSubs(homePlayers.filter(p => !homeStarters.includes(p.id)).map(p => p.id));
-                                            setAwaySubs(awayPlayers.filter(p => !awayStarters.includes(p.id)).map(p => p.id));
+                                            const homeSubIds = homePlayers.filter(p => !homeStarters.includes(p.id)).map(p => p.id);
+                                            const awaySubIds = awayPlayers.filter(p => !awayStarters.includes(p.id)).map(p => p.id);
+
+                                            setHomeSubs(homeSubIds);
+                                            setAwaySubs(awaySubIds);
                                             setLineupSet(true);
                                             setShowLineupModal(false);
+
+                                            // Publish lineups to server
+                                            try {
+                                                // Save and publish home lineup
+                                                await fetch(`/api/matches/${match.id}/lineup`, {
+                                                    method: 'POST',
+                                                    headers: { 'Content-Type': 'application/json' },
+                                                    body: JSON.stringify({
+                                                        team: 'home',
+                                                        lineup: {
+                                                            starters: homeStarters.map(id => ({ playerId: id, isCaptain: false })), // Add captain logic if needed
+                                                            subs: homeSubIds.map(id => ({ playerId: id })),
+                                                            status: 'published'
+                                                        }
+                                                    })
+                                                });
+
+                                                // Save and publish away lineup
+                                                await fetch(`/api/matches/${match.id}/lineup`, {
+                                                    method: 'POST',
+                                                    headers: { 'Content-Type': 'application/json' },
+                                                    body: JSON.stringify({
+                                                        team: 'away',
+                                                        lineup: {
+                                                            starters: awayStarters.map(id => ({ playerId: id, isCaptain: false })),
+                                                            subs: awaySubIds.map(id => ({ playerId: id })),
+                                                            status: 'published'
+                                                        }
+                                                    })
+                                                });
+
+                                                console.log('Lineups published successfully');
+                                            } catch (error) {
+                                                console.error('Error publishing lineups:', error);
+                                                // Optional: Show error toast
+                                            }
                                         }
                                     }}
                                     disabled={homeStarters.length !== 11 || awayStarters.length !== 11}
