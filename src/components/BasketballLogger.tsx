@@ -218,8 +218,11 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                 const teamsResponse = await fetch('/api/teams');
                 const teamsData = await teamsResponse.json();
 
-                const home = teamsData.find((t: Team) => t.id === match.homeTeamId);
-                const away = teamsData.find((t: Team) => t.id === match.awayTeamId);
+                // Handle different response formats for teams
+                const teamsArray = Array.isArray(teamsData) ? teamsData : (teamsData.teams || teamsData.data || []);
+
+                const home = teamsArray.find((t: Team) => t.id === match.homeTeamId);
+                const away = teamsArray.find((t: Team) => t.id === match.awayTeamId);
 
                 setHomeTeam(home || null);
                 setAwayTeam(away || null);
@@ -228,8 +231,23 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                 const playersResponse = await fetch('/api/players');
                 const playersData = await playersResponse.json();
 
-                setHomePlayers(playersData.filter((p: Player) => p.teamId === match.homeTeamId));
-                setAwayPlayers(playersData.filter((p: Player) => p.teamId === match.awayTeamId));
+                // Handle different response formats for players
+                const playersArray = Array.isArray(playersData)
+                    ? playersData
+                    : (playersData.players || playersData.data || []);
+
+                console.log('🏀 Players fetched:', playersArray.length);
+                console.log('🏠 Home team ID:', match.homeTeamId);
+                console.log('✈️ Away team ID:', match.awayTeamId);
+
+                const homePlayersList = playersArray.filter((p: Player) => p.teamId === match.homeTeamId);
+                const awayPlayersList = playersArray.filter((p: Player) => p.teamId === match.awayTeamId);
+
+                console.log('🏠 Home players:', homePlayersList.length);
+                console.log('✈️ Away players:', awayPlayersList.length);
+
+                setHomePlayers(homePlayersList);
+                setAwayPlayers(awayPlayersList);
 
                 // Fetch existing events for this match
                 try {
