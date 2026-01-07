@@ -5,14 +5,19 @@ import { motion } from 'framer-motion';
 interface MatchStatusBadgeProps {
     status: string;
     className?: string;
+    matchTime?: {
+        minute: number;
+        extraTime: number;
+        half: number;
+    };
 }
 
-export default function MatchStatusBadge({ status, className = '' }: MatchStatusBadgeProps) {
+export default function MatchStatusBadge({ status, className = '', matchTime }: MatchStatusBadgeProps) {
     const getStatusConfig = () => {
         switch (status) {
             case 'LIVE':
                 return {
-                    label: 'LIVE',
+                    label: matchTime ? `${matchTime.minute}'${matchTime.extraTime > 0 ? `+${matchTime.extraTime}` : ''}` : 'LIVE',
                     icon: '🔴',
                     bgColor: 'bg-red-500/20',
                     textColor: 'text-red-500',
@@ -89,4 +94,3 @@ export default function MatchStatusBadge({ status, className = '' }: MatchStatus
         </motion.div>
     );
 }
-

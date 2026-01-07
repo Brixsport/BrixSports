@@ -452,10 +452,10 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
                       <span className="text-primary">{matchTime.minute}'{matchTime.extraTime > 0 && `+${matchTime.extraTime}`}</span>
                       <span className="text-white/40">•</span>
                       <span>H{matchTime.half}</span>
-                      <span className="text-white/40">•</span>
                     </>
                   )}
-                  {match.status === 'FINISHED' ? 'FT' : match.status === 'LIVE' ? "LIVE" : match.status}
+                  {match.status === 'FINISHED' && 'FT'}
+                  {match.status === 'UPCOMING' && match.status}
                 </div>
               </div>
 
