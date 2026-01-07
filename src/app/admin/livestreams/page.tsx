@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Video, Plus, Edit, Trash2, Eye, EyeOff, Save, X, Radio } from 'lucide-react';
+import { Video, Plus, Edit, Trash2, Eye, EyeOff, Save, X, Radio, Info, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface Match {
@@ -33,6 +33,9 @@ export default function LivestreamsAdminPage() {
     const [matches, setMatches] = useState<Match[]>([]);
     const [loading, setLoading] = useState(true);
     const [editingMatch, setEditingMatch] = useState<string | null>(null);
+    const [saving, setSaving] = useState(false);
+    const [errorMessage, setErrorMessage] = useState<string | null>(null);
+    const [successMessage, setSuccessMessage] = useState<string | null>(null);
     const [formData, setFormData] = useState<LivestreamForm>({
         matchId: '',
         livestreamUrl: '',
@@ -47,13 +50,25 @@ export default function LivestreamsAdminPage() {
 
     const fetchMatches = async () => {
         try {
-            const response = await fetch('/api/matches?status=UPCOMING,LIVE&limit=50');
+            const response = await fetch('/api/matches?limit=100');
             if (response.ok) {
                 const data = await response.json();
-                setMatches(data.matches || []);
+                console.log('Fetched matches:', data);
+
+                // Accept all matches, not just UPCOMING and LIVE
+                const allMatches = data.matches || data || [];
+                setMatches(Array.isArray(allMatches) ? allMatches : []);
+
+                if (allMatches.length === 0) {
+                    setErrorMessage('No matches found in the database. Please create matches first.');
+                }
+            } else {
+                const errorData = await response.json();
+                setErrorMessage(`Failed to load matches: ${errorData.error || 'Unknown error'}`);
             }
         } catch (error) {
             console.error('Error fetching matches:', error);
+            setErrorMessage('Network error: Unable to fetch matches. Please check your connection.');
         } finally {
             setLoading(false);
         }
@@ -71,6 +86,10 @@ export default function LivestreamsAdminPage() {
     };
 
     const handleSave = async () => {
+        setSaving(true);
+        setErrorMessage(null);
+        setSuccessMessage(null);
+
         try {
             const response = await fetch(`/api/matches/${formData.matchId}/livestream`, {
                 method: 'PATCH',
@@ -81,14 +100,23 @@ export default function LivestreamsAdminPage() {
             if (response.ok) {
                 await fetchMatches();
                 setEditingMatch(null);
-                alert('Livestream settings updated successfully!');
+                setSuccessMessage('Livestream settings updated successfully!');
+                setTimeout(() => setSuccessMessage(null), 5000);
             } else {
                 const error = await response.json();
-                alert(`Error: ${error.error || 'Failed to update'}`);
+                if (response.status === 401) {
+                    setErrorMessage('Authentication required. Please log in as an admin.');
+                } else if (response.status === 403) {
+                    setErrorMessage('Admin access required. You do not have permission to update livestreams.');
+                } else {
+                    setErrorMessage(error.error || 'Failed to update livestream settings');
+                }
             }
         } catch (error) {
             console.error('Error saving livestream:', error);
-            alert('Failed to save livestream settings');
+            setErrorMessage('Network error. Please check your connection and try again.');
+        } finally {
+            setSaving(false);
         }
     };
 
@@ -149,6 +177,46 @@ export default function LivestreamsAdminPage() {
                         </span>
                     </div>
                 </div>
+
+                {/* Info Box */}
+                <div className="bg-blue-600/10 border border-blue-600/30 rounded-xl p-4 flex items-start gap-3">
+                    <Info className="w-5 h-5 text-blue-500 flex-shrink-0 mt-0.5" />
+                    <div className="flex-1">
+                        <h3 className="font-semibold text-blue-400 mb-1">How to Add a Livestream Link</h3>
+                        <ol className="text-sm text-gray-300 space-y-1 list-decimal list-inside">
+                            <li>Click the <strong>Edit button</strong> (blue pencil icon) on any match</li>
+                            <li>Paste your livestream URL in the <strong>"Stream URL"</strong> field</li>
+                            <li>Select the appropriate <strong>Stream Type</strong> (YouTube, Twitch, etc.)</li>
+                            <li>Check <strong>"Enable Livestream"</strong> to make it visible to users</li>
+                            <li>Click <strong>"Save Changes"</strong> to update</li>
+                        </ol>
+                        <p className="text-xs text-gray-400 mt-2">
+                            Note: You must be logged in as an admin to save changes.
+                        </p>
+                    </div>
+                </div>
+
+                {/* Success/Error Messages */}
+                {successMessage && (
+                    <div className="bg-green-600/10 border border-green-600/30 rounded-xl p-4 flex items-center gap-3">
+                        <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+                        <p className="text-green-400 font-semibold">{successMessage}</p>
+                    </div>
+                )}
+
+                {errorMessage && (
+                    <div className="bg-red-600/10 border border-red-600/30 rounded-xl p-4 flex items-start gap-3">
+                        <div className="w-2 h-2 bg-red-500 rounded-full mt-2" />
+                        <div className="flex-1">
+                            <p className="text-red-400 font-semibold">{errorMessage}</p>
+                            {errorMessage.includes('Authentication') && (
+                                <p className="text-xs text-gray-400 mt-1">
+                                    Please navigate to the login page and sign in with admin credentials.
+                                </p>
+                            )}
+                        </div>
+                    </div>
+                )}
 
                 {/* Matches List */}
                 <div className="bg-gray-900 rounded-xl border border-gray-800 overflow-hidden">
@@ -234,10 +302,20 @@ export default function LivestreamsAdminPage() {
                                                         <div className="flex items-center gap-3 pt-4">
                                                             <button
                                                                 onClick={handleSave}
-                                                                className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded-lg font-semibold transition-colors"
+                                                                disabled={saving}
+                                                                className="flex items-center gap-2 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white px-6 py-2 rounded-lg font-semibold transition-colors"
                                                             >
-                                                                <Save className="w-4 h-4" />
-                                                                Save Changes
+                                                                {saving ? (
+                                                                    <>
+                                                                        <Loader2 className="w-4 h-4 animate-spin" />
+                                                                        Saving...
+                                                                    </>
+                                                                ) : (
+                                                                    <>
+                                                                        <Save className="w-4 h-4" />
+                                                                        Save Changes
+                                                                    </>
+                                                                )}
                                                             </button>
                                                             <button
                                                                 onClick={handleCancel}
@@ -325,12 +403,27 @@ export default function LivestreamsAdminPage() {
                                             </>
                                         )}
                                     </tr>
-                                ))}
+                                ))
+                                }
+                                {matches.length === 0 && !loading && (
+                                    <tr>
+                                        <td colSpan={7} className="px-6 py-12 text-center">
+                                            <div className="flex flex-col items-center gap-3">
+                                                <Video className="w-12 h-12 text-gray-600" />
+                                                <p className="text-gray-400 font-semibold">No matches available</p>
+                                                <p className="text-sm text-gray-500">Create matches in the admin panel to manage livestreams</p>
+                                                <a href="/admin/matches" className="mt-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-sm font-semibold transition-colors">
+                                                    Go to Matches
+                                                </a>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                )}
                             </tbody>
                         </table>
                     </div>
                 </div>
             </div>
-        </div>
+        </div >
     );
 }

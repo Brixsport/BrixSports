@@ -1,5 +1,35 @@
 'use client';
 
+/**
+ * TRACK & FIELD LOGGER - POSITION DETERMINATION SYSTEM
+ * 
+ * This logger handles position/ranking determination for different track & field events:
+ * 
+ * 1. TRACK EVENTS (Sprint, Distance, Hurdles, Relay):
+ *    - Positions are determined by FINISH TIME (fastest = 1st place)
+ *    - Times are sorted automatically (not by button click order)
+ *    - Ties: Athletes with times within 0.001s (1ms) share the same position
+ *    - Example: If two athletes finish at 10.234s, both get position 1
+ *              The next finisher gets position 3 (not 2)
+ * 
+ * 2. FIELD EVENTS (Jump, Throw):
+ *    - Positions are determined by BEST VALID ATTEMPT (highest/longest = 1st place)
+ *    - Each athlete gets up to 6 attempts
+ *    - Fouls don't count toward ranking
+ *    - Ties: Athletes with marks within 0.01m share the same position
+ *    - Wind speed is tracked for jumps (>±2.0 m/s = illegal for records)
+ * 
+ * 3. HEAT QUALIFICATION (for multi-round events):
+ *    - Top N finishers from each heat advance automatically
+ *    - Plus fastest "losers" across all heats (time-based qualification)
+ *    - Example: Top 2 from each heat + 2 fastest times overall
+ * 
+ * 4. REAL-TIME UPDATES:
+ *    - Positions recalculate automatically when new results are added
+ *    - Click "Finish" button when athlete crosses line (order doesn't matter)
+ *    - System sorts by actual time and assigns correct positions
+ */
+
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -182,15 +212,38 @@ export function TrackLogger({ match, onExit, teams, players }: TrackLoggerProps)
     // Record finish for athlete
     const recordFinish = (playerId: string) => {
         const finishTime = currentTime;
-        const position = athletes.filter(a => a.finalTime !== undefined).length + 1;
 
-        setAthletes(athletes.map(a =>
+        // Update athlete with finish time (position will be calculated automatically)
+        const updatedAthletes = athletes.map(a =>
             a.playerId === playerId
-                ? { ...a, finalTime: finishTime, position, status: 'Finished' as const }
+                ? { ...a, finalTime: finishTime, status: 'Finished' as const }
                 : a
-        ));
+        );
+
+        // Calculate positions based on actual times (not click order)
+        const finishedAthletes = updatedAthletes
+            .filter(a => a.finalTime !== undefined)
+            .sort((a, b) => (a.finalTime || 0) - (b.finalTime || 0));
+
+        // Assign positions (handle ties)
+        let currentPosition = 1;
+        finishedAthletes.forEach((athlete, index) => {
+            if (index > 0) {
+                const prevTime = finishedAthletes[index - 1].finalTime || 0;
+                const currTime = athlete.finalTime || 0;
+                // If times are within 0.001s (1ms), it's a tie
+                if (Math.abs(currTime - prevTime) > 0.001) {
+                    currentPosition = index + 1;
+                }
+            }
+            athlete.position = currentPosition;
+        });
+
+        // Update state with calculated positions
+        setAthletes(updatedAthletes);
 
         const player = allPlayers.find(p => p.id === playerId);
+        const position = finishedAthletes.find(a => a.playerId === playerId)?.position || 0;
         logEvent('Finish', `${player?.name} - Position ${position} - ${formatTime(finishTime)}`);
     };
 
@@ -237,6 +290,39 @@ export function TrackLogger({ match, onExit, teams, players }: TrackLoggerProps)
         if (validAttempts.length === 0) return null;
 
         return Math.max(...validAttempts.map(a => a.measurement!));
+    };
+
+    // Get field event rankings (for jumps/throws)
+    const getFieldEventRankings = () => {
+        const athleteResults = allPlayers.slice(0, 8).map(player => {
+            const best = getBestAttempt(player.id);
+            const attempts = fieldAttempts.filter(a => a.playerId === player.id);
+            return {
+                playerId: player.id,
+                bestMark: best,
+                attemptCount: attempts.length,
+                fouls: attempts.filter(a => a.isFoul).length
+            };
+        }).filter(r => r.bestMark !== null);
+
+        // Sort by best mark (descending for field events)
+        athleteResults.sort((a, b) => (b.bestMark || 0) - (a.bestMark || 0));
+
+        // Assign positions (handle ties)
+        let currentPosition = 1;
+        athleteResults.forEach((result, index) => {
+            if (index > 0) {
+                const prevMark = athleteResults[index - 1].bestMark || 0;
+                const currMark = result.bestMark || 0;
+                // If marks are within 0.01m, it's a tie
+                if (Math.abs(currMark - prevMark) > 0.01) {
+                    currentPosition = index + 1;
+                }
+            }
+            (result as any).position = currentPosition;
+        });
+
+        return athleteResults;
     };
 
     // Log event
@@ -426,8 +512,8 @@ export function TrackLogger({ match, onExit, teams, players }: TrackLoggerProps)
                                 </div>
                                 <div className="flex items-end">
                                     <div className={`px-4 py-2 rounded-xl font-bold text-sm ${Math.abs(weather.windSpeed) > 2.0
-                                            ? 'bg-red-500/20 text-red-500 border border-red-500/30'
-                                            : 'bg-green-500/20 text-green-500 border border-green-500/30'
+                                        ? 'bg-red-500/20 text-red-500 border border-red-500/30'
+                                        : 'bg-green-500/20 text-green-500 border border-green-500/30'
                                         }`}>
                                         {Math.abs(weather.windSpeed) > 2.0 ? 'Wind Illegal' : 'Wind Legal'}
                                     </div>
@@ -444,9 +530,9 @@ export function TrackLogger({ match, onExit, teams, players }: TrackLoggerProps)
                         <div className="text-center">
                             <p className="text-[10px] font-black uppercase tracking-widest text-white/40 mb-3">Status</p>
                             <div className={`inline-flex items-center gap-2 px-6 py-3 rounded-2xl font-black uppercase tracking-widest ${raceStatus === 'Setup' ? 'bg-gray-500/20 text-gray-400' :
-                                    raceStatus === 'Ready' ? 'bg-yellow-500/20 text-yellow-500' :
-                                        raceStatus === 'Running' ? 'bg-green-500/20 text-green-500 animate-pulse' :
-                                            'bg-blue-500/20 text-blue-500'
+                                raceStatus === 'Ready' ? 'bg-yellow-500/20 text-yellow-500' :
+                                    raceStatus === 'Running' ? 'bg-green-500/20 text-green-500 animate-pulse' :
+                                        'bg-blue-500/20 text-blue-500'
                                 }`}>
                                 <Activity size={16} />
                                 {raceStatus}
@@ -596,9 +682,9 @@ export function TrackLogger({ match, onExit, teams, players }: TrackLoggerProps)
                                                     <div
                                                         key={athlete.playerId}
                                                         className={`border rounded-2xl p-4 ${athlete.status === 'Finished' ? 'bg-green-500/10 border-green-500/30' :
-                                                                athlete.status === 'DQ' ? 'bg-red-500/10 border-red-500/30' :
-                                                                    athlete.status === 'Running' ? 'bg-blue-500/10 border-blue-500/30' :
-                                                                        'bg-white/5 border-white/10'
+                                                            athlete.status === 'DQ' ? 'bg-red-500/10 border-red-500/30' :
+                                                                athlete.status === 'Running' ? 'bg-blue-500/10 border-blue-500/30' :
+                                                                    'bg-white/5 border-white/10'
                                                             }`}
                                                     >
                                                         <div className="flex items-center justify-between mb-3">
@@ -695,10 +781,10 @@ export function TrackLogger({ match, onExit, teams, players }: TrackLoggerProps)
                                                                     <div
                                                                         key={idx}
                                                                         className={`flex-1 h-12 rounded-xl flex items-center justify-center text-xs font-bold ${attempt
-                                                                                ? attempt.isFoul
-                                                                                    ? 'bg-red-500/20 text-red-500 border border-red-500/30'
-                                                                                    : 'bg-green-500/20 text-green-500 border border-green-500/30'
-                                                                                : 'bg-white/5 border border-white/10 text-white/40'
+                                                                            ? attempt.isFoul
+                                                                                ? 'bg-red-500/20 text-red-500 border border-red-500/30'
+                                                                                : 'bg-green-500/20 text-green-500 border border-green-500/30'
+                                                                            : 'bg-white/5 border border-white/10 text-white/40'
                                                                             }`}
                                                                     >
                                                                         {attempt ? (attempt.isFoul ? 'X' : `${attempt.measurement?.toFixed(2)}`) : idx + 1}
@@ -760,17 +846,17 @@ export function TrackLogger({ match, onExit, teams, players }: TrackLoggerProps)
                                                     initial={{ opacity: 0, x: -20 }}
                                                     animate={{ opacity: 1, x: 0 }}
                                                     className={`border rounded-2xl p-4 ${position === 1 ? 'bg-yellow-500/10 border-yellow-500/30' :
-                                                            position === 2 ? 'bg-gray-400/10 border-gray-400/30' :
-                                                                position === 3 ? 'bg-orange-500/10 border-orange-500/30' :
-                                                                    'bg-white/5 border-white/10'
+                                                        position === 2 ? 'bg-gray-400/10 border-gray-400/30' :
+                                                            position === 3 ? 'bg-orange-500/10 border-orange-500/30' :
+                                                                'bg-white/5 border-white/10'
                                                         }`}
                                                 >
                                                     <div className="flex items-center justify-between">
                                                         <div className="flex items-center gap-3">
                                                             <div className={`w-10 h-10 rounded-full flex items-center justify-center font-display text-lg font-bold ${position === 1 ? 'bg-yellow-500 text-black' :
-                                                                    position === 2 ? 'bg-gray-400 text-black' :
-                                                                        position === 3 ? 'bg-orange-500 text-black' :
-                                                                            'bg-white/10 text-white'
+                                                                position === 2 ? 'bg-gray-400 text-black' :
+                                                                    position === 3 ? 'bg-orange-500 text-black' :
+                                                                        'bg-white/10 text-white'
                                                                 }`}>
                                                                 {position}
                                                             </div>
