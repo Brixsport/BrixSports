@@ -1148,6 +1148,18 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                                                         if (isStarter) {
                                                             setHomeStarters(homeStarters.filter(id => id !== player.id));
                                                         } else if (homeStarters.length < 11) {
+                                                            // Check for GK limit
+                                                            const isGK = player.position === 'GK' || player.position === 'Goalkeeper';
+                                                            if (isGK) {
+                                                                const hasGK = homeStarters.some(id => {
+                                                                    const p = homePlayers.find(p => p.id === id);
+                                                                    return p?.position === 'GK' || p?.position === 'Goalkeeper';
+                                                                });
+                                                                if (hasGK) {
+                                                                    alert('Only one Goalkeeper is allowed in the starting lineup.');
+                                                                    return;
+                                                                }
+                                                            }
                                                             setHomeStarters([...homeStarters, player.id]);
                                                             setHomeSubs(homeSubs.filter(id => id !== player.id));
                                                         }
@@ -1209,6 +1221,18 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                                                         if (isStarter) {
                                                             setAwayStarters(awayStarters.filter(id => id !== player.id));
                                                         } else if (awayStarters.length < 11) {
+                                                            // Check for GK limit
+                                                            const isGK = player.position === 'GK' || player.position === 'Goalkeeper';
+                                                            if (isGK) {
+                                                                const hasGK = awayStarters.some(id => {
+                                                                    const p = awayPlayers.find(p => p.id === id);
+                                                                    return p?.position === 'GK' || p?.position === 'Goalkeeper';
+                                                                });
+                                                                if (hasGK) {
+                                                                    alert('Only one Goalkeeper is allowed in the starting lineup.');
+                                                                    return;
+                                                                }
+                                                            }
                                                             setAwayStarters([...awayStarters, player.id]);
                                                             setAwaySubs(awaySubs.filter(id => id !== player.id));
                                                         }
