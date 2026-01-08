@@ -11,7 +11,7 @@ import { getAuthUser } from '@/lib/auth';
  */
 export async function POST(
     request: NextRequest,
-    { params }: { params: { id: string } }
+    { params }: { params: Promise<{ id: string }> }
 ) {
     try {
         const user = await getAuthUser(request);
@@ -22,7 +22,7 @@ export async function POST(
             );
         }
 
-        const matchId = params.id;
+        const { id: matchId } = await params;
 
         // Get match details
         const match = await db

@@ -6,10 +6,10 @@ import { eq, and } from 'drizzle-orm';
 // GET /api/players/[id]/stats - Get player statistics
 export async function GET(
     request: NextRequest,
-    { params }: { params: { id: string } }
+    { params }: { params: Promise<{ id: string }> }
 ) {
     try {
-        const playerId = params.id;
+        const { id: playerId } = await params;
         const { searchParams } = new URL(request.url);
         const competition = searchParams.get('competition');
         const season = searchParams.get('season');
@@ -110,10 +110,10 @@ export async function GET(
 // POST /api/players/[id]/stats - Create or update player statistics
 export async function POST(
     request: NextRequest,
-    { params }: { params: { id: string } }
+    { params }: { params: Promise<{ id: string }> }
 ) {
     try {
-        const playerId = params.id;
+        const { id: playerId } = await params;
         const body = await request.json();
         const {
             competition,

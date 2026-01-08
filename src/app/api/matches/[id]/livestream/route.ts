@@ -7,10 +7,10 @@ import jwt from 'jsonwebtoken';
 // GET /api/matches/[id]/livestream - Get livestream info
 export async function GET(
     request: NextRequest,
-    { params }: { params: { id: string } }
+    { params }: { params: Promise<{ id: string }> }
 ) {
     try {
-        const matchId = params.id;
+        const { id: matchId } = await params;
 
         const match = await db.query.matches.findFirst({
             where: eq(matches.id, matchId),
@@ -60,10 +60,10 @@ export async function GET(
 // PATCH /api/matches/[id]/livestream - Update livestream settings (Admin only)
 export async function PATCH(
     request: NextRequest,
-    { params }: { params: { id: string } }
+    { params }: { params: Promise<{ id: string }> }
 ) {
     try {
-        const matchId = params.id;
+        const { id: matchId } = await params;
         const body = await request.json();
 
         // Admin authentication check

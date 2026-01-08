@@ -14,10 +14,10 @@ import { eq, sql } from 'drizzle-orm';
  */
 export async function GET(
     request: NextRequest,
-    { params }: { params: { id: string } }
+    { params }: { params: Promise<{ id: string }> }
 ) {
     try {
-        const userId = params.id;
+        const { id: userId } = await params;
         const { searchParams } = new URL(request.url);
         const includeStats = searchParams.get('includeStats') === 'true';
 
@@ -120,10 +120,10 @@ export async function GET(
  */
 export async function PATCH(
     request: NextRequest,
-    { params }: { params: { id: string } }
+    { params }: { params: Promise<{ id: string }> }
 ) {
     try {
-        const userId = params.id;
+        const { id: userId } = await params;
         const body = await request.json();
         const { name, bio, avatar, coverImage, favoriteTeamId } = body;
 
@@ -172,10 +172,10 @@ export async function PATCH(
  */
 export async function DELETE(
     request: NextRequest,
-    { params }: { params: { id: string } }
+    { params }: { params: Promise<{ id: string }> }
 ) {
     try {
-        const userId = params.id;
+        const { id: userId } = await params;
 
         // Delete user (cascade will handle related records)
         await db

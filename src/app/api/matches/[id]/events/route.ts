@@ -7,10 +7,10 @@ import { nanoid } from 'nanoid';
 // GET /api/matches/[id]/events - Get all events for a match
 export async function GET(
     request: NextRequest,
-    { params }: { params: { id: string } }
+    { params }: { params: Promise<{ id: string }> }
 ) {
     try {
-        const matchId = params.id;
+        const { id: matchId } = await params;
 
         // Verify match exists
         const match = await db
@@ -50,10 +50,10 @@ export async function GET(
 // POST /api/matches/[id]/events - Create new match event
 export async function POST(
     request: NextRequest,
-    { params }: { params: { id: string } }
+    { params }: { params: Promise<{ id: string }> }
 ) {
     try {
-        const matchId = params.id;
+        const { id: matchId } = await params;
         const body = await request.json();
         const {
             type,
@@ -164,10 +164,10 @@ export async function POST(
 // DELETE /api/matches/[id]/events - Delete an event (undo)
 export async function DELETE(
     request: NextRequest,
-    { params }: { params: { id: string } }
+    { params }: { params: Promise<{ id: string }> }
 ) {
     try {
-        const matchId = params.id;
+        const { id: matchId } = await params;
         const { searchParams } = new URL(request.url);
         const eventId = searchParams.get('eventId');
 

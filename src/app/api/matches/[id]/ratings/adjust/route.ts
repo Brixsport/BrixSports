@@ -12,7 +12,7 @@ import { RatingCalculator } from '@/lib/ratingCalculator';
  */
 export async function GET(
     request: NextRequest,
-    { params }: { params: { id: string } }
+    { params }: { params: Promise<{ id: string }> }
 ) {
     try {
         const user = await getAuthUser(request);
@@ -42,7 +42,7 @@ export async function GET(
             );
         }
 
-        const matchId = params.id;
+        const { id: matchId } = await params;
         console.log('[Ratings Adjust] Fetching match:', matchId);
 
         // Get match details with teams
@@ -158,7 +158,7 @@ export async function GET(
  */
 export async function POST(
     request: NextRequest,
-    { params }: { params: { id: string } }
+    { params }: { params: Promise<{ id: string }> }
 ) {
     try {
         const user = await getAuthUser(request);
@@ -169,7 +169,7 @@ export async function POST(
             );
         }
 
-        const matchId = params.id;
+        const { id: matchId } = await params;
         const body = await request.json();
         const { ratings: adjustedRatings } = body;
 
