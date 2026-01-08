@@ -125,6 +125,11 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
   useEffect(() => {
     if (liveStatus && liveStatus !== match.status) {
       setMatch(prev => ({ ...prev, status: liveStatus as import('@/types').MatchStatus }));
+      // Refetch complete match data when status changes to FINISHED
+      if (liveStatus === 'FINISHED') {
+        // Note: refetchMatchData is defined below, this will work due to hoisting
+        setTimeout(() => refetchMatchData(), 100);
+      }
     }
     if (liveScore) {
       setMatch(prev => ({ ...prev, homeScore: liveScore.home, awayScore: liveScore.away }));
@@ -196,6 +201,47 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
       });
     }
   }, [liveRatings]);
+
+  // Helper function to refetch complete match data
+  const refetchMatchData = async () => {
+    try {
+      const response = await fetch(`/api/matches/${match.id}`);
+      if (response.ok) {
+        const data = await response.json();
+        console.log('Refetched match data:', data);
+        setMatch(prev => ({
+          ...prev,
+          ...data.match,
+          homeTeam: data.match.homeTeam || prev.homeTeam,
+          awayTeam: data.match.awayTeam || prev.awayTeam,
+        }));
+      }
+    } catch (error) {
+      console.error('Error refetching match data:', error);
+    }
+  };
+
+  // Listen for match status changes from logger
+  useEffect(() => {
+    const handleStatusChange = (event: any) => {
+      if (event.detail.matchId === match.id) {
+        console.log('Match status changed:', event.detail.status);
+        // Update match state immediately
+        setMatch(prev => ({
+          ...prev,
+          status: event.detail.status,
+        }));
+
+        // Refetch complete match data when match finishes
+        if (event.detail.status === 'FINISHED') {
+          refetchMatchData();
+        }
+      }
+    };
+
+    window.addEventListener('MATCH_STATUS_CHANGE', handleStatusChange);
+    return () => window.removeEventListener('MATCH_STATUS_CHANGE', handleStatusChange);
+  }, [match.id]);
 
   const tabs = [
     ...(match.isStreaming ? [{ id: 'watch', label: 'Watch Live', icon: Play }] : []),
@@ -376,7 +422,6 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       className="fixed inset-0 z-[100] bg-black/95 backdrop-blur-md flex flex-col overflow-hidden"
-      onClick={onClose}
     >
       <div className="flex flex-col min-h-full" onClick={(e) => e.stopPropagation()}>
         {/* Header */}
