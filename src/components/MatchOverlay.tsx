@@ -216,15 +216,46 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
 
 
 
+  // Helper function to extract player IDs from lineup (supports both formats)
+  const getLineupPlayerIds = (lineup: any): string[] => {
+    if (!lineup) return [];
+    // New format: { starters: [...], substitutes: [...], status: 'published' }
+    if (lineup.starters && Array.isArray(lineup.starters)) {
+      return lineup.starters.map((p: any) => p.playerId);
+    }
+    // Legacy format: direct array
+    if (Array.isArray(lineup)) {
+      return lineup.map((e: any) => e.playerId);
+    }
+    return [];
+  };
+
+  // Helper function to check if lineup is published
+  const isLineupPublished = (lineup: any): boolean => {
+    if (!lineup) return false;
+    // New format with status field
+    if (lineup.status) {
+      return lineup.status === 'published';
+    }
+    // Legacy format: if it exists and has data, consider it published
+    if (Array.isArray(lineup) && lineup.length > 0) {
+      return true;
+    }
+    // New format: if it has starters, consider it published
+    if (lineup.starters && Array.isArray(lineup.starters) && lineup.starters.length > 0) {
+      return true;
+    }
+    return false;
+  };
+
   // Fetch player data when lineups or scout tab is opened
   useEffect(() => {
     const needsPlayers = (activeTab === 'lineups' || activeTab === 'scout') && match.lineups;
     if (!needsPlayers || loadingPlayers || playersFetched) return;
 
-    const playerIds = [
-      ...(match.lineups?.home.map(e => e.playerId) || []),
-      ...(match.lineups?.away.map(e => e.playerId) || [])
-    ];
+    const homePlayerIds = getLineupPlayerIds(match.lineups?.home);
+    const awayPlayerIds = getLineupPlayerIds(match.lineups?.away);
+    const playerIds = [...homePlayerIds, ...awayPlayerIds];
 
     // Only fetch if we don't have all players
     const missingPlayers = playerIds.filter(id => !players[id]);
@@ -524,8 +555,8 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
 
                     {/* Label - Hide on very small screens for some tabs */}
                     <span className={`${tab.id === 'watch' || tab.id === 'overview' || tab.id === 'lineups'
-                        ? ''
-                        : 'hidden xs:inline'
+                      ? ''
+                      : 'hidden xs:inline'
                       }`}>
                       {tab.label}
                     </span>
@@ -650,7 +681,7 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
                     <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
                     <p className="text-white/40">Loading lineups...</p>
                   </div>
-                ) : match.lineups?.home && match.lineups?.away ? (
+                ) : isLineupPublished(match.lineups?.home) && isLineupPublished(match.lineups?.away) ? (
                   /* Full Pitch View - Both teams facing each other */
                   <FullPitchLineups
                     homeTeam={{
@@ -665,16 +696,52 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
                     }}
                     homePlayers={players}
                     awayPlayers={players}
-                    homeLineup={match.lineups.home.map(entry => ({
-                      ...entry,
-                      rating: ratings[entry.playerId]?.finalRating || ratings[entry.playerId]?.autoRating || entry.rating || 6.0,
-                      isMotM: ratings[entry.playerId]?.isMotM || false
-                    }))}
-                    awayLineup={match.lineups.away.map(entry => ({
-                      ...entry,
-                      rating: ratings[entry.playerId]?.finalRating || ratings[entry.playerId]?.autoRating || entry.rating || 6.0,
-                      isMotM: ratings[entry.playerId]?.isMotM || false
-                    }))}
+                    homeLineup={(() => {
+                      if (!match.lineups?.home) return [];
+                      const homeLineup = match.lineups.home as any;
+                      // New format: { starters: [...], substitutes: [...] }
+                      if (homeLineup.starters && Array.isArray(homeLineup.starters)) {
+                        return homeLineup.starters.map((entry: any) => ({
+                          playerId: entry.playerId,
+                          position: entry.position,
+                          rating: ratings[entry.playerId]?.finalRating || ratings[entry.playerId]?.autoRating || 6.0,
+                          isCaptain: entry.isCaptain || false,
+                          isMotM: ratings[entry.playerId]?.isMotM || false
+                        }));
+                      }
+                      // Legacy format: direct array
+                      if (Array.isArray(homeLineup)) {
+                        return homeLineup.map((entry: any) => ({
+                          ...entry,
+                          rating: ratings[entry.playerId]?.finalRating || ratings[entry.playerId]?.autoRating || entry.rating || 6.0,
+                          isMotM: ratings[entry.playerId]?.isMotM || false
+                        }));
+                      }
+                      return [];
+                    })()}
+                    awayLineup={(() => {
+                      if (!match.lineups?.away) return [];
+                      const awayLineup = match.lineups.away as any;
+                      // New format: { starters: [...], substitutes: [...] }
+                      if (awayLineup.starters && Array.isArray(awayLineup.starters)) {
+                        return awayLineup.starters.map((entry: any) => ({
+                          playerId: entry.playerId,
+                          position: entry.position,
+                          rating: ratings[entry.playerId]?.finalRating || ratings[entry.playerId]?.autoRating || 6.0,
+                          isCaptain: entry.isCaptain || false,
+                          isMotM: ratings[entry.playerId]?.isMotM || false
+                        }));
+                      }
+                      // Legacy format: direct array
+                      if (Array.isArray(awayLineup)) {
+                        return awayLineup.map((entry: any) => ({
+                          ...entry,
+                          rating: ratings[entry.playerId]?.finalRating || ratings[entry.playerId]?.autoRating || entry.rating || 6.0,
+                          isMotM: ratings[entry.playerId]?.isMotM || false
+                        }));
+                      }
+                      return [];
+                    })()}
                     onPlayerClick={onSelectPlayer}
                   />
                 ) : (
