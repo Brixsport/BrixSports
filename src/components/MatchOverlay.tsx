@@ -88,7 +88,7 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
         // Update match with new event
         setMatch(prev => ({
           ...prev,
-          events: [...prev.events, newEvent],
+          events: [...(prev.events || []), newEvent], // Safely handle undefined events
           homeScore: homeScore ?? prev.homeScore,
           awayScore: awayScore ?? prev.awayScore,
           status: status ?? prev.status,
@@ -136,9 +136,32 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
     }
   }, [liveStatus, liveScore, match.status]);
 
-  // Handle new live events
+  // Handle new live events from WebSocket
   useEffect(() => {
     if (latestEvent) {
+      // Add event to match state if not already present
+      setMatch(prev => {
+        const eventExists = prev.events?.some(e => e.id === latestEvent.id);
+        if (eventExists) return prev;
+
+        // Cast to MatchEvent type to ensure compatibility
+        const matchEvent: MatchEvent = {
+          id: latestEvent.id,
+          matchId: latestEvent.matchId,
+          type: latestEvent.type as MatchEvent['type'],
+          minute: latestEvent.minute,
+          teamId: latestEvent.teamId || '',
+          playerId: latestEvent.playerId ?? undefined,
+          detail: latestEvent.detail || '',
+          isEyePoint: latestEvent.isEyePoint ?? undefined,
+        };
+
+        return {
+          ...prev,
+          events: [...(prev.events || []), matchEvent],
+        };
+      });
+
       // Show notification for significant events
       if (latestEvent.type === 'Goal') {
         addNotification({
@@ -209,17 +232,32 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
       if (response.ok) {
         const data = await response.json();
         console.log('Refetched match data:', data);
+        console.log('Events from API:', data.events);
+        console.log('Stats from API:', data.match.stats);
+
+        // Merge the API response properly - events are a separate property
         setMatch(prev => ({
           ...prev,
           ...data.match,
           homeTeam: data.match.homeTeam || prev.homeTeam,
           awayTeam: data.match.awayTeam || prev.awayTeam,
+          events: data.events || prev.events || [], // Events come from separate property
+          stats: data.match.stats || prev.stats, // Stats are already parsed by API
         }));
       }
     } catch (error) {
       console.error('Error refetching match data:', error);
     }
   };
+
+  // Fetch complete match data on mount if events or stats are missing
+  useEffect(() => {
+    const needsInitialFetch = !match.events || match.events.length === 0 || !match.stats;
+    if (needsInitialFetch) {
+      console.log('Fetching initial match data - events:', match.events?.length, 'stats:', !!match.stats);
+      refetchMatchData();
+    }
+  }, []); // Only run on mount
 
   // Listen for match status changes from logger
   useEffect(() => {

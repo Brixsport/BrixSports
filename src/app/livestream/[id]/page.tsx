@@ -3,15 +3,16 @@ import { notFound } from 'next/navigation';
 import { LivestreamView } from '@/components/livestream';
 
 interface PageProps {
-    params: {
+    params: Promise<{
         id: string;
-    };
+    }>;
 }
 
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
+    const { id } = await params;
     // Fetch match details for metadata
     try {
-        const response = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/matches/${params.id}`, {
+        const response = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/matches/${id}`, {
             cache: 'no-store'
         });
 
@@ -41,9 +42,10 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 }
 
 export default async function LivestreamPage({ params }: PageProps) {
+    const { id } = await params;
     // Fetch match and livestream data
     const matchResponse = await fetch(
-        `${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/matches/${params.id}`,
+        `${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/matches/${id}`,
         { cache: 'no-store' }
     );
 
@@ -55,7 +57,7 @@ export default async function LivestreamPage({ params }: PageProps) {
 
     // Fetch livestream info
     const livestreamResponse = await fetch(
-        `${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/matches/${params.id}/livestream`,
+        `${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/matches/${id}/livestream`,
         { cache: 'no-store' }
     );
 
