@@ -201,19 +201,19 @@ export default function LiveMatchCard({ match }: LiveMatchCardProps) {
                                 <>
                                     <div className="text-center">
                                         <div className="text-2xl font-bold text-primary">
-                                            {match.stats.possession || 50}%
+                                            {match.stats?.possession?.[0] || 50}%
                                         </div>
                                         <div className="text-xs text-white/60">Possession</div>
                                     </div>
                                     <div className="text-center">
                                         <div className="text-2xl font-bold text-blue-500">
-                                            {match.stats.shots || 0}
+                                            {match.stats?.shots?.[0] || 0}
                                         </div>
                                         <div className="text-xs text-white/60">Shots</div>
                                     </div>
                                     <div className="text-center">
                                         <div className="text-2xl font-bold text-blue-500">
-                                            {match.stats.shotsOnTarget || 0}
+                                            {match.stats?.shotsOnTarget?.[0] || 0}
                                         </div>
                                         <div className="text-xs text-white/60">On Target</div>
                                     </div>

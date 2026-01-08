@@ -7,6 +7,8 @@ import { BottomNav } from "@/components/BottomNav";
 import { PWAProvider } from "@/components/pwa/PWAProvider";
 import SessionProvider from "@/components/providers/SessionProvider";
 import { NotificationProvider } from "@/components/NotificationProvider";
+import { AuthProvider } from "@/contexts/AuthContext";
+import { AuthModal } from "@/components/auth/AuthModal";
 
 export const metadata: Metadata = {
   title: "Brixsport | Nigerian University Sports Live",
@@ -65,10 +67,13 @@ export default function RootLayout({
         />
         <PWAProvider swPath="/sw-user.js">
           <SessionProvider>
-            <NotificationProvider>
-              {children}
-              <BottomNav />
-            </NotificationProvider>
+            <AuthProvider>
+              <NotificationProvider>
+                {children}
+                <BottomNav />
+                <AuthModal />
+              </NotificationProvider>
+            </AuthProvider>
           </SessionProvider>
         </PWAProvider>
         <VisualEditsMessenger />

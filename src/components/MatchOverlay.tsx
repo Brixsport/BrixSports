@@ -488,21 +488,66 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
               </div>
             </div>
 
-            {/* Tabs */}
-            <div className="flex gap-2 overflow-x-auto scrollbar-hide">
-              {tabs.map((tab) => (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wider whitespace-nowrap transition-all ${activeTab === tab.id
-                    ? 'bg-primary text-black'
-                    : 'bg-white/5 text-white/60 hover:bg-white/10 hover:text-white'
-                    }`}
-                >
-                  <tab.icon size={14} />
-                  {tab.label}
-                </button>
-              ))}
+            {/* Tabs - Enhanced Mobile UI */}
+            <div className="relative -mx-4 px-4">
+              {/* Left Scroll Indicator */}
+              <div className="absolute left-0 top-0 bottom-0 w-8 bg-gradient-to-r from-[#0a0a0a] to-transparent pointer-events-none z-10" />
+
+              {/* Right Scroll Indicator */}
+              <div className="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-[#0a0a0a] to-transparent pointer-events-none z-10" />
+
+              {/* Tabs Container */}
+              <div className="flex gap-2 overflow-x-auto scrollbar-hide scroll-smooth snap-x snap-mandatory pb-1">
+                {tabs.map((tab) => (
+                  <button
+                    key={tab.id}
+                    onClick={() => setActiveTab(tab.id)}
+                    className={`
+                      group relative flex items-center justify-center gap-2 
+                      px-5 py-3 rounded-xl
+                      text-xs sm:text-sm font-bold uppercase tracking-wider 
+                      whitespace-nowrap transition-all duration-300
+                      snap-start flex-shrink-0
+                      min-w-[120px] sm:min-w-[140px]
+                      ${activeTab === tab.id
+                        ? 'bg-gradient-to-r from-primary via-primary to-yellow-400 text-black shadow-lg shadow-primary/30 scale-105'
+                        : 'bg-white/5 text-white/60 hover:bg-white/10 hover:text-white hover:scale-102 backdrop-blur-sm border border-white/10'
+                      }
+                    `}
+                  >
+                    {/* Icon with animation */}
+                    <tab.icon
+                      size={16}
+                      className={`transition-transform duration-300 ${activeTab === tab.id ? 'scale-110' : 'group-hover:scale-110'
+                        }`}
+                    />
+
+                    {/* Label - Hide on very small screens for some tabs */}
+                    <span className={`${tab.id === 'watch' || tab.id === 'overview' || tab.id === 'lineups'
+                        ? ''
+                        : 'hidden xs:inline'
+                      }`}>
+                      {tab.label}
+                    </span>
+
+                    {/* Active indicator dot */}
+                    {activeTab === tab.id && (
+                      <motion.div
+                        layoutId="activeTab"
+                        className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-1.5 h-1.5 bg-black rounded-full"
+                        transition={{ type: "spring", stiffness: 380, damping: 30 }}
+                      />
+                    )}
+
+                    {/* Shine effect on active tab */}
+                    {activeTab === tab.id && (
+                      <div className="absolute inset-0 rounded-xl overflow-hidden">
+                        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent animate-shimmer" />
+                      </div>
+                    )}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
         </div>
@@ -653,25 +698,30 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
               >
                 <h3 className="font-bold text-sm uppercase tracking-wider text-white/60 mb-6">Match Statistics</h3>
                 <div className="space-y-6">
-                  {match.stats.possession && <StatRow label="Possession" values={match.stats.possession} suffix="%" />}
-                  {match.stats.expectedGoals && <StatRow label="Expected Goals (xG)" values={match.stats.expectedGoals} suffix="" />}
-                  {match.stats.shots && <StatRow label="Total Shots" values={match.stats.shots} />}
-                  {match.stats.shotsOnTarget && <StatRow label="Shots on Target" values={match.stats.shotsOnTarget} />}
-                  {match.stats.corners && <StatRow label="Corners" values={match.stats.corners} />}
-                  {match.stats.fouls && <StatRow label="Fouls" values={match.stats.fouls} />}
-                  {match.stats.yellowCards && <StatRow label="Yellow Cards" values={match.stats.yellowCards} />}
-                  {match.stats.redCards && <StatRow label="Red Cards" values={match.stats.redCards} />}
+                  {match.stats?.possession && <StatRow label="Possession" values={match.stats.possession} suffix="%" />}
+                  {match.stats?.expectedGoals && <StatRow label="Expected Goals (xG)" values={match.stats.expectedGoals} suffix="" />}
+                  {match.stats?.shots && <StatRow label="Total Shots" values={match.stats.shots} />}
+                  {match.stats?.shotsOnTarget && <StatRow label="Shots on Target" values={match.stats.shotsOnTarget} />}
+                  {match.stats?.corners && <StatRow label="Corners" values={match.stats.corners} />}
+                  {match.stats?.fouls && <StatRow label="Fouls" values={match.stats.fouls} />}
+                  {match.stats?.yellowCards && <StatRow label="Yellow Cards" values={match.stats.yellowCards} />}
+                  {match.stats?.redCards && <StatRow label="Red Cards" values={match.stats.redCards} />}
 
                   {/* Show message if no stats available */}
-                  {!match.stats.possession && !match.stats.shots && !match.stats.shotsOnTarget &&
-                    !match.stats.corners && !match.stats.fouls && (
+                  {(!match.stats || (
+                    !match.stats.possession &&
+                    !match.stats.shots &&
+                    !match.stats.shotsOnTarget &&
+                    !match.stats.corners &&
+                    !match.stats.fouls
+                  )) && (
                       <div className="py-8 text-center text-white/40">
                         No match statistics available yet
                       </div>
                     )}
                 </div>
 
-                {match.stats.winProbability && (
+                {match.stats?.winProbability && (
                   <div className="bg-secondary/10 border border-secondary/20 rounded-2xl p-4 text-center mt-6">
                     <p className="text-[10px] font-black uppercase tracking-[0.2em] text-secondary mb-1">Win Probability</p>
                     <div className="flex items-center justify-between text-xs font-bold italic">
@@ -700,51 +750,59 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
                   <Clock size={18} className="text-primary" />
                   <h3 className="font-display italic uppercase tracking-tighter text-2xl">Timeline</h3>
                 </div>
-                <div className="space-y-4 relative">
-                  <div className="absolute left-[15px] top-0 bottom-0 w-px bg-white/5"></div>
-                  {match.events.map((event) => (
-                    <motion.div
-                      initial={{ opacity: 0, x: -20 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      key={event.id}
-                      className="flex items-start gap-6 relative"
-                    >
-                      <div className="relative z-10 w-8 h-8 rounded-full bg-black border border-white/10 flex items-center justify-center text-[10px] font-bold tabular-nums">
-                        {event.minute}'
-                      </div>
-                      <div className="flex-1 bg-white/5 rounded-2xl p-4 border border-white/5 flex items-center justify-between group hover:border-primary/30 transition-all">
-                        <div className="flex items-center gap-3">
-                          <div className={`p-1.5 rounded-lg ${event.type === 'Goal' ? 'bg-primary/20 text-primary' :
-                            event.type === 'Yellow Card' ? 'bg-yellow-500/20 text-yellow-500' :
-                              event.type === 'Red Card' ? 'bg-red-500/20 text-red-500' :
-                                event.type === 'Substitution' ? 'bg-blue-500/20 text-blue-400' :
-                                  event.type === 'Eye Point' ? 'bg-secondary/20 text-secondary' :
-                                    'bg-white/5 text-white/40'
-                            }`}>
-                            {event.type === 'Goal' ? <Trophy size={14} /> :
-                              event.type === 'Substitution' ? <RefreshCw size={14} /> :
-                                event.type === 'Eye Point' ? <Star size={14} fill="currentColor" /> :
-                                  <AlertCircle size={14} />}
-                          </div>
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <p className="text-sm font-bold uppercase tracking-tight italic">{event.type}</p>
-                              {event.isEyePoint && (
-                                <span className="bg-primary/10 text-primary text-[8px] font-black px-1.5 py-0.5 rounded tracking-widest uppercase">+0.5 RATING</span>
-                              )}
-                            </div>
-                            <p className="text-xs text-white/40">{event.detail}</p>
-                          </div>
+                {match.events && match.events.length > 0 ? (
+                  <div className="space-y-4 relative">
+                    <div className="absolute left-[15px] top-0 bottom-0 w-px bg-white/5"></div>
+                    {match.events.map((event) => (
+                      <motion.div
+                        initial={{ opacity: 0, x: -20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        key={event.id}
+                        className="flex items-start gap-6 relative"
+                      >
+                        <div className="relative z-10 w-8 h-8 rounded-full bg-black border border-white/10 flex items-center justify-center text-[10px] font-bold tabular-nums">
+                          {event.minute}'
                         </div>
-                        {event.teamId && (
-                          <div className="text-xl opacity-40 group-hover:opacity-100 transition-opacity">
-                            {event.teamId === match.homeTeamId ? homeTeam?.logo : awayTeam?.logo}
+                        <div className="flex-1 bg-white/5 rounded-2xl p-4 border border-white/5 flex items-center justify-between group hover:border-primary/30 transition-all">
+                          <div className="flex items-center gap-3">
+                            <div className={`p-1.5 rounded-lg ${event.type === 'Goal' ? 'bg-primary/20 text-primary' :
+                              event.type === 'Yellow Card' ? 'bg-yellow-500/20 text-yellow-500' :
+                                event.type === 'Red Card' ? 'bg-red-500/20 text-red-500' :
+                                  event.type === 'Substitution' ? 'bg-blue-500/20 text-blue-400' :
+                                    event.type === 'Eye Point' ? 'bg-secondary/20 text-secondary' :
+                                      'bg-white/5 text-white/40'
+                              }`}>
+                              {event.type === 'Goal' ? <Trophy size={14} /> :
+                                event.type === 'Substitution' ? <RefreshCw size={14} /> :
+                                  event.type === 'Eye Point' ? <Star size={14} fill="currentColor" /> :
+                                    <AlertCircle size={14} />}
+                            </div>
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <p className="text-sm font-bold uppercase tracking-tight italic">{event.type}</p>
+                                {event.isEyePoint && (
+                                  <span className="bg-primary/10 text-primary text-[8px] font-black px-1.5 py-0.5 rounded tracking-widest uppercase">+0.5 RATING</span>
+                                )}
+                              </div>
+                              <p className="text-xs text-white/40">{event.detail}</p>
+                            </div>
                           </div>
-                        )}
-                      </div>
-                    </motion.div>
-                  ))}
-                </div>
+                          {event.teamId && (
+                            <div className="text-xl opacity-40 group-hover:opacity-100 transition-opacity">
+                              {event.teamId === match.homeTeamId ? homeTeam?.logo : awayTeam?.logo}
+                            </div>
+                          )}
+                        </div>
+                      </motion.div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="bg-white/5 rounded-2xl border border-white/10 p-12 text-center">
+                    <Clock className="mx-auto mb-4 text-white/40" size={48} />
+                    <p className="text-white/60 mb-2">No events yet</p>
+                    <p className="text-white/40 text-sm">Match events will appear here as they happen</p>
+                  </div>
+                )}
               </motion.div>
             )}
 

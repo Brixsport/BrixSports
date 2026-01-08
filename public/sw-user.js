@@ -74,6 +74,11 @@ self.addEventListener('fetch', (event) => {
         return;
     }
 
+    // Skip unsupported URL schemes (chrome-extension, etc.)
+    if (!url.protocol.startsWith('http')) {
+        return;
+    }
+
     // API requests - Network first, cache fallback
     if (url.pathname.startsWith('/api/')) {
         event.respondWith(

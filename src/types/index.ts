@@ -62,7 +62,7 @@ export interface Match {
     homeTeam?: Team;
     awayTeam?: Team;
     events: MatchEvent[];
-    stats: MatchStats;
+    stats?: MatchStats;
     lineups?: {
         home: LineupEntry[];
         away: LineupEntry[];
@@ -84,13 +84,13 @@ export interface MatchEvent {
 }
 
 export interface MatchStats {
-    possession: [number, number];
-    shots: [number, number];
-    shotsOnTarget: [number, number];
-    corners: [number, number];
-    fouls: [number, number];
-    yellowCards: [number, number];
-    redCards: [number, number];
+    possession?: [number, number];
+    shots?: [number, number];
+    shotsOnTarget?: [number, number];
+    corners?: [number, number];
+    fouls?: [number, number];
+    yellowCards?: [number, number];
+    redCards?: [number, number];
     // Football-specific stats
     expectedGoals?: [number, number]; // xG for home and away
     winProbability?: [number, number, number]; // [home%, draw%, away%]
