@@ -25,22 +25,28 @@ const getPositionOnPitch = (position: string, index: number, totalInPosition: nu
     const positionLower = position.toLowerCase();
 
     // Vertical positioning (0% = top/home goal, 100% = bottom/away goal)
+    // FIXED: More separation between teams to prevent overlap
     let verticalPercent = 50;
 
     if (positionLower.includes('gk') || positionLower.includes('goalkeeper')) {
         verticalPercent = isHome ? 5 : 95;
     } else if (positionLower.includes('def') || positionLower.includes('cb') || positionLower.includes('lb') || positionLower.includes('rb')) {
-        verticalPercent = isHome ? 18 : 82;
+        // Defenders: Home at 15%, Away at 85% (more separation)
+        verticalPercent = isHome ? 15 : 85;
     } else if (positionLower.includes('mid') || positionLower.includes('cm') || positionLower.includes('dm') || positionLower.includes('am')) {
         if (positionLower.includes('dm')) {
-            verticalPercent = isHome ? 32 : 68;
+            // Defensive midfielders: Home at 28%, Away at 72%
+            verticalPercent = isHome ? 28 : 72;
         } else if (positionLower.includes('am')) {
-            verticalPercent = isHome ? 45 : 55;
+            // Attacking midfielders: Home at 42%, Away at 58%
+            verticalPercent = isHome ? 42 : 58;
         } else {
-            verticalPercent = isHome ? 38 : 62;
+            // Central midfielders: Home at 35%, Away at 65%
+            verticalPercent = isHome ? 35 : 65;
         }
     } else if (positionLower.includes('fw') || positionLower.includes('st') || positionLower.includes('cf') || positionLower.includes('lw') || positionLower.includes('rw')) {
-        verticalPercent = isHome ? 52 : 48;
+        // Forwards: Home at 48%, Away at 52% (closest to center but still separated)
+        verticalPercent = isHome ? 48 : 52;
     }
 
     // Horizontal positioning (left to right)
