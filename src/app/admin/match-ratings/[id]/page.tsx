@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { RatingCalculator } from '@/lib/ratingCalculator';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronLeft, Save, AlertCircle, RefreshCw, Star, Info, Filter } from 'lucide-react';
+import { ChevronLeft, Save, AlertCircle, RefreshCw, Star, Info, Filter, X } from 'lucide-react';
 import Image from 'next/image';
 
 interface Team {
@@ -192,18 +192,51 @@ export default function MatchRatingsAdjustPage() {
                 isMotM: data.isMotM
             }));
 
+            console.log('[Publish Ratings] Submitting', ratingsToSubmit.length, 'ratings for match', matchId);
+            console.log('[Publish Ratings] Payload:', ratingsToSubmit);
+
             const response = await fetch(`/api/matches/${matchId}/ratings/adjust`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ ratings: ratingsToSubmit })
             });
 
-            if (!response.ok) throw new Error('Failed to save ratings');
+            const data = await response.json();
+            console.log('[Publish Ratings] Response:', data);
 
-            router.push(`/matches/${matchId}`);
+            if (!response.ok) {
+                const errorMessage = data.error || data.message || 'Failed to save ratings';
+                console.error('[Publish Ratings] Error:', errorMessage, data);
+                throw new Error(errorMessage);
+            }
+
+            // Validate response
+            if (data.updated === 0) {
+                console.warn('[Publish Ratings] Warning: No ratings were updated');
+                throw new Error('No ratings were updated. Please try again.');
+            }
+
+            if (data.errors && data.errors.length > 0) {
+                console.warn('[Publish Ratings] Partial success:', data.errors);
+                const errorMsg = `Published ${data.updated} ratings, but ${data.errors.length} failed. Check console for details.`;
+                setError(errorMsg);
+                // Still redirect after 2 seconds to show the published ratings
+                setTimeout(() => {
+                    router.push(`/admin/match-ratings`);
+                }, 2000);
+                return;
+            }
+
+            console.log('[Publish Ratings] Success! Updated', data.updated, 'ratings');
+
+            // Show success message briefly before redirecting
+            alert(`Successfully published ${data.updated} player ratings!`);
+            router.push(`/admin/match-ratings`);
 
         } catch (err) {
-            setError(err instanceof Error ? err.message : 'Failed to save ratings');
+            const errorMessage = err instanceof Error ? err.message : 'Failed to save ratings';
+            console.error('[Publish Ratings] Error:', err);
+            setError(errorMessage);
         } finally {
             setSaving(false);
         }
@@ -519,6 +552,32 @@ export default function MatchRatingsAdjustPage() {
                     </AnimatePresence>
                 </motion.div>
             </div>
+
+
+            {/* Error Banner */}
+            {error && (
+                <div className="fixed bottom-24 left-0 right-0 z-50 px-4">
+                    <div className="max-w-5xl mx-auto">
+                        <motion.div
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            className="bg-red-500/10 border border-red-500/50 rounded-xl p-4 flex items-start gap-3 backdrop-blur-xl"
+                        >
+                            <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
+                            <div className="flex-1">
+                                <h4 className="font-bold text-red-400 mb-1">Publishing Error</h4>
+                                <p className="text-sm text-red-300">{error}</p>
+                            </div>
+                            <button
+                                onClick={() => setError(null)}
+                                className="text-red-400 hover:text-red-300 transition-colors"
+                            >
+                                <X className="w-4 h-4" />
+                            </button>
+                        </motion.div>
+                    </div>
+                </div>
+            )}
 
             {/* Sticky Footer */}
             <div className="fixed bottom-0 left-0 right-0 bg-neutral-950/80 backdrop-blur-xl border-t border-white/10 p-4 z-50">
