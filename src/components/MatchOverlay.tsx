@@ -243,6 +243,23 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
     return () => window.removeEventListener('MATCH_STATUS_CHANGE', handleStatusChange);
   }, [match.id]);
 
+  // Listen for ratings published events
+  useEffect(() => {
+    const handleRatingsPublished = (event: any) => {
+      if (event.detail.matchId === match.id) {
+        console.log('Ratings published for match:', match.id);
+        // Refetch ratings to update lineup display
+        if (activeTab === 'lineups' || match.status === 'FINISHED') {
+          setRatingsFetched(false); // Reset to allow refetch
+          // Ratings will be refetched by the existing useEffect
+        }
+      }
+    };
+
+    window.addEventListener('RATINGS_PUBLISHED', handleRatingsPublished);
+    return () => window.removeEventListener('RATINGS_PUBLISHED', handleRatingsPublished);
+  }, [match.id, activeTab, match.status]);
+
   const tabs = [
     ...(match.isStreaming ? [{ id: 'watch', label: 'Watch Live', icon: Play }] : []),
     { id: 'overview', label: 'Overview', icon: Trophy },

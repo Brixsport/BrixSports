@@ -229,6 +229,17 @@ export default function MatchRatingsAdjustPage() {
 
             console.log('[Publish Ratings] Success! Updated', data.updated, 'ratings');
 
+            // Emit custom event for real-time updates
+            if (typeof window !== 'undefined') {
+                window.dispatchEvent(new CustomEvent('RATINGS_PUBLISHED', {
+                    detail: {
+                        matchId,
+                        updated: data.updated,
+                        timestamp: new Date().toISOString()
+                    }
+                }));
+            }
+
             // Show success message briefly before redirecting
             alert(`Successfully published ${data.updated} player ratings!`);
             router.push(`/admin/match-ratings`);

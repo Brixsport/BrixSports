@@ -158,65 +158,79 @@ export function MatchVotePoll({ match, compact = false }: MatchVotePollProps) {
                         Who will win?
                     </h4>
                     <span className="text-xs text-gray-400">
-                        {pollData.totalVotes} votes
+                        {pollData.totalVotes} vote{pollData.totalVotes !== 1 ? 's' : ''}
                     </span>
                 </div>
 
-                {mounted && !showResults && isAuthenticated ? (
-                    <div className="grid grid-cols-3 gap-2">
+                {/* Always show results in compact mode */}
+                <div className="space-y-2">
+                    {[
+                        { label: match.homeTeam.shortName, votes: pollData.homeVotes, choice: 'home', color: 'blue' },
+                        { label: 'Draw', votes: pollData.drawVotes, choice: 'draw', color: 'gray' },
+                        { label: match.awayTeam.shortName, votes: pollData.awayVotes, choice: 'away', color: 'red' },
+                    ].map((option) => (
+                        <div key={option.choice} className="space-y-1">
+                            <div className="flex items-center justify-between text-xs">
+                                <span className={cn(
+                                    "font-medium",
+                                    pollData.userVote === option.choice && "text-green-400"
+                                )}>
+                                    {option.label}
+                                    {pollData.userVote === option.choice && " ✓"}
+                                </span>
+                                <span className="text-gray-400">{getPercentage(option.votes)}%</span>
+                            </div>
+                            <div className="h-1.5 bg-gray-700 rounded-full overflow-hidden">
+                                <div
+                                    className={cn(
+                                        "h-full transition-all duration-500",
+                                        option.color === 'blue' && "bg-blue-500",
+                                        option.color === 'gray' && "bg-gray-500",
+                                        option.color === 'red' && "bg-red-500"
+                                    )}
+                                    style={{ width: `${getPercentage(option.votes)}%` }}
+                                />
+                            </div>
+                        </div>
+                    ))}
+                </div>
+
+                {/* Vote button if not voted yet */}
+                {mounted && isAuthenticated && !pollData.userVote && (
+                    <div className="grid grid-cols-3 gap-2 mt-3 pt-3 border-t border-white/10">
                         <button
                             onClick={() => handleVote('home')}
                             disabled={voting}
                             className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-700 text-white py-2 px-3 rounded-lg text-xs font-semibold transition-colors"
                         >
-                            {match.homeTeam.shortName}
+                            Vote
                         </button>
                         <button
                             onClick={() => handleVote('draw')}
                             disabled={voting}
                             className="bg-gray-600 hover:bg-gray-700 disabled:bg-gray-700 text-white py-2 px-3 rounded-lg text-xs font-semibold transition-colors"
                         >
-                            Draw
+                            Vote
                         </button>
                         <button
                             onClick={() => handleVote('away')}
                             disabled={voting}
                             className="bg-red-600 hover:bg-red-700 disabled:bg-gray-700 text-white py-2 px-3 rounded-lg text-xs font-semibold transition-colors"
                         >
-                            {match.awayTeam.shortName}
+                            Vote
                         </button>
                     </div>
-                ) : (
-                    <div className="space-y-2">
-                        {[
-                            { label: match.homeTeam.shortName, votes: pollData.homeVotes, choice: 'home', color: 'blue' },
-                            { label: 'Draw', votes: pollData.drawVotes, choice: 'draw', color: 'gray' },
-                            { label: match.awayTeam.shortName, votes: pollData.awayVotes, choice: 'away', color: 'red' },
-                        ].map((option) => (
-                            <div key={option.choice} className="space-y-1">
-                                <div className="flex items-center justify-between text-xs">
-                                    <span className={cn(
-                                        "font-medium",
-                                        pollData.userVote === option.choice && "text-green-400"
-                                    )}>
-                                        {option.label}
-                                        {pollData.userVote === option.choice && " ✓"}
-                                    </span>
-                                    <span className="text-gray-400">{getPercentage(option.votes)}%</span>
-                                </div>
-                                <div className="h-1.5 bg-gray-700 rounded-full overflow-hidden">
-                                    <div
-                                        className={cn(
-                                            "h-full transition-all duration-500",
-                                            option.color === 'blue' && "bg-blue-500",
-                                            option.color === 'gray' && "bg-gray-500",
-                                            option.color === 'red' && "bg-red-500"
-                                        )}
-                                        style={{ width: `${getPercentage(option.votes)}%` }}
-                                    />
-                                </div>
-                            </div>
-                        ))}
+                )}
+
+                {/* Sign in prompt */}
+                {mounted && !isAuthenticated && (
+                    <div className="text-center pt-2">
+                        <button
+                            onClick={() => openAuthModal()}
+                            className="text-xs text-primary hover:text-primary/80 font-semibold"
+                        >
+                            Sign in to vote
+                        </button>
                     </div>
                 )}
             </div>
@@ -234,7 +248,9 @@ export function MatchVotePoll({ match, compact = false }: MatchVotePollProps) {
                         </div>
                         <div>
                             <h3 className="text-white font-bold text-base md:text-lg">Match Poll</h3>
-                            <p className="text-white/60 text-xs md:text-sm hidden sm:block">Vote for the winner!</p>
+                            <p className="text-white/60 text-xs md:text-sm hidden sm:block">
+                                {pollData.userVote ? 'Results' : 'Vote for the winner!'}
+                            </p>
                         </div>
                     </div>
 
@@ -248,7 +264,8 @@ export function MatchVotePoll({ match, compact = false }: MatchVotePollProps) {
             </div>
 
             <div className="p-4 md:p-6 space-y-4 md:space-y-6">
-                {mounted && !showResults && isAuthenticated ? (
+                {/* Show voting interface if not voted */}
+                {mounted && !pollData.userVote && isAuthenticated ? (
                     <>
                         <p className="text-center text-white/60 text-sm">Who do you think will win this match?</p>
 

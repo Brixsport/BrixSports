@@ -128,7 +128,7 @@ export function FullPitchLineups({
             </div>
 
             {/* Full Pitch */}
-            <div className="relative w-full aspect-[9/16] md:aspect-[9/14] bg-gradient-to-b from-green-900/40 via-green-800/40 to-green-900/40 rounded-2xl overflow-hidden border border-white/10">
+            <div className="relative w-full aspect-[9/18] md:aspect-[9/16] bg-gradient-to-b from-green-900/40 via-green-800/40 to-green-900/40 rounded-2xl overflow-hidden border border-white/10">
                 {/* Pitch markings */}
                 <div className="absolute inset-0 opacity-20">
                     {/* Top goal */}
@@ -233,6 +233,16 @@ interface PlayerDotProps {
 }
 
 function PlayerDot({ player, rating, position, isCaptain, isMotM, style, onClick, teamColor, isGoalkeeper }: PlayerDotProps) {
+    // Get rating color based on performance
+    const getRatingColor = (rating: number) => {
+        if (rating >= 7.5) return 'bg-green-500 text-white border-green-400';
+        if (rating >= 7.0) return 'bg-green-600 text-white border-green-500';
+        if (rating >= 6.5) return 'bg-yellow-500 text-black border-yellow-400';
+        if (rating >= 6.0) return 'bg-yellow-600 text-white border-yellow-500';
+        if (rating >= 5.5) return 'bg-orange-500 text-white border-orange-400';
+        return 'bg-red-500 text-white border-red-400';
+    };
+
     return (
         <div
             className="absolute cursor-pointer group z-10"
@@ -241,7 +251,7 @@ function PlayerDot({ player, rating, position, isCaptain, isMotM, style, onClick
         >
             {/* Man of the Match star */}
             {isMotM && (
-                <div className="absolute -top-2 left-1/2 -translate-x-1/2 z-20">
+                <div className="absolute -top-3 left-1/2 -translate-x-1/2 z-20">
                     <div className="relative">
                         <div className="absolute inset-0 bg-yellow-400 blur-md opacity-60 animate-pulse"></div>
                         <svg className="w-5 h-5 relative z-10" viewBox="0 0 24 24" fill="gold" stroke="black" strokeWidth="1">
@@ -258,40 +268,51 @@ function PlayerDot({ player, rating, position, isCaptain, isMotM, style, onClick
                 </div>
             )}
 
-            {/* Player circle */}
+            {/* Player circle with jersey number */}
             <div
-                className={`relative w-11 h-11 md:w-12 md:h-12 rounded-full border-2 flex items-center justify-center transition-all group-hover:scale-125 group-hover:z-30 shadow-lg ${rating >= 7.0
-                    ? 'bg-green-500/95 border-green-300'
-                    : rating >= 6.0
-                        ? 'bg-blue-500/95 border-blue-300'
-                        : 'bg-red-500/95 border-red-300'
-                    } ${isGoalkeeper ? 'ring-2 ring-yellow-400/50' : ''}`}
+                className={`relative w-12 h-12 md:w-14 md:h-14 rounded-full border-3 flex items-center justify-center transition-all group-hover:scale-110 group-hover:z-30 shadow-lg ${isGoalkeeper ? 'bg-yellow-500/95 border-yellow-300 ring-2 ring-yellow-400/50' : 'bg-white/95 border-white'
+                    }`}
+                style={{ backgroundColor: isGoalkeeper ? undefined : teamColor }}
             >
-                <span className={`text-xs md:text-sm font-black ${rating >= 6.0 ? 'text-black' : 'text-white'}`}>
+                <span className={`text-sm md:text-base font-black ${isGoalkeeper ? 'text-black' : 'text-white drop-shadow-lg'}`}>
                     {player.number}
                 </span>
             </div>
 
-            {/* Player info tooltip */}
-            <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-30">
+            {/* Rating Badge - Always Visible (SofaScore style) */}
+            <div className="absolute -bottom-6 left-1/2 -translate-x-1/2 z-20">
+                <div className={`px-2 py-0.5 rounded-md border-2 font-bold text-xs md:text-sm shadow-lg ${getRatingColor(rating)}`}>
+                    {rating.toFixed(1)}
+                </div>
+            </div>
+
+            {/* Player name below rating */}
+            <div className="absolute -bottom-10 left-1/2 -translate-x-1/2 z-20 whitespace-nowrap">
+                <p className="text-[10px] md:text-xs font-bold text-white drop-shadow-lg text-center bg-black/50 px-2 py-0.5 rounded">
+                    {player.jerseyName || player.name.split(' ').pop()}
+                </p>
+            </div>
+
+            {/* Enhanced tooltip on hover */}
+            <div className="absolute top-full left-1/2 -translate-x-1/2 mt-14 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-30">
                 <div className="bg-black/95 backdrop-blur-sm px-3 py-2 rounded-lg border border-white/20 whitespace-nowrap shadow-xl">
                     <p className="text-xs font-bold text-white">{player.name}</p>
                     <div className="flex items-center gap-2 mt-1">
                         <span className="text-[10px] text-white/60 uppercase">{position}</span>
                         <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${rating >= 7.0 ? 'bg-green-500/20 text-green-400' :
-                            rating >= 6.0 ? 'bg-blue-500/20 text-blue-400' :
+                            rating >= 6.0 ? 'bg-yellow-500/20 text-yellow-400' :
                                 'bg-red-500/20 text-red-400'
                             }`}>
-                            {rating.toFixed(1)}
+                            ⭐ {rating.toFixed(1)}
                         </span>
                         {isMotM && (
                             <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-yellow-400/20 text-yellow-300 flex items-center gap-0.5">
-                                ⭐ MOTM
+                                🏆 MOTM
                             </span>
                         )}
                         {isCaptain && (
                             <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-yellow-500/20 text-yellow-400">
-                                CAPTAIN
+                                👑 CAPTAIN
                             </span>
                         )}
                     </div>

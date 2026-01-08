@@ -267,6 +267,15 @@ export async function POST(
             }
         }
 
+        // Emit WebSocket event for real-time updates
+        if (typeof global !== 'undefined' && (global as any).io) {
+            (global as any).io.to(`match:${matchId}`).emit('ratings:published', {
+                matchId,
+                updated: updated.length,
+                timestamp: new Date().toISOString()
+            });
+        }
+
         return NextResponse.json({
             message: 'Ratings adjusted successfully',
             updated: updated.length,
