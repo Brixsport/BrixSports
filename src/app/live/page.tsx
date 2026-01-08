@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
 import { ArrowLeft, Activity, Play, Users, Clock } from 'lucide-react';
+import { LiveUpdates } from '@/components/LiveUpdates';
 
 interface Match {
     id: string;
@@ -108,8 +109,8 @@ export default function LiveCenter() {
                                     key={match.id}
                                     onClick={() => setSelectedMatch(match)}
                                     className={`p-4 rounded-xl cursor-pointer transition-all ${selectedMatch?.id === match.id
-                                            ? 'bg-primary/10 border-2 border-primary'
-                                            : 'bg-white/5 border border-white/10 hover:border-white/20'
+                                        ? 'bg-primary/10 border-2 border-primary'
+                                        : 'bg-white/5 border border-white/10 hover:border-white/20'
                                         }`}
                                 >
                                     <div className="flex items-center justify-between mb-2">
@@ -214,18 +215,8 @@ export default function LiveCenter() {
                                             </div>
                                         </div>
 
-                                        {/* Live Commentary Placeholder */}
-                                        <div className="bg-white/5 rounded-xl p-6">
-                                            <h3 className="font-bold mb-4 flex items-center gap-2">
-                                                <Activity size={16} className="text-primary" />
-                                                Live Updates
-                                            </h3>
-                                            <div className="space-y-3 text-sm">
-                                                <p className="text-white/60 text-center py-4">
-                                                    Live commentary coming soon...
-                                                </p>
-                                            </div>
-                                        </div>
+                                        {/* Live Updates */}
+                                        <LiveUpdates matchId={selectedMatch.id} />
                                     </div>
                                 </div>
                             </div>

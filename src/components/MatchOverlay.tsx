@@ -966,12 +966,21 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
                               </div>
                               <p className="text-xs text-white/40">{event.detail}</p>
                             </div>
-                          </div>
-                          {event.teamId && (
-                            <div className="text-xl opacity-40 group-hover:opacity-100 transition-opacity">
-                              {event.teamId === match.homeTeamId ? homeTeam?.logo : awayTeam?.logo}
+                            <div className="flex items-center gap-2">
+                              {event.teamId && (
+                                <img
+                                  src={event.teamId === match.homeTeamId ? homeTeam?.logo : awayTeam?.logo}
+                                  alt="Team"
+                                  className="w-6 h-6 object-contain opacity-60 group-hover:opacity-100 transition-opacity"
+                                />
+                              )}
+                              {event.playerId && players[event.playerId] && (
+                                <span className="text-xs font-semibold text-white/60">
+                                  {players[event.playerId].jerseyName || players[event.playerId].name}
+                                </span>
+                              )}
                             </div>
-                          )}
+                          </div>
                         </div>
                       </motion.div>
                     ))}
