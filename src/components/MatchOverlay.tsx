@@ -263,12 +263,16 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
   useEffect(() => {
     const handleStatusChange = (event: any) => {
       if (event.detail.matchId === match.id) {
-        console.log('Match status changed:', event.detail.status);
+        console.log('🔴 [OVERLAY] Match status changed:', event.detail.status);
+        console.log('🔴 [OVERLAY] Previous status:', match.status);
         // Update match state immediately
-        setMatch(prev => ({
-          ...prev,
-          status: event.detail.status,
-        }));
+        setMatch(prev => {
+          console.log('🔴 [OVERLAY] Updating match status from', prev.status, 'to', event.detail.status);
+          return {
+            ...prev,
+            status: event.detail.status,
+          };
+        });
 
         // Refetch complete match data when match finishes
         if (event.detail.status === 'FINISHED') {
@@ -279,7 +283,7 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
 
     window.addEventListener('MATCH_STATUS_CHANGE', handleStatusChange);
     return () => window.removeEventListener('MATCH_STATUS_CHANGE', handleStatusChange);
-  }, [match.id]);
+  }, [match.id, match.status]);
 
   // Listen for ratings published events
   useEffect(() => {
@@ -297,6 +301,15 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
     window.addEventListener('RATINGS_PUBLISHED', handleRatingsPublished);
     return () => window.removeEventListener('RATINGS_PUBLISHED', handleRatingsPublished);
   }, [match.id, activeTab, match.status]);
+
+  // Log current match status for debugging
+  useEffect(() => {
+    console.log('🎯 [OVERLAY] Current match status:', match.status);
+    console.log('🎯 [OVERLAY] Tabs will show:', {
+      predict: match.status === 'UPCOMING',
+      chat: match.status === 'LIVE',
+    });
+  }, [match.status]);
 
   const tabs = [
     ...(match.isStreaming ? [{ id: 'watch', label: 'Watch Live', icon: Play }] : []),

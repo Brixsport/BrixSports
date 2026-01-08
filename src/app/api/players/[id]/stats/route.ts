@@ -222,3 +222,115 @@ export async function POST(
         );
     }
 }
+
+// PATCH /api/players/[id]/stats - Increment player statistics (for real-time updates)
+export async function PATCH(
+    request: NextRequest,
+    { params }: { params: Promise<{ id: string }> }
+) {
+    try {
+        const { id: playerId } = await params;
+        const body = await request.json();
+        const {
+            competition,
+            sport,
+            incrementGoals = 0,
+            incrementAssists = 0,
+            incrementYellowCards = 0,
+            incrementRedCards = 0,
+            incrementSaves = 0,
+            incrementAppearances = 0,
+        } = body;
+
+        // Validate required fields
+        if (!competition || !sport) {
+            return NextResponse.json(
+                { error: 'Competition and sport are required' },
+                { status: 400 }
+            );
+        }
+
+        // Verify player exists
+        const player = await db
+            .select()
+            .from(players)
+            .where(eq(players.id, playerId))
+            .get();
+
+        if (!player) {
+            return NextResponse.json(
+                { error: 'Player not found' },
+                { status: 404 }
+            );
+        }
+
+        // Check if stats already exist for this player/competition
+        const existingStats = await db
+            .select()
+            .from(playerStats)
+            .where(
+                and(
+                    eq(playerStats.playerId, playerId),
+                    eq(playerStats.competition, competition)
+                )
+            )
+            .get();
+
+        if (existingStats) {
+            // Increment existing stats
+            const updatedStats = {
+                goals: (existingStats.goals || 0) + incrementGoals,
+                assists: (existingStats.assists || 0) + incrementAssists,
+                yellowCards: (existingStats.yellowCards || 0) + incrementYellowCards,
+                redCards: (existingStats.redCards || 0) + incrementRedCards,
+                saves: (existingStats.saves || 0) + incrementSaves,
+                appearances: (existingStats.appearances || 0) + incrementAppearances,
+                updatedAt: new Date(),
+            };
+
+            await db
+                .update(playerStats)
+                .set(updatedStats)
+                .where(eq(playerStats.id, existingStats.id));
+
+            return NextResponse.json({
+                success: true,
+                message: 'Player statistics incremented successfully',
+                stats: { ...existingStats, ...updatedStats },
+            });
+        } else {
+            // Create new stats with incremented values
+            const statsId = `${playerId}_${competition}`;
+            const newStats = {
+                id: statsId,
+                playerId,
+                competition,
+                sport,
+                goals: incrementGoals,
+                assists: incrementAssists,
+                appearances: incrementAppearances,
+                minutesPlayed: 0,
+                yellowCards: incrementYellowCards,
+                redCards: incrementRedCards,
+                cleanSheets: 0,
+                saves: incrementSaves,
+                averageRating: 7.0,
+                updatedAt: new Date(),
+            };
+
+            await db.insert(playerStats).values(newStats);
+
+            return NextResponse.json({
+                success: true,
+                message: 'Player statistics created and incremented successfully',
+                stats: newStats,
+            }, { status: 201 });
+        }
+    } catch (error) {
+        console.error('Error incrementing player stats:', error);
+        return NextResponse.json(
+            { error: 'Failed to increment player statistics' },
+            { status: 500 }
+        );
+    }
+}

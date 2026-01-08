@@ -515,6 +515,9 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                     loggerName: currentLogger?.name,
                 }),
             });
+
+            // Update player statistics in real-time
+            await updatePlayerStats(type, playerId, assistPlayerId);
         } catch (error) {
             console.error('Failed to persist event:', error);
             // Event is still in local state, can be synced later
@@ -555,6 +558,64 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
         // Reset state
         setPendingEvent(null);
         setSelectedEventPlayer(null);
+    };
+
+    // Helper function to update player statistics
+    const updatePlayerStats = async (eventType: FootballEventType, playerId: string, assistPlayerId?: string | null) => {
+        try {
+            const statsUpdate: any = {
+                competition: match.competition,
+                sport: match.sport,
+            };
+
+            // Determine what to increment based on event type
+            switch (eventType) {
+                case 'Goal':
+                case 'Penalty':
+                    statsUpdate.incrementGoals = 1;
+                    break;
+                case 'Yellow Card':
+                    statsUpdate.incrementYellowCards = 1;
+                    break;
+                case 'Red Card':
+                    statsUpdate.incrementRedCards = 1;
+                    break;
+                case 'Save':
+                case 'Catch':
+                    statsUpdate.incrementSaves = 1;
+                    break;
+                // Own goals don't count for the player
+                case 'Own Goal':
+                    return; // Don't update stats for own goals
+            }
+
+            // Update primary player stats
+            if (Object.keys(statsUpdate).length > 2) { // More than just competition and sport
+                await fetch(`/api/players/${playerId}/stats`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(statsUpdate),
+                });
+                console.log(`✅ Updated stats for player ${playerId}:`, statsUpdate);
+            }
+
+            // Update assist player stats if applicable
+            if (assistPlayerId && (eventType === 'Goal' || eventType === 'Penalty')) {
+                await fetch(`/api/players/${assistPlayerId}/stats`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        competition: match.competition,
+                        sport: match.sport,
+                        incrementAssists: 1,
+                    }),
+                });
+                console.log(`✅ Updated assist stats for player ${assistPlayerId}`);
+            }
+        } catch (error) {
+            console.error('Failed to update player stats:', error);
+            // Don't throw - stats can be recalculated later
+        }
     };
 
     const undoLastEvent = () => {
