@@ -268,6 +268,7 @@ function createNotificationPayload(event: MatchEventNotification): NotificationP
 
 /**
  * Send notification for match starting soon (30 minutes, 15 minutes before)
+ * Sends to ALL users with push subscriptions (not just team followers)
  */
 export async function sendMatchReminderNotification(
     matchId: string,
@@ -278,34 +279,19 @@ export async function sendMatchReminderNotification(
     minutesBefore: number
 ): Promise<{ success: boolean; sentCount: number }> {
     try {
-        // Get users who follow either team
-        const teamFollowers = await db
-            .select({
-                userId: userFollows.userId,
-            })
-            .from(userFollows)
-            .where(
-                and(
-                    eq(userFollows.followType, 'team'),
-                    or(
-                        eq(userFollows.followId, homeTeamId),
-                        eq(userFollows.followId, awayTeamId)
-                    ),
-                    eq(userFollows.notificationsEnabled, true)
-                )
-            );
+        console.log(`[MatchNotificationService] Sending ${minutesBefore}-minute reminder for match ${matchId}`);
 
-        const userIds = teamFollowers.map(f => f.userId);
+        // Get ALL push subscriptions (send to everyone, not just team followers)
+        const subscriptions = await db
+            .select()
+            .from(pushSubscriptions);
 
-        if (userIds.length === 0) {
+        if (subscriptions.length === 0) {
+            console.log('[MatchNotificationService] No push subscriptions found');
             return { success: true, sentCount: 0 };
         }
 
-        // Get push subscriptions
-        const subscriptions = await db
-            .select()
-            .from(pushSubscriptions)
-            .where(inArray(pushSubscriptions.userId, userIds));
+        console.log(`[MatchNotificationService] Found ${subscriptions.length} push subscriptions`);
 
         const payload: NotificationPayload = {
             title: '⏰ Match Starting Soon!',
@@ -325,6 +311,7 @@ export async function sendMatchReminderNotification(
         };
 
         let sentCount = 0;
+        const failedSubscriptions: string[] = [];
 
         for (const sub of subscriptions) {
             try {
@@ -339,14 +326,26 @@ export async function sendMatchReminderNotification(
                 await webpush.sendNotification(pushSubscription, JSON.stringify(payload));
                 sentCount++;
             } catch (error: any) {
-                // If subscription is invalid, remove it
+                console.error(`[MatchNotificationService] Failed to send to subscription ${sub.id}:`, error.message);
+
+                // If subscription is invalid, mark for removal
                 if (error.statusCode === 410 || error.statusCode === 404) {
-                    await db
-                        .delete(pushSubscriptions)
-                        .where(eq(pushSubscriptions.id, sub.id));
+                    failedSubscriptions.push(sub.id);
                 }
             }
         }
+
+        // Clean up invalid subscriptions
+        if (failedSubscriptions.length > 0) {
+            for (const subId of failedSubscriptions) {
+                await db
+                    .delete(pushSubscriptions)
+                    .where(eq(pushSubscriptions.id, subId));
+            }
+            console.log(`[MatchNotificationService] Removed ${failedSubscriptions.length} invalid subscriptions`);
+        }
+
+        console.log(`[MatchNotificationService] Sent ${sentCount}/${subscriptions.length} notifications`);
 
         return { success: true, sentCount };
     } catch (error) {
@@ -354,3 +353,4 @@ export async function sendMatchReminderNotification(
         return { success: false, sentCount: 0 };
     }
 }
+

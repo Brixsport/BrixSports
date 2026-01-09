@@ -81,13 +81,21 @@ export async function POST(request: NextRequest) {
         });
 
         // Set auth token in cookie
-        response.cookies.set('authToken', token, {
+        // For production on brixsports.com, ensure cookie works across the domain
+        const cookieOptions: any = {
             httpOnly: true,
             secure: process.env.NODE_ENV === 'production',
             sameSite: 'lax',
             maxAge: 60 * 60 * 24 * 7, // 7 days
             path: '/',
-        });
+        };
+
+        // In production, explicitly set domain for brixsports.com
+        if (process.env.NODE_ENV === 'production' && process.env.COOKIE_DOMAIN) {
+            cookieOptions.domain = process.env.COOKIE_DOMAIN;
+        }
+
+        response.cookies.set('authToken', token, cookieOptions);
 
         return response;
     } catch (error) {

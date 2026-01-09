@@ -71,7 +71,7 @@ export async function POST(request: NextRequest) {
         // Generate JWT token
         const token = generateToken(userId, email.toLowerCase(), role);
 
-        return NextResponse.json({
+        const response = NextResponse.json({
             success: true,
             message: 'User registered successfully',
             user: {
@@ -82,6 +82,24 @@ export async function POST(request: NextRequest) {
             },
             token,
         }, { status: 201 });
+
+        // Set auth token in cookie (same as login)
+        const cookieOptions: any = {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'lax',
+            maxAge: 60 * 60 * 24 * 7, // 7 days
+            path: '/',
+        };
+
+        // In production, explicitly set domain for brixsports.com
+        if (process.env.NODE_ENV === 'production' && process.env.COOKIE_DOMAIN) {
+            cookieOptions.domain = process.env.COOKIE_DOMAIN;
+        }
+
+        response.cookies.set('authToken', token, cookieOptions);
+
+        return response;
     } catch (error) {
         console.error('Registration error:', error);
         return NextResponse.json(
