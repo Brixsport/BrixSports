@@ -144,11 +144,16 @@ function AdminLoggersPageContent() {
             });
 
             if (res.ok) {
-                success(loggerId ? 'Logger assigned' : 'Logger unassigned');
+                success(loggerId ? 'Logger assigned successfully' : 'Logger unassigned successfully');
                 fetchData();
                 setShowAssignModal(false);
             } else {
-                error('Failed to assign logger');
+                const data = await res.json();
+                if (data.code === 'MATCH_ALREADY_ASSIGNED') {
+                    error('This match is already assigned to another logger. Please unassign it first.');
+                } else {
+                    error(data.error || 'Failed to assign logger');
+                }
             }
         } catch (err) {
             error('Failed to assign logger');
@@ -466,10 +471,16 @@ function AdminLoggersPageContent() {
                                                                 </div>
                                                             </div>
                                                             <button
-                                                                onClick={() => assignLogger(match.id, null)}
-                                                                className="p-2 text-white/20 hover:text-red-500 transition-colors"
+                                                                onClick={() => {
+                                                                    if (confirm(`Unassign ${logger?.name} from this match?`)) {
+                                                                        assignLogger(match.id, null);
+                                                                    }
+                                                                }}
+                                                                className="px-3 py-1.5 bg-red-500/10 border border-red-500/20 rounded-lg text-red-500 hover:bg-red-500/20 transition-all text-[10px] font-black uppercase tracking-widest flex items-center gap-1"
+                                                                title="Unassign Logger"
                                                             >
-                                                                <RefreshCw size={14} />
+                                                                <RefreshCw size={12} />
+                                                                Unassign
                                                             </button>
                                                         </div>
                                                     </div>
@@ -568,6 +579,30 @@ function AdminLoggersPageContent() {
                             </div>
 
                             <div className="space-y-3 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
+                                {/* Show unassign option if match already has a logger */}
+                                {selectedMatch?.loggerId && (
+                                    <button
+                                        onClick={() => {
+                                            if (confirm('Are you sure you want to unassign the current logger?')) {
+                                                assignLogger(selectedMatch!.id, null);
+                                            }
+                                        }}
+                                        className="w-full flex items-center justify-between p-4 bg-red-500/5 rounded-2xl border border-red-500/20 hover:border-red-500/50 hover:bg-red-500/10 transition-all group"
+                                    >
+                                        <div className="flex items-center gap-3">
+                                            <div className="w-10 h-10 rounded-full bg-red-500/20 text-red-500 flex items-center justify-center">
+                                                <RefreshCw size={16} />
+                                            </div>
+                                            <div className="text-left">
+                                                <p className="text-sm font-bold italic text-red-500">Unassign Current Logger</p>
+                                                <p className="text-[10px] text-white/30 font-bold uppercase">Remove logger assignment</p>
+                                            </div>
+                                        </div>
+                                        <ChevronRight size={16} className="text-red-500/40 group-hover:text-red-500 transition-colors" />
+                                    </button>
+                                )}
+
+                                {/* Available loggers */}
                                 {loggers.filter(l => l.isAvailable).map(logger => (
                                     <button
                                         key={logger.id}

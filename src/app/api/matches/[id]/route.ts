@@ -311,6 +311,33 @@ export async function PATCH(
         const { id: matchId } = await params;
         const body = await request.json();
 
+        // If assigning a logger, validate that the match isn't already assigned to another logger
+        if (body.loggerId !== undefined && body.loggerId !== null) {
+            const [existingMatch] = await db
+                .select()
+                .from(matches)
+                .where(eq(matches.id, matchId));
+
+            if (!existingMatch) {
+                return NextResponse.json(
+                    { error: 'Match not found' },
+                    { status: 404 }
+                );
+            }
+
+            // Check if match is already assigned to a different logger
+            if (existingMatch.loggerId && existingMatch.loggerId !== body.loggerId) {
+                return NextResponse.json(
+                    {
+                        error: 'Match is already assigned to another logger',
+                        code: 'MATCH_ALREADY_ASSIGNED',
+                        currentLoggerId: existingMatch.loggerId
+                    },
+                    { status: 409 } // 409 Conflict
+                );
+            }
+        }
+
         const updateData: any = {
             updatedAt: new Date(),
         };
