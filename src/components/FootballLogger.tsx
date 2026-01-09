@@ -1167,156 +1167,293 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
             <div className="max-w-7xl mx-auto">
                 {viewMode === 'logger' && (
                     <>
-                        <div className="space-y-4">
-                            {/* Team Toggle */}
-                            <div className="flex bg-white/5 p-1 rounded-xl border border-white/10">
+                        <div className="space-y-3 sm:space-y-4">
+                            {/* Team Toggle - Mobile Optimized */}
+                            <div className="grid grid-cols-2 gap-2 sm:gap-0 sm:flex sm:bg-white/5 sm:p-1 sm:rounded-xl sm:border sm:border-white/10">
                                 <button
                                     onClick={() => setSelectedTeam('home')}
-                                    className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-lg transition-all ${selectedTeam === 'home' ? 'bg-primary text-black' : 'text-white/40'
+                                    className={`flex items-center justify-center gap-2 py-3 sm:py-3 px-4 rounded-lg sm:rounded-lg transition-all ${selectedTeam === 'home'
+                                        ? 'bg-primary text-black scale-105'
+                                        : 'bg-white/5 sm:bg-transparent text-white/40 border border-white/10 sm:border-0'
                                         }`}
                                 >
                                     {homeTeam?.logo ? (
-                                        <img src={homeTeam.logo} alt={homeTeam.name} className="w-8 h-8 object-contain" />
+                                        <img src={homeTeam.logo} alt={homeTeam.name} className="w-6 h-6 sm:w-8 sm:h-8 object-contain" />
                                     ) : (
-                                        <span className="text-2xl">⚽</span>
+                                        <span className="text-xl sm:text-2xl">⚽</span>
                                     )}
-                                    <span className="font-black uppercase tracking-widest">{homeTeam?.shortName}</span>
+                                    <span className="font-black uppercase tracking-widest text-xs sm:text-base">{homeTeam?.shortName}</span>
                                 </button>
                                 <button
                                     onClick={() => setSelectedTeam('away')}
-                                    className={`flex-1 flex items-center justify-center gap-3 py-4 rounded-xl transition-all ${selectedTeam === 'away' ? 'bg-primary text-black' : 'text-white/40'
+                                    className={`flex items-center justify-center gap-2 py-3 sm:py-3 px-4 rounded-lg sm:rounded-lg transition-all ${selectedTeam === 'away'
+                                        ? 'bg-primary text-black scale-105'
+                                        : 'bg-white/5 sm:bg-transparent text-white/40 border border-white/10 sm:border-0'
                                         }`}
                                 >
                                     {awayTeam?.logo ? (
-                                        <img src={awayTeam.logo} alt={awayTeam.name} className="w-8 h-8 object-contain" />
+                                        <img src={awayTeam.logo} alt={awayTeam.name} className="w-6 h-6 sm:w-8 sm:h-8 object-contain" />
                                     ) : (
-                                        <span className="text-2xl">⚽</span>
+                                        <span className="text-xl sm:text-2xl">⚽</span>
                                     )}
-                                    <span className="font-black uppercase tracking-widest">{awayTeam?.shortName}</span>
+                                    <span className="font-black uppercase tracking-widest text-xs sm:text-base">{awayTeam?.shortName}</span>
                                 </button>
                             </div>
 
-                            {/* Scoring Actions */}
-                            <div className="bg-white/5 border border-white/10 rounded-[24px] p-4">
-                                <h3 className="text-sm font-black uppercase tracking-widest mb-4 flex items-center gap-2">
-                                    <Trophy className="text-primary" size={16} />
-                                    Scoring
+                            {/* UNIFIED EVENT PANEL - ALL 24 EVENTS */}
+                            <div className="bg-white/5 border border-white/10 rounded-xl sm:rounded-[24px] p-3 sm:p-6">
+                                <h3 className="text-xs sm:text-sm font-black uppercase tracking-widest text-white/60 mb-3 sm:mb-4">
+                                    UNIFIED EVENT PANEL
                                 </h3>
-                                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-                                    <ActionButton
-                                        label="Goal"
-                                        icon={<Trophy size={18} />}
-                                        color="bg-green-500/20 text-green-500 border-green-500/30"
+
+                                {/* Event Grid - Responsive columns */}
+                                <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-2 sm:gap-3">
+                                    {/* SCORING (3) */}
+                                    {/* Goal */}
+                                    <button
                                         onClick={() => handleEventClick('Goal', true)}
-                                        matchStarted={matchStarted} matchEnded={matchEnded}
-                                    />
-                                    <ActionButton
-                                        label="Penalty"
-                                        icon={<Target size={18} />}
-                                        color="bg-orange-500/20 text-orange-500 border-orange-500/30"
+                                        disabled={!matchStarted || matchEnded}
+                                        className="aspect-square bg-white/5 border border-white/10 rounded-lg sm:rounded-xl hover:bg-green-500/10 hover:border-green-500/50 transition-all disabled:opacity-30 disabled:cursor-not-allowed active:scale-95 flex flex-col items-center justify-center p-2 sm:p-3"
+                                    >
+                                        <span className="text-2xl sm:text-3xl mb-1">⚽</span>
+                                        <span className="text-[9px] sm:text-[10px] font-bold text-white/80 text-center leading-tight">Goal</span>
+                                    </button>
+
+                                    {/* Penalty */}
+                                    <button
                                         onClick={() => handleEventClick('Penalty', true)}
-                                        matchStarted={matchStarted} matchEnded={matchEnded}
-                                    />
-                                    <ActionButton
-                                        label="Own Goal"
-                                        icon={<Trophy size={18} />}
-                                        color="bg-red-500/20 text-red-500 border-red-500/30"
+                                        disabled={!matchStarted || matchEnded}
+                                        className="aspect-square bg-white/5 border border-white/10 rounded-lg sm:rounded-xl hover:bg-orange-500/10 hover:border-orange-500/50 transition-all disabled:opacity-30 disabled:cursor-not-allowed active:scale-95 flex flex-col items-center justify-center p-2 sm:p-3"
+                                    >
+                                        <span className="text-2xl sm:text-3xl mb-1">🎯</span>
+                                        <span className="text-[9px] sm:text-[10px] font-bold text-white/80 text-center leading-tight">Penalty</span>
+                                    </button>
+
+                                    {/* Own Goal */}
+                                    <button
                                         onClick={() => handleEventClick('Own Goal', true)}
-                                        matchStarted={matchStarted} matchEnded={matchEnded}
-                                    />
-                                </div>
-                            </div>
+                                        disabled={!matchStarted || matchEnded}
+                                        className="aspect-square bg-white/5 border border-white/10 rounded-lg sm:rounded-xl hover:bg-red-500/10 hover:border-red-500/50 transition-all disabled:opacity-30 disabled:cursor-not-allowed active:scale-95 flex flex-col items-center justify-center p-2 sm:p-3"
+                                    >
+                                        <span className="text-2xl sm:text-3xl mb-1">⚽</span>
+                                        <span className="text-[9px] sm:text-[10px] font-bold text-white/80 text-center leading-tight">Own Goal</span>
+                                    </button>
 
-                            {/* Goalkeeper Actions */}
-                            <div className="bg-white/5 border border-white/10 rounded-[24px] p-4">
-                                <h3 className="text-sm font-black uppercase tracking-widest mb-4 flex items-center gap-2">
-                                    <Shield className="text-primary" size={16} />
-                                    Goalkeeper
-                                </h3>
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                    <SimpleActionButton label="Save" onClick={() => handleEventClick('Save')} matchStarted={matchStarted} matchEnded={matchEnded} />
-                                    <SimpleActionButton label="Catch" onClick={() => handleEventClick('Catch')} matchStarted={matchStarted} matchEnded={matchEnded} />
-                                </div>
-                            </div>
+                                    {/* GOALKEEPER (2) */}
+                                    {/* Save */}
+                                    <button
+                                        onClick={() => handleEventClick('Save')}
+                                        disabled={!matchStarted || matchEnded}
+                                        className="aspect-square bg-white/5 border border-white/10 rounded-lg sm:rounded-xl hover:bg-white/10 hover:border-primary/50 transition-all disabled:opacity-30 disabled:cursor-not-allowed active:scale-95 flex flex-col items-center justify-center p-2 sm:p-3"
+                                    >
+                                        <span className="text-2xl sm:text-3xl mb-1">🧤</span>
+                                        <span className="text-[9px] sm:text-[10px] font-bold text-white/80 text-center leading-tight">Save</span>
+                                    </button>
 
-                            {/* Defensive Actions */}
-                            <div className="bg-white/5 border border-white/10 rounded-[24px] p-4">
-                                <h3 className="text-sm font-black uppercase tracking-widest mb-4 flex items-center gap-2">
-                                    <Shield className="text-primary" size={16} />
-                                    Defense
-                                </h3>
-                                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-                                    <SimpleActionButton label="Block" onClick={() => handleEventClick('Block')} matchStarted={matchStarted} matchEnded={matchEnded} />
-                                    <SimpleActionButton label="Interception" onClick={() => handleEventClick('Interception')} matchStarted={matchStarted} matchEnded={matchEnded} />
-                                    <SimpleActionButton label="Clearance" onClick={() => handleEventClick('Clearance')} matchStarted={matchStarted} matchEnded={matchEnded} />
-                                    <SimpleActionButton label="Tackle" onClick={() => handleEventClick('Tackle')} matchStarted={matchStarted} matchEnded={matchEnded} />
-                                </div>
-                            </div>
+                                    {/* Catch */}
+                                    <button
+                                        onClick={() => handleEventClick('Catch')}
+                                        disabled={!matchStarted || matchEnded}
+                                        className="aspect-square bg-white/5 border border-white/10 rounded-lg sm:rounded-xl hover:bg-white/10 hover:border-primary/50 transition-all disabled:opacity-30 disabled:cursor-not-allowed active:scale-95 flex flex-col items-center justify-center p-2 sm:p-3"
+                                    >
+                                        <span className="text-2xl sm:text-3xl mb-1">🤲</span>
+                                        <span className="text-[9px] sm:text-[10px] font-bold text-white/80 text-center leading-tight">Catch</span>
+                                    </button>
 
-                            {/* Shooting */}
-                            <div className="bg-white/5 border border-white/10 rounded-[24px] p-4">
-                                <h3 className="text-sm font-black uppercase tracking-widest mb-4 flex items-center gap-2">
-                                    <Target className="text-primary" size={16} />
-                                    Shooting
-                                </h3>
-                                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-                                    <SimpleActionButton label="Shot" onClick={() => handleEventClick('Shot')} matchStarted={matchStarted} matchEnded={matchEnded} />
-                                    <SimpleActionButton label="Shot on Target" onClick={() => handleEventClick('Shot on Target')} matchStarted={matchStarted} matchEnded={matchEnded} />
-                                    <SimpleActionButton label="Shot off Target" onClick={() => handleEventClick('Shot off Target')} matchStarted={matchStarted} matchEnded={matchEnded} />
-                                </div>
-                            </div>
+                                    {/* DEFENSE (4) */}
+                                    {/* Block */}
+                                    <button
+                                        onClick={() => handleEventClick('Block')}
+                                        disabled={!matchStarted || matchEnded}
+                                        className="aspect-square bg-white/5 border border-white/10 rounded-lg sm:rounded-xl hover:bg-white/10 hover:border-primary/50 transition-all disabled:opacity-30 disabled:cursor-not-allowed active:scale-95 flex flex-col items-center justify-center p-2 sm:p-3"
+                                    >
+                                        <span className="text-2xl sm:text-3xl mb-1">🚫</span>
+                                        <span className="text-[9px] sm:text-[10px] font-bold text-white/80 text-center leading-tight">Block</span>
+                                    </button>
 
-                            {/* Set Pieces */}
-                            <div className="bg-white/5 border border-white/10 rounded-[24px] p-4">
-                                <h3 className="text-sm font-black uppercase tracking-widest mb-4 flex items-center gap-2">
-                                    <Activity className="text-primary" size={16} />
-                                    Set Pieces
-                                </h3>
-                                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-                                    <SimpleActionButton label="Corner" onClick={() => handleEventClick('Corner')} matchStarted={matchStarted} matchEnded={matchEnded} />
-                                    <SimpleActionButton label="Free Kick" onClick={() => handleEventClick('Free Kick')} matchStarted={matchStarted} matchEnded={matchEnded} />
-                                    <SimpleActionButton label="Throw In" onClick={() => handleEventClick('Throw In')} matchStarted={matchStarted} matchEnded={matchEnded} />
-                                    <SimpleActionButton label="Goal Kick" onClick={() => handleEventClick('Goal Kick')} matchStarted={matchStarted} matchEnded={matchEnded} />
-                                    <SimpleActionButton label="Offside" onClick={() => handleEventClick('Offside')} matchStarted={matchStarted} matchEnded={matchEnded} />
-                                </div>
-                            </div>
+                                    {/* Interception */}
+                                    <button
+                                        onClick={() => handleEventClick('Interception')}
+                                        disabled={!matchStarted || matchEnded}
+                                        className="aspect-square bg-white/5 border border-white/10 rounded-lg sm:rounded-xl hover:bg-white/10 hover:border-primary/50 transition-all disabled:opacity-30 disabled:cursor-not-allowed active:scale-95 flex flex-col items-center justify-center p-2 sm:p-3"
+                                    >
+                                        <span className="text-2xl sm:text-3xl mb-1">🛡️</span>
+                                        <span className="text-[9px] sm:text-[10px] font-bold text-white/80 text-center leading-tight">Intercept</span>
+                                    </button>
 
-                            {/* Fouls & Cards */}
-                            <div className="bg-white/5 border border-white/10 rounded-[24px] p-4">
-                                <h3 className="text-sm font-black uppercase tracking-widest mb-4 flex items-center gap-2">
-                                    <AlertTriangle className="text-orange-500" size={16} />
-                                    Discipline
-                                </h3>
-                                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-                                    <SimpleActionButton label="Foul" onClick={() => handleEventClick('Foul')} matchStarted={matchStarted} matchEnded={matchEnded} />
-                                    <SimpleActionButton label="Push" onClick={() => handleEventClick('Push')} matchStarted={matchStarted} matchEnded={matchEnded} />
-                                    <SimpleActionButton label="Handball" onClick={() => handleEventClick('Handball')} matchStarted={matchStarted} matchEnded={matchEnded} />
-                                    <ActionButton
-                                        label="Yellow Card"
-                                        icon={<AlertTriangle size={18} />}
-                                        color="bg-yellow-500/20 text-yellow-500 border-yellow-500/30"
+                                    {/* Clearance */}
+                                    <button
+                                        onClick={() => handleEventClick('Clearance')}
+                                        disabled={!matchStarted || matchEnded}
+                                        className="aspect-square bg-white/5 border border-white/10 rounded-lg sm:rounded-xl hover:bg-white/10 hover:border-primary/50 transition-all disabled:opacity-30 disabled:cursor-not-allowed active:scale-95 flex flex-col items-center justify-center p-2 sm:p-3"
+                                    >
+                                        <span className="text-2xl sm:text-3xl mb-1">🦶</span>
+                                        <span className="text-[9px] sm:text-[10px] font-bold text-white/80 text-center leading-tight">Clear</span>
+                                    </button>
+
+                                    {/* Tackle */}
+                                    <button
+                                        onClick={() => handleEventClick('Tackle')}
+                                        disabled={!matchStarted || matchEnded}
+                                        className="aspect-square bg-white/5 border border-white/10 rounded-lg sm:rounded-xl hover:bg-white/10 hover:border-primary/50 transition-all disabled:opacity-30 disabled:cursor-not-allowed active:scale-95 flex flex-col items-center justify-center p-2 sm:p-3"
+                                    >
+                                        <span className="text-2xl sm:text-3xl mb-1">💪</span>
+                                        <span className="text-[9px] sm:text-[10px] font-bold text-white/80 text-center leading-tight">Tackle</span>
+                                    </button>
+
+                                    {/* SHOOTING (3) */}
+                                    {/* Shot */}
+                                    <button
+                                        onClick={() => handleEventClick('Shot')}
+                                        disabled={!matchStarted || matchEnded}
+                                        className="aspect-square bg-white/5 border border-white/10 rounded-lg sm:rounded-xl hover:bg-white/10 hover:border-primary/50 transition-all disabled:opacity-30 disabled:cursor-not-allowed active:scale-95 flex flex-col items-center justify-center p-2 sm:p-3"
+                                    >
+                                        <span className="text-2xl sm:text-3xl mb-1">⚡</span>
+                                        <span className="text-[9px] sm:text-[10px] font-bold text-white/80 text-center leading-tight">Shot</span>
+                                    </button>
+
+                                    {/* Shot On Target */}
+                                    <button
+                                        onClick={() => handleEventClick('Shot on Target')}
+                                        disabled={!matchStarted || matchEnded}
+                                        className="aspect-square bg-white/5 border border-white/10 rounded-lg sm:rounded-xl hover:bg-white/10 hover:border-primary/50 transition-all disabled:opacity-30 disabled:cursor-not-allowed active:scale-95 flex flex-col items-center justify-center p-2 sm:p-3"
+                                    >
+                                        <span className="text-2xl sm:text-3xl mb-1">🎯</span>
+                                        <span className="text-[9px] sm:text-[10px] font-bold text-white/80 text-center leading-tight">Shot On</span>
+                                    </button>
+
+                                    {/* Shot Off Target */}
+                                    <button
+                                        onClick={() => handleEventClick('Shot off Target')}
+                                        disabled={!matchStarted || matchEnded}
+                                        className="aspect-square bg-white/5 border border-white/10 rounded-lg sm:rounded-xl hover:bg-white/10 hover:border-primary/50 transition-all disabled:opacity-30 disabled:cursor-not-allowed active:scale-95 flex flex-col items-center justify-center p-2 sm:p-3"
+                                    >
+                                        <span className="text-2xl sm:text-3xl mb-1">❌</span>
+                                        <span className="text-[9px] sm:text-[10px] font-bold text-white/80 text-center leading-tight">Shot Off</span>
+                                    </button>
+
+                                    {/* SET PIECES (5) */}
+                                    {/* Corner */}
+                                    <button
+                                        onClick={() => handleEventClick('Corner')}
+                                        disabled={!matchStarted || matchEnded}
+                                        className="aspect-square bg-white/5 border border-white/10 rounded-lg sm:rounded-xl hover:bg-white/10 hover:border-primary/50 transition-all disabled:opacity-30 disabled:cursor-not-allowed active:scale-95 flex flex-col items-center justify-center p-2 sm:p-3"
+                                    >
+                                        <span className="text-2xl sm:text-3xl mb-1">🚩</span>
+                                        <span className="text-[9px] sm:text-[10px] font-bold text-white/80 text-center leading-tight">Corner</span>
+                                    </button>
+
+                                    {/* Free Kick */}
+                                    <button
+                                        onClick={() => handleEventClick('Free Kick')}
+                                        disabled={!matchStarted || matchEnded}
+                                        className="aspect-square bg-white/5 border border-white/10 rounded-lg sm:rounded-xl hover:bg-white/10 hover:border-primary/50 transition-all disabled:opacity-30 disabled:cursor-not-allowed active:scale-95 flex flex-col items-center justify-center p-2 sm:p-3"
+                                    >
+                                        <span className="text-2xl sm:text-3xl mb-1">🦶</span>
+                                        <span className="text-[9px] sm:text-[10px] font-bold text-white/80 text-center leading-tight">Free Kick</span>
+                                    </button>
+
+                                    {/* Throw In */}
+                                    <button
+                                        onClick={() => handleEventClick('Throw In')}
+                                        disabled={!matchStarted || matchEnded}
+                                        className="aspect-square bg-white/5 border border-white/10 rounded-lg sm:rounded-xl hover:bg-white/10 hover:border-primary/50 transition-all disabled:opacity-30 disabled:cursor-not-allowed active:scale-95 flex flex-col items-center justify-center p-2 sm:p-3"
+                                    >
+                                        <span className="text-2xl sm:text-3xl mb-1">👐</span>
+                                        <span className="text-[9px] sm:text-[10px] font-bold text-white/80 text-center leading-tight">Throw-in</span>
+                                    </button>
+
+                                    {/* Goal Kick */}
+                                    <button
+                                        onClick={() => handleEventClick('Goal Kick')}
+                                        disabled={!matchStarted || matchEnded}
+                                        className="aspect-square bg-white/5 border border-white/10 rounded-lg sm:rounded-xl hover:bg-white/10 hover:border-primary/50 transition-all disabled:opacity-30 disabled:cursor-not-allowed active:scale-95 flex flex-col items-center justify-center p-2 sm:p-3"
+                                    >
+                                        <span className="text-2xl sm:text-3xl mb-1">🥅</span>
+                                        <span className="text-[9px] sm:text-[10px] font-bold text-white/80 text-center leading-tight">Goal Kick</span>
+                                    </button>
+
+                                    {/* Offside */}
+                                    <button
+                                        onClick={() => handleEventClick('Offside')}
+                                        disabled={!matchStarted || matchEnded}
+                                        className="aspect-square bg-white/5 border border-white/10 rounded-lg sm:rounded-xl hover:bg-white/10 hover:border-primary/50 transition-all disabled:opacity-30 disabled:cursor-not-allowed active:scale-95 flex flex-col items-center justify-center p-2 sm:p-3"
+                                    >
+                                        <span className="text-2xl sm:text-3xl mb-1">🚩</span>
+                                        <span className="text-[9px] sm:text-[10px] font-bold text-white/80 text-center leading-tight">Offside</span>
+                                    </button>
+
+                                    {/* DISCIPLINE (5) */}
+                                    {/* Foul */}
+                                    <button
+                                        onClick={() => handleEventClick('Foul')}
+                                        disabled={!matchStarted || matchEnded}
+                                        className="aspect-square bg-white/5 border border-white/10 rounded-lg sm:rounded-xl hover:bg-white/10 hover:border-primary/50 transition-all disabled:opacity-30 disabled:cursor-not-allowed active:scale-95 flex flex-col items-center justify-center p-2 sm:p-3"
+                                    >
+                                        <span className="text-2xl sm:text-3xl mb-1">⚠️</span>
+                                        <span className="text-[9px] sm:text-[10px] font-bold text-white/80 text-center leading-tight">Foul</span>
+                                    </button>
+
+                                    {/* Push */}
+                                    <button
+                                        onClick={() => handleEventClick('Push')}
+                                        disabled={!matchStarted || matchEnded}
+                                        className="aspect-square bg-white/5 border border-white/10 rounded-lg sm:rounded-xl hover:bg-white/10 hover:border-primary/50 transition-all disabled:opacity-30 disabled:cursor-not-allowed active:scale-95 flex flex-col items-center justify-center p-2 sm:p-3"
+                                    >
+                                        <span className="text-2xl sm:text-3xl mb-1">🤚</span>
+                                        <span className="text-[9px] sm:text-[10px] font-bold text-white/80 text-center leading-tight">Push</span>
+                                    </button>
+
+                                    {/* Handball */}
+                                    <button
+                                        onClick={() => handleEventClick('Handball')}
+                                        disabled={!matchStarted || matchEnded}
+                                        className="aspect-square bg-white/5 border border-white/10 rounded-lg sm:rounded-xl hover:bg-white/10 hover:border-primary/50 transition-all disabled:opacity-30 disabled:cursor-not-allowed active:scale-95 flex flex-col items-center justify-center p-2 sm:p-3"
+                                    >
+                                        <span className="text-2xl sm:text-3xl mb-1">✋</span>
+                                        <span className="text-[9px] sm:text-[10px] font-bold text-white/80 text-center leading-tight">Handball</span>
+                                    </button>
+
+                                    {/* Yellow Card */}
+                                    <button
                                         onClick={() => handleEventClick('Yellow Card')}
-                                        matchStarted={matchStarted} matchEnded={matchEnded}
-                                    />
-                                    <ActionButton
-                                        label="Red Card"
-                                        icon={<AlertTriangle size={18} />}
-                                        color="bg-red-500/20 text-red-500 border-red-500/30"
-                                        onClick={() => handleEventClick('Red Card')}
-                                        matchStarted={matchStarted} matchEnded={matchEnded}
-                                    />
-                                </div>
-                            </div>
+                                        disabled={!matchStarted || matchEnded}
+                                        className="aspect-square bg-white/5 border border-white/10 rounded-lg sm:rounded-xl hover:bg-yellow-500/10 hover:border-yellow-500/50 transition-all disabled:opacity-30 disabled:cursor-not-allowed active:scale-95 flex flex-col items-center justify-center p-2 sm:p-3"
+                                    >
+                                        <span className="text-2xl sm:text-3xl mb-1">🟨</span>
+                                        <span className="text-[9px] sm:text-[10px] font-bold text-white/80 text-center leading-tight">Yellow</span>
+                                    </button>
 
-                            {/* Team Actions */}
-                            <div className="bg-white/5 border border-white/10 rounded-[24px] p-4">
-                                <h3 className="text-sm font-black uppercase tracking-widest mb-4 flex items-center gap-2">
-                                    <Users className="text-primary" size={16} />
-                                    Team Actions
-                                </h3>
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                    <SimpleActionButton label="Substitution" onClick={() => handleEventClick('Substitution')} matchStarted={matchStarted} matchEnded={matchEnded} />
-                                    <SimpleActionButton label="Assist" onClick={() => handleEventClick('Assist')} matchStarted={matchStarted} matchEnded={matchEnded} />
+                                    {/* Red Card */}
+                                    <button
+                                        onClick={() => handleEventClick('Red Card')}
+                                        disabled={!matchStarted || matchEnded}
+                                        className="aspect-square bg-white/5 border border-white/10 rounded-lg sm:rounded-xl hover:bg-red-500/10 hover:border-red-500/50 transition-all disabled:opacity-30 disabled:cursor-not-allowed active:scale-95 flex flex-col items-center justify-center p-2 sm:p-3"
+                                    >
+                                        <span className="text-2xl sm:text-3xl mb-1">🟥</span>
+                                        <span className="text-[9px] sm:text-[10px] font-bold text-white/80 text-center leading-tight">Red</span>
+                                    </button>
+
+                                    {/* TEAM ACTIONS (2) */}
+                                    {/* Substitution */}
+                                    <button
+                                        onClick={() => handleEventClick('Substitution')}
+                                        disabled={!matchStarted || matchEnded}
+                                        className="aspect-square bg-white/5 border border-white/10 rounded-lg sm:rounded-xl hover:bg-white/10 hover:border-primary/50 transition-all disabled:opacity-30 disabled:cursor-not-allowed active:scale-95 flex flex-col items-center justify-center p-2 sm:p-3"
+                                    >
+                                        <span className="text-2xl sm:text-3xl mb-1">🔄</span>
+                                        <span className="text-[9px] sm:text-[10px] font-bold text-white/80 text-center leading-tight">Sub</span>
+                                    </button>
+
+                                    {/* Assist */}
+                                    <button
+                                        onClick={() => handleEventClick('Assist')}
+                                        disabled={!matchStarted || matchEnded}
+                                        className="aspect-square bg-white/5 border border-white/10 rounded-lg sm:rounded-xl hover:bg-white/10 hover:border-primary/50 transition-all disabled:opacity-30 disabled:cursor-not-allowed active:scale-95 flex flex-col items-center justify-center p-2 sm:p-3"
+                                    >
+                                        <span className="text-2xl sm:text-3xl mb-1">🤝</span>
+                                        <span className="text-[9px] sm:text-[10px] font-bold text-white/80 text-center leading-tight">Assist</span>
+                                    </button>
                                 </div>
                             </div>
                         </div>

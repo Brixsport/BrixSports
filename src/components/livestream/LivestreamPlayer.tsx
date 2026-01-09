@@ -29,6 +29,8 @@ export function LivestreamPlayer({
     const [showControls, setShowControls] = useState(true);
     const [volume, setVolume] = useState(100);
     const [currentEmbedUrl, setCurrentEmbedUrl] = useState('');
+    const [isLoading, setIsLoading] = useState(true);
+    const [hasError, setHasError] = useState(false);
     const containerRef = useRef<HTMLDivElement>(null);
     const iframeRef = useRef<HTMLIFrameElement>(null);
     const controlsTimeoutRef = useRef<NodeJS.Timeout | undefined>(undefined);
@@ -46,28 +48,71 @@ export function LivestreamPlayer({
 
     // Extract video ID for different platforms
     const getEmbedUrl = (url: string, type: string) => {
-        switch (type) {
-            case 'youtube': {
-                const videoId = extractYouTubeId(url);
-                // Add enablejsapi=1 to allow postMessage control
-                return `https://www.youtube.com/embed/${videoId}?autoplay=1&mute=0&controls=1&rel=0&modestbranding=1&enablejsapi=1`;
+        try {
+            switch (type) {
+                case 'youtube': {
+                    const videoId = extractYouTubeId(url);
+                    if (!videoId) {
+                        console.error('Invalid YouTube URL:', url);
+                        setHasError(true);
+                        return '';
+                    }
+                    // Add enablejsapi=1 to allow postMessage control
+                    return `https://www.youtube.com/embed/${videoId}?autoplay=1&mute=0&controls=1&rel=0&modestbranding=1&enablejsapi=1&origin=${window.location.origin}`;
+                }
+                case 'twitch': {
+                    const channel = extractTwitchChannel(url);
+                    if (!channel) {
+                        console.error('Invalid Twitch URL:', url);
+                        setHasError(true);
+                        return '';
+                    }
+                    return `https://player.twitch.tv/?channel=${channel}&parent=${window.location.hostname}&autoplay=true`;
+                }
+                case 'facebook': {
+                    return `https://www.facebook.com/plugins/video.php?href=${encodeURIComponent(url)}&autoplay=true&show_text=false`;
+                }
+                case 'hls':
+                case 'dash':
+                case 'custom':
+                    // For HLS/DASH, return the URL directly - will need a proper player
+                    return url;
+                default:
+                    return url;
             }
-            case 'twitch': {
-                const channel = extractTwitchChannel(url);
-                return `https://player.twitch.tv/?channel=${channel}&parent=${window.location.hostname}&autoplay=true`;
-            }
-            case 'facebook': {
-                return `https://www.facebook.com/plugins/video.php?href=${encodeURIComponent(url)}&autoplay=true`;
-            }
-            default:
-                return url;
+        } catch (error) {
+            console.error('Error generating embed URL:', error);
+            setHasError(true);
+            return '';
         }
     };
 
     // Initial URL setup
     useEffect(() => {
-        setCurrentEmbedUrl(getEmbedUrl(streamUrl, streamType));
+        setIsLoading(true);
+        setHasError(false);
+        const embedUrl = getEmbedUrl(streamUrl, streamType);
+        if (embedUrl) {
+            setCurrentEmbedUrl(embedUrl);
+            // Set loading to false after a short delay to allow iframe to load
+            setTimeout(() => setIsLoading(false), 2000);
+        } else {
+            setIsLoading(false);
+            setHasError(true);
+        }
     }, [streamUrl, streamType]);
+
+    // Handle iframe load events
+    const handleIframeLoad = () => {
+        setIsLoading(false);
+        setHasError(false);
+    };
+
+    const handleIframeError = () => {
+        setIsLoading(false);
+        setHasError(true);
+        console.error('Iframe failed to load:', currentEmbedUrl);
+    };
 
     // Handle seek
     useEffect(() => {
@@ -148,15 +193,57 @@ export function LivestreamPlayer({
         >
             {/* Video Container */}
             <div className="relative aspect-video w-full">
+                {/* Error State */}
+                {hasError && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-gray-900 to-black">
+                        <div className="text-center p-8">
+                            <div className="text-6xl mb-4">⚠️</div>
+                            <h3 className="text-xl font-bold text-white mb-2">Unable to Load Stream</h3>
+                            <p className="text-gray-400 mb-4">
+                                The livestream could not be loaded. This might be due to:
+                            </p>
+                            <ul className="text-sm text-gray-500 text-left max-w-md mx-auto space-y-1 mb-4">
+                                <li>• Invalid stream URL</li>
+                                <li>• Stream is not currently live</li>
+                                <li>• Browser blocking the embed</li>
+                                <li>• Network connectivity issues</li>
+                            </ul>
+                            <button
+                                onClick={() => window.location.reload()}
+                                className="px-6 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors"
+                            >
+                                Retry
+                            </button>
+                        </div>
+                    </div>
+                )}
+
+                {/* Loading State */}
+                {isLoading && !hasError && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-gray-900 to-black">
+                        <div className="text-center">
+                            <div className="w-16 h-16 border-4 border-red-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+                            <p className="text-white font-semibold">Loading stream...</p>
+                            <p className="text-gray-400 text-sm mt-2">Please wait</p>
+                        </div>
+                    </div>
+                )}
+
                 {/* Embedded Player */}
-                <iframe
-                    ref={iframeRef}
-                    src={currentEmbedUrl}
-                    className="absolute inset-0 w-full h-full"
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                    allowFullScreen
-                    title={matchTitle}
-                />
+                {currentEmbedUrl && !hasError && (
+                    <iframe
+                        ref={iframeRef}
+                        src={currentEmbedUrl}
+                        className="absolute inset-0 w-full h-full"
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                        allowFullScreen
+                        title={matchTitle}
+                        onLoad={handleIframeLoad}
+                        onError={handleIframeError}
+                        sandbox="allow-same-origin allow-scripts allow-presentation allow-forms allow-popups"
+                    />
+                )}
+
 
                 {/* Live Indicator & Viewer Count */}
                 <div
