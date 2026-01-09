@@ -154,9 +154,9 @@ export function FullPitchLineups({
         const activeLayers = allLayers.filter(l => layerMap[l].length > 0);
 
         // Calculate dynamic Y-spacing
-        // Available space: from 6% (Goal) to 46% (Near Halfway)
+        // Available space: from 6% (Goal) to 41% (Retracted from Halfway to prevent overlap)
         const minY = 6;
-        const maxY = 46;
+        const maxY = 41;
 
         const getDynamicY = (layerName: string) => {
             const index = activeLayers.indexOf(layerName);
