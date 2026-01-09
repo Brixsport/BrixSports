@@ -404,9 +404,26 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
         return () => clearInterval(syncInterval);
     }, [events, isConnected, syncEvents, currentLogger]);
 
-    // Handle event button click - opens player modal
+    // Helper function to determine if an event requires player selection
+    const requiresPlayerSelection = (type: FootballEventType): boolean => {
+        // Set pieces and team-level events don't need player selection
+        const noPlayerEvents: FootballEventType[] = [
+            'Corner', 'Free Kick', 'Throw In', 'Goal Kick', 'Offside'
+        ];
+        return !noPlayerEvents.includes(type);
+    };
+
+    // Handle event button click - opens player modal or records directly
     const handleEventClick = (type: FootballEventType, isGoal: boolean = false) => {
         if (!matchStarted) return;
+
+        // If event doesn't require player selection, record it directly
+        if (!requiresPlayerSelection(type)) {
+            recordEvent(type, 'team-event'); // Use a placeholder for team events
+            return;
+        }
+
+        // Otherwise, show player selection modal
         setPendingEvent({ type, isGoal });
         setShowPlayerModal(true);
     };
@@ -466,10 +483,18 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
     // Record the actual event
     const recordEvent = async (type: FootballEventType, playerId: string, assistPlayerId?: string | null) => {
         const allPlayers = [...homePlayers, ...awayPlayers];
-        const player = allPlayers.find(p => p.id === playerId);
+        const isTeamEvent = playerId === 'team-event';
+        const player = isTeamEvent ? null : allPlayers.find(p => p.id === playerId);
         const assistPlayer = assistPlayerId ? allPlayers.find(p => p.id === assistPlayerId) : null;
 
         const isScoringEvent = ['Goal', 'Penalty', 'Own Goal'].includes(type);
+
+        // For team events, use team name; for player events, use player name
+        const eventDetail = isTeamEvent
+            ? (selectedTeam === 'home' ? homeTeam?.name : awayTeam?.name) || type
+            : type === 'Substitution' && assistPlayer
+                ? `${assistPlayer.name} IN for ${player?.name || 'Unknown'}`
+                : player?.name || '';
 
         const newEvent = {
             id: `e${events.length + 1}`,
@@ -477,11 +502,9 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
             minute: minute,
             second: second,
             teamId: selectedTeam === 'home' ? match.homeTeamId : match.awayTeamId,
-            playerId,
+            playerId: isTeamEvent ? null : playerId,
             assistPlayerId: assistPlayerId || undefined,
-            detail: type === 'Substitution' && assistPlayer
-                ? `${assistPlayer.name} IN for ${player?.name || 'Unknown'}`
-                : player?.name || '',
+            detail: eventDetail,
             assistDetail: type === 'Substitution' ? undefined : assistPlayer?.name,
             value: isScoringEvent ? 1 : undefined,
             loggerId: currentLogger?.id,
@@ -537,7 +560,7 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                     minute: minute,  // Actual match minute
                     second: second,  // Actual match second
                     teamId: selectedTeam === 'home' ? match.homeTeamId : match.awayTeamId,
-                    playerId,
+                    playerId: isTeamEvent ? null : playerId,
                     relatedPlayerId: assistPlayerId || null,
                     detail: newEvent.detail,
                     value: isScoringEvent ? 1 : null,
@@ -546,8 +569,10 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                 }),
             });
 
-            // Update player statistics in real-time
-            await updatePlayerStats(type, playerId, assistPlayerId);
+            // Update player statistics in real-time (only for player-specific events)
+            if (!isTeamEvent) {
+                await updatePlayerStats(type, playerId, assistPlayerId);
+            }
         } catch (error) {
             console.error('Failed to persist event:', error);
             // Event is still in local state, can be synced later
@@ -1177,7 +1202,7 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                                     <Trophy className="text-primary" size={16} />
                                     Scoring
                                 </h3>
-                                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
                                     <ActionButton
                                         label="Goal"
                                         icon={<Trophy size={18} />}
@@ -1208,7 +1233,7 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                                     <Shield className="text-primary" size={16} />
                                     Goalkeeper
                                 </h3>
-                                <div className="grid grid-cols-2 gap-3">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                     <SimpleActionButton label="Save" onClick={() => handleEventClick('Save')} matchStarted={matchStarted} matchEnded={matchEnded} />
                                     <SimpleActionButton label="Catch" onClick={() => handleEventClick('Catch')} matchStarted={matchStarted} matchEnded={matchEnded} />
                                 </div>
@@ -1220,7 +1245,7 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                                     <Shield className="text-primary" size={16} />
                                     Defense
                                 </h3>
-                                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
                                     <SimpleActionButton label="Block" onClick={() => handleEventClick('Block')} matchStarted={matchStarted} matchEnded={matchEnded} />
                                     <SimpleActionButton label="Interception" onClick={() => handleEventClick('Interception')} matchStarted={matchStarted} matchEnded={matchEnded} />
                                     <SimpleActionButton label="Clearance" onClick={() => handleEventClick('Clearance')} matchStarted={matchStarted} matchEnded={matchEnded} />
@@ -1234,7 +1259,7 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                                     <Target className="text-primary" size={16} />
                                     Shooting
                                 </h3>
-                                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
                                     <SimpleActionButton label="Shot" onClick={() => handleEventClick('Shot')} matchStarted={matchStarted} matchEnded={matchEnded} />
                                     <SimpleActionButton label="Shot on Target" onClick={() => handleEventClick('Shot on Target')} matchStarted={matchStarted} matchEnded={matchEnded} />
                                     <SimpleActionButton label="Shot off Target" onClick={() => handleEventClick('Shot off Target')} matchStarted={matchStarted} matchEnded={matchEnded} />
@@ -1247,7 +1272,7 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                                     <Activity className="text-primary" size={16} />
                                     Set Pieces
                                 </h3>
-                                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
                                     <SimpleActionButton label="Corner" onClick={() => handleEventClick('Corner')} matchStarted={matchStarted} matchEnded={matchEnded} />
                                     <SimpleActionButton label="Free Kick" onClick={() => handleEventClick('Free Kick')} matchStarted={matchStarted} matchEnded={matchEnded} />
                                     <SimpleActionButton label="Throw In" onClick={() => handleEventClick('Throw In')} matchStarted={matchStarted} matchEnded={matchEnded} />
@@ -1262,7 +1287,7 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                                     <AlertTriangle className="text-orange-500" size={16} />
                                     Discipline
                                 </h3>
-                                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
                                     <SimpleActionButton label="Foul" onClick={() => handleEventClick('Foul')} matchStarted={matchStarted} matchEnded={matchEnded} />
                                     <SimpleActionButton label="Push" onClick={() => handleEventClick('Push')} matchStarted={matchStarted} matchEnded={matchEnded} />
                                     <SimpleActionButton label="Handball" onClick={() => handleEventClick('Handball')} matchStarted={matchStarted} matchEnded={matchEnded} />
@@ -1289,7 +1314,7 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                                     <Users className="text-primary" size={16} />
                                     Team Actions
                                 </h3>
-                                <div className="grid grid-cols-2 gap-3">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                     <SimpleActionButton label="Substitution" onClick={() => handleEventClick('Substitution')} matchStarted={matchStarted} matchEnded={matchEnded} />
                                     <SimpleActionButton label="Assist" onClick={() => handleEventClick('Assist')} matchStarted={matchStarted} matchEnded={matchEnded} />
                                 </div>
@@ -1780,10 +1805,10 @@ function ActionButton({ label, icon, color, onClick, matchStarted, matchEnded }:
         <button
             onClick={onClick}
             disabled={!matchStarted || matchEnded}
-            className={`${color} flex flex-col items-center justify-center gap-2 p-4 rounded-[20px] hover:scale-105 transition-all active:scale-95 border disabled:opacity-50 disabled:cursor-not-allowed`}
+            className={`${color} flex flex-col items-center justify-center gap-2 p-4 min-h-[80px] rounded-[20px] hover:scale-105 transition-all active:scale-95 border disabled:opacity-50 disabled:cursor-not-allowed touch-manipulation`}
         >
             <div className="opacity-80">{icon}</div>
-            <span className="text-[9px] font-black uppercase tracking-tight text-center leading-tight">{label}</span>
+            <span className="text-[10px] sm:text-xs font-black uppercase tracking-tight text-center leading-tight">{label}</span>
         </button>
     );
 }
@@ -1793,7 +1818,7 @@ function SimpleActionButton({ label, onClick, matchStarted, matchEnded }: any) {
         <button
             onClick={onClick}
             disabled={!matchStarted || matchEnded}
-            className="bg-white/5 text-white/60 border border-white/10 p-4 rounded-[20px] hover:bg-white/10 hover:text-white transition-all text-[10px] font-black uppercase tracking-tight disabled:opacity-50 disabled:cursor-not-allowed"
+            className="bg-white/5 text-white/60 border border-white/10 p-4 min-h-[60px] rounded-[20px] hover:bg-white/10 hover:text-white active:bg-white/15 transition-all text-[10px] sm:text-xs font-black uppercase tracking-tight disabled:opacity-50 disabled:cursor-not-allowed touch-manipulation"
         >
             {label}
         </button>
