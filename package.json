@@ -17,7 +17,8 @@
     "list-users": "tsx scripts/list-users.ts",
     "set-admin": "tsx scripts/set-admin-role.ts",
     "check-loggers": "tsx scripts/check-logger-matches.ts",
-    "assign-match": "tsx scripts/assign-match.ts"
+    "assign-match": "tsx scripts/assign-match.ts",
+    "add-king-fc-players": "tsx scripts/add-king-fc-players.ts"
   },
   "dependencies": {
     "@babel/parser": "^7.28.5",

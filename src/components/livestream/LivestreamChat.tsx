@@ -96,7 +96,12 @@ export function LivestreamChat({ matchId, enabled = true, className }: Livestrea
     const handleSendMessage = (e: React.FormEvent) => {
         e.preventDefault();
 
-        if (!inputMessage.trim() || !user) return;
+        if (!inputMessage.trim()) return;
+
+        if (!user) {
+            openAuthModal();
+            return;
+        }
 
         const newMessage: ChatMessage = {
             id: Date.now().toString(),
@@ -107,15 +112,29 @@ export function LivestreamChat({ matchId, enabled = true, className }: Livestrea
             timestamp: new Date()
         };
 
-        // Emit to server
+        // Add message optimistically to UI
+        setMessages(prev => [...prev, newMessage]);
+        setInputMessage('');
+
+        // Emit to server if connected
         if (isConnected) {
             emit('chat:message', {
                 matchId,
                 ...newMessage
             });
-            setInputMessage('');
         } else {
-            console.error('Cannot send message: Socket not connected');
+            // If not connected, show a system message
+            console.warn('Cannot send message: Socket not connected');
+            setTimeout(() => {
+                setMessages(prev => [...prev, {
+                    id: 'system-error-' + Date.now(),
+                    userId: 'system',
+                    userName: 'System',
+                    message: '⚠️ Message not sent - connection lost. Trying to reconnect...',
+                    timestamp: new Date(),
+                    isSystemMessage: true
+                }]);
+            }, 500);
         }
     };
 
@@ -208,6 +227,15 @@ export function LivestreamChat({ matchId, enabled = true, className }: Livestrea
                 <div ref={messagesEndRef} />
             </div>
 
+            {/* Connection Warning */}
+            {!isConnected && (
+                <div className="px-4 py-2 bg-yellow-900/20 border-y border-yellow-500/20">
+                    <p className="text-xs text-yellow-500 text-center">
+                        ⚠️ Chat disconnected. Reconnecting...
+                    </p>
+                </div>
+            )}
+
             {/* Input */}
             <div className="px-4 py-3 bg-gray-800 border-t border-gray-700">
                 {user ? (
@@ -230,8 +258,9 @@ export function LivestreamChat({ matchId, enabled = true, className }: Livestrea
                         </div>
                         <button
                             type="submit"
-                            disabled={!inputMessage.trim()}
+                            disabled={!inputMessage.trim() || !isConnected}
                             className="bg-red-600 hover:bg-red-700 disabled:bg-gray-700 disabled:cursor-not-allowed text-white rounded-lg p-2.5 transition-colors"
+                            title={!isConnected ? 'Connecting to chat...' : 'Send message'}
                         >
                             <Send className="w-5 h-5" />
                         </button>

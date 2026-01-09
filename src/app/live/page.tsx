@@ -4,7 +4,6 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
 import { ArrowLeft, Activity, Play, Users, Clock } from 'lucide-react';
-import { LiveUpdates } from '@/components/LiveUpdates';
 
 interface Match {
     id: string;
@@ -23,7 +22,6 @@ interface Match {
 
 export default function LiveCenter() {
     const [liveMatches, setLiveMatches] = useState<Match[]>([]);
-    const [selectedMatch, setSelectedMatch] = useState<Match | null>(null);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
@@ -35,10 +33,6 @@ export default function LiveCenter() {
                 // Filter for live matches
                 const live = data.filter((m: Match) => m.status === 'LIVE');
                 setLiveMatches(live);
-
-                if (live.length > 0) {
-                    setSelectedMatch(live[0]);
-                }
             } catch (error) {
                 console.error('Error fetching live matches:', error);
             } finally {
@@ -98,129 +92,78 @@ export default function LiveCenter() {
             {/* Main Content */}
             <div className="max-w-7xl mx-auto px-4 py-8">
                 {liveMatches.length > 0 ? (
-                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                        {/* Match List */}
-                        <div className="lg:col-span-1 space-y-3">
-                            <h2 className="text-sm font-bold uppercase tracking-wider text-white/60 mb-4">
-                                Live Matches ({liveMatches.length})
-                            </h2>
+                    <div className="space-y-4">
+                        <h2 className="text-sm font-bold uppercase tracking-wider text-white/60 mb-6">
+                            Live Matches ({liveMatches.length})
+                        </h2>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                             {liveMatches.map((match) => (
-                                <motion.div
+                                <Link
                                     key={match.id}
-                                    onClick={() => setSelectedMatch(match)}
-                                    className={`p-4 rounded-xl cursor-pointer transition-all ${selectedMatch?.id === match.id
-                                        ? 'bg-primary/10 border-2 border-primary'
-                                        : 'bg-white/5 border border-white/10 hover:border-white/20'
-                                        }`}
+                                    href={`/matches/${match.id}`}
                                 >
-                                    <div className="flex items-center justify-between mb-2">
-                                        <span className="text-xs text-white/60">{match.competition}</span>
-                                        <div className="flex items-center gap-1.5 text-red-500 text-xs font-bold">
-                                            <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse"></span>
-                                            LIVE
-                                        </div>
-                                    </div>
-                                    <div className="space-y-2">
-                                        <div className="flex items-center justify-between">
-                                            <span className="font-semibold text-sm">
-                                                {match.homeTeam?.name || 'Home Team'}
-                                            </span>
-                                            <span className={`text-lg font-bold ${match.homeScore > match.awayScore ? 'text-primary' : 'text-white/60'}`}>
-                                                {match.homeScore}
-                                            </span>
-                                        </div>
-                                        <div className="flex items-center justify-between">
-                                            <span className="font-semibold text-sm">
-                                                {match.awayTeam?.name || 'Away Team'}
-                                            </span>
-                                            <span className={`text-lg font-bold ${match.awayScore > match.homeScore ? 'text-primary' : 'text-white/60'}`}>
-                                                {match.awayScore}
-                                            </span>
-                                        </div>
-                                    </div>
-                                </motion.div>
-                            ))}
-                        </div>
-
-                        {/* Match Detail */}
-                        {selectedMatch && (
-                            <div className="lg:col-span-2">
-                                <div className="bg-white/5 border border-white/10 rounded-2xl overflow-hidden">
-                                    {/* Match Header */}
-                                    <div className="bg-gradient-to-r from-red-500/10 to-primary/10 border-b border-white/10 p-6">
+                                    <motion.div
+                                        initial={{ opacity: 0, y: 20 }}
+                                        animate={{ opacity: 1, y: 0 }}
+                                        className="p-6 rounded-xl cursor-pointer transition-all bg-white/5 border border-white/10 hover:border-primary/50 hover:bg-white/10 group"
+                                    >
                                         <div className="flex items-center justify-between mb-4">
-                                            <span className="text-sm text-white/60">{selectedMatch.competition}</span>
-                                            <div className="flex items-center gap-2 px-3 py-1.5 bg-red-500/20 text-red-500 rounded-lg text-xs font-bold">
-                                                <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
+                                            <span className="text-xs text-white/60">{match.competition}</span>
+                                            <div className="flex items-center gap-1.5 text-red-500 text-xs font-bold">
+                                                <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse"></span>
                                                 LIVE
                                             </div>
                                         </div>
-
-                                        {/* Score Display */}
-                                        <div className="flex items-center justify-between">
-                                            {/* Home Team */}
-                                            <div className="flex-1 text-center">
-                                                <div className="w-16 h-16 bg-white/10 rounded-2xl mx-auto mb-3 flex items-center justify-center text-2xl font-bold">
-                                                    {selectedMatch.homeTeam?.shortName || 'HOME'}
+                                        <div className="space-y-3">
+                                            <div className="flex items-center justify-between">
+                                                <div className="flex items-center gap-3 flex-1">
+                                                    {match.homeTeam?.logo && (
+                                                        <img
+                                                            src={match.homeTeam.logo}
+                                                            alt={match.homeTeam.name}
+                                                            className="w-8 h-8 object-contain"
+                                                        />
+                                                    )}
+                                                    <span className="font-semibold text-sm group-hover:text-primary transition-colors">
+                                                        {match.homeTeam?.name || 'Home Team'}
+                                                    </span>
                                                 </div>
-                                                <h3 className="font-bold text-lg mb-2">
-                                                    {selectedMatch.homeTeam?.name || 'Home Team'}
-                                                </h3>
-                                                <div className={`text-5xl font-bold ${selectedMatch.homeScore > selectedMatch.awayScore ? 'text-primary' : 'text-white/60'}`}>
-                                                    {selectedMatch.homeScore}
-                                                </div>
+                                                <span className={`text-2xl font-bold ml-4 ${match.homeScore > match.awayScore ? 'text-primary' : 'text-white/60'}`}>
+                                                    {match.homeScore}
+                                                </span>
                                             </div>
-
-                                            {/* VS */}
-                                            <div className="px-8">
-                                                <div className="text-white/20 text-2xl font-bold">VS</div>
-                                            </div>
-
-                                            {/* Away Team */}
-                                            <div className="flex-1 text-center">
-                                                <div className="w-16 h-16 bg-white/10 rounded-2xl mx-auto mb-3 flex items-center justify-center text-2xl font-bold">
-                                                    {selectedMatch.awayTeam?.shortName || 'AWAY'}
+                                            <div className="flex items-center justify-between">
+                                                <div className="flex items-center gap-3 flex-1">
+                                                    {match.awayTeam?.logo && (
+                                                        <img
+                                                            src={match.awayTeam.logo}
+                                                            alt={match.awayTeam.name}
+                                                            className="w-8 h-8 object-contain"
+                                                        />
+                                                    )}
+                                                    <span className="font-semibold text-sm group-hover:text-primary transition-colors">
+                                                        {match.awayTeam?.name || 'Away Team'}
+                                                    </span>
                                                 </div>
-                                                <h3 className="font-bold text-lg mb-2">
-                                                    {selectedMatch.awayTeam?.name || 'Away Team'}
-                                                </h3>
-                                                <div className={`text-5xl font-bold ${selectedMatch.awayScore > selectedMatch.homeScore ? 'text-primary' : 'text-white/60'}`}>
-                                                    {selectedMatch.awayScore}
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    {/* Match Info */}
-                                    <div className="p-6 space-y-4">
-                                        <div className="grid grid-cols-2 gap-4">
-                                            <div className="bg-white/5 rounded-xl p-4">
-                                                <div className="flex items-center gap-2 text-white/60 text-xs mb-2">
-                                                    <Clock size={14} />
-                                                    <span>Kickoff Time</span>
-                                                </div>
-                                                <p className="font-bold">
-                                                    {new Date(selectedMatch.startTime).toLocaleTimeString('en-US', {
-                                                        hour: '2-digit',
-                                                        minute: '2-digit'
-                                                    })}
-                                                </p>
-                                            </div>
-                                            <div className="bg-white/5 rounded-xl p-4">
-                                                <div className="flex items-center gap-2 text-white/60 text-xs mb-2">
-                                                    <Users size={14} />
-                                                    <span>Venue</span>
-                                                </div>
-                                                <p className="font-bold">{selectedMatch.venue}</p>
+                                                <span className={`text-2xl font-bold ml-4 ${match.awayScore > match.homeScore ? 'text-primary' : 'text-white/60'}`}>
+                                                    {match.awayScore}
+                                                </span>
                                             </div>
                                         </div>
-
-                                        {/* Live Updates */}
-                                        <LiveUpdates matchId={selectedMatch.id} />
-                                    </div>
-                                </div>
-                            </div>
-                        )}
+                                        <div className="mt-4 pt-4 border-t border-white/10 flex items-center justify-between text-xs text-white/40">
+                                            <div className="flex items-center gap-2">
+                                                <Users size={14} />
+                                                <span>{match.venue}</span>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <Clock size={14} />
+                                                <span>{new Date(match.startTime).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}</span>
+                                            </div>
+                                        </div>
+                                    </motion.div>
+                                </Link>
+                            ))}
+                        </div>
                     </div>
                 ) : (
                     <div className="py-20 text-center">
