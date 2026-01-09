@@ -287,11 +287,48 @@ export function useTeamStats(matchId: string) {
 }
 
 /**
+ * Hook for subscribing to match timer updates
+ */
+export function useMatchTimer(matchId: string) {
+    const [time, setTime] = useState<{ minute: number; extraTime: number; half: number } | null>(null);
+
+    const { on, off } = useWebSocket({
+        matchId,
+        autoConnect: true,
+    });
+
+    useEffect(() => {
+        const handleTimeUpdate = (data: {
+            matchId: string;
+            minute: number;
+            extraTime: number;
+            half: number;
+        }) => {
+            if (data.matchId === matchId) {
+                setTime({
+                    minute: data.minute,
+                    extraTime: data.extraTime,
+                    half: data.half,
+                });
+            }
+        };
+
+        on('match:time:updated', handleTimeUpdate);
+
+        return () => {
+            off('match:time:updated', handleTimeUpdate);
+        };
+    }, [matchId, on, off]);
+
+    return time;
+}
+
+/**
  * Hook for subscribing to match status updates
  */
-export function useMatchStatus(matchId: string) {
-    const [status, setStatus] = useState<string>('UPCOMING');
-    const [score, setScore] = useState<{ home: number; away: number }>({ home: 0, away: 0 });
+export function useMatchStatus(matchId: string, initialStatus: string = 'UPCOMING', initialScore = { home: 0, away: 0 }) {
+    const [status, setStatus] = useState<string>(initialStatus);
+    const [score, setScore] = useState<{ home: number; away: number }>(initialScore);
 
     const { on, off } = useWebSocket({
         matchId,

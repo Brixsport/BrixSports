@@ -20,91 +20,93 @@ interface FullPitchLineupsProps {
     onPlayerClick: (player: Player) => void;
 }
 
-// Helper to determine player position on pitch (0-100% scale)
-const getPositionOnPitch = (position: string, index: number, totalInPosition: number, isHome: boolean) => {
-    const positionLower = position.toLowerCase();
+// Helper to normalize position string
+const parsePosition = (pos: string): string => {
+    const p = pos.toLowerCase().trim();
+    if (p.includes('gk') || p.includes('goalkeeper')) return 'GK';
 
-    // Vertical positioning (0% = top/home goal, 100% = bottom/away goal)
-    // FIXED: More separation between teams to prevent overlap
-    let verticalPercent = 50;
+    // Defenders
+    if (p.includes('lb') || p.includes('left back')) return 'LB';
+    if (p.includes('rb') || p.includes('right back')) return 'RB';
+    if (p.includes('cb') || p.includes('central defender')) return 'CB';
+    if (p.includes('def') || p.includes('defender')) return 'CB'; // Generic def -> CB
+    if (p.includes('wb')) return p.includes('l') ? 'LWB' : 'RWB';
 
-    if (positionLower.includes('gk') || positionLower.includes('goalkeeper')) {
-        verticalPercent = isHome ? 5 : 95;
-    } else if (positionLower.includes('def') || positionLower.includes('cb') || positionLower.includes('lb') || positionLower.includes('rb')) {
-        // Defenders: Home at 15%, Away at 85% (more separation)
-        verticalPercent = isHome ? 15 : 85;
-    } else if (positionLower.includes('mid') || positionLower.includes('cm') || positionLower.includes('dm') || positionLower.includes('am')) {
-        if (positionLower.includes('dm')) {
-            // Defensive midfielders: Home at 28%, Away at 72%
-            verticalPercent = isHome ? 28 : 72;
-        } else if (positionLower.includes('am')) {
-            // Attacking midfielders: Home at 42%, Away at 58%
-            verticalPercent = isHome ? 42 : 58;
-        } else {
-            // Central midfielders: Home at 35%, Away at 65%
-            verticalPercent = isHome ? 35 : 65;
-        }
-    } else if (positionLower.includes('fw') || positionLower.includes('st') || positionLower.includes('cf') || positionLower.includes('lw') || positionLower.includes('rw')) {
-        // Forwards: Home at 48%, Away at 52% (closest to center but still separated)
-        verticalPercent = isHome ? 48 : 52;
-    }
+    // Midfielders
+    if (p.includes('dm') || p.includes('defensive mid')) return 'DM';
+    if (p.includes('am') || p.includes('attacking mid')) return 'AM';
+    if (p.includes('lm') || p.includes('left mid')) return 'LM';
+    if (p.includes('rm') || p.includes('right mid')) return 'RM';
+    if (p.includes('cm') || p.includes('central mid') || p.includes('mid')) return 'CM';
 
-    // Horizontal positioning (left to right)
-    let horizontalPercent = 50;
-    if (totalInPosition === 1) {
-        horizontalPercent = 50;
-    } else if (totalInPosition === 2) {
-        horizontalPercent = index === 0 ? 30 : 70;
-    } else if (totalInPosition === 3) {
-        horizontalPercent = index === 0 ? 20 : index === 1 ? 50 : 80;
-    } else if (totalInPosition === 4) {
-        horizontalPercent = index === 0 ? 15 : index === 1 ? 38 : index === 2 ? 62 : 85;
-    } else if (totalInPosition === 5) {
-        horizontalPercent = index === 0 ? 10 : index === 1 ? 30 : index === 2 ? 50 : index === 3 ? 70 : 90;
-    }
+    // Forwards
+    if (p.includes('lw') || p.includes('left wing')) return 'LW';
+    if (p.includes('rw') || p.includes('right wing')) return 'RW';
+    if (p.includes('st') || p.includes('striker')) return 'ST';
+    if (p.includes('cf') || p.includes('center forward')) return 'ST'; // Treat CF as ST for simplicity
+    if (p.includes('fw') || p.includes('forward')) return 'ST';
 
-    // Adjust for wide positions
-    if (positionLower.includes('lw') || positionLower.includes('lb') || positionLower.includes('lm')) {
-        horizontalPercent = 12;
-    } else if (positionLower.includes('rw') || positionLower.includes('rb') || positionLower.includes('rm')) {
-        horizontalPercent = 88;
-    }
-
-    return { top: `${verticalPercent}%`, left: `${horizontalPercent}%` };
+    return 'CM'; // Default fallback
 };
 
-// Group players by position type
-const groupPlayersByPosition = (
-    players: Record<string, Player>,
-    lineup: Array<{ playerId: string; rating: number; position?: string; isCaptain?: boolean; isMotM?: boolean }>
-) => {
-    const groups: Record<string, Array<{ player: Player; rating: number; position: string; isCaptain: boolean; isMotM: boolean }>> = {
-        GK: [],
-        DEF: [],
-        MID: [],
-        FWD: []
-    };
+interface ProcessedPlayer {
+    player: Player;
+    rating: number;
+    position: string;
+    role: string;
+    isCaptain: boolean;
+    isMotM: boolean;
+}
 
-    lineup.forEach(entry => {
-        const player = players[entry.playerId];
-        if (!player) return;
+// Calculate position styles
+const getPlayerStyle = (role: string, index: number, totalInRole: number, isHome: boolean, hasWideInLayer: boolean) => {
+    // 1. Determine Y (Vertical) Depth %
+    // Home team 0->100, Away team 100->0
+    let yBase = 0;
 
-        const pos = (entry.position || player.position || '').toLowerCase();
+    switch (role) {
+        case 'GK': yBase = 5; break;
+        case 'LB': case 'RB': case 'CB': case 'LWB': case 'RWB': yBase = 18; break; // Defensive Line
+        case 'DM': yBase = 30; break;
+        case 'CM': case 'LM': case 'RM': yBase = 38; break;
+        case 'AM': yBase = 44; break;
+        case 'LW': case 'RW': case 'ST': yBase = 48; break;
+        default: yBase = 38;
+    }
 
-        if (pos.includes('gk') || pos.includes('goalkeeper')) {
-            groups.GK.push({ player, rating: entry.rating, position: entry.position || player.position, isCaptain: entry.isCaptain || false, isMotM: entry.isMotM || false });
-        } else if (pos.includes('def') || pos.includes('cb') || pos.includes('lb') || pos.includes('rb')) {
-            groups.DEF.push({ player, rating: entry.rating, position: entry.position || player.position, isCaptain: entry.isCaptain || false, isMotM: entry.isMotM || false });
-        } else if (pos.includes('mid') || pos.includes('cm') || pos.includes('dm') || pos.includes('am') || pos.includes('lm') || pos.includes('rm')) {
-            groups.MID.push({ player, rating: entry.rating, position: entry.position || player.position, isCaptain: entry.isCaptain || false, isMotM: entry.isMotM || false });
-        } else if (pos.includes('fw') || pos.includes('st') || pos.includes('cf') || pos.includes('lw') || pos.includes('rw') || pos.includes('forward') || pos.includes('striker')) {
-            groups.FWD.push({ player, rating: entry.rating, position: entry.position || player.position, isCaptain: entry.isCaptain || false, isMotM: entry.isMotM || false });
-        } else {
-            groups.MID.push({ player, rating: entry.rating, position: entry.position || player.position, isCaptain: entry.isCaptain || false, isMotM: entry.isMotM || false });
+    const top = isHome ? `${yBase}%` : `${100 - yBase}%`;
+
+    // 2. Determine X (Horizontal) %
+    let left = '50%';
+
+    // Fixed side positions
+    if (role === 'LB' || role === 'LWB') left = '10%';
+    else if (role === 'RB' || role === 'RWB') left = '90%';
+    else if (role === 'LM' || role === 'LW') left = '15%';
+    else if (role === 'RM' || role === 'RW') left = '85%';
+    else {
+        // Central roles (CB, DM, CM, AM, ST) - distribute evenly in center
+        // If there are wide players in this layer (e.g. Back 4 has LB/RB), we squeeze the central ones
+
+        let widthSpan = 80; // Default span
+        let startX = 10;
+
+        // Adjust for specific layers that mix fixed and dynamic
+        if (role === 'CB' && hasWideInLayer) {
+            // If we have LB/RB, CBs should be compactly in center
+            widthSpan = 40;
+            startX = 30;
         }
-    });
 
-    return groups;
+        if (totalInRole === 1) left = '50%';
+        else {
+            const step = widthSpan / (totalInRole + 1); // +1 to create margins
+            const percent = startX + (step * (index + 1));
+            left = `${percent}%`;
+        }
+    }
+
+    return { top, left };
 };
 
 export function FullPitchLineups({
@@ -116,8 +118,100 @@ export function FullPitchLineups({
     awayLineup,
     onPlayerClick
 }: FullPitchLineupsProps) {
-    const homeGroups = groupPlayersByPosition(homePlayers, homeLineup);
-    const awayGroups = groupPlayersByPosition(awayPlayers, awayLineup);
+
+    // Process a lineup into layers
+    const processLineup = (players: Record<string, Player>, lineup: any[], isHome: boolean) => {
+        const processed: ProcessedPlayer[] = [];
+
+        // 1. Process all players and assign normalized roles
+        lineup.forEach(entry => {
+            const player = players[entry.playerId];
+            if (!player) return;
+            processed.push({
+                player,
+                rating: entry.rating,
+                position: entry.position || player.position,
+                role: parsePosition(entry.position || player.position || ''),
+                isCaptain: !!entry.isCaptain,
+                isMotM: !!entry.isMotM
+            });
+        });
+
+        // 2. Define logical layers in order from Goalkeeper to Forward
+        // We will filter for only those that have players
+        const allLayers = ['GK', 'DEF', 'DM', 'MID', 'AM', 'FWD'];
+
+        const layerMap: Record<string, ProcessedPlayer[]> = {
+            GK: processed.filter(p => p.role === 'GK'),
+            DEF: processed.filter(p => ['LB', 'RB', 'CB', 'LWB', 'RWB'].includes(p.role)),
+            DM: processed.filter(p => p.role === 'DM'),
+            MID: processed.filter(p => ['CM', 'LM', 'RM'].includes(p.role)),
+            AM: processed.filter(p => p.role === 'AM'),
+            FWD: processed.filter(p => ['ST', 'LW', 'RW'].includes(p.role)),
+        };
+
+        // Identify which layers are active
+        const activeLayers = allLayers.filter(l => layerMap[l].length > 0);
+
+        // Calculate dynamic Y-spacing
+        // Available space: from 6% (Goal) to 46% (Near Halfway)
+        const minY = 6;
+        const maxY = 46;
+
+        const getDynamicY = (layerName: string) => {
+            const index = activeLayers.indexOf(layerName);
+            if (index === -1) return 25;
+            if (activeLayers.length <= 1) return 25;
+
+            // Distribute evenly
+            const step = (maxY - minY) / (activeLayers.length - 1);
+            return minY + (step * index);
+        };
+
+        // 3. Map to components
+        return activeLayers.flatMap((layerName) => {
+            const layerPlayers = layerMap[layerName];
+            const yDepth = getDynamicY(layerName);
+
+            // Special check: Does this distinct defensive/mid layer have wide players?
+            const hasWide = layerPlayers.some(p => ['LB', 'RB', 'LM', 'RM'].includes(p.role));
+
+            // Sub-group strictly for distribution logic
+            const centralInLayer = layerPlayers.filter(p => !['LB', 'RB', 'LM', 'RM', 'LW', 'RW'].includes(p.role));
+
+            return layerPlayers.map((p, i) => {
+                let index = i;
+                let total = layerPlayers.length;
+
+                // If this is a distributed central role, recalculate its index amongst ONLY central peers
+                if (!['LB', 'RB', 'LM', 'RM', 'LW', 'RW'].includes(p.role)) {
+                    index = centralInLayer.indexOf(p);
+                    total = centralInLayer.length;
+                }
+
+                // Use dynamic Y instead of fixed role-based Y
+                const top = isHome ? `${yDepth}%` : `${100 - yDepth}%`;
+
+                // Get X position from helper (we ignore its top return)
+                const { left } = getPlayerStyle(p.role, index, total, isHome, hasWide);
+
+                return (
+                    <PlayerDot
+                        key={p.player.id}
+                        player={p.player}
+                        rating={p.rating}
+                        position={p.position}
+                        isCaptain={p.isCaptain}
+                        isMotM={p.isMotM}
+                        style={{ top, left }}
+                        onClick={() => onPlayerClick(p.player)}
+                        teamColor={isHome ? homeTeam.color : awayTeam.color}
+                        isGoalkeeper={p.role === 'GK'}
+                    />
+                );
+            });
+        });
+    };
 
     return (
         <div className="w-full space-y-4">
@@ -134,96 +228,37 @@ export function FullPitchLineups({
             </div>
 
             {/* Full Pitch */}
-            <div className="relative w-full aspect-[9/18] md:aspect-[9/16] bg-gradient-to-b from-green-900/40 via-green-800/40 to-green-900/40 rounded-2xl overflow-hidden border border-white/10">
+            <div className="relative w-full aspect-[2/3] md:aspect-[9/16] bg-gradient-to-b from-green-900/40 via-green-800/40 to-green-900/40 rounded-2xl overflow-hidden border border-white/10">
                 {/* Pitch markings */}
                 <div className="absolute inset-0 opacity-20">
-                    {/* Top goal */}
                     <div className="absolute top-0 left-1/2 -translate-x-1/2 w-1/4 h-8 border-2 border-white/40 border-t-0 rounded-b-lg"></div>
-
-                    {/* Top penalty area */}
                     <div className="absolute top-0 left-1/2 -translate-x-1/2 w-2/3 h-20 border-2 border-white/40 border-t-0"></div>
-
-                    {/* Top goal area */}
                     <div className="absolute top-0 left-1/2 -translate-x-1/2 w-1/3 h-12 border-2 border-white/40 border-t-0"></div>
-
-                    {/* Center circle */}
                     <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-32 h-32 border-2 border-white/40 rounded-full"></div>
                     <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-2 h-2 bg-white/40 rounded-full"></div>
-
-                    {/* Halfway line */}
                     <div className="absolute top-1/2 left-0 right-0 h-0.5 bg-white/40"></div>
-
-                    {/* Bottom penalty area */}
                     <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-2/3 h-20 border-2 border-white/40 border-b-0"></div>
-
-                    {/* Bottom goal area */}
                     <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-1/3 h-12 border-2 border-white/40 border-b-0"></div>
-
-                    {/* Bottom goal */}
                     <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-1/4 h-8 border-2 border-white/40 border-b-0 rounded-t-lg"></div>
                 </div>
 
-                {/* Home Team Players (Top half) */}
+                {/* Home Team */}
                 <div className="absolute inset-0">
-                    {Object.entries(homeGroups).map(([groupName, groupPlayers]) =>
-                        groupPlayers.map((item, index) => {
-                            const position = getPositionOnPitch(item.position, index, groupPlayers.length, true);
-                            return (
-                                <PlayerDot
-                                    key={item.player.id}
-                                    player={item.player}
-                                    rating={item.rating}
-                                    position={item.position}
-                                    isCaptain={item.isCaptain}
-                                    isMotM={item.isMotM}
-                                    style={position}
-                                    onClick={() => onPlayerClick(item.player)}
-                                    teamColor={homeTeam.color}
-                                    isGoalkeeper={groupName === 'GK'}
-                                />
-                            );
-                        })
-                    )}
+                    {processLineup(homePlayers, homeLineup, true)}
                 </div>
 
-                {/* Away Team Players (Bottom half) */}
+                {/* Away Team */}
                 <div className="absolute inset-0">
-                    {Object.entries(awayGroups).map(([groupName, groupPlayers]) =>
-                        groupPlayers.map((item, index) => {
-                            const position = getPositionOnPitch(item.position, index, groupPlayers.length, false);
-                            return (
-                                <PlayerDot
-                                    key={item.player.id}
-                                    player={item.player}
-                                    rating={item.rating}
-                                    position={item.position}
-                                    isCaptain={item.isCaptain}
-                                    isMotM={item.isMotM}
-                                    style={position}
-                                    onClick={() => onPlayerClick(item.player)}
-                                    teamColor={awayTeam.color}
-                                    isGoalkeeper={groupName === 'GK'}
-                                />
-                            );
-                        })
-                    )}
+                    {processLineup(awayPlayers, awayLineup, false)}
                 </div>
-            </div>
-
-            {/* Formation Display */}
-            <div className="flex items-center justify-between px-4 text-sm text-white/60">
-                <div>Formation: {getFormationString(homeGroups)}</div>
-                <div>Formation: {getFormationString(awayGroups)}</div>
             </div>
         </div>
     );
 }
 
 function getFormationString(groups: Record<string, any[]>): string {
-    const def = groups.DEF.length;
-    const mid = groups.MID.length;
-    const fwd = groups.FWD.length;
-    return `${def}-${mid}-${fwd}`;
+    // This is optional now as we don't display formation string in the main view anymore or calculate it differently
+    return "";
 }
 
 interface PlayerDotProps {
@@ -276,25 +311,25 @@ function PlayerDot({ player, rating, position, isCaptain, isMotM, style, onClick
 
             {/* Player circle with jersey number */}
             <div
-                className={`relative w-12 h-12 md:w-14 md:h-14 rounded-full border-3 flex items-center justify-center transition-all group-hover:scale-110 group-hover:z-30 shadow-lg ${isGoalkeeper ? 'bg-yellow-500/95 border-yellow-300 ring-2 ring-yellow-400/50' : 'bg-white/95 border-white'
+                className={`relative w-9 h-9 md:w-14 md:h-14 rounded-full border-2 md:border-3 flex items-center justify-center transition-all group-hover:scale-110 group-hover:z-30 shadow-lg ${isGoalkeeper ? 'bg-yellow-500/95 border-yellow-300 ring-2 ring-yellow-400/50' : 'bg-white/95 border-white'
                     }`}
                 style={{ backgroundColor: isGoalkeeper ? undefined : teamColor }}
             >
-                <span className={`text-sm md:text-base font-black ${isGoalkeeper ? 'text-black' : 'text-white drop-shadow-lg'}`}>
+                <span className={`text-xs md:text-base font-black ${isGoalkeeper ? 'text-black' : 'text-white drop-shadow-lg'}`}>
                     {player.number}
                 </span>
             </div>
 
             {/* Rating Badge - Always Visible (SofaScore style) */}
-            <div className="absolute -bottom-6 left-1/2 -translate-x-1/2 z-20">
-                <div className={`px-2 py-0.5 rounded-md border-2 font-bold text-xs md:text-sm shadow-lg ${getRatingColor(rating)}`}>
+            <div className="absolute -bottom-5 left-1/2 -translate-x-1/2 z-20">
+                <div className={`px-1.5 py-0.5 rounded-md border-2 font-bold text-[10px] md:text-sm shadow-lg leading-none ${getRatingColor(rating)}`}>
                     {rating.toFixed(1)}
                 </div>
             </div>
 
             {/* Player name below rating */}
-            <div className="absolute -bottom-10 left-1/2 -translate-x-1/2 z-20 whitespace-nowrap">
-                <p className="text-[10px] md:text-xs font-bold text-white drop-shadow-lg text-center bg-black/50 px-2 py-0.5 rounded">
+            <div className="absolute -bottom-9 left-1/2 -translate-x-1/2 z-20 whitespace-nowrap">
+                <p className="text-[9px] md:text-xs font-bold text-white drop-shadow-lg text-center bg-black/50 px-1.5 py-0.5 rounded leading-none">
                     {player.jerseyName || player.name.split(' ').pop()}
                 </p>
             </div>

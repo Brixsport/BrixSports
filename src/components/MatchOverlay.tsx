@@ -13,7 +13,7 @@ import { LivestreamChat } from '@/components/livestream/LivestreamChat';
 import { LivestreamPlayer } from '@/components/livestream/LivestreamPlayer';
 import { FootballPitch } from '@/components/FootballPitch';
 import { FullPitchLineups } from '@/components/FullPitchLineups';
-import { useMatchEvents, useMatchStatus, usePlayerRatings, useMatchViewers } from '@/hooks/useWebSocket';
+import { useMatchEvents, useMatchStatus, usePlayerRatings, useMatchViewers, useMatchTimer } from '@/hooks/useWebSocket';
 
 interface MatchOverlayProps {
   match: Match;
@@ -40,10 +40,15 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   // Real-time WebSocket Data
-  const { status: liveStatus, score: liveScore } = useMatchStatus(match.id);
+  const { status: liveStatus, score: liveScore } = useMatchStatus(
+    match.id,
+    match.status,
+    { home: match.homeScore, away: match.awayScore }
+  );
   const { events: liveEvents, latestEvent } = useMatchEvents(match.id);
   const liveRatings = usePlayerRatings(match.id);
   const viewerCount = useMatchViewers(match.id);
+  const liveTime = useMatchTimer(match.id);
 
   // Ratings state (merge initial API fetch with live updates)
   const [ratings, setRatings] = useState<Record<string, { autoRating: number; finalRating: number | null; isMotM: boolean; notes: string | null }>>({});
@@ -78,6 +83,13 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
     window.addEventListener('MATCH_TIME_UPDATE', handleTimeUpdate);
     return () => window.removeEventListener('MATCH_TIME_UPDATE', handleTimeUpdate);
   }, [match.id]);
+
+  // Sync match time from WebSocket updates
+  useEffect(() => {
+    if (liveTime) {
+      setMatchTime(liveTime);
+    }
+  }, [liveTime]);
 
   // Listen for football events from logger (goals, cards, clearances, etc.)
   useEffect(() => {

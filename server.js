@@ -32,6 +32,9 @@ app.prepare().then(() => {
         transports: ['websocket', 'polling'],
     });
 
+    // In-memory cache for match times
+    const matchTimes = new Map();
+
     // Socket.IO event handlers
     io.on('connection', (socket) => {
         console.log(`[Socket.IO] Client connected: ${socket.id}`);
@@ -41,6 +44,11 @@ app.prepare().then(() => {
             socket.join(`match:${matchId}`);
             console.log(`[Socket.IO] Client ${socket.id} subscribed to match ${matchId}`);
             socket.emit('match:subscribed', { matchId });
+
+            // Send cached time if available
+            if (matchTimes.has(matchId)) {
+                socket.emit('match:time:updated', matchTimes.get(matchId));
+            }
 
             // Broadcast new viewer count
             const roomSize = io.sockets.adapter.rooms.get(`match:${matchId}`)?.size || 0;
@@ -128,6 +136,13 @@ app.prepare().then(() => {
         socket.on('match:status:change', (data) => {
             console.log(`[Socket.IO] Match status change:`, data);
             io.to(`match:${data.matchId}`).emit('match:status:changed', data);
+        });
+
+        // Match time update
+        socket.on('match:time:update', (data) => {
+            // console.log(`[Socket.IO] Match time update:`, data); // Optional logging
+            matchTimes.set(data.matchId, data);
+            io.to(`match:${data.matchId}`).emit('match:time:updated', data);
         });
 
         // Chat: Join Room

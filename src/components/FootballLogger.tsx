@@ -188,6 +188,12 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                                             half,
                                         }
                                     }));
+                                    emit('match:time:update', {
+                                        matchId: match.id,
+                                        minute: nextMinute,
+                                        extraTime: 0,
+                                        half,
+                                    });
                                 }
                                 return nextMinute;
                             } else if (prevMinute === halfDuration - 1) {
@@ -202,6 +208,12 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                                             half,
                                         }
                                     }));
+                                    emit('match:time:update', {
+                                        matchId: match.id,
+                                        minute: nextMinute,
+                                        extraTime: 0,
+                                        half,
+                                    });
                                 }
                                 return nextMinute;
                             } else if (prevMinute === halfDuration && extraTime === 0) {
@@ -217,6 +229,12 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                                                 half,
                                             }
                                         }));
+                                        emit('match:time:update', {
+                                            matchId: match.id,
+                                            minute: halfDuration,
+                                            extraTime: nextExtra,
+                                            half,
+                                        });
                                     }
                                     return nextExtra;
                                 });
@@ -234,6 +252,12 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                                                 half,
                                             }
                                         }));
+                                        emit('match:time:update', {
+                                            matchId: match.id,
+                                            minute: halfDuration,
+                                            extraTime: nextExtra,
+                                            half,
+                                        });
                                     }
                                     return nextExtra;
                                 });
@@ -250,6 +274,12 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                                             half,
                                         }
                                     }));
+                                    emit('match:time:update', {
+                                        matchId: match.id,
+                                        minute: nextMinute,
+                                        extraTime: 0,
+                                        half,
+                                    });
                                 }
                                 return nextMinute;
                             }
@@ -674,7 +704,7 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                         }
                     }));
 
-                    emit('match:status:changed', {
+                    emit('match:status:change', {
                         matchId: match.id,
                         status: 'FINISHED'
                     });
@@ -777,7 +807,7 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                                                     }
                                                 }));
 
-                                                emit('match:status:changed', {
+                                                emit('match:status:change', {
                                                     matchId: match.id,
                                                     status: 'LIVE'
                                                 });
@@ -883,6 +913,12 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                                                             half: h,
                                                         }
                                                     }));
+                                                    emit('match:time:update', {
+                                                        matchId: match.id,
+                                                        minute: 0,
+                                                        extraTime: 0,
+                                                        half: h,
+                                                    });
                                                 }
                                             }}
                                             className={`w-12 h-12 rounded-xl font-display text-xl transition-all ${half === h ? 'bg-primary text-black' : 'bg-white/5 text-white/40'
@@ -934,6 +970,12 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                                                     half,
                                                 }
                                             }));
+                                            emit('match:time:update', {
+                                                matchId: match.id,
+                                                minute: newMinute,
+                                                extraTime: newExtraTime,
+                                                half,
+                                            });
                                         }
                                     }}
                                     className="w-full h-1 bg-white/10 rounded-full appearance-none accent-primary cursor-pointer"
@@ -956,6 +998,12 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                                                             half,
                                                         }
                                                     }));
+                                                    emit('match:time:update', {
+                                                        matchId: match.id,
+                                                        minute: halfDuration,
+                                                        extraTime: newExtraTime,
+                                                        half,
+                                                    });
                                                 }
                                             }}
                                             className="w-8 h-8 bg-white/5 border border-white/10 rounded-lg hover:bg-white/10 transition-all flex items-center justify-center"
@@ -979,6 +1027,12 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                                                             half,
                                                         }
                                                     }));
+                                                    emit('match:time:update', {
+                                                        matchId: match.id,
+                                                        minute: newMinute,
+                                                        extraTime: 0,
+                                                        half,
+                                                    });
                                                 }
                                             }}
                                             className="bg-green-500 text-black px-6 py-3 rounded-2xl hover:scale-105 transition-all font-black uppercase tracking-widest flex items-center justify-center gap-2"
@@ -1000,6 +1054,12 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                                                             half,
                                                         }
                                                     }));
+                                                    emit('match:time:update', {
+                                                        matchId: match.id,
+                                                        minute: halfDuration,
+                                                        extraTime: newExtraTime,
+                                                        half,
+                                                    });
                                                 }
                                             }}
                                             className="w-8 h-8 bg-white/5 border border-white/10 rounded-lg hover:bg-white/10 transition-all flex items-center justify-center"
