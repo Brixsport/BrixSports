@@ -45,7 +45,10 @@ interface Competition {
 function AdminMatchesPageContent() {
     const [isLoading, setIsLoading] = useState(true);
     const [showCreateModal, setShowCreateModal] = useState(false);
+    const [showEditModal, setShowEditModal] = useState(false);
+    const [editingMatch, setEditingMatch] = useState<Match | null>(null);
     const [isCreating, setIsCreating] = useState(false);
+    const [isUpdating, setIsUpdating] = useState(false);
     const [filterStatus, setFilterStatus] = useState<string>('all');
     const [matches, setMatches] = useState<Match[]>([]);
     const [teams, setTeams] = useState<Team[]>([]);
@@ -182,6 +185,73 @@ function AdminMatchesPageContent() {
             error('Network error. Please try again.');
             console.error('Error deleting match:', err);
             setDeleteDialog(prev => ({ ...prev, isDeleting: false }));
+        }
+    };
+
+    const openEditModal = (match: Match) => {
+        setEditingMatch(match);
+        setFormData({
+            sport: match.sport,
+            homeTeamId: match.homeTeamId,
+            awayTeamId: match.awayTeamId,
+            startTime: new Date(match.startTime).toISOString().slice(0, 16),
+            venue: match.venue,
+            matchType: match.matchType,
+            competition: match.competition,
+            competitionLevel: match.competitionLevel || 'busa-league',
+            friendlyType: match.friendlyType || 'internal',
+            friendlyDescription: match.friendlyDescription || '',
+            status: match.status,
+            livestreamEnabled: false
+        });
+        setShowEditModal(true);
+    };
+
+    const handleUpdate = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!editingMatch) return;
+
+        setIsUpdating(true);
+
+        try {
+            const response = await fetch(`/api/matches/${editingMatch.id}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(formData),
+            });
+
+            if (response.ok) {
+                // Update local state with proper type casting
+                setMatches(matches.map(m =>
+                    m.id === editingMatch.id
+                        ? {
+                            ...m,
+                            sport: formData.sport,
+                            homeTeamId: formData.homeTeamId,
+                            awayTeamId: formData.awayTeamId,
+                            venue: formData.venue,
+                            competition: formData.competition,
+                            status: formData.status as 'LIVE' | 'FINISHED' | 'UPCOMING' | 'HALF_TIME',
+                            matchType: formData.matchType as 'competition' | 'friendly',
+                            competitionLevel: formData.competitionLevel as 'busa-league' | 'college' | 'department' | 'year-level' | 'external',
+                            friendlyType: formData.friendlyType as 'internal' | 'external',
+                            friendlyDescription: formData.friendlyDescription,
+                            startTime: new Date(formData.startTime).toISOString()
+                        }
+                        : m
+                ));
+                setShowEditModal(false);
+                setEditingMatch(null);
+                success('Match updated successfully!');
+            } else {
+                const data = await response.json();
+                error(data.error || 'Failed to update match');
+            }
+        } catch (err) {
+            error('Network error. Please check your connection.');
+            console.error('Error updating match:', err);
+        } finally {
+            setIsUpdating(false);
         }
     };
 
@@ -367,8 +437,15 @@ function AdminMatchesPageContent() {
                                                     Logger
                                                 </span>
                                             </Link>
-                                            <button className="p-2 hover:bg-white/10 rounded-lg transition-colors">
+                                            <button
+                                                onClick={() => openEditModal(match)}
+                                                className="p-2 hover:bg-white/10 rounded-lg transition-colors group relative"
+                                                title="Edit Match"
+                                            >
                                                 <Edit size={18} />
+                                                <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-black text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
+                                                    Edit
+                                                </span>
                                             </button>
                                             <button
                                                 onClick={() => confirmDelete(match.id, `${getTeamName(match.homeTeamId)} vs ${getTeamName(match.awayTeamId)}`)}
@@ -553,6 +630,165 @@ function AdminMatchesPageContent() {
                                         </span>
                                     ) : (
                                         'Create Match'
+                                    )}
+                                </button>
+                            </div>
+                        </form>
+                    </motion.div>
+                </div>
+            )}
+
+            {/* Edit Match Modal */}
+            {showEditModal && editingMatch && (
+                <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                    <motion.div
+                        initial={{ opacity: 0, scale: 0.95 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        className="bg-[#0a0a0a] rounded-2xl border border-white/10 max-w-2xl w-full max-h-[90vh] overflow-y-auto"
+                    >
+                        <div className="p-6 border-b border-white/10">
+                            <h2 className="text-2xl font-bold">Edit Match</h2>
+                            <p className="text-sm text-white/60 mt-1">{getTeamName(editingMatch.homeTeamId)} vs {getTeamName(editingMatch.awayTeamId)}</p>
+                        </div>
+                        <form onSubmit={handleUpdate} className="p-6 space-y-6">
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-sm font-semibold mb-2">Sport</label>
+                                    <select
+                                        value={formData.sport}
+                                        onChange={(e) => setFormData({ ...formData, sport: e.target.value })}
+                                        className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-primary"
+                                    >
+                                        <option value="Football" className="bg-[#0a0a0a] text-white">Football</option>
+                                        <option value="Basketball" className="bg-[#0a0a0a] text-white">Basketball</option>
+                                        <option value="Volleyball" className="bg-[#0a0a0a] text-white">Volleyball</option>
+                                        <option value="Track" className="bg-[#0a0a0a] text-white">Track & Field</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-semibold mb-2">Status</label>
+                                    <select
+                                        value={formData.status}
+                                        onChange={(e) => setFormData({ ...formData, status: e.target.value })}
+                                        className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-primary"
+                                    >
+                                        <option value="UPCOMING" className="bg-[#0a0a0a] text-white">Upcoming</option>
+                                        <option value="LIVE" className="bg-[#0a0a0a] text-white">Live</option>
+                                        <option value="HALF_TIME" className="bg-[#0a0a0a] text-white">Half Time</option>
+                                        <option value="FINISHED" className="bg-[#0a0a0a] text-white">Finished</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-sm font-semibold mb-2">Home Team</label>
+                                    <select
+                                        value={formData.homeTeamId}
+                                        onChange={(e) => setFormData({ ...formData, homeTeamId: e.target.value })}
+                                        className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-primary"
+                                        required
+                                    >
+                                        <option value="" className="bg-[#0a0a0a] text-white">Select Home Team</option>
+                                        {teams.filter(t => t.sport === formData.sport).map(team => (
+                                            <option key={team.id} value={team.id} className="bg-[#0a0a0a] text-white">{team.name}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-semibold mb-2">Away Team</label>
+                                    <select
+                                        value={formData.awayTeamId}
+                                        onChange={(e) => setFormData({ ...formData, awayTeamId: e.target.value })}
+                                        className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-primary"
+                                        required
+                                    >
+                                        <option value="" className="bg-[#0a0a0a] text-white">Select Away Team</option>
+                                        {teams.filter(t => t.sport === formData.sport).map(team => (
+                                            <option key={team.id} value={team.id} className="bg-[#0a0a0a] text-white">{team.name}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-semibold mb-2">Competition</label>
+                                <select
+                                    value={formData.competition}
+                                    onChange={(e) => setFormData({ ...formData, competition: e.target.value })}
+                                    className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-primary"
+                                    required
+                                >
+                                    <option value="" className="bg-[#0a0a0a] text-white">Select Competition</option>
+                                    {competitions.filter(c => c.sport === formData.sport).map(comp => (
+                                        <option key={comp.id} value={comp.name} className="bg-[#0a0a0a] text-white">{comp.name}</option>
+                                    ))}
+                                    <option value="Friendly Match" className="bg-[#0a0a0a] text-white">Friendly Match</option>
+                                </select>
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-semibold mb-2">Competition Level</label>
+                                <select
+                                    value={formData.competitionLevel}
+                                    onChange={(e) => setFormData({ ...formData, competitionLevel: e.target.value as any })}
+                                    className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-primary"
+                                >
+                                    <option value="busa-league" className="bg-[#0a0a0a] text-white">BUSA League</option>
+                                    <option value="college" className="bg-[#0a0a0a] text-white">College (INTERCOLLEGE)</option>
+                                    <option value="department" className="bg-[#0a0a0a] text-white">Department</option>
+                                    <option value="year-level" className="bg-[#0a0a0a] text-white">Year Level</option>
+                                    <option value="external" className="bg-[#0a0a0a] text-white">External (vs Other Universities)</option>
+                                </select>
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-semibold mb-2">Start Time</label>
+                                <input
+                                    type="datetime-local"
+                                    value={formData.startTime}
+                                    onChange={(e) => setFormData({ ...formData, startTime: e.target.value })}
+                                    className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 focus:outline-none focus:border-primary"
+                                    required
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-semibold mb-2">Venue</label>
+                                <input
+                                    type="text"
+                                    value={formData.venue}
+                                    onChange={(e) => setFormData({ ...formData, venue: e.target.value })}
+                                    className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 focus:outline-none focus:border-primary"
+                                    placeholder="e.g., Bells University Main Pitch"
+                                    required
+                                />
+                            </div>
+
+                            <div className="flex gap-3 pt-4">
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setShowEditModal(false);
+                                        setEditingMatch(null);
+                                    }}
+                                    disabled={isUpdating}
+                                    className="flex-1 bg-white/5 hover:bg-white/10 px-6 py-3 rounded-lg font-bold transition-colors disabled:opacity-50"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="submit"
+                                    disabled={isUpdating}
+                                    className="flex-1 bg-primary text-black px-6 py-3 rounded-lg font-bold hover:bg-primary/90 transition-colors disabled:opacity-50"
+                                >
+                                    {isUpdating ? (
+                                        <span className="flex items-center justify-center gap-2">
+                                            <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                                            Updating...
+                                        </span>
+                                    ) : (
+                                        'Update Match'
                                     )}
                                 </button>
                             </div>

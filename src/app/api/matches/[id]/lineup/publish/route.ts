@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { db } from '@/db';
 import { matches } from '@/db/schema';
 import { eq } from 'drizzle-orm';
+import jwt from 'jsonwebtoken';
 
 // POST /api/matches/[id]/lineup/publish - Publish lineup (lock it)
 export async function POST(
@@ -13,6 +14,27 @@ export async function POST(
         const matchId = params.id;
         const body = await request.json();
         const { team } = body; // 'home' | 'away'
+
+        // Get authenticated user info
+        const token = request.headers.get('cookie')?.split('authToken=')[1]?.split(';')[0];
+        let userId = 'unknown';
+        let userName = 'Unknown User';
+        let userRole = 'user';
+
+        if (token) {
+            try {
+                const decoded = jwt.verify(
+                    token,
+                    process.env.JWT_SECRET || 'your-secret-key-change-in-production'
+                ) as { id: string; email: string; role: string; name?: string };
+
+                userId = decoded.id;
+                userName = decoded.name || decoded.email;
+                userRole = decoded.role;
+            } catch (error) {
+                console.error('Token verification failed:', error);
+            }
+        }
 
         if (!team) {
             return NextResponse.json({ error: 'Team parameter required' }, { status: 400 });
@@ -37,6 +59,18 @@ export async function POST(
         // Get existing lineups
         const existingLineups = match[0].lineups ? JSON.parse(match[0].lineups) : {};
 
+        // Check if lineup is already published (lock mechanism)
+        if (existingLineups[team]?.status === 'published' && !existingLineups[team]?.unlocked) {
+            return NextResponse.json({
+                error: 'Lineup already published and locked',
+                code: 'LINEUP_LOCKED',
+                publishedBy: existingLineups[team].publishedBy,
+                publishedByName: existingLineups[team].publishedByName,
+                publishedAt: existingLineups[team].publishedAt,
+                message: 'This lineup has already been published. Contact an admin to unlock it for editing.'
+            }, { status: 409 }); // 409 Conflict
+        }
+
         if (!existingLineups[team]) {
             return NextResponse.json({ error: 'No lineup found for this team' }, { status: 404 });
         }
@@ -58,11 +92,15 @@ export async function POST(
             return NextResponse.json({ error: 'Lineup must have a captain' }, { status: 400 });
         }
 
-        // Update lineup status to published
+        // Update lineup status to published with user info
         existingLineups[team] = {
             ...lineup,
             status: 'published',
             publishedAt: new Date().toISOString(),
+            publishedBy: userId,
+            publishedByName: userName,
+            publishedByRole: userRole,
+            unlocked: false, // Lock the lineup
             updatedAt: new Date().toISOString()
         };
 

@@ -44,6 +44,9 @@ export default function AdminMatchLineupsPage() {
     const [awayCaptain, setAwayCaptain] = useState('');
     const [saving, setSaving] = useState(false);
     const [loadingData, setLoadingData] = useState(false);
+    const [homeLineupStatus, setHomeLineupStatus] = useState<any>(null);
+    const [awayLineupStatus, setAwayLineupStatus] = useState<any>(null);
+    const [unlocking, setUnlocking] = useState(false);
 
     // Check authentication and role
     useEffect(() => {
@@ -131,12 +134,14 @@ export default function AdminMatchLineupsPage() {
                     setHomeFormation(lineupData.lineups.home.formation);
                     const captain = lineupData.lineups.home.starters.find((s: any) => s.isCaptain);
                     if (captain) setHomeCaptain(captain.playerId);
+                    setHomeLineupStatus(lineupData.lineups.home);
                 }
                 if (lineupData.lineups.away) {
                     setAwayStarters(lineupData.lineups.away.starters.map((s: any) => s.playerId));
                     setAwayFormation(lineupData.lineups.away.formation);
                     const captain = lineupData.lineups.away.starters.find((s: any) => s.isCaptain);
                     if (captain) setAwayCaptain(captain.playerId);
+                    setAwayLineupStatus(lineupData.lineups.away);
                 }
             }
         } catch (error) {
@@ -258,6 +263,33 @@ export default function AdminMatchLineupsPage() {
         }
     };
 
+    const unlockLineup = async (team: 'home' | 'away') => {
+        if (!selectedMatch) return;
+
+        setUnlocking(true);
+        try {
+            const response = await fetch(`/api/matches/${selectedMatch.id}/lineup/unlock`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ team })
+            });
+
+            if (response.ok) {
+                alert(`${team === 'home' ? 'Home' : 'Away'} lineup unlocked successfully! You can now edit and republish.`);
+                // Reload lineups to get updated status
+                loadRosters(selectedMatch);
+            } else {
+                const data = await response.json();
+                alert(data.error || 'Failed to unlock lineup');
+            }
+        } catch (error) {
+            console.error('Error unlocking lineup:', error);
+            alert('Failed to unlock lineup');
+        } finally {
+            setUnlocking(false);
+        }
+    };
+
     if (loading) {
         return (
             <div className="min-h-screen bg-[#050505] flex items-center justify-center">
@@ -373,6 +405,77 @@ export default function AdminMatchLineupsPage() {
                                     Away: {awayStarters.length}/11 starters
                                 </div>
                             </div>
+                        </div>
+
+                        {/* Lineup Status Banners */}
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                            {/* Home Lineup Status */}
+                            {homeLineupStatus?.status === 'published' && !homeLineupStatus?.unlocked && (
+                                <div className="bg-green-500/10 border border-green-500/20 rounded-xl p-4">
+                                    <div className="flex items-start justify-between">
+                                        <div>
+                                            <p className="text-green-400 font-bold text-sm mb-1">✓ Home Lineup Published</p>
+                                            <p className="text-xs text-white/60">
+                                                By {homeLineupStatus.publishedByName} on {new Date(homeLineupStatus.publishedAt).toLocaleString()}
+                                            </p>
+                                            <p className="text-xs text-white/40 mt-1">This lineup is locked and cannot be edited.</p>
+                                        </div>
+                                        {user?.role === 'admin' && (
+                                            <button
+                                                onClick={() => unlockLineup('home')}
+                                                disabled={unlocking}
+                                                className="px-3 py-1.5 bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-400 rounded-lg text-xs font-bold transition-colors disabled:opacity-50"
+                                            >
+                                                {unlocking ? 'Unlocking...' : '🔓 Unlock'}
+                                            </button>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+
+                            {homeLineupStatus?.unlocked && (
+                                <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-xl p-4">
+                                    <p className="text-yellow-400 font-bold text-sm mb-1">⚠️ Home Lineup Unlocked</p>
+                                    <p className="text-xs text-white/60">
+                                        Unlocked by {homeLineupStatus.unlockedByName} on {new Date(homeLineupStatus.unlockedAt).toLocaleString()}
+                                    </p>
+                                    <p className="text-xs text-white/40 mt-1">You can now edit and republish this lineup.</p>
+                                </div>
+                            )}
+
+                            {/* Away Lineup Status */}
+                            {awayLineupStatus?.status === 'published' && !awayLineupStatus?.unlocked && (
+                                <div className="bg-green-500/10 border border-green-500/20 rounded-xl p-4">
+                                    <div className="flex items-start justify-between">
+                                        <div>
+                                            <p className="text-green-400 font-bold text-sm mb-1">✓ Away Lineup Published</p>
+                                            <p className="text-xs text-white/60">
+                                                By {awayLineupStatus.publishedByName} on {new Date(awayLineupStatus.publishedAt).toLocaleString()}
+                                            </p>
+                                            <p className="text-xs text-white/40 mt-1">This lineup is locked and cannot be edited.</p>
+                                        </div>
+                                        {user?.role === 'admin' && (
+                                            <button
+                                                onClick={() => unlockLineup('away')}
+                                                disabled={unlocking}
+                                                className="px-3 py-1.5 bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-400 rounded-lg text-xs font-bold transition-colors disabled:opacity-50"
+                                            >
+                                                {unlocking ? 'Unlocking...' : '🔓 Unlock'}
+                                            </button>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+
+                            {awayLineupStatus?.unlocked && (
+                                <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-xl p-4">
+                                    <p className="text-yellow-400 font-bold text-sm mb-1">⚠️ Away Lineup Unlocked</p>
+                                    <p className="text-xs text-white/60">
+                                        Unlocked by {awayLineupStatus.unlockedByName} on {new Date(awayLineupStatus.unlockedAt).toLocaleString()}
+                                    </p>
+                                    <p className="text-xs text-white/40 mt-1">You can now edit and republish this lineup.</p>
+                                </div>
+                            )}
                         </div>
 
                         {loadingData ? (

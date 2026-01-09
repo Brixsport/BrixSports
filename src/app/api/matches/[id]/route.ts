@@ -350,6 +350,18 @@ export async function PATCH(
         if (body.stats) updateData.stats = JSON.stringify(body.stats);
         if (body.lineups) updateData.lineups = JSON.stringify(body.lineups);
 
+        // Additional fields for match details editing
+        if (body.sport) updateData.sport = body.sport;
+        if (body.homeTeamId) updateData.homeTeamId = body.homeTeamId;
+        if (body.awayTeamId) updateData.awayTeamId = body.awayTeamId;
+        if (body.startTime) updateData.startTime = new Date(body.startTime);
+        if (body.venue) updateData.venue = body.venue;
+        if (body.competition) updateData.competition = body.competition;
+        if (body.competitionLevel) updateData.competitionLevel = body.competitionLevel;
+        if (body.matchType) updateData.matchType = body.matchType;
+        if (body.friendlyType) updateData.friendlyType = body.friendlyType;
+        if (body.friendlyDescription !== undefined) updateData.friendlyDescription = body.friendlyDescription;
+
         await db
             .update(matches)
             .set(updateData)
