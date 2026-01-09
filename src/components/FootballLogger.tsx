@@ -806,151 +806,164 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
             />
 
             {/* Header - Sticky */}
-            <div className="sticky top-0 z-40 bg-[#050505]/95 backdrop-blur-lg border-b border-white/10 -mx-4 px-4 pb-4 mb-4">
+            <div className="sticky top-0 z-40 bg-[#050505]/95 backdrop-blur-lg border-b border-white/10 -mx-4 px-2 sm:px-4 pb-3 sm:pb-4 mb-4">
                 <div className="max-w-7xl mx-auto">
-                    <div className="flex items-center justify-between mb-6">
-                        <div className="flex items-center gap-4">
+                    {/* Top Row - Title and Exit */}
+                    <div className="flex items-center justify-between mb-3 sm:mb-4">
+                        <div className="flex items-center gap-2 sm:gap-4">
                             <button
                                 onClick={onExit}
-                                className="w-12 h-12 bg-white/5 border border-white/10 rounded-2xl flex items-center justify-center hover:bg-white/10 transition-all"
+                                className="w-10 h-10 sm:w-12 sm:h-12 bg-white/5 border border-white/10 rounded-xl sm:rounded-2xl flex items-center justify-center hover:bg-white/10 transition-all"
                             >
-                                <X size={20} />
+                                <X size={18} className="sm:hidden" />
+                                <X size={20} className="hidden sm:block" />
                             </button>
                             <div>
                                 <div className="flex items-center gap-2">
-                                    <p className="text-[10px] font-black uppercase tracking-widest text-white/40">Football Logger</p>
-                                    <span className="px-1.5 py-0.5 bg-green-500/20 text-green-500 border border-green-500/30 rounded text-[8px] font-black uppercase tracking-tighter">Group Stage</span>
+                                    <p className="text-[8px] sm:text-[10px] font-black uppercase tracking-widest text-white/40">Football Logger</p>
+                                    <span className="hidden sm:inline-block px-1.5 py-0.5 bg-green-500/20 text-green-500 border border-green-500/30 rounded text-[8px] font-black uppercase tracking-tighter">Group Stage</span>
                                 </div>
-                                <h1 className="text-2xl font-display italic uppercase">{match.competition}</h1>
+                                <h1 className="text-base sm:text-2xl font-display italic uppercase">{match.competition}</h1>
                             </div>
                         </div>
 
-                        <div className="flex items-center gap-4">
-                            {!matchStarted && (
-                                <button
-                                    onClick={async () => {
-                                        console.log('⚽ [FOOTBALL] Button clicked! lineupSet:', lineupSet);
-                                        if (!lineupSet) {
-                                            console.log('✅ [FOOTBALL] Opening lineup modal...');
-                                            setShowLineupModal(true);
-                                        } else {
-                                            console.log('▶️ [FOOTBALL] Starting match...');
-                                            setMatchStarted(true);
+                        {/* Settings - Always visible */}
+                        <button
+                            onClick={() => setShowSettingsModal(true)}
+                            className="w-10 h-10 sm:w-auto sm:px-3 sm:py-3 bg-white/5 border border-white/10 rounded-xl sm:rounded-2xl hover:bg-white/10 transition-all flex items-center justify-center gap-2"
+                        >
+                            <Settings size={16} />
+                        </button>
+                    </div>
 
-                                            // Update match status in database to LIVE
-                                            try {
-                                                const response = await fetch(`/api/matches/${match.id}`, {
-                                                    method: 'PATCH',
-                                                    headers: { 'Content-Type': 'application/json' },
-                                                    body: JSON.stringify({
-                                                        status: 'LIVE',
-                                                    }),
-                                                });
+                    {/* Bottom Row - Actions */}
+                    <div className="flex items-center gap-2 sm:gap-4 flex-wrap">
+                        {/* Start/Lineup Button */}
+                        {!matchStarted && (
+                            <button
+                                onClick={async () => {
+                                    console.log('⚽ [FOOTBALL] Button clicked! lineupSet:', lineupSet);
+                                    if (!lineupSet) {
+                                        console.log('✅ [FOOTBALL] Opening lineup modal...');
+                                        setShowLineupModal(true);
+                                    } else {
+                                        console.log('▶️ [FOOTBALL] Starting match...');
+                                        setMatchStarted(true);
 
-                                                if (response.ok) {
-                                                    console.log('✅ Match status updated to LIVE in database');
-                                                } else {
-                                                    console.error('❌ Failed to update match status');
-                                                }
-                                            } catch (error) {
-                                                console.error('❌ Error updating match status:', error);
+                                        // Update match status in database to LIVE
+                                        try {
+                                            const response = await fetch(`/api/matches/${match.id}`, {
+                                                method: 'PATCH',
+                                                headers: { 'Content-Type': 'application/json' },
+                                                body: JSON.stringify({
+                                                    status: 'LIVE',
+                                                }),
+                                            });
+
+                                            if (response.ok) {
+                                                console.log('✅ Match status updated to LIVE in database');
+                                            } else {
+                                                console.error('❌ Failed to update match status');
                                             }
-
-                                            // Dispatch WebSocket event for match start
-                                            if (typeof window !== 'undefined') {
-                                                window.dispatchEvent(new CustomEvent('MATCH_STATUS_CHANGE', {
-                                                    detail: {
-                                                        matchId: match.id,
-                                                        status: 'LIVE',
-                                                        homeTeamId: match.homeTeamId,
-                                                        awayTeamId: match.awayTeamId
-                                                    }
-                                                }));
-
-                                                emit('match:status:change', {
-                                                    matchId: match.id,
-                                                    status: 'LIVE'
-                                                });
-                                            }
-
-                                            // Send push notification for match start
-                                            try {
-                                                await fetch('/api/notifications/match-event', {
-                                                    method: 'POST',
-                                                    headers: { 'Content-Type': 'application/json' },
-                                                    body: JSON.stringify({
-                                                        matchId: match.id,
-                                                        homeTeamId: match.homeTeamId,
-                                                        awayTeamId: match.awayTeamId,
-                                                        eventType: 'MATCH_START',
-                                                        teamName: `${homeTeam?.name} vs ${awayTeam?.name}`,
-                                                    }),
-                                                });
-                                                console.log('✅ Match start notification sent');
-                                            } catch (error) {
-                                                console.error('Failed to send match start notification:', error);
-                                            }
+                                        } catch (error) {
+                                            console.error('❌ Error updating match status:', error);
                                         }
-                                    }}
-                                    className="px-6 py-3 bg-green-500 text-black rounded-2xl hover:scale-105 transition-all flex items-center gap-2 font-black uppercase tracking-widest"
-                                >
-                                    <Play size={16} />
-                                    {lineupSet ? 'Start Match' : 'Set Lineup & Start'}
-                                </button>
-                            )}
 
-                            {/* View Switcher */}
-                            <div className="flex bg-white/5 p-1 rounded-xl border border-white/10 mx-2">
-                                <button
-                                    onClick={() => setViewMode('logger')}
-                                    className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${viewMode === 'logger' ? 'bg-primary text-black' : 'text-white/40 hover:text-white/60'}`}
-                                >
-                                    Logger
-                                </button>
-                                <button
-                                    onClick={() => setViewMode('stats')}
-                                    className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${viewMode === 'stats' ? 'bg-primary text-black' : 'text-white/40 hover:text-white/60'}`}
-                                >
-                                    Stats
-                                </button>
-                                <button
-                                    onClick={() => setViewMode('history')}
-                                    className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${viewMode === 'history' ? 'bg-primary text-black' : 'text-white/40 hover:text-white/60'}`}
-                                >
-                                    History
-                                </button>
-                            </div>
+                                        // Dispatch WebSocket event for match start
+                                        if (typeof window !== 'undefined') {
+                                            window.dispatchEvent(new CustomEvent('MATCH_STATUS_CHANGE', {
+                                                detail: {
+                                                    matchId: match.id,
+                                                    status: 'LIVE',
+                                                    homeTeamId: match.homeTeamId,
+                                                    awayTeamId: match.awayTeamId
+                                                }
+                                            }));
 
+                                            emit('match:status:change', {
+                                                matchId: match.id,
+                                                status: 'LIVE'
+                                            });
+                                        }
+
+                                        // Send push notification for match start
+                                        try {
+                                            await fetch('/api/notifications/match-event', {
+                                                method: 'POST',
+                                                headers: { 'Content-Type': 'application/json' },
+                                                body: JSON.stringify({
+                                                    matchId: match.id,
+                                                    homeTeamId: match.homeTeamId,
+                                                    awayTeamId: match.awayTeamId,
+                                                    eventType: 'MATCH_START',
+                                                    teamName: `${homeTeam?.name} vs ${awayTeam?.name}`,
+                                                }),
+                                            });
+                                            console.log('✅ Match start notification sent');
+                                        } catch (error) {
+                                            console.error('Failed to send match start notification:', error);
+                                        }
+                                    }
+                                }}
+                                className="px-3 sm:px-6 py-2 sm:py-3 bg-green-500 text-black rounded-xl sm:rounded-2xl hover:scale-105 transition-all flex items-center gap-1.5 sm:gap-2 font-black uppercase tracking-widest text-[10px] sm:text-xs"
+                            >
+                                <Play size={14} className="sm:hidden" />
+                                <Play size={16} className="hidden sm:block" />
+                                <span className="hidden sm:inline">{lineupSet ? 'Start Match' : 'Set Lineup & Start'}</span>
+                                <span className="sm:hidden">{lineupSet ? 'Start' : 'Lineup'}</span>
+                            </button>
+                        )}
+
+                        {/* View Switcher */}
+                        <div className="flex bg-white/5 p-0.5 sm:p-1 rounded-lg sm:rounded-xl border border-white/10">
+                            <button
+                                onClick={() => setViewMode('logger')}
+                                className={`px-2 sm:px-4 py-1.5 sm:py-2 rounded-md sm:rounded-lg text-[8px] sm:text-[10px] font-black uppercase tracking-widest transition-all ${viewMode === 'logger' ? 'bg-primary text-black' : 'text-white/40 hover:text-white/60'}`}
+                            >
+                                Logger
+                            </button>
+                            <button
+                                onClick={() => setViewMode('stats')}
+                                className={`px-2 sm:px-4 py-1.5 sm:py-2 rounded-md sm:rounded-lg text-[8px] sm:text-[10px] font-black uppercase tracking-widest transition-all ${viewMode === 'stats' ? 'bg-primary text-black' : 'text-white/40 hover:text-white/60'}`}
+                            >
+                                Stats
+                            </button>
+                            <button
+                                onClick={() => setViewMode('history')}
+                                className={`px-2 sm:px-4 py-1.5 sm:py-2 rounded-md sm:rounded-lg text-[8px] sm:text-[10px] font-black uppercase tracking-widest transition-all ${viewMode === 'history' ? 'bg-primary text-black' : 'text-white/40 hover:text-white/60'}`}
+                            >
+                                History
+                            </button>
+                        </div>
+
+                        {/* Action Buttons Group */}
+                        <div className="flex items-center gap-2 ml-auto">
                             <button
                                 onClick={undoLastEvent}
                                 disabled={!matchStarted || matchEnded}
-                                className="px-6 py-3 bg-white/5 border border-white/10 rounded-2xl hover:bg-white/10 transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                                className="w-10 h-10 sm:w-auto sm:px-4 sm:py-2.5 bg-white/5 border border-white/10 rounded-xl sm:rounded-2xl hover:bg-white/10 transition-all flex items-center justify-center sm:gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                                title="Undo"
                             >
                                 <Undo2 size={16} />
-                                <span className="text-xs font-black uppercase tracking-widest">Undo</span>
+                                <span className="hidden sm:inline text-xs font-black uppercase tracking-widest">Undo</span>
                             </button>
                             {matchStarted && !matchEnded && (
                                 <button
                                     onClick={finalizeMatch}
                                     disabled={isSaving}
-                                    className="px-6 py-3 bg-green-500 text-black rounded-2xl hover:scale-105 transition-all flex items-center gap-2 font-black uppercase tracking-widest disabled:opacity-50 disabled:cursor-not-allowed"
+                                    className="px-3 sm:px-6 py-2 sm:py-2.5 bg-green-500 text-black rounded-xl sm:rounded-2xl hover:scale-105 transition-all flex items-center gap-1.5 sm:gap-2 font-black uppercase tracking-widest text-[10px] sm:text-xs disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
-                                    <Save size={16} />
-                                    <span className="text-xs">{isSaving ? 'Saving...' : 'Finalize Match'}</span>
+                                    <Save size={14} className="sm:hidden" />
+                                    <Save size={16} className="hidden sm:block" />
+                                    <span className="hidden sm:inline">{isSaving ? 'Saving...' : 'Finalize'}</span>
+                                    <span className="sm:hidden">End</span>
                                 </button>
                             )}
-                            <button
-                                onClick={() => setShowSettingsModal(true)}
-                                className="px-3 py-3 bg-white/5 border border-white/10 rounded-2xl hover:bg-white/10 transition-all flex items-center gap-2"
-                            >
-                                <Settings size={16} />
-                            </button>
-
-
                         </div>
                     </div>
                 </div>
             </div>
+
 
             <div className="max-w-7xl mx-auto">
                 {/* Scoreboard - Compact */}
@@ -1519,56 +1532,62 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
             </div>
 
             {/* Player Selection Modal */}
-            {showPlayerModal && (
-                <PlayerSelectionModal
-                    players={
-                        selectedTeam === 'home'
-                            ? homePlayers.filter(p => homeStarters.includes(p.id))
-                            : awayPlayers.filter(p => awayStarters.includes(p.id))
-                    }
-                    onSelect={handlePlayerSelect}
-                    onClose={() => {
-                        setShowPlayerModal(false);
-                        setPendingEvent(null);
-                    }}
-                    title={`Select Player - ${pendingEvent?.type}`}
-                />
-            )}
+            {
+                showPlayerModal && (
+                    <PlayerSelectionModal
+                        players={
+                            selectedTeam === 'home'
+                                ? homePlayers.filter(p => homeStarters.includes(p.id))
+                                : awayPlayers.filter(p => awayStarters.includes(p.id))
+                        }
+                        onSelect={handlePlayerSelect}
+                        onClose={() => {
+                            setShowPlayerModal(false);
+                            setPendingEvent(null);
+                        }}
+                        title={`Select Player - ${pendingEvent?.type}`}
+                    />
+                )
+            }
 
             {/* Assist Modal */}
             {/* Assist Modal */}
-            {showAssistModal && (
-                <AssistModal
-                    players={
-                        selectedTeam === 'home'
-                            ? homePlayers.filter(p => homeStarters.includes(p.id))
-                            : awayPlayers.filter(p => awayStarters.includes(p.id))
-                    }
-                    onSelect={handleAssistSelect}
-                    onClose={() => {
-                        setShowAssistModal(false);
-                        handleAssistSelect(null);
-                    }}
-                />
-            )}
+            {
+                showAssistModal && (
+                    <AssistModal
+                        players={
+                            selectedTeam === 'home'
+                                ? homePlayers.filter(p => homeStarters.includes(p.id))
+                                : awayPlayers.filter(p => awayStarters.includes(p.id))
+                        }
+                        onSelect={handleAssistSelect}
+                        onClose={() => {
+                            setShowAssistModal(false);
+                            handleAssistSelect(null);
+                        }}
+                    />
+                )
+            }
 
             {/* Sub In Modal - Select incoming player */}
-            {showSubInModal && (
-                <PlayerSelectionModal
-                    players={
-                        selectedTeam === 'home'
-                            ? homePlayers.filter(p => !homeStarters.includes(p.id))
-                            : awayPlayers.filter(p => !awayStarters.includes(p.id))
-                    }
-                    onSelect={handleSubIn}
-                    onClose={() => {
-                        setShowSubInModal(false);
-                        setPlayerComingOut(null);
-                        setPendingEvent(null);
-                    }}
-                    title="Select Player Coming IN"
-                />
-            )}
+            {
+                showSubInModal && (
+                    <PlayerSelectionModal
+                        players={
+                            selectedTeam === 'home'
+                                ? homePlayers.filter(p => !homeStarters.includes(p.id))
+                                : awayPlayers.filter(p => !awayStarters.includes(p.id))
+                        }
+                        onSelect={handleSubIn}
+                        onClose={() => {
+                            setShowSubInModal(false);
+                            setPlayerComingOut(null);
+                            setPendingEvent(null);
+                        }}
+                        title="Select Player Coming IN"
+                    />
+                )
+            }
 
             {/* Lineup Selection Modal - Football (11 players) */}
             <AnimatePresence>
@@ -1887,52 +1906,56 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
             </AnimatePresence>
 
             {/* Settings Modal */}
-            {showSettingsModal && (
-                <SettingsModal
-                    halfDuration={halfDuration}
-                    setHalfDuration={setHalfDuration}
-                    onClose={() => setShowSettingsModal(false)}
-                />
-            )}
+            {
+                showSettingsModal && (
+                    <SettingsModal
+                        halfDuration={halfDuration}
+                        setHalfDuration={setHalfDuration}
+                        onClose={() => setShowSettingsModal(false)}
+                    />
+                )
+            }
 
             {/* Finish Match Confirmation Modal */}
-            {showFinishModal && (
-                <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-                    <motion.div
-                        initial={{ opacity: 0, scale: 0.95 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        className="bg-[#0a0a0a] border border-white/10 rounded-[32px] p-8 max-w-md w-full text-center"
-                    >
-                        <div className="flex justify-center mb-4">
-                            <div className="w-16 h-16 bg-blue-500/20 text-blue-500 rounded-full flex items-center justify-center">
-                                <Trophy size={32} />
+            {
+                showFinishModal && (
+                    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.95 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            className="bg-[#0a0a0a] border border-white/10 rounded-[32px] p-8 max-w-md w-full text-center"
+                        >
+                            <div className="flex justify-center mb-4">
+                                <div className="w-16 h-16 bg-blue-500/20 text-blue-500 rounded-full flex items-center justify-center">
+                                    <Trophy size={32} />
+                                </div>
                             </div>
-                        </div>
-                        <h3 className="text-2xl font-display italic uppercase mb-2">Finish Match?</h3>
-                        <p className="text-white/60 mb-8">
-                            Are you sure you want to finish this match? This action cannot be undone.
-                        </p>
-                        <div className="grid grid-cols-2 gap-4">
-                            <button
-                                onClick={() => setShowFinishModal(false)}
-                                className="bg-white/5 text-white border border-white/10 py-4 rounded-xl font-black uppercase tracking-widest hover:bg-white/10 transition-all"
-                            >
-                                Cancel
-                            </button>
-                            <button
-                                onClick={() => {
-                                    finalizeMatch();
-                                    setShowFinishModal(false);
-                                }}
-                                className="bg-blue-500 text-white py-4 rounded-xl font-black uppercase tracking-widest hover:scale-105 transition-all"
-                            >
-                                Confirm Finish
-                            </button>
-                        </div>
-                    </motion.div>
-                </div>
-            )}
-        </div>
+                            <h3 className="text-2xl font-display italic uppercase mb-2">Finish Match?</h3>
+                            <p className="text-white/60 mb-8">
+                                Are you sure you want to finish this match? This action cannot be undone.
+                            </p>
+                            <div className="grid grid-cols-2 gap-4">
+                                <button
+                                    onClick={() => setShowFinishModal(false)}
+                                    className="bg-white/5 text-white border border-white/10 py-4 rounded-xl font-black uppercase tracking-widest hover:bg-white/10 transition-all"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={() => {
+                                        finalizeMatch();
+                                        setShowFinishModal(false);
+                                    }}
+                                    className="bg-blue-500 text-white py-4 rounded-xl font-black uppercase tracking-widest hover:scale-105 transition-all"
+                                >
+                                    Confirm Finish
+                                </button>
+                            </div>
+                        </motion.div>
+                    </div>
+                )
+            }
+        </div >
     );
 }
 

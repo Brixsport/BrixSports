@@ -47,15 +47,12 @@ const parsePositionToLine = (pos: string, sport: string = 'Football'): string =>
         p.includes('lwb') || p.includes('rwb') ||
         p.includes('def') || p.includes('back')) return 'DEF';
 
-    // Defensive Midfielders
-    if (p.includes('dm') || p.includes('defensive mid') || p.includes('cdm')) return 'DM';
+    // Defensive Midfielders (includes ALL midfielders except AM)
+    if (p.includes('dm') || p.includes('defensive mid') || p.includes('cdm') ||
+        p.includes('cm') || p.includes('lm') || p.includes('rm') || p.includes('mid')) return 'DM';
 
     // Attacking Midfielders
     if (p.includes('am') || p.includes('attacking mid') || p.includes('cam')) return 'AM';
-
-    // Midfielders (general)
-    if (p.includes('cm') || p.includes('lm') || p.includes('rm') ||
-        p.includes('mid')) return 'MID';
 
     // Forwards
     if (p.includes('st') || p.includes('cf') || p.includes('lw') ||
@@ -76,13 +73,13 @@ interface ProcessedPlayer {
 }
 
 // Formation-driven line geometry with fixed vertical ratios (PERCENTAGES)
+// STRICT FOTMOB GEOMETRY - NO EXCEPTIONS, NO OFFSETS
 const FOOTBALL_LINE_Y_RATIOS: Record<string, number> = {
-    'FW': 22,
-    'AM': 38,
-    'MID': 45,
-    'DM': 52,
-    'DEF': 65,
-    'GK': 82
+    'FW': 22,   // Forwards
+    'AM': 38,   // Attacking Midfielders
+    'DM': 52,   // Defensive Midfielders (includes all CMs)
+    'DEF': 65,  // Defenders
+    'GK': 82    // Goalkeeper
 };
 
 const BASKETBALL_LINE_Y_RATIOS: Record<string, number> = {
@@ -103,7 +100,7 @@ export function FullPitchLineups({
 }: FullPitchLineupsProps) {
     const isBasketball = sport === 'Basketball';
     const LINE_Y_RATIOS = isBasketball ? BASKETBALL_LINE_Y_RATIOS : FOOTBALL_LINE_Y_RATIOS;
-    const allLines = isBasketball ? ['GUARD', 'FORWARD', 'CENTER'] : ['GK', 'DEF', 'DM', 'MID', 'AM', 'FW'];
+    const allLines = isBasketball ? ['GUARD', 'FORWARD', 'CENTER'] : ['GK', 'DEF', 'DM', 'AM', 'FW'];
 
     // Process lineup using formation-driven line geometry
     const processLineup = (players: Record<string, Player>, lineup: any[], isHome: boolean) => {
@@ -142,6 +139,9 @@ export function FullPitchLineups({
             // Get fixed Y ratio for this line (PERCENTAGES)
             const yRatio = LINE_Y_RATIOS[lineName];
             const top = isHome ? `${yRatio}%` : `${100 - yRatio}%`;
+
+            // DEBUG: Log Y positions to verify strict line geometry
+            console.log(`[${isHome ? 'HOME' : 'AWAY'}] Line: ${lineName}, Y: ${top}, Players: ${linePlayers.length}`);
 
             // Calculate horizontal distribution (PERCENTAGES)
             const pitchWidth = 100;
@@ -195,8 +195,8 @@ export function FullPitchLineups({
 
             {/* Playing Surface - Responsive aspect ratio */}
             <div className={`relative w-full ${isBasketball ? 'aspect-[9/14]' : 'aspect-[9/16]'} bg-gradient-to-b ${isBasketball
-                    ? 'from-orange-900/30 via-orange-800/30 to-orange-900/30'
-                    : 'from-green-900/40 via-green-800/40 to-green-900/40'
+                ? 'from-orange-900/30 via-orange-800/30 to-orange-900/30'
+                : 'from-green-900/40 via-green-800/40 to-green-900/40'
                 } rounded-xl sm:rounded-2xl overflow-hidden border border-white/10`}>
                 {/* Surface markings */}
                 {isBasketball ? <BasketballCourtMarkings /> : <FootballPitchMarkings />}
@@ -339,80 +339,83 @@ function PlayerDot({ player, rating, position, isCaptain, isMotM, style, onClick
 
     return (
         <div
-            className="absolute cursor-pointer group z-10"
+            className="absolute cursor-pointer group"
             style={{ ...style, transform: 'translate(-50%, -50%)' }}
             onClick={onClick}
         >
-            {/* Man of the Match star - Mobile responsive */}
-            {isMotM && (
-                <div className="absolute -top-2 sm:-top-3 left-1/2 -translate-x-1/2 z-20">
-                    <div className="relative">
-                        <div className="absolute inset-0 bg-yellow-400 blur-sm sm:blur-md opacity-60 animate-pulse"></div>
-                        <svg className="w-3 h-3 sm:w-4 sm:h-4 md:w-5 md:h-5 relative z-10" viewBox="0 0 24 24" fill="gold" stroke="black" strokeWidth="1">
-                            <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
-                        </svg>
+            {/* FIXED HEIGHT CONTAINER - This is the ONLY element that affects geometry */}
+            <div className="relative" style={{ width: 0, height: 0 }}>
+                {/* Man of the Match star - ABSOLUTE OVERLAY */}
+                {isMotM && (
+                    <div className="absolute -top-6 sm:-top-7 md:-top-8 left-1/2 -translate-x-1/2 z-20 pointer-events-none">
+                        <div className="relative">
+                            <div className="absolute inset-0 bg-yellow-400 blur-sm sm:blur-md opacity-60 animate-pulse"></div>
+                            <svg className="w-3 h-3 sm:w-4 sm:h-4 md:w-5 md:h-5 relative z-10" viewBox="0 0 24 24" fill="gold" stroke="black" strokeWidth="1">
+                                <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+                            </svg>
+                        </div>
                     </div>
-                </div>
-            )}
+                )}
 
-            {/* Captain armband - Mobile responsive */}
-            {isCaptain && (
-                <div className="absolute -top-0.5 -right-0.5 sm:-top-1 sm:-right-1 w-3 h-3 sm:w-4 sm:h-4 bg-yellow-400 rounded-full flex items-center justify-center z-20 border border-black sm:border-2">
-                    <span className="text-[6px] sm:text-[7px] md:text-[8px] font-black text-black">C</span>
-                </div>
-            )}
-
-            {/* Player circle with jersey number - Mobile responsive */}
-            <div
-                className={`relative ${sizeClasses} rounded-full border border-white sm:border-2 flex items-center justify-center transition-all group-hover:scale-110 group-hover:z-30 shadow-lg ${isGoalkeeper ? 'bg-yellow-500/95 border-yellow-300 ring-1 sm:ring-2 ring-yellow-400/50' : 'bg-white/95 border-white'
-                    }`}
-                style={{ backgroundColor: isGoalkeeper ? undefined : teamColor }}
-            >
-                <span className={`text-[10px] sm:text-xs md:text-sm lg:text-base font-black ${isGoalkeeper ? 'text-black' : 'text-white drop-shadow-lg'}`}>
-                    {player.number}
-                </span>
-            </div>
-
-            {/* Rating Badge - Only show if rating exists - Mobile responsive */}
-            {rating > 0 && (
-                <div className="absolute -bottom-3 sm:-bottom-4 md:-bottom-5 left-1/2 -translate-x-1/2 z-20">
-                    <div className={`px-1 py-0.5 sm:px-1.5 rounded border sm:border-2 font-bold text-[8px] sm:text-[9px] md:text-[10px] lg:text-sm shadow-lg leading-none ${getRatingColor(rating)}`}>
-                        {rating.toFixed(1)}
+                {/* Captain armband - ABSOLUTE OVERLAY */}
+                {isCaptain && (
+                    <div className="absolute -top-1 -right-1 sm:-top-1.5 sm:-right-1.5 w-3 h-3 sm:w-4 sm:h-4 bg-yellow-400 rounded-full flex items-center justify-center z-20 border border-black sm:border-2 pointer-events-none">
+                        <span className="text-[6px] sm:text-[7px] md:text-[8px] font-black text-black">C</span>
                     </div>
+                )}
+
+                {/* Player circle with jersey number - FIXED SIZE */}
+                <div
+                    className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 ${sizeClasses} rounded-full border border-white sm:border-2 flex items-center justify-center transition-all group-hover:scale-110 shadow-lg ${isGoalkeeper ? 'bg-yellow-500/95 border-yellow-300 ring-1 sm:ring-2 ring-yellow-400/50' : 'bg-white/95 border-white'
+                        }`}
+                    style={{ backgroundColor: isGoalkeeper ? undefined : teamColor }}
+                >
+                    <span className={`text-[10px] sm:text-xs md:text-sm lg:text-base font-black ${isGoalkeeper ? 'text-black' : 'text-white drop-shadow-lg'}`}>
+                        {player.number}
+                    </span>
                 </div>
-            )}
 
-            {/* Player name below rating - Mobile responsive */}
-            <div className="absolute -bottom-6 sm:-bottom-7 md:-bottom-9 left-1/2 -translate-x-1/2 z-20 whitespace-nowrap">
-                <p className="text-[7px] sm:text-[8px] md:text-[9px] lg:text-xs font-bold text-white drop-shadow-lg text-center bg-black/50 px-1 py-0.5 sm:px-1.5 rounded leading-none">
-                    {player.jerseyName || player.name.split(' ').pop()}
-                </p>
-            </div>
+                {/* Rating Badge - ABSOLUTE OVERLAY (does NOT affect layout) */}
+                {rating > 0 && (
+                    <div className="absolute top-full left-1/2 -translate-x-1/2 mt-1 sm:mt-1.5 z-20 pointer-events-none">
+                        <div className={`px-1 py-0.5 sm:px-1.5 rounded border sm:border-2 font-bold text-[8px] sm:text-[9px] md:text-[10px] lg:text-xs shadow-lg leading-none whitespace-nowrap ${getRatingColor(rating)}`}>
+                            {rating.toFixed(1)}
+                        </div>
+                    </div>
+                )}
 
-            {/* Enhanced tooltip on hover - Hidden on mobile, shown on desktop */}
-            <div className="hidden md:block absolute top-full left-1/2 -translate-x-1/2 mt-12 lg:mt-14 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-30">
-                <div className="bg-black/95 backdrop-blur-sm px-3 py-2 rounded-lg border border-white/20 whitespace-nowrap shadow-xl">
-                    <p className="text-xs font-bold text-white">{player.name}</p>
-                    <div className="flex items-center gap-2 mt-1">
-                        <span className="text-[10px] text-white/60 uppercase">{position}</span>
-                        {rating > 0 && (
-                            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${rating >= 7.0 ? 'bg-green-500/20 text-green-400' :
+                {/* Player name - ABSOLUTE OVERLAY */}
+                <div className="absolute top-full left-1/2 -translate-x-1/2 mt-5 sm:mt-6 md:mt-7 z-10 whitespace-nowrap pointer-events-none">
+                    <p className="text-[7px] sm:text-[8px] md:text-[9px] lg:text-xs font-bold text-white drop-shadow-lg text-center bg-black/50 px-1 py-0.5 sm:px-1.5 rounded leading-none">
+                        {player.jerseyName || player.name.split(' ').pop()}
+                    </p>
+                </div>
+
+                {/* Enhanced tooltip on hover - Hidden on mobile, shown on desktop */}
+                <div className="hidden md:block absolute top-full left-1/2 -translate-x-1/2 mt-12 lg:mt-16 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-30">
+                    <div className="bg-black/95 backdrop-blur-sm px-3 py-2 rounded-lg border border-white/20 whitespace-nowrap shadow-xl">
+                        <p className="text-xs font-bold text-white">{player.name}</p>
+                        <div className="flex items-center gap-2 mt-1">
+                            <span className="text-[10px] text-white/60 uppercase">{position}</span>
+                            {rating > 0 && (
+                                <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${rating >= 7.0 ? 'bg-green-500/20 text-green-400' :
                                     rating >= 6.0 ? 'bg-yellow-500/20 text-yellow-400' :
                                         'bg-red-500/20 text-red-400'
-                                }`}>
-                                ⭐ {rating.toFixed(1)}
-                            </span>
-                        )}
-                        {isMotM && (
-                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-yellow-400/20 text-yellow-300">
-                                🏆 MOTM
-                            </span>
-                        )}
-                        {isCaptain && (
-                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-yellow-500/20 text-yellow-400">
-                                👑 CAPTAIN
-                            </span>
-                        )}
+                                    }`}>
+                                    ⭐ {rating.toFixed(1)}
+                                </span>
+                            )}
+                            {isMotM && (
+                                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-yellow-400/20 text-yellow-300">
+                                    🏆 MOTM
+                                </span>
+                            )}
+                            {isCaptain && (
+                                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-yellow-500/20 text-yellow-400">
+                                    👑 CAPTAIN
+                                </span>
+                            )}
+                        </div>
                     </div>
                 </div>
             </div>
