@@ -45,23 +45,31 @@ export default function MatchDetailPage() {
     const { isConnected, on, off } = useWebSocket({ matchId, autoConnect: true });
     const { events: liveEvents, latestEvent } = useMatchEvents(matchId);
 
-    // Handle scroll for collapsing header
+    // Handle scroll for collapsing header with requestAnimationFrame for smooth updates
     useEffect(() => {
+        let ticking = false;
+
         const handleScroll = () => {
-            if (scrollContainerRef.current) {
-                setScrollY(scrollContainerRef.current.scrollTop);
+            if (!ticking) {
+                window.requestAnimationFrame(() => {
+                    if (scrollContainerRef.current) {
+                        setScrollY(scrollContainerRef.current.scrollTop);
+                    }
+                    ticking = false;
+                });
+                ticking = true;
             }
         };
 
         const container = scrollContainerRef.current;
         if (container) {
-            container.addEventListener('scroll', handleScroll);
+            container.addEventListener('scroll', handleScroll, { passive: true });
             return () => container.removeEventListener('scroll', handleScroll);
         }
     }, []);
 
     // Calculate header animation values based on scroll
-    const scrollProgress = Math.min(scrollY / SCROLL_THRESHOLD, 1);
+    const scrollProgress = Math.min(Math.max(scrollY / SCROLL_THRESHOLD, 0), 1);
     const headerHeight = HEADER_EXPANDED_HEIGHT - (HEADER_EXPANDED_HEIGHT - HEADER_COLLAPSED_HEIGHT) * scrollProgress;
     const expandedContentOpacity = 1 - scrollProgress;
     const collapsedContentOpacity = scrollProgress;
@@ -180,10 +188,13 @@ export default function MatchDetailPage() {
 
     return (
         <div className="min-h-screen bg-[#050505] text-white flex flex-col">
-            {/* Collapsing Header - Absolute positioned, sticky */}
+            {/* Collapsing Header - Optimized for smooth scrolling */}
             <div
-                className="sticky top-0 z-50 bg-[#050505]/95 backdrop-blur-xl border-b border-white/10 transition-all duration-200"
-                style={{ height: `${headerHeight}px` }}
+                className="sticky top-0 z-50 bg-[#050505]/95 backdrop-blur-xl border-b border-white/10"
+                style={{
+                    height: `${headerHeight}px`,
+                    willChange: scrollY > 0 && scrollY < SCROLL_THRESHOLD ? 'height' : 'auto'
+                }}
             >
                 <div className="max-w-7xl mx-auto px-4 h-full flex flex-col">
                     {/* Top bar - always visible */}

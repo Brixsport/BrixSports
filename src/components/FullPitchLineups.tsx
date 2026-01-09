@@ -20,13 +20,26 @@ interface FullPitchLineupsProps {
     homeLineup: Array<{ playerId: string; rating: number; position?: string; isCaptain?: boolean; isStarter?: boolean }>;
     awayLineup: Array<{ playerId: string; rating: number; position?: string; isCaptain?: boolean; isStarter?: boolean }>;
     onPlayerClick: (player: Player) => void;
+    sport?: string; // 'Football' or 'Basketball'
 }
 
 // Helper to normalize position string to line category
-const parsePositionToLine = (pos: string): string => {
+const parsePositionToLine = (pos: string, sport: string = 'Football'): string => {
     const p = pos.toLowerCase().trim();
 
-    // Goalkeeper
+    // Basketball positions
+    if (sport === 'Basketball') {
+        if (p.includes('pg') || p.includes('point guard')) return 'GUARD';
+        if (p.includes('sg') || p.includes('shooting guard')) return 'GUARD';
+        if (p.includes('sf') || p.includes('small forward')) return 'FORWARD';
+        if (p.includes('pf') || p.includes('power forward')) return 'FORWARD';
+        if (p.includes('c') || p.includes('center')) return 'CENTER';
+        if (p.includes('guard')) return 'GUARD';
+        if (p.includes('forward')) return 'FORWARD';
+        return 'GUARD'; // Default
+    }
+
+    // Football positions
     if (p.includes('gk') || p.includes('goalkeeper')) return 'GK';
 
     // Defenders
@@ -63,13 +76,19 @@ interface ProcessedPlayer {
 }
 
 // Formation-driven line geometry with fixed vertical ratios (PERCENTAGES)
-const LINE_Y_RATIOS: Record<string, number> = {
+const FOOTBALL_LINE_Y_RATIOS: Record<string, number> = {
     'FW': 22,
     'AM': 38,
     'MID': 45,
     'DM': 52,
     'DEF': 65,
     'GK': 82
+};
+
+const BASKETBALL_LINE_Y_RATIOS: Record<string, number> = {
+    'GUARD': 30,
+    'FORWARD': 50,
+    'CENTER': 70
 };
 
 export function FullPitchLineups({
@@ -79,8 +98,12 @@ export function FullPitchLineups({
     awayPlayers,
     homeLineup,
     awayLineup,
-    onPlayerClick
+    onPlayerClick,
+    sport = 'Football'
 }: FullPitchLineupsProps) {
+    const isBasketball = sport === 'Basketball';
+    const LINE_Y_RATIOS = isBasketball ? BASKETBALL_LINE_Y_RATIOS : FOOTBALL_LINE_Y_RATIOS;
+    const allLines = isBasketball ? ['GUARD', 'FORWARD', 'CENTER'] : ['GK', 'DEF', 'DM', 'MID', 'AM', 'FW'];
 
     // Process lineup using formation-driven line geometry
     const processLineup = (players: Record<string, Player>, lineup: any[], isHome: boolean) => {
@@ -94,7 +117,7 @@ export function FullPitchLineups({
                 player,
                 rating: entry.rating || 0, // No fake ratings - use 0 if not available
                 position: entry.position || player.position,
-                line: parsePositionToLine(entry.position || player.position || ''),
+                line: parsePositionToLine(entry.position || player.position || '', sport),
                 isCaptain: !!entry.isCaptain,
                 isMotM: !!entry.isMotM,
                 isStarter: entry.isStarter !== false // Default to true if not specified
@@ -106,18 +129,12 @@ export function FullPitchLineups({
         const substitutes = processed.filter(p => !p.isStarter);
 
         // 3. Group starters by line
-        const lineMap: Record<string, ProcessedPlayer[]> = {
-            GK: starters.filter(p => p.line === 'GK'),
-            DEF: starters.filter(p => p.line === 'DEF'),
-            DM: starters.filter(p => p.line === 'DM'),
-            MID: starters.filter(p => p.line === 'MID'),
-            AM: starters.filter(p => p.line === 'AM'),
-            FW: starters.filter(p => p.line === 'FW'),
-        };
+        const lineMap: Record<string, ProcessedPlayer[]> = {};
+        allLines.forEach(line => {
+            lineMap[line] = starters.filter(p => p.line === line);
+        });
 
         // 4. Render starters with formation-based positioning
-        const allLines = ['GK', 'DEF', 'DM', 'MID', 'AM', 'FW'];
-
         const starterNodes = allLines.flatMap((lineName) => {
             const linePlayers = lineMap[lineName];
             if (linePlayers.length === 0) return [];
@@ -163,33 +180,26 @@ export function FullPitchLineups({
     const awayResult = processLineup(awayPlayers, awayLineup, false);
 
     return (
-        <div className="w-full space-y-4">
-            {/* Team Headers */}
-            <div className="flex items-center justify-between px-4">
-                <div className="flex items-center gap-3">
-                    <img src={homeTeam.logo} alt={homeTeam.name} className="w-8 h-8 object-contain" />
-                    <span className="font-bold text-lg">{homeTeam.name}</span>
+        <div className="w-full space-y-3 sm:space-y-4">
+            {/* Team Headers - Mobile Responsive */}
+            <div className="flex items-center justify-between px-2 sm:px-4">
+                <div className="flex items-center gap-2 sm:gap-3">
+                    <img src={homeTeam.logo} alt={homeTeam.name} className="w-6 h-6 sm:w-8 sm:h-8 object-contain" />
+                    <span className="font-bold text-sm sm:text-lg truncate max-w-[100px] sm:max-w-none">{homeTeam.name}</span>
                 </div>
-                <div className="flex items-center gap-3">
-                    <span className="font-bold text-lg">{awayTeam.name}</span>
-                    <img src={awayTeam.logo} alt={awayTeam.name} className="w-8 h-8 object-contain" />
+                <div className="flex items-center gap-2 sm:gap-3">
+                    <span className="font-bold text-sm sm:text-lg truncate max-w-[100px] sm:max-w-none">{awayTeam.name}</span>
+                    <img src={awayTeam.logo} alt={awayTeam.name} className="w-6 h-6 sm:w-8 sm:h-8 object-contain" />
                 </div>
             </div>
 
-            {/* Full Pitch - Starters Only */}
-            <div className="relative w-full aspect-[9/16] bg-gradient-to-b from-green-900/40 via-green-800/40 to-green-900/40 rounded-2xl overflow-hidden border border-white/10">
-                {/* Pitch markings */}
-                <div className="absolute inset-0 opacity-20">
-                    <div className="absolute top-0 left-1/2 -translate-x-1/2 w-1/4 h-8 border-2 border-white/40 border-t-0 rounded-b-lg"></div>
-                    <div className="absolute top-0 left-1/2 -translate-x-1/2 w-2/3 h-20 border-2 border-white/40 border-t-0"></div>
-                    <div className="absolute top-0 left-1/2 -translate-x-1/2 w-1/3 h-12 border-2 border-white/40 border-t-0"></div>
-                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-32 h-32 border-2 border-white/40 rounded-full"></div>
-                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-2 h-2 bg-white/40 rounded-full"></div>
-                    <div className="absolute top-1/2 left-0 right-0 h-0.5 bg-white/40"></div>
-                    <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-2/3 h-20 border-2 border-white/40 border-b-0"></div>
-                    <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-1/3 h-12 border-2 border-white/40 border-b-0"></div>
-                    <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-1/4 h-8 border-2 border-white/40 border-b-0 rounded-t-lg"></div>
-                </div>
+            {/* Playing Surface - Responsive aspect ratio */}
+            <div className={`relative w-full ${isBasketball ? 'aspect-[9/14]' : 'aspect-[9/16]'} bg-gradient-to-b ${isBasketball
+                    ? 'from-orange-900/30 via-orange-800/30 to-orange-900/30'
+                    : 'from-green-900/40 via-green-800/40 to-green-900/40'
+                } rounded-xl sm:rounded-2xl overflow-hidden border border-white/10`}>
+                {/* Surface markings */}
+                {isBasketball ? <BasketballCourtMarkings /> : <FootballPitchMarkings />}
 
                 {/* Home Team Starters */}
                 <div className="absolute inset-0">
@@ -202,17 +212,17 @@ export function FullPitchLineups({
                 </div>
             </div>
 
-            {/* Bench - Horizontal List Below Pitch */}
+            {/* Bench - Horizontal List Below - Mobile Responsive */}
             {(homeResult.substitutes.length > 0 || awayResult.substitutes.length > 0) && (
-                <div className="space-y-4 px-4">
+                <div className="space-y-3 sm:space-y-4 px-2 sm:px-4">
                     {/* Home Bench */}
                     {homeResult.substitutes.length > 0 && (
                         <div>
-                            <div className="flex items-center gap-2 mb-3">
-                                <img src={homeTeam.logo} alt={homeTeam.name} className="w-5 h-5 object-contain" />
-                                <span className="text-sm font-semibold text-white/60">Substitutes</span>
+                            <div className="flex items-center gap-2 mb-2 sm:mb-3">
+                                <img src={homeTeam.logo} alt={homeTeam.name} className="w-4 h-4 sm:w-5 sm:h-5 object-contain" />
+                                <span className="text-xs sm:text-sm font-semibold text-white/60">Substitutes</span>
                             </div>
-                            <div className="flex gap-3 overflow-x-auto pb-2">
+                            <div className="flex gap-2 sm:gap-3 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
                                 {homeResult.substitutes.map((sub) => (
                                     <BenchPlayer
                                         key={sub.player.id}
@@ -230,11 +240,11 @@ export function FullPitchLineups({
                     {/* Away Bench */}
                     {awayResult.substitutes.length > 0 && (
                         <div>
-                            <div className="flex items-center gap-2 mb-3">
-                                <img src={awayTeam.logo} alt={awayTeam.name} className="w-5 h-5 object-contain" />
-                                <span className="text-sm font-semibold text-white/60">Substitutes</span>
+                            <div className="flex items-center gap-2 mb-2 sm:mb-3">
+                                <img src={awayTeam.logo} alt={awayTeam.name} className="w-4 h-4 sm:w-5 sm:h-5 object-contain" />
+                                <span className="text-xs sm:text-sm font-semibold text-white/60">Substitutes</span>
                             </div>
-                            <div className="flex gap-3 overflow-x-auto pb-2">
+                            <div className="flex gap-2 sm:gap-3 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
                                 {awayResult.substitutes.map((sub) => (
                                     <BenchPlayer
                                         key={sub.player.id}
@@ -250,6 +260,49 @@ export function FullPitchLineups({
                     )}
                 </div>
             )}
+        </div>
+    );
+}
+
+// Football Pitch Markings Component
+function FootballPitchMarkings() {
+    return (
+        <div className="absolute inset-0 opacity-20">
+            <div className="absolute top-0 left-1/2 -translate-x-1/2 w-1/4 h-6 sm:h-8 border border-white/40 sm:border-2 border-t-0 rounded-b-lg"></div>
+            <div className="absolute top-0 left-1/2 -translate-x-1/2 w-2/3 h-16 sm:h-20 border border-white/40 sm:border-2 border-t-0"></div>
+            <div className="absolute top-0 left-1/2 -translate-x-1/2 w-1/3 h-10 sm:h-12 border border-white/40 sm:border-2 border-t-0"></div>
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-24 h-24 sm:w-32 sm:h-32 border border-white/40 sm:border-2 rounded-full"></div>
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-1.5 h-1.5 sm:w-2 sm:h-2 bg-white/40 rounded-full"></div>
+            <div className="absolute top-1/2 left-0 right-0 h-0.5 bg-white/40"></div>
+            <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-2/3 h-16 sm:h-20 border border-white/40 sm:border-2 border-b-0"></div>
+            <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-1/3 h-10 sm:h-12 border border-white/40 sm:border-2 border-b-0"></div>
+            <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-1/4 h-6 sm:h-8 border border-white/40 sm:border-2 border-b-0 rounded-t-lg"></div>
+        </div>
+    );
+}
+
+// Basketball Court Markings Component
+function BasketballCourtMarkings() {
+    return (
+        <div className="absolute inset-0 opacity-20">
+            {/* Top hoop and key */}
+            <div className="absolute top-0 left-1/2 -translate-x-1/2 w-16 sm:w-20 h-1 bg-white/40"></div>
+            <div className="absolute top-0 left-1/2 -translate-x-1/2 w-1/3 h-16 sm:h-20 border border-white/40 sm:border-2 border-t-0 rounded-b-full"></div>
+            <div className="absolute top-0 left-1/2 -translate-x-1/2 w-1/4 h-12 sm:h-16 border border-white/40 sm:border-2 border-t-0"></div>
+
+            {/* Center circle */}
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-20 h-20 sm:w-28 sm:h-28 border border-white/40 sm:border-2 rounded-full"></div>
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-1.5 h-1.5 sm:w-2 sm:h-2 bg-white/40 rounded-full"></div>
+            <div className="absolute top-1/2 left-0 right-0 h-0.5 bg-white/40"></div>
+
+            {/* Bottom hoop and key */}
+            <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-16 sm:w-20 h-1 bg-white/40"></div>
+            <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-1/3 h-16 sm:h-20 border border-white/40 sm:border-2 border-b-0 rounded-t-full"></div>
+            <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-1/4 h-12 sm:h-16 border border-white/40 sm:border-2 border-b-0"></div>
+
+            {/* Three-point lines (simplified) */}
+            <div className="absolute top-0 left-0 right-0 h-1/3 border-l-2 border-r-2 border-white/20 rounded-b-[50%]"></div>
+            <div className="absolute bottom-0 left-0 right-0 h-1/3 border-l-2 border-r-2 border-white/20 rounded-t-[50%]"></div>
         </div>
     );
 }
@@ -279,9 +332,10 @@ function PlayerDot({ player, rating, position, isCaptain, isMotM, style, onClick
         return 'bg-red-500/90 text-white border-red-400';
     };
 
+    // Mobile-responsive sizes
     const sizeClasses = size === 'small'
-        ? 'w-8 h-8'
-        : 'w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14';
+        ? 'w-7 h-7 sm:w-8 sm:h-8'
+        : 'w-8 h-8 sm:w-10 sm:h-10 md:w-12 md:h-12 lg:w-14 lg:h-14';
 
     return (
         <div
@@ -289,54 +343,54 @@ function PlayerDot({ player, rating, position, isCaptain, isMotM, style, onClick
             style={{ ...style, transform: 'translate(-50%, -50%)' }}
             onClick={onClick}
         >
-            {/* Man of the Match star */}
+            {/* Man of the Match star - Mobile responsive */}
             {isMotM && (
-                <div className="absolute -top-3 left-1/2 -translate-x-1/2 z-20">
+                <div className="absolute -top-2 sm:-top-3 left-1/2 -translate-x-1/2 z-20">
                     <div className="relative">
-                        <div className="absolute inset-0 bg-yellow-400 blur-md opacity-60 animate-pulse"></div>
-                        <svg className="w-5 h-5 relative z-10" viewBox="0 0 24 24" fill="gold" stroke="black" strokeWidth="1">
+                        <div className="absolute inset-0 bg-yellow-400 blur-sm sm:blur-md opacity-60 animate-pulse"></div>
+                        <svg className="w-3 h-3 sm:w-4 sm:h-4 md:w-5 md:h-5 relative z-10" viewBox="0 0 24 24" fill="gold" stroke="black" strokeWidth="1">
                             <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
                         </svg>
                     </div>
                 </div>
             )}
 
-            {/* Captain armband */}
+            {/* Captain armband - Mobile responsive */}
             {isCaptain && (
-                <div className="absolute -top-1 -right-1 w-4 h-4 bg-yellow-400 rounded-full flex items-center justify-center z-20 border-2 border-black">
-                    <span className="text-[8px] font-black text-black">C</span>
+                <div className="absolute -top-0.5 -right-0.5 sm:-top-1 sm:-right-1 w-3 h-3 sm:w-4 sm:h-4 bg-yellow-400 rounded-full flex items-center justify-center z-20 border border-black sm:border-2">
+                    <span className="text-[6px] sm:text-[7px] md:text-[8px] font-black text-black">C</span>
                 </div>
             )}
 
-            {/* Player circle with jersey number */}
+            {/* Player circle with jersey number - Mobile responsive */}
             <div
-                className={`relative ${sizeClasses} rounded-full border-2 flex items-center justify-center transition-all group-hover:scale-110 group-hover:z-30 shadow-lg ${isGoalkeeper ? 'bg-yellow-500/95 border-yellow-300 ring-2 ring-yellow-400/50' : 'bg-white/95 border-white'
+                className={`relative ${sizeClasses} rounded-full border border-white sm:border-2 flex items-center justify-center transition-all group-hover:scale-110 group-hover:z-30 shadow-lg ${isGoalkeeper ? 'bg-yellow-500/95 border-yellow-300 ring-1 sm:ring-2 ring-yellow-400/50' : 'bg-white/95 border-white'
                     }`}
                 style={{ backgroundColor: isGoalkeeper ? undefined : teamColor }}
             >
-                <span className={`text-xs md:text-base font-black ${isGoalkeeper ? 'text-black' : 'text-white drop-shadow-lg'}`}>
+                <span className={`text-[10px] sm:text-xs md:text-sm lg:text-base font-black ${isGoalkeeper ? 'text-black' : 'text-white drop-shadow-lg'}`}>
                     {player.number}
                 </span>
             </div>
 
-            {/* Rating Badge - Only show if rating exists */}
+            {/* Rating Badge - Only show if rating exists - Mobile responsive */}
             {rating > 0 && (
-                <div className="absolute -bottom-5 left-1/2 -translate-x-1/2 z-20">
-                    <div className={`px-1.5 py-0.5 rounded border-2 font-bold text-[10px] md:text-sm shadow-lg leading-none ${getRatingColor(rating)}`}>
+                <div className="absolute -bottom-3 sm:-bottom-4 md:-bottom-5 left-1/2 -translate-x-1/2 z-20">
+                    <div className={`px-1 py-0.5 sm:px-1.5 rounded border sm:border-2 font-bold text-[8px] sm:text-[9px] md:text-[10px] lg:text-sm shadow-lg leading-none ${getRatingColor(rating)}`}>
                         {rating.toFixed(1)}
                     </div>
                 </div>
             )}
 
-            {/* Player name below rating */}
-            <div className="absolute -bottom-9 left-1/2 -translate-x-1/2 z-20 whitespace-nowrap">
-                <p className="text-[9px] md:text-xs font-bold text-white drop-shadow-lg text-center bg-black/50 px-1.5 py-0.5 rounded leading-none">
+            {/* Player name below rating - Mobile responsive */}
+            <div className="absolute -bottom-6 sm:-bottom-7 md:-bottom-9 left-1/2 -translate-x-1/2 z-20 whitespace-nowrap">
+                <p className="text-[7px] sm:text-[8px] md:text-[9px] lg:text-xs font-bold text-white drop-shadow-lg text-center bg-black/50 px-1 py-0.5 sm:px-1.5 rounded leading-none">
                     {player.jerseyName || player.name.split(' ').pop()}
                 </p>
             </div>
 
-            {/* Enhanced tooltip on hover - Desktop only */}
-            <div className="hidden md:block absolute top-full left-1/2 -translate-x-1/2 mt-14 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-30">
+            {/* Enhanced tooltip on hover - Hidden on mobile, shown on desktop */}
+            <div className="hidden md:block absolute top-full left-1/2 -translate-x-1/2 mt-12 lg:mt-14 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-30">
                 <div className="bg-black/95 backdrop-blur-sm px-3 py-2 rounded-lg border border-white/20 whitespace-nowrap shadow-xl">
                     <p className="text-xs font-bold text-white">{player.name}</p>
                     <div className="flex items-center gap-2 mt-1">
@@ -385,27 +439,27 @@ function BenchPlayer({ player, rating, position, teamColor, onClick }: BenchPlay
     return (
         <div
             onClick={onClick}
-            className="flex-shrink-0 flex items-center gap-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg px-3 py-2 cursor-pointer transition-all hover:scale-105"
+            className="flex-shrink-0 flex items-center gap-1.5 sm:gap-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg px-2 py-1.5 sm:px-3 sm:py-2 cursor-pointer transition-all hover:scale-105 active:scale-95"
         >
-            {/* Jersey number */}
+            {/* Jersey number - Mobile responsive */}
             <div
-                className="w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold"
+                className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg flex items-center justify-center text-[10px] sm:text-xs font-bold"
                 style={{ backgroundColor: teamColor + '40', color: '#fff' }}
             >
                 {player.number}
             </div>
 
-            {/* Player info */}
+            {/* Player info - Mobile responsive */}
             <div className="min-w-0">
-                <div className="text-sm font-semibold text-white truncate">
+                <div className="text-xs sm:text-sm font-semibold text-white truncate max-w-[80px] sm:max-w-[120px]">
                     {player.jerseyName || player.name.split(' ').pop()}
                 </div>
-                <div className="text-[10px] text-white/60">{position}</div>
+                <div className="text-[9px] sm:text-[10px] text-white/60">{position}</div>
             </div>
 
-            {/* Rating - Only show if exists */}
+            {/* Rating - Only show if exists - Mobile responsive */}
             {rating > 0 && (
-                <div className={`ml-auto px-2 py-1 rounded text-xs font-bold ${getRatingColor(rating)}`}>
+                <div className={`ml-auto px-1.5 py-0.5 sm:px-2 sm:py-1 rounded text-[10px] sm:text-xs font-bold ${getRatingColor(rating)}`}>
                     {rating.toFixed(1)}
                 </div>
             )}
