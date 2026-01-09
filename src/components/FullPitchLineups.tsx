@@ -214,32 +214,32 @@ export function FullPitchLineups({
     };
 
     return (
-        <div className="w-full space-y-4">
-            {/* Team Headers */}
-            <div className="flex items-center justify-between px-4">
-                <div className="flex items-center gap-3">
-                    <img src={homeTeam.logo} alt={homeTeam.name} className="w-8 h-8 object-contain" />
-                    <span className="font-bold text-lg">{homeTeam.name}</span>
+        <div className="w-full space-y-2 sm:space-y-4">
+            {/* Team Headers - More compact on mobile */}
+            <div className="flex items-center justify-between px-2 sm:px-4">
+                <div className="flex items-center gap-1.5 sm:gap-3">
+                    <img src={homeTeam.logo} alt={homeTeam.name} className="w-6 h-6 sm:w-8 sm:h-8 object-contain" />
+                    <span className="font-bold text-sm sm:text-lg truncate max-w-[120px] sm:max-w-none">{homeTeam.name}</span>
                 </div>
-                <div className="flex items-center gap-3">
-                    <span className="font-bold text-lg">{awayTeam.name}</span>
-                    <img src={awayTeam.logo} alt={awayTeam.name} className="w-8 h-8 object-contain" />
+                <div className="flex items-center gap-1.5 sm:gap-3">
+                    <span className="font-bold text-sm sm:text-lg truncate max-w-[120px] sm:max-w-none">{awayTeam.name}</span>
+                    <img src={awayTeam.logo} alt={awayTeam.name} className="w-6 h-6 sm:w-8 sm:h-8 object-contain" />
                 </div>
             </div>
 
-            {/* Full Pitch */}
-            <div className="relative w-full aspect-[2/3] md:aspect-[9/16] bg-gradient-to-b from-green-900/40 via-green-800/40 to-green-900/40 rounded-2xl overflow-hidden border border-white/10">
-                {/* Pitch markings */}
+            {/* Full Pitch - Better aspect ratio for mobile */}
+            <div className="relative w-full aspect-[3/4] sm:aspect-[2/3] md:aspect-[9/16] bg-gradient-to-b from-green-900/40 via-green-800/40 to-green-900/40 rounded-xl sm:rounded-2xl overflow-hidden border border-white/10">
+                {/* Pitch markings - Scaled for mobile */}
                 <div className="absolute inset-0 opacity-20">
-                    <div className="absolute top-0 left-1/2 -translate-x-1/2 w-1/4 h-8 border-2 border-white/40 border-t-0 rounded-b-lg"></div>
-                    <div className="absolute top-0 left-1/2 -translate-x-1/2 w-2/3 h-20 border-2 border-white/40 border-t-0"></div>
-                    <div className="absolute top-0 left-1/2 -translate-x-1/2 w-1/3 h-12 border-2 border-white/40 border-t-0"></div>
-                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-32 h-32 border-2 border-white/40 rounded-full"></div>
-                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-2 h-2 bg-white/40 rounded-full"></div>
+                    <div className="absolute top-0 left-1/2 -translate-x-1/2 w-1/4 h-6 sm:h-8 border border-white/40 sm:border-2 border-t-0 rounded-b-lg"></div>
+                    <div className="absolute top-0 left-1/2 -translate-x-1/2 w-2/3 h-16 sm:h-20 border border-white/40 sm:border-2 border-t-0"></div>
+                    <div className="absolute top-0 left-1/2 -translate-x-1/2 w-1/3 h-10 sm:h-12 border border-white/40 sm:border-2 border-t-0"></div>
+                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-24 h-24 sm:w-32 sm:h-32 border border-white/40 sm:border-2 rounded-full"></div>
+                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-1.5 h-1.5 sm:w-2 sm:h-2 bg-white/40 rounded-full"></div>
                     <div className="absolute top-1/2 left-0 right-0 h-0.5 bg-white/40"></div>
-                    <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-2/3 h-20 border-2 border-white/40 border-b-0"></div>
-                    <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-1/3 h-12 border-2 border-white/40 border-b-0"></div>
-                    <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-1/4 h-8 border-2 border-white/40 border-b-0 rounded-t-lg"></div>
+                    <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-2/3 h-16 sm:h-20 border border-white/40 sm:border-2 border-b-0"></div>
+                    <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-1/3 h-10 sm:h-12 border border-white/40 sm:border-2 border-b-0"></div>
+                    <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-1/4 h-6 sm:h-8 border border-white/40 sm:border-2 border-b-0 rounded-t-lg"></div>
                 </div>
 
                 {/* Home Team */}
@@ -290,59 +290,59 @@ function PlayerDot({ player, rating, position, isCaptain, isMotM, style, onClick
             style={{ ...style, transform: 'translate(-50%, -50%)' }}
             onClick={onClick}
         >
-            {/* Man of the Match star */}
+            {/* Man of the Match star - Smaller on mobile */}
             {isMotM && (
-                <div className="absolute -top-3 left-1/2 -translate-x-1/2 z-20">
+                <div className="absolute -top-2 sm:-top-3 left-1/2 -translate-x-1/2 z-20">
                     <div className="relative">
-                        <div className="absolute inset-0 bg-yellow-400 blur-md opacity-60 animate-pulse"></div>
-                        <svg className="w-5 h-5 relative z-10" viewBox="0 0 24 24" fill="gold" stroke="black" strokeWidth="1">
+                        <div className="absolute inset-0 bg-yellow-400 blur-sm sm:blur-md opacity-60 animate-pulse"></div>
+                        <svg className="w-3 h-3 sm:w-5 sm:h-5 relative z-10" viewBox="0 0 24 24" fill="gold" stroke="black" strokeWidth="1">
                             <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
                         </svg>
                     </div>
                 </div>
             )}
 
-            {/* Captain armband */}
+            {/* Captain armband - Smaller on mobile */}
             {isCaptain && (
-                <div className="absolute -top-1 -right-1 w-4 h-4 bg-yellow-400 rounded-full flex items-center justify-center z-20 border-2 border-black">
-                    <span className="text-[8px] font-black text-black">C</span>
+                <div className="absolute -top-0.5 -right-0.5 sm:-top-1 sm:-right-1 w-3 h-3 sm:w-4 sm:h-4 bg-yellow-400 rounded-full flex items-center justify-center z-20 border border-black sm:border-2">
+                    <span className="text-[6px] sm:text-[8px] font-black text-black">C</span>
                 </div>
             )}
 
-            {/* Player circle with jersey number */}
+            {/* Player circle with jersey number - Much smaller on mobile */}
             <div
-                className={`relative w-9 h-9 md:w-14 md:h-14 rounded-full border-2 md:border-3 flex items-center justify-center transition-all group-hover:scale-110 group-hover:z-30 shadow-lg ${isGoalkeeper ? 'bg-yellow-500/95 border-yellow-300 ring-2 ring-yellow-400/50' : 'bg-white/95 border-white'
+                className={`relative w-7 h-7 sm:w-9 sm:h-9 md:w-14 md:h-14 rounded-full border border-white sm:border-2 md:border-3 flex items-center justify-center transition-all group-hover:scale-110 group-hover:z-30 shadow-lg ${isGoalkeeper ? 'bg-yellow-500/95 border-yellow-300 ring-1 sm:ring-2 ring-yellow-400/50' : 'bg-white/95 border-white'
                     }`}
                 style={{ backgroundColor: isGoalkeeper ? undefined : teamColor }}
             >
-                <span className={`text-xs md:text-base font-black ${isGoalkeeper ? 'text-black' : 'text-white drop-shadow-lg'}`}>
+                <span className={`text-[10px] sm:text-xs md:text-base font-black ${isGoalkeeper ? 'text-black' : 'text-white drop-shadow-lg'}`}>
                     {player.number}
                 </span>
             </div>
 
-            {/* Rating Badge - Always Visible (SofaScore style) */}
-            <div className="absolute -bottom-5 left-1/2 -translate-x-1/2 z-20">
-                <div className={`px-1.5 py-0.5 rounded-md border-2 font-bold text-[10px] md:text-sm shadow-lg leading-none ${getRatingColor(rating)}`}>
+            {/* Rating Badge - Smaller on mobile */}
+            <div className="absolute -bottom-3 sm:-bottom-5 left-1/2 -translate-x-1/2 z-20">
+                <div className={`px-1 py-0.5 sm:px-1.5 rounded border sm:border-2 font-bold text-[8px] sm:text-[10px] md:text-sm shadow-lg leading-none ${getRatingColor(rating)}`}>
                     {rating.toFixed(1)}
                 </div>
             </div>
 
-            {/* Player name below rating */}
-            <div className="absolute -bottom-9 left-1/2 -translate-x-1/2 z-20 whitespace-nowrap">
-                <p className="text-[9px] md:text-xs font-bold text-white drop-shadow-lg text-center bg-black/50 px-1.5 py-0.5 rounded leading-none">
+            {/* Player name below rating - Smaller on mobile */}
+            <div className="absolute -bottom-6 sm:-bottom-9 left-1/2 -translate-x-1/2 z-20 whitespace-nowrap">
+                <p className="text-[7px] sm:text-[9px] md:text-xs font-bold text-white drop-shadow-lg text-center bg-black/50 px-1 py-0.5 sm:px-1.5 rounded leading-none">
                     {player.jerseyName || player.name.split(' ').pop()}
                 </p>
             </div>
 
-            {/* Enhanced tooltip on hover */}
-            <div className="absolute top-full left-1/2 -translate-x-1/2 mt-14 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-30">
+            {/* Enhanced tooltip on hover - Hidden on mobile, shown on desktop */}
+            <div className="hidden sm:block absolute top-full left-1/2 -translate-x-1/2 mt-14 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-30">
                 <div className="bg-black/95 backdrop-blur-sm px-3 py-2 rounded-lg border border-white/20 whitespace-nowrap shadow-xl">
                     <p className="text-xs font-bold text-white">{player.name}</p>
                     <div className="flex items-center gap-2 mt-1">
                         <span className="text-[10px] text-white/60 uppercase">{position}</span>
                         <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${rating >= 7.0 ? 'bg-green-500/20 text-green-400' :
-                            rating >= 6.0 ? 'bg-yellow-500/20 text-yellow-400' :
-                                'bg-red-500/20 text-red-400'
+                                rating >= 6.0 ? 'bg-yellow-500/20 text-yellow-400' :
+                                    'bg-red-500/20 text-red-400'
                             }`}>
                             ⭐ {rating.toFixed(1)}
                         </span>
