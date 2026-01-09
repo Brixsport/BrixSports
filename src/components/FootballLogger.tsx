@@ -585,6 +585,41 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
             }
         }
 
+        // Send push notifications to users following the teams
+        try {
+            let notificationEventType: 'GOAL' | 'RED_CARD' | 'YELLOW_CARD' | undefined;
+
+            if (type === 'Goal' || type === 'Penalty') {
+                notificationEventType = 'GOAL';
+            } else if (type === 'Red Card') {
+                notificationEventType = 'RED_CARD';
+            } else if (type === 'Yellow Card') {
+                notificationEventType = 'YELLOW_CARD';
+            }
+
+            if (notificationEventType) {
+                await fetch('/api/notifications/match-event', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        matchId: match.id,
+                        homeTeamId: match.homeTeamId,
+                        awayTeamId: match.awayTeamId,
+                        eventType: notificationEventType,
+                        playerName: player?.name,
+                        teamName: selectedTeam === 'home' ? homeTeam?.name : awayTeam?.name,
+                        minute,
+                        homeScore: newHomeScore,
+                        awayScore: newAwayScore,
+                    }),
+                });
+                console.log(`✅ Push notification sent for ${notificationEventType}`);
+            }
+        } catch (error) {
+            console.error('Failed to send push notification:', error);
+            // Don't block event recording if notification fails
+        }
+
         // Reset state
         setPendingEvent(null);
         setSelectedEventPlayer(null);
@@ -811,6 +846,24 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                                                     matchId: match.id,
                                                     status: 'LIVE'
                                                 });
+                                            }
+
+                                            // Send push notification for match start
+                                            try {
+                                                await fetch('/api/notifications/match-event', {
+                                                    method: 'POST',
+                                                    headers: { 'Content-Type': 'application/json' },
+                                                    body: JSON.stringify({
+                                                        matchId: match.id,
+                                                        homeTeamId: match.homeTeamId,
+                                                        awayTeamId: match.awayTeamId,
+                                                        eventType: 'MATCH_START',
+                                                        teamName: `${homeTeam?.name} vs ${awayTeam?.name}`,
+                                                    }),
+                                                });
+                                                console.log('✅ Match start notification sent');
+                                            } catch (error) {
+                                                console.error('Failed to send match start notification:', error);
                                             }
                                         }
                                     }}

@@ -74,6 +74,28 @@ export async function POST(
             })
             .where(eq(matches.id, matchId));
 
+        // Send push notification for lineup availability
+        try {
+            const teamId = team === 'home' ? match[0].homeTeamId : match[0].awayTeamId;
+            const otherTeamId = team === 'home' ? match[0].awayTeamId : match[0].homeTeamId;
+
+            await fetch(`${request.url.split('/api')[0]}/api/notifications/match-event`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    matchId,
+                    homeTeamId: match[0].homeTeamId,
+                    awayTeamId: match[0].awayTeamId,
+                    eventType: 'LINEUP_AVAILABLE',
+                    teamName: team === 'home' ? 'Home team' : 'Away team',
+                }),
+            });
+            console.log('✅ Lineup available notification sent');
+        } catch (error) {
+            console.error('Failed to send lineup notification:', error);
+            // Don't fail the request if notification fails
+        }
+
         return NextResponse.json({
             success: true,
             message: 'Lineup published successfully',
