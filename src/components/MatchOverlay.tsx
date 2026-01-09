@@ -507,36 +507,40 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
         {/* Header */}
         <div className={`sticky top-0 z-10 bg-[#0a0a0a] border-b border-white/10 transition-all duration-300 ${isScrolled ? 'py-2 shadow-xl' : 'py-4'}`}>
           <div className="max-w-5xl mx-auto px-4">
-            <div className={`flex items-center justify-between ${isScrolled ? 'mb-2' : 'mb-4'} transition-all duration-300`}>
+            <div className={`relative flex items-center ${isScrolled ? 'mb-2' : 'mb-4'} transition-all duration-300`}>
+              {/* Left: Close Button */}
               <div className="flex items-center gap-3">
                 <button onClick={onClose} className="p-2 hover:bg-white/5 rounded-lg transition-colors">
                   <X size={20} />
                 </button>
-                {isScrolled && (
-                  <div className="flex items-center gap-3">
-                    <div className="flex items-center gap-2">
-                      <div className="w-6 h-6 relative rounded overflow-hidden bg-white/5">
-                        {isValidImagePath(homeTeam?.logo) && homeTeam && (
-                          <Image src={homeTeam.logo} alt={homeTeam.name} fill className="object-cover" />
-                        )}
-                      </div>
-                      <span className={`text-lg font-bold ${match.homeScore > match.awayScore ? 'text-primary' : 'text-white'}`}>{match.homeScore}</span>
-                    </div>
-                    <span className="text-white/20 text-sm">-</span>
-                    <div className="flex items-center gap-2">
-                      <span className={`text-lg font-bold ${match.awayScore > match.homeScore ? 'text-primary' : 'text-white'}`}>{match.awayScore}</span>
-                      <div className="w-6 h-6 relative rounded overflow-hidden bg-white/5">
-                        {isValidImagePath(awayTeam?.logo) && awayTeam && (
-                          <Image src={awayTeam.logo} alt={awayTeam.name} fill className="object-cover" />
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                )}
               </div>
 
+              {/* Center: Score Cluster (Absolutely Centered) */}
+              {isScrolled && (
+                <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center justify-center gap-3">
+                  <div className="flex items-center gap-2">
+                    <div className="w-6 h-6 relative rounded overflow-hidden bg-white/5">
+                      {isValidImagePath(homeTeam?.logo) && homeTeam && (
+                        <Image src={homeTeam.logo} alt={homeTeam.name} fill className="object-cover" />
+                      )}
+                    </div>
+                    <span className={`text-lg font-bold ${match.homeScore > match.awayScore ? 'text-primary' : 'text-white'}`}>{match.homeScore}</span>
+                  </div>
+                  <span className="text-white/20 text-sm">-</span>
+                  <div className="flex items-center gap-2">
+                    <span className={`text-lg font-bold ${match.awayScore > match.homeScore ? 'text-primary' : 'text-white'}`}>{match.awayScore}</span>
+                    <div className="w-6 h-6 relative rounded overflow-hidden bg-white/5">
+                      {isValidImagePath(awayTeam?.logo) && awayTeam && (
+                        <Image src={awayTeam.logo} alt={awayTeam.name} fill className="object-cover" />
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Center: Competition Info (Expanded State) */}
               {!isScrolled && (
-                <div className="flex flex-col items-center text-center">
+                <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-col items-center text-center">
                   <span className="text-xs font-bold uppercase tracking-wider text-primary">
                     {match.competition}
                   </span>
@@ -555,9 +559,12 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
                 </div>
               )}
 
-              <button className="p-2 hover:bg-white/5 rounded-lg transition-colors">
-                <Share2 size={20} className="text-white/60" />
-              </button>
+              {/* Right: Share Button */}
+              <div className="ml-auto">
+                <button className="p-2 hover:bg-white/5 rounded-lg transition-colors">
+                  <Share2 size={20} className="text-white/60" />
+                </button>
+              </div>
             </div>
 
             {/* Score Display (Full Size) - Hidden when scrolled */}
