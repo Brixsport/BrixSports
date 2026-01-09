@@ -1,14 +1,4 @@
 {
-    "crons": [
-        {
-            "path": "/api/reminders/check",
-            "schedule": "0 10 * * *"
-        },
-        {
-            "path": "/api/notifications/match-reminders",
-            "schedule": "*/5 * * * *"
-        }
-    ],
     "headers": [
         {
             "source": "/api/(.*)",
