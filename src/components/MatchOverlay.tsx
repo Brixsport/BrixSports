@@ -12,7 +12,7 @@ import { MatchVotePoll } from '@/components/predictions/MatchVotePoll';
 import { LivestreamChat } from '@/components/livestream/LivestreamChat';
 import { LivestreamPlayer } from '@/components/livestream/LivestreamPlayer';
 import { FootballPitch } from '@/components/FootballPitch';
-import { FullPitchLineups } from '@/components/FullPitchLineups';
+import { ResponsiveLineup } from '@/components/lineup/ResponsiveLineup';
 import { useMatchEvents, useMatchStatus, usePlayerRatings, useMatchViewers, useMatchTimer } from '@/hooks/useWebSocket';
 
 interface MatchOverlayProps {
@@ -29,7 +29,7 @@ const isValidImagePath = (path: string | undefined): boolean => {
 
 export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: MatchOverlayProps) {
   const [match, setMatch] = useState(initialMatch);
-  const [activeTab, setActiveTab] = useState(match.isStreaming ? 'watch' : 'overview'); // Default to watch if streaming
+  const [activeTab, setActiveTab] = useState(match.isStreaming ? 'watch' : 'overview');
   const [players, setPlayers] = useState<Record<string, Player>>({});
   const [loadingPlayers, setLoadingPlayers] = useState(false);
   const [standings, setStandings] = useState<any[]>([]);
@@ -100,7 +100,7 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
         // Update match with new event
         setMatch(prev => ({
           ...prev,
-          events: [...(prev.events || []), newEvent], // Safely handle undefined events
+          events: [...(prev.events || []), newEvent],
           homeScore: homeScore ?? prev.homeScore,
           awayScore: awayScore ?? prev.awayScore,
           status: status ?? prev.status,
@@ -137,9 +137,7 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
   useEffect(() => {
     if (liveStatus && liveStatus !== match.status) {
       setMatch(prev => ({ ...prev, status: liveStatus as import('@/types').MatchStatus }));
-      // Refetch complete match data when status changes to FINISHED
       if (liveStatus === 'FINISHED') {
-        // Note: refetchMatchData is defined below, this will work due to hoisting
         setTimeout(() => refetchMatchData(), 100);
       }
     }
@@ -151,12 +149,10 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
   // Handle new live events from WebSocket
   useEffect(() => {
     if (latestEvent) {
-      // Add event to match state if not already present
       setMatch(prev => {
         const eventExists = prev.events?.some(e => e.id === latestEvent.id);
         if (eventExists) return prev;
 
-        // Cast to MatchEvent type to ensure compatibility
         const matchEvent: MatchEvent = {
           id: latestEvent.id,
           matchId: latestEvent.matchId,
@@ -174,7 +170,6 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
         };
       });
 
-      // Show notification for significant events
       if (latestEvent.type === 'Goal') {
         addNotification({
           title: 'GOAL!',
@@ -192,17 +187,16 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
     }
   }, [latestEvent, addNotification]);
 
-  // Global Goal Notifications (Goals from OTHER matches)
-  const { socket, isConnected } = useMatchEvents(match.id); // Reuse socket connection
+  // Global Goal Notifications
+  const { socket, isConnected } = useMatchEvents(match.id);
   useEffect(() => {
     if (isConnected && socket) {
       const handleGlobalNotification = (data: { type: string, matchId: string, message: string }) => {
-        // Only show if it's NOT the current match
         if (data.type === 'GOAL' && data.matchId !== match.id) {
           addNotification({
             title: 'GOAL UPDATE',
-            message: data.message, // e.g. "GOAL! Manchester United scores!"
-            type: 'match' // Distinct style?
+            message: data.message,
+            type: 'match'
           });
         }
       };
@@ -223,7 +217,6 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
           if (newRatings[playerId]) {
             newRatings[playerId].autoRating = rating;
           } else {
-            // Create basic entry if not exists
             newRatings[playerId] = {
               autoRating: rating,
               finalRating: null,
@@ -243,18 +236,13 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
       const response = await fetch(`/api/matches/${match.id}`);
       if (response.ok) {
         const data = await response.json();
-        console.log('Refetched match data:', data);
-        console.log('Events from API:', data.events);
-        console.log('Stats from API:', data.match.stats);
-
-        // Merge the API response properly - events are a separate property
         setMatch(prev => ({
           ...prev,
           ...data.match,
           homeTeam: data.match.homeTeam || prev.homeTeam,
           awayTeam: data.match.awayTeam || prev.awayTeam,
-          events: data.events || prev.events || [], // Events come from separate property
-          stats: data.match.stats || prev.stats, // Stats are already parsed by API
+          events: data.events || prev.events || [],
+          stats: data.match.stats || prev.stats,
         }));
       }
     } catch (error) {
@@ -266,27 +254,19 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
   useEffect(() => {
     const needsInitialFetch = !match.events || match.events.length === 0 || !match.stats;
     if (needsInitialFetch) {
-      console.log('Fetching initial match data - events:', match.events?.length, 'stats:', !!match.stats);
       refetchMatchData();
     }
-  }, []); // Only run on mount
+  }, []);
 
   // Listen for match status changes from logger
   useEffect(() => {
     const handleStatusChange = (event: any) => {
       if (event.detail.matchId === match.id) {
-        console.log('🔴 [OVERLAY] Match status changed:', event.detail.status);
-        console.log('🔴 [OVERLAY] Previous status:', match.status);
-        // Update match state immediately
-        setMatch(prev => {
-          console.log('🔴 [OVERLAY] Updating match status from', prev.status, 'to', event.detail.status);
-          return {
-            ...prev,
-            status: event.detail.status,
-          };
-        });
+        setMatch(prev => ({
+          ...prev,
+          status: event.detail.status,
+        }));
 
-        // Refetch complete match data when match finishes
         if (event.detail.status === 'FINISHED') {
           refetchMatchData();
         }
@@ -301,11 +281,8 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
   useEffect(() => {
     const handleRatingsPublished = (event: any) => {
       if (event.detail.matchId === match.id) {
-        console.log('Ratings published for match:', match.id);
-        // Refetch ratings to update lineup display
         if (activeTab === 'lineups' || match.status === 'FINISHED') {
-          setRatingsFetched(false); // Reset to allow refetch
-          // Ratings will be refetched by the existing useEffect
+          setRatingsFetched(false);
         }
       }
     };
@@ -314,67 +291,59 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
     return () => window.removeEventListener('RATINGS_PUBLISHED', handleRatingsPublished);
   }, [match.id, activeTab, match.status]);
 
-  // Log current match status for debugging
-  useEffect(() => {
-    console.log('🎯 [OVERLAY] Current match status:', match.status);
-    console.log('🎯 [OVERLAY] Tabs will show:', {
-      predict: match.status === 'UPCOMING',
-      chat: match.status === 'LIVE',
-    });
-  }, [match.status]);
-
   const tabs = [
-    ...(match.isStreaming ? [{ id: 'watch', label: 'Watch Live', icon: Play }] : []),
+    ...(match.isStreaming ? [{ id: 'watch', label: 'Watch', icon: Play }] : []),
     { id: 'overview', label: 'Overview', icon: Trophy },
     { id: 'lineups', label: 'Lineups', icon: Users },
     { id: 'stats', label: 'Stats', icon: BarChart3 },
     { id: 'timeline', label: 'Timeline', icon: Clock },
-    { id: 'standings', label: 'Standings', icon: Table },
-    // Conditional tabs
+    { id: 'standings', label: 'Table', icon: Table },
     ...(match.status === 'UPCOMING' ? [
       { id: 'predict', label: 'Predict', icon: Target },
-      { id: 'poll', label: 'Fan Poll', icon: BarChart3 },
+      { id: 'poll', label: 'Poll', icon: BarChart3 },
     ] : []),
     ...(match.status === 'LIVE' ? [
       { id: 'chat', label: 'Chat', icon: MessageSquare },
     ] : []),
   ];
 
-
-
-  // Helper function to extract player IDs from lineup (supports both formats)
+  // Helper function to extract player IDs from lineup
   const getLineupPlayerIds = (lineup: any): string[] => {
     if (!lineup) return [];
-    // New format: { starters: [...], substitutes: [...], status: 'published' }
+    let ids: string[] = [];
+
+    // Check for structured lineup (starters + substitutes)
     if (lineup.starters && Array.isArray(lineup.starters)) {
-      return lineup.starters.map((p: any) => p.playerId);
+      ids = [...ids, ...lineup.starters.map((p: any) => p.playerId)];
     }
-    // Legacy format: direct array
-    if (Array.isArray(lineup)) {
+    if (lineup.substitutes && Array.isArray(lineup.substitutes)) {
+      ids = [...ids, ...lineup.substitutes.map((p: any) => p.playerId)];
+    }
+
+    // Fallback for flat array or empty structured lineup
+    if (ids.length === 0 && Array.isArray(lineup)) {
       return lineup.map((e: any) => e.playerId);
     }
-    return [];
+
+    return ids;
   };
 
   // Helper function to check if lineup is published
   const isLineupPublished = (lineup: any): boolean => {
     if (!lineup) return false;
-    // New format with status field
     if (lineup.status) {
       return lineup.status === 'published';
     }
-    // Legacy format: if it exists and has data, consider it published
     if (Array.isArray(lineup) && lineup.length > 0) {
       return true;
     }
-    // New format: if it has starters, consider it published
     if (lineup.starters && Array.isArray(lineup.starters) && lineup.starters.length > 0) {
       return true;
     }
     return false;
   };
 
-  // Fetch player data when lineups or scout tab is opened
+  // Fetch player data when lineups tab is opened
   useEffect(() => {
     const needsPlayers = (activeTab === 'lineups' || activeTab === 'scout') && match.lineups;
     if (!needsPlayers || loadingPlayers || playersFetched) return;
@@ -383,7 +352,6 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
     const awayPlayerIds = getLineupPlayerIds(match.lineups?.away);
     const playerIds = [...homePlayerIds, ...awayPlayerIds];
 
-    // Only fetch if we don't have all players
     const missingPlayers = playerIds.filter(id => !players[id]);
     if (missingPlayers.length === 0) return;
 
@@ -419,16 +387,13 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
       try {
         const response = await fetch(`/api/standings?competition=${encodeURIComponent(match.competition)}`);
         const data = await response.json();
-        // API returns standings directly as an array, not wrapped
         if (Array.isArray(data) && data.length > 0) {
           setStandings(data);
           setStandingsFetched(true);
         } else if (data.success && data.standings) {
-          // Fallback for wrapped response format
           setStandings(data.standings);
           setStandingsFetched(true);
         } else {
-          // Empty standings
           setStandings([]);
           setStandingsFetched(true);
         }
@@ -475,7 +440,7 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
     fetchRatings();
   }, [activeTab, match.id, match.lineups, match.status, loadingRatings, ratingsFetched]);
 
-  // Handle scroll with debouncing to prevent jitter
+  // Handle scroll
   useEffect(() => {
     const scrollContainer = scrollContainerRef.current;
     if (!scrollContainer) return;
@@ -496,6 +461,18 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
     return () => scrollContainer.removeEventListener('scroll', handleScroll);
   }, []);
 
+  // Format match status text
+  const getStatusText = () => {
+    if (match.status === 'LIVE') {
+      return `${matchTime.minute}'${matchTime.extraTime > 0 ? ` +${matchTime.extraTime}` : ''}`;
+    }
+    if (match.status === 'FINISHED') return 'Full Time';
+    if (match.status === 'UPCOMING') {
+      return new Date(match.startTime).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+    }
+    return match.status;
+  };
+
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -505,212 +482,128 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
     >
       <div className="flex flex-col min-h-full" onClick={(e) => e.stopPropagation()}>
         {/* Header */}
-        <div className={`sticky top-0 z-10 bg-[#0a0a0a] border-b border-white/10 transition-all duration-300 ${isScrolled ? 'py-2 shadow-xl' : 'py-3 sm:py-4'}`}>
-          <div className="max-w-5xl mx-auto px-3 sm:px-4">
-            <div className={`relative flex items-center ${isScrolled ? 'mb-2' : 'mb-3 sm:mb-4'} transition-all duration-300`}>
+        <div className={`sticky top-0 z-10 bg-[#0a0a0a] border-b border-white/10 transition-all duration-300 ${isScrolled ? 'py-3' : 'py-4'}`}>
+          <div className="max-w-5xl mx-auto px-4">
+            {/* Top Bar */}
+            <div className="flex items-center justify-between mb-3">
               {/* Left: Close Button */}
-              <div className="flex items-center gap-2 sm:gap-3">
-                <button onClick={onClose} className="p-1.5 sm:p-2 hover:bg-white/5 rounded-lg transition-colors">
-                  <X size={18} className="sm:w-5 sm:h-5" />
-                </button>
-              </div>
+              <button onClick={onClose} className="p-2 hover:bg-white/5 rounded-lg transition-colors">
+                <X size={20} />
+              </button>
 
-              {/* Center: Score Cluster (Absolutely Centered) */}
-              {isScrolled && (
-                <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center justify-center gap-2 sm:gap-3">
-                  <div className="flex items-center gap-1.5 sm:gap-2">
-                    <div className="w-5 h-5 sm:w-6 sm:h-6 relative rounded overflow-hidden bg-white/5">
-                      {isValidImagePath(homeTeam?.logo) && homeTeam && (
-                        <Image src={homeTeam.logo} alt={homeTeam.name} fill className="object-cover" />
-                      )}
-                    </div>
-                    <span className={`text-base sm:text-lg font-bold ${match.homeScore > match.awayScore ? 'text-primary' : 'text-white'}`}>{match.homeScore}</span>
-                  </div>
-                  <span className="text-white/20 text-xs sm:text-sm">-</span>
-                  <div className="flex items-center gap-1.5 sm:gap-2">
-                    <span className={`text-base sm:text-lg font-bold ${match.awayScore > match.homeScore ? 'text-primary' : 'text-white'}`}>{match.awayScore}</span>
-                    <div className="w-5 h-5 sm:w-6 sm:h-6 relative rounded overflow-hidden bg-white/5">
-                      {isValidImagePath(awayTeam?.logo) && awayTeam && (
-                        <Image src={awayTeam.logo} alt={awayTeam.name} fill className="object-cover" />
-                      )}
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Center: Competition Info (Expanded State) */}
-              {!isScrolled && (
-                <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-col items-center text-center max-w-[60%] sm:max-w-none">
-                  <span className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-primary truncate max-w-full">
-                    {match.competition}
-                  </span>
-                  <div className="hidden sm:flex items-center gap-2 text-xs text-white/40 mt-1">
-                    <div className="flex items-center gap-1 text-red-500 animate-pulse">
-                      <Users size={12} />
-                      <span className="font-bold">{viewerCount} Live</span>
-                    </div>
-                    <span>•</span>
-                    <MapPin size={12} />
-                    <span>{match.venue}</span>
-                    <span>•</span>
-                    <Calendar size={12} />
-                    <span>{new Date(match.startTime).toLocaleDateString()}</span>
-                  </div>
-                </div>
-              )}
+              {/* Center: Competition Name */}
+              <span className="text-xs font-semibold text-white/60 uppercase tracking-wide">
+                {match.competition}
+              </span>
 
               {/* Right: Share Button */}
-              <div className="ml-auto">
-                <button className="p-1.5 sm:p-2 hover:bg-white/5 rounded-lg transition-colors">
-                  <Share2 size={18} className="text-white/60 sm:w-5 sm:h-5" />
-                </button>
-              </div>
+              <button className="p-2 hover:bg-white/5 rounded-lg transition-colors">
+                <Share2 size={20} className="text-white/60" />
+              </button>
             </div>
 
-            {/* Score Display (Full Size) - Hidden when scrolled */}
-            <div className={`flex items-center justify-between overflow-hidden transition-all duration-500 ease-in-out ${isScrolled ? 'max-h-0 opacity-0 mb-0' : 'max-h-40 opacity-100 mb-4 sm:mb-6'}`}>
-              {/* Home Team */}
-              <div className="flex-1 flex flex-col items-center gap-2 sm:gap-3">
-                <div className="w-12 h-12 sm:w-16 sm:h-16 relative rounded-xl overflow-hidden bg-white/5">
-                  {isValidImagePath(homeTeam?.logo) ? (
-                    <Image
-                      src={homeTeam!.logo}
-                      alt={homeTeam!.name}
-                      fill
-                      className="object-cover"
-                    />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center text-2xl sm:text-3xl">
-                      {homeTeam?.logo}
-                    </div>
-                  )}
+            {/* Score Display - Horizontal Layout */}
+            {!isScrolled && (
+              <div className="flex items-center justify-center gap-8 mb-3">
+                {/* Home Team */}
+                <div className="flex items-center gap-3 flex-1 justify-end">
+                  <div className="text-right">
+                    <h3 className="font-semibold text-base truncate">{homeTeam?.name}</h3>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); if (homeTeam) toggleTeam(homeTeam.id); }}
+                      className="text-xs text-white/60 hover:text-primary transition-colors flex items-center gap-1 ml-auto"
+                    >
+                      <Heart size={12} fill={isFavoriteTeam(homeTeam?.id || '') ? "currentColor" : "none"} />
+                      {isFavoriteTeam(homeTeam?.id || '') ? 'Following' : 'Follow'}
+                    </button>
+                  </div>
+                  <div className="w-10 h-10 relative rounded-lg overflow-hidden bg-white/5 flex-shrink-0">
+                    {isValidImagePath(homeTeam?.logo) && homeTeam && (
+                      <Image src={homeTeam.logo} alt={homeTeam.name} fill className="object-cover" />
+                    )}
+                  </div>
                 </div>
-                <div className="text-center">
-                  <h3 className="font-bold text-sm sm:text-lg">{homeTeam?.name}</h3>
-                  <p className="text-[10px] sm:text-xs text-white/40">{homeTeam?.shortName}</p>
-                </div>
-                <button
-                  onClick={(e) => { e.stopPropagation(); if (homeTeam) toggleTeam(homeTeam.id); }}
-                  className={`p-1.5 sm:p-2 rounded-full border border-white/10 transition-all ${isFavoriteTeam(homeTeam?.id || '') ? 'bg-primary text-black' : 'bg-black text-white hover:bg-white/10'}`}
-                >
-                  <Heart size={12} className="sm:w-3.5 sm:h-3.5" fill={isFavoriteTeam(homeTeam?.id || '') ? "currentColor" : "none"} />
-                </button>
-              </div>
 
-              {/* Score */}
-              <div className="px-4 sm:px-8 flex flex-col items-center gap-1.5 sm:gap-2">
-                <div className="flex items-center gap-2 sm:gap-4">
-                  <span className={`text-3xl sm:text-5xl font-bold ${match.homeScore > match.awayScore ? 'text-primary' : 'text-white/60'}`}>
-                    {match.homeScore}
-                  </span>
-                  <span className="text-white/20 text-lg sm:text-2xl">-</span>
-                  <span className={`text-3xl sm:text-5xl font-bold ${match.awayScore > match.homeScore ? 'text-primary' : 'text-white/60'}`}>
-                    {match.awayScore}
-                  </span>
-                </div>
-                <div className="px-2 sm:px-3 py-1 bg-white/10 rounded-full text-[10px] sm:text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 sm:gap-2">
-                  {match.status === 'LIVE' && (
-                    <>
-                      <Clock size={10} className="text-primary sm:w-3 sm:h-3" />
-                      <span className="text-primary">{matchTime.minute}'{matchTime.extraTime > 0 && `+${matchTime.extraTime}`}</span>
-                      <span className="text-white/40">•</span>
-                      <span>H{matchTime.half}</span>
-                    </>
-                  )}
-                  {match.status === 'FINISHED' && 'FT'}
-                  {match.status === 'UPCOMING' && match.status}
-                </div>
-              </div>
-
-              {/* Away Team */}
-              <div className="flex-1 flex flex-col items-center gap-2 sm:gap-3">
-                <div className="w-12 h-12 sm:w-16 sm:h-16 relative rounded-xl overflow-hidden bg-white/5">
-                  {isValidImagePath(awayTeam?.logo) ? (
-                    <Image
-                      src={awayTeam!.logo}
-                      alt={awayTeam!.name}
-                      fill
-                      className="object-cover"
-                    />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center text-2xl sm:text-3xl">
-                      {awayTeam?.logo}
-                    </div>
-                  )}
-                </div>
-                <div className="text-center">
-                  <h3 className="font-bold text-sm sm:text-lg">{awayTeam?.name}</h3>
-                  <p className="text-[10px] sm:text-xs text-white/40">{awayTeam?.shortName}</p>
-                </div>
-                <button
-                  onClick={(e) => { e.stopPropagation(); if (awayTeam) toggleTeam(awayTeam.id); }}
-                  className={`p-1.5 sm:p-2 rounded-full border border-white/10 transition-all ${isFavoriteTeam(awayTeam?.id || '') ? 'bg-primary text-black' : 'bg-black text-white hover:bg-white/10'}`}
-                >
-                  <Heart size={12} className="sm:w-3.5 sm:h-3.5" fill={isFavoriteTeam(awayTeam?.id || '') ? "currentColor" : "none"} />
-                </button>
-              </div>
-            </div>
-
-            {/* Tabs - Enhanced Mobile UI */}
-            <div className="relative -mx-4 px-4">
-              {/* Left Scroll Indicator */}
-              <div className="absolute left-0 top-0 bottom-0 w-8 bg-gradient-to-r from-[#0a0a0a] to-transparent pointer-events-none z-10" />
-
-              {/* Right Scroll Indicator */}
-              <div className="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-[#0a0a0a] to-transparent pointer-events-none z-10" />
-
-              {/* Tabs Container */}
-              <div className="flex gap-2 overflow-x-auto scrollbar-hide scroll-smooth snap-x snap-mandatory pb-1">
-                {tabs.map((tab) => (
-                  <button
-                    key={tab.id}
-                    onClick={() => setActiveTab(tab.id)}
-                    className={`
-                      group relative flex items-center justify-center gap-2 
-                      px-5 py-3 rounded-xl
-                      text-xs sm:text-sm font-bold uppercase tracking-wider 
-                      whitespace-nowrap transition-all duration-300
-                      snap-start flex-shrink-0
-                      min-w-[120px] sm:min-w-[140px]
-                      ${activeTab === tab.id
-                        ? 'bg-gradient-to-r from-primary via-primary to-yellow-400 text-black shadow-lg shadow-primary/30 scale-105'
-                        : 'bg-white/5 text-white/60 hover:bg-white/10 hover:text-white hover:scale-102 backdrop-blur-sm border border-white/10'
-                      }
-                    `}
-                  >
-                    {/* Icon with animation */}
-                    <tab.icon
-                      size={16}
-                      className={`transition-transform duration-300 ${activeTab === tab.id ? 'scale-110' : 'group-hover:scale-110'
-                        }`}
-                    />
-
-                    {/* Label - Hide on very small screens for some tabs */}
-                    <span className={`${tab.id === 'watch' || tab.id === 'overview' || tab.id === 'lineups'
-                      ? ''
-                      : 'hidden xs:inline'
-                      }`}>
-                      {tab.label}
+                {/* Score */}
+                <div className="flex flex-col items-center gap-2">
+                  <div className="flex items-center gap-3">
+                    <span className={`text-3xl font-bold tabular-nums ${match.homeScore > match.awayScore ? 'text-white' : 'text-white/40'}`}>
+                      {match.homeScore}
                     </span>
+                    <span className="text-xl text-white/20">-</span>
+                    <span className={`text-3xl font-bold tabular-nums ${match.awayScore > match.homeScore ? 'text-white' : 'text-white/40'}`}>
+                      {match.awayScore}
+                    </span>
+                  </div>
+                  <div className={`text-xs font-semibold ${match.status === 'LIVE' ? 'text-primary' : 'text-white/60'}`}>
+                    {getStatusText()}
+                  </div>
+                </div>
 
-                    {/* Active indicator dot */}
-                    {activeTab === tab.id && (
-                      <motion.div
-                        layoutId="activeTab"
-                        className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-1.5 h-1.5 bg-black rounded-full"
-                        transition={{ type: "spring", stiffness: 380, damping: 30 }}
-                      />
+                {/* Away Team */}
+                <div className="flex items-center gap-3 flex-1">
+                  <div className="w-10 h-10 relative rounded-lg overflow-hidden bg-white/5 flex-shrink-0">
+                    {isValidImagePath(awayTeam?.logo) && awayTeam && (
+                      <Image src={awayTeam.logo} alt={awayTeam.name} fill className="object-cover" />
                     )}
-
-                    {/* Shine effect on active tab */}
-                    {activeTab === tab.id && (
-                      <div className="absolute inset-0 rounded-xl overflow-hidden">
-                        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent animate-shimmer" />
-                      </div>
-                    )}
-                  </button>
-                ))}
+                  </div>
+                  <div className="text-left">
+                    <h3 className="font-semibold text-base truncate">{awayTeam?.name}</h3>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); if (awayTeam) toggleTeam(awayTeam.id); }}
+                      className="text-xs text-white/60 hover:text-primary transition-colors flex items-center gap-1"
+                    >
+                      <Heart size={12} fill={isFavoriteTeam(awayTeam?.id || '') ? "currentColor" : "none"} />
+                      {isFavoriteTeam(awayTeam?.id || '') ? 'Following' : 'Follow'}
+                    </button>
+                  </div>
+                </div>
               </div>
+            )}
+
+            {/* Match Info Bar - Only when not scrolled */}
+            {!isScrolled && (
+              <div className="flex items-center justify-center gap-3 text-xs text-white/40 pt-3 border-t border-white/5">
+                <div className="flex items-center gap-1">
+                  <Users size={12} />
+                  <span>{viewerCount} watching</span>
+                </div>
+                <span>•</span>
+                <div className="flex items-center gap-1">
+                  <MapPin size={12} />
+                  <span>{match.venue}</span>
+                </div>
+                <span>•</span>
+                <div className="flex items-center gap-1">
+                  <Calendar size={12} />
+                  <span>{new Date(match.startTime).toLocaleDateString()}</span>
+                </div>
+              </div>
+            )}
+
+            {/* Navigation Tabs */}
+            <div className="flex gap-1 overflow-x-auto scrollbar-hide mt-4 -mb-px">
+              {tabs.map((tab) => (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className="relative flex items-center gap-2 px-4 py-3 text-sm font-semibold whitespace-nowrap transition-colors flex-shrink-0"
+                >
+                  <tab.icon size={16} className={activeTab === tab.id ? 'text-white' : 'text-white/60'} />
+                  <span className={activeTab === tab.id ? 'text-white' : 'text-white/60 hover:text-white/80'}>
+                    {tab.label}
+                  </span>
+
+                  {/* Active indicator */}
+                  {activeTab === tab.id && (
+                    <motion.div
+                      layoutId="activeTab"
+                      className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary"
+                      transition={{ type: "spring", stiffness: 380, damping: 30 }}
+                    />
+                  )}
+                </button>
+              ))}
             </div>
           </div>
         </div>
@@ -718,10 +611,10 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
         {/* Content */}
         <div
           ref={scrollContainerRef}
-          className="max-w-5xl mx-auto w-full px-3 sm:px-4 py-6 sm:py-8 overflow-y-auto flex-1"
+          className="max-w-5xl mx-auto w-full px-4 py-6 overflow-y-auto flex-1 scrollbar-hide"
         >
           <AnimatePresence mode="wait">
-            {/* Watch Tab - For Live Streaming */}
+            {/* Watch Tab */}
             {activeTab === 'watch' && match.isStreaming && match.streamUrl && (
               <motion.div
                 key="watch"
@@ -730,7 +623,7 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
                 exit={{ opacity: 0, y: -20 }}
                 className="space-y-6"
               >
-                <div className="bg-white/5 rounded-2xl border border-white/10 overflow-hidden">
+                <div className="bg-white/5 rounded-xl border border-white/10 overflow-hidden">
                   <LivestreamPlayer
                     streamUrl={match.streamUrl}
                     streamType={match.streamType || 'youtube'}
@@ -748,54 +641,20 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -20 }}
-                className="space-y-6"
+                className="grid grid-cols-2 gap-4"
               >
-                <div className="bg-white/5 rounded-2xl border border-white/10 p-6">
-                  <h3 className="font-bold text-sm uppercase tracking-wider text-white/60 mb-4">Match Summary</h3>
-                  <div className="grid grid-cols-3 gap-4 text-center">
-                    <div>
-                      <p className="text-2xl font-bold text-primary">{match.homeScore}</p>
-                      <p className="text-xs text-white/40 mt-1">Goals</p>
-                    </div>
-                    <div>
-                      <p className="text-2xl font-bold">{match.homeScore + match.awayScore}</p>
-                      <p className="text-xs text-white/40 mt-1">Total Goals</p>
-                    </div>
-                    <div>
-                      <p className="text-2xl font-bold text-primary">{match.awayScore}</p>
-                      <p className="text-xs text-white/40 mt-1">Goals</p>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="bg-white/5 rounded-2xl border border-white/10 p-6">
-                  <h3 className="font-bold text-sm uppercase tracking-wider text-white/60 mb-4">Match Info</h3>
-                  <div className="space-y-3 text-sm">
-                    <div className="flex justify-between">
-                      <span className="text-white/60">Competition</span>
-                      <span className="font-semibold">{match.competition}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-white/60">Venue</span>
-                      <span className="font-semibold">{match.venue}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-white/60">Date</span>
-                      <span className="font-semibold">
-                        {new Date(match.startTime).toLocaleDateString('en-US', {
-                          weekday: 'long',
-                          year: 'numeric',
-                          month: 'long',
-                          day: 'numeric'
-                        })}
-                      </span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-white/60">Status</span>
-                      <span className="font-semibold">{match.status}</span>
-                    </div>
-                  </div>
-                </div>
+                <InfoCard icon={Trophy} label="Competition" value={match.competition} />
+                <InfoCard icon={MapPin} label="Venue" value={match.venue} />
+                <InfoCard
+                  icon={Calendar}
+                  label="Date"
+                  value={new Date(match.startTime).toLocaleDateString('en-US', {
+                    month: 'short',
+                    day: 'numeric',
+                    year: 'numeric'
+                  })}
+                />
+                <InfoCard icon={Clock} label="Status" value={match.status} />
               </motion.div>
             )}
 
@@ -809,13 +668,12 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
                 className="space-y-8"
               >
                 {loadingPlayers ? (
-                  <div className="py-20 text-center">
+                  <div className="py-12 text-center">
                     <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-                    <p className="text-white/40">Loading lineups...</p>
+                    <p className="text-white/60 text-sm">Loading lineups...</p>
                   </div>
                 ) : isLineupPublished(match.lineups?.home) && isLineupPublished(match.lineups?.away) ? (
-                  /* Full Pitch View - Both teams facing each other */
-                  <FullPitchLineups
+                  <ResponsiveLineup
                     homeTeam={{
                       name: homeTeam?.name || 'Home',
                       logo: homeTeam?.logo || '',
@@ -833,7 +691,6 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
                     homeLineup={(() => {
                       if (!match.lineups?.home) return [];
                       const homeLineup = match.lineups.home as any;
-                      // New format: { starters: [...], substitutes: [...] }
                       if (homeLineup.starters && Array.isArray(homeLineup.starters)) {
                         return homeLineup.starters.map((entry: any) => ({
                           playerId: entry.playerId,
@@ -843,7 +700,6 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
                           isMotM: ratings[entry.playerId]?.isMotM || false
                         }));
                       }
-                      // Legacy format: direct array
                       if (Array.isArray(homeLineup)) {
                         return homeLineup.map((entry: any) => ({
                           ...entry,
@@ -856,7 +712,6 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
                     awayLineup={(() => {
                       if (!match.lineups?.away) return [];
                       const awayLineup = match.lineups.away as any;
-                      // New format: { starters: [...], substitutes: [...] }
                       if (awayLineup.starters && Array.isArray(awayLineup.starters)) {
                         return awayLineup.starters.map((entry: any) => ({
                           playerId: entry.playerId,
@@ -866,7 +721,6 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
                           isMotM: ratings[entry.playerId]?.isMotM || false
                         }));
                       }
-                      // Legacy format: direct array
                       if (Array.isArray(awayLineup)) {
                         return awayLineup.map((entry: any) => ({
                           ...entry,
@@ -876,13 +730,40 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
                       }
                       return [];
                     })()}
+                    homeSubs={(() => {
+                      if (!match.lineups?.home) return [];
+                      const homeLineup = match.lineups.home as any;
+                      if (homeLineup.substitutes && Array.isArray(homeLineup.substitutes)) {
+                        return homeLineup.substitutes.map((entry: any) => ({
+                          playerId: entry.playerId,
+                          position: entry.position,
+                          rating: ratings[entry.playerId]?.finalRating || ratings[entry.playerId]?.autoRating || 6.0,
+                          isMotM: ratings[entry.playerId]?.isMotM || false
+                        }));
+                      }
+                      return [];
+                    })()}
+                    awaySubs={(() => {
+                      if (!match.lineups?.away) return [];
+                      const awayLineup = match.lineups.away as any;
+                      if (awayLineup.substitutes && Array.isArray(awayLineup.substitutes)) {
+                        return awayLineup.substitutes.map((entry: any) => ({
+                          playerId: entry.playerId,
+                          position: entry.position,
+                          rating: ratings[entry.playerId]?.finalRating || ratings[entry.playerId]?.autoRating || 6.0,
+                          isMotM: ratings[entry.playerId]?.isMotM || false
+                        }));
+                      }
+                      return [];
+                    })()}
+                    events={match.events || []}
                     onPlayerClick={onSelectPlayer}
                   />
                 ) : (
-                  <div className="bg-white/5 rounded-xl border border-white/10 p-12 text-center">
-                    <Users className="mx-auto mb-4 text-white/40" size={48} />
-                    <p className="text-white/60 mb-2">No lineups available yet</p>
-                    <p className="text-white/40 text-sm">Lineups will be published before the match starts</p>
+                  <div className="py-12 text-center">
+                    <Users className="mx-auto mb-3 text-white/20" size={48} />
+                    <p className="text-white/60 text-sm">No lineups available yet</p>
+                    <p className="text-white/40 text-xs mt-1">Lineups will be published before the match starts</p>
                   </div>
                 )}
               </motion.div>
@@ -895,46 +776,30 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -20 }}
-                className="bg-white/5 rounded-2xl border border-white/10 p-6"
+                className="space-y-1"
               >
-                <h3 className="font-bold text-sm uppercase tracking-wider text-white/60 mb-6">Match Statistics</h3>
-                <div className="space-y-6">
-                  {match.stats?.possession && <StatRow label="Possession" values={match.stats.possession} suffix="%" />}
-                  {match.stats?.expectedGoals && <StatRow label="Expected Goals (xG)" values={match.stats.expectedGoals} suffix="" />}
-                  {match.stats?.shots && <StatRow label="Total Shots" values={match.stats.shots} />}
-                  {match.stats?.shotsOnTarget && <StatRow label="Shots on Target" values={match.stats.shotsOnTarget} />}
-                  {match.stats?.corners && <StatRow label="Corners" values={match.stats.corners} />}
-                  {match.stats?.fouls && <StatRow label="Fouls" values={match.stats.fouls} />}
-                  {match.stats?.yellowCards && <StatRow label="Yellow Cards" values={match.stats.yellowCards} />}
-                  {match.stats?.redCards && <StatRow label="Red Cards" values={match.stats.redCards} />}
+                {match.stats?.possession && <StatRow label="Ball Possession" values={match.stats.possession} suffix="%" showBar={true} />}
+                {match.stats?.expectedGoals && <StatRow label="Expected Goals (xG)" values={match.stats.expectedGoals} suffix="" showBar={true} />}
+                {match.stats?.shots && <StatRow label="Total Shots" values={match.stats.shots} showBar={false} />}
+                {match.stats?.shotsOnTarget && <StatRow label="Shots on Target" values={match.stats.shotsOnTarget} showBar={false} />}
+                {match.stats?.corners && <StatRow label="Corners" values={match.stats.corners} showBar={false} />}
+                {match.stats?.fouls && <StatRow label="Fouls" values={match.stats.fouls} showBar={false} />}
+                {match.stats?.yellowCards && <StatRow label="Yellow Cards" values={match.stats.yellowCards} showBar={false} />}
+                {match.stats?.redCards && <StatRow label="Red Cards" values={match.stats.redCards} showBar={false} />}
 
-                  {/* Show message if no stats available */}
-                  {(!match.stats || (
-                    !match.stats.possession &&
-                    !match.stats.shots &&
-                    !match.stats.shotsOnTarget &&
-                    !match.stats.corners &&
-                    !match.stats.fouls
-                  )) && (
-                      <div className="py-8 text-center text-white/40">
-                        No match statistics available yet
-                      </div>
-                    )}
-                </div>
-
-                {match.stats?.winProbability && (
-                  <div className="bg-secondary/10 border border-secondary/20 rounded-2xl p-4 text-center mt-6">
-                    <p className="text-[10px] font-black uppercase tracking-[0.2em] text-secondary mb-1">Win Probability</p>
-                    <div className="flex items-center justify-between text-xs font-bold italic">
-                      <span>{homeTeam?.shortName} {match.stats.winProbability[0]}%</span>
-                      <div className="h-1 flex-1 mx-4 bg-white/10 rounded-full overflow-hidden flex">
-                        <div className="h-full bg-secondary" style={{ width: `${match.stats.winProbability[0]}%` }}></div>
-                        <div className="h-full bg-white/20" style={{ width: `${match.stats.winProbability[1]}%` }}></div>
-                      </div>
-                      <span>{awayTeam?.shortName} {match.stats.winProbability[2]}%</span>
+                {(!match.stats || (
+                  !match.stats.possession &&
+                  !match.stats.shots &&
+                  !match.stats.shotsOnTarget &&
+                  !match.stats.corners &&
+                  !match.stats.fouls
+                )) && (
+                    <div className="py-12 text-center">
+                      <BarChart3 className="mx-auto mb-3 text-white/20" size={48} />
+                      <p className="text-white/60 text-sm">No statistics available yet</p>
+                      <p className="text-white/40 text-xs mt-1">Statistics will be available during the match</p>
                     </div>
-                  </div>
-                )}
+                  )}
               </motion.div>
             )}
 
@@ -945,72 +810,53 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -20 }}
-                className="space-y-6"
+                className="space-y-4"
               >
-                <div className="flex items-center gap-2 mb-4">
-                  <Clock size={18} className="text-primary" />
-                  <h3 className="font-display italic uppercase tracking-tighter text-2xl">Timeline</h3>
-                </div>
                 {match.events && match.events.length > 0 ? (
-                  <div className="space-y-4 relative">
-                    <div className="absolute left-[15px] top-0 bottom-0 w-px bg-white/5"></div>
-                    {match.events.map((event) => (
-                      <motion.div
-                        initial={{ opacity: 0, x: -20 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        key={event.id}
-                        className="flex items-start gap-6 relative"
-                      >
-                        <div className="relative z-10 w-8 h-8 rounded-full bg-black border border-white/10 flex items-center justify-center text-[10px] font-bold tabular-nums">
-                          {event.minute}'
-                        </div>
-                        <div className="flex-1 bg-white/5 rounded-2xl p-4 border border-white/5 flex items-center justify-between group hover:border-primary/30 transition-all">
-                          <div className="flex items-center gap-3">
-                            <div className={`p-1.5 rounded-lg ${event.type === 'Goal' ? 'bg-primary/20 text-primary' :
-                              event.type === 'Yellow Card' ? 'bg-yellow-500/20 text-yellow-500' :
-                                event.type === 'Red Card' ? 'bg-red-500/20 text-red-500' :
-                                  event.type === 'Substitution' ? 'bg-blue-500/20 text-blue-400' :
-                                    event.type === 'Eye Point' ? 'bg-secondary/20 text-secondary' :
-                                      'bg-white/5 text-white/40'
-                              }`}>
-                              {event.type === 'Goal' ? <Trophy size={14} /> :
-                                event.type === 'Substitution' ? <RefreshCw size={14} /> :
-                                  event.type === 'Eye Point' ? <Star size={14} fill="currentColor" /> :
-                                    <AlertCircle size={14} />}
-                            </div>
-                            <div>
-                              <div className="flex items-center gap-2">
-                                <p className="text-sm font-bold uppercase tracking-tight italic">{event.type}</p>
-                                {event.isEyePoint && (
-                                  <span className="bg-primary/10 text-primary text-[8px] font-black px-1.5 py-0.5 rounded tracking-widest uppercase">+0.5 RATING</span>
-                                )}
-                              </div>
-                              <p className="text-xs text-white/40">{event.detail}</p>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              {event.teamId && (
-                                <img
-                                  src={event.teamId === match.homeTeamId ? homeTeam?.logo : awayTeam?.logo}
-                                  alt="Team"
-                                  className="w-6 h-6 object-contain opacity-60 group-hover:opacity-100 transition-opacity"
-                                />
-                              )}
-                              {event.playerId && players[event.playerId] && (
-                                <span className="text-xs font-semibold text-white/60">
-                                  {players[event.playerId].jerseyName || players[event.playerId].name}
-                                </span>
-                              )}
-                            </div>
+                  match.events.map((event) => {
+                    const isHomeTeam = event.teamId === match.homeTeamId;
+                    const eventColor =
+                      event.type === 'Goal' ? 'bg-primary' :
+                        event.type === 'Yellow Card' ? 'bg-yellow-500' :
+                          event.type === 'Red Card' ? 'bg-red-500' :
+                            'bg-white/40';
+
+                    return (
+                      <div key={event.id} className={`flex items-center gap-3 ${isHomeTeam ? '' : 'flex-row-reverse'}`}>
+                        {/* Team Side Content */}
+                        <div className={`flex-1 flex items-center gap-2 ${isHomeTeam ? '' : 'flex-row-reverse'}`}>
+                          <div className="w-7 h-7 relative rounded overflow-hidden bg-white/5 flex-shrink-0">
+                            {event.teamId && (
+                              <Image
+                                src={event.teamId === match.homeTeamId ? homeTeam?.logo || '' : awayTeam?.logo || ''}
+                                alt="Team"
+                                fill
+                                className="object-cover"
+                              />
+                            )}
+                          </div>
+                          <div className={`flex-1 ${isHomeTeam ? 'text-left' : 'text-right'}`}>
+                            <p className="text-sm font-semibold">{event.detail}</p>
+                            <p className="text-xs text-white/60">{event.type}</p>
                           </div>
                         </div>
-                      </motion.div>
-                    ))}
-                  </div>
+
+                        {/* Center Time Marker */}
+                        <div className="flex flex-col items-center gap-1 min-w-[50px]">
+                          <div className={`w-2 h-2 rounded-full ${eventColor}`} />
+                          <span className="text-xs font-semibold text-white/60">{event.minute}'</span>
+                        </div>
+
+                        {/* Opposite Side - Empty Spacer */}
+                        <div className="flex-1" />
+                      </div>
+                    );
+                  })
                 ) : (
-                  <div className="bg-white/5 rounded-2xl border border-white/10 p-12 text-center">
-                    <Clock className="mx-auto mb-4 text-white/40" size={48} />
-                    <p className="text-white/60 mb-2">No events yet</p>
-                    <p className="text-white/40 text-sm">Match events will appear here as they happen</p>
+                  <div className="py-12 text-center">
+                    <Clock className="mx-auto mb-3 text-white/20" size={48} />
+                    <p className="text-white/60 text-sm">No events yet</p>
+                    <p className="text-white/40 text-xs mt-1">Match events will appear here as they happen</p>
                   </div>
                 )}
               </motion.div>
@@ -1025,16 +871,16 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
                 exit={{ opacity: 0, y: -20 }}
               >
                 {loadingStandings ? (
-                  <div className="py-20 text-center">
+                  <div className="py-12 text-center">
                     <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-                    <p className="text-white/40">Loading standings...</p>
+                    <p className="text-white/60 text-sm">Loading standings...</p>
                   </div>
                 ) : standings.length > 0 ? (
-                  <div className="bg-white/5 rounded-2xl border border-white/10 overflow-hidden">
+                  <div className="bg-white/5 rounded-xl border border-white/10 overflow-hidden">
                     <div className="overflow-x-auto">
                       <table className="w-full">
                         <thead className="bg-white/5">
-                          <tr className="text-xs font-bold uppercase tracking-wider text-white/60">
+                          <tr className="text-xs font-semibold text-white/60">
                             <th className="px-4 py-3 text-left">Pos</th>
                             <th className="px-4 py-3 text-left">Team</th>
                             <th className="px-4 py-3 text-center">P</th>
@@ -1056,11 +902,10 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
                             return (
                               <tr
                                 key={standing.id}
-                                className={`border-t border-white/5 ${isHighlighted ? 'bg-primary/10 border-primary/20' : 'hover:bg-white/5'
-                                  } transition-colors`}
+                                className={`border-t border-white/5 ${isHighlighted ? 'bg-primary/10 border-primary/20' : 'hover:bg-white/5'} transition-colors`}
                               >
                                 <td className="px-4 py-3">
-                                  <span className={`font-bold ${index === 0 ? 'text-primary' : ''}`}>
+                                  <span className={`font-semibold ${index === 0 ? 'text-primary' : ''}`}>
                                     {index + 1}
                                   </span>
                                 </td>
@@ -1095,7 +940,7 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
                                   {standing.goalDifference > 0 ? '+' : ''}{standing.goalDifference}
                                 </td>
                                 <td className="px-4 py-3 text-center">
-                                  <span className="px-2 py-1 bg-primary/20 text-primary rounded text-sm font-bold">
+                                  <span className="px-2 py-1 bg-primary/20 text-primary rounded text-sm font-semibold">
                                     {standing.points}
                                   </span>
                                 </td>
@@ -1107,14 +952,16 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
                     </div>
                   </div>
                 ) : (
-                  <div className="bg-white/5 rounded-2xl border border-white/10 p-12 text-center">
-                    <p className="text-white/40">No standings available for this competition</p>
+                  <div className="py-12 text-center">
+                    <Table className="mx-auto mb-3 text-white/20" size={48} />
+                    <p className="text-white/60 text-sm">No standings available</p>
+                    <p className="text-white/40 text-xs mt-1">Standings data not available for this competition</p>
                   </div>
                 )}
               </motion.div>
             )}
 
-            {/* Predict Tab - For Upcoming Matches */}
+            {/* Predict Tab */}
             {activeTab === 'predict' && match.status === 'UPCOMING' && (
               <motion.div
                 key="predict"
@@ -1134,14 +981,14 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
                     }}
                   />
                 ) : (
-                  <div className="bg-white/5 rounded-xl border border-white/10 p-12 text-center">
-                    <p className="text-white/40">Team data not available</p>
+                  <div className="py-12 text-center">
+                    <p className="text-white/40 text-sm">Team data not available</p>
                   </div>
                 )}
               </motion.div>
             )}
 
-            {/* Fan Poll Tab - For Upcoming Matches */}
+            {/* Fan Poll Tab */}
             {activeTab === 'poll' && match.status === 'UPCOMING' && (
               <motion.div
                 key="poll"
@@ -1160,32 +1007,30 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
                     }}
                   />
                 ) : (
-                  <div className="bg-white/5 rounded-xl border border-white/10 p-12 text-center">
-                    <p className="text-white/40">Team data not available</p>
+                  <div className="py-12 text-center">
+                    <p className="text-white/40 text-sm">Team data not available</p>
                   </div>
                 )}
               </motion.div>
             )}
 
-            {/* Chat Tab - For Live Matches */}
+            {/* Chat Tab */}
             {activeTab === 'chat' && match.status === 'LIVE' && (
               <motion.div
                 key="chat"
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -20 }}
-                className="-mx-4 -my-8"
+                className="-mx-4 -my-6"
               >
-                {/* Chat Header - Integrated */}
                 <div className="bg-gradient-to-r from-primary/10 via-primary/5 to-transparent border-b border-primary/20 px-4 py-4 flex items-center gap-3 sticky top-0 z-10 backdrop-blur-sm">
                   <MessageSquare className="text-primary" size={20} />
                   <div>
-                    <h3 className="font-bold">Live Chat</h3>
+                    <h3 className="font-semibold">Live Chat</h3>
                     <p className="text-xs text-white/60">Join the conversation</p>
                   </div>
                 </div>
 
-                {/* Full-width Chat */}
                 <div className="h-[calc(100vh-300px)] min-h-[500px]">
                   <LivestreamChat
                     matchId={match.id}
@@ -1198,12 +1043,25 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
           </AnimatePresence>
         </div>
       </div>
-    </motion.div >
+    </motion.div>
   );
 }
 
-function StatRow({ label, values, suffix = '' }: { label: string; values: [number, number] | any; suffix?: string }) {
-  // Ensure values is a proper array
+// InfoCard Component for Overview Tab
+function InfoCard({ icon: Icon, label, value }: { icon: any; label: string; value: string }) {
+  return (
+    <div className="bg-white/5 rounded-xl p-4 border border-white/10">
+      <div className="flex items-center gap-2 mb-2">
+        <Icon size={16} className="text-primary" />
+        <span className="text-xs font-semibold text-white/60">{label}</span>
+      </div>
+      <p className="font-semibold">{value}</p>
+    </div>
+  );
+}
+
+// StatRow Component - Sofascore Style
+function StatRow({ label, values, suffix = '', showBar = false }: { label: string; values: [number, number] | any; suffix?: string; showBar?: boolean }) {
   let homeValue = 0;
   let awayValue = 0;
 
@@ -1211,7 +1069,6 @@ function StatRow({ label, values, suffix = '' }: { label: string; values: [numbe
     homeValue = typeof values[0] === 'number' ? values[0] : parseFloat(values[0]) || 0;
     awayValue = typeof values[1] === 'number' ? values[1] : parseFloat(values[1]) || 0;
   } else if (typeof values === 'string') {
-    // Handle case where values might be a string like "51,42"
     const parts = values.split(',').map((v: string) => parseFloat(v.trim()) || 0);
     homeValue = parts[0] || 0;
     awayValue = parts[1] || 0;
@@ -1221,48 +1078,26 @@ function StatRow({ label, values, suffix = '' }: { label: string; values: [numbe
   const homePercent = (homeValue / (total || 1)) * 100;
 
   return (
-    <div className="space-y-2">
-      <div className="flex justify-between text-[10px] font-black tracking-widest uppercase mb-1">
-        <span className={homeValue > awayValue ? 'text-primary' : 'text-white'}>{homeValue}{suffix}</span>
-        <span className="text-white/20">{label}</span>
-        <span className={awayValue > homeValue ? 'text-primary' : 'text-white'}>{awayValue}{suffix}</span>
+    <div className="bg-white/5 border-b border-white/5 last:border-b-0 py-4 px-4">
+      {/* Top: Values and centered label */}
+      <div className="flex justify-between items-center mb-2">
+        <span className="text-sm font-semibold tabular-nums">{homeValue}{suffix}</span>
+        <span className="text-xs text-white/60 font-medium">{label}</span>
+        <span className="text-sm font-semibold tabular-nums">{awayValue}{suffix}</span>
       </div>
-      <div className="h-1 bg-white/5 rounded-full flex overflow-hidden">
-        <motion.div
-          initial={{ width: 0 }}
-          animate={{ width: `${homePercent}%` }}
-          className="bg-primary h-full"
-        />
-        <div className="flex-1 bg-white/10 h-full"></div>
-      </div>
+
+      {/* Bottom: Progress bar (only for possession and xG) */}
+      {showBar && (
+        <div className="h-1 bg-white/10 rounded-full flex overflow-hidden">
+          <motion.div
+            initial={{ width: 0 }}
+            animate={{ width: `${homePercent}%` }}
+            className="bg-primary h-full"
+            transition={{ duration: 0.5, ease: "easeOut" }}
+          />
+          <div className="flex-1 bg-white/20 h-full" />
+        </div>
+      )}
     </div>
   );
 }
-
-function PlayerRow({ player, rating, onClick }: { player: Player; rating: number; onClick: () => void }) {
-  return (
-    <button
-      onClick={onClick}
-      className="w-full flex items-center justify-between p-3 bg-white/5 rounded-2xl border border-white/5 hover:border-primary/30 group transition-all"
-    >
-      <div className="flex items-center gap-3">
-        <div className="w-10 h-10 bg-black rounded-xl border border-white/10 flex items-center justify-center font-display italic group-hover:bg-primary group-hover:text-black transition-colors">
-          {player.number}
-        </div>
-        <div className="text-left">
-          <p className="text-sm font-bold uppercase italic group-hover:text-primary transition-colors">{player.name}</p>
-          <p className="text-[10px] text-white/40 uppercase tracking-wider">{player.position}</p>
-        </div>
-      </div>
-      <div className="flex items-center gap-3">
-        <div className="text-[9px] font-black text-secondary uppercase italic opacity-0 group-hover:opacity-100 transition-opacity">
-          Scout View
-        </div>
-        <div className={`px-2 py-1 rounded-lg font-black text-xs min-w-[32px] text-center ${rating >= 8 ? 'bg-blue-500/20 text-blue-500' : rating >= 7 ? 'bg-primary/20 text-primary' : 'bg-white/10 text-white/40'}`}>
-          {rating.toFixed(1)}
-        </div>
-      </div>
-    </button>
-  );
-}
-
