@@ -29,6 +29,7 @@ export default function Home() {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState('ALL');
   const [activeSport, setActiveSport] = useState('BASKETBALL'); // Default to basketball
+  const [activeContentTab, setActiveContentTab] = useState('fixtures'); // New: Main content tabs
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [matches, setMatches] = useState<Match[]>([]);
   const [loading, setLoading] = useState(true);
@@ -319,9 +320,9 @@ export default function Home() {
     return true;
   });
 
-  // Sort matches by start time chronologically
+  // Sort matches by start time in reverse chronological order (most recent first)
   const sortedMatches = [...filteredMatches].sort((a, b) =>
-    new Date(a.startTime).getTime() - new Date(b.startTime).getTime()
+    new Date(b.startTime).getTime() - new Date(a.startTime).getTime()
   );
 
   // Group matches by round (for basketball) or date (for other sports)
@@ -487,278 +488,322 @@ export default function Home() {
       {/* Main Content */}
       <main className="pt-28 pb-12">
         <div className="max-w-7xl mx-auto px-4">
-          {/* Status Filter Tabs */}
-          <div className="flex items-center gap-2 mb-6 overflow-x-auto scrollbar-hide">
-            {['ALL', 'LIVE', 'FINISHED', 'UPCOMING', 'FAVORITES'].map((tab) => (
+          {/* Main Content Tabs */}
+          <div className="flex items-center gap-2 mb-6 overflow-x-auto scrollbar-hide border-b border-white/10 pb-3">
+            {[
+              { id: 'fixtures', label: 'Fixtures', icon: Calendar },
+              { id: 'news', label: 'News', icon: Activity },
+              { id: 'teams', label: 'Teams', icon: Trophy }
+            ].map((tab) => (
               <button
-                key={tab}
-                onClick={() => setActiveTab(tab)}
-                className={`px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wider whitespace-nowrap transition-all ${activeTab === tab
+                key={tab.id}
+                onClick={() => setActiveContentTab(tab.id)}
+                className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-bold uppercase tracking-wider whitespace-nowrap transition-all ${activeContentTab === tab.id
                   ? 'bg-primary text-black'
                   : 'bg-white/5 text-white/60 hover:bg-white/10 hover:text-white'
                   }`}
               >
-                {tab === 'LIVE' && <span className="inline-block w-2 h-2 bg-red-500 rounded-full mr-2 animate-pulse"></span>}
-                {tab}
+                <tab.icon size={16} />
+                {tab.label}
               </button>
             ))}
           </div>
 
-          {/* Date Filter - SofaScore Style */}
-          <div className="mb-6 bg-[#0a0a0a] border border-white/10 rounded-lg px-4 py-3">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4">
-              {/* Left side - Title */}
-              <div className="flex items-center gap-3">
-                <Calendar size={18} className="text-primary" />
-                <h3 className="font-bold text-sm">Matches</h3>
+          {/* Fixtures Tab Content */}
+          {activeContentTab === 'fixtures' && (
+            <>
+              {/* Status Filter Tabs */}
+              <div className="flex items-center gap-2 mb-6 overflow-x-auto scrollbar-hide">
+                {['ALL', 'LIVE', 'FINISHED', 'UPCOMING', 'FAVORITES'].map((tab) => (
+                  <button
+                    key={tab}
+                    onClick={() => setActiveTab(tab)}
+                    className={`px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wider whitespace-nowrap transition-all ${activeTab === tab
+                      ? 'bg-primary text-black'
+                      : 'bg-white/5 text-white/60 hover:bg-white/10 hover:text-white'
+                      }`}
+                  >
+                    {tab === 'LIVE' && <span className="inline-block w-2 h-2 bg-red-500 rounded-full mr-2 animate-pulse"></span>}
+                    {tab}
+                  </button>
+                ))}
               </div>
 
-              {/* Right side - Date Navigation */}
-              <div className="flex items-center gap-2 bg-white/5 rounded-lg p-1 w-full sm:w-auto">
-                <button
-                  onClick={() => setSelectedDate(selectedDate ? addDays(selectedDate, -1) : addDays(new Date(), -1))}
-                  className="p-2 hover:bg-white/10 rounded transition-colors"
-                  aria-label="Previous day"
-                >
-                  <ChevronLeft size={18} className="text-white/60" />
-                </button>
-                <div className="px-3 sm:px-4 text-xs sm:text-sm font-semibold text-white min-w-[100px] sm:min-w-[120px] text-center">
-                  {selectedDate ? format(selectedDate, 'MMM d, yyyy') : format(new Date(), 'MMM d, yyyy')}
-                </div>
-                <button
-                  onClick={() => setSelectedDate(selectedDate ? addDays(selectedDate, 1) : addDays(new Date(), 1))}
-                  className="p-2 hover:bg-white/10 rounded transition-colors"
-                  aria-label="Next day"
-                >
-                  <ChevronRight size={18} className="text-white/60" />
-                </button>
-              </div>
-            </div>
-          </div>
-
-          {/* Football Hub Banner */}
-          {activeSport === 'FOOTBALL' && (
-            <Link href="/football">
-              <motion.div
-                initial={{ opacity: 0, y: -10 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="mb-6 bg-gradient-to-r from-green-600/20 to-green-400/20 border border-green-500/20 rounded-2xl p-4 hover:border-green-500/50 transition-all cursor-pointer group"
-              >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 bg-gradient-to-br from-green-500 to-green-600 rounded-xl flex items-center justify-center shadow-lg shadow-green-500/20">
-                      <Trophy size={24} className="text-white" />
-                    </div>
-                    <div>
-                      <h3 className="font-display font-bold text-lg flex items-center gap-2 text-white">
-                        BUSA LEAGUE FOOTBALL
-                        <span className="text-[10px] bg-green-500/20 text-green-400 px-2 py-0.5 rounded border border-green-500/20">OFFICIAL HUB</span>
-                      </h3>
-                      <p className="text-sm text-white/60 group-hover:text-white/80 transition-colors">
-                        View standings, stats leaders, teams, and player profiles
-                      </p>
-                    </div>
-                  </div>
-                  <div className="bg-white/5 p-2 rounded-full group-hover:bg-white/10 transition-colors">
-                    <ChevronRight size={20} className="text-white/40 group-hover:text-white transition-colors" />
-                  </div>
-                </div>
-              </motion.div>
-            </Link>
-          )}
-
-          {/* Basketball Hub Banner */}
-          {activeSport === 'BASKETBALL' && (
-            <Link href="/basketball">
-              <motion.div
-                initial={{ opacity: 0, y: -10 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="mb-6 bg-gradient-to-r from-orange-600/20 to-orange-400/20 border border-orange-500/20 rounded-2xl p-4 hover:border-orange-500/50 transition-all cursor-pointer group"
-              >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 bg-gradient-to-br from-orange-500 to-orange-600 rounded-xl flex items-center justify-center shadow-lg shadow-orange-500/20">
-                      <Trophy size={24} className="text-white" />
-                    </div>
-                    <div>
-                      <h3 className="font-display font-bold text-lg flex items-center gap-2 text-white">
-                        BUSA LEAGUE BASKETBALL
-                        <span className="text-[10px] bg-orange-500/20 text-orange-400 px-2 py-0.5 rounded border border-orange-500/20">OFFICIAL HUB</span>
-                      </h3>
-                      <p className="text-sm text-white/60 group-hover:text-white/80 transition-colors">
-                        View standings, stats leaders, teams, and player profiles
-                      </p>
-                    </div>
-                  </div>
-                  <div className="bg-white/5 p-2 rounded-full group-hover:bg-white/10 transition-colors">
-                    <ChevronRight size={20} className="text-white/40 group-hover:text-white transition-colors" />
-                  </div>
-                </div>
-              </motion.div>
-            </Link>
-          )}
-
-          {/* Live Now Section */}
-          <div className="mb-8">
-            <LiveNowSection />
-          </div>
-
-          {/* Live Center Button */}
-          {matches.filter(m => m.status === 'LIVE').length > 0 && (
-            <Link href="/live">
-              <motion.div
-                initial={{ opacity: 0, y: -10 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="mb-6 bg-gradient-to-r from-red-500/10 to-primary/10 border border-red-500/20 rounded-2xl p-4 hover:border-red-500/40 transition-all cursor-pointer group"
-              >
-                <div className="flex items-center justify-between">
+              {/* Date Filter - SofaScore Style */}
+              <div className="mb-6 bg-[#0a0a0a] border border-white/10 rounded-lg px-4 py-3">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4">
+                  {/* Left side - Title */}
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-red-500/20 rounded-xl flex items-center justify-center">
-                      <Play size={20} className="text-red-500 fill-red-500" />
-                    </div>
-                    <div>
-                      <h3 className="font-bold text-sm flex items-center gap-2">
-                        <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
-                        LIVE CENTER
-                      </h3>
-                      <p className="text-xs text-white/60">
-                        {matches.filter(m => m.status === 'LIVE').length} matches live now
-                      </p>
-                    </div>
+                    <Calendar size={18} className="text-primary" />
+                    <h3 className="font-bold text-sm">Matches</h3>
                   </div>
-                  <ChevronRight size={20} className="text-white/40 group-hover:text-primary transition-colors" />
+
+                  {/* Right side - Date Navigation */}
+                  <div className="flex items-center gap-2 bg-white/5 rounded-lg p-1 w-full sm:w-auto">
+                    <button
+                      onClick={() => setSelectedDate(selectedDate ? addDays(selectedDate, -1) : addDays(new Date(), -1))}
+                      className="p-2 hover:bg-white/10 rounded transition-colors"
+                      aria-label="Previous day"
+                    >
+                      <ChevronLeft size={18} className="text-white/60" />
+                    </button>
+                    <div className="px-3 sm:px-4 text-xs sm:text-sm font-semibold text-white min-w-[100px] sm:min-w-[120px] text-center">
+                      {selectedDate ? format(selectedDate, 'MMM d, yyyy') : format(new Date(), 'MMM d, yyyy')}
+                    </div>
+                    <button
+                      onClick={() => setSelectedDate(selectedDate ? addDays(selectedDate, 1) : addDays(new Date(), 1))}
+                      className="p-2 hover:bg-white/10 rounded transition-colors"
+                      aria-label="Next day"
+                    >
+                      <ChevronRight size={18} className="text-white/60" />
+                    </button>
+                  </div>
                 </div>
-              </motion.div>
-            </Link>
+              </div>
+
+              {/* Football Hub Banner */}
+              {activeSport === 'FOOTBALL' && (
+                <Link href="/football">
+                  <motion.div
+                    initial={{ opacity: 0, y: -10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="mb-6 bg-gradient-to-r from-green-600/20 to-green-400/20 border border-green-500/20 rounded-2xl p-4 hover:border-green-500/50 transition-all cursor-pointer group"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-4">
+                        <div className="w-12 h-12 bg-gradient-to-br from-green-500 to-green-600 rounded-xl flex items-center justify-center shadow-lg shadow-green-500/20">
+                          <Trophy size={24} className="text-white" />
+                        </div>
+                        <div>
+                          <h3 className="font-display font-bold text-lg flex items-center gap-2 text-white">
+                            BUSA LEAGUE FOOTBALL
+                            <span className="text-[10px] bg-green-500/20 text-green-400 px-2 py-0.5 rounded border border-green-500/20">OFFICIAL HUB</span>
+                          </h3>
+                          <p className="text-sm text-white/60 group-hover:text-white/80 transition-colors">
+                            View standings, stats leaders, teams, and player profiles
+                          </p>
+                        </div>
+                      </div>
+                      <div className="bg-white/5 p-2 rounded-full group-hover:bg-white/10 transition-colors">
+                        <ChevronRight size={20} className="text-white/40 group-hover:text-white transition-colors" />
+                      </div>
+                    </div>
+                  </motion.div>
+                </Link>
+              )}
+
+              {/* Basketball Hub Banner */}
+              {activeSport === 'BASKETBALL' && (
+                <Link href="/basketball">
+                  <motion.div
+                    initial={{ opacity: 0, y: -10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="mb-6 bg-gradient-to-r from-orange-600/20 to-orange-400/20 border border-orange-500/20 rounded-2xl p-4 hover:border-orange-500/50 transition-all cursor-pointer group"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-4">
+                        <div className="w-12 h-12 bg-gradient-to-br from-orange-500 to-orange-600 rounded-xl flex items-center justify-center shadow-lg shadow-orange-500/20">
+                          <Trophy size={24} className="text-white" />
+                        </div>
+                        <div>
+                          <h3 className="font-display font-bold text-lg flex items-center gap-2 text-white">
+                            BUSA LEAGUE BASKETBALL
+                            <span className="text-[10px] bg-orange-500/20 text-orange-400 px-2 py-0.5 rounded border border-orange-500/20">OFFICIAL HUB</span>
+                          </h3>
+                          <p className="text-sm text-white/60 group-hover:text-white/80 transition-colors">
+                            View standings, stats leaders, teams, and player profiles
+                          </p>
+                        </div>
+                      </div>
+                      <div className="bg-white/5 p-2 rounded-full group-hover:bg-white/10 transition-colors">
+                        <ChevronRight size={20} className="text-white/40 group-hover:text-white transition-colors" />
+                      </div>
+                    </div>
+                  </motion.div>
+                </Link>
+              )}
+
+              {/* Live Now Section */}
+              <div className="mb-8">
+                <LiveNowSection />
+              </div>
+
+              {/* Live Center Button */}
+              {matches.filter(m => m.status === 'LIVE').length > 0 && (
+                <Link href="/live">
+                  <motion.div
+                    initial={{ opacity: 0, y: -10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="mb-6 bg-gradient-to-r from-red-500/10 to-primary/10 border border-red-500/20 rounded-2xl p-4 hover:border-red-500/40 transition-all cursor-pointer group"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-red-500/20 rounded-xl flex items-center justify-center">
+                          <Play size={20} className="text-red-500 fill-red-500" />
+                        </div>
+                        <div>
+                          <h3 className="font-bold text-sm flex items-center gap-2">
+                            <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
+                            LIVE CENTER
+                          </h3>
+                          <p className="text-xs text-white/60">
+                            {matches.filter(m => m.status === 'LIVE').length} matches live now
+                          </p>
+                        </div>
+                      </div>
+                      <ChevronRight size={20} className="text-white/40 group-hover:text-primary transition-colors" />
+                    </div>
+                  </motion.div>
+                </Link>
+              )}
+
+              {/* Matches by Date */}
+              {Object.keys(groupedMatches).length > 0 ? (
+                <div className="space-y-6">
+                  {Object.entries(groupedMatches).map(([date, dateMatches]: [string, any]) => (
+                    <div key={date}>
+                      {/* Date Header */}
+                      <div className="flex items-center gap-3 mb-3">
+                        <Calendar size={16} className="text-white/40" />
+                        <h2 className="text-sm font-bold uppercase tracking-wider text-white/60">{date}</h2>
+                        {/* Show actual date for basketball rounds */}
+                        {date.startsWith('Round') && dateMatches.length > 0 && (
+                          <span className="text-xs text-white/40">
+                            {new Date(dateMatches[0].startTime).toLocaleDateString('en-US', {
+                              month: 'short',
+                              day: 'numeric',
+                              year: 'numeric'
+                            })}
+                          </span>
+                        )}
+                        <div className="flex-1 h-px bg-white/5"></div>
+                      </div>
+
+                      {/* Matches */}
+                      <div className="space-y-2">
+                        {dateMatches.map((match: Match) => (
+                          <motion.div
+                            key={match.id}
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            onClick={() => setSelectedMatch(match)}
+                            className="bg-white/5 hover:bg-white/10 border border-white/10 hover:border-primary/50 rounded-xl p-4 cursor-pointer transition-all group"
+                          >
+                            <div className="flex items-center justify-between">
+                              {/* Teams */}
+                              <div className="flex-1 space-y-2">
+                                {/* Home Team */}
+                                <div className="flex items-center gap-3">
+                                  {isValidImagePath(match.homeTeam?.logo) ? (
+                                    <div className="w-8 h-8 relative rounded overflow-hidden bg-white/5">
+                                      <Image
+                                        src={match.homeTeam!.logo}
+                                        alt={match.homeTeam!.name}
+                                        fill
+                                        className="object-cover"
+                                      />
+                                    </div>
+                                  ) : (
+                                    <div className="w-8 h-8 bg-white/10 rounded flex items-center justify-center text-xs font-bold">
+                                      {match.homeTeam?.shortName || 'H'}
+                                    </div>
+                                  )}
+                                  <span className="font-semibold text-sm">
+                                    {match.homeTeam?.name || 'Home Team'}
+                                  </span>
+                                  {match.status !== 'UPCOMING' && (
+                                    <span className={`ml-auto text-lg font-bold ${match.homeScore > match.awayScore ? 'text-primary' : 'text-white/40'}`}>
+                                      {match.homeScore}
+                                    </span>
+                                  )}
+                                </div>
+
+                                {/* Away Team */}
+                                <div className="flex items-center gap-3">
+                                  {isValidImagePath(match.awayTeam?.logo) ? (
+                                    <div className="w-8 h-8 relative rounded overflow-hidden bg-white/5">
+                                      <Image
+                                        src={match.awayTeam!.logo}
+                                        alt={match.awayTeam!.name}
+                                        fill
+                                        className="object-cover"
+                                      />
+                                    </div>
+                                  ) : (
+                                    <div className="w-8 h-8 bg-white/10 rounded flex items-center justify-center text-xs font-bold">
+                                      {match.awayTeam?.shortName || 'A'}
+                                    </div>
+                                  )}
+                                  <span className="font-semibold text-sm">
+                                    {match.awayTeam?.name || 'Away Team'}
+                                  </span>
+                                  {match.status !== 'UPCOMING' && (
+                                    <span className={`ml-auto text-lg font-bold ${match.awayScore > match.homeScore ? 'text-primary' : 'text-white/40'}`}>
+                                      {match.awayScore}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+
+                              {/* Status */}
+                              <div className="ml-4 text-right">
+                                {match.isStreaming && (
+                                  <div className="mb-2 inline-flex items-center gap-1 bg-red-600/20 text-red-500 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider animate-pulse border border-red-500/20">
+                                    <span>●</span> LIVE STREAM
+                                  </div>
+                                )}
+                                {match.status === 'LIVE' && (
+                                  <div className="flex items-center gap-1.5 text-red-500 text-xs font-bold mb-1">
+                                    <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse"></span>
+                                    LIVE
+                                  </div>
+                                )}
+                                {match.status === 'UPCOMING' && (
+                                  <div className="text-xs text-white/60">
+                                    {new Date(match.startTime).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+                                  </div>
+                                )}
+                                {match.status === 'FINISHED' && (
+                                  <div className="text-xs text-white/40 font-bold">
+                                    FT
+                                  </div>
+                                )}
+                                <div className="text-xs text-white/40 mt-1">
+                                  {match.competition}
+                                </div>
+                              </div>
+                            </div>
+                          </motion.div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="py-20 text-center">
+                  <Trophy size={48} className="mx-auto text-white/10 mb-4" />
+                  <p className="text-white/40 font-bold">No matches found</p>
+                  <p className="text-white/20 text-sm mt-2">Try adjusting your filters</p>
+                </div>
+              )}
+            </>
           )}
 
-          {/* Matches by Date */}
-          {Object.keys(groupedMatches).length > 0 ? (
-            <div className="space-y-6">
-              {Object.entries(groupedMatches).map(([date, dateMatches]: [string, any]) => (
-                <div key={date}>
-                  {/* Date Header */}
-                  <div className="flex items-center gap-3 mb-3">
-                    <Calendar size={16} className="text-white/40" />
-                    <h2 className="text-sm font-bold uppercase tracking-wider text-white/60">{date}</h2>
-                    {/* Show actual date for basketball rounds */}
-                    {date.startsWith('Round') && dateMatches.length > 0 && (
-                      <span className="text-xs text-white/40">
-                        {new Date(dateMatches[0].startTime).toLocaleDateString('en-US', {
-                          month: 'short',
-                          day: 'numeric',
-                          year: 'numeric'
-                        })}
-                      </span>
-                    )}
-                    <div className="flex-1 h-px bg-white/5"></div>
-                  </div>
-
-                  {/* Matches */}
-                  <div className="space-y-2">
-                    {dateMatches.map((match: Match) => (
-                      <motion.div
-                        key={match.id}
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        onClick={() => setSelectedMatch(match)}
-                        className="bg-white/5 hover:bg-white/10 border border-white/10 hover:border-primary/50 rounded-xl p-4 cursor-pointer transition-all group"
-                      >
-                        <div className="flex items-center justify-between">
-                          {/* Teams */}
-                          <div className="flex-1 space-y-2">
-                            {/* Home Team */}
-                            <div className="flex items-center gap-3">
-                              {isValidImagePath(match.homeTeam?.logo) ? (
-                                <div className="w-8 h-8 relative rounded overflow-hidden bg-white/5">
-                                  <Image
-                                    src={match.homeTeam!.logo}
-                                    alt={match.homeTeam!.name}
-                                    fill
-                                    className="object-cover"
-                                  />
-                                </div>
-                              ) : (
-                                <div className="w-8 h-8 bg-white/10 rounded flex items-center justify-center text-xs font-bold">
-                                  {match.homeTeam?.shortName || 'H'}
-                                </div>
-                              )}
-                              <span className="font-semibold text-sm">
-                                {match.homeTeam?.name || 'Home Team'}
-                              </span>
-                              {match.status !== 'UPCOMING' && (
-                                <span className={`ml-auto text-lg font-bold ${match.homeScore > match.awayScore ? 'text-primary' : 'text-white/40'}`}>
-                                  {match.homeScore}
-                                </span>
-                              )}
-                            </div>
-
-                            {/* Away Team */}
-                            <div className="flex items-center gap-3">
-                              {isValidImagePath(match.awayTeam?.logo) ? (
-                                <div className="w-8 h-8 relative rounded overflow-hidden bg-white/5">
-                                  <Image
-                                    src={match.awayTeam!.logo}
-                                    alt={match.awayTeam!.name}
-                                    fill
-                                    className="object-cover"
-                                  />
-                                </div>
-                              ) : (
-                                <div className="w-8 h-8 bg-white/10 rounded flex items-center justify-center text-xs font-bold">
-                                  {match.awayTeam?.shortName || 'A'}
-                                </div>
-                              )}
-                              <span className="font-semibold text-sm">
-                                {match.awayTeam?.name || 'Away Team'}
-                              </span>
-                              {match.status !== 'UPCOMING' && (
-                                <span className={`ml-auto text-lg font-bold ${match.awayScore > match.homeScore ? 'text-primary' : 'text-white/40'}`}>
-                                  {match.awayScore}
-                                </span>
-                              )}
-                            </div>
-                          </div>
-
-                          {/* Status */}
-                          <div className="ml-4 text-right">
-                            {match.isStreaming && (
-                              <div className="mb-2 inline-flex items-center gap-1 bg-red-600/20 text-red-500 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider animate-pulse border border-red-500/20">
-                                <span>●</span> LIVE STREAM
-                              </div>
-                            )}
-                            {match.status === 'LIVE' && (
-                              <div className="flex items-center gap-1.5 text-red-500 text-xs font-bold mb-1">
-                                <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse"></span>
-                                LIVE
-                              </div>
-                            )}
-                            {match.status === 'UPCOMING' && (
-                              <div className="text-xs text-white/60">
-                                {new Date(match.startTime).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
-                              </div>
-                            )}
-                            {match.status === 'FINISHED' && (
-                              <div className="text-xs text-white/40 font-bold">
-                                FT
-                              </div>
-                            )}
-                            <div className="text-xs text-white/40 mt-1">
-                              {match.competition}
-                            </div>
-                          </div>
-                        </div>
-                      </motion.div>
-                    ))}
-                  </div>
-                </div>
-              ))}
+          {/* News Tab Content */}
+          {activeContentTab === 'news' && (
+            <div className="py-20 text-center">
+              <Activity size={48} className="mx-auto text-white/10 mb-4" />
+              <p className="text-white/40 font-bold">News Coming Soon</p>
+              <p className="text-white/20 text-sm mt-2">Stay tuned for the latest sports news</p>
             </div>
-          ) : (
+          )}
+
+          {/* Teams Tab Content */}
+          {activeContentTab === 'teams' && (
             <div className="py-20 text-center">
               <Trophy size={48} className="mx-auto text-white/10 mb-4" />
-              <p className="text-white/40 font-bold">No matches found</p>
-              <p className="text-white/20 text-sm mt-2">Try adjusting your filters</p>
+              <p className="text-white/40 font-bold">Teams Directory Coming Soon</p>
+              <p className="text-white/20 text-sm mt-2">Browse all teams and their stats</p>
             </div>
           )}
         </div>

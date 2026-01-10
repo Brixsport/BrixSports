@@ -13,7 +13,6 @@ const API_CACHE = `${CACHE_VERSION}-api`;
 const STATIC_ASSETS = [
     '/',
     '/live',
-    '/fixtures',
     '/news',
     '/offline',
     '/icons/icon-192x192.png',

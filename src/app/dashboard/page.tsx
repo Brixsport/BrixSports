@@ -242,7 +242,7 @@ export default function DashboardPage() {
                                     Upcoming
                                 </h2>
                                 <Link
-                                    href="/fixtures"
+                                    href="/"
                                     className="text-xs font-bold text-primary hover:underline"
                                 >
                                     View All
