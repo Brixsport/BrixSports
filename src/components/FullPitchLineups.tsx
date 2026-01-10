@@ -180,9 +180,9 @@ export function FullPitchLineups({
     const awayResult = processLineup(awayPlayers, awayLineup, false);
 
     return (
-        <div className="w-full space-y-6">
-            {/* Team Headers */}
-            <div className="flex items-center justify-between px-4">
+        <div className="w-full space-y-4 md:space-y-6">
+            {/* Team Headers - Hidden on mobile, shown on desktop */}
+            <div className="hidden md:flex items-center justify-between px-4">
                 <div className="flex items-center gap-3">
                     <img src={homeTeam.logo} alt={homeTeam.name} className="w-10 h-10 object-contain" />
                     <div>
@@ -200,11 +200,11 @@ export function FullPitchLineups({
             </div>
 
             {/* Playing Surface - FIFA Standard 68:105 aspect ratio (width:height) */}
-            {/* This creates a tall, scrollable pitch similar to SofaScore/FotMob */}
-            <div className={`relative w-full ${isBasketball ? 'aspect-[9/14]' : 'aspect-[68/105]'} bg-gradient-to-b ${isBasketball
+            {/* Full-width on mobile, contained on desktop */}
+            <div className={`relative w-full ${isBasketball ? 'aspect-[68/105]' : 'aspect-[68/105]'} bg-gradient-to-b ${isBasketball
                 ? 'from-orange-900/30 via-orange-800/30 to-orange-900/30'
                 : 'from-green-900/40 via-green-800/40 to-green-900/40'
-                } rounded-2xl overflow-hidden border border-white/10 shadow-2xl`}>
+                } md:rounded-2xl overflow-hidden border-0 md:border border-white/10 shadow-2xl`}>
                 {/* Surface markings */}
                 {isBasketball ? <BasketballCourtMarkings /> : <FootballPitchMarkings />}
 
@@ -377,10 +377,10 @@ function PlayerDot({ player, rating, position, isCaptain, isMotM, style, onClick
         return 'bg-red-500/90 text-white border-red-400';
     };
 
-    // Mobile-responsive sizes
+    // Mobile-responsive sizes - Larger on mobile like FotMob
     const sizeClasses = size === 'small'
-        ? 'w-7 h-7 sm:w-8 sm:h-8'
-        : 'w-8 h-8 sm:w-10 sm:h-10 md:w-12 md:h-12 lg:w-14 lg:h-14';
+        ? 'w-10 h-10 sm:w-8 sm:h-8'
+        : 'w-14 h-14 sm:w-12 sm:h-12 md:w-14 md:h-14 lg:w-16 lg:h-16';
 
     return (
         <div

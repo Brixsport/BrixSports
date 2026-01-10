@@ -24,11 +24,6 @@ interface MatchData {
     eyePoints: any[];
 }
 
-// Collapsing header constants
-const HEADER_EXPANDED_HEIGHT = 200;
-const HEADER_COLLAPSED_HEIGHT = 72;
-const SCROLL_THRESHOLD = 150; // Distance to scroll before fully collapsed
-
 export default function MatchDetailPage() {
     const params = useParams();
     const router = useRouter();
@@ -40,18 +35,37 @@ export default function MatchDetailPage() {
     const [isFavorited, setIsFavorited] = useState(false);
     const [h2hData, setH2hData] = useState<any>(null);
     const [scrollY, setScrollY] = useState(0);
+    const [lastScrollY, setLastScrollY] = useState(0);
+    const [headerVisible, setHeaderVisible] = useState(true);
 
     const { isConnected, on, off } = useWebSocket({ matchId, autoConnect: true });
     const { events: liveEvents, latestEvent } = useMatchEvents(matchId);
 
-    // Handle scroll for collapsing header with requestAnimationFrame for smooth updates
+    // Handle scroll for hide/show header behavior
     useEffect(() => {
         let ticking = false;
 
         const handleScroll = () => {
             if (!ticking) {
                 window.requestAnimationFrame(() => {
-                    setScrollY(window.scrollY);
+                    const currentScrollY = window.scrollY;
+
+                    // Determine scroll direction
+                    if (currentScrollY > lastScrollY && currentScrollY > 100) {
+                        // Scrolling down & past threshold - hide header
+                        setHeaderVisible(false);
+                    } else if (currentScrollY < lastScrollY) {
+                        // Scrolling up - show header
+                        setHeaderVisible(true);
+                    }
+
+                    // Always show header at top of page
+                    if (currentScrollY < 50) {
+                        setHeaderVisible(true);
+                    }
+
+                    setScrollY(currentScrollY);
+                    setLastScrollY(currentScrollY);
                     ticking = false;
                 });
                 ticking = true;
@@ -60,14 +74,7 @@ export default function MatchDetailPage() {
 
         window.addEventListener('scroll', handleScroll, { passive: true });
         return () => window.removeEventListener('scroll', handleScroll);
-    }, []);
-
-    // Calculate header animation values based on scroll
-    const scrollProgress = Math.min(Math.max(scrollY / SCROLL_THRESHOLD, 0), 1);
-    const headerHeight = HEADER_EXPANDED_HEIGHT - (HEADER_EXPANDED_HEIGHT - HEADER_COLLAPSED_HEIGHT) * scrollProgress;
-    const expandedContentOpacity = 1 - scrollProgress;
-    const collapsedContentOpacity = scrollProgress;
-    const scoreScale = 1 - (scrollProgress * 0.3); // Scale down score slightly
+    }, [lastScrollY]);
 
     // Fetch match data
     useEffect(() => {
@@ -182,23 +189,22 @@ export default function MatchDetailPage() {
 
     return (
         <div className="min-h-screen bg-[#050505] text-white">
-            {/* Collapsing Header - Optimized for smooth scrolling */}
+            {/* Sticky Header - Slides up/down based on scroll direction */}
             <div
-                className="sticky top-0 z-50 bg-[#050505]/95 backdrop-blur-xl border-b border-white/10"
+                className="sticky top-0 z-40 bg-gradient-to-b from-[#050505] via-[#050505]/95 to-[#050505]/90 backdrop-blur-xl border-b border-white/10 transition-transform duration-300 ease-out"
                 style={{
-                    height: `${headerHeight}px`,
-                    willChange: scrollY > 0 && scrollY < SCROLL_THRESHOLD ? 'height' : 'auto'
+                    transform: headerVisible ? 'translateY(0)' : 'translateY(-100%)',
                 }}
             >
-                <div className="max-w-7xl mx-auto px-4 h-full flex flex-col">
-                    {/* Top bar - always visible */}
-                    <div className="flex items-center justify-between py-4">
+                <div className="max-w-7xl mx-auto px-4 py-4">
+                    {/* Top bar */}
+                    <div className="flex items-center justify-between mb-4">
                         <button
                             onClick={() => router.back()}
                             className="flex items-center gap-2 text-white/60 hover:text-white transition-colors"
                         >
                             <ArrowLeft className="w-5 h-5" />
-                            <span style={{ opacity: expandedContentOpacity }}>Back</span>
+                            <span>Back</span>
                         </button>
 
                         <div className="flex items-center gap-3">
@@ -223,150 +229,49 @@ export default function MatchDetailPage() {
                         </div>
                     </div>
 
-                    {/* Expanded content - fades out on scroll */}
-                    <div
-                        className="flex-1 overflow-hidden"
-                        style={{ opacity: expandedContentOpacity, pointerEvents: scrollProgress > 0.5 ? 'none' : 'auto' }}
-                    >
-                        {/* Competition Info */}
-                        {match.competition && (
-                            <div className="flex items-center gap-3 mb-4">
-                                {match.competition.logo && (
-                                    <img
-                                        src={match.competition.logo}
-                                        alt={match.competition.name}
-                                        className="w-8 h-8 rounded-lg object-cover"
-                                    />
-                                )}
-                                <div>
-                                    <div className="font-semibold">{match.competition.name}</div>
-                                    <div className="text-sm text-white/60 flex items-center gap-2">
-                                        <MapPin className="w-3 h-3" />
-                                        {match.venue}
-                                    </div>
-                                </div>
+                    {/* Match Info - Always visible */}
+                    <div className="flex items-center justify-between gap-4">
+                        {/* Home Team */}
+                        <div className="flex items-center gap-3 flex-1">
+                            <img
+                                src={match.homeTeam.logo}
+                                alt={match.homeTeam.name}
+                                className="w-12 h-12 object-contain"
+                            />
+                            <div className="hidden sm:block">
+                                <div className="font-bold text-lg">{match.homeTeam.name}</div>
+                                <div className="text-sm text-white/60">{match.homeTeam.shortName}</div>
                             </div>
-                        )}
+                        </div>
 
-                        {/* Match Score - Expanded */}
-                        <div className="grid grid-cols-[1fr_auto_1fr] gap-6 items-center">
-                            {/* Home Team */}
+                        {/* Score */}
+                        <div className="text-center">
                             <div className="flex items-center gap-4">
-                                <div
-                                    className="w-16 h-16 rounded-2xl flex items-center justify-center"
-                                    style={{ backgroundColor: match.homeTeam.color + '20' }}
-                                >
-                                    {match.homeTeam.logo ? (
-                                        <img
-                                            src={match.homeTeam.logo}
-                                            alt={match.homeTeam.name}
-                                            className="w-14 h-14 object-contain"
-                                        />
-                                    ) : (
-                                        <span className="text-2xl font-bold">
-                                            {match.homeTeam.shortName.substring(0, 2)}
-                                        </span>
-                                    )}
-                                </div>
-                                <div className="flex-1">
-                                    <div className="font-bold text-xl">{match.homeTeam.name}</div>
-                                    <div className="text-white/60 text-sm">{match.homeTeam.shortName}</div>
-                                </div>
+                                <div className="text-4xl font-black">{match.homeScore}</div>
+                                <div className="text-2xl text-white/40">-</div>
+                                <div className="text-4xl font-black">{match.awayScore}</div>
                             </div>
+                            <div className="text-sm text-white/60 mt-1">
+                                {match.status === 'live' && match.minute ? `${match.minute}'` : match.status}
+                            </div>
+                        </div>
 
-                            {/* Score */}
-                            <div className="text-center px-8">
-                                <MatchStatusBadge status={match.status} className="mb-2" />
-                                <div className="flex items-center gap-4">
-                                    <motion.div
-                                        key={`home-${match.homeScore}`}
-                                        initial={{ scale: 1.3, color: '#10b981' }}
-                                        animate={{ scale: scoreScale, color: '#ffffff' }}
-                                        className="text-5xl font-bold"
-                                    >
-                                        {match.homeScore}
-                                    </motion.div>
-                                    <div className="text-2xl text-white/40">-</div>
-                                    <motion.div
-                                        key={`away-${match.awayScore}`}
-                                        initial={{ scale: 1.3, color: '#10b981' }}
-                                        animate={{ scale: scoreScale, color: '#ffffff' }}
-                                        className="text-5xl font-bold"
-                                    >
-                                        {match.awayScore}
-                                    </motion.div>
-                                </div>
+                        {/* Away Team */}
+                        <div className="flex items-center gap-3 flex-1 justify-end">
+                            <div className="hidden sm:block text-right">
+                                <div className="font-bold text-lg">{match.awayTeam.name}</div>
+                                <div className="text-sm text-white/60">{match.awayTeam.shortName}</div>
                             </div>
-
-                            {/* Away Team */}
-                            <div className="flex items-center gap-4 flex-row-reverse">
-                                <div
-                                    className="w-16 h-16 rounded-2xl flex items-center justify-center"
-                                    style={{ backgroundColor: match.awayTeam.color + '20' }}
-                                >
-                                    {match.awayTeam.logo ? (
-                                        <img
-                                            src={match.awayTeam.logo}
-                                            alt={match.awayTeam.name}
-                                            className="w-14 h-14 object-contain"
-                                        />
-                                    ) : (
-                                        <span className="text-2xl font-bold">
-                                            {match.awayTeam.shortName.substring(0, 2)}
-                                        </span>
-                                    )}
-                                </div>
-                                <div className="flex-1 text-right">
-                                    <div className="font-bold text-xl">{match.awayTeam.name}</div>
-                                    <div className="text-white/60 text-sm">{match.awayTeam.shortName}</div>
-                                </div>
-                            </div>
+                            <img
+                                src={match.awayTeam.logo}
+                                alt={match.awayTeam.name}
+                                className="w-12 h-12 object-contain"
+                            />
                         </div>
                     </div>
 
-                    {/* Collapsed content - fades in on scroll */}
-                    <div
-                        className="absolute top-0 left-0 right-0 h-[72px] flex items-center justify-between px-4 max-w-7xl mx-auto"
-                        style={{ opacity: collapsedContentOpacity, pointerEvents: scrollProgress < 0.5 ? 'none' : 'auto' }}
-                    >
-                        <button
-                            onClick={() => router.back()}
-                            className="flex items-center gap-2 text-white/60 hover:text-white transition-colors"
-                        >
-                            <ArrowLeft className="w-5 h-5" />
-                        </button>
-
-                        {/* Collapsed score display */}
-                        <div className="flex items-center gap-4">
-                            <div className="flex items-center gap-2">
-                                <img src={match.homeTeam.logo} alt={match.homeTeam.name} className="w-8 h-8 object-contain" />
-                                <span className="font-bold">{match.homeTeam.shortName}</span>
-                            </div>
-                            <div className="flex items-center gap-3 px-4 py-2 bg-white/5 rounded-lg">
-                                <span className="text-2xl font-bold">{match.homeScore}</span>
-                                <span className="text-white/40">-</span>
-                                <span className="text-2xl font-bold">{match.awayScore}</span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                                <span className="font-bold">{match.awayTeam.shortName}</span>
-                                <img src={match.awayTeam.logo} alt={match.awayTeam.name} className="w-8 h-8 object-contain" />
-                            </div>
-                        </div>
-
-                        <div className="flex items-center gap-3">
-                            <button
-                                onClick={() => setIsFavorited(!isFavorited)}
-                                className={`p-2 rounded-lg transition-colors ${isFavorited ? 'bg-red-500/20 text-red-500' : 'bg-white/5 text-white/60 hover:bg-white/10'
-                                    }`}
-                            >
-                                <Heart className={`w-5 h-5 ${isFavorited ? 'fill-current' : ''}`} />
-                            </button>
-                        </div>
-                    </div>
-
-                    {/* Tabs - always at bottom of header */}
-                    <div className="flex gap-2 border-t border-white/10 overflow-x-auto">
-                        {/* Overview Tab */}
+                    {/* Tabs */}
+                    <div className="flex gap-2 border-t border-white/10 overflow-x-auto mt-4">
                         <button
                             onClick={() => setActiveTab('overview')}
                             className={`px-6 py-3 font-medium transition-all relative whitespace-nowrap ${activeTab === 'overview'
