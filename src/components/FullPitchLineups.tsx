@@ -102,22 +102,65 @@ export function FullPitchLineups({
     const LINE_Y_RATIOS = isBasketball ? BASKETBALL_LINE_Y_RATIOS : FOOTBALL_LINE_Y_RATIOS;
     const allLines = isBasketball ? ['GUARD', 'FORWARD', 'CENTER'] : ['GK', 'DEF', 'DM', 'AM', 'FW'];
 
-    // Process lineup using formation-driven line geometry
-    const processLineup = (players: Record<string, Player>, lineup: any[], isHome: boolean) => {
-        const processed: ProcessedPlayer[] = [];
+    // Parse formation string to get expected player distribution
+    const parseFormation = (formation: string): Record<string, number> => {
+        if (isBasketball) {
+            // Basketball doesn't use formations the same way
+            return { 'GUARD': 2, 'FORWARD': 2, 'CENTER': 1 };
+        }
 
-        // 1. Process all players and assign to lines
+        // Football formation parsing (e.g., "4-4-2", "4-3-3", "3-5-2")
+        const parts = formation.split('-').map(n => parseInt(n, 10));
+        const formationMap: Record<string, number> = { 'GK': 1 };
+
+        if (parts.length >= 3) {
+            formationMap['DEF'] = parts[0]; // Defenders
+
+            // Handle formations with attacking midfielders (e.g., 4-2-3-1)
+            if (parts.length === 4) {
+                formationMap['DM'] = parts[1]; // Defensive/Central midfielders
+                formationMap['AM'] = parts[2]; // Attacking midfielders
+                formationMap['FW'] = parts[3]; // Forwards
+            } else if (parts.length === 3) {
+                // Standard 3-part formation (e.g., 4-4-2, 4-3-3)
+                const totalMidfielders = parts[1];
+                formationMap['FW'] = parts[2]; // Forwards
+
+                // Distribute midfielders between DM and AM based on common patterns
+                if (totalMidfielders >= 4) {
+                    formationMap['DM'] = Math.ceil(totalMidfielders / 2);
+                    formationMap['AM'] = Math.floor(totalMidfielders / 2);
+                } else {
+                    formationMap['DM'] = totalMidfielders;
+                }
+            }
+        }
+
+        return formationMap;
+    };
+
+    // Process lineup using formation-driven line geometry
+    const processLineup = (players: Record<string, Player>, lineup: any[], isHome: boolean, formation: string) => {
+        const processed: ProcessedPlayer[] = [];
+        const formationMap = parseFormation(formation);
+
+        // 1. Process all players and assign to lines based on their ACTUAL position
         lineup.forEach(entry => {
             const player = players[entry.playerId];
             if (!player) return;
+
+            // Use the position from the lineup entry (which should be position-aware)
+            const actualPosition = entry.position || player.position || 'MID';
+            const assignedLine = parsePositionToLine(actualPosition, sport);
+
             processed.push({
                 player,
-                rating: entry.rating || 0, // No fake ratings - use 0 if not available
-                position: entry.position || player.position,
-                line: parsePositionToLine(entry.position || player.position || '', sport),
+                rating: entry.rating || 0,
+                position: actualPosition,
+                line: assignedLine,
                 isCaptain: !!entry.isCaptain,
                 isMotM: !!entry.isMotM,
-                isStarter: entry.isStarter !== false // Default to true if not specified
+                isStarter: entry.isStarter !== false
             });
         });
 
@@ -140,16 +183,31 @@ export function FullPitchLineups({
             const yRatio = LINE_Y_RATIOS[lineName];
             const top = isHome ? `${yRatio}%` : `${100 - yRatio}%`;
 
-            // DEBUG: Log Y positions to verify strict line geometry
-            console.log(`[${isHome ? 'HOME' : 'AWAY'}] Line: ${lineName}, Y: ${top}, Players: ${linePlayers.length}`);
-
             // Calculate horizontal distribution (PERCENTAGES)
             const pitchWidth = 100;
             const usableWidth = pitchWidth * 0.8;
             const startX = (pitchWidth - usableWidth) / 2;
             const playersInLine = linePlayers.length;
 
-            return linePlayers.map((p, index) => {
+            // Sort players by position for better visual distribution
+            // GK: center, DEF: LB, CB, CB, RB, MID: LM, CM, CM, RM, FW: LW, ST, RW
+            const sortedPlayers = [...linePlayers].sort((a, b) => {
+                const posA = a.position.toLowerCase();
+                const posB = b.position.toLowerCase();
+
+                // Left positions come first
+                if (posA.includes('l') && !posB.includes('l')) return -1;
+                if (!posA.includes('l') && posB.includes('l')) return 1;
+
+                // Right positions come last
+                if (posA.includes('r') && !posB.includes('r')) return 1;
+                if (!posA.includes('r') && posB.includes('r')) return -1;
+
+                // Center positions in the middle
+                return 0;
+            });
+
+            return sortedPlayers.map((p, index) => {
                 // Mathematical horizontal distribution
                 const left = playersInLine === 1
                     ? '50%'
@@ -176,8 +234,8 @@ export function FullPitchLineups({
         return { starterNodes, substitutes };
     };
 
-    const homeResult = processLineup(homePlayers, homeLineup, true);
-    const awayResult = processLineup(awayPlayers, awayLineup, false);
+    const homeResult = processLineup(homePlayers, homeLineup, true, homeTeam.formation || '4-4-2');
+    const awayResult = processLineup(awayPlayers, awayLineup, false, awayTeam.formation || '4-4-2');
 
     return (
         <div className="w-full space-y-4 md:space-y-6">

@@ -819,12 +819,14 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
                     homeTeam={{
                       name: homeTeam?.name || 'Home',
                       logo: homeTeam?.logo || '',
-                      color: homeTeam?.color || '#3B82F6'
+                      color: homeTeam?.color || '#3B82F6',
+                      formation: (match.lineups?.home as any)?.formation || '4-4-2'
                     }}
                     awayTeam={{
                       name: awayTeam?.name || 'Away',
                       logo: awayTeam?.logo || '',
-                      color: awayTeam?.color || '#EF4444'
+                      color: awayTeam?.color || '#EF4444',
+                      formation: (match.lineups?.away as any)?.formation || '4-4-2'
                     }}
                     homePlayers={players}
                     awayPlayers={players}
