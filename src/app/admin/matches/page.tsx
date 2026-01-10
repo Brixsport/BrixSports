@@ -482,7 +482,7 @@ function AdminMatchesPageContent() {
                             <h2 className="text-2xl font-bold">Create New Match</h2>
                         </div>
                         <form onSubmit={handleSubmit} className="p-6 space-y-6">
-                            <div className="grid grid-cols-2 gap-4">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div>
                                     <label className="block text-sm font-semibold mb-2">Sport</label>
                                     <select
@@ -511,7 +511,7 @@ function AdminMatchesPageContent() {
                                 </div>
                             </div>
 
-                            <div className="grid grid-cols-2 gap-4">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div>
                                     <label className="block text-sm font-semibold mb-2">Home Team</label>
                                     <select
@@ -651,7 +651,7 @@ function AdminMatchesPageContent() {
                             <p className="text-sm text-white/60 mt-1">{getTeamName(editingMatch.homeTeamId)} vs {getTeamName(editingMatch.awayTeamId)}</p>
                         </div>
                         <form onSubmit={handleUpdate} className="p-6 space-y-6">
-                            <div className="grid grid-cols-2 gap-4">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div>
                                     <label className="block text-sm font-semibold mb-2">Sport</label>
                                     <select
@@ -680,7 +680,7 @@ function AdminMatchesPageContent() {
                                 </div>
                             </div>
 
-                            <div className="grid grid-cols-2 gap-4">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div>
                                     <label className="block text-sm font-semibold mb-2">Home Team</label>
                                     <select

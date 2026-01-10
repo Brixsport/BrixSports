@@ -506,7 +506,7 @@ export default function Home() {
 
           {/* Date Filter - SofaScore Style */}
           <div className="mb-6 bg-[#0a0a0a] border border-white/10 rounded-lg px-4 py-3">
-            <div className="flex items-center justify-between gap-4">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4">
               {/* Left side - Title */}
               <div className="flex items-center gap-3">
                 <Calendar size={18} className="text-primary" />
@@ -514,7 +514,7 @@ export default function Home() {
               </div>
 
               {/* Right side - Date Navigation */}
-              <div className="flex items-center gap-2 bg-white/5 rounded-lg p-1">
+              <div className="flex items-center gap-2 bg-white/5 rounded-lg p-1 w-full sm:w-auto">
                 <button
                   onClick={() => setSelectedDate(selectedDate ? addDays(selectedDate, -1) : addDays(new Date(), -1))}
                   className="p-2 hover:bg-white/10 rounded transition-colors"
@@ -522,7 +522,7 @@ export default function Home() {
                 >
                   <ChevronLeft size={18} className="text-white/60" />
                 </button>
-                <div className="px-4 text-sm font-semibold text-white min-w-[120px] text-center">
+                <div className="px-3 sm:px-4 text-xs sm:text-sm font-semibold text-white min-w-[100px] sm:min-w-[120px] text-center">
                   {selectedDate ? format(selectedDate, 'MMM d, yyyy') : format(new Date(), 'MMM d, yyyy')}
                 </div>
                 <button
