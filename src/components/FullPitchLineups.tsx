@@ -180,24 +180,31 @@ export function FullPitchLineups({
     const awayResult = processLineup(awayPlayers, awayLineup, false);
 
     return (
-        <div className="w-full space-y-3 sm:space-y-4">
-            {/* Team Headers - Mobile Responsive */}
-            <div className="flex items-center justify-between px-2 sm:px-4">
-                <div className="flex items-center gap-2 sm:gap-3">
-                    <img src={homeTeam.logo} alt={homeTeam.name} className="w-6 h-6 sm:w-8 sm:h-8 object-contain" />
-                    <span className="font-bold text-sm sm:text-lg truncate max-w-[100px] sm:max-w-none">{homeTeam.name}</span>
+        <div className="w-full space-y-6">
+            {/* Team Headers */}
+            <div className="flex items-center justify-between px-4">
+                <div className="flex items-center gap-3">
+                    <img src={homeTeam.logo} alt={homeTeam.name} className="w-10 h-10 object-contain" />
+                    <div>
+                        <span className="font-bold text-lg">{homeTeam.name}</span>
+                        <div className="text-sm text-white/60">{homeTeam.formation || '4-4-2'}</div>
+                    </div>
                 </div>
-                <div className="flex items-center gap-2 sm:gap-3">
-                    <span className="font-bold text-sm sm:text-lg truncate max-w-[100px] sm:max-w-none">{awayTeam.name}</span>
-                    <img src={awayTeam.logo} alt={awayTeam.name} className="w-6 h-6 sm:w-8 sm:h-8 object-contain" />
+                <div className="flex items-center gap-3">
+                    <div className="text-right">
+                        <span className="font-bold text-lg">{awayTeam.name}</span>
+                        <div className="text-sm text-white/60">{awayTeam.formation || '4-4-2'}</div>
+                    </div>
+                    <img src={awayTeam.logo} alt={awayTeam.name} className="w-10 h-10 object-contain" />
                 </div>
             </div>
 
-            {/* Playing Surface - Responsive aspect ratio */}
-            <div className={`relative w-full ${isBasketball ? 'aspect-[9/14]' : 'aspect-[9/16]'} bg-gradient-to-b ${isBasketball
+            {/* Playing Surface - FIFA Standard 68:105 aspect ratio (width:height) */}
+            {/* This creates a tall, scrollable pitch similar to SofaScore/FotMob */}
+            <div className={`relative w-full ${isBasketball ? 'aspect-[9/14]' : 'aspect-[68/105]'} bg-gradient-to-b ${isBasketball
                 ? 'from-orange-900/30 via-orange-800/30 to-orange-900/30'
                 : 'from-green-900/40 via-green-800/40 to-green-900/40'
-                } rounded-xl sm:rounded-2xl overflow-hidden border border-white/10`}>
+                } rounded-2xl overflow-hidden border border-white/10 shadow-2xl`}>
                 {/* Surface markings */}
                 {isBasketball ? <BasketballCourtMarkings /> : <FootballPitchMarkings />}
 
@@ -212,17 +219,17 @@ export function FullPitchLineups({
                 </div>
             </div>
 
-            {/* Bench - Horizontal List Below - Mobile Responsive */}
+            {/* Bench - Horizontal List Below */}
             {(homeResult.substitutes.length > 0 || awayResult.substitutes.length > 0) && (
-                <div className="space-y-3 sm:space-y-4 px-2 sm:px-4">
+                <div className="space-y-4 px-4">
                     {/* Home Bench */}
                     {homeResult.substitutes.length > 0 && (
                         <div>
-                            <div className="flex items-center gap-2 mb-2 sm:mb-3">
-                                <img src={homeTeam.logo} alt={homeTeam.name} className="w-4 h-4 sm:w-5 sm:h-5 object-contain" />
-                                <span className="text-xs sm:text-sm font-semibold text-white/60">Substitutes</span>
+                            <div className="flex items-center gap-2 mb-3">
+                                <img src={homeTeam.logo} alt={homeTeam.name} className="w-5 h-5 object-contain" />
+                                <span className="text-sm font-semibold text-white/60">Substitutes</span>
                             </div>
-                            <div className="flex gap-2 sm:gap-3 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
+                            <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
                                 {homeResult.substitutes.map((sub) => (
                                     <BenchPlayer
                                         key={sub.player.id}
@@ -240,11 +247,11 @@ export function FullPitchLineups({
                     {/* Away Bench */}
                     {awayResult.substitutes.length > 0 && (
                         <div>
-                            <div className="flex items-center gap-2 mb-2 sm:mb-3">
-                                <img src={awayTeam.logo} alt={awayTeam.name} className="w-4 h-4 sm:w-5 sm:h-5 object-contain" />
-                                <span className="text-xs sm:text-sm font-semibold text-white/60">Substitutes</span>
+                            <div className="flex items-center gap-2 mb-3">
+                                <img src={awayTeam.logo} alt={awayTeam.name} className="w-5 h-5 object-contain" />
+                                <span className="text-sm font-semibold text-white/60">Substitutes</span>
                             </div>
-                            <div className="flex gap-2 sm:gap-3 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
+                            <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
                                 {awayResult.substitutes.map((sub) => (
                                     <BenchPlayer
                                         key={sub.player.id}
@@ -264,19 +271,57 @@ export function FullPitchLineups({
     );
 }
 
-// Football Pitch Markings Component
+// Football Pitch Markings Component - Enhanced for larger display
 function FootballPitchMarkings() {
     return (
-        <div className="absolute inset-0 opacity-20">
-            <div className="absolute top-0 left-1/2 -translate-x-1/2 w-1/4 h-6 sm:h-8 border border-white/40 sm:border-2 border-t-0 rounded-b-lg"></div>
-            <div className="absolute top-0 left-1/2 -translate-x-1/2 w-2/3 h-16 sm:h-20 border border-white/40 sm:border-2 border-t-0"></div>
-            <div className="absolute top-0 left-1/2 -translate-x-1/2 w-1/3 h-10 sm:h-12 border border-white/40 sm:border-2 border-t-0"></div>
-            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-24 h-24 sm:w-32 sm:h-32 border border-white/40 sm:border-2 rounded-full"></div>
-            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-1.5 h-1.5 sm:w-2 sm:h-2 bg-white/40 rounded-full"></div>
-            <div className="absolute top-1/2 left-0 right-0 h-0.5 bg-white/40"></div>
-            <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-2/3 h-16 sm:h-20 border border-white/40 sm:border-2 border-b-0"></div>
-            <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-1/3 h-10 sm:h-12 border border-white/40 sm:border-2 border-b-0"></div>
-            <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-1/4 h-6 sm:h-8 border border-white/40 sm:border-2 border-b-0 rounded-t-lg"></div>
+        <div className="absolute inset-0 opacity-25">
+            {/* Outer boundary */}
+            <div className="absolute inset-2 border-2 border-white/60 rounded-sm"></div>
+
+            {/* Top penalty area */}
+            <div className="absolute top-2 left-1/2 -translate-x-1/2 w-2/3 h-[16%] border-2 border-white/60 border-t-0"></div>
+
+            {/* Top goal area */}
+            <div className="absolute top-2 left-1/2 -translate-x-1/2 w-1/3 h-[8%] border-2 border-white/60 border-t-0"></div>
+
+            {/* Top goal box */}
+            <div className="absolute top-2 left-1/2 -translate-x-1/2 w-1/5 h-[4%] border-2 border-white/60 border-t-0 rounded-b-md bg-white/5"></div>
+
+            {/* Top penalty spot */}
+            <div className="absolute top-[12%] left-1/2 -translate-x-1/2 w-2 h-2 bg-white/60 rounded-full"></div>
+
+            {/* Top penalty arc */}
+            <div className="absolute top-[16%] left-1/2 -translate-x-1/2 w-24 h-12 border-2 border-white/60 border-t-0 border-l-0 border-r-0 rounded-b-full"></div>
+
+            {/* Center line */}
+            <div className="absolute top-1/2 left-2 right-2 h-0.5 bg-white/60"></div>
+
+            {/* Center circle */}
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-32 h-32 border-2 border-white/60 rounded-full"></div>
+
+            {/* Center spot */}
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-2 h-2 bg-white/60 rounded-full"></div>
+
+            {/* Bottom penalty area */}
+            <div className="absolute bottom-2 left-1/2 -translate-x-1/2 w-2/3 h-[16%] border-2 border-white/60 border-b-0"></div>
+
+            {/* Bottom goal area */}
+            <div className="absolute bottom-2 left-1/2 -translate-x-1/2 w-1/3 h-[8%] border-2 border-white/60 border-b-0"></div>
+
+            {/* Bottom goal box */}
+            <div className="absolute bottom-2 left-1/2 -translate-x-1/2 w-1/5 h-[4%] border-2 border-white/60 border-b-0 rounded-t-md bg-white/5"></div>
+
+            {/* Bottom penalty spot */}
+            <div className="absolute bottom-[12%] left-1/2 -translate-x-1/2 w-2 h-2 bg-white/60 rounded-full"></div>
+
+            {/* Bottom penalty arc */}
+            <div className="absolute bottom-[16%] left-1/2 -translate-x-1/2 w-24 h-12 border-2 border-white/60 border-b-0 border-l-0 border-r-0 rounded-t-full"></div>
+
+            {/* Corner arcs */}
+            <div className="absolute top-2 left-2 w-8 h-8 border-2 border-white/60 border-t-0 border-l-0 rounded-br-full"></div>
+            <div className="absolute top-2 right-2 w-8 h-8 border-2 border-white/60 border-t-0 border-r-0 rounded-bl-full"></div>
+            <div className="absolute bottom-2 left-2 w-8 h-8 border-2 border-white/60 border-b-0 border-l-0 rounded-tr-full"></div>
+            <div className="absolute bottom-2 right-2 w-8 h-8 border-2 border-white/60 border-b-0 border-r-0 rounded-tl-full"></div>
         </div>
     );
 }

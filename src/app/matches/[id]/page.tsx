@@ -1,8 +1,8 @@
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { motion, AnimatePresence, useScroll, useTransform } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useWebSocket, useMatchEvents } from '@/hooks/useWebSocket';
 import {
     ArrowLeft, Clock, MapPin, Users, TrendingUp, Eye,
@@ -33,7 +33,6 @@ export default function MatchDetailPage() {
     const params = useParams();
     const router = useRouter();
     const matchId = params.id as string;
-    const scrollContainerRef = useRef<HTMLDivElement>(null);
 
     const [matchData, setMatchData] = useState<MatchData | null>(null);
     const [loading, setLoading] = useState(true);
@@ -52,20 +51,15 @@ export default function MatchDetailPage() {
         const handleScroll = () => {
             if (!ticking) {
                 window.requestAnimationFrame(() => {
-                    if (scrollContainerRef.current) {
-                        setScrollY(scrollContainerRef.current.scrollTop);
-                    }
+                    setScrollY(window.scrollY);
                     ticking = false;
                 });
                 ticking = true;
             }
         };
 
-        const container = scrollContainerRef.current;
-        if (container) {
-            container.addEventListener('scroll', handleScroll, { passive: true });
-            return () => container.removeEventListener('scroll', handleScroll);
-        }
+        window.addEventListener('scroll', handleScroll, { passive: true });
+        return () => window.removeEventListener('scroll', handleScroll);
     }, []);
 
     // Calculate header animation values based on scroll
@@ -187,7 +181,7 @@ export default function MatchDetailPage() {
     }, [isUpcoming]);
 
     return (
-        <div className="min-h-screen bg-[#050505] text-white flex flex-col">
+        <div className="min-h-screen bg-[#050505] text-white">
             {/* Collapsing Header - Optimized for smooth scrolling */}
             <div
                 className="sticky top-0 z-50 bg-[#050505]/95 backdrop-blur-xl border-b border-white/10"
@@ -501,192 +495,187 @@ export default function MatchDetailPage() {
                 </div>
             </div>
 
-            {/* Scrollable Content */}
-            <div
-                ref={scrollContainerRef}
-                className="flex-1 overflow-y-auto"
-            >
-                <div className="max-w-7xl mx-auto px-4 py-8">
-                    <AnimatePresence mode="wait">
-                        {activeTab === 'overview' && (
-                            <motion.div
-                                key="overview"
-                                initial={{ opacity: 0, y: 20 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                exit={{ opacity: 0, y: -20 }}
-                            >
-                                {/* Livestream Embedded View */}
-                                {match.livestreamEnabled && match.livestreamUrl ? (
-                                    <div className="space-y-6">
-                                        <LivestreamView
-                                            match={match}
-                                            livestream={{
-                                                livestreamUrl: match.livestreamUrl,
-                                                livestreamType: match.livestreamType,
-                                                livestreamEnabled: match.livestreamEnabled,
-                                                livestreamViewers: match.viewersCount,
-                                                livestreamChatEnabled: match.livestreamChatEnabled,
-                                                isActive: match.status === 'LIVE'
-                                            }}
-                                        />
-                                    </div>
-                                ) : (
-                                    <div className="bg-white/5 border border-white/10 rounded-[24px] p-8">
-                                        <div className="text-center">
-                                            <Eye className="w-16 h-16 mx-auto mb-4 text-white/20" />
-                                            <h3 className="text-xl font-bold mb-2">Match Overview</h3>
-                                            <p className="text-white/60 mb-6">
-                                                {isLive ? 'Match is currently live!' : isUpcoming ? 'Match starts soon' : 'Match has ended'}
-                                            </p>
-                                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-8">
-                                                <div className="bg-white/5 rounded-xl p-4">
-                                                    <div className="text-sm text-white/40 mb-1">Venue</div>
-                                                    <div className="font-bold">{match.venue}</div>
-                                                </div>
-                                                <div className="bg-white/5 rounded-xl p-4">
-                                                    <div className="text-sm text-white/40 mb-1">Competition</div>
-                                                    <div className="font-bold">{match.competition}</div>
-                                                </div>
-                                                <div className="bg-white/5 rounded-xl p-4">
-                                                    <div className="text-sm text-white/40 mb-1">Status</div>
-                                                    <div className="font-bold capitalize">{match.status.replace('_', ' ')}</div>
-                                                </div>
+            {/* Content - Now naturally scrollable with the page */}
+            <div className="max-w-7xl mx-auto px-4 py-8">
+                <AnimatePresence mode="wait">
+                    {activeTab === 'overview' && (
+                        <motion.div
+                            key="overview"
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: -20 }}
+                        >
+                            {/* Livestream Embedded View */}
+                            {match.livestreamEnabled && match.livestreamUrl ? (
+                                <div className="space-y-6">
+                                    <LivestreamView
+                                        match={match}
+                                        livestream={{
+                                            livestreamUrl: match.livestreamUrl,
+                                            livestreamType: match.livestreamType,
+                                            livestreamEnabled: match.livestreamEnabled,
+                                            livestreamViewers: match.viewersCount,
+                                            livestreamChatEnabled: match.livestreamChatEnabled,
+                                            isActive: match.status === 'LIVE'
+                                        }}
+                                    />
+                                </div>
+                            ) : (
+                                <div className="bg-white/5 border border-white/10 rounded-[24px] p-8">
+                                    <div className="text-center">
+                                        <Eye className="w-16 h-16 mx-auto mb-4 text-white/20" />
+                                        <h3 className="text-xl font-bold mb-2">Match Overview</h3>
+                                        <p className="text-white/60 mb-6">
+                                            {isLive ? 'Match is currently live!' : isUpcoming ? 'Match starts soon' : 'Match has ended'}
+                                        </p>
+                                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-8">
+                                            <div className="bg-white/5 rounded-xl p-4">
+                                                <div className="text-sm text-white/40 mb-1">Venue</div>
+                                                <div className="font-bold">{match.venue}</div>
+                                            </div>
+                                            <div className="bg-white/5 rounded-xl p-4">
+                                                <div className="text-sm text-white/40 mb-1">Competition</div>
+                                                <div className="font-bold">{match.competition}</div>
+                                            </div>
+                                            <div className="bg-white/5 rounded-xl p-4">
+                                                <div className="text-sm text-white/40 mb-1">Status</div>
+                                                <div className="font-bold capitalize">{match.status.replace('_', ' ')}</div>
                                             </div>
                                         </div>
                                     </div>
-                                )}
-                            </motion.div>
-                        )}
+                                </div>
+                            )}
+                        </motion.div>
+                    )}
 
-                        {activeTab === 'timeline' && (
-                            <motion.div
-                                key="timeline"
-                                initial={{ opacity: 0, y: 20 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                exit={{ opacity: 0, y: -20 }}
-                            >
-                                <LiveMatchTimeline
-                                    events={events}
-                                    homeTeam={match.homeTeam}
-                                    awayTeam={match.awayTeam}
-                                    eyePoints={eyePoints}
-                                    sport={match.sport}
-                                />
-                            </motion.div>
-                        )}
+                    {activeTab === 'timeline' && (
+                        <motion.div
+                            key="timeline"
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: -20 }}
+                        >
+                            <LiveMatchTimeline
+                                events={events}
+                                homeTeam={match.homeTeam}
+                                awayTeam={match.awayTeam}
+                                eyePoints={eyePoints}
+                                sport={match.sport}
+                            />
+                        </motion.div>
+                    )}
 
-                        {activeTab === 'stats' && (
-                            <motion.div
-                                key="stats"
-                                initial={{ opacity: 0, y: 20 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                exit={{ opacity: 0, y: -20 }}
-                            >
-                                {match.stats && Object.keys(match.stats).length > 0 ? (
-                                    <LiveStats
-                                        stats={match.stats}
-                                        sport={match.sport}
-                                        homeTeam={match.homeTeam}
-                                        awayTeam={match.awayTeam}
-                                    />
-                                ) : (
-                                    <div className="bg-white/5 border border-white/10 rounded-[24px] p-12 text-center">
-                                        <BarChart3 className="w-16 h-16 mx-auto mb-4 text-white/20" />
-                                        <h3 className="text-xl font-bold mb-2">Match Statistics Unavailable</h3>
-                                        <p className="text-white/60">
-                                            Statistics will be available once the match starts and events are logged.
-                                        </p>
-                                    </div>
-                                )}
-                            </motion.div>
-                        )}
-
-                        {activeTab === 'lineups' && (
-                            <motion.div
-                                key="lineups"
-                                initial={{ opacity: 0, y: 20 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                exit={{ opacity: 0, y: -20 }}
-                            >
-                                <MatchLineups
-                                    lineups={match.lineups}
+                    {activeTab === 'stats' && (
+                        <motion.div
+                            key="stats"
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: -20 }}
+                        >
+                            {match.stats && Object.keys(match.stats).length > 0 ? (
+                                <LiveStats
+                                    stats={match.stats}
                                     sport={match.sport}
                                     homeTeam={match.homeTeam}
                                     awayTeam={match.awayTeam}
                                 />
-                            </motion.div>
-                        )}
+                            ) : (
+                                <div className="bg-white/5 border border-white/10 rounded-[24px] p-12 text-center">
+                                    <BarChart3 className="w-16 h-16 mx-auto mb-4 text-white/20" />
+                                    <h3 className="text-xl font-bold mb-2">Match Statistics Unavailable</h3>
+                                    <p className="text-white/60">
+                                        Statistics will be available once the match starts and events are logged.
+                                    </p>
+                                </div>
+                            )}
+                        </motion.div>
+                    )}
 
-                        {activeTab === 'h2h' && (
-                            <motion.div
-                                key="h2h"
-                                initial={{ opacity: 0, y: 20 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                exit={{ opacity: 0, y: -20 }}
-                            >
-                                {h2hData ? (
-                                    <HeadToHeadComparison
-                                        data={{
-                                            team1: h2hData.team1,
-                                            team2: h2hData.team2,
-                                            headToHead: h2hData.headToHead,
-                                            recentMatches: h2hData.recentMatches,
-                                        }}
-                                        showRecentMatches={true}
-                                    />
-                                ) : (
-                                    <div className="bg-white/5 border border-white/10 rounded-[24px] p-12 text-center">
-                                        <Trophy className="w-16 h-16 mx-auto mb-4 text-white/20" />
-                                        <h3 className="text-xl font-bold mb-2">Head-to-Head Data Unavailable</h3>
-                                        <p className="text-white/60">
-                                            No historical data available for these teams yet.
-                                        </p>
-                                    </div>
-                                )}
-                            </motion.div>
-                        )}
+                    {activeTab === 'lineups' && (
+                        <motion.div
+                            key="lineups"
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: -20 }}
+                        >
+                            <MatchLineups
+                                lineups={match.lineups}
+                                sport={match.sport}
+                                homeTeam={match.homeTeam}
+                                awayTeam={match.awayTeam}
+                            />
+                        </motion.div>
+                    )}
 
-                        {activeTab === 'polls' && (
-                            <motion.div
-                                key="polls"
-                                initial={{ opacity: 0, y: 20 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                exit={{ opacity: 0, y: -20 }}
-                            >
-                                <MatchPoll matchId={matchId} />
-                            </motion.div>
-                        )}
-
-                        {activeTab === 'predictions' && match.status === 'UPCOMING' && (
-                            <motion.div
-                                key="predictions"
-                                initial={{ opacity: 0, y: 20 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                exit={{ opacity: 0, y: -20 }}
-                                className="grid grid-cols-1 lg:grid-cols-2 gap-6"
-                            >
-                                <MatchPredictionCard
-                                    match={{
-                                        id: match.id,
-                                        homeTeam: match.homeTeam,
-                                        awayTeam: match.awayTeam,
-                                        startTime: match.startTime,
-                                        competition: match.competition,
-                                        sport: match.sport,
+                    {activeTab === 'h2h' && (
+                        <motion.div
+                            key="h2h"
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: -20 }}
+                        >
+                            {h2hData ? (
+                                <HeadToHeadComparison
+                                    data={{
+                                        team1: h2hData.team1,
+                                        team2: h2hData.team2,
+                                        headToHead: h2hData.headToHead,
+                                        recentMatches: h2hData.recentMatches,
                                     }}
+                                    showRecentMatches={true}
                                 />
-                                <MatchVotePoll
-                                    match={{
-                                        id: match.id,
-                                        homeTeam: match.homeTeam,
-                                        awayTeam: match.awayTeam,
-                                        startTime: match.startTime,
-                                    }}
-                                />
-                            </motion.div>
-                        )}
-                    </AnimatePresence>
-                </div>
+                            ) : (
+                                <div className="bg-white/5 border border-white/10 rounded-[24px] p-12 text-center">
+                                    <Trophy className="w-16 h-16 mx-auto mb-4 text-white/20" />
+                                    <h3 className="text-xl font-bold mb-2">Head-to-Head Data Unavailable</h3>
+                                    <p className="text-white/60">
+                                        No historical data available for these teams yet.
+                                    </p>
+                                </div>
+                            )}
+                        </motion.div>
+                    )}
+
+                    {activeTab === 'polls' && (
+                        <motion.div
+                            key="polls"
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: -20 }}
+                        >
+                            <MatchPoll matchId={matchId} />
+                        </motion.div>
+                    )}
+
+                    {activeTab === 'predictions' && match.status === 'UPCOMING' && (
+                        <motion.div
+                            key="predictions"
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: -20 }}
+                            className="grid grid-cols-1 lg:grid-cols-2 gap-6"
+                        >
+                            <MatchPredictionCard
+                                match={{
+                                    id: match.id,
+                                    homeTeam: match.homeTeam,
+                                    awayTeam: match.awayTeam,
+                                    startTime: match.startTime,
+                                    competition: match.competition,
+                                    sport: match.sport,
+                                }}
+                            />
+                            <MatchVotePoll
+                                match={{
+                                    id: match.id,
+                                    homeTeam: match.homeTeam,
+                                    awayTeam: match.awayTeam,
+                                    startTime: match.startTime,
+                                }}
+                            />
+                        </motion.div>
+                    )}
+                </AnimatePresence>
             </div>
         </div>
     );

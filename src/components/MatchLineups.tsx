@@ -1,7 +1,8 @@
 'use client';
 
 import { motion } from 'framer-motion';
-import { Users, Shield, Target, TrendingUp, Star } from 'lucide-react';
+import { Users, Shield, Target, TrendingUp, Star, ArrowRightLeft } from 'lucide-react';
+import { FullPitchLineups } from './FullPitchLineups';
 
 interface MatchLineupsProps {
     lineups: any;
@@ -21,193 +22,263 @@ export default function MatchLineups({ lineups, sport, homeTeam, awayTeam }: Mat
         );
     }
 
-    const PlayerCard = ({ player, teamColor }: any) => (
-        <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="p-4 bg-white/5 backdrop-blur-sm rounded-xl border border-white/10 hover:border-white/20 transition-all"
-        >
-            <div className="flex items-center gap-3">
-                {/* Jersey Number */}
-                <div
-                    className="w-12 h-12 rounded-lg flex items-center justify-center font-bold text-lg relative"
-                    style={{ backgroundColor: teamColor + '30' }}
-                >
-                    {player.number}
-                    {player.isStarter && (
-                        <div className="absolute -top-1 -right-1 w-3 h-3 bg-blue-500 rounded-full border-2 border-[#050505]" title="Starter" />
-                    )}
-                </div>
+    // Convert lineup data to the format expected by FullPitchLineups
+    const homePlayers: Record<string, any> = {};
+    const awayPlayers: Record<string, any> = {};
+    const homeLineupArray: any[] = [];
+    const awayLineupArray: any[] = [];
 
-                {/* Player Info */}
-                <div className="flex-1">
-                    <div className="flex items-center gap-2">
-                        <div className="font-semibold">{player.jerseyName || player.name}</div>
-                        {player.isStarter && (
-                            <span className="text-xs px-2 py-0.5 bg-blue-500/20 text-blue-400 rounded-full">
-                                Starter
-                            </span>
-                        )}
-                    </div>
-                    <div className="text-sm text-white/60">{player.position}</div>
-                </div>
+    // Process home team
+    if (lineups.home && Array.isArray(lineups.home)) {
+        lineups.home.forEach((player: any, index: number) => {
+            const playerId = player.id || `home-${index}`;
+            homePlayers[playerId] = {
+                id: playerId,
+                name: player.name || 'Unknown',
+                jerseyName: player.jerseyName || player.name?.split(' ').pop() || 'Unknown',
+                number: player.number || index + 1,
+                position: player.position || 'MID',
+            };
+            homeLineupArray.push({
+                playerId,
+                rating: player.rating || 0,
+                position: player.position || 'MID',
+                isCaptain: player.isCaptain || false,
+                isStarter: player.isStarter !== false, // Default to true
+            });
+        });
+    }
 
-                {/* Rating */}
-                {player.rating && (
-                    <div className="text-right">
-                        <div className="flex items-center gap-1">
-                            <Star className="w-4 h-4 text-yellow-500 fill-current" />
-                            <span className="font-bold text-lg">{player.rating.toFixed(1)}</span>
-                        </div>
-                        <div className="text-xs text-white/60">Rating</div>
-                    </div>
-                )}
-            </div>
+    // Process away team
+    if (lineups.away && Array.isArray(lineups.away)) {
+        lineups.away.forEach((player: any, index: number) => {
+            const playerId = player.id || `away-${index}`;
+            awayPlayers[playerId] = {
+                id: playerId,
+                name: player.name || 'Unknown',
+                jerseyName: player.jerseyName || player.name?.split(' ').pop() || 'Unknown',
+                number: player.number || index + 1,
+                position: player.position || 'MID',
+            };
+            awayLineupArray.push({
+                playerId,
+                rating: player.rating || 0,
+                position: player.position || 'MID',
+                isCaptain: player.isCaptain || false,
+                isStarter: player.isStarter !== false,
+            });
+        });
+    }
 
-            {/* Player Stats (if available) */}
-            {player.stats && (
-                <div className="mt-3 pt-3 border-t border-white/10">
-                    <div className="grid grid-cols-5 gap-3 text-xs">
-                        <div className="text-center">
-                            <div className="font-bold text-2xl text-blue-500">{player.stats.points || 0}</div>
-                            <div className="text-white/60 text-[10px]">PTS</div>
-                        </div>
-                        <div className="text-center">
-                            <div className="font-bold text-lg text-green-500">{player.stats.rebounds || 0}</div>
-                            <div className="text-white/60 text-[10px]">REB</div>
-                        </div>
-                        <div className="text-center">
-                            <div className="font-bold text-lg text-purple-500">{player.stats.assists || 0}</div>
-                            <div className="text-white/60 text-[10px]">AST</div>
-                        </div>
-                        <div className="text-center">
-                            <div className="font-bold text-lg text-yellow-500">{player.stats.steals || 0}</div>
-                            <div className="text-white/60 text-[10px]">STL</div>
-                        </div>
-                        <div className="text-center">
-                            <div className="font-bold text-lg text-red-500">{player.stats.blocks || 0}</div>
-                            <div className="text-white/60 text-[10px]">BLK</div>
-                        </div>
-                    </div>
-                </div>
-            )}
-        </motion.div>
-    );
+    // Get substitutes for both teams
+    const homeSubstitutes = lineups.home?.filter((p: any) => p.isStarter === false) || [];
+    const awaySubstitutes = lineups.away?.filter((p: any) => p.isStarter === false) || [];
 
-    const TeamLineup = ({ team, players, teamColor }: any) => {
-        // Group players by position for football
-        const groupedPlayers = sport === 'Football' ? {
-            'Goalkeeper': players.filter((p: any) => ['GK', 'gk'].includes(p.position)),
-            'Defenders': players.filter((p: any) => ['CB', 'LB', 'RB', 'LWB', 'RWB', 'lb', 'lcb', 'cb', 'rcb', 'rb', 'lwb', 'rwb'].includes(p.position)),
-            'Midfielders': players.filter((p: any) => ['CM', 'CDM', 'CAM', 'LM', 'RM', 'cdm', 'lcdm', 'rcdm', 'lm', 'lcm', 'cm', 'rcm', 'rm', 'lam', 'cam', 'ram'].includes(p.position)),
-            'Forwards': players.filter((p: any) => ['ST', 'CF', 'LW', 'RW', 'lw', 'rw', 'st', 'lst', 'rst'].includes(p.position)),
-        } : null;
-
-        return (
-            <div>
-                {/* Team Header */}
-                <div className="flex items-center gap-3 mb-6 pb-4 border-b border-white/10">
-                    <div
-                        className="w-14 h-14 rounded-xl flex items-center justify-center"
-                        style={{ backgroundColor: teamColor + '20' }}
-                    >
-                        {team.logo ? (
-                            <img src={team.logo} alt={team.name} className="w-12 h-12 object-contain" />
-                        ) : (
-                            <span className="text-2xl font-bold">{team.shortName.substring(0, 2)}</span>
-                        )}
-                    </div>
-                    <div>
-                        <div className="font-bold text-xl">{team.name}</div>
-                        <div className="text-white/60">{players.length} players</div>
-                    </div>
-                </div>
-
-                {/* Players */}
-                {sport === 'Football' && groupedPlayers ? (
-                    <div className="space-y-6">
-                        {Object.entries(groupedPlayers).map(([position, posPlayers]: [string, any]) => (
-                            posPlayers.length > 0 && (
-                                <div key={position}>
-                                    <div className="text-sm font-semibold text-white/60 mb-3 flex items-center gap-2">
-                                        {position === 'Goalkeeper' && <Shield className="w-4 h-4" />}
-                                        {position === 'Defenders' && <Shield className="w-4 h-4" />}
-                                        {position === 'Midfielders' && <TrendingUp className="w-4 h-4" />}
-                                        {position === 'Forwards' && <Target className="w-4 h-4" />}
-                                        {position}
-                                    </div>
-                                    <div className="space-y-2">
-                                        {posPlayers.map((player: any, index: number) => (
-                                            <PlayerCard key={index} player={player} teamColor={teamColor} />
-                                        ))}
-                                    </div>
-                                </div>
-                            )
-                        ))}
-                    </div>
-                ) : sport === 'Basketball' ? (
-                    <div className="space-y-6">
-                        {/* Starters */}
-                        {players.filter((p: any) => p.isStarter).length > 0 && (
-                            <div>
-                                <div className="text-sm font-semibold text-white/60 mb-3 flex items-center gap-2">
-                                    <Users className="w-4 h-4" />
-                                    Starting Five
-                                </div>
-                                <div className="space-y-2">
-                                    {players.filter((p: any) => p.isStarter).map((player: any, index: number) => (
-                                        <PlayerCard key={index} player={player} teamColor={teamColor} />
-                                    ))}
-                                </div>
-                            </div>
-                        )}
-
-                        {/* Substitutes */}
-                        {players.filter((p: any) => !p.isStarter).length > 0 && (
-                            <div>
-                                <div className="text-sm font-semibold text-white/60 mb-3 flex items-center gap-2">
-                                    <Users className="w-4 h-4" />
-                                    Bench
-                                </div>
-                                <div className="space-y-2">
-                                    {players.filter((p: any) => !p.isStarter).map((player: any, index: number) => (
-                                        <PlayerCard key={index} player={player} teamColor={teamColor} />
-                                    ))}
-                                </div>
-                            </div>
-                        )}
-                    </div>
-                ) : (
-                    <div className="space-y-2">
-                        {players.map((player: any, index: number) => (
-                            <PlayerCard key={index} player={player} teamColor={teamColor} />
-                        ))}
-                    </div>
-                )}
-            </div>
-        );
-    };
+    // Get substitutions if available
+    const substitutions = lineups.substitutions || [];
 
     return (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            {/* Home Team */}
-            {lineups.home && lineups.home.length > 0 && (
-                <TeamLineup
-                    team={homeTeam}
-                    players={lineups.home}
-                    teamColor={homeTeam.color}
+        <div className="space-y-8">
+            {/* Full Pitch View - Large and Scrollable */}
+            <div className="w-full">
+                <FullPitchLineups
+                    homeTeam={{
+                        name: homeTeam.name,
+                        logo: homeTeam.logo,
+                        color: homeTeam.color,
+                        formation: lineups.homeFormation || '4-4-2',
+                    }}
+                    awayTeam={{
+                        name: awayTeam.name,
+                        logo: awayTeam.logo,
+                        color: awayTeam.color,
+                        formation: lineups.awayFormation || '4-4-2',
+                    }}
+                    homePlayers={homePlayers}
+                    awayPlayers={awayPlayers}
+                    homeLineup={homeLineupArray}
+                    awayLineup={awayLineupArray}
+                    onPlayerClick={(player) => {
+                        // Handle player click - could open a modal with player stats
+                        console.log('Player clicked:', player);
+                    }}
+                    sport={sport}
                 />
+            </div>
+
+            {/* Substitutions Section - List Below */}
+            {substitutions.length > 0 && (
+                <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="bg-white/5 border border-white/10 rounded-2xl p-6"
+                >
+                    <div className="flex items-center gap-3 mb-6">
+                        <div className="w-10 h-10 rounded-xl bg-blue-500/20 flex items-center justify-center">
+                            <ArrowRightLeft className="w-5 h-5 text-blue-400" />
+                        </div>
+                        <div>
+                            <h3 className="text-lg font-bold">Substitutions</h3>
+                            <p className="text-sm text-white/60">{substitutions.length} changes made</p>
+                        </div>
+                    </div>
+
+                    <div className="space-y-3">
+                        {substitutions.map((sub: any, index: number) => (
+                            <SubstitutionCard
+                                key={index}
+                                substitution={sub}
+                                homeTeam={homeTeam}
+                                awayTeam={awayTeam}
+                            />
+                        ))}
+                    </div>
+                </motion.div>
             )}
 
-            {/* Away Team */}
-            {lineups.away && lineups.away.length > 0 && (
-                <TeamLineup
-                    team={awayTeam}
-                    players={lineups.away}
-                    teamColor={awayTeam.color}
-                />
+            {/* Bench Players - If no substitutions recorded yet */}
+            {substitutions.length === 0 && (homeSubstitutes.length > 0 || awaySubstitutes.length > 0) && (
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    {/* Home Bench */}
+                    {homeSubstitutes.length > 0 && (
+                        <motion.div
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            className="bg-white/5 border border-white/10 rounded-2xl p-6"
+                        >
+                            <div className="flex items-center gap-3 mb-4">
+                                <img src={homeTeam.logo} alt={homeTeam.name} className="w-8 h-8 object-contain" />
+                                <div>
+                                    <h3 className="font-bold">{homeTeam.name}</h3>
+                                    <p className="text-sm text-white/60">Substitutes</p>
+                                </div>
+                            </div>
+                            <div className="space-y-2">
+                                {homeSubstitutes.map((player: any, index: number) => (
+                                    <PlayerCard key={index} player={player} teamColor={homeTeam.color} />
+                                ))}
+                            </div>
+                        </motion.div>
+                    )}
+
+                    {/* Away Bench */}
+                    {awaySubstitutes.length > 0 && (
+                        <motion.div
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: 0.1 }}
+                            className="bg-white/5 border border-white/10 rounded-2xl p-6"
+                        >
+                            <div className="flex items-center gap-3 mb-4">
+                                <img src={awayTeam.logo} alt={awayTeam.name} className="w-8 h-8 object-contain" />
+                                <div>
+                                    <h3 className="font-bold">{awayTeam.name}</h3>
+                                    <p className="text-sm text-white/60">Substitutes</p>
+                                </div>
+                            </div>
+                            <div className="space-y-2">
+                                {awaySubstitutes.map((player: any, index: number) => (
+                                    <PlayerCard key={index} player={player} teamColor={awayTeam.color} />
+                                ))}
+                            </div>
+                        </motion.div>
+                    )}
+                </div>
             )}
         </div>
     );
 }
 
+// Player Card Component for Substitutes
+const PlayerCard = ({ player, teamColor }: any) => (
+    <div className="p-3 bg-white/5 backdrop-blur-sm rounded-xl border border-white/10 hover:border-white/20 transition-all">
+        <div className="flex items-center gap-3">
+            {/* Jersey Number */}
+            <div
+                className="w-10 h-10 rounded-lg flex items-center justify-center font-bold text-sm"
+                style={{ backgroundColor: teamColor + '30' }}
+            >
+                {player.number}
+            </div>
+
+            {/* Player Info */}
+            <div className="flex-1">
+                <div className="font-semibold">{player.jerseyName || player.name}</div>
+                <div className="text-sm text-white/60">{player.position}</div>
+            </div>
+
+            {/* Rating */}
+            {player.rating && player.rating > 0 && (
+                <div className="text-right">
+                    <div className="flex items-center gap-1">
+                        <Star className="w-4 h-4 text-yellow-500 fill-current" />
+                        <span className="font-bold">{player.rating.toFixed(1)}</span>
+                    </div>
+                </div>
+            )}
+        </div>
+    </div>
+);
+
+// Substitution Card Component
+const SubstitutionCard = ({ substitution, homeTeam, awayTeam }: any) => {
+    const team = substitution.team === 'home' ? homeTeam : awayTeam;
+    const teamColor = team.color;
+
+    return (
+        <div className="bg-white/5 border border-white/10 rounded-xl p-4 hover:bg-white/10 transition-all">
+            <div className="flex items-center gap-4">
+                {/* Team Logo */}
+                <img src={team.logo} alt={team.name} className="w-8 h-8 object-contain" />
+
+                {/* Substitution Details */}
+                <div className="flex-1 flex items-center gap-4">
+                    {/* Player Out */}
+                    <div className="flex items-center gap-2 flex-1">
+                        <div
+                            className="w-8 h-8 rounded-lg flex items-center justify-center font-bold text-xs"
+                            style={{ backgroundColor: teamColor + '30' }}
+                        >
+                            {substitution.playerOut?.number || '?'}
+                        </div>
+                        <div className="flex-1">
+                            <div className="text-sm font-semibold text-red-400">
+                                {substitution.playerOut?.name || 'Unknown'}
+                            </div>
+                            <div className="text-xs text-white/60">OUT</div>
+                        </div>
+                    </div>
+
+                    {/* Arrow */}
+                    <ArrowRightLeft className="w-5 h-5 text-white/40 flex-shrink-0" />
+
+                    {/* Player In */}
+                    <div className="flex items-center gap-2 flex-1">
+                        <div
+                            className="w-8 h-8 rounded-lg flex items-center justify-center font-bold text-xs"
+                            style={{ backgroundColor: teamColor + '30' }}
+                        >
+                            {substitution.playerIn?.number || '?'}
+                        </div>
+                        <div className="flex-1">
+                            <div className="text-sm font-semibold text-green-400">
+                                {substitution.playerIn?.name || 'Unknown'}
+                            </div>
+                            <div className="text-xs text-white/60">IN</div>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Time */}
+                {substitution.minute && (
+                    <div className="text-right">
+                        <div className="text-sm font-bold text-white/80">{substitution.minute}'</div>
+                        <div className="text-xs text-white/60">
+                            {substitution.half === 2 ? '2nd Half' : '1st Half'}
+                        </div>
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+};
