@@ -57,12 +57,13 @@ export function UpdatePrompt() {
                     initial={{ y: 100, opacity: 0 }}
                     animate={{ y: 0, opacity: 1 }}
                     exit={{ y: 100, opacity: 0 }}
-                    className="fixed bottom-20 left-4 right-4 md:left-auto md:right-4 md:w-96 z-50"
+                    className="fixed bottom-20 left-4 right-4 md:left-auto md:right-4 md:w-96 z-[100] pointer-events-auto"
                 >
-                    <div className="bg-gradient-to-br from-blue-500/20 via-blue-500/10 to-transparent border border-blue-500/30 rounded-3xl p-6 backdrop-blur-xl shadow-2xl shadow-blue-500/20">
+                    <div className="bg-gradient-to-br from-blue-500/20 via-blue-500/10 to-transparent border border-blue-500/30 rounded-3xl p-6 backdrop-blur-xl shadow-2xl shadow-blue-500/20 pointer-events-auto">
                         <button
                             onClick={handleDismiss}
-                            className="absolute top-4 right-4 text-white/40 hover:text-white transition-colors"
+                            className="absolute top-4 right-4 text-white/40 hover:text-white transition-colors cursor-pointer z-10"
+                            type="button"
                         >
                             <X size={20} />
                         </button>
@@ -84,14 +85,16 @@ export function UpdatePrompt() {
                         <div className="flex gap-3">
                             <button
                                 onClick={handleUpdate}
-                                className="flex-1 bg-blue-500 text-white font-black uppercase tracking-widest text-xs py-3 px-4 rounded-xl hover:scale-105 transition-transform active:scale-95 shadow-lg shadow-blue-500/30 flex items-center justify-center gap-2"
+                                type="button"
+                                className="flex-1 bg-blue-500 text-white font-black uppercase tracking-widest text-xs py-3 px-4 rounded-xl hover:scale-105 transition-transform active:scale-95 shadow-lg shadow-blue-500/30 flex items-center justify-center gap-2 cursor-pointer"
                             >
                                 <RefreshCw size={16} />
                                 Update Now
                             </button>
                             <button
                                 onClick={handleDismiss}
-                                className="px-4 py-3 text-white/60 hover:text-white text-xs font-bold uppercase tracking-widest transition-colors"
+                                type="button"
+                                className="px-4 py-3 text-white/60 hover:text-white text-xs font-bold uppercase tracking-widest transition-colors cursor-pointer"
                             >
                                 Later
                             </button>
