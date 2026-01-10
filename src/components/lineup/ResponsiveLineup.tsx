@@ -216,7 +216,7 @@ function BenchSection({
     );
 }
 
-// Mobile View - Stacked Vertical
+// Mobile View - Full Pitch Vertical
 function MobileLineupView({
     homeTeam,
     awayTeam,
@@ -230,56 +230,142 @@ function MobileLineupView({
     onPlayerClick,
     screenSize
 }: ResponsiveLineupProps & { onPlayerClick: (player: Player) => void; screenSize: any }) {
+    const homePositions = getFormationPositions(homeTeam.formation);
+    const awayPositions = getFormationPositions(awayTeam.formation);
+
     return (
         <div className="space-y-6">
-            {/* Away Team - Compact Pitch */}
-            <div className="relative bg-[#2d5016] rounded-xl overflow-hidden" style={{ height: 'calc(var(--vh, 1vh) * 45)' }}>
-                <MobilePitchHalf
-                    team={awayTeam}
-                    players={awayPlayers}
-                    lineup={awayLineup}
-                    events={events}
-                    isTop={true}
-                    onPlayerClick={onPlayerClick}
-                    screenSize={screenSize}
-                />
-            </div>
-            <BenchSection
-                team={awayTeam}
-                players={awayPlayers}
-                subs={awaySubs}
-                events={events} // Pass events
-                onPlayerClick={onPlayerClick}
-            />
+            {/* Full Pitch Container */}
+            <div className="relative bg-[#2d5016] rounded-xl overflow-hidden shadow-2xl border border-white/10" style={{ height: '82vh', minHeight: '600px' }}>
+                {/* Pitch Markings */}
+                <div className="absolute inset-0 pointer-events-none">
+                    {/* Grass Pattern */}
+                    <div className="absolute inset-0 opacity-20"
+                        style={{
+                            backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 49px, rgba(0,0,0,0.1) 50px, rgba(0,0,0,0.1) 99px)'
+                        }}
+                    />
 
-            {/* Score/Match Info Strip */}
-            <div className="bg-white/5 rounded-xl p-4 text-center border border-white/10">
-                <div className="flex items-center justify-between">
-                    <span className="font-bold text-lg text-white">{homeTeam.formation || '4-3-3'}</span>
-                    <span className="text-white/40">VS</span>
-                    <span className="font-bold text-lg text-white">{awayTeam.formation || '4-3-3'}</span>
+                    {/* Outer Border */}
+                    <div className="absolute inset-2 border-2 border-white/20 rounded-lg" />
+
+                    {/* Center line */}
+                    <div className="absolute top-1/2 left-2 right-2 h-0.5 bg-white/20" />
+
+                    {/* Center circle */}
+                    <div className="absolute top-1/2 left-1/2 w-20 h-20 border-2 border-white/20 rounded-full transform -translate-x-1/2 -translate-y-1/2" />
+
+                    {/* Center dot */}
+                    <div className="absolute top-1/2 left-1/2 w-1.5 h-1.5 bg-white/40 rounded-full transform -translate-x-1/2 -translate-y-1/2" />
+
+                    {/* Home (Bottom) Penalty box */}
+                    <div className="absolute bottom-2 left-[20%] right-[20%] h-[15%] border-2 border-white/20 border-b-0" />
+                    <div className="absolute bottom-2 left-[38%] right-[38%] h-[6%] border-2 border-white/20 border-b-0" />
+                    {/* Home Penalty Arc */}
+                    <div className="absolute bottom-[17%] left-1/2 w-16 h-8 border-2 border-t-2 border-b-0 border-white/20 rounded-t-full transform -translate-x-1/2" />
+
+                    {/* Away (Top) Penalty box */}
+                    <div className="absolute top-2 left-[20%] right-[20%] h-[15%] border-2 border-white/20 border-t-0" />
+                    <div className="absolute top-2 left-[38%] right-[38%] h-[6%] border-2 border-white/20 border-t-0" />
+                    {/* Away Penalty Arc */}
+                    <div className="absolute top-[17%] left-1/2 w-16 h-8 border-2 border-b-2 border-t-0 border-white/20 rounded-b-full transform -translate-x-1/2" />
+
+                    {/* Corner Arcs */}
+                    <div className="absolute top-2 left-2 w-4 h-4 border-r-2 border-b-2 border-white/20 rounded-br-full" />
+                    <div className="absolute top-2 right-2 w-4 h-4 border-l-2 border-b-2 border-white/20 rounded-bl-full" />
+                    <div className="absolute bottom-2 left-2 w-4 h-4 border-r-2 border-t-2 border-white/20 rounded-tr-full" />
+                    <div className="absolute bottom-2 right-2 w-4 h-4 border-l-2 border-t-2 border-white/20 rounded-tl-full" />
                 </div>
+
+                {/* Team Labels */}
+                <div className="absolute top-4 left-4 z-10 flex items-center gap-2">
+                    <img src={awayTeam.logo} alt={awayTeam.name} className="w-6 h-6 object-contain" />
+                    <span className="text-white/80 font-bold text-xs shadow-black drop-shadow-md">{awayTeam.name}</span>
+                </div>
+                <div className="absolute bottom-4 left-4 z-10 flex items-center gap-2">
+                    <img src={homeTeam.logo} alt={homeTeam.name} className="w-6 h-6 object-contain" />
+                    <span className="text-white/80 font-bold text-xs shadow-black drop-shadow-md">{homeTeam.name}</span>
+                </div>
+
+                {/* Away Team Players (Top) */}
+                {awayLineup.slice(0, 11).map((lineupPlayer, index) => {
+                    const player = awayPlayers[lineupPlayer.playerId];
+                    if (!player) return null;
+
+                    const position = awayPositions[index] || { top: 50, left: 50 };
+                    // Scale: 30(FWD)->45%, 90(GK)->5%
+                    const adjustedTop = 45 - (position.top - 30) * 0.66;
+                    const adjustedLeft = 100 - position.left; // Mirror horizontally
+
+                    const subOutEvent = events.find(e =>
+                        e.type === 'Substitution' &&
+                        e.playerId === player.id
+                    );
+
+                    return (
+                        <ResponsivePlayerCard
+                            key={player.id}
+                            player={player}
+                            position={{ top: adjustedTop, left: adjustedLeft }}
+                            rating={lineupPlayer.rating}
+                            isCaptain={lineupPlayer.isCaptain}
+                            isMotM={lineupPlayer.isMotM}
+                            subInfo={subOutEvent ? { type: 'out', minute: subOutEvent.minute } : undefined}
+                            teamColor={awayTeam.color}
+                            screenSize={screenSize}
+                            onClick={onPlayerClick}
+                        />
+                    );
+                })}
+
+                {/* Home Team Players (Bottom) */}
+                {homeLineup.slice(0, 11).map((lineupPlayer, index) => {
+                    const player = homePlayers[lineupPlayer.playerId];
+                    if (!player) return null;
+
+                    const position = homePositions[index] || { top: 50, left: 50 };
+                    // Scale: 30(FWD)->55%, 90(GK)->95%
+                    const adjustedTop = 55 + (position.top - 30) * 0.66;
+
+                    const subOutEvent = events.find(e =>
+                        e.type === 'Substitution' &&
+                        e.playerId === player.id
+                    );
+
+                    return (
+                        <ResponsivePlayerCard
+                            key={player.id}
+                            player={player}
+                            position={{ top: adjustedTop, left: position.left }}
+                            rating={lineupPlayer.rating}
+                            isCaptain={lineupPlayer.isCaptain}
+                            isMotM={lineupPlayer.isMotM}
+                            subInfo={subOutEvent ? { type: 'out', minute: subOutEvent.minute } : undefined}
+                            teamColor={homeTeam.color}
+                            screenSize={screenSize}
+                            onClick={onPlayerClick}
+                        />
+                    );
+                })}
             </div>
 
-            {/* Home Team - Compact Pitch */}
-            <div className="relative bg-[#2d5016] rounded-xl overflow-hidden" style={{ height: 'calc(var(--vh, 1vh) * 45)' }}>
-                <MobilePitchHalf
+            {/* Benches */}
+            <div className="space-y-4">
+                <BenchSection
                     team={homeTeam}
                     players={homePlayers}
-                    lineup={homeLineup}
+                    subs={homeSubs}
                     events={events}
-                    isTop={false}
                     onPlayerClick={onPlayerClick}
-                    screenSize={screenSize}
+                />
+                <BenchSection
+                    team={awayTeam}
+                    players={awayPlayers}
+                    subs={awaySubs}
+                    events={events}
+                    onPlayerClick={onPlayerClick}
                 />
             </div>
-            <BenchSection
-                team={homeTeam}
-                players={homePlayers}
-                subs={homeSubs}
-                events={events} // Pass events
-                onPlayerClick={onPlayerClick}
-            />
         </div>
     );
 }

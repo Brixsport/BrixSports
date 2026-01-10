@@ -28,6 +28,12 @@ export function BottomNav() {
     const navItems: NavItem[] = [
 
         {
+            id: 'fixtures',
+            label: 'Fixtures',
+            icon: Calendar,
+            path: '/',
+        },
+        {
             id: 'competitions',
             label: 'Competitions',
             icon: Trophy,

@@ -463,13 +463,36 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
 
   // Format match status text
   const getStatusText = () => {
-    if (match.status === 'LIVE') {
-      return `${matchTime.minute}'${matchTime.extraTime > 0 ? ` +${matchTime.extraTime}` : ''}`;
-    }
     if (match.status === 'FINISHED') return 'Full Time';
+
+    if (match.status === 'LIVE') {
+      const { minute, extraTime, half } = matchTime;
+
+      // If minute is 45 and half is 1, it might be HT, but we can't be sure without status.
+      // However, usually we can show the half.
+
+      let timeStr = `${minute}'`;
+      if (extraTime > 0) timeStr += `+${extraTime}`;
+
+      let halfStr = '';
+      if (half === 1) halfStr = '1H';
+      else if (half === 2) halfStr = '2H';
+      else if (half === 3) halfStr = 'ET';
+      else if (half === 4) halfStr = 'Pen';
+
+      // Attempt to detect HT based on time/half (heuristic)
+      // Ideally this comes from status='HT'
+      if (minute === 45 && half === 1 && extraTime > 0) {
+        // Keeping it as 1H for now unless we add HT status validation
+      }
+
+      return halfStr ? `${timeStr} • ${halfStr}` : timeStr;
+    }
+
     if (match.status === 'UPCOMING') {
       return new Date(match.startTime).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
     }
+
     return match.status;
   };
 
@@ -482,115 +505,127 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
     >
       <div className="flex flex-col min-h-full" onClick={(e) => e.stopPropagation()}>
         {/* Header */}
-        <div className={`sticky top-0 z-10 bg-[#0a0a0a] border-b border-white/10 transition-all duration-300 ${isScrolled ? 'py-3' : 'py-4'}`}>
+        <div className={`sticky top-0 z-10 bg-[#0a0a0a]/95 backdrop-blur-xl border-b border-white/10 transition-all duration-300 ${isScrolled ? 'py-2' : 'pt-6 pb-0'}`}>
           <div className="max-w-5xl mx-auto px-4">
             {/* Top Bar */}
-            <div className="flex items-center justify-between mb-3">
-              {/* Left: Close Button */}
-              <button onClick={onClose} className="p-2 hover:bg-white/5 rounded-lg transition-colors">
-                <X size={20} />
+            <div className={`flex items-center justify-between ${isScrolled ? 'mb-2' : 'mb-6'}`}>
+              <button
+                onClick={onClose}
+                className="w-8 h-8 flex items-center justify-center hover:bg-white/10 rounded-full transition-colors"
+              >
+                <X size={18} className="text-white/80" />
               </button>
 
-              {/* Center: Competition Name */}
-              <span className="text-xs font-semibold text-white/60 uppercase tracking-wide">
+              <span className="text-[10px] font-bold tracking-[0.2em] text-white/40 uppercase">
                 {match.competition}
               </span>
 
-              {/* Right: Share Button */}
-              <button className="p-2 hover:bg-white/5 rounded-lg transition-colors">
-                <Share2 size={20} className="text-white/60" />
+              <button className="w-8 h-8 flex items-center justify-center hover:bg-white/10 rounded-full transition-colors">
+                <Share2 size={18} className="text-white/80" />
               </button>
             </div>
 
-            {/* Score Display - Horizontal Layout */}
+            {/* Main Score Area */}
             {!isScrolled && (
-              <div className="flex items-center justify-center gap-8 mb-3">
+              <div className="flex items-center justify-between gap-2 sm:gap-8 mb-6">
                 {/* Home Team */}
-                <div className="flex items-center gap-3 flex-1 justify-end">
-                  <div className="text-right">
-                    <h3 className="font-semibold text-base truncate">{homeTeam?.name}</h3>
+                <div className="flex items-center gap-3 sm:gap-4 flex-1 justify-end min-w-0">
+                  <div className="flex flex-col items-end min-w-0">
+                    <h3 className="font-bold text-sm sm:text-xl text-white leading-tight text-right truncate w-full">
+                      {homeTeam?.name}
+                    </h3>
                     <button
                       onClick={(e) => { e.stopPropagation(); if (homeTeam) toggleTeam(homeTeam.id); }}
-                      className="text-xs text-white/60 hover:text-primary transition-colors flex items-center gap-1 ml-auto"
+                      className="text-xs text-white/40 hover:text-primary transition-colors flex items-center gap-1 mt-1"
                     >
                       <Heart size={12} fill={isFavoriteTeam(homeTeam?.id || '') ? "currentColor" : "none"} />
-                      {isFavoriteTeam(homeTeam?.id || '') ? 'Following' : 'Follow'}
+                      <span className="hidden sm:inline">{isFavoriteTeam(homeTeam?.id || '') ? 'Following' : 'Follow'}</span>
                     </button>
                   </div>
-                  <div className="w-10 h-10 relative rounded-lg overflow-hidden bg-white/5 flex-shrink-0">
+                  <div className="w-10 h-10 sm:w-16 sm:h-16 relative rounded-full overflow-hidden bg-white/5 border border-white/10 flex-shrink-0 shadow-lg shadow-black/50">
                     {isValidImagePath(homeTeam?.logo) && homeTeam && (
-                      <Image src={homeTeam.logo} alt={homeTeam.name} fill className="object-cover" />
+                      <Image src={homeTeam.logo} alt={homeTeam.name} fill className="object-cover p-1" />
                     )}
                   </div>
                 </div>
 
-                {/* Score */}
-                <div className="flex flex-col items-center gap-2">
-                  <div className="flex items-center gap-3">
-                    <span className={`text-3xl font-bold tabular-nums ${match.homeScore > match.awayScore ? 'text-white' : 'text-white/40'}`}>
+                {/* Score Center */}
+                <div className="flex flex-col items-center px-2 sm:px-6 relative z-10">
+                  <div className="flex items-center gap-2 sm:gap-4 bg-white/5 px-4 py-2 sm:px-6 sm:py-3 rounded-xl border border-white/10 shadow-inner backdrop-blur-sm">
+                    <span className={`text-2xl sm:text-5xl font-black tabular-nums tracking-tighter ${match.homeScore > match.awayScore ? 'text-white' : 'text-white/60'}`}>
                       {match.homeScore}
                     </span>
-                    <span className="text-xl text-white/20">-</span>
-                    <span className={`text-3xl font-bold tabular-nums ${match.awayScore > match.homeScore ? 'text-white' : 'text-white/40'}`}>
+                    <span className="text-white/20 text-xl sm:text-3xl font-light">:</span>
+                    <span className={`text-2xl sm:text-5xl font-black tabular-nums tracking-tighter ${match.awayScore > match.homeScore ? 'text-white' : 'text-white/60'}`}>
                       {match.awayScore}
                     </span>
                   </div>
-                  <div className={`text-xs font-semibold ${match.status === 'LIVE' ? 'text-primary' : 'text-white/60'}`}>
-                    {getStatusText()}
+
+                  {/* Status Pill */}
+                  <div className="mt-[-10px] bg-[#0a0a0a] px-3 py-1 rounded-full border border-white/10 flex items-center gap-1.5 shadow-sm">
+                    {match.status === 'LIVE' && <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse shadow-[0_0_8px_rgba(239,68,68,0.6)]" />}
+                    <span className={`text-[10px] sm:text-xs font-bold uppercase tracking-wider ${match.status === 'LIVE' ? 'text-red-500' : 'text-white/60'}`}>
+                      {getStatusText()}
+                    </span>
                   </div>
                 </div>
 
                 {/* Away Team */}
-                <div className="flex items-center gap-3 flex-1">
-                  <div className="w-10 h-10 relative rounded-lg overflow-hidden bg-white/5 flex-shrink-0">
+                <div className="flex items-center gap-3 sm:gap-4 flex-1 justify-start min-w-0">
+                  <div className="w-10 h-10 sm:w-16 sm:h-16 relative rounded-full overflow-hidden bg-white/5 border border-white/10 flex-shrink-0 shadow-lg shadow-black/50">
                     {isValidImagePath(awayTeam?.logo) && awayTeam && (
-                      <Image src={awayTeam.logo} alt={awayTeam.name} fill className="object-cover" />
+                      <Image src={awayTeam.logo} alt={awayTeam.name} fill className="object-cover p-1" />
                     )}
                   </div>
-                  <div className="text-left">
-                    <h3 className="font-semibold text-base truncate">{awayTeam?.name}</h3>
+                  <div className="flex flex-col items-start min-w-0">
+                    <h3 className="font-bold text-sm sm:text-xl text-white leading-tight text-left truncate w-full">
+                      {awayTeam?.name}
+                    </h3>
                     <button
                       onClick={(e) => { e.stopPropagation(); if (awayTeam) toggleTeam(awayTeam.id); }}
-                      className="text-xs text-white/60 hover:text-primary transition-colors flex items-center gap-1"
+                      className="text-xs text-white/40 hover:text-primary transition-colors flex items-center gap-1 mt-1"
                     >
                       <Heart size={12} fill={isFavoriteTeam(awayTeam?.id || '') ? "currentColor" : "none"} />
-                      {isFavoriteTeam(awayTeam?.id || '') ? 'Following' : 'Follow'}
+                      <span className="hidden sm:inline">{isFavoriteTeam(awayTeam?.id || '') ? 'Following' : 'Follow'}</span>
                     </button>
                   </div>
                 </div>
               </div>
             )}
 
-            {/* Match Info Bar - Only when not scrolled */}
+            {/* Metadata Row */}
             {!isScrolled && (
-              <div className="flex items-center justify-center gap-3 text-xs text-white/40 pt-3 border-t border-white/5">
-                <div className="flex items-center gap-1">
+              <div className="flex items-center justify-center gap-4 text-[10px] sm:text-xs text-white/40 mb-6 font-medium tracking-wide">
+                <div className="flex items-center gap-1.5">
                   <Users size={12} />
                   <span>{viewerCount} watching</span>
                 </div>
-                <span>•</span>
-                <div className="flex items-center gap-1">
+                <div className="w-1 h-1 bg-white/20 rounded-full" />
+                <div className="flex items-center gap-1.5">
                   <MapPin size={12} />
                   <span>{match.venue}</span>
                 </div>
-                <span>•</span>
-                <div className="flex items-center gap-1">
+                <div className="w-1 h-1 bg-white/20 rounded-full" />
+                <div className="flex items-center gap-1.5">
                   <Calendar size={12} />
                   <span>{new Date(match.startTime).toLocaleDateString()}</span>
                 </div>
               </div>
             )}
 
-            {/* Navigation Tabs */}
-            <div className="flex gap-1 overflow-x-auto scrollbar-hide mt-4 -mb-px">
+            {/* Tabs */}
+            <div className="flex gap-6 overflow-x-auto scrollbar-hide border-b border-white/5 pb-0.5">
               {tabs.map((tab) => (
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
-                  className="relative flex items-center gap-2 px-4 py-3 text-sm font-semibold whitespace-nowrap transition-colors flex-shrink-0"
+                  className="relative flex items-center gap-2 pb-3 text-sm font-semibold whitespace-nowrap transition-all flex-shrink-0 group"
                 >
-                  <tab.icon size={16} className={activeTab === tab.id ? 'text-white' : 'text-white/60'} />
-                  <span className={activeTab === tab.id ? 'text-white' : 'text-white/60 hover:text-white/80'}>
+                  <tab.icon
+                    size={16}
+                    className={`transition-colors ${activeTab === tab.id ? 'text-primary' : 'text-white/40 group-hover:text-white/60'}`}
+                  />
+                  <span className={`transition-colors ${activeTab === tab.id ? 'text-white' : 'text-white/40 group-hover:text-white/60'}`}>
                     {tab.label}
                   </span>
 
@@ -598,7 +633,7 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
                   {activeTab === tab.id && (
                     <motion.div
                       layoutId="activeTab"
-                      className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary"
+                      className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary shadow-[0_0_10px_rgba(var(--primary-rgb),0.5)]"
                       transition={{ type: "spring", stiffness: 380, damping: 30 }}
                     />
                   )}
