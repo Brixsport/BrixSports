@@ -821,13 +821,19 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
                 {match.stats?.fouls && <StatRow label="Fouls" values={match.stats.fouls} showBar={false} />}
                 {match.stats?.yellowCards && <StatRow label="Yellow Cards" values={match.stats.yellowCards} showBar={false} />}
                 {match.stats?.redCards && <StatRow label="Red Cards" values={match.stats.redCards} showBar={false} />}
+                {match.stats?.offsides && <StatRow label="Offsides" values={match.stats.offsides} showBar={false} />}
+                {match.stats?.freeKicks && <StatRow label="Free Kicks" values={match.stats.freeKicks} showBar={false} />}
 
                 {(!match.stats || (
                   !match.stats.possession &&
                   !match.stats.shots &&
                   !match.stats.shotsOnTarget &&
                   !match.stats.corners &&
-                  !match.stats.fouls
+                  !match.stats.fouls &&
+                  !match.stats.yellowCards &&
+                  !match.stats.redCards &&
+                  !match.stats.offsides &&
+                  !match.stats.freeKicks
                 )) && (
                     <div className="py-12 text-center">
                       <BarChart3 className="mx-auto mb-3 text-white/20" size={48} />
@@ -845,50 +851,52 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -20 }}
-                className="space-y-4"
+                className="relative py-4 px-4"
               >
+                {/* Central Line */}
+                <div className="absolute left-[50%] top-6 bottom-6 w-px bg-white/10 -translate-x-1/2" />
+
                 {match.events && match.events.length > 0 ? (
-                  match.events.map((event) => {
-                    const isHomeTeam = event.teamId === match.homeTeamId;
-                    const eventColor =
-                      event.type === 'Goal' ? 'bg-primary' :
-                        event.type === 'Yellow Card' ? 'bg-yellow-500' :
-                          event.type === 'Red Card' ? 'bg-red-500' :
-                            'bg-white/40';
+                  <div className="space-y-8 relative">
+                    {[...match.events].reverse().map((event, index) => {
+                      const isHomeTeam = event.teamId === match.homeTeamId;
+                      const isGoal = event.type === 'Goal';
+                      const isSub = event.type === 'Substitution';
+                      const isCard = event.type.includes('Card');
 
-                    return (
-                      <div key={event.id} className={`flex items-center gap-3 ${isHomeTeam ? '' : 'flex-row-reverse'}`}>
-                        {/* Team Side Content */}
-                        <div className={`flex-1 flex items-center gap-2 ${isHomeTeam ? '' : 'flex-row-reverse'}`}>
-                          <div className="w-7 h-7 relative rounded overflow-hidden bg-white/5 flex-shrink-0">
-                            {event.teamId && (
-                              <Image
-                                src={event.teamId === match.homeTeamId ? homeTeam?.logo || '' : awayTeam?.logo || ''}
-                                alt="Team"
-                                fill
-                                className="object-cover"
-                              />
-                            )}
+                      return (
+                        <div key={event.id || index} className={`flex items-center w-full ${isHomeTeam ? 'flex-row' : 'flex-row-reverse'}`}>
+
+                          {/* Event Content Card */}
+                          <div className={`w-[calc(50%-2rem)] ${isHomeTeam ? 'pr-4 text-right' : 'pl-4 text-left'}`}>
+                            <div className="flex flex-col gap-1">
+                              <div className={`flex items-center gap-2 ${isHomeTeam ? 'justify-end' : 'justify-start'}`}>
+                                {isGoal && <div className="p-1.5 rounded-full bg-primary/20 text-primary"><Target size={14} /></div>}
+                                {isSub && <div className="p-1.5 rounded-full bg-green-500/20 text-green-500"><RefreshCw size={14} /></div>}
+                                {event.type === 'Red Card' && <div className="w-3 h-4 bg-red-500 rounded-sm shadow-sm" />}
+                                {event.type === 'Yellow Card' && <div className="w-3 h-4 bg-yellow-500 rounded-sm shadow-sm" />}
+
+                                <span className="font-bold text-sm text-white">{event.detail}</span>
+                              </div>
+                              <span className="text-[10px] uppercase font-bold text-white/40 tracking-wider">{event.type}</span>
+                            </div>
                           </div>
-                          <div className={`flex-1 ${isHomeTeam ? 'text-left' : 'text-right'}`}>
-                            <p className="text-sm font-semibold">{event.detail}</p>
-                            <p className="text-xs text-white/60">{event.type}</p>
+
+                          {/* Center Time Marker */}
+                          <div className="w-16 flex justify-center relative z-10">
+                            <div className="w-8 h-8 rounded-full bg-[#1a1a1a] border border-white/10 flex items-center justify-center text-xs font-bold text-white/60 shadow-lg">
+                              {event.minute}'
+                            </div>
                           </div>
-                        </div>
 
-                        {/* Center Time Marker */}
-                        <div className="flex flex-col items-center gap-1 min-w-[50px]">
-                          <div className={`w-2 h-2 rounded-full ${eventColor}`} />
-                          <span className="text-xs font-semibold text-white/60">{event.minute}'</span>
+                          {/* Empty spacer for opposite side */}
+                          <div className="w-[calc(50%-2rem)]" />
                         </div>
-
-                        {/* Opposite Side - Empty Spacer */}
-                        <div className="flex-1" />
-                      </div>
-                    );
-                  })
+                      );
+                    })}
+                  </div>
                 ) : (
-                  <div className="py-12 text-center">
+                  <div className="py-12 text-center bg-white/5 rounded-xl border border-white/10">
                     <Clock className="mx-auto mb-3 text-white/20" size={48} />
                     <p className="text-white/60 text-sm">No events yet</p>
                     <p className="text-white/40 text-xs mt-1">Match events will appear here as they happen</p>
