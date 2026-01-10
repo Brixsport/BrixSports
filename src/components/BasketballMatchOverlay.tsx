@@ -830,22 +830,24 @@ export function BasketballMatchOverlay({ match, onClose, onSelectTeam, onSelectP
                                 initial={{ opacity: 0, y: 20 }}
                                 animate={{ opacity: 1, y: 0 }}
                                 exit={{ opacity: 0, y: -20 }}
+                                className="-mx-4 -my-8"
                             >
-                                <div className="bg-white/5 rounded-2xl border border-white/10 overflow-hidden">
-                                    <div className="p-4 border-b border-white/10 flex items-center gap-3">
-                                        <MessageSquare className="text-primary" size={20} />
-                                        <div>
-                                            <h3 className="font-bold">Live Chat</h3>
-                                            <p className="text-xs text-white/60">Join the conversation</p>
-                                        </div>
+                                {/* Chat Header - Integrated */}
+                                <div className="bg-gradient-to-r from-primary/10 via-primary/5 to-transparent border-b border-primary/20 px-4 py-4 flex items-center gap-3 sticky top-0 z-10 backdrop-blur-sm">
+                                    <MessageSquare className="text-primary" size={20} />
+                                    <div>
+                                        <h3 className="font-bold">Live Chat</h3>
+                                        <p className="text-xs text-white/60">Join the conversation</p>
                                     </div>
-                                    <div className="h-[500px]">
-                                        <LivestreamChat
-                                            matchId={match.id}
-                                            enabled={true}
-                                            className="h-full"
-                                        />
-                                    </div>
+                                </div>
+
+                                {/* Full-width Chat */}
+                                <div className="h-[calc(100vh-300px)] min-h-[500px]">
+                                    <LivestreamChat
+                                        matchId={match.id}
+                                        enabled={true}
+                                        className="h-full"
+                                    />
                                 </div>
                             </motion.div>
                         )}
