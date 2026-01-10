@@ -72,21 +72,24 @@ interface ProcessedPlayer {
     isStarter: boolean;
 }
 
+
 // Formation-driven line geometry with fixed vertical ratios (PERCENTAGES)
-// STRICT FOTMOB GEOMETRY - NO EXCEPTIONS, NO OFFSETS
+// Each team stays in their own half with proper spacing
+// Home team: 50-95% (bottom half), Away team: 5-50% (top half when mirrored)
 const FOOTBALL_LINE_Y_RATIOS: Record<string, number> = {
-    'FW': 22,   // Forwards
-    'AM': 38,   // Attacking Midfielders
-    'DM': 52,   // Defensive Midfielders (includes all CMs)
-    'DEF': 65,  // Defenders
-    'GK': 82    // Goalkeeper
+    'FW': 15,   // Forwards - closest to opponent's goal
+    'AM': 28,   // Attacking Midfielders
+    'DM': 41,   // Defensive Midfielders (includes all CMs)
+    'DEF': 54,  // Defenders
+    'GK': 70    // Goalkeeper - deepest position
 };
 
 const BASKETBALL_LINE_Y_RATIOS: Record<string, number> = {
-    'GUARD': 30,
-    'FORWARD': 50,
-    'CENTER': 70
+    'GUARD': 20,
+    'FORWARD': 35,
+    'CENTER': 50
 };
+
 
 export function FullPitchLineups({
     homeTeam,
@@ -183,9 +186,9 @@ export function FullPitchLineups({
             const yRatio = LINE_Y_RATIOS[lineName];
             const top = isHome ? `${yRatio}%` : `${100 - yRatio}%`;
 
-            // Calculate horizontal distribution (PERCENTAGES)
+            // Calculate horizontal distribution with better spacing (PERCENTAGES)
             const pitchWidth = 100;
-            const usableWidth = pitchWidth * 0.8;
+            const usableWidth = pitchWidth * 0.90; // Increased from 0.8 to 0.9 for more spacing
             const startX = (pitchWidth - usableWidth) / 2;
             const playersInLine = linePlayers.length;
 
@@ -208,7 +211,7 @@ export function FullPitchLineups({
             });
 
             return sortedPlayers.map((p, index) => {
-                // Mathematical horizontal distribution
+                // Mathematical horizontal distribution with better spacing
                 const left = playersInLine === 1
                     ? '50%'
                     : `${startX + ((index + 1) * (usableWidth / (playersInLine + 1)))}%`;
@@ -257,11 +260,12 @@ export function FullPitchLineups({
                 </div>
             </div>
 
-            {/* Playing Surface - FIFA Standard 68:105 aspect ratio (width:height) */}
-            {/* Full-width on mobile, contained on desktop */}
-            <div className={`relative w-full ${isBasketball ? 'aspect-[68/105]' : 'aspect-[68/105]'} bg-gradient-to-b ${isBasketball
-                ? 'from-orange-900/30 via-orange-800/30 to-orange-900/30'
-                : 'from-green-900/40 via-green-800/40 to-green-900/40'
+            {/* Playing Surface - Enhanced larger view */}
+            {/* Full-width edge-to-edge on mobile, contained on desktop */}
+            <div className={`relative w-full -mx-4 md:mx-0 ${isBasketball ? 'aspect-[68/120]' : 'aspect-[68/120]'
+                } min-h-[600px] md:min-h-[700px] lg:min-h-[800px] bg-gradient-to-b ${isBasketball
+                    ? 'from-orange-900/30 via-orange-800/30 to-orange-900/30'
+                    : 'from-green-900/40 via-green-800/40 to-green-900/40'
                 } md:rounded-2xl overflow-hidden border-0 md:border border-white/10 shadow-2xl`}>
                 {/* Surface markings */}
                 {isBasketball ? <BasketballCourtMarkings /> : <FootballPitchMarkings />}
@@ -435,10 +439,10 @@ function PlayerDot({ player, rating, position, isCaptain, isMotM, style, onClick
         return 'bg-red-500/90 text-white border-red-400';
     };
 
-    // Mobile-responsive sizes - Larger on mobile like FotMob
+    // Mobile-responsive sizes - Larger for better visibility on bigger pitch
     const sizeClasses = size === 'small'
-        ? 'w-10 h-10 sm:w-8 sm:h-8'
-        : 'w-14 h-14 sm:w-12 sm:h-12 md:w-14 md:h-14 lg:w-16 lg:h-16';
+        ? 'w-10 h-10 sm:w-9 sm:h-9'
+        : 'w-16 h-16 sm:w-14 sm:h-14 md:w-16 md:h-16 lg:w-18 lg:h-18 xl:w-20 xl:h-20';
 
     return (
         <div
