@@ -113,7 +113,7 @@ export function PitchPlayer({
             {showName && (
                 <div className="mt-1 flex flex-col items-center">
                     <span className="text-xs sm:text-sm font-medium text-white px-2 py-0.5 rounded-sm drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)] whitespace-nowrap overflow-hidden text-ellipsis max-w-[100px] text-center">
-                        {player.jerseyName || player.name.split(' ').pop() || player.name}
+                        {player.jerseyName || player.name.trim().split(/\s+/).pop() || player.name}
                     </span>
                     {/* Small number if avatar is shown? Maybe redundant but requested "Player number: Small text above name" 
                         Actually request says "Player number: Small text above name".
