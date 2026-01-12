@@ -19,49 +19,41 @@ export interface Formation {
 // Football Formations
 export const footballFormations: Formation[] = [
     {
-        id: '4-3-3',
-        name: '4-3-3',
-        sport: 'Football',
-        description: 'Balanced formation with strong wings',
-        positions: [
-            // Goalkeeper
-            { id: 'gk', position: 'GK', x: 50, y: 95, zone: 'GK' },
-            // Defenders
-            { id: 'lb', position: 'LB', x: 20, y: 75, zone: 'DEF' },
-            { id: 'lcb', position: 'CB', x: 40, y: 80, zone: 'DEF' },
-            { id: 'rcb', position: 'CB', x: 60, y: 80, zone: 'DEF' },
-            { id: 'rb', position: 'RB', x: 80, y: 75, zone: 'DEF' },
-            // Midfielders
-            { id: 'cdm', position: 'CDM', x: 50, y: 60, zone: 'MID' },
-            { id: 'lcm', position: 'CM', x: 35, y: 50, zone: 'MID' },
-            { id: 'rcm', position: 'CM', x: 65, y: 50, zone: 'MID' },
-            // Forwards
-            { id: 'lw', position: 'LW', x: 20, y: 25, zone: 'FWD' },
-            { id: 'st', position: 'ST', x: 50, y: 15, zone: 'FWD' },
-            { id: 'rw', position: 'RW', x: 80, y: 25, zone: 'FWD' },
-        ]
-    },
-    {
         id: '4-4-2',
         name: '4-4-2',
         sport: 'Football',
         description: 'Classic balanced formation',
         positions: [
-            // Goalkeeper
-            { id: 'gk', position: 'GK', x: 50, y: 95, zone: 'GK' },
-            // Defenders
-            { id: 'lb', position: 'LB', x: 20, y: 75, zone: 'DEF' },
-            { id: 'lcb', position: 'CB', x: 40, y: 80, zone: 'DEF' },
-            { id: 'rcb', position: 'CB', x: 60, y: 80, zone: 'DEF' },
-            { id: 'rb', position: 'RB', x: 80, y: 75, zone: 'DEF' },
-            // Midfielders
-            { id: 'lm', position: 'LM', x: 20, y: 50, zone: 'MID' },
-            { id: 'lcm', position: 'CM', x: 40, y: 55, zone: 'MID' },
-            { id: 'rcm', position: 'CM', x: 60, y: 55, zone: 'MID' },
-            { id: 'rm', position: 'RM', x: 80, y: 50, zone: 'MID' },
-            // Forwards
-            { id: 'lst', position: 'ST', x: 40, y: 20, zone: 'FWD' },
-            { id: 'rst', position: 'ST', x: 60, y: 20, zone: 'FWD' },
+            { id: 'gk', position: 'GK', x: 50, y: 92, zone: 'GK' },
+            { id: 'lb', position: 'LB', x: 15, y: 75, zone: 'DEF' },
+            { id: 'lcb', position: 'CB', x: 38, y: 80, zone: 'DEF' },
+            { id: 'rcb', position: 'CB', x: 62, y: 80, zone: 'DEF' },
+            { id: 'rb', position: 'RB', x: 85, y: 75, zone: 'DEF' },
+            { id: 'lm', position: 'LM', x: 15, y: 45, zone: 'MID' },
+            { id: 'lcm', position: 'CM', x: 38, y: 50, zone: 'MID' },
+            { id: 'rcm', position: 'CM', x: 62, y: 50, zone: 'MID' },
+            { id: 'rm', position: 'RM', x: 85, y: 45, zone: 'MID' },
+            { id: 'lst', position: 'ST', x: 35, y: 15, zone: 'FWD' },
+            { id: 'rst', position: 'ST', x: 65, y: 15, zone: 'FWD' },
+        ]
+    },
+    {
+        id: '4-3-3',
+        name: '4-3-3',
+        sport: 'Football',
+        description: 'Balanced formation with strong wings',
+        positions: [
+            { id: 'gk', position: 'GK', x: 50, y: 92, zone: 'GK' },
+            { id: 'lb', position: 'LB', x: 15, y: 75, zone: 'DEF' },
+            { id: 'lcb', position: 'CB', x: 38, y: 80, zone: 'DEF' },
+            { id: 'rcb', position: 'CB', x: 62, y: 80, zone: 'DEF' },
+            { id: 'rb', position: 'RB', x: 85, y: 75, zone: 'DEF' },
+            { id: 'cdm', position: 'CDM', x: 50, y: 60, zone: 'MID' },
+            { id: 'lcm', position: 'CM', x: 30, y: 50, zone: 'MID' },
+            { id: 'rcm', position: 'CM', x: 70, y: 50, zone: 'MID' },
+            { id: 'lw', position: 'LW', x: 15, y: 20, zone: 'FWD' },
+            { id: 'st', position: 'ST', x: 50, y: 15, zone: 'FWD' },
+            { id: 'rw', position: 'RW', x: 85, y: 20, zone: 'FWD' },
         ]
     },
     {
@@ -70,45 +62,17 @@ export const footballFormations: Formation[] = [
         sport: 'Football',
         description: 'Attacking formation with wing-backs',
         positions: [
-            // Goalkeeper
-            { id: 'gk', position: 'GK', x: 50, y: 95, zone: 'GK' },
-            // Defenders
+            { id: 'gk', position: 'GK', x: 50, y: 92, zone: 'GK' },
             { id: 'lcb', position: 'CB', x: 30, y: 80, zone: 'DEF' },
             { id: 'cb', position: 'CB', x: 50, y: 82, zone: 'DEF' },
             { id: 'rcb', position: 'CB', x: 70, y: 80, zone: 'DEF' },
-            // Midfielders
-            { id: 'lwb', position: 'LWB', x: 15, y: 60, zone: 'MID' },
-            { id: 'lcm', position: 'CM', x: 35, y: 55, zone: 'MID' },
-            { id: 'cm', position: 'CM', x: 50, y: 50, zone: 'MID' },
-            { id: 'rcm', position: 'CM', x: 65, y: 55, zone: 'MID' },
-            { id: 'rwb', position: 'RWB', x: 85, y: 60, zone: 'MID' },
-            // Forwards
-            { id: 'lst', position: 'ST', x: 40, y: 20, zone: 'FWD' },
-            { id: 'rst', position: 'ST', x: 60, y: 20, zone: 'FWD' },
-        ]
-    },
-    {
-        id: '4-2-3-1',
-        name: '4-2-3-1',
-        sport: 'Football',
-        description: 'Modern attacking formation',
-        positions: [
-            // Goalkeeper
-            { id: 'gk', position: 'GK', x: 50, y: 95, zone: 'GK' },
-            // Defenders
-            { id: 'lb', position: 'LB', x: 20, y: 75, zone: 'DEF' },
-            { id: 'lcb', position: 'CB', x: 40, y: 80, zone: 'DEF' },
-            { id: 'rcb', position: 'CB', x: 60, y: 80, zone: 'DEF' },
-            { id: 'rb', position: 'RB', x: 80, y: 75, zone: 'DEF' },
-            // Defensive Midfielders
-            { id: 'lcdm', position: 'CDM', x: 40, y: 60, zone: 'MID' },
-            { id: 'rcdm', position: 'CDM', x: 60, y: 60, zone: 'MID' },
-            // Attacking Midfielders
-            { id: 'lam', position: 'LAM', x: 25, y: 35, zone: 'MID' },
+            { id: 'lm', position: 'LM', x: 10, y: 45, zone: 'MID' },
+            { id: 'lcdm', position: 'CDM', x: 35, y: 55, zone: 'MID' },
             { id: 'cam', position: 'CAM', x: 50, y: 40, zone: 'MID' },
-            { id: 'ram', position: 'RAM', x: 75, y: 35, zone: 'MID' },
-            // Forward
-            { id: 'st', position: 'ST', x: 50, y: 15, zone: 'FWD' },
+            { id: 'rcdm', position: 'CDM', x: 65, y: 55, zone: 'MID' },
+            { id: 'rm', position: 'RM', x: 90, y: 45, zone: 'MID' },
+            { id: 'lst', position: 'ST', x: 35, y: 15, zone: 'FWD' },
+            { id: 'rst', position: 'ST', x: 65, y: 15, zone: 'FWD' },
         ]
     },
     {
@@ -117,91 +81,112 @@ export const footballFormations: Formation[] = [
         sport: 'Football',
         description: 'Attacking formation with 3 forwards',
         positions: [
-            // Goalkeeper
-            { id: 'gk', position: 'GK', x: 50, y: 95, zone: 'GK' },
-            // Defenders
+            { id: 'gk', position: 'GK', x: 50, y: 92, zone: 'GK' },
             { id: 'lcb', position: 'CB', x: 30, y: 80, zone: 'DEF' },
             { id: 'cb', position: 'CB', x: 50, y: 82, zone: 'DEF' },
             { id: 'rcb', position: 'CB', x: 70, y: 80, zone: 'DEF' },
-            // Midfielders
-            { id: 'lm', position: 'LM', x: 15, y: 50, zone: 'MID' },
+            { id: 'lm', position: 'LM', x: 10, y: 45, zone: 'MID' },
             { id: 'lcm', position: 'CM', x: 40, y: 55, zone: 'MID' },
             { id: 'rcm', position: 'CM', x: 60, y: 55, zone: 'MID' },
-            { id: 'rm', position: 'RM', x: 85, y: 50, zone: 'MID' },
-            // Forwards
-            { id: 'lw', position: 'LW', x: 20, y: 25, zone: 'FWD' },
+            { id: 'rm', position: 'RM', x: 90, y: 45, zone: 'MID' },
+            { id: 'lw', position: 'LW', x: 15, y: 20, zone: 'FWD' },
             { id: 'st', position: 'ST', x: 50, y: 15, zone: 'FWD' },
-            { id: 'rw', position: 'RW', x: 80, y: 25, zone: 'FWD' },
+            { id: 'rw', position: 'RW', x: 85, y: 20, zone: 'FWD' },
         ]
     },
     {
-        id: '4-2-2-2',
-        name: '4-2-2-2',
+        id: '4-2-3-1',
+        name: '4-2-3-1',
         sport: 'Football',
-        description: 'Balanced with 2 CMs and 2 AMs',
+        description: 'Modern versatile formation',
         positions: [
-            // Goalkeeper
-            { id: 'gk', position: 'GK', x: 50, y: 95, zone: 'GK' },
-            // Defenders
-            { id: 'lb', position: 'LB', x: 20, y: 75, zone: 'DEF' },
-            { id: 'lcb', position: 'CB', x: 40, y: 80, zone: 'DEF' },
-            { id: 'rcb', position: 'CB', x: 60, y: 80, zone: 'DEF' },
-            { id: 'rb', position: 'RB', x: 80, y: 75, zone: 'DEF' },
-            // Central Midfielders
-            { id: 'lcm', position: 'CM', x: 40, y: 60, zone: 'MID' },
-            { id: 'rcm', position: 'CM', x: 60, y: 60, zone: 'MID' },
-            // Attacking Midfielders
-            { id: 'lam', position: 'CAM', x: 30, y: 40, zone: 'MID' },
-            { id: 'ram', position: 'CAM', x: 70, y: 40, zone: 'MID' },
-            // Forwards
-            { id: 'lst', position: 'ST', x: 40, y: 20, zone: 'FWD' },
-            { id: 'rst', position: 'ST', x: 60, y: 20, zone: 'FWD' },
+            { id: 'gk', position: 'GK', x: 50, y: 92, zone: 'GK' },
+            { id: 'lb', position: 'LB', x: 15, y: 75, zone: 'DEF' },
+            { id: 'lcb', position: 'CB', x: 38, y: 80, zone: 'DEF' },
+            { id: 'rcb', position: 'CB', x: 62, y: 80, zone: 'DEF' },
+            { id: 'rb', position: 'RB', x: 85, y: 75, zone: 'DEF' },
+            { id: 'lcdm', position: 'CDM', x: 35, y: 60, zone: 'MID' },
+            { id: 'rcdm', position: 'CDM', x: 65, y: 60, zone: 'MID' },
+            { id: 'lam', position: 'CAM', x: 20, y: 35, zone: 'MID' },
+            { id: 'cam', position: 'CAM', x: 50, y: 35, zone: 'MID' },
+            { id: 'ram', position: 'CAM', x: 80, y: 35, zone: 'MID' },
+            { id: 'st', position: 'ST', x: 50, y: 15, zone: 'FWD' },
         ]
     },
     {
-        id: '3-5-2-dp',
-        name: '3-5-2 (Double Pivot)',
+        id: '4-1-4-1',
+        name: '4-1-4-1',
         sport: 'Football',
-        description: '3-5-2 with a defensive double pivot',
+        description: 'Defensive structure with wide midfield',
         positions: [
-            // Goalkeeper
-            { id: 'gk', position: 'GK', x: 50, y: 95, zone: 'GK' },
-            // Defenders
+            { id: 'gk', position: 'GK', x: 50, y: 92, zone: 'GK' },
+            { id: 'lb', position: 'LB', x: 15, y: 75, zone: 'DEF' },
+            { id: 'lcb', position: 'CB', x: 38, y: 80, zone: 'DEF' },
+            { id: 'rcb', position: 'CB', x: 62, y: 80, zone: 'DEF' },
+            { id: 'rb', position: 'RB', x: 85, y: 75, zone: 'DEF' },
+            { id: 'cdm', position: 'CDM', x: 50, y: 65, zone: 'MID' },
+            { id: 'lm', position: 'LM', x: 15, y: 45, zone: 'MID' },
+            { id: 'lcm', position: 'CM', x: 35, y: 50, zone: 'MID' },
+            { id: 'rcm', position: 'CM', x: 65, y: 50, zone: 'MID' },
+            { id: 'rm', position: 'RM', x: 85, y: 45, zone: 'MID' },
+            { id: 'st', position: 'ST', x: 50, y: 15, zone: 'FWD' },
+        ]
+    },
+    {
+        id: '3-1-4-2',
+        name: '3-1-4-2',
+        sport: 'Football',
+        description: 'Variation of 3-5-2 with holding mid',
+        positions: [
+            { id: 'gk', position: 'GK', x: 50, y: 92, zone: 'GK' },
             { id: 'lcb', position: 'CB', x: 30, y: 80, zone: 'DEF' },
             { id: 'cb', position: 'CB', x: 50, y: 82, zone: 'DEF' },
             { id: 'rcb', position: 'CB', x: 70, y: 80, zone: 'DEF' },
-            // Midfielders
-            { id: 'lwb', position: 'LWB', x: 15, y: 55, zone: 'MID' },
-            { id: 'lcdm', position: 'CDM', x: 40, y: 60, zone: 'MID' },
-            { id: 'rcdm', position: 'CDM', x: 60, y: 60, zone: 'MID' },
-            { id: 'rwb', position: 'RWB', x: 85, y: 55, zone: 'MID' },
-            { id: 'cam', position: 'CAM', x: 50, y: 40, zone: 'MID' },
-            // Forwards
-            { id: 'lst', position: 'ST', x: 40, y: 20, zone: 'FWD' },
-            { id: 'rst', position: 'ST', x: 60, y: 20, zone: 'FWD' },
+            { id: 'cdm', position: 'CDM', x: 50, y: 65, zone: 'MID' },
+            { id: 'lm', position: 'LM', x: 15, y: 45, zone: 'MID' },
+            { id: 'lcm', position: 'CM', x: 35, y: 50, zone: 'MID' },
+            { id: 'rcm', position: 'CM', x: 65, y: 50, zone: 'MID' },
+            { id: 'rm', position: 'RM', x: 85, y: 45, zone: 'MID' },
+            { id: 'lst', position: 'ST', x: 35, y: 15, zone: 'FWD' },
+            { id: 'rst', position: 'ST', x: 65, y: 15, zone: 'FWD' },
         ]
     },
     {
-        id: '4-4-2-diamond',
-        name: '4-4-2 Diamond',
+        id: '5-3-2',
+        name: '5-3-2',
         sport: 'Football',
-        description: 'Narrow formation with a midfield diamond',
+        description: 'Strong defensive block',
         positions: [
-            // Goalkeeper
-            { id: 'gk', position: 'GK', x: 50, y: 95, zone: 'GK' },
-            // Defenders
-            { id: 'lb', position: 'LB', x: 20, y: 75, zone: 'DEF' },
-            { id: 'lcb', position: 'CB', x: 40, y: 80, zone: 'DEF' },
-            { id: 'rcb', position: 'CB', x: 60, y: 80, zone: 'DEF' },
-            { id: 'rb', position: 'RB', x: 80, y: 75, zone: 'DEF' },
-            // Midfielders (Diamond)
-            { id: 'cdm', position: 'CDM', x: 50, y: 65, zone: 'MID' },
+            { id: 'gk', position: 'GK', x: 50, y: 92, zone: 'GK' },
+            { id: 'lwb', position: 'LWB', x: 10, y: 65, zone: 'DEF' },
+            { id: 'lcb', position: 'CB', x: 30, y: 80, zone: 'DEF' },
+            { id: 'cb', position: 'CB', x: 50, y: 80, zone: 'DEF' },
+            { id: 'rcb', position: 'CB', x: 70, y: 80, zone: 'DEF' },
+            { id: 'rwb', position: 'RWB', x: 90, y: 65, zone: 'DEF' },
             { id: 'lcm', position: 'CM', x: 35, y: 50, zone: 'MID' },
+            { id: 'cm', position: 'CM', x: 50, y: 55, zone: 'MID' },
             { id: 'rcm', position: 'CM', x: 65, y: 50, zone: 'MID' },
-            { id: 'cam', position: 'CAM', x: 50, y: 35, zone: 'MID' },
-            // Forwards
-            { id: 'lst', position: 'ST', x: 40, y: 20, zone: 'FWD' },
-            { id: 'rst', position: 'ST', x: 60, y: 20, zone: 'FWD' },
+            { id: 'lst', position: 'ST', x: 35, y: 15, zone: 'FWD' },
+            { id: 'rst', position: 'ST', x: 65, y: 15, zone: 'FWD' },
+        ]
+    },
+    {
+        id: '4-5-1',
+        name: '4-5-1',
+        sport: 'Football',
+        description: 'Packed midfield',
+        positions: [
+            { id: 'gk', position: 'GK', x: 50, y: 92, zone: 'GK' },
+            { id: 'lb', position: 'LB', x: 15, y: 75, zone: 'DEF' },
+            { id: 'lcb', position: 'CB', x: 38, y: 80, zone: 'DEF' },
+            { id: 'rcb', position: 'CB', x: 62, y: 80, zone: 'DEF' },
+            { id: 'rb', position: 'RB', x: 85, y: 75, zone: 'DEF' },
+            { id: 'lm', position: 'LM', x: 15, y: 45, zone: 'MID' },
+            { id: 'lcm', position: 'CM', x: 35, y: 50, zone: 'MID' },
+            { id: 'cm', position: 'CM', x: 50, y: 55, zone: 'MID' },
+            { id: 'rcm', position: 'CM', x: 65, y: 50, zone: 'MID' },
+            { id: 'rm', position: 'RM', x: 85, y: 45, zone: 'MID' },
+            { id: 'st', position: 'ST', x: 50, y: 15, zone: 'FWD' },
         ]
     }
 ];
