@@ -177,9 +177,9 @@ export function MatchLineup({
     const awayLayout = processLineup(awayStarterPlayers, finalAwayFormation, false);
 
     return (
-        <div className="w-full flex flex-col bg-[#0f1419]">
+        <div className="flex flex-col bg-[#0f1419] -mx-4 w-[calc(100%+2rem)] sm:mx-0 sm:w-full">
             {/* Header / Toggle - Sticky */}
-            <div className="sticky top-0 z-30 flex items-center justify-between px-4 py-3 bg-[#0f1419]/95 backdrop-blur-sm border-b border-white/5">
+            <div className="sticky top-0 z-30 flex items-center justify-between px-4 py-3 bg-[#0f1419]/95 backdrop-blur-sm border-b border-white/5 shadow-sm">
                 <h2 className="text-xl font-bold text-white">Lineups</h2>
                 <div className="flex bg-[#1e2329] rounded-full p-1 border border-white/5">
                     <button
@@ -207,12 +207,12 @@ export function MatchLineup({
             {view === 'pitch' ? (
                 <div className="w-full bg-[#1a4d2e]">
 
-                    {/* Pitch Container - Fixed Height */}
-                    <div className="relative w-full shadow-2xl" style={{ height: '1100px' }}>
+                    {/* Pitch Container - Increased Height for Zoom effect */}
+                    <div className="relative w-full shadow-2xl" style={{ height: '1350px' }}>
 
                         {/* Background - Horizontal Stripes */}
                         <div className="absolute inset-0 flex flex-col pointer-events-none">
-                            {Array.from({ length: 20 }).map((_, i) => (
+                            {Array.from({ length: 24 }).map((_, i) => (
                                 <div key={i} className={cn(
                                     "flex-1 w-full",
                                     i % 2 === 0 ? "bg-[#1a4d2e]" : "bg-[#1f5635]"
