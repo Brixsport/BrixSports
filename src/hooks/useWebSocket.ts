@@ -290,7 +290,7 @@ export function useTeamStats(matchId: string) {
  * Hook for subscribing to match timer updates
  */
 export function useMatchTimer(matchId: string) {
-    const [time, setTime] = useState<{ minute: number; extraTime: number; half: number } | null>(null);
+    const [time, setTime] = useState<{ minute: number; extraTime: number; half: number; period?: string } | null>(null);
 
     const { on, off } = useWebSocket({
         matchId,
@@ -303,20 +303,24 @@ export function useMatchTimer(matchId: string) {
             minute: number;
             extraTime: number;
             half: number;
+            period?: string;
         }) => {
             if (data.matchId === matchId) {
                 setTime({
                     minute: data.minute,
                     extraTime: data.extraTime,
                     half: data.half,
+                    period: data.period
                 });
             }
         };
 
         on('match:time:updated', handleTimeUpdate);
+        on('match:time:update', handleTimeUpdate); // Listen to both just in case
 
         return () => {
             off('match:time:updated', handleTimeUpdate);
+            off('match:time:update', handleTimeUpdate);
         };
     }, [matchId, on, off]);
 

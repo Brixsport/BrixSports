@@ -62,10 +62,11 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
   const { addNotification } = useNotifications();
 
   // Match time tracking (synced from logger)
-  const [matchTime, setMatchTime] = useState<{ minute: number; extraTime: number; half: number }>({
+  const [matchTime, setMatchTime] = useState<{ minute: number; extraTime: number; half: number; period?: string; announcedStoppage?: number }>({
     minute: 0,
     extraTime: 0,
     half: 1,
+    announcedStoppage: 0,
   });
 
   // Listen for match time updates from logger
@@ -76,6 +77,8 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
           minute: event.detail.minute,
           extraTime: event.detail.extraTime,
           half: event.detail.half,
+          period: event.detail.period,
+          announcedStoppage: event.detail.announcedStoppage || 0,
         });
       }
     };
@@ -466,10 +469,10 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
     if (match.status === 'FINISHED') return 'Full Time';
 
     if (match.status === 'LIVE') {
-      const { minute, extraTime, half } = matchTime;
+      const { minute, extraTime, half, period } = matchTime;
 
-      // If minute is 45 and half is 1, it might be HT, but we can't be sure without status.
-      // However, usually we can show the half.
+      if (period === 'HALF_TIME') return 'HT';
+      if (period === 'FINISHED') return 'Full Time';
 
       let timeStr = `${minute}'`;
       if (extraTime > 0) timeStr += `+${extraTime}`;
@@ -479,12 +482,6 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
       else if (half === 2) halfStr = '2H';
       else if (half === 3) halfStr = 'ET';
       else if (half === 4) halfStr = 'Pen';
-
-      // Attempt to detect HT based on time/half (heuristic)
-      // Ideally this comes from status='HT'
-      if (minute === 45 && half === 1 && extraTime > 0) {
-        // Keeping it as 1H for now unless we add HT status validation
-      }
 
       return halfStr ? `${timeStr} • ${halfStr}` : timeStr;
     }
@@ -563,9 +560,16 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
 
                   {/* Status Pill */}
                   <div className="mt-[-10px] bg-[#0a0a0a] px-3 py-1 rounded-full border border-white/10 flex items-center gap-1.5 shadow-sm">
-                    {match.status === 'LIVE' && <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse shadow-[0_0_8px_rgba(239,68,68,0.6)]" />}
+                    {match.status === 'LIVE' && ['FIRST_HALF', 'SECOND_HALF', 'EXTRA_TIME_1', 'EXTRA_TIME_2', 'PENALTY_SHOOTOUT'].includes(matchTime.period || '') && <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse shadow-[0_0_8px_rgba(239,68,68,0.6)]" />}
                     <span className={`text-[10px] sm:text-xs font-bold uppercase tracking-wider ${match.status === 'LIVE' ? 'text-red-500' : 'text-white/60'}`}>
-                      {getStatusText()}
+                      <div className="flex items-center gap-1">
+                        {getStatusText()}
+                        {match.status === 'LIVE' && matchTime.announcedStoppage && matchTime.announcedStoppage > 0 && (
+                          <span className="ml-1 px-1 py-0.5 bg-white/10 rounded text-[9px] text-white font-bold border border-white/20">
+                            +{matchTime.announcedStoppage}
+                          </span>
+                        )}
+                      </div>
                     </span>
                   </div>
                 </div>

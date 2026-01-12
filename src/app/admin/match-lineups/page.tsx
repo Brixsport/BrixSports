@@ -241,7 +241,7 @@ export default function AdminMatchLineupsPage() {
             };
 
             // Save both lineups
-            await Promise.all([
+            const [homeRes, awayRes] = await Promise.all([
                 fetch(`/api/admin/match-lineups/${selectedMatch.id}`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -254,10 +254,21 @@ export default function AdminMatchLineupsPage() {
                 })
             ]);
 
+            if (!homeRes.ok) {
+                const data = await homeRes.json();
+                throw new Error(`Home Lineup: ${data.error || 'Failed to publish'}`);
+            }
+            if (!awayRes.ok) {
+                const data = await awayRes.json();
+                throw new Error(`Away Lineup: ${data.error || 'Failed to publish'}`);
+            }
+
             alert('Lineups published successfully!');
-        } catch (error) {
+            // Reload to update status headers
+            loadRosters(selectedMatch);
+        } catch (error: any) {
             console.error('Error publishing lineups:', error);
-            alert('Failed to publish lineups');
+            alert(error.message || 'Failed to publish lineups');
         } finally {
             setSaving(false);
         }
@@ -418,7 +429,13 @@ export default function AdminMatchLineupsPage() {
                                             <p className="text-xs text-white/60">
                                                 By {homeLineupStatus.publishedByName} on {new Date(homeLineupStatus.publishedAt).toLocaleString()}
                                             </p>
-                                            <p className="text-xs text-white/40 mt-1">This lineup is locked and cannot be edited.</p>
+                                            <p className="text-xs text-white/40 mt-1">
+                                                {user?.role === 'admin'
+                                                    ? 'Published. You can update it below.'
+                                                    : homeLineupStatus.publishedByRole === 'admin'
+                                                        ? 'Locked by Admin. Cannot be edited.'
+                                                        : 'Published. You can correct it below.'}
+                                            </p>
                                         </div>
                                         {user?.role === 'admin' && (
                                             <button
@@ -452,7 +469,13 @@ export default function AdminMatchLineupsPage() {
                                             <p className="text-xs text-white/60">
                                                 By {awayLineupStatus.publishedByName} on {new Date(awayLineupStatus.publishedAt).toLocaleString()}
                                             </p>
-                                            <p className="text-xs text-white/40 mt-1">This lineup is locked and cannot be edited.</p>
+                                            <p className="text-xs text-white/40 mt-1">
+                                                {user?.role === 'admin'
+                                                    ? 'Published. You can update it below.'
+                                                    : awayLineupStatus.publishedByRole === 'admin'
+                                                        ? 'Locked by Admin. Cannot be edited.'
+                                                        : 'Published. You can correct it below.'}
+                                            </p>
                                         </div>
                                         {user?.role === 'admin' && (
                                             <button
@@ -495,6 +518,7 @@ export default function AdminMatchLineupsPage() {
                                     onToggleStarter={(id) => toggleStarter(id, 'home')}
                                     onFormationChange={setHomeFormation}
                                     onCaptainChange={setHomeCaptain}
+                                    isDisabled={user?.role !== 'admin' && homeLineupStatus?.publishedByRole === 'admin' && !homeLineupStatus?.unlocked}
                                 />
 
                                 {/* Away Team */}
@@ -507,6 +531,7 @@ export default function AdminMatchLineupsPage() {
                                     onToggleStarter={(id) => toggleStarter(id, 'away')}
                                     onFormationChange={setAwayFormation}
                                     onCaptainChange={setAwayCaptain}
+                                    isDisabled={user?.role !== 'admin' && awayLineupStatus?.publishedByRole === 'admin' && !awayLineupStatus?.unlocked}
                                 />
                             </div>
                         )}
@@ -515,11 +540,11 @@ export default function AdminMatchLineupsPage() {
                         <div className="flex justify-center">
                             <button
                                 onClick={publishLineups}
-                                disabled={saving || homeStarters.length !== 11 || awayStarters.length !== 11 || !homeCaptain || !awayCaptain}
+                                disabled={saving || homeStarters.length !== 11 || awayStarters.length !== 11 || !homeCaptain || !awayCaptain || (user?.role !== 'admin' && ((homeLineupStatus?.publishedByRole === 'admin' && !homeLineupStatus?.unlocked) || (awayLineupStatus?.publishedByRole === 'admin' && !awayLineupStatus?.unlocked)))}
                                 className="px-8 py-4 bg-primary hover:bg-primary/90 disabled:bg-white/10 disabled:cursor-not-allowed text-black disabled:text-white/40 rounded-xl font-bold text-lg flex items-center gap-3 transition-colors"
                             >
                                 <Save size={20} />
-                                {saving ? 'Publishing...' : 'Publish Official Lineups'}
+                                {saving ? 'Publishing...' : (homeLineupStatus?.status === 'published' || awayLineupStatus?.status === 'published') ? 'Update Lineups' : 'Publish Official Lineups'}
                             </button>
                         </div>
                     </div>
@@ -537,7 +562,8 @@ function TeamLineupBuilder({
     captain,
     onToggleStarter,
     onFormationChange,
-    onCaptainChange
+    onCaptainChange,
+    isDisabled = false
 }: {
     team: any;
     roster: Player[];
@@ -547,11 +573,12 @@ function TeamLineupBuilder({
     onToggleStarter: (id: string) => void;
     onFormationChange: (formation: string) => void;
     onCaptainChange: (id: string) => void;
+    isDisabled?: boolean;
 }) {
     const formations = ['4-3-3', '4-4-2', '4-2-3-1', '3-5-2', '3-4-3', '5-3-2'];
 
     return (
-        <div className="bg-white/5 rounded-xl border border-white/10 p-6">
+        <div className={`bg-white/5 rounded-xl border border-white/10 p-6 ${isDisabled ? 'opacity-50 pointer-events-none' : ''}`}>
             <h3 className="text-xl font-bold mb-4">{team.name}</h3>
 
             {/* Formation Selector */}

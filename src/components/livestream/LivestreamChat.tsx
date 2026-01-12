@@ -25,6 +25,7 @@ interface LivestreamChatProps {
 export function LivestreamChat({ matchId, enabled = true, className }: LivestreamChatProps) {
     const [messages, setMessages] = useState<ChatMessage[]>([]);
     const [inputMessage, setInputMessage] = useState('');
+    const [isSending, setIsSending] = useState(false);
 
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const { user, openAuthModal } = useAuth();
@@ -93,15 +94,17 @@ export function LivestreamChat({ matchId, enabled = true, className }: Livestrea
         }
     }, [enabled]);
 
-    const handleSendMessage = (e: React.FormEvent) => {
+    const handleSendMessage = async (e: React.FormEvent) => {
         e.preventDefault();
 
-        if (!inputMessage.trim()) return;
+        if (!inputMessage.trim() || isSending) return;
 
         if (!user) {
             openAuthModal();
             return;
         }
+
+        setIsSending(true);
 
         const newMessage: ChatMessage = {
             id: Date.now().toString(),
@@ -116,25 +119,34 @@ export function LivestreamChat({ matchId, enabled = true, className }: Livestrea
         setMessages(prev => [...prev, newMessage]);
         setInputMessage('');
 
-        // Emit to server if connected
-        if (isConnected) {
-            emit('chat:message', {
-                matchId,
-                ...newMessage
-            });
-        } else {
-            // If not connected, show a system message
-            console.warn('Cannot send message: Socket not connected');
-            setTimeout(() => {
-                setMessages(prev => [...prev, {
-                    id: 'system-error-' + Date.now(),
-                    userId: 'system',
-                    userName: 'System',
-                    message: '⚠️ Message not sent - connection lost. Trying to reconnect...',
-                    timestamp: new Date(),
-                    isSystemMessage: true
-                }]);
-            }, 500);
+        try {
+            if (isConnected) {
+                // Emit to server if connected
+                emit('chat:message', {
+                    matchId,
+                    ...newMessage
+                });
+            } else {
+                // HTTP Fallback
+                await fetch('/api/chat/send', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ matchId, message: newMessage }),
+                });
+            }
+        } catch (error) {
+            console.error('Failed to send message:', error);
+            // Show error message
+            setMessages(prev => [...prev, {
+                id: `error_${Date.now()}`,
+                userId: 'system',
+                userName: 'System',
+                message: '⚠️ Failed to send message. Please try again.',
+                timestamp: new Date(),
+                isSystemMessage: true,
+            }]);
+        } finally {
+            setIsSending(false);
         }
     };
 
@@ -258,11 +270,15 @@ export function LivestreamChat({ matchId, enabled = true, className }: Livestrea
                         </div>
                         <button
                             type="submit"
-                            disabled={!inputMessage.trim() || !isConnected}
+                            disabled={!inputMessage.trim() || isSending}
                             className="bg-red-600 hover:bg-red-700 disabled:bg-gray-700 disabled:cursor-not-allowed text-white rounded-lg p-2.5 transition-colors"
-                            title={!isConnected ? 'Connecting to chat...' : 'Send message'}
+                            title={isSending ? 'Sending...' : 'Send message'}
                         >
-                            <Send className="w-5 h-5" />
+                            {isSending ? (
+                                <div className="w-5 h-5 border-2 border-white/50 border-t-white rounded-full animate-spin" />
+                            ) : (
+                                <Send className="w-5 h-5" />
+                            )}
                         </button>
                     </form>
                 ) : (

@@ -1,6 +1,11 @@
 'use client';
 
 import { Player } from '@/types';
+// Import explicitly to ensure type availability (though dynamic import is used below for component)
+import type { PitchPlayer } from './lineup/ResponsivePitch';
+// We'll use a dynamic import for the component inside the render to match previous pattern if needed, 
+// but standard import is better for type safety. Let's use standard import.
+import { ResponsivePitch } from './lineup/ResponsivePitch';
 
 interface FullPitchLineupsProps {
     homeTeam: {
@@ -17,8 +22,8 @@ interface FullPitchLineupsProps {
     };
     homePlayers: Record<string, Player>;
     awayPlayers: Record<string, Player>;
-    homeLineup: Array<{ playerId: string; rating: number; position?: string; isCaptain?: boolean; isStarter?: boolean }>;
-    awayLineup: Array<{ playerId: string; rating: number; position?: string; isCaptain?: boolean; isStarter?: boolean }>;
+    homeLineup: Array<{ playerId: string; rating: number; position?: string; isCaptain?: boolean; isStarter?: boolean; isMotM?: boolean }>;
+    awayLineup: Array<{ playerId: string; rating: number; position?: string; isCaptain?: boolean; isStarter?: boolean; isMotM?: boolean }>;
     onPlayerClick: (player: Player) => void;
     sport?: string; // 'Football' or 'Basketball'
 }
@@ -62,26 +67,17 @@ const parsePositionToLine = (pos: string, sport: string = 'Football'): string =>
     return 'MID'; // Default fallback
 };
 
-interface ProcessedPlayer {
-    player: Player;
-    rating: number;
-    position: string;
-    line: string;
-    isCaptain: boolean;
-    isMotM: boolean;
-    isStarter: boolean;
-}
+// Formation lines
+const FOOTBALL_LINES = ['GK', 'DEF', 'DM', 'AM', 'FW'];
+const BASKETBALL_LINES = ['GUARD', 'FORWARD', 'CENTER'];
 
-
-// Formation-driven line geometry with fixed vertical ratios (PERCENTAGES)
-// Each team stays in their own half with proper spacing
-// Home team: 50-95% (bottom half), Away team: 5-50% (top half when mirrored)
+// Y-Ratios (Depth percentages for each line) - Standardized for 0-100 logic
 const FOOTBALL_LINE_Y_RATIOS: Record<string, number> = {
-    'FW': 15,   // Forwards - closest to opponent's goal
-    'AM': 28,   // Attacking Midfielders
-    'DM': 41,   // Defensive Midfielders (includes all CMs)
-    'DEF': 54,  // Defenders
-    'GK': 70    // Goalkeeper - deepest position
+    'FW': 15,
+    'AM': 28,
+    'DM': 42,
+    'DEF': 58,
+    'GK': 75
 };
 
 const BASKETBALL_LINE_Y_RATIOS: Record<string, number> = {
@@ -89,7 +85,6 @@ const BASKETBALL_LINE_Y_RATIOS: Record<string, number> = {
     'FORWARD': 35,
     'CENTER': 50
 };
-
 
 export function FullPitchLineups({
     homeTeam,
@@ -103,33 +98,25 @@ export function FullPitchLineups({
 }: FullPitchLineupsProps) {
     const isBasketball = sport === 'Basketball';
     const LINE_Y_RATIOS = isBasketball ? BASKETBALL_LINE_Y_RATIOS : FOOTBALL_LINE_Y_RATIOS;
-    const allLines = isBasketball ? ['GUARD', 'FORWARD', 'CENTER'] : ['GK', 'DEF', 'DM', 'AM', 'FW'];
+    const allLines = isBasketball ? BASKETBALL_LINES : FOOTBALL_LINES;
 
-    // Parse formation string to get expected player distribution
+    // Parse formation string to get expected player distribution (optional, used for validation if needed)
     const parseFormation = (formation: string): Record<string, number> => {
-        if (isBasketball) {
-            // Basketball doesn't use formations the same way
-            return { 'GUARD': 2, 'FORWARD': 2, 'CENTER': 1 };
-        }
+        if (isBasketball) return { 'GUARD': 2, 'FORWARD': 2, 'CENTER': 1 };
 
-        // Football formation parsing (e.g., "4-4-2", "4-3-3", "3-5-2")
+        // Football formation parsing (e.g., "4-4-2")
         const parts = formation.split('-').map(n => parseInt(n, 10));
         const formationMap: Record<string, number> = { 'GK': 1 };
 
         if (parts.length >= 3) {
-            formationMap['DEF'] = parts[0]; // Defenders
-
-            // Handle formations with attacking midfielders (e.g., 4-2-3-1)
+            formationMap['DEF'] = parts[0];
             if (parts.length === 4) {
-                formationMap['DM'] = parts[1]; // Defensive/Central midfielders
-                formationMap['AM'] = parts[2]; // Attacking midfielders
-                formationMap['FW'] = parts[3]; // Forwards
+                formationMap['DM'] = parts[1];
+                formationMap['AM'] = parts[2];
+                formationMap['FW'] = parts[3];
             } else if (parts.length === 3) {
-                // Standard 3-part formation (e.g., 4-4-2, 4-3-3)
                 const totalMidfielders = parts[1];
-                formationMap['FW'] = parts[2]; // Forwards
-
-                // Distribute midfielders between DM and AM based on common patterns
+                formationMap['FW'] = parts[2];
                 if (totalMidfielders >= 4) {
                     formationMap['DM'] = Math.ceil(totalMidfielders / 2);
                     formationMap['AM'] = Math.floor(totalMidfielders / 2);
@@ -138,111 +125,154 @@ export function FullPitchLineups({
                 }
             }
         }
-
         return formationMap;
     };
 
     // Process lineup using formation-driven line geometry
-    const processLineup = (players: Record<string, Player>, lineup: any[], isHome: boolean, formation: string) => {
-        const processed: ProcessedPlayer[] = [];
-        const formationMap = parseFormation(formation);
+    const processLineupForPitch = (players: Record<string, Player>, lineup: any[], isHome: boolean, formation: string): PitchPlayer[] => {
+        const pitchPlayers: PitchPlayer[] = [];
 
-        // 1. Process all players and assign to lines based on their ACTUAL position
-        lineup.forEach(entry => {
+        // 1. Assign Lines
+        const playersWithLines = lineup.map(entry => {
             const player = players[entry.playerId];
-            if (!player) return;
-
-            // Use the position from the lineup entry (which should be position-aware)
+            if (!player) return null;
             const actualPosition = entry.position || player.position || 'MID';
             const assignedLine = parsePositionToLine(actualPosition, sport);
-
-            processed.push({
+            return {
                 player,
-                rating: entry.rating || 0,
-                position: actualPosition,
+                entry,
                 line: assignedLine,
-                isCaptain: !!entry.isCaptain,
-                isMotM: !!entry.isMotM,
-                isStarter: entry.isStarter !== false
-            });
+                position: actualPosition
+            };
+        }).filter((p): p is NonNullable<typeof p> => p !== null && (p.entry.isStarter !== false));
+
+        // 2. Group by Line
+        const lineGroups: Record<string, typeof playersWithLines> = {};
+        allLines.forEach(line => lineGroups[line] = []);
+        playersWithLines.forEach(p => {
+            if (lineGroups[p.line]) {
+                lineGroups[p.line].push(p);
+            }
+            // Fallback for MID or unmapped positions
+            else {
+                // Try to put generic MIDs in DM (often safer) or split if possible
+                if (lineGroups['DM']) lineGroups['DM'].push(p);
+                else if (lineGroups['AM']) lineGroups['AM'].push(p);
+                // Last resort: put in first available group after GK
+                else if (isBasketball && lineGroups['GUARD']) lineGroups['GUARD'].push(p);
+                else if (!isBasketball && lineGroups['DEF']) lineGroups['DEF'].push(p);
+            }
         });
 
-        // 2. Separate starters and substitutes
-        const starters = processed.filter(p => p.isStarter);
-        const substitutes = processed.filter(p => !p.isStarter);
+        // 3. Calculate Positions (Percentages)
+        Object.entries(lineGroups).forEach(([line, linePlayers]) => {
+            if (linePlayers.length === 0) return;
 
-        // 3. Group starters by line
-        const lineMap: Record<string, ProcessedPlayer[]> = {};
-        allLines.forEach(line => {
-            lineMap[line] = starters.filter(p => p.line === line);
-        });
-
-        // 4. Render starters with formation-based positioning
-        const starterNodes = allLines.flatMap((lineName) => {
-            const linePlayers = lineMap[lineName];
-            if (linePlayers.length === 0) return [];
-
-            // Get fixed Y ratio for this line (PERCENTAGES)
-            const yRatio = LINE_Y_RATIOS[lineName];
-            const top = isHome ? `${yRatio}%` : `${100 - yRatio}%`;
-
-            // Calculate horizontal distribution with better spacing (PERCENTAGES)
-            const pitchWidth = 100;
-            const usableWidth = pitchWidth * 0.90; // Increased from 0.8 to 0.9 for more spacing
-            const startX = (pitchWidth - usableWidth) / 2;
-            const playersInLine = linePlayers.length;
-
-            // Sort players by position for better visual distribution
-            // GK: center, DEF: LB, CB, CB, RB, MID: LM, CM, CM, RM, FW: LW, ST, RW
-            const sortedPlayers = [...linePlayers].sort((a, b) => {
+            // Sort left-to-right based on position name
+            linePlayers.sort((a, b) => {
                 const posA = a.position.toLowerCase();
                 const posB = b.position.toLowerCase();
-
-                // Left positions come first
                 if (posA.includes('l') && !posB.includes('l')) return -1;
                 if (!posA.includes('l') && posB.includes('l')) return 1;
-
-                // Right positions come last
                 if (posA.includes('r') && !posB.includes('r')) return 1;
                 if (!posA.includes('r') && posB.includes('r')) return -1;
-
-                // Center positions in the middle
                 return 0;
             });
 
-            return sortedPlayers.map((p, index) => {
-                // Mathematical horizontal distribution with better spacing
-                const left = playersInLine === 1
-                    ? '50%'
-                    : `${startX + ((index + 1) * (usableWidth / (playersInLine + 1)))}%`;
+            // Y-Coordinate (Vertical Depth)
+            // We use a 0-100 system where 0 is Top and 100 is Bottom.
+            // Home Team: Bottom Half (50-100)
+            // Away Team: Top Half (0-50)
 
-                return (
-                    <PlayerDot
-                        key={p.player.id}
-                        player={p.player}
-                        rating={p.rating}
-                        position={p.position}
-                        isCaptain={p.isCaptain}
-                        isMotM={p.isMotM}
-                        style={{ top, left }}
-                        onClick={() => onPlayerClick(p.player)}
-                        teamColor={isHome ? homeTeam.color : awayTeam.color}
-                        isGoalkeeper={p.line === 'GK'}
-                        size="normal"
-                    />
-                );
+            let y: number;
+
+            if (isBasketball) {
+                // Basketball spacing (vertical half court logic per team? actually full court usually)
+                // Assuming full court view:
+                // Home defends bottom, Away defends top.
+                if (isHome) {
+                    if (line === 'GUARD') y = 75;
+                    else if (line === 'CENTER') y = 90;
+                    else y = 60; // FORWARD
+                } else {
+                    if (line === 'GUARD') y = 25;
+                    else if (line === 'CENTER') y = 10;
+                    else y = 40; // FORWARD
+                }
+            } else {
+                // Football
+                if (isHome) {
+                    // Home is Bottom (50-100)
+                    // GK: 92%, DEF: 82%, DM: 70%, AM: 60%, FW: 53%
+                    if (line === 'GK') y = 92;
+                    else if (line === 'DEF') y = 82;
+                    else if (line === 'DM') y = 70;
+                    else if (line === 'AM') y = 62;
+                    else if (line === 'FW') y = 54;
+                    else y = 70;
+                } else {
+                    // Away is Top (0-50)
+                    // GK: 8%, DEF: 18%, DM: 30%, AM: 38%, FW: 46%
+                    if (line === 'GK') y = 8;
+                    else if (line === 'DEF') y = 18;
+                    else if (line === 'DM') y = 30;
+                    else if (line === 'AM') y = 38;
+                    else if (line === 'FW') y = 46;
+                    else y = 30;
+                }
+            }
+
+            // X-Coordinate (Horizontal Width)
+            const count = linePlayers.length;
+            // Use 90% width to leave 5% margin on each side
+            const availableWidth = 90;
+            const startX = 5;
+            const spacing = availableWidth / (count + 1);
+
+            linePlayers.forEach((p, index) => {
+                // formula: start + spacing * (i+1)
+                const x = startX + (spacing * (index + 1));
+
+                pitchPlayers.push({
+                    player: p.player,
+                    position: { x, y },
+                    rating: p.entry.rating || 0,
+                    isCaptain: !!p.entry.isCaptain,
+                    isMotM: !!p.entry.isMotM,
+                });
             });
         });
 
-        return { starterNodes, substitutes };
+        return pitchPlayers;
     };
 
-    const homeResult = processLineup(homePlayers, homeLineup, true, homeTeam.formation || '4-4-2');
-    const awayResult = processLineup(awayPlayers, awayLineup, false, awayTeam.formation || '4-4-2');
+    // Get Substitutes separately
+    const getSubstitutes = (players: Record<string, Player>, lineup: any[]) => {
+        return lineup
+            .filter(entry => entry.isStarter === false)
+            .map(entry => {
+                const player = players[entry.playerId];
+                if (!player) return null;
+                return {
+                    player,
+                    rating: entry.rating || 0,
+                    position: entry.position || player.position || 'SUB',
+                    teamColor: '' // Handled by render
+                };
+            })
+            .filter((p): p is NonNullable<typeof p> => p !== null);
+    };
+
+    const homePitchPlayers = processLineupForPitch(homePlayers, homeLineup, true, homeTeam.formation || '4-4-2');
+    const awayPitchPlayers = processLineupForPitch(awayPlayers, awayLineup, false, awayTeam.formation || '4-4-2');
+
+    const allPitchPlayers = [...homePitchPlayers, ...awayPitchPlayers];
+    const homeSubs = getSubstitutes(homePlayers, homeLineup);
+    const awaySubs = getSubstitutes(awayPlayers, awayLineup);
 
     return (
         <div className="w-full space-y-4 md:space-y-6">
-            {/* Team Headers - Hidden on mobile, shown on desktop */}
+            {/* Team Headers */}
             <div className="hidden md:flex items-center justify-between px-4">
                 <div className="flex items-center gap-3">
                     <img src={homeTeam.logo} alt={homeTeam.name} className="w-10 h-10 object-contain" />
@@ -260,39 +290,29 @@ export function FullPitchLineups({
                 </div>
             </div>
 
-            {/* Playing Surface - Enhanced larger view */}
-            {/* Full-width edge-to-edge on mobile, contained on desktop */}
-            <div className={`relative w-full -mx-4 md:mx-0 ${isBasketball ? 'aspect-[68/120]' : 'aspect-[68/120]'
-                } min-h-[600px] md:min-h-[700px] lg:min-h-[800px] bg-gradient-to-b ${isBasketball
-                    ? 'from-orange-900/30 via-orange-800/30 to-orange-900/30'
-                    : 'from-green-900/40 via-green-800/40 to-green-900/40'
-                } md:rounded-2xl overflow-hidden border-0 md:border border-white/10 shadow-2xl`}>
-                {/* Surface markings */}
-                {isBasketball ? <BasketballCourtMarkings /> : <FootballPitchMarkings />}
-
-                {/* Home Team Starters */}
-                <div className="absolute inset-0">
-                    {homeResult.starterNodes}
-                </div>
-
-                {/* Away Team Starters */}
-                <div className="absolute inset-0">
-                    {awayResult.starterNodes}
-                </div>
+            {/* Responsive Pitch Component */}
+            <div className="w-full max-w-lg mx-auto md:max-w-xl lg:max-w-2xl px-2">
+                <ResponsivePitch
+                    players={allPitchPlayers}
+                    homeTeamColor={homeTeam.color}
+                    awayTeamColor={awayTeam.color}
+                    onPlayerClick={onPlayerClick}
+                    orientation="vertical"
+                />
             </div>
 
-            {/* Bench - Horizontal List Below */}
-            {(homeResult.substitutes.length > 0 || awayResult.substitutes.length > 0) && (
-                <div className="space-y-4 px-4">
+            {/* Bench Section */}
+            {(homeSubs.length > 0 || awaySubs.length > 0) && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 px-4">
                     {/* Home Bench */}
-                    {homeResult.substitutes.length > 0 && (
-                        <div>
-                            <div className="flex items-center gap-2 mb-3">
-                                <img src={homeTeam.logo} alt={homeTeam.name} className="w-5 h-5 object-contain" />
-                                <span className="text-sm font-semibold text-white/60">Substitutes</span>
+                    {homeSubs.length > 0 && (
+                        <div className="space-y-3">
+                            <div className="flex items-center gap-2 border-b border-white/10 pb-2">
+                                <img src={homeTeam.logo} alt={homeTeam.name} className="w-6 h-6 object-contain" />
+                                <span className="font-bold text-sm">Valid Substitutes</span>
                             </div>
-                            <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
-                                {homeResult.substitutes.map((sub) => (
+                            <div className="grid grid-cols-1 gap-2">
+                                {homeSubs.map((sub) => (
                                     <BenchPlayer
                                         key={sub.player.id}
                                         player={sub.player}
@@ -307,14 +327,14 @@ export function FullPitchLineups({
                     )}
 
                     {/* Away Bench */}
-                    {awayResult.substitutes.length > 0 && (
-                        <div>
-                            <div className="flex items-center gap-2 mb-3">
-                                <img src={awayTeam.logo} alt={awayTeam.name} className="w-5 h-5 object-contain" />
-                                <span className="text-sm font-semibold text-white/60">Substitutes</span>
+                    {awaySubs.length > 0 && (
+                        <div className="space-y-3">
+                            <div className="flex items-center gap-2 border-b border-white/10 pb-2 justify-end md:justify-start">
+                                <img src={awayTeam.logo} alt={awayTeam.name} className="w-6 h-6 object-contain order-first md:order-last" />
+                                <span className="font-bold text-sm">Valid Substitutes</span>
                             </div>
-                            <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
-                                {awayResult.substitutes.map((sub) => (
+                            <div className="grid grid-cols-1 gap-2">
+                                {awaySubs.map((sub) => (
                                     <BenchPlayer
                                         key={sub.player.id}
                                         player={sub.player}
@@ -329,203 +349,6 @@ export function FullPitchLineups({
                     )}
                 </div>
             )}
-        </div>
-    );
-}
-
-// Football Pitch Markings Component - Enhanced for larger display
-function FootballPitchMarkings() {
-    return (
-        <div className="absolute inset-0 opacity-25">
-            {/* Outer boundary */}
-            <div className="absolute inset-2 border-2 border-white/60 rounded-sm"></div>
-
-            {/* Top penalty area */}
-            <div className="absolute top-2 left-1/2 -translate-x-1/2 w-2/3 h-[16%] border-2 border-white/60 border-t-0"></div>
-
-            {/* Top goal area */}
-            <div className="absolute top-2 left-1/2 -translate-x-1/2 w-1/3 h-[8%] border-2 border-white/60 border-t-0"></div>
-
-            {/* Top goal box */}
-            <div className="absolute top-2 left-1/2 -translate-x-1/2 w-1/5 h-[4%] border-2 border-white/60 border-t-0 rounded-b-md bg-white/5"></div>
-
-            {/* Top penalty spot */}
-            <div className="absolute top-[12%] left-1/2 -translate-x-1/2 w-2 h-2 bg-white/60 rounded-full"></div>
-
-            {/* Top penalty arc */}
-            <div className="absolute top-[16%] left-1/2 -translate-x-1/2 w-24 h-12 border-2 border-white/60 border-t-0 border-l-0 border-r-0 rounded-b-full"></div>
-
-            {/* Center line */}
-            <div className="absolute top-1/2 left-2 right-2 h-0.5 bg-white/60"></div>
-
-            {/* Center circle */}
-            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-32 h-32 border-2 border-white/60 rounded-full"></div>
-
-            {/* Center spot */}
-            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-2 h-2 bg-white/60 rounded-full"></div>
-
-            {/* Bottom penalty area */}
-            <div className="absolute bottom-2 left-1/2 -translate-x-1/2 w-2/3 h-[16%] border-2 border-white/60 border-b-0"></div>
-
-            {/* Bottom goal area */}
-            <div className="absolute bottom-2 left-1/2 -translate-x-1/2 w-1/3 h-[8%] border-2 border-white/60 border-b-0"></div>
-
-            {/* Bottom goal box */}
-            <div className="absolute bottom-2 left-1/2 -translate-x-1/2 w-1/5 h-[4%] border-2 border-white/60 border-b-0 rounded-t-md bg-white/5"></div>
-
-            {/* Bottom penalty spot */}
-            <div className="absolute bottom-[12%] left-1/2 -translate-x-1/2 w-2 h-2 bg-white/60 rounded-full"></div>
-
-            {/* Bottom penalty arc */}
-            <div className="absolute bottom-[16%] left-1/2 -translate-x-1/2 w-24 h-12 border-2 border-white/60 border-b-0 border-l-0 border-r-0 rounded-t-full"></div>
-
-            {/* Corner arcs */}
-            <div className="absolute top-2 left-2 w-8 h-8 border-2 border-white/60 border-t-0 border-l-0 rounded-br-full"></div>
-            <div className="absolute top-2 right-2 w-8 h-8 border-2 border-white/60 border-t-0 border-r-0 rounded-bl-full"></div>
-            <div className="absolute bottom-2 left-2 w-8 h-8 border-2 border-white/60 border-b-0 border-l-0 rounded-tr-full"></div>
-            <div className="absolute bottom-2 right-2 w-8 h-8 border-2 border-white/60 border-b-0 border-r-0 rounded-tl-full"></div>
-        </div>
-    );
-}
-
-// Basketball Court Markings Component
-function BasketballCourtMarkings() {
-    return (
-        <div className="absolute inset-0 opacity-20">
-            {/* Top hoop and key */}
-            <div className="absolute top-0 left-1/2 -translate-x-1/2 w-16 sm:w-20 h-1 bg-white/40"></div>
-            <div className="absolute top-0 left-1/2 -translate-x-1/2 w-1/3 h-16 sm:h-20 border border-white/40 sm:border-2 border-t-0 rounded-b-full"></div>
-            <div className="absolute top-0 left-1/2 -translate-x-1/2 w-1/4 h-12 sm:h-16 border border-white/40 sm:border-2 border-t-0"></div>
-
-            {/* Center circle */}
-            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-20 h-20 sm:w-28 sm:h-28 border border-white/40 sm:border-2 rounded-full"></div>
-            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-1.5 h-1.5 sm:w-2 sm:h-2 bg-white/40 rounded-full"></div>
-            <div className="absolute top-1/2 left-0 right-0 h-0.5 bg-white/40"></div>
-
-            {/* Bottom hoop and key */}
-            <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-16 sm:w-20 h-1 bg-white/40"></div>
-            <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-1/3 h-16 sm:h-20 border border-white/40 sm:border-2 border-b-0 rounded-t-full"></div>
-            <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-1/4 h-12 sm:h-16 border border-white/40 sm:border-2 border-b-0"></div>
-
-            {/* Three-point lines (simplified) */}
-            <div className="absolute top-0 left-0 right-0 h-1/3 border-l-2 border-r-2 border-white/20 rounded-b-[50%]"></div>
-            <div className="absolute bottom-0 left-0 right-0 h-1/3 border-l-2 border-r-2 border-white/20 rounded-t-[50%]"></div>
-        </div>
-    );
-}
-
-interface PlayerDotProps {
-    player: Player;
-    rating: number;
-    position: string;
-    isCaptain: boolean;
-    isMotM: boolean;
-    style: { top: string; left: string };
-    onClick: () => void;
-    teamColor: string;
-    isGoalkeeper?: boolean;
-    size?: 'normal' | 'small';
-}
-
-function PlayerDot({ player, rating, position, isCaptain, isMotM, style, onClick, teamColor, isGoalkeeper, size = 'normal' }: PlayerDotProps) {
-    // Get rating color based on performance (NO COLOR OVERLOAD - subtle colors)
-    const getRatingColor = (rating: number) => {
-        if (rating === 0) return 'bg-white/10 text-white/40 border-white/20'; // No rating yet
-        if (rating >= 7.5) return 'bg-green-500/90 text-white border-green-400';
-        if (rating >= 7.0) return 'bg-green-600/90 text-white border-green-500';
-        if (rating >= 6.5) return 'bg-yellow-500/90 text-black border-yellow-400';
-        if (rating >= 6.0) return 'bg-yellow-600/90 text-white border-yellow-500';
-        if (rating >= 5.5) return 'bg-orange-500/90 text-white border-orange-400';
-        return 'bg-red-500/90 text-white border-red-400';
-    };
-
-    // Mobile-responsive sizes - Larger for better visibility on bigger pitch
-    const sizeClasses = size === 'small'
-        ? 'w-10 h-10 sm:w-9 sm:h-9'
-        : 'w-16 h-16 sm:w-14 sm:h-14 md:w-16 md:h-16 lg:w-18 lg:h-18 xl:w-20 xl:h-20';
-
-    return (
-        <div
-            className="absolute cursor-pointer group"
-            style={{ ...style, transform: 'translate(-50%, -50%)' }}
-            onClick={onClick}
-        >
-            {/* FIXED HEIGHT CONTAINER - This is the ONLY element that affects geometry */}
-            <div className="relative" style={{ width: 0, height: 0 }}>
-                {/* Man of the Match star - ABSOLUTE OVERLAY */}
-                {isMotM && (
-                    <div className="absolute -top-6 sm:-top-7 md:-top-8 left-1/2 -translate-x-1/2 z-20 pointer-events-none">
-                        <div className="relative">
-                            <div className="absolute inset-0 bg-yellow-400 blur-sm sm:blur-md opacity-60 animate-pulse"></div>
-                            <svg className="w-3 h-3 sm:w-4 sm:h-4 md:w-5 md:h-5 relative z-10" viewBox="0 0 24 24" fill="gold" stroke="black" strokeWidth="1">
-                                <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
-                            </svg>
-                        </div>
-                    </div>
-                )}
-
-                {/* Captain armband - ABSOLUTE OVERLAY */}
-                {isCaptain && (
-                    <div className="absolute -top-1 -right-1 sm:-top-1.5 sm:-right-1.5 w-3 h-3 sm:w-4 sm:h-4 bg-yellow-400 rounded-full flex items-center justify-center z-20 border border-black sm:border-2 pointer-events-none">
-                        <span className="text-[6px] sm:text-[7px] md:text-[8px] font-black text-black">C</span>
-                    </div>
-                )}
-
-                {/* Player circle with jersey number - FIXED SIZE */}
-                <div
-                    className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 ${sizeClasses} rounded-full border border-white sm:border-2 flex items-center justify-center transition-all group-hover:scale-110 shadow-lg ${isGoalkeeper ? 'bg-yellow-500/95 border-yellow-300 ring-1 sm:ring-2 ring-yellow-400/50' : 'bg-white/95 border-white'
-                        }`}
-                    style={{ backgroundColor: isGoalkeeper ? undefined : teamColor }}
-                >
-                    <span className={`text-[10px] sm:text-xs md:text-sm lg:text-base font-black ${isGoalkeeper ? 'text-black' : 'text-white drop-shadow-lg'}`}>
-                        {player.number}
-                    </span>
-                </div>
-
-                {/* Rating Badge - ABSOLUTE OVERLAY (does NOT affect layout) */}
-                {rating > 0 && (
-                    <div className="absolute top-full left-1/2 -translate-x-1/2 mt-1 sm:mt-1.5 z-20 pointer-events-none">
-                        <div className={`px-1 py-0.5 sm:px-1.5 rounded border sm:border-2 font-bold text-[8px] sm:text-[9px] md:text-[10px] lg:text-xs shadow-lg leading-none whitespace-nowrap ${getRatingColor(rating)}`}>
-                            {rating.toFixed(1)}
-                        </div>
-                    </div>
-                )}
-
-                {/* Player name - ABSOLUTE OVERLAY */}
-                <div className="absolute top-full left-1/2 -translate-x-1/2 mt-5 sm:mt-6 md:mt-7 z-10 whitespace-nowrap pointer-events-none">
-                    <p className="text-[7px] sm:text-[8px] md:text-[9px] lg:text-xs font-bold text-white drop-shadow-lg text-center bg-black/50 px-1 py-0.5 sm:px-1.5 rounded leading-none">
-                        {player.jerseyName || player.name.split(' ').pop()}
-                    </p>
-                </div>
-
-                {/* Enhanced tooltip on hover - Hidden on mobile, shown on desktop */}
-                <div className="hidden md:block absolute top-full left-1/2 -translate-x-1/2 mt-12 lg:mt-16 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-30">
-                    <div className="bg-black/95 backdrop-blur-sm px-3 py-2 rounded-lg border border-white/20 whitespace-nowrap shadow-xl">
-                        <p className="text-xs font-bold text-white">{player.name}</p>
-                        <div className="flex items-center gap-2 mt-1">
-                            <span className="text-[10px] text-white/60 uppercase">{position}</span>
-                            {rating > 0 && (
-                                <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${rating >= 7.0 ? 'bg-green-500/20 text-green-400' :
-                                    rating >= 6.0 ? 'bg-yellow-500/20 text-yellow-400' :
-                                        'bg-red-500/20 text-red-400'
-                                    }`}>
-                                    ⭐ {rating.toFixed(1)}
-                                </span>
-                            )}
-                            {isMotM && (
-                                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-yellow-400/20 text-yellow-300">
-                                    🏆 MOTM
-                                </span>
-                            )}
-                            {isCaptain && (
-                                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-yellow-500/20 text-yellow-400">
-                                    👑 CAPTAIN
-                                </span>
-                            )}
-                        </div>
-                    </div>
-                </div>
-            </div>
         </div>
     );
 }
@@ -551,7 +374,7 @@ function BenchPlayer({ player, rating, position, teamColor, onClick }: BenchPlay
             onClick={onClick}
             className="flex-shrink-0 flex items-center gap-1.5 sm:gap-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg px-2 py-1.5 sm:px-3 sm:py-2 cursor-pointer transition-all hover:scale-105 active:scale-95"
         >
-            {/* Jersey number - Mobile responsive */}
+            {/* Jersey number */}
             <div
                 className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg flex items-center justify-center text-[10px] sm:text-xs font-bold"
                 style={{ backgroundColor: teamColor + '40', color: '#fff' }}
@@ -559,15 +382,15 @@ function BenchPlayer({ player, rating, position, teamColor, onClick }: BenchPlay
                 {player.number}
             </div>
 
-            {/* Player info - Mobile responsive */}
+            {/* Player info */}
             <div className="min-w-0">
-                <div className="text-xs sm:text-sm font-semibold text-white truncate max-w-[80px] sm:max-w-[120px]">
+                <div className="text-xs sm:text-sm font-semibold text-white truncate max-w-[150px]">
                     {player.jerseyName || player.name.split(' ').pop()}
                 </div>
                 <div className="text-[9px] sm:text-[10px] text-white/60">{position}</div>
             </div>
 
-            {/* Rating - Only show if exists - Mobile responsive */}
+            {/* Rating */}
             {rating > 0 && (
                 <div className={`ml-auto px-1.5 py-0.5 sm:px-2 sm:py-1 rounded text-[10px] sm:text-xs font-bold ${getRatingColor(rating)}`}>
                     {rating.toFixed(1)}

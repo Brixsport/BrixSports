@@ -18,7 +18,14 @@ export async function GET(
             return NextResponse.json({ error: 'Match not found' }, { status: 404 });
         }
 
-        const lineups = match[0].lineups ? JSON.parse(match[0].lineups) : null;
+        let lineups = null;
+        if (match[0].lineups) {
+            try {
+                lineups = JSON.parse(match[0].lineups as string);
+            } catch (e) {
+                console.error('Error parsing lineups JSON:', e);
+            }
+        }
 
         return NextResponse.json({
             success: true,
@@ -64,7 +71,18 @@ export async function POST(
         }
 
         // Get existing lineups or create new object
-        const existingLineups = match[0].lineups ? JSON.parse(match[0].lineups) : {};
+        // Get existing lineups or create new object
+        let existingLineups: any = {};
+        if (match[0].lineups) {
+            try {
+                const parsed = JSON.parse(match[0].lineups as string);
+                if (parsed && typeof parsed === 'object') {
+                    existingLineups = parsed;
+                }
+            } catch (e) {
+                console.error('Error parsing lineups JSON:', e);
+            }
+        }
 
         // Update the specific team's lineup
         existingLineups[team] = {
@@ -115,7 +133,18 @@ export async function DELETE(
         }
 
         // Get existing lineups
-        const existingLineups = match[0].lineups ? JSON.parse(match[0].lineups) : {};
+        // Get existing lineups
+        let existingLineups: any = {};
+        if (match[0].lineups) {
+            try {
+                const parsed = JSON.parse(match[0].lineups as string);
+                if (parsed && typeof parsed === 'object') {
+                    existingLineups = parsed;
+                }
+            } catch (e) {
+                console.error('Error parsing lineups JSON:', e);
+            }
+        }
 
         // Delete the specific team's lineup
         delete existingLineups[team];

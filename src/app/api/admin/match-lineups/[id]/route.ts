@@ -73,13 +73,25 @@ export async function POST(
         }
 
         // Get existing lineups or create new object
-        const existingLineups = match[0].lineups ? JSON.parse(match[0].lineups) : {};
+        let existingLineups: any = {};
+        if (match[0].lineups) {
+            try {
+                const parsed = JSON.parse(match[0].lineups as string);
+                if (parsed && typeof parsed === 'object') {
+                    existingLineups = parsed;
+                }
+            } catch (e) {
+                console.error('Error parsing match lineups JSON:', e);
+                // Fallback to empty object
+            }
+        }
 
         // Update the specific team's lineup
         existingLineups[team] = {
             ...lineup,
             status: 'published',
             publishedBy: user.id,
+            publishedByRole: user.role,
             publishedAt: new Date().toISOString(),
             updatedAt: new Date().toISOString()
         };
