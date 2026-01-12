@@ -12,7 +12,7 @@ import { MatchVotePoll } from '@/components/predictions/MatchVotePoll';
 import { LivestreamChat } from '@/components/livestream/LivestreamChat';
 import { LivestreamPlayer } from '@/components/livestream/LivestreamPlayer';
 import { FootballPitch } from '@/components/FootballPitch';
-import { MatchLineup } from '@/components/lineup/MatchLineup';
+import { ResponsiveLineup } from '@/components/lineup/ResponsiveLineup';
 import { useMatchEvents, useMatchStatus, usePlayerRatings, useMatchViewers, useMatchTimer } from '@/hooks/useWebSocket';
 
 interface MatchOverlayProps {
@@ -749,16 +749,14 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
                     <p className="text-white/60 text-sm">Loading lineups...</p>
                   </div>
                 ) : isLineupPublished(match.lineups?.home) && isLineupPublished(match.lineups?.away) ? (
-                  <MatchLineup
+                  <ResponsiveLineup
                     homeTeam={{
-                      id: homeTeam?.id,
                       name: homeTeam?.name || 'Home',
                       logo: homeTeam?.logo || '',
                       color: homeTeam?.color || '#3B82F6',
                       formation: (match.lineups?.home as any)?.formation || '4-4-2'
                     }}
                     awayTeam={{
-                      id: awayTeam?.id,
                       name: awayTeam?.name || 'Away',
                       logo: awayTeam?.logo || '',
                       color: awayTeam?.color || '#EF4444',
@@ -799,6 +797,13 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
                           isMotM: ratings[entry.playerId]?.isMotM || false
                         }));
                       }
+                      if (Array.isArray(awayLineup)) {
+                        return awayLineup.map((entry: any) => ({
+                          ...entry,
+                          rating: ratings[entry.playerId]?.finalRating || ratings[entry.playerId]?.autoRating || entry.rating || 0,
+                          isMotM: ratings[entry.playerId]?.isMotM || false
+                        }));
+                      }
                       return [];
                     })()}
                     homeSubs={(() => {
@@ -808,7 +813,8 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
                         return homeLineup.substitutes.map((entry: any) => ({
                           playerId: entry.playerId,
                           position: entry.position,
-                          rating: ratings[entry.playerId]?.finalRating || ratings[entry.playerId]?.autoRating || 0
+                          rating: ratings[entry.playerId]?.finalRating || ratings[entry.playerId]?.autoRating || 0,
+                          isMotM: ratings[entry.playerId]?.isMotM || false
                         }));
                       }
                       return [];
@@ -820,12 +826,13 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
                         return awayLineup.substitutes.map((entry: any) => ({
                           playerId: entry.playerId,
                           position: entry.position,
-                          rating: ratings[entry.playerId]?.finalRating || ratings[entry.playerId]?.autoRating || 0
+                          rating: ratings[entry.playerId]?.finalRating || ratings[entry.playerId]?.autoRating || 0,
+                          isMotM: ratings[entry.playerId]?.isMotM || false
                         }));
                       }
                       return [];
                     })()}
-                    events={match.events}
+                    events={match.events || []}
                     onPlayerClick={onSelectPlayer}
                   />
                 ) : (

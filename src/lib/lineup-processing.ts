@@ -51,132 +51,68 @@ export function processLineup(
     const slots = [...formation.positions];
     const assignedPlayers: ProcessedPitchPlayer[] = [];
 
-    // Helper to determine side from string or coordinate
-    function getSide(str: string, x?: number): 'L' | 'R' | 'C' {
-        const s = str.toLowerCase();
-        if (s.includes('l') && !s.includes('c') && !s.includes('r')) return 'L'; // e.g. LB, LW
-        if (s.includes('r') && !s.includes('c') && !s.includes('l')) return 'R'; // e.g. RB, RW
-        if (s.startsWith('l') || s.endsWith('l')) return 'L'; // LCB, LCM
-        if (s.startsWith('r') || s.endsWith('r')) return 'R'; // RCB, RCM
-
-        // Fallback to coordinates
-        if (x !== undefined) {
-            if (x < 35) return 'L';
-            if (x > 65) return 'R';
-        }
-        return 'C';
-    }
-
-    function getPositionScore(player: Player, slot: FormationPosition): number {
-        let score = 0;
-        const pPos = player.position.toUpperCase();
-        const sPos = slot.position.toUpperCase();
-        const sId = slot.id.toLowerCase();
-
-        // 1. Exact Match (Highest Priority)
-        // e.g. 'CDM' == 'CDM'
-        if (pPos === sPos) score += 100;
-
-        // 2. Partial Match
-        // e.g. 'CDM' in 'LCDM' slot? or 'CB' in 'LCB'?
-        // Usually slot.position is just 'CB'.
-        // So this check is covered by 1 mostly.
-
-        // 3. Side Agreement (Crucial for LCB vs RCB)
-        const pSide = getSide(player.position); // e.g. LCB -> L
-        const sSide = getSide(slot.id, slot.x); // e.g. lcb -> L, x=30 -> L
-
-        if (pSide === sSide) {
-            score += 50;
-        } else if (pSide !== 'C' && sSide !== 'C') {
-            // Explicit Mismatch (L vs R)
-            score -= 50;
-        }
-
-        // 4. Center Bias checking
-        // If player is 'C' (e.g. CDM) and slot is 'C' (x=50), bonus
-        if (pSide === 'C' && sSide === 'C') score += 25;
-
-        return score;
-    }
-
+    // Helper to fill a set of slots with a set of players
     function fillSlots(zone: 'GK' | 'DEF' | 'MID' | 'FWD') {
-        const availableSlots = slots.filter(s => s.zone === zone);
-        let availablePlayers = [...pool[zone]];
+        const zoneSlots = slots.filter(s => s.zone === zone).sort((a, b) => a.x - b.x); // Left to right
+        const zonePlayers = pool[zone];
 
-        // We want to find the BEST match for each slot globally, or greedily?
-        // Greedy approach: Calculate all scores, pick best pair, remove, repeat.
+        // Map 1:1 as best as possible
+        // If we have more slots than players, some slots remain empty.
+        // If we have more players than slots, we need to spill over or overload.
 
-        // Calculate all possible pair scores
-        interface MatchParams {
-            slotIndex: number;
-            playerIndex: number;
-            score: number;
-        }
+        // Strategy: Fill Left-to-Right slots with Left-to-Right players?
+        // Usually, lineup arrays are list: LB, CB, CB, RB.
+        // Slots sorted X: 15(LB), 38(LCB), 62(RCB), 85(RB).
+        // Matches perfectly.
 
-        const matches: MatchParams[] = [];
+        for (let i = 0; i < zoneSlots.length; i++) {
+            if (i < zonePlayers.length) {
+                const player = zonePlayers[i];
+                const slot = zoneSlots[i];
 
-        availableSlots.forEach((slot, sIdx) => {
-            availablePlayers.forEach((player, pIdx) => {
-                matches.push({
-                    slotIndex: sIdx,
-                    playerIndex: pIdx,
-                    score: getPositionScore(player, slot)
+                // Calculate Coordinates
+                // For Home Team (Bottom 50-100% usually, or full pitch 0-100 where 100 is bottom/defense?)
+                // User spec: "0=attack/top, 100=defense/bottom"
+                // If this is for a full pitch view where Home is at bottom:
+                // GK is at 95 (Bottom). FWD is at 15 (Top).
+                // Wait, if 0 is attack (top) and 100 is defense (bottom), then:
+                // GK at 95 is correct (near own goal at bottom).
+                // FWD at 15 is correct (near opponent goal at top).
+
+                // HOWEVER, typically Home attacks UP (GK at bottom) or Away attacks DOWN (GK at top).
+                // If we want both teams on one pitch:
+                // Home Team: GK at Bottom (y=95).
+                // Away Team: GK at Top (y=5).
+
+                // So if isHomeTeam: Use coords as is.
+                // If !isHomeTeam: Mirror coords (x becomes 100-x, y becomes 100-y).
+                // Wait, if Away GK is at Top (0-5), and template says y=95 for GK...
+                // Then Away Y = 100 - TemplateY. (100-95 = 5).
+                // Away FWD (Template 15) -> 100 - 15 = 85 (near Home goal). Correct.
+
+                let finalX = slot.x;
+                let finalY = slot.y;
+
+                if (!isHomeTeam) {
+                    finalX = 100 - finalX;
+                    finalY = 100 - finalY;
+                }
+
+                assignedPlayers.push({
+                    player,
+                    x: finalX,
+                    y: finalY,
+                    role: slot.position
                 });
-            });
-        });
-
-        // Sort by Score Descending
-        matches.sort((a, b) => b.score - a.score);
-
-        const assignedSlotIndices = new Set<number>();
-        const assignedPlayerIndices = new Set<number>();
-
-        // Assign best matches
-        for (const match of matches) {
-            if (assignedSlotIndices.has(match.slotIndex) || assignedPlayerIndices.has(match.playerIndex)) {
-                continue;
-            }
-
-            const slot = availableSlots[match.slotIndex];
-            const player = availablePlayers[match.playerIndex];
-
-            mapPlayerToSlot(player, slot);
-
-            assignedSlotIndices.add(match.slotIndex);
-            assignedPlayerIndices.add(match.playerIndex);
-        }
-
-        // Handle leftovers (highly unlikely in standard formations if numbers match)
-        // If there are unassigned slots and unassigned players, fall back to simple fill?
-        if (assignedSlotIndices.size < availableSlots.length && assignedPlayerIndices.size < availablePlayers.length) {
-            // Get unassigned items
-            const remainingSlots = availableSlots.filter((_, idx) => !assignedSlotIndices.has(idx)).sort((a, b) => a.x - b.x);
-            const remainingPlayers = availablePlayers.filter((_, idx) => !assignedPlayerIndices.has(idx)); // Order?
-
-            // Just zip them up left-to-right
-            for (let i = 0; i < Math.min(remainingSlots.length, remainingPlayers.length); i++) {
-                mapPlayerToSlot(remainingPlayers[i], remainingSlots[i]);
             }
         }
 
-        function mapPlayerToSlot(player: Player, slot: FormationPosition) {
-            let finalX = slot.x; // 0-100
-            let finalY = slot.y; // 0-100
-
-            if (isHomeTeam) {
-                finalY = 50 + (finalY / 2);
-            } else {
-                finalY = (100 - finalY) / 2;
-                finalX = 100 - finalX;
-            }
-
-            assignedPlayers.push({
-                player,
-                x: finalX,
-                y: finalY,
-                role: slot.position
-            });
+        // Handle overflow (players without slots) - unlikely in strict 11v11 but possible
+        const remaining = zonePlayers.slice(zoneSlots.length);
+        if (remaining.length > 0) {
+            // Find nearest zone or just dump in middle? 
+            // For now, ignore or log. In a real app we might put them on the sideline or generic positions.
+            console.warn(`Unassigned players in zone ${zone}:`, remaining.map(p => p.name));
         }
     }
 

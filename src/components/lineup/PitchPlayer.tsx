@@ -56,7 +56,7 @@ export function PitchPlayer({
                 {/* Player Avatar / Number Circle */}
                 <div
                     className={cn(
-                        "relative w-14 h-14 sm:w-16 sm:h-16 rounded-full flex items-center justify-center border-2 shadow-md transition-transform group-hover:scale-105",
+                        "relative w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center border-2 shadow-md transition-transform group-hover:scale-105",
                         isMotM ? "border-yellow-400 shadow-[0_0_10px_rgba(250,204,21,0.5)]" : "border-white/90"
                     )}
                     style={{ backgroundColor: color }}
@@ -71,28 +71,28 @@ export function PitchPlayer({
                             />
                         </div>
                     ) : (
-                        <span className="text-white font-bold text-lg sm:text-xl drop-shadow-md">
+                        <span className="text-white font-bold text-sm sm:text-base drop-shadow-md">
                             {player.number}
                         </span>
                     )}
 
                     {/* Captain Badge */}
                     {isCaptain && (
-                        <div className="absolute -top-1 -left-1 w-5 h-5 bg-yellow-400 rounded-full flex items-center justify-center text-[10px] font-black text-black border border-white shadow-sm z-20">
+                        <div className="absolute -top-1 -left-1 w-4 h-4 bg-yellow-400 rounded-full flex items-center justify-center text-[8px] font-black text-black border border-white shadow-sm z-20">
                             C
                         </div>
                     )}
 
                     {/* Substitution Indicator (Red Badge) */}
                     {substitutionTime && (
-                        <div className="absolute -top-1 -right-2 bg-red-600 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full border border-white shadow-sm z-20 flex items-center gap-0.5">
-                            <span className="text-[7px]">↓</span>{substitutionTime}
+                        <div className="absolute -top-1 -right-2 bg-red-600 text-white text-[8px] font-bold px-1 py-0.5 rounded-full border border-white shadow-sm z-20 flex items-center gap-0.5">
+                            <span className="text-[6px]">↓</span>{substitutionTime}
                         </div>
                     )}
 
                     {/* Goal Indicator */}
                     {goals && goals > 0 && (
-                        <div className="absolute -bottom-1 -left-2 bg-white text-black text-[9px] font-bold px-1.5 py-0 rounded-full border border-gray-200 shadow-sm z-20 flex items-center gap-0.5">
+                        <div className="absolute -bottom-1 -left-2 bg-white text-black text-[8px] font-bold px-1 py-0 rounded-full border border-gray-200 shadow-sm z-20 flex items-center gap-0.5">
                             ⚽ {goals > 1 ? `x${goals}` : ''}
                         </div>
                     )}
@@ -100,7 +100,7 @@ export function PitchPlayer({
                     {/* Rating Badge (Bottom Right) */}
                     {rating !== undefined && rating > 0 && (
                         <div className={cn(
-                            "absolute -bottom-1 -right-1 w-6 h-6 sm:w-7 sm:h-7 rounded-full flex items-center justify-center text-[10px] sm:text-xs font-bold border shadow-sm z-20",
+                            "absolute -bottom-1 -right-1 w-5 h-5 sm:w-6 sm:h-6 rounded-full flex items-center justify-center text-[9px] sm:text-[10px] font-bold border shadow-sm z-20",
                             getRatingColor(rating)
                         )}>
                             {rating.toFixed(1)}
@@ -112,8 +112,8 @@ export function PitchPlayer({
             {/* Player Name */}
             {showName && (
                 <div className="mt-1 flex flex-col items-center">
-                    <span className="text-xs sm:text-sm font-medium text-white px-2 py-0.5 rounded-sm drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)] whitespace-nowrap overflow-hidden text-ellipsis max-w-[100px] text-center">
-                        {player.jerseyName || player.name.trim().split(/\s+/).pop() || player.name}
+                    <span className="text-[10px] sm:text-xs font-medium text-white bg-black/50 px-1.5 py-0.5 rounded backdrop-blur-[2px] whitespace-nowrap overflow-hidden text-ellipsis max-w-[90px] text-center shadow-sm">
+                        {player.jerseyName || player.name.split(' ').pop() || player.name}
                     </span>
                     {/* Small number if avatar is shown? Maybe redundant but requested "Player number: Small text above name" 
                         Actually request says "Player number: Small text above name".
