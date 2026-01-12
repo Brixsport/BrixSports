@@ -53,22 +53,25 @@ export function ResponsivePitch({
                     "relative w-full h-full rounded-xl overflow-hidden shadow-2xl bg-[#2a2a2a] border border-white/10",
                 )}
             >
-                {/* Pitch Background - Grass Texture */}
-                <div className="absolute inset-0 bg-gradient-to-br from-green-800 via-emerald-800 to-green-900">
-                    {/* Mowed lawn stripes pattern */}
+                {/* Pitch Background - Dark Premium Theme */}
+                <div className="absolute inset-0 bg-[#1a1a1a]">
+                    {/* Subtle gradient overlay */}
+                    <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-transparent to-black/40" />
+
+                    {/* Mowed lawn stripes pattern - very subtle */}
                     <div
-                        className="absolute inset-0 opacity-10"
+                        className="absolute inset-0 opacity-[0.03]"
                         style={{
                             backgroundImage: orientation === 'horizontal'
-                                ? 'repeating-linear-gradient(90deg, transparent, transparent 5%, #000 5%, #000 10%)'
-                                : 'repeating-linear-gradient(0deg, transparent, transparent 5%, #000 5%, #000 10%)'
+                                ? 'repeating-linear-gradient(90deg, transparent, transparent 5%, #fff 5%, #fff 10%)'
+                                : 'repeating-linear-gradient(0deg, transparent, transparent 5%, #fff 5%, #fff 10%)'
                         }}
                     />
                 </div>
 
                 {/* Markings */}
                 {showMarkings && (
-                    <PitchMarkings orientation={orientation} strokeColor="rgba(255,255,255,0.4)" />
+                    <PitchMarkings orientation={orientation} strokeColor="rgba(255,255,255,0.2)" />
                 )}
 
                 {/* Players Layer */}

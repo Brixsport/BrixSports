@@ -376,7 +376,7 @@ export function FullPitchLineups({
                     className="
                         relative
                         w-full
-                        aspect-[9/16]
+                        aspect-[7/10]
                         sm:aspect-[3/5]
                         lg:aspect-[3/4]
                     "
