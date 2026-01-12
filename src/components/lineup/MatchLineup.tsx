@@ -93,87 +93,117 @@ export function MatchLineup({
     const homeLayout = processLineup(homeStarterPlayers, homeFormation, true);
     const awayLayout = processLineup(awayStarterPlayers, awayFormation, false);
 
-    return (
-        <div className="w-full flex flex-col gap-4">
+    const [view, setView] = React.useState<'pitch' | 'list'>('pitch');
 
-            {/* Header Info */}
-            <div className="flex justify-between items-center px-4 py-2 bg-zinc-900/50 rounded-lg backdrop-blur-sm border border-white/5">
-                <div className="flex flex-col">
-                    <span className="text-xs text-zinc-400">Home Formation</span>
-                    <span className="font-bold text-white">{homeFormation}</span>
-                </div>
-                <div className="flex flex-col items-end">
-                    <span className="text-xs text-zinc-400">Away Formation</span>
-                    <span className="font-bold text-white">{awayFormation}</span>
+    return (
+        <div className="w-full flex flex-col h-[calc(100vh-140px)] bg-[#0f1419]">
+            {/* Header / Toggle */}
+            <div className="flex items-center justify-between px-4 py-3 bg-[#0f1419] z-20">
+                <h2 className="text-xl font-bold text-white">Lineups</h2>
+                <div className="flex bg-[#1e2329] rounded-full p-1 border border-white/5">
+                    <button
+                        onClick={() => setView('pitch')}
+                        className={cn(
+                            "px-6 py-1.5 rounded-full text-sm font-medium transition-all",
+                            view === 'pitch' ? "bg-[#3b82f6] text-white shadow-md" : "text-zinc-400 hover:text-zinc-200"
+                        )}
+                    >
+                        Pitch
+                    </button>
+                    <button
+                        onClick={() => setView('list')}
+                        className={cn(
+                            "px-6 py-1.5 rounded-full text-sm font-medium transition-all",
+                            view === 'list' ? "bg-[#3b82f6] text-white shadow-md" : "text-zinc-400 hover:text-zinc-200"
+                        )}
+                    >
+                        List
+                    </button>
                 </div>
             </div>
 
-            {/* Scrollable Pitch Container */}
-            <div className="relative w-full overflow-x-hidden overflow-y-auto bg-[#0f1419] rounded-xl border border-white/10 shadow-2xl" style={{ height: 'calc(100vh - 200px)', minHeight: '600px' }}>
+            {/* Content Area */}
+            {view === 'pitch' ? (
+                <div className="relative w-full flex-1 overflow-x-hidden overflow-y-auto bg-[#1a4d2e]">
 
-                {/* The Tall Pitch Content */}
-                <div className="relative w-full" style={{ height: '1200px' }}>
+                    {/* Pitch Container - Fixed Height within scroll */}
+                    <div className="relative w-full" style={{ height: '1100px', marginBottom: '80px' }}>
 
-                    {/* Background */}
-                    <div className="absolute inset-0 bg-gradient-to-b from-[#1a4d2e] to-[#0f2e1b]">
-                        {/* Grass pattern */}
-                        <div className="absolute inset-0 opacity-20"
-                            style={{ backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 49px, rgba(0,0,0,0.1) 49px, rgba(0,0,0,0.1) 50px)' }}>
+                        {/* Background - Horizontal Stripes */}
+                        <div className="absolute inset-0 flex flex-col">
+                            {Array.from({ length: 20 }).map((_, i) => (
+                                <div key={i} className={cn(
+                                    "flex-1 w-full",
+                                    i % 2 === 0 ? "bg-[#1a4d2e]" : "bg-[#1f5635]"
+                                )} />
+                            ))}
+                        </div>
+
+                        {/* Markings */}
+                        <PitchMarkings className="absolute inset-0 w-full h-full pointer-events-none z-0 opacity-40 mix-blend-overlay" />
+
+                        {/* Formation Label (Top-Left) */}
+                        <div className="absolute top-4 left-4 z-0 text-white/20 text-4xl font-black uppercase tracking-wider select-none pointer-events-none">
+                            {awayFormation}
+                        </div>
+                        <div className="absolute bottom-4 right-4 z-0 text-white/20 text-4xl font-black uppercase tracking-wider select-none pointer-events-none">
+                            {homeFormation}
+                        </div>
+
+
+                        {/* PLAYERS LAYER */}
+                        <div className="absolute inset-0 z-10 p-4">
+                            {/* Away Team (Top) */}
+                            {awayLayout.map((item) => (
+                                <PitchPlayer
+                                    key={item.player.id}
+                                    player={item.player}
+                                    x={item.x}
+                                    y={item.y}
+                                    color={awayTeam.color}
+                                    rating={(item.player as any)._rating}
+                                    isCaptain={(item.player as any)._isCaptain}
+                                    isMotM={(item.player as any)._isMotM}
+                                    goals={(item.player as any)._goals}
+                                    substitutionTime={(item.player as any)._subTime}
+                                    onClick={() => onPlayerClick?.(item.player)}
+                                />
+                            ))}
+
+                            {/* Home Team (Bottom) */}
+                            {homeLayout.map((item) => (
+                                <PitchPlayer
+                                    key={item.player.id}
+                                    player={item.player}
+                                    x={item.x}
+                                    y={item.y}
+                                    color={homeTeam.color}
+                                    rating={(item.player as any)._rating}
+                                    isCaptain={(item.player as any)._isCaptain}
+                                    isMotM={(item.player as any)._isMotM}
+                                    goals={(item.player as any)._goals}
+                                    substitutionTime={(item.player as any)._subTime}
+                                    onClick={() => onPlayerClick?.(item.player)}
+                                />
+                            ))}
                         </div>
                     </div>
 
-                    {/* Markings */}
-                    <PitchMarkings className="absolute inset-0 w-full h-full pointer-events-none z-0" />
-
-                    {/* Formation Label (Top-Left) */}
-                    <div className="absolute top-4 left-4 z-0 text-white/20 text-4xl font-black uppercase tracking-wider select-none pointer-events-none">
-                        {awayFormation}
-                    </div>
-                    <div className="absolute bottom-4 right-4 z-0 text-white/20 text-4xl font-black uppercase tracking-wider select-none pointer-events-none">
-                        {homeFormation}
-                    </div>
-
-
-                    {/* PLAYERS LAYER */}
-                    <div className="absolute inset-0 z-10">
-                        {/* Away Team (Top) */}
-                        {awayLayout.map((item) => (
-                            <PitchPlayer
-                                key={item.player.id}
-                                player={item.player}
-                                x={item.x}
-                                y={item.y}
-                                color={awayTeam.color}
-                                rating={(item.player as any)._rating}
-                                isCaptain={(item.player as any)._isCaptain}
-                                isMotM={(item.player as any)._isMotM}
-                                goals={(item.player as any)._goals}
-                                substitutionTime={(item.player as any)._subTime}
-                                onClick={() => onPlayerClick?.(item.player)}
-                            // Add goals/subs if available in player stats or lineup events
-                            />
-                        ))}
-
-                        {/* Home Team (Bottom) */}
-                        {homeLayout.map((item) => (
-                            <PitchPlayer
-                                key={item.player.id}
-                                player={item.player}
-                                x={item.x}
-                                y={item.y}
-                                color={homeTeam.color}
-                                rating={(item.player as any)._rating}
-                                isCaptain={(item.player as any)._isCaptain}
-                                isMotM={(item.player as any)._isMotM}
-                                goals={(item.player as any)._goals}
-                                substitutionTime={(item.player as any)._subTime}
-                                onClick={() => onPlayerClick?.(item.player)}
-                            />
-                        ))}
+                    {/* Substitutes Header (Bottom of Pitch Scroll) */}
+                    <div className="px-4 py-3 bg-[#0f1419] border-t border-white/10 mt-auto">
+                        <div className="flex items-center gap-2">
+                            {/* Small logo placeholder */}
+                            <div className="w-5 h-5 bg-indigo-900 rounded-sm flex items-center justify-center text-[10px] text-white">🏆</div>
+                            <span className="font-bold text-white text-sm">Valid Substitutes</span>
+                        </div>
                     </div>
 
                 </div>
-            </div>
+            ) : (
+                <div className="w-full flex-1 p-8 flex items-center justify-center text-zinc-500">
+                    List view implementation...
+                </div>
+            )}
         </div>
     );
 }
