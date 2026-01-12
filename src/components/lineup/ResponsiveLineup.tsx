@@ -4,9 +4,7 @@ import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Player } from '@/types';
 import { useScreenSize } from '@/hooks/useScreenSize';
-import { useViewportHeight } from '@/hooks/useViewportHeight';
-import { MobilePlayerSheet } from './MobilePlayerSheet';
-import { ResponsivePlayerCard } from './ResponsivePlayerCard';
+import { FullPitchLineups } from '@/components/FullPitchLineups';
 
 interface TeamData {
     name: string;
@@ -28,108 +26,7 @@ interface ResponsiveLineupProps {
     onPlayerClick?: (player: Player) => void;
 }
 
-// Formation position mappings (simplified for mobile)
-const FORMATION_POSITIONS: Record<string, { top: number; left: number }[]> = {
-    '4-3-3': [
-        { top: 90, left: 50 }, // GK
-        { top: 75, left: 15 }, { top: 75, left: 35 }, { top: 75, left: 65 }, { top: 75, left: 85 }, // DEF
-        { top: 55, left: 30 }, { top: 55, left: 50 }, { top: 55, left: 70 }, // MID
-        { top: 30, left: 20 }, { top: 30, left: 50 }, { top: 30, left: 80 }, // FWD
-    ],
-    '4-4-2': [
-        { top: 90, left: 50 }, // GK
-        { top: 75, left: 15 }, { top: 75, left: 35 }, { top: 75, left: 65 }, { top: 75, left: 85 }, // DEF
-        { top: 55, left: 20 }, { top: 55, left: 40 }, { top: 55, left: 60 }, { top: 55, left: 80 }, // MID
-        { top: 30, left: 35 }, { top: 30, left: 65 }, // FWD
-    ],
-    '4-2-3-1': [
-        { top: 90, left: 50 }, // GK
-        { top: 75, left: 15 }, { top: 75, left: 35 }, { top: 75, left: 65 }, { top: 75, left: 85 }, // DEF
-        { top: 60, left: 35 }, { top: 60, left: 65 }, // CDM
-        { top: 45, left: 20 }, { top: 45, left: 50 }, { top: 45, left: 80 }, // CAM
-        { top: 25, left: 50 }, // ST
-    ],
-};
-
-function getFormationPositions(formation: string = '4-3-3'): { top: number; left: number }[] {
-    return FORMATION_POSITIONS[formation] || FORMATION_POSITIONS['4-3-3'];
-}
-
-// Mobile Pitch Half Component
-function MobilePitchHalf({
-    team,
-    players,
-    lineup,
-    events = [],
-    isTop,
-    onPlayerClick,
-    screenSize
-}: {
-    team: TeamData;
-    players: Record<string, Player>;
-    lineup: any[];
-    events?: any[];
-    isTop: boolean;
-    onPlayerClick: (player: Player) => void;
-    screenSize: any;
-}) {
-    useViewportHeight();
-    const positions = getFormationPositions(team.formation);
-
-    return (
-        <div className="relative w-full h-full bg-[#2d5016] rounded-xl overflow-hidden">
-            {/* Pitch Markings */}
-            <div className="absolute inset-0">
-                {/* Center line */}
-                <div className="absolute top-0 left-0 right-0 h-0.5 bg-white/20" />
-                {/* Penalty box */}
-                <div className="absolute bottom-0 left-1/4 right-1/4 h-1/4 border-2 border-white/20 border-b-0" />
-                {/* Goal box */}
-                <div className="absolute bottom-0 left-1/3 right-1/3 h-1/6 border-2 border-white/20 border-b-0" />
-            </div>
-
-            {/* Team Header */}
-            <div className="absolute top-3 left-0 right-0 flex items-center justify-center gap-2 z-10">
-                <img src={team.logo} alt={team.name} className="w-6 h-6 object-contain" />
-                <span className="text-white font-bold text-sm">{team.name}</span>
-                {team.formation && (
-                    <span className="text-white/60 text-xs">({team.formation})</span>
-                )}
-            </div>
-
-            {/* Players */}
-            {lineup.slice(0, 11).map((lineupPlayer, index) => {
-                const player = players[lineupPlayer.playerId];
-                if (!player) return null;
-
-                const position = positions[index] || { top: 50, left: 50 };
-
-                // Get sub info
-                const subOutEvent = events.find(e =>
-                    e.type === 'Substitution' &&
-                    e.playerId === player.id
-                );
-
-                return (
-                    <ResponsivePlayerCard
-                        key={player.id}
-                        player={player}
-                        position={position}
-                        rating={lineupPlayer.rating}
-                        isCaptain={lineupPlayer.isCaptain}
-                        isMotM={lineupPlayer.isMotM}
-                        subInfo={subOutEvent ? { type: 'out', minute: subOutEvent.minute } : undefined}
-                        teamColor={team.color}
-                        screenSize={screenSize}
-                        onClick={onPlayerClick}
-                    />
-                );
-            })}
-        </div>
-    );
-}
-
-// Bench Section Component
+// Bench Section Component (Used in List View)
 function BenchSection({
     team,
     players,
@@ -216,345 +113,6 @@ function BenchSection({
     );
 }
 
-// Mobile View - Full Pitch Vertical
-function MobileLineupView({
-    homeTeam,
-    awayTeam,
-    homePlayers,
-    awayPlayers,
-    homeLineup,
-    awayLineup,
-    homeSubs = [],
-    awaySubs = [],
-    events = [],
-    onPlayerClick,
-    screenSize
-}: ResponsiveLineupProps & { onPlayerClick: (player: Player) => void; screenSize: any }) {
-    const homePositions = getFormationPositions(homeTeam.formation);
-    const awayPositions = getFormationPositions(awayTeam.formation);
-
-    return (
-        <div className="space-y-6">
-            {/* Full Pitch Container */}
-            <div className="relative bg-[#2d5016] rounded-xl overflow-hidden shadow-2xl border border-white/10" style={{ height: '82vh', minHeight: '600px' }}>
-                {/* Pitch Markings */}
-                <div className="absolute inset-0 pointer-events-none">
-                    {/* Grass Pattern */}
-                    <div className="absolute inset-0 opacity-20"
-                        style={{
-                            backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 49px, rgba(0,0,0,0.1) 50px, rgba(0,0,0,0.1) 99px)'
-                        }}
-                    />
-
-                    {/* Outer Border */}
-                    <div className="absolute inset-2 border-2 border-white/20 rounded-lg" />
-
-                    {/* Center line */}
-                    <div className="absolute top-1/2 left-2 right-2 h-0.5 bg-white/20" />
-
-                    {/* Center circle */}
-                    <div className="absolute top-1/2 left-1/2 w-20 h-20 border-2 border-white/20 rounded-full transform -translate-x-1/2 -translate-y-1/2" />
-
-                    {/* Center dot */}
-                    <div className="absolute top-1/2 left-1/2 w-1.5 h-1.5 bg-white/40 rounded-full transform -translate-x-1/2 -translate-y-1/2" />
-
-                    {/* Home (Bottom) Penalty box */}
-                    <div className="absolute bottom-2 left-[20%] right-[20%] h-[15%] border-2 border-white/20 border-b-0" />
-                    <div className="absolute bottom-2 left-[38%] right-[38%] h-[6%] border-2 border-white/20 border-b-0" />
-                    {/* Home Penalty Arc */}
-                    <div className="absolute bottom-[17%] left-1/2 w-16 h-8 border-2 border-t-2 border-b-0 border-white/20 rounded-t-full transform -translate-x-1/2" />
-
-                    {/* Away (Top) Penalty box */}
-                    <div className="absolute top-2 left-[20%] right-[20%] h-[15%] border-2 border-white/20 border-t-0" />
-                    <div className="absolute top-2 left-[38%] right-[38%] h-[6%] border-2 border-white/20 border-t-0" />
-                    {/* Away Penalty Arc */}
-                    <div className="absolute top-[17%] left-1/2 w-16 h-8 border-2 border-b-2 border-t-0 border-white/20 rounded-b-full transform -translate-x-1/2" />
-
-                    {/* Corner Arcs */}
-                    <div className="absolute top-2 left-2 w-4 h-4 border-r-2 border-b-2 border-white/20 rounded-br-full" />
-                    <div className="absolute top-2 right-2 w-4 h-4 border-l-2 border-b-2 border-white/20 rounded-bl-full" />
-                    <div className="absolute bottom-2 left-2 w-4 h-4 border-r-2 border-t-2 border-white/20 rounded-tr-full" />
-                    <div className="absolute bottom-2 right-2 w-4 h-4 border-l-2 border-t-2 border-white/20 rounded-tl-full" />
-                </div>
-
-                {/* Team Labels */}
-                <div className="absolute top-4 left-4 z-10 flex items-center gap-2">
-                    <img src={awayTeam.logo} alt={awayTeam.name} className="w-6 h-6 object-contain" />
-                    <span className="text-white/80 font-bold text-xs shadow-black drop-shadow-md">{awayTeam.name}</span>
-                </div>
-                <div className="absolute bottom-4 left-4 z-10 flex items-center gap-2">
-                    <img src={homeTeam.logo} alt={homeTeam.name} className="w-6 h-6 object-contain" />
-                    <span className="text-white/80 font-bold text-xs shadow-black drop-shadow-md">{homeTeam.name}</span>
-                </div>
-
-                {/* Away Team Players (Top) */}
-                {awayLineup.slice(0, 11).map((lineupPlayer, index) => {
-                    const player = awayPlayers[lineupPlayer.playerId];
-                    if (!player) return null;
-
-                    const position = awayPositions[index] || { top: 50, left: 50 };
-                    // Scale: 30(FWD)->45%, 90(GK)->5%
-                    const adjustedTop = 45 - (position.top - 30) * 0.66;
-                    const adjustedLeft = 100 - position.left; // Mirror horizontally
-
-                    const subOutEvent = events.find(e =>
-                        e.type === 'Substitution' &&
-                        e.playerId === player.id
-                    );
-
-                    return (
-                        <ResponsivePlayerCard
-                            key={player.id}
-                            player={player}
-                            position={{ top: adjustedTop, left: adjustedLeft }}
-                            rating={lineupPlayer.rating}
-                            isCaptain={lineupPlayer.isCaptain}
-                            isMotM={lineupPlayer.isMotM}
-                            subInfo={subOutEvent ? { type: 'out', minute: subOutEvent.minute } : undefined}
-                            teamColor={awayTeam.color}
-                            screenSize={screenSize}
-                            onClick={onPlayerClick}
-                        />
-                    );
-                })}
-
-                {/* Home Team Players (Bottom) */}
-                {homeLineup.slice(0, 11).map((lineupPlayer, index) => {
-                    const player = homePlayers[lineupPlayer.playerId];
-                    if (!player) return null;
-
-                    const position = homePositions[index] || { top: 50, left: 50 };
-                    // Scale: 30(FWD)->55%, 90(GK)->95%
-                    const adjustedTop = 55 + (position.top - 30) * 0.66;
-
-                    const subOutEvent = events.find(e =>
-                        e.type === 'Substitution' &&
-                        e.playerId === player.id
-                    );
-
-                    return (
-                        <ResponsivePlayerCard
-                            key={player.id}
-                            player={player}
-                            position={{ top: adjustedTop, left: position.left }}
-                            rating={lineupPlayer.rating}
-                            isCaptain={lineupPlayer.isCaptain}
-                            isMotM={lineupPlayer.isMotM}
-                            subInfo={subOutEvent ? { type: 'out', minute: subOutEvent.minute } : undefined}
-                            teamColor={homeTeam.color}
-                            screenSize={screenSize}
-                            onClick={onPlayerClick}
-                        />
-                    );
-                })}
-            </div>
-
-            {/* Benches */}
-            <div className="space-y-4">
-                <BenchSection
-                    team={homeTeam}
-                    players={homePlayers}
-                    subs={homeSubs}
-                    events={events}
-                    onPlayerClick={onPlayerClick}
-                />
-                <BenchSection
-                    team={awayTeam}
-                    players={awayPlayers}
-                    subs={awaySubs}
-                    events={events}
-                    onPlayerClick={onPlayerClick}
-                />
-            </div>
-        </div>
-    );
-}
-
-// Tablet View - Side by Side
-function TabletLineupView({
-    homeTeam,
-    awayTeam,
-    homePlayers,
-    awayPlayers,
-    homeLineup,
-    awayLineup,
-    homeSubs = [],
-    awaySubs = [],
-    events = [],
-    onPlayerClick,
-    screenSize
-}: ResponsiveLineupProps & { onPlayerClick: (player: Player) => void; screenSize: any }) {
-    return (
-        <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-4">
-                <div className="relative bg-[#2d5016] rounded-xl overflow-hidden" style={{ height: '70vh' }}>
-                    <MobilePitchHalf
-                        team={homeTeam}
-                        players={homePlayers}
-                        lineup={homeLineup}
-                        events={events}
-                        isTop={false}
-                        onPlayerClick={onPlayerClick}
-                        screenSize={screenSize}
-                    />
-                </div>
-                <BenchSection
-                    team={homeTeam}
-                    players={homePlayers}
-                    subs={homeSubs}
-                    events={events}
-                    onPlayerClick={onPlayerClick}
-                />
-            </div>
-
-            <div className="space-y-4">
-                <div className="relative bg-[#2d5016] rounded-xl overflow-hidden" style={{ height: '70vh' }}>
-                    <MobilePitchHalf
-                        team={awayTeam}
-                        players={awayPlayers}
-                        lineup={awayLineup}
-                        events={events}
-                        isTop={true}
-                        onPlayerClick={onPlayerClick}
-                        screenSize={screenSize}
-                    />
-                </div>
-                <BenchSection
-                    team={awayTeam}
-                    players={awayPlayers}
-                    subs={awaySubs}
-                    events={events}
-                    onPlayerClick={onPlayerClick}
-                />
-            </div>
-        </div>
-    );
-}
-
-// Desktop View - Full Pitch (uses existing FullPitchLineups)
-function DesktopLineupView({
-    homeTeam,
-    awayTeam,
-    homePlayers,
-    awayPlayers,
-    homeLineup,
-    awayLineup,
-    homeSubs = [],
-    awaySubs = [],
-    events = [],
-    onPlayerClick,
-    screenSize
-}: ResponsiveLineupProps & { onPlayerClick: (player: Player) => void; screenSize: any }) {
-    const positions = getFormationPositions(homeTeam.formation);
-    const awayPositions = getFormationPositions(awayTeam.formation);
-
-    return (
-        <div className="space-y-4">
-            <div className="relative bg-[#2d5016] rounded-xl overflow-hidden" style={{ height: '85vh', minHeight: '700px' }}>
-                {/* Full pitch markings */}
-                <div className="absolute inset-0">
-                    {/* Center line */}
-                    <div className="absolute top-1/2 left-0 right-0 h-0.5 bg-white/30 transform -translate-y-1/2" />
-                    {/* Center circle */}
-                    <div className="absolute top-1/2 left-1/2 w-24 h-24 border-2 border-white/30 rounded-full transform -translate-x-1/2 -translate-y-1/2" />
-
-                    {/* Home penalty box */}
-                    <div className="absolute bottom-0 left-1/4 right-1/4 h-1/6 border-2 border-white/30 border-b-0" />
-                    {/* Away penalty box */}
-                    <div className="absolute top-0 left-1/4 right-1/4 h-1/6 border-2 border-white/30 border-t-0" />
-                </div>
-
-                {/* Home Team Players */}
-                {homeLineup.slice(0, 11).map((lineupPlayer, index) => {
-                    const player = homePlayers[lineupPlayer.playerId];
-                    if (!player) return null;
-
-                    const position = positions[index] || { top: 50, left: 50 };
-                    // Flip for bottom half
-                    const adjustedPosition = {
-                        top: 50 + (position.top - 50) * 0.45,
-                        left: position.left
-                    };
-
-                    // Get sub info (Home)
-                    const subOutEvent = events.find(e =>
-                        e.type === 'Substitution' &&
-                        e.playerId === player.id
-                    );
-
-                    return (
-                        <ResponsivePlayerCard
-                            key={player.id}
-                            player={player}
-                            position={adjustedPosition}
-                            rating={lineupPlayer.rating}
-                            isCaptain={lineupPlayer.isCaptain}
-                            isMotM={lineupPlayer.isMotM}
-                            subInfo={subOutEvent ? { type: 'out', minute: subOutEvent.minute } : undefined}
-                            teamColor={homeTeam.color}
-                            screenSize={screenSize}
-                            onClick={onPlayerClick}
-                        />
-                    );
-                })}
-
-                {/* Away Team Players */}
-                {awayLineup.slice(0, 11).map((lineupPlayer, index) => {
-                    const player = awayPlayers[lineupPlayer.playerId];
-                    if (!player) return null;
-
-                    const position = awayPositions[index] || { top: 50, left: 50 };
-                    // Flip for top half
-                    const adjustedPosition = {
-                        top: 50 - (position.top - 50) * 0.45,
-                        left: 100 - position.left
-                    };
-
-                    // Get sub info (Away)
-                    const subOutEvent = events.find(e =>
-                        e.type === 'Substitution' &&
-                        e.playerId === player.id
-                    );
-
-                    return (
-                        <ResponsivePlayerCard
-                            key={player.id}
-                            player={player}
-                            position={adjustedPosition}
-                            rating={lineupPlayer.rating}
-                            isCaptain={lineupPlayer.isCaptain}
-                            isMotM={lineupPlayer.isMotM}
-                            subInfo={subOutEvent ? { type: 'out', minute: subOutEvent.minute } : undefined}
-                            teamColor={awayTeam.color}
-                            screenSize={screenSize}
-                            onClick={onPlayerClick}
-                        />
-                    );
-                })}
-            </div>
-
-            <div className="grid grid-cols-2 gap-8">
-                <BenchSection
-                    team={homeTeam}
-                    players={homePlayers}
-                    subs={homeSubs}
-                    events={events}
-                    onPlayerClick={onPlayerClick}
-                    className="bg-white/5 rounded-xl p-4 border border-white/10"
-                />
-                <BenchSection
-                    team={awayTeam}
-                    players={awayPlayers}
-                    subs={awaySubs}
-                    events={events}
-                    onPlayerClick={onPlayerClick}
-                    className="bg-white/5 rounded-xl p-4 border border-white/10"
-                />
-            </div>
-        </div>
-    );
-}
-
 // List View Component
 function ListView({
     homeTeam,
@@ -594,7 +152,6 @@ function ListView({
             </div>
 
             {/* Player List */}
-
             <div className="bg-white/5 rounded-xl border border-white/10 p-2">
                 <div className="text-white/40 text-xs font-bold uppercase tracking-wider mb-2 px-2">Starting XI</div>
                 <div className="space-y-2">
@@ -659,7 +216,7 @@ function ListView({
                 onPlayerClick={onPlayerClick}
                 className="bg-white/5 rounded-xl border border-white/10 p-2"
             />
-        </div >
+        </div>
     );
 }
 
@@ -676,7 +233,7 @@ export function ResponsiveLineup({
     events = [],
     onPlayerClick
 }: ResponsiveLineupProps) {
-    const { isMobile, isTablet, isDesktop } = useScreenSize();
+    const { isMobile } = useScreenSize();
     const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
     const [viewMode, setViewMode] = useState<'pitch' | 'list'>('pitch');
 
@@ -687,11 +244,9 @@ export function ResponsiveLineup({
         }
     }, []);
 
-    const screenSize = { isMobile, isTablet, isDesktop };
-
     const handlePlayerClick = (player: Player) => {
         setSelectedPlayer(player);
-        if (!isMobile && onPlayerClick) {
+        if (onPlayerClick) {
             onPlayerClick(player);
         }
     };
@@ -756,71 +311,20 @@ export function ResponsiveLineup({
                         exit={{ opacity: 0 }}
                         className="pb-8"
                     >
-                        {/* Responsive Pitch Views */}
-                        {isMobile ? (
-                            <MobileLineupView
-                                homeTeam={homeTeam}
-                                awayTeam={awayTeam}
-                                homePlayers={homePlayers}
-                                awayPlayers={awayPlayers}
-                                homeLineup={homeLineup}
-                                awayLineup={awayLineup}
-                                homeSubs={homeSubs}
-                                awaySubs={awaySubs}
-                                events={events}
-                                onPlayerClick={handlePlayerClick}
-                                screenSize={screenSize}
-                            />
-                        ) : isTablet ? (
-                            <TabletLineupView
-                                homeTeam={homeTeam}
-                                awayTeam={awayTeam}
-                                homePlayers={homePlayers}
-                                awayPlayers={awayPlayers}
-                                homeLineup={homeLineup}
-                                awayLineup={awayLineup}
-                                homeSubs={homeSubs}
-                                awaySubs={awaySubs}
-                                events={events}
-                                onPlayerClick={handlePlayerClick}
-                                screenSize={screenSize}
-                            />
-                        ) : (
-                            <DesktopLineupView
-                                homeTeam={homeTeam}
-                                awayTeam={awayTeam}
-                                homePlayers={homePlayers}
-                                awayPlayers={awayPlayers}
-                                homeLineup={homeLineup}
-                                awayLineup={awayLineup}
-                                homeSubs={homeSubs}
-                                awaySubs={awaySubs}
-                                events={events}
-                                onPlayerClick={handlePlayerClick}
-                                screenSize={screenSize}
-                            />
-                        )}
+                        <FullPitchLineups
+                            homeTeam={homeTeam}
+                            awayTeam={awayTeam}
+                            homePlayers={homePlayers}
+                            awayPlayers={awayPlayers}
+                            homeLineup={homeLineup}
+                            awayLineup={awayLineup}
+                            homeSubs={homeSubs}
+                            awaySubs={awaySubs}
+                            onPlayerClick={handlePlayerClick}
+                        />
                     </motion.div>
                 )}
             </AnimatePresence>
-
-            {/* Mobile Player Details Sheet */}
-            {isMobile && selectedPlayer && (
-                <MobilePlayerSheet
-                    player={selectedPlayer}
-                    isOpen={!!selectedPlayer}
-                    onClose={() => setSelectedPlayer(null)}
-                    rating={
-                        homeLineup.find(p => p.playerId === selectedPlayer.id)?.rating ||
-                        awayLineup.find(p => p.playerId === selectedPlayer.id)?.rating ||
-                        homeSubs.find(p => p.playerId === selectedPlayer.id)?.rating ||
-                        awaySubs.find(p => p.playerId === selectedPlayer.id)?.rating
-                    }
-                    teamColor={
-                        homePlayers[selectedPlayer.id] ? homeTeam.color : awayTeam.color
-                    }
-                />
-            )}
         </div>
     );
 }

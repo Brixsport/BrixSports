@@ -111,6 +111,11 @@ export interface MatchState {
     score: MatchScore;
     events: MatchEvent[];
 
+    teamRatings: {
+        home: number;
+        away: number;
+    };
+
     players: {
         home: Map<string, Player>;
         away: Map<string, Player>;
@@ -146,6 +151,29 @@ export function destroyMatchStateManager(matchId: string): void {
         managerRegistry.delete(matchId);
     }
 }
+
+// ========== CONSTANTS ==========
+
+export const RATING_IMPACTS: Partial<Record<FootballEventType, number>> = {
+    'Goal': 1.0,
+    'Penalty': 0.8,
+    'Assist': 0.5,
+    'Own Goal': -1.5,
+    'Yellow Card': -0.5,
+    'Red Card': -2.0,
+    'Save': 0.5,
+    'Block': 0.2,
+    'Interception': 0.2,
+    'Tackle': 0.2,
+    'Clearance': 0.1,
+    'Catch': 0.2,
+    'Shot on Target': 0.2,
+    'Shot off Target': -0.1,
+    'Shot': 0.1,
+    'Corner': 0.2,
+    'Foul': -0.1,
+    'Offside': -0.1,
+};
 
 // ========== MATCH STATE MANAGER ==========
 
@@ -399,6 +427,9 @@ export class MatchStateManager {
         // Update score if scoring event
         this.updateScoreFromEvent(fullEvent);
 
+        // Update player ratings
+        this.applyEventRatingImpact(fullEvent, 1);
+
         this.notifyListeners();
         this.persistState();
         this.broadcastEvent(fullEvent);
@@ -422,6 +453,38 @@ export class MatchStateManager {
             } else {
                 this.state.score.home++;
             }
+        }
+    }
+
+    private applyEventRatingImpact(event: MatchEvent, multiplier: number): void {
+        const impact = RATING_IMPACTS[event.type];
+        if (!impact) return;
+
+        const ratingChange = impact * multiplier;
+
+        if (event.playerId) {
+            this.updatePlayerRating(event.playerId, event.teamId, ratingChange);
+        }
+    }
+
+    private updatePlayerRating(playerId: string, teamId: string, delta: number): void {
+        // Try to find player in home lineup
+        let playerEntry = this.state.lineups.home.find(p => p.playerId === playerId);
+
+        // If not found, try away lineup
+        if (!playerEntry) {
+            playerEntry = this.state.lineups.away.find(p => p.playerId === playerId);
+        }
+
+        if (playerEntry) {
+            // Initialize rating if it creates the entry (though finding it implies it exists)
+            // Ensure rating stays within realistic bounds (e.g., 1.0 to 10.0)
+            const currentRating = playerEntry.rating || 6.0; // Default logical base if 0/undefined
+            const newRating = Math.max(1.0, Math.min(10.0, currentRating + delta));
+            playerEntry.rating = Number(newRating.toFixed(1)); // Keep it clean
+
+            // Recalculate team OVR
+            this.calculateTeamRatings();
         }
     }
 
@@ -461,11 +524,15 @@ export class MatchStateManager {
             }
         }
 
+        // Revert ratings
+        this.applyEventRatingImpact(lastEvent, -1);
+
         // Remove event
         this.state.events = this.state.events.slice(0, -1);
 
         this.notifyListeners();
         this.persistState();
+        this.broadcastUndo(lastEvent);
 
         return lastEvent;
     }
@@ -592,17 +659,51 @@ export class MatchStateManager {
     private broadcastEvent(event: MatchEvent): void {
         if (typeof window === 'undefined') return;
 
-        window.dispatchEvent(new CustomEvent('MATCH_EVENT', {
+        const payload = {
+            matchId: this.state.matchId,
+            event,
+            score: this.state.score,
+            clock: this.state.clock,
+        };
+
+        // Standard event
+        window.dispatchEvent(new CustomEvent('MATCH_EVENT', { detail: payload }));
+
+        // Legacy/Overlay compatibility event
+        window.dispatchEvent(new CustomEvent('FOOTBALL_EVENT', {
             detail: {
                 matchId: this.state.matchId,
                 event,
-                score: this.state.score,
-                clock: this.state.clock,
+                homeScore: this.state.score.home,
+                awayScore: this.state.score.away,
+                status: this.state.clock.period,
             }
         }));
 
         // Trigger notification
         this.triggerNotification(event);
+    }
+
+    private broadcastUndo(event: MatchEvent): void {
+        if (typeof window === 'undefined') return;
+
+        // Broadcast undo specifically
+        window.dispatchEvent(new CustomEvent('MATCH_EVENT_UNDO', {
+            detail: {
+                matchId: this.state.matchId,
+                eventId: event.id,
+                score: this.state.score,
+                teamRatings: this.state.teamRatings
+            }
+        }));
+
+        window.dispatchEvent(new CustomEvent('FOOTBALL_EVENT_UNDO', {
+            detail: {
+                matchId: this.state.matchId,
+                eventId: event.id,
+                score: this.state.score.home
+            }
+        }));
     }
 
     private broadcastTimeUpdate(): void {
@@ -638,6 +739,38 @@ export class MatchStateManager {
                 matchId: this.state.matchId,
                 event,
                 score: this.state.score,
+            }
+        }));
+    }
+
+    private calculateTeamRatings(): void {
+        const calculateAvg = (lineup: LineupEntry[]) => {
+            const starters = lineup.filter(p => !p.isStarter === false); // Default to starter if undefined? Assume lineup contains active players + subs marked
+            // Actually usually lineup contains everyone. We should filter by people on pitch if possible, or just all rated players
+            // For OVR, usually it's the 11 on the pitch.
+            // Let's assume all entries without isStarter=false are starters
+            const active = starters.length > 0 ? starters : lineup;
+            if (active.length === 0) return 0;
+
+            const total = active.reduce((sum, p) => sum + (p.rating || 6.0), 0);
+            return Number((total / active.length).toFixed(1));
+        };
+
+        this.state.teamRatings.home = calculateAvg(this.state.lineups.home);
+        this.state.teamRatings.away = calculateAvg(this.state.lineups.away);
+
+        // Broadcast ratings update
+        this.broadcastRatingsUpdate();
+    }
+
+    private broadcastRatingsUpdate(): void {
+        if (typeof window === 'undefined') return;
+
+        window.dispatchEvent(new CustomEvent('MATCH_RATINGS_UPDATE', {
+            detail: {
+                matchId: this.state.matchId,
+                teamRatings: this.state.teamRatings,
+                lineups: this.state.lineups
             }
         }));
     }
@@ -718,6 +851,13 @@ export class MatchStateManager {
                 away: 0,
                 ...saved?.score,
                 ...initial?.score,
+            },
+
+            teamRatings: {
+                home: 6.0,
+                away: 6.0,
+                ...saved?.teamRatings,
+                ...initial?.teamRatings
             },
 
             events: saved?.events || initial?.events || [],

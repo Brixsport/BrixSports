@@ -50,8 +50,7 @@ export function ResponsivePitch({
             {/* Vertical: pb-[150%] */}
             <div
                 className={cn(
-                    "relative w-full rounded-xl overflow-hidden shadow-2xl bg-[#2a2a2a] border border-white/10",
-                    orientation === 'horizontal' ? 'pb-[60%]' : 'pb-[140%]'
+                    "relative w-full h-full rounded-xl overflow-hidden shadow-2xl bg-[#2a2a2a] border border-white/10",
                 )}
             >
                 {/* Pitch Background - Grass Texture */}
@@ -105,6 +104,10 @@ function PlayerDot({
     // Invert Y axis if needed, or handle varying coordinate systems
     // Assuming inputs are: x (0-100 left-right), y (0-100 top-bottom)
 
+    // Y-Coordinate Calibration (FotMob Logic)
+    const VISUAL_Y_SCALE = 0.92;
+    const visualY = 50 + (position.y - 50) * VISUAL_Y_SCALE;
+
     return (
         <motion.div
             initial={{ scale: 0, opacity: 0 }}
@@ -112,7 +115,8 @@ function PlayerDot({
             className="absolute transform -translate-x-1/2 -translate-y-1/2 cursor-pointer group flex flex-col items-center"
             style={{
                 left: `${position.x}%`,
-                top: `${position.y}%`,
+                top: `${visualY}%`,
+                zIndex: 20
             }}
             onClick={(e) => {
                 e.stopPropagation();
@@ -123,17 +127,22 @@ function PlayerDot({
             <div className="relative">
                 <div
                     className={cn(
-                        "w-8 h-8 sm:w-10 sm:h-10 md:w-12 md:h-12 rounded-full flex items-center justify-center",
+                        "rounded-full flex items-center justify-center",
                         "border-2 shadow-lg transition-transform duration-200 group-hover:scale-110",
-                        "bg-zinc-900 text-white font-bold text-xs sm:text-sm"
+                        "bg-zinc-900 text-white font-bold"
                     )}
                     style={{
+                        width: '3.5%', // 3.5% of pitch width
+                        aspectRatio: '1/1', // Keep it circular
+                        minWidth: '22px', // Minimum visibility
+                        minHeight: '22px',
+                        fontSize: 'clamp(10px, 1.25cqw, 14px)', // clear text scaling
                         borderColor: isMotM ? '#FFD700' : isCaptain ? '#FFFFFF' : 'rgba(255,255,255,0.8)',
                         backgroundColor: color,
                         boxShadow: isMotM ? '0 0 15px rgba(255, 215, 0, 0.5)' : '0 4px 6px rgba(0,0,0,0.3)'
                     }}
                 >
-                    {player.number}
+                    <span style={{ fontSize: '100%' }}>{player.number}</span>
                 </div>
 
                 {/* Captain Badge */}
@@ -179,58 +188,113 @@ function getRatingColor(rating: number): string {
 function PitchMarkings({ orientation, strokeColor }: { orientation: 'vertical' | 'horizontal'; strokeColor: string }) {
     if (orientation === 'horizontal') {
         return (
-            <svg className="absolute inset-0 w-full h-full pointer-events-none" viewBox="0 0 100 64" preserveAspectRatio="none">
-                {/* Border */}
-                <rect x="0" y="0" width="100" height="64" fill="none" stroke="none" />
-
-                {/* Outer Boundary */}
-                <rect x="2" y="2" width="96" height="60" fill="none" stroke={strokeColor} strokeWidth="0.3" />
+            <svg className="absolute inset-0 w-full h-full pointer-events-none" viewBox="0 0 105 68" preserveAspectRatio="none">
+                {/* Border / Touchline / Goal Line */}
+                <rect x="0" y="0" width="105" height="68" fill="none" stroke={strokeColor} strokeWidth="0.3" />
 
                 {/* Center Line */}
-                <line x1="50" y1="2" x2="50" y2="62" stroke={strokeColor} strokeWidth="0.3" />
+                <line x1="52.5" y1="0" x2="52.5" y2="68" stroke={strokeColor} strokeWidth="0.3" />
 
-                {/* Center Circle */}
-                <circle cx="50" cy="32" r="8" fill="none" stroke={strokeColor} strokeWidth="0.3" />
-                <circle cx="50" cy="32" r="0.4" fill={strokeColor} />
+                {/* Center Circle (Radius 9.15m) */}
+                <circle cx="52.5" cy="34" r="9.15" fill="none" stroke={strokeColor} strokeWidth="0.3" />
+                <circle cx="52.5" cy="34" r="0.4" fill={strokeColor} />
 
-                {/* Left Goal Area (Home) */}
-                <rect x="2" y="22" width="5" height="20" fill="none" stroke={strokeColor} strokeWidth="0.3" /> {/* Small box */}
-                <rect x="2" y="14" width="15" height="36" fill="none" stroke={strokeColor} strokeWidth="0.3" /> {/* Big box */}
-                <circle cx="10" cy="32" r="0.4" fill={strokeColor} /> {/* Penalty spot */}
+                {/* --- LEFT (HOME) --- */}
+
+                {/* Goal Area (5.5m deep, 18.32m wide) */}
+                {/* Y-start = 34 - 9.16 = 24.84 */}
+                <rect x="0" y="24.84" width="5.5" height="18.32" fill="none" stroke={strokeColor} strokeWidth="0.3" />
+
+                {/* Penalty Area (16.5m deep, 40.32m wide) */}
+                {/* Y-start = 34 - 20.16 = 13.84 */}
+                <rect x="0" y="13.84" width="16.5" height="40.32" fill="none" stroke={strokeColor} strokeWidth="0.3" />
+
+                {/* Penalty Spot (11m) */}
+                <circle cx="11" cy="34" r="0.4" fill={strokeColor} />
+
+                {/* Penalty Arc (Radius 9.15m from spot, bounded) */}
+                {/* Starting from y=26.5 to y=41.5 (approx intersection with box line) */}
+                {/* Math: sqrt(9.15^2 - (16.5-11)^2) = sqrt(83.72 - 30.25) = sqrt(53.47) = 7.31 */}
+                {/* Intersection Y = 34 +/- 7.31 = 26.69 and 41.31 */}
+                <path d="M 16.5 26.69 A 9.15 9.15 0 0 1 16.5 41.31" fill="none" stroke={strokeColor} strokeWidth="0.3" />
+
+
+                {/* --- RIGHT (AWAY) --- */}
+
+                {/* Goal Area */}
+                <rect x="99.5" y="24.84" width="5.5" height="18.32" fill="none" stroke={strokeColor} strokeWidth="0.3" />
+
+                {/* Penalty Area */}
+                <rect x="88.5" y="13.84" width="16.5" height="40.32" fill="none" stroke={strokeColor} strokeWidth="0.3" />
+
+                {/* Penalty Spot (105 - 11 = 94) */}
+                <circle cx="94" cy="34" r="0.4" fill={strokeColor} />
+
                 {/* Penalty Arc */}
-                <path d="M 17 27 A 8 8 0 0 1 17 37" fill="none" stroke={strokeColor} strokeWidth="0.3" />
+                <path d="M 88.5 26.69 A 9.15 9.15 0 0 0 88.5 41.31" fill="none" stroke={strokeColor} strokeWidth="0.3" />
 
-                {/* Right Goal Area (Away) */}
-                <rect x="93" y="22" width="5" height="20" fill="none" stroke={strokeColor} strokeWidth="0.3" />
-                <rect x="83" y="14" width="15" height="36" fill="none" stroke={strokeColor} strokeWidth="0.3" />
-                <circle cx="90" cy="32" r="0.4" fill={strokeColor} />
-                <path d="M 83 27 A 8 8 0 0 0 83 37" fill="none" stroke={strokeColor} strokeWidth="0.3" />
 
-                {/* Corner Arcs */}
-                <path d="M 2 3 A 1 1 0 0 0 3 2" fill="none" stroke={strokeColor} strokeWidth="0.3" />
-                <path d="M 98 3 A 1 1 0 0 1 97 2" fill="none" stroke={strokeColor} strokeWidth="0.3" />
-                <path d="M 2 61 A 1 1 0 0 1 3 62" fill="none" stroke={strokeColor} strokeWidth="0.3" />
-                <path d="M 98 61 A 1 1 0 0 0 97 62" fill="none" stroke={strokeColor} strokeWidth="0.3" />
+                {/* --- CORNERS (1m radius) --- */}
+                <path d="M 0 1 A 1 1 0 0 0 1 0" fill="none" stroke={strokeColor} strokeWidth="0.3" />
+                <path d="M 104 0 A 1 1 0 0 0 105 1" fill="none" stroke={strokeColor} strokeWidth="0.3" />
+                <path d="M 0 67 A 1 1 0 0 1 1 68" fill="none" stroke={strokeColor} strokeWidth="0.3" />
+                <path d="M 105 67 A 1 1 0 0 0 104 68" fill="none" stroke={strokeColor} strokeWidth="0.3" />
             </svg>
         );
     }
 
-    // Vertical (Mobile) Orientation
+    // Vertical (Mobile) Orientation (68 x 105)
     return (
-        <svg className="absolute inset-0 w-full h-full pointer-events-none" viewBox="0 0 64 100" preserveAspectRatio="none">
-            <rect x="2" y="2" width="60" height="96" fill="none" stroke={strokeColor} strokeWidth="0.3" />
+        <svg className="absolute inset-0 w-full h-full pointer-events-none" viewBox="0 0 68 105" preserveAspectRatio="none">
+            {/* Border */}
+            <rect x="0" y="0" width="68" height="105" fill="none" stroke={strokeColor} strokeWidth="0.3" />
 
             {/* Center Line */}
-            <line x1="2" y1="50" x2="62" y2="50" stroke={strokeColor} strokeWidth="0.3" />
-            <circle cx="32" cy="50" r="8" fill="none" stroke={strokeColor} strokeWidth="0.3" />
+            <line x1="0" y1="52.5" x2="68" y2="52.5" stroke={strokeColor} strokeWidth="0.3" />
 
-            {/* Top Goal Area */}
-            <rect x="22" y="2" width="20" height="5" fill="none" stroke={strokeColor} strokeWidth="0.3" />
-            <rect x="14" y="2" width="36" height="15" fill="none" stroke={strokeColor} strokeWidth="0.3" />
+            {/* Center Circle */}
+            <circle cx="34" cy="52.5" r="9.15" fill="none" stroke={strokeColor} strokeWidth="0.3" />
+            <circle cx="34" cy="52.5" r="0.4" fill={strokeColor} />
 
-            {/* Bottom Goal Area */}
-            <rect x="22" y="93" width="20" height="5" fill="none" stroke={strokeColor} strokeWidth="0.3" />
-            <rect x="14" y="83" width="36" height="15" fill="none" stroke={strokeColor} strokeWidth="0.3" />
+
+            {/* --- TOP (AWAY) --- */}
+
+            {/* Goal Area (width 18.32, depth 5.5) */}
+            {/* X-start = 34 - 9.16 = 24.84 */}
+            <rect x="24.84" y="0" width="18.32" height="5.5" fill="none" stroke={strokeColor} strokeWidth="0.3" />
+
+            {/* Penalty Area (width 40.32, depth 16.5) */}
+            {/* X-start = 34 - 20.16 = 13.84 */}
+            <rect x="13.84" y="0" width="40.32" height="16.5" fill="none" stroke={strokeColor} strokeWidth="0.3" />
+
+            {/* Penalty Spot (11m) */}
+            <circle cx="34" cy="11" r="0.4" fill={strokeColor} />
+
+            {/* Penalty Arc */}
+            {/* Intersection X = 34 +/- 7.31 = 26.69 and 41.31 */}
+            <path d="M 26.69 16.5 A 9.15 9.15 0 0 0 41.31 16.5" fill="none" stroke={strokeColor} strokeWidth="0.3" />
+
+
+            {/* --- BOTTOM (HOME) --- */}
+
+            {/* Goal Area */}
+            <rect x="24.84" y="99.5" width="18.32" height="5.5" fill="none" stroke={strokeColor} strokeWidth="0.3" />
+
+            {/* Penalty Area */}
+            <rect x="13.84" y="88.5" width="40.32" height="16.5" fill="none" stroke={strokeColor} strokeWidth="0.3" />
+
+            {/* Penalty Spot (105 - 11 = 94) */}
+            <circle cx="34" cy="94" r="0.4" fill={strokeColor} />
+
+            {/* Penalty Arc */}
+            <path d="M 26.69 88.5 A 9.15 9.15 0 0 1 41.31 88.5" fill="none" stroke={strokeColor} strokeWidth="0.3" />
+
+
+            {/* --- CORNERS --- */}
+            <path d="M 1 0 A 1 1 0 0 0 0 1" fill="none" stroke={strokeColor} strokeWidth="0.3" />
+            <path d="M 68 1 A 1 1 0 0 0 67 0" fill="none" stroke={strokeColor} strokeWidth="0.3" />
+            <path d="M 0 104 A 1 1 0 0 0 1 105" fill="none" stroke={strokeColor} strokeWidth="0.3" />
+            <path d="M 67 105 A 1 1 0 0 0 68 104" fill="none" stroke={strokeColor} strokeWidth="0.3" />
         </svg>
     );
 }

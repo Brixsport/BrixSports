@@ -68,23 +68,46 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
     half: 1,
     announcedStoppage: 0,
   });
+  // Team Ratings State
+  const [teamRatings, setTeamRatings] = useState<{ home: number; away: number }>({ home: 0, away: 0 });
 
-  // Listen for match time updates from logger
+  // Listen for ratings updates
   useEffect(() => {
-    const handleTimeUpdate = (event: any) => {
+    const handleRatingsUpdate = (event: any) => {
       if (event.detail.matchId === match.id) {
-        setMatchTime({
-          minute: event.detail.minute,
-          extraTime: event.detail.extraTime,
-          half: event.detail.half,
-          period: event.detail.period,
-          announcedStoppage: event.detail.announcedStoppage || 0,
-        });
+        setTeamRatings(event.detail.teamRatings);
       }
     };
 
-    window.addEventListener('MATCH_TIME_UPDATE', handleTimeUpdate);
-    return () => window.removeEventListener('MATCH_TIME_UPDATE', handleTimeUpdate);
+    window.addEventListener('MATCH_RATINGS_UPDATE', handleRatingsUpdate);
+    return () => window.removeEventListener('MATCH_RATINGS_UPDATE', handleRatingsUpdate);
+  }, [match.id]);
+
+  // Listen for Undo events
+  useEffect(() => {
+    const handleUndo = (event: any) => {
+      if (event.detail.matchId === match.id) {
+        const { eventId, score, teamRatings: newTeamRatings } = event.detail;
+
+        setMatch(prev => ({
+          ...prev,
+          events: (prev.events || []).filter(e => e.id !== eventId),
+          homeScore: score.home,
+          awayScore: score.away
+        }));
+
+        if (newTeamRatings) {
+          setTeamRatings(newTeamRatings);
+        }
+
+        // Remove from local ratings if needed, or just let the next rating update handle it
+        // Ideally we revert the specific rating change in the 'ratings' state map too
+        // But simply refreshing via API or relying on MATCH_RATINGS_UPDATE is safer for now.
+      }
+    };
+
+    window.addEventListener('MATCH_EVENT_UNDO', handleUndo);
+    return () => window.removeEventListener('MATCH_EVENT_UNDO', handleUndo);
   }, [match.id]);
 
   // Sync match time from WebSocket updates
@@ -531,13 +554,20 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
                     <h3 className="font-bold text-sm sm:text-xl text-white leading-tight text-right truncate w-full">
                       {homeTeam?.name}
                     </h3>
-                    <button
-                      onClick={(e) => { e.stopPropagation(); if (homeTeam) toggleTeam(homeTeam.id); }}
-                      className="text-xs text-white/40 hover:text-primary transition-colors flex items-center gap-1 mt-1"
-                    >
-                      <Heart size={12} fill={isFavoriteTeam(homeTeam?.id || '') ? "currentColor" : "none"} />
-                      <span className="hidden sm:inline">{isFavoriteTeam(homeTeam?.id || '') ? 'Following' : 'Follow'}</span>
-                    </button>
+                    <div className="flex items-center gap-2 mt-1">
+                      {teamRatings.home > 0 && (
+                        <span className="px-1.5 py-0.5 bg-white/10 rounded text-[10px] font-bold text-white/70">
+                          {teamRatings.home.toFixed(1)} OVR
+                        </span>
+                      )}
+                      <button
+                        onClick={(e) => { e.stopPropagation(); if (homeTeam) toggleTeam(homeTeam.id); }}
+                        className="text-xs text-white/40 hover:text-primary transition-colors flex items-center gap-1"
+                      >
+                        <Heart size={12} fill={isFavoriteTeam(homeTeam?.id || '') ? "currentColor" : "none"} />
+                        <span className="hidden sm:inline">{isFavoriteTeam(homeTeam?.id || '') ? 'Following' : 'Follow'}</span>
+                      </button>
+                    </div>
                   </div>
                   <div className="w-10 h-10 sm:w-16 sm:h-16 relative rounded-full overflow-hidden bg-white/5 border border-white/10 flex-shrink-0 shadow-lg shadow-black/50">
                     {isValidImagePath(homeTeam?.logo) && homeTeam && (
@@ -585,13 +615,20 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
                     <h3 className="font-bold text-sm sm:text-xl text-white leading-tight text-left truncate w-full">
                       {awayTeam?.name}
                     </h3>
-                    <button
-                      onClick={(e) => { e.stopPropagation(); if (awayTeam) toggleTeam(awayTeam.id); }}
-                      className="text-xs text-white/40 hover:text-primary transition-colors flex items-center gap-1 mt-1"
-                    >
-                      <Heart size={12} fill={isFavoriteTeam(awayTeam?.id || '') ? "currentColor" : "none"} />
-                      <span className="hidden sm:inline">{isFavoriteTeam(awayTeam?.id || '') ? 'Following' : 'Follow'}</span>
-                    </button>
+                    <div className="flex items-center gap-2 mt-1">
+                      {teamRatings.away > 0 && (
+                        <span className="px-1.5 py-0.5 bg-white/10 rounded text-[10px] font-bold text-white/70">
+                          {teamRatings.away.toFixed(1)} OVR
+                        </span>
+                      )}
+                      <button
+                        onClick={(e) => { e.stopPropagation(); if (awayTeam) toggleTeam(awayTeam.id); }}
+                        className="text-xs text-white/40 hover:text-primary transition-colors flex items-center gap-1"
+                      >
+                        <Heart size={12} fill={isFavoriteTeam(awayTeam?.id || '') ? "currentColor" : "none"} />
+                        <span className="hidden sm:inline">{isFavoriteTeam(awayTeam?.id || '') ? 'Following' : 'Follow'}</span>
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -734,7 +771,7 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
                         return homeLineup.starters.map((entry: any) => ({
                           playerId: entry.playerId,
                           position: entry.position,
-                          rating: ratings[entry.playerId]?.finalRating || ratings[entry.playerId]?.autoRating || 6.0,
+                          rating: ratings[entry.playerId]?.finalRating || ratings[entry.playerId]?.autoRating || 0,
                           isCaptain: entry.isCaptain || false,
                           isMotM: ratings[entry.playerId]?.isMotM || false
                         }));
@@ -742,7 +779,7 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
                       if (Array.isArray(homeLineup)) {
                         return homeLineup.map((entry: any) => ({
                           ...entry,
-                          rating: ratings[entry.playerId]?.finalRating || ratings[entry.playerId]?.autoRating || entry.rating || 6.0,
+                          rating: ratings[entry.playerId]?.finalRating || ratings[entry.playerId]?.autoRating || entry.rating || 0,
                           isMotM: ratings[entry.playerId]?.isMotM || false
                         }));
                       }
@@ -755,7 +792,7 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
                         return awayLineup.starters.map((entry: any) => ({
                           playerId: entry.playerId,
                           position: entry.position,
-                          rating: ratings[entry.playerId]?.finalRating || ratings[entry.playerId]?.autoRating || 6.0,
+                          rating: ratings[entry.playerId]?.finalRating || ratings[entry.playerId]?.autoRating || 0,
                           isCaptain: entry.isCaptain || false,
                           isMotM: ratings[entry.playerId]?.isMotM || false
                         }));
@@ -763,7 +800,7 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
                       if (Array.isArray(awayLineup)) {
                         return awayLineup.map((entry: any) => ({
                           ...entry,
-                          rating: ratings[entry.playerId]?.finalRating || ratings[entry.playerId]?.autoRating || entry.rating || 6.0,
+                          rating: ratings[entry.playerId]?.finalRating || ratings[entry.playerId]?.autoRating || entry.rating || 0,
                           isMotM: ratings[entry.playerId]?.isMotM || false
                         }));
                       }
@@ -776,7 +813,7 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
                         return homeLineup.substitutes.map((entry: any) => ({
                           playerId: entry.playerId,
                           position: entry.position,
-                          rating: ratings[entry.playerId]?.finalRating || ratings[entry.playerId]?.autoRating || 6.0,
+                          rating: ratings[entry.playerId]?.finalRating || ratings[entry.playerId]?.autoRating || 0,
                           isMotM: ratings[entry.playerId]?.isMotM || false
                         }));
                       }
@@ -789,7 +826,7 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
                         return awayLineup.substitutes.map((entry: any) => ({
                           playerId: entry.playerId,
                           position: entry.position,
-                          rating: ratings[entry.playerId]?.finalRating || ratings[entry.playerId]?.autoRating || 6.0,
+                          rating: ratings[entry.playerId]?.finalRating || ratings[entry.playerId]?.autoRating || 0,
                           isMotM: ratings[entry.playerId]?.isMotM || false
                         }));
                       }
