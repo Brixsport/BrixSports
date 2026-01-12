@@ -328,7 +328,7 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
       { id: 'predict', label: 'Predict', icon: Target },
       { id: 'poll', label: 'Poll', icon: BarChart3 },
     ] : []),
-    ...(match.status === 'LIVE' ? [
+    ...(['UPCOMING', 'LIVE', 'FINISHED'].includes(match.status) ? [
       { id: 'chat', label: 'Chat', icon: MessageSquare },
     ] : []),
   ];
@@ -1099,7 +1099,7 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
             )}
 
             {/* Chat Tab */}
-            {activeTab === 'chat' && match.status === 'LIVE' && (
+            {activeTab === 'chat' && ['UPCOMING', 'LIVE', 'FINISHED'].includes(match.status) && (
               <motion.div
                 key="chat"
                 initial={{ opacity: 0, y: 20 }}
@@ -1107,13 +1107,6 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
                 exit={{ opacity: 0, y: -20 }}
                 className="-mx-4 -my-6"
               >
-                <div className="bg-gradient-to-r from-primary/10 via-primary/5 to-transparent border-b border-primary/20 px-4 py-4 flex items-center gap-3 sticky top-0 z-10 backdrop-blur-sm">
-                  <MessageSquare className="text-primary" size={20} />
-                  <div>
-                    <h3 className="font-semibold">Live Chat</h3>
-                    <p className="text-xs text-white/60">Join the conversation</p>
-                  </div>
-                </div>
 
                 <div className="h-[calc(100vh-300px)] min-h-[500px]">
                   <LivestreamChat

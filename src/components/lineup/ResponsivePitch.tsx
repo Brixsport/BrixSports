@@ -44,7 +44,7 @@ export function ResponsivePitch({
     // Vertical: Inverse
 
     return (
-        <div className={cn("w-full relative select-none", className)}>
+        <div className={cn("w-full h-full relative select-none", className)}>
             {/* Aspect Ratio Container */}
             {/* Horizontal: pb-[64%] (approx 105/68) or pb-[56.25%] (16:9) */}
             {/* Vertical: pb-[150%] */}
