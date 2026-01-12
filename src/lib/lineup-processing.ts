@@ -90,12 +90,32 @@ export function processLineup(
                 // Then Away Y = 100 - TemplateY. (100-95 = 5).
                 // Away FWD (Template 15) -> 100 - 15 = 85 (near Home goal). Correct.
 
-                let finalX = slot.x;
-                let finalY = slot.y;
+                let finalX = slot.x; // 0-100
+                let finalY = slot.y; // 0-100 (Where 100 is Goal Line, 0 is High Press)
 
-                if (!isHomeTeam) {
+                // COMPRESSION LOGIC: "FotMob Style" Lineup View
+                // Each team stays in their own half (Home Bottom, Away Top)
+                // They do NOT cross the halfway line (50%)
+
+                if (isHomeTeam) {
+                    // Home defends Bottom (100). 
+                    // Map 0->100 range to 50->100 range.
+                    // y=92 (GK) -> 50 + 46 = 96.
+                    // y=15 (ST) -> 50 + 7.5 = 57.5.
+                    finalY = 50 + (finalY / 2);
+                    finalX = finalX; // Keep X as is
+                } else {
+                    // Away defends Top (0).
+                    // Map 0->100 range to 0->50 range, BUT mirrored vertically.
+                    // We want GK (template 92) to be at Top (near 0).
+                    // We want ST (template 15) to be at Center (near 50).
+                    // Formula: (100 - y) / 2
+                    // y=92 -> 8 / 2 = 4.
+                    // y=15 -> 85 / 2 = 42.5.
+                    finalY = (100 - finalY) / 2;
+
+                    // Mirror X for Away team (Left Winger becomes Screen Right)
                     finalX = 100 - finalX;
-                    finalY = 100 - finalY;
                 }
 
                 assignedPlayers.push({
