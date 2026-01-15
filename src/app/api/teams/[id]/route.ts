@@ -111,10 +111,11 @@ export async function GET(
         const enrichedUpcoming = await enrichMatches(upcomingMatches);
 
         // Calculate team statistics
-        // Calculate team statistics (Use DB stats if available, otherwise calculate from fetched matches)
+        // Use stored stats from database if they exist, otherwise calculate from recent matches
         const finishedMatches = enrichedRecent.filter(m => m.status === 'FINISHED');
 
-        const useStoredStats = team.played && team.played > 0;
+        // Check if team has stored stats (played field is not null/undefined)
+        const useStoredStats = team.played !== null && team.played !== undefined;
 
         const stats = {
             played: useStoredStats ? (team.played ?? 0) : finishedMatches.length,
