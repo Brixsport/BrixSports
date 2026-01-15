@@ -54,18 +54,22 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
     const [showSubInModal, setShowSubInModal] = useState(false);
     const [playerComingOut, setPlayerComingOut] = useState<string | null>(null);
     const [showStoppageModal, setShowStoppageModal] = useState(false);
+    const [showPeriodEndModal, setShowPeriodEndModal] = useState(false);
+    const [pendingPeriodTransition, setPendingPeriodTransition] = useState<{ current: string; next: string } | null>(null);
 
     // Initial Load & Manager Setup
     useEffect(() => {
         const init = async () => {
             try {
-                const [teamsRes, playersRes] = await Promise.all([
+                const [teamsRes, playersRes, lineupsRes] = await Promise.all([
                     fetch('/api/teams'),
-                    fetch('/api/players')
+                    fetch('/api/players'),
+                    fetch(`/api/matches/${match.id}/lineup`)
                 ]);
 
                 const teamsData = await teamsRes.json();
                 const playersData = await playersRes.json();
+                const lineupsData = await lineupsRes.json();
 
                 const teams = Array.isArray(teamsData) ? teamsData : (teamsData.teams || teamsData.data || []);
                 const players = Array.isArray(playersData) ? playersData : (playersData.players || playersData.data || []);
@@ -95,6 +99,25 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                 manager.registerPlayers(hPlayers, 'home');
                 manager.registerPlayers(aPlayers, 'away');
 
+                // Auto-load published lineups if available
+                if (lineupsData.success && lineupsData.lineups) {
+                    const { home: homeLineup, away: awayLineup } = lineupsData.lineups;
+
+                    // Check if home lineup is published
+                    if (homeLineup && homeLineup.status === 'published') {
+                        console.log('Auto-loading published home lineup');
+                        // The lineup data is already stored in the match, no need to do anything
+                        // The overlay and other components will fetch it from the match API
+                    }
+
+                    // Check if away lineup is published
+                    if (awayLineup && awayLineup.status === 'published') {
+                        console.log('Auto-loading published away lineup');
+                        // The lineup data is already stored in the match, no need to do anything
+                        // The overlay and other components will fetch it from the match API
+                    }
+                }
+
                 stateManager.current = manager;
 
                 const unsubscribe = manager.subscribe((newState) => {
@@ -113,6 +136,25 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
 
         init();
     }, [match.id, match.homeTeamId, match.awayTeamId]);
+
+    // Listen for period end events
+    useEffect(() => {
+        const handlePeriodEnd = (event: any) => {
+            const { currentPeriod, nextPeriod, requiresExtraTime } = event.detail;
+
+            if (requiresExtraTime) {
+                // Show extra time modal
+                setPendingPeriodTransition({ current: currentPeriod, next: nextPeriod });
+                setShowPeriodEndModal(true);
+            } else {
+                // Auto-transition (e.g., extra time periods)
+                stateManager.current?.completePeriodTransition(nextPeriod);
+            }
+        };
+
+        window.addEventListener('MATCH_PERIOD_END', handlePeriodEnd);
+        return () => window.removeEventListener('MATCH_PERIOD_END', handlePeriodEnd);
+    }, []);
 
     // Broadcast Time Updates for Overlay/Remote
     useEffect(() => {
@@ -234,9 +276,12 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
         const playerSnapshot = stateManager.current.createPlayerSnapshot(playerId);
         const relatedSnapshot = relatedPlayerId ? stateManager.current.createPlayerSnapshot(relatedPlayerId) : null;
 
-        let detail = player ? player.name : 'Unknown';
+        let detail = player ? (player.jerseyName || player.name) : 'Unknown';
         if (type === 'Substitution' && relatedSnapshot) {
-            detail = `${relatedSnapshot.name} IN for ${detail}`;
+            const relatedPlayer = stateManager.current.getPlayer(relatedPlayerId!);
+            const relatedJerseyName = relatedPlayer?.jerseyName || relatedSnapshot.name;
+            const outJerseyName = player?.jerseyName || detail;
+            detail = `${relatedJerseyName} IN for ${outJerseyName}`;
         }
 
         stateManager.current.recordEvent({
@@ -255,6 +300,22 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
     const handleSetStoppage = (minutes: number) => {
         stateManager.current?.setAnnouncedStoppage(minutes);
         setShowStoppageModal(false);
+    };
+
+    const handlePeriodEndConfirm = (extraTimeMinutes: number) => {
+        if (!stateManager.current || !pendingPeriodTransition) return;
+
+        // Set the extra time
+        if (extraTimeMinutes > 0) {
+            stateManager.current.setAnnouncedStoppage(extraTimeMinutes);
+        }
+
+        // Complete the transition to next period
+        stateManager.current.completePeriodTransition(pendingPeriodTransition.next as any);
+
+        // Close modal and reset state
+        setShowPeriodEndModal(false);
+        setPendingPeriodTransition(null);
     };
 
     const toggleClock = () => {
@@ -355,17 +416,6 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                                 >
                                     +
                                 </button>
-                            </div>
-                            <div className="flex justify-center gap-1 mt-4">
-                                {['FIRST_HALF', 'HALF_TIME', 'SECOND_HALF', 'FINISHED'].map(p => (
-                                    <button
-                                        key={p}
-                                        onClick={() => stateManager.current?.transitionStatus(p as any)}
-                                        className={`text-[10px] px-2 py-1 rounded border ${currentPeriod === p ? 'bg-primary text-black border-primary' : 'bg-transparent text-white/40 border-white/10'}`}
-                                    >
-                                        {p.replace('_', ' ').substring(0, 3)}
-                                    </button>
-                                ))}
                             </div>
                         </div>
                         <div className="text-center w-1/3">
@@ -471,6 +521,36 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                                     +{num}
                                 </button>
                             ))}
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {showPeriodEndModal && pendingPeriodTransition && (
+                <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-50 flex items-center justify-center p-4">
+                    <div className="bg-zinc-900 border border-primary/50 w-full max-w-md rounded-2xl overflow-hidden shadow-2xl">
+                        <div className="p-6 border-b border-white/10 bg-gradient-to-r from-primary/10 to-transparent">
+                            <h3 className="font-bold text-xl text-primary">Half Ended</h3>
+                            <p className="text-sm text-white/60 mt-1">
+                                {pendingPeriodTransition.current === 'FIRST_HALF' ? 'First Half' : 'Second Half'} has ended
+                            </p>
+                        </div>
+                        <div className="p-6">
+                            <p className="text-white/80 mb-4">Add extra time played (optional):</p>
+                            <div className="grid grid-cols-5 gap-2 mb-6">
+                                {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(num => (
+                                    <button
+                                        key={num}
+                                        onClick={() => handlePeriodEndConfirm(num)}
+                                        className="aspect-square bg-white/5 hover:bg-primary hover:text-black rounded-xl font-bold transition-all active:scale-95 border border-white/10 hover:border-primary"
+                                    >
+                                        {num === 0 ? 'None' : `+${num}`}
+                                    </button>
+                                ))}
+                            </div>
+                            <div className="text-xs text-white/40 text-center">
+                                Click to add extra time and proceed to {pendingPeriodTransition.next === 'HALF_TIME' ? 'Half Time' : 'Full Time'}
+                            </div>
                         </div>
                     </div>
                 </div>

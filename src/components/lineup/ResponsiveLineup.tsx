@@ -187,7 +187,7 @@ function ListView({
                                 </div>
                                 <div className="flex-1">
                                     <div className="flex items-center gap-2">
-                                        <h4 className="font-bold text-white text-sm">{player.name}</h4>
+                                        <h4 className="font-bold text-white text-sm">{player.jerseyName || player.name}</h4>
                                         {subOutEvent && (
                                             <span className="text-[10px] bg-red-500/20 text-red-400 px-1 rounded font-bold">
                                                 {subOutEvent.minute}'
@@ -253,25 +253,25 @@ export function ResponsiveLineup({
 
     return (
         <div className="w-full">
-            {/* View Toggle - Sticky on Mobile */}
-            <div className="sticky top-0 z-20 bg-[#0a0a0a] border-b border-white/10 p-4 mb-4">
+            {/* View Toggle - Sticky with Backdrop Blur */}
+            <div className="sticky top-0 z-20 bg-[#0a0a0a]/95 backdrop-blur-md border-b border-white/10 p-4 mb-4">
                 <div className="flex items-center justify-between max-w-5xl mx-auto">
                     <h3 className="font-bold text-lg text-white">Lineups</h3>
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 bg-white/5 p-1 rounded-lg">
                         <button
                             onClick={() => setViewMode('pitch')}
-                            className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${viewMode === 'pitch'
-                                ? 'bg-primary text-black'
-                                : 'bg-white/5 text-white/60'
+                            className={`px-4 py-2 rounded-md text-sm font-semibold transition-all duration-200 ${viewMode === 'pitch'
+                                ? 'bg-primary text-black shadow-lg'
+                                : 'bg-transparent text-white/60 hover:text-white'
                                 }`}
                         >
                             Pitch
                         </button>
                         <button
                             onClick={() => setViewMode('list')}
-                            className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${viewMode === 'list'
-                                ? 'bg-primary text-black'
-                                : 'bg-white/5 text-white/60'
+                            className={`px-4 py-2 rounded-md text-sm font-semibold transition-all duration-200 ${viewMode === 'list'
+                                ? 'bg-primary text-black shadow-lg'
+                                : 'bg-transparent text-white/60 hover:text-white'
                                 }`}
                         >
                             List
@@ -280,51 +280,55 @@ export function ResponsiveLineup({
                 </div>
             </div>
 
-            {/* Content */}
-            <AnimatePresence mode="wait">
-                {viewMode === 'list' ? (
-                    <motion.div
-                        key="list"
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        className="pb-8"
-                    >
-                        <ListView
-                            homeTeam={homeTeam}
-                            awayTeam={awayTeam}
-                            homePlayers={homePlayers}
-                            awayPlayers={awayPlayers}
-                            homeLineup={homeLineup}
-                            awayLineup={awayLineup}
-                            homeSubs={homeSubs}
-                            awaySubs={awaySubs}
-                            events={events}
-                            onPlayerClick={handlePlayerClick}
-                        />
-                    </motion.div>
-                ) : (
-                    <motion.div
-                        key="pitch"
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        className="pb-8"
-                    >
-                        <FullPitchLineups
-                            homeTeam={homeTeam}
-                            awayTeam={awayTeam}
-                            homePlayers={homePlayers}
-                            awayPlayers={awayPlayers}
-                            homeLineup={homeLineup}
-                            awayLineup={awayLineup}
-                            homeSubs={homeSubs}
-                            awaySubs={awaySubs}
-                            onPlayerClick={handlePlayerClick}
-                        />
-                    </motion.div>
-                )}
-            </AnimatePresence>
+            {/* Content - Fixed min-height to prevent layout shift */}
+            <div className="min-h-[600px] relative">
+                <AnimatePresence mode="wait">
+                    {viewMode === 'list' ? (
+                        <motion.div
+                            key="list"
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: -10 }}
+                            transition={{ duration: 0.2, ease: "easeInOut" }}
+                            className="pb-8 absolute inset-0"
+                        >
+                            <ListView
+                                homeTeam={homeTeam}
+                                awayTeam={awayTeam}
+                                homePlayers={homePlayers}
+                                awayPlayers={awayPlayers}
+                                homeLineup={homeLineup}
+                                awayLineup={awayLineup}
+                                homeSubs={homeSubs}
+                                awaySubs={awaySubs}
+                                events={events}
+                                onPlayerClick={handlePlayerClick}
+                            />
+                        </motion.div>
+                    ) : (
+                        <motion.div
+                            key="pitch"
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: -10 }}
+                            transition={{ duration: 0.2, ease: "easeInOut" }}
+                            className="pb-8 absolute inset-0"
+                        >
+                            <FullPitchLineups
+                                homeTeam={homeTeam}
+                                awayTeam={awayTeam}
+                                homePlayers={homePlayers}
+                                awayPlayers={awayPlayers}
+                                homeLineup={homeLineup}
+                                awayLineup={awayLineup}
+                                homeSubs={homeSubs}
+                                awaySubs={awaySubs}
+                                onPlayerClick={handlePlayerClick}
+                            />
+                        </motion.div>
+                    )}
+                </AnimatePresence>
+            </div>
         </div>
     );
 }

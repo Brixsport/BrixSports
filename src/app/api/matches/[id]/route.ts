@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
 import { matches, teams, matchEvents, players } from '@/db/schema';
 import { eq, desc, sql } from 'drizzle-orm';
+import { playerRatings } from '@/db/schema-ratings';
 
 export async function GET(
     request: NextRequest,
@@ -279,6 +280,40 @@ export async function GET(
         }
 
         // Note: Viewer count feature not yet implemented in schema
+
+        // Merge updated ratings into lineups
+        if (lineups) {
+            try {
+                const updatedRatings = await db
+                    .select()
+                    .from(playerRatings)
+                    .where(eq(playerRatings.matchId, matchId));
+
+                if (updatedRatings.length > 0) {
+                    const ratingMap = new Map();
+                    updatedRatings.forEach(r => {
+                        ratingMap.set(r.playerId, r.finalRating ?? r.autoRating);
+                    });
+
+                    const updatePlayerRatings = (players: any[]) => {
+                        if (!Array.isArray(players)) return players;
+                        return players.map((p: any) => ({
+                            ...p,
+                            rating: ratingMap.has(p.id) ? ratingMap.get(p.id) : p.rating
+                        }));
+                    };
+
+                    if (lineups.home) {
+                        lineups.home = updatePlayerRatings(lineups.home);
+                    }
+                    if (lineups.away) {
+                        lineups.away = updatePlayerRatings(lineups.away);
+                    }
+                }
+            } catch (err) {
+                console.error('Error merging ratings:', err);
+            }
+        }
 
         return NextResponse.json({
             match: {

@@ -28,6 +28,7 @@ interface FullPitchLineupsProps {
     awaySubs?: Array<{ playerId: string; rating: number; position?: string; isCaptain?: boolean; isMotM?: boolean }>;
     onPlayerClick: (player: Player) => void;
     sport?: string; // 'Football' or 'Basketball'
+    events?: any[]; // Match events for goal/assist tracking
 }
 
 // ========== FORMATION CONFIGURATION ==========
@@ -144,9 +145,34 @@ export function FullPitchLineups({
     homeSubs: propHomeSubs,
     awaySubs: propAwaySubs,
     onPlayerClick,
-    sport = 'Football'
+    sport = 'Football',
+    events = []
 }: FullPitchLineupsProps) {
     const isBasketball = sport === 'Basketball';
+
+    // Calculate goals and assists per player from events
+    const playerStats = new Map<string, { goals: number; assists: number }>();
+
+    events.forEach((event: any) => {
+        if (!event.playerId) return;
+
+        const stats = playerStats.get(event.playerId) || { goals: 0, assists: 0 };
+
+        // Count goals
+        if (event.type === 'Goal') {
+            stats.goals++;
+        }
+
+        // Count assists (check both assistPlayerId and relatedPlayerId)
+        const assisterId = event.assistPlayerId || event.relatedPlayerId;
+        if (assisterId && event.type === 'Goal') {
+            const assisterStats = playerStats.get(assisterId) || { goals: 0, assists: 0 };
+            assisterStats.assists++;
+            playerStats.set(assisterId, assisterStats);
+        }
+
+        playerStats.set(event.playerId, stats);
+    });
 
     // *** FOOTBALL LOGIC: Formation Slot Mapping ***
     const processLineupForPitch = (players: Record<string, Player>, lineup: any[], isHome: boolean, formation: string): PitchPlayer[] => {
@@ -291,12 +317,17 @@ export function FullPitchLineups({
                 finalX = 100 - slot.x;
             }
 
+            // Get player stats
+            const stats = playerStats.get(playerEntry.playerId) || { goals: 0, assists: 0 };
+
             pitchPlayers.push({
                 player: playerEntry.player,
                 position: { x: finalX, y: finalY },
                 rating: playerEntry.rating || 0,
                 isCaptain: !!playerEntry.isCaptain,
                 isMotM: !!playerEntry.isMotM,
+                goals: stats.goals,
+                assists: stats.assists,
             });
         });
 

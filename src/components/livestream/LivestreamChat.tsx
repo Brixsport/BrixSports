@@ -159,33 +159,33 @@ export function LivestreamChat({ matchId, enabled = true, className }: Livestrea
 
     if (!enabled) {
         return (
-            <div className={cn("flex items-center justify-center h-full bg-gray-900/50 rounded-xl", className)}>
-                <p className="text-gray-400 text-sm">Chat is disabled for this stream</p>
+            <div className={cn("flex items-center justify-center h-full bg-black/40 backdrop-blur-sm rounded-xl border border-white/10", className)}>
+                <p className="text-white/40 text-sm">Chat is disabled for this stream</p>
             </div>
         );
     }
 
     return (
-        <div className={cn("flex flex-col h-full bg-gray-900 rounded-xl overflow-hidden", className)}>
+        <div className={cn("flex flex-col h-full bg-black/40 backdrop-blur-sm rounded-xl overflow-hidden border border-white/10", className)}>
             {/* Header */}
-            <div className="flex items-center justify-between px-4 py-3 bg-gray-800 border-b border-gray-700">
+            <div className="flex items-center justify-between px-4 py-3 bg-white/5 border-b border-white/10">
                 <div className="flex items-center gap-2">
                     <div className={cn(
                         "w-2 h-2 rounded-full",
-                        isConnected ? "bg-green-500 animate-pulse" : "bg-gray-500"
+                        isConnected ? "bg-primary animate-pulse" : "bg-white/20"
                     )} />
                     <h3 className="text-white font-semibold text-sm">Live Chat</h3>
-                    <span className="text-gray-400 text-xs">
+                    <span className="text-white/40 text-xs">
                         {messages.filter(m => !m.isSystemMessage).length} messages
                     </span>
                 </div>
-                <button className="text-gray-400 hover:text-white transition-colors">
+                <button className="text-white/40 hover:text-white transition-colors">
                     <MoreVertical className="w-4 h-4" />
                 </button>
             </div>
 
             {/* Messages */}
-            <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3 scrollbar-thin scrollbar-thumb-gray-700 scrollbar-track-transparent">
+            <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
                 {messages.map((msg) => (
                     <div
                         key={msg.id}
@@ -203,7 +203,7 @@ export function LivestreamChat({ matchId, enabled = true, className }: Livestrea
                                         className="w-8 h-8 rounded-full object-cover"
                                     />
                                 ) : (
-                                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-red-500 to-orange-500 flex items-center justify-center text-white text-xs font-bold">
+                                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary/80 to-primary flex items-center justify-center text-white text-xs font-bold">
                                         {msg.userName.charAt(0).toUpperCase()}
                                     </div>
                                 )}
@@ -215,7 +215,7 @@ export function LivestreamChat({ matchId, enabled = true, className }: Livestrea
                             msg.isSystemMessage && "text-center"
                         )}>
                             {msg.isSystemMessage ? (
-                                <p className="text-xs text-gray-400 bg-gray-800/50 rounded-lg px-3 py-2 inline-block">
+                                <p className="text-xs text-white/40 bg-white/5 rounded-lg px-3 py-2 inline-block border border-white/5">
                                     {msg.message}
                                 </p>
                             ) : (
@@ -224,11 +224,11 @@ export function LivestreamChat({ matchId, enabled = true, className }: Livestrea
                                         <span className="text-sm font-semibold text-white truncate">
                                             {msg.userName}
                                         </span>
-                                        <span className="text-xs text-gray-500">
+                                        <span className="text-xs text-white/30">
                                             {formatTime(msg.timestamp)}
                                         </span>
                                     </div>
-                                    <p className="text-sm text-gray-300 break-words">
+                                    <p className="text-sm text-white/70 break-words">
                                         {msg.message}
                                     </p>
                                 </>
@@ -241,15 +241,15 @@ export function LivestreamChat({ matchId, enabled = true, className }: Livestrea
 
             {/* Connection Warning */}
             {!isConnected && (
-                <div className="px-4 py-2 bg-yellow-900/20 border-y border-yellow-500/20">
-                    <p className="text-xs text-yellow-500 text-center">
+                <div className="px-4 py-2 bg-yellow-500/10 border-y border-yellow-500/20">
+                    <p className="text-xs text-yellow-500/80 text-center">
                         ⚠️ Chat disconnected. Reconnecting...
                     </p>
                 </div>
             )}
 
             {/* Input */}
-            <div className="px-4 py-3 bg-gray-800 border-t border-gray-700">
+            <div className="px-4 py-3 bg-white/5 border-t border-white/10">
                 {user ? (
                     <form onSubmit={handleSendMessage} className="flex items-center gap-2">
                         <div className="flex-1 relative">
@@ -258,12 +258,12 @@ export function LivestreamChat({ matchId, enabled = true, className }: Livestrea
                                 value={inputMessage}
                                 onChange={(e) => setInputMessage(e.target.value)}
                                 placeholder="Type a message..."
-                                className="w-full bg-gray-700 text-white placeholder-gray-400 rounded-lg px-4 py-2.5 pr-10 text-sm focus:outline-none focus:ring-2 focus:ring-red-500 transition-all"
+                                className="w-full bg-white/5 text-white placeholder-white/30 rounded-lg px-4 py-2.5 pr-10 text-sm border border-white/10 focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary transition-all"
                                 maxLength={200}
                             />
                             <button
                                 type="button"
-                                className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white transition-colors"
+                                className="absolute right-2 top-1/2 -translate-y-1/2 text-white/30 hover:text-white transition-colors"
                             >
                                 <Smile className="w-5 h-5" />
                             </button>
@@ -271,11 +271,11 @@ export function LivestreamChat({ matchId, enabled = true, className }: Livestrea
                         <button
                             type="submit"
                             disabled={!inputMessage.trim() || isSending}
-                            className="bg-red-600 hover:bg-red-700 disabled:bg-gray-700 disabled:cursor-not-allowed text-white rounded-lg p-2.5 transition-colors"
+                            className="bg-primary hover:bg-primary/90 disabled:bg-white/10 disabled:cursor-not-allowed text-black disabled:text-white/30 rounded-lg p-2.5 transition-colors font-bold"
                             title={isSending ? 'Sending...' : 'Send message'}
                         >
                             {isSending ? (
-                                <div className="w-5 h-5 border-2 border-white/50 border-t-white rounded-full animate-spin" />
+                                <div className="w-5 h-5 border-2 border-black/30 border-t-black rounded-full animate-spin" />
                             ) : (
                                 <Send className="w-5 h-5" />
                             )}
@@ -283,10 +283,10 @@ export function LivestreamChat({ matchId, enabled = true, className }: Livestrea
                     </form>
                 ) : (
                     <div className="text-center py-2">
-                        <p className="text-sm text-gray-400">
+                        <p className="text-sm text-white/40">
                             <button
                                 onClick={() => openAuthModal()}
-                                className="text-red-500 hover:text-red-400 font-semibold cursor-pointer"
+                                className="text-primary hover:text-primary/80 font-semibold cursor-pointer transition-colors"
                             >
                                 Sign in
                             </button>

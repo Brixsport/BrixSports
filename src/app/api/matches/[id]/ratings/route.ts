@@ -109,9 +109,29 @@ export async function POST(
             );
         }
 
+        // Helper to extract players from lineup structure (handling both array and object formats)
+        const getPlayersFromTeam = (teamLineup: any) => {
+            if (!teamLineup) return [];
+
+            // If it's a flat array (standard football format)
+            if (Array.isArray(teamLineup)) {
+                return teamLineup;
+            }
+
+            // If it's structured (basketball/generated format)
+            if (teamLineup.starters || teamLineup.bench) {
+                return [
+                    ...(teamLineup.starters || []),
+                    ...(teamLineup.bench || [])
+                ];
+            }
+
+            return [];
+        };
+
         const allPlayers = [
-            ...(lineups.home?.starters || []),
-            ...(lineups.away?.starters || [])
+            ...getPlayersFromTeam(lineups.home),
+            ...getPlayersFromTeam(lineups.away)
         ];
 
         // Calculate stats for each player

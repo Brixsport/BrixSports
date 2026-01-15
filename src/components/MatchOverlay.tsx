@@ -83,6 +83,21 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
     return () => window.removeEventListener('MATCH_RATINGS_UPDATE', handleRatingsUpdate);
   }, [match.id]);
 
+  // Listen for stats updates
+  useEffect(() => {
+    const handleStatsUpdate = (event: any) => {
+      if (event.detail.matchId === match.id) {
+        setMatch(prev => ({
+          ...prev,
+          stats: event.detail.stats
+        }));
+      }
+    };
+
+    window.addEventListener('MATCH_STATS_UPDATE', handleStatsUpdate);
+    return () => window.removeEventListener('MATCH_STATS_UPDATE', handleStatsUpdate);
+  }, [match.id]);
+
   // Listen for Undo events
   useEffect(() => {
     const handleUndo = (event: any) => {
@@ -116,6 +131,24 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
       setMatchTime(liveTime);
     }
   }, [liveTime]);
+
+  // Also listen for local window events (for same-device logger)
+  useEffect(() => {
+    const handleLocalTimeUpdate = (event: any) => {
+      if (event.detail.matchId === match.id) {
+        setMatchTime({
+          minute: event.detail.minute,
+          extraTime: event.detail.extraTime,
+          half: event.detail.half,
+          period: event.detail.period,
+          announcedStoppage: event.detail.announcedStoppage
+        });
+      }
+    };
+
+    window.addEventListener('MATCH_TIME_UPDATE', handleLocalTimeUpdate);
+    return () => window.removeEventListener('MATCH_TIME_UPDATE', handleLocalTimeUpdate);
+  }, [match.id]);
 
   // Listen for football events from logger (goals, cards, clearances, etc.)
   useEffect(() => {
@@ -858,6 +891,7 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
                 {match.stats?.expectedGoals && <StatRow label="Expected Goals (xG)" values={match.stats.expectedGoals} suffix="" showBar={true} />}
                 {match.stats?.shots && <StatRow label="Total Shots" values={match.stats.shots} showBar={false} />}
                 {match.stats?.shotsOnTarget && <StatRow label="Shots on Target" values={match.stats.shotsOnTarget} showBar={false} />}
+                {match.stats?.shotsOffTarget && <StatRow label="Shots off Target" values={match.stats.shotsOffTarget} showBar={false} />}
                 {match.stats?.corners && <StatRow label="Corners" values={match.stats.corners} showBar={false} />}
                 {match.stats?.fouls && <StatRow label="Fouls" values={match.stats.fouls} showBar={false} />}
                 {match.stats?.yellowCards && <StatRow label="Yellow Cards" values={match.stats.yellowCards} showBar={false} />}
@@ -1111,7 +1145,7 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
                 <div className="h-[calc(100vh-300px)] min-h-[500px]">
                   <LivestreamChat
                     matchId={match.id}
-                    enabled={true}
+                    enabled={false}
                     className="h-full"
                   />
                 </div>

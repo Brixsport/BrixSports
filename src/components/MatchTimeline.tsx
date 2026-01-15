@@ -211,14 +211,47 @@ export function MatchTimeline({ events, homeTeam, awayTeam, sport, showFilters =
     // Group events by period
     const groupedEvents = filteredEvents.reduce((acc, event) => {
         let period = 'First Half';
-        if (sport === 'Football') {
-            if (event.minute > 45 && event.minute <= 90) period = 'Second Half';
-            else if (event.minute > 90) period = 'Extra Time';
-        } else if (sport === 'Basketball') {
-            if (event.minute <= 10) period = '1st Quarter';
-            else if (event.minute <= 20) period = '2nd Quarter';
-            else if (event.minute <= 30) period = '3rd Quarter';
-            else period = '4th Quarter';
+
+        // Check if event has a period field (from MatchStateManager)
+        if ((event as any).period) {
+            const eventPeriod = (event as any).period;
+            switch (eventPeriod) {
+                case 'FIRST_HALF':
+                case 'NOT_STARTED':
+                    period = 'First Half';
+                    break;
+                case 'SECOND_HALF':
+                    period = 'Second Half';
+                    break;
+                case 'HALF_TIME':
+                    period = 'Half Time';
+                    break;
+                case 'EXTRA_TIME_1':
+                    period = 'Extra Time (1st Half)';
+                    break;
+                case 'EXTRA_TIME_2':
+                    period = 'Extra Time (2nd Half)';
+                    break;
+                case 'PENALTY_SHOOTOUT':
+                    period = 'Penalty Shootout';
+                    break;
+                case 'FINISHED':
+                    period = 'Full Time';
+                    break;
+                default:
+                    period = 'First Half';
+            }
+        } else {
+            // Fallback to minute-based grouping (for older events without period field)
+            if (sport === 'Football') {
+                if (event.minute > 45 && event.minute <= 90) period = 'Second Half';
+                else if (event.minute > 90) period = 'Extra Time';
+            } else if (sport === 'Basketball') {
+                if (event.minute <= 10) period = '1st Quarter';
+                else if (event.minute <= 20) period = '2nd Quarter';
+                else if (event.minute <= 30) period = '3rd Quarter';
+                else period = '4th Quarter';
+            }
         }
 
         if (!acc[period]) acc[period] = [];
@@ -252,8 +285,8 @@ export function MatchTimeline({ events, homeTeam, awayTeam, sport, showFilters =
                             key={key}
                             onClick={() => setFilter(key as EventFilter)}
                             className={`px-4 py-2 rounded-xl font-bold text-xs uppercase tracking-wider transition-all flex items-center gap-2 ${filter === key
-                                    ? 'bg-primary text-black'
-                                    : 'bg-white/5 text-white/60 hover:bg-white/10'
+                                ? 'bg-primary text-black'
+                                : 'bg-white/5 text-white/60 hover:bg-white/10'
                                 }`}
                         >
                             <Icon size={14} />

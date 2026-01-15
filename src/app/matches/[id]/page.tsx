@@ -508,6 +508,7 @@ export default function MatchDetailPage() {
                                 sport={match.sport}
                                 homeTeam={match.homeTeam}
                                 awayTeam={match.awayTeam}
+                                events={events}
                             />
                         </motion.div>
                     )}

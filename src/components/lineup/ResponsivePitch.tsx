@@ -15,6 +15,8 @@ export interface PitchPlayer {
     isMotM?: boolean;
     isSubstituted?: boolean;
     subMinute?: number;
+    goals?: number;
+    assists?: number;
 }
 
 export interface ResponsivePitchProps {
@@ -102,7 +104,7 @@ function PlayerDot({
     onClick?: () => void;
     orientation: 'vertical' | 'horizontal';
 }) {
-    const { player, position, rating, isCaptain, isMotM } = data;
+    const { player, position, rating, isCaptain, isMotM, goals, assists } = data;
 
     // Invert Y axis if needed, or handle varying coordinate systems
     // Assuming inputs are: x (0-100 left-right), y (0-100 top-bottom)
@@ -154,12 +156,28 @@ function PlayerDot({
                         C
                     </div>
                 )}
+
+                {/* Goal Indicator */}
+                {goals && goals > 0 && (
+                    <div className="absolute -top-1 -left-1 w-4 h-4 bg-green-500 rounded-full flex items-center justify-center text-[8px] font-black text-white border border-white shadow-sm">
+                        ⚽
+                        {goals > 1 && <span className="absolute -top-1 -right-1 text-[6px]">{goals}</span>}
+                    </div>
+                )}
+
+                {/* Assist Indicator */}
+                {assists && assists > 0 && (
+                    <div className="absolute -bottom-1 -left-1 w-4 h-4 bg-blue-500 rounded-full flex items-center justify-center text-[8px] font-black text-white border border-white shadow-sm">
+                        👟
+                        {assists > 1 && <span className="absolute -top-1 -right-1 text-[6px]">{assists}</span>}
+                    </div>
+                )}
             </div>
 
             {/* Name Label */}
             <div className="mt-1">
                 <div className="bg-black/80 backdrop-blur-sm text-white text-[10px] sm:text-xs px-2 py-0.5 rounded-full font-medium truncate max-w-[80px] text-center shadow-md border border-white/5">
-                    {player.name}
+                    {player.jerseyName || player.name}
                 </div>
             </div>
 

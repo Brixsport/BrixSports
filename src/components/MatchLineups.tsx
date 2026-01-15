@@ -12,9 +12,10 @@ interface MatchLineupsProps {
     sport: string;
     homeTeam: any;
     awayTeam: any;
+    events?: any[];
 }
 
-export default function MatchLineups({ lineups, sport, homeTeam, awayTeam }: MatchLineupsProps) {
+export default function MatchLineups({ lineups, sport, homeTeam, awayTeam, events = [] }: MatchLineupsProps) {
     // State for interactive features
     const [selectedPlayer, setSelectedPlayer] = useState<any>(null);
     const [showPlayerModal, setShowPlayerModal] = useState(false);
@@ -246,6 +247,7 @@ export default function MatchLineups({ lineups, sport, homeTeam, awayTeam }: Mat
                     awayLineup={awayLineupArray}
                     onPlayerClick={handlePlayerClick}
                     sport={sport}
+                    events={events}
                 />
             </div>
 

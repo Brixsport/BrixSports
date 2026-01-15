@@ -32,6 +32,7 @@ export class RatingCalculator {
 
     /**
      * Calculate auto-rating based on logged events
+     * Improved algorithm with better scaling and position-specific logic
      */
     static calculateAutoRating(stats: PlayerStats): { rating: number; breakdown: RatingBreakdown } {
         let rating = this.BASE_RATING;
@@ -46,62 +47,134 @@ export class RatingCalculator {
         };
 
         const position = stats.position.toLowerCase();
+        const isDefensive = position.includes('gk') || position.includes('def') || position.includes('cb') || position.includes('lb') || position.includes('rb');
+        const isMidfield = position.includes('mid') || position.includes('cm') || position.includes('cdm') || position.includes('cam');
+        const isAttacking = position.includes('fw') || position.includes('st') || position.includes('cf') || position.includes('wing');
 
-        // Goals (weighted by position)
+        // ========== GOALS ==========
+        // Diminishing returns for multiple goals, position-weighted
         if (stats.goals > 0) {
-            let goalValue = 1.0;
+            let goalValue = 0;
 
-            // Position bonuses for goals
-            if (position.includes('gk')) {
-                goalValue = 2.0; // Goalkeeper goal is amazing!
-            } else if (position.includes('def') || position.includes('cb') || position.includes('lb') || position.includes('rb')) {
-                goalValue = 1.5; // Defender goal is great
-            } else if (position.includes('mid') || position.includes('cm') || position.includes('cdm') || position.includes('cam')) {
-                goalValue = 1.3; // Midfielder goal is good
+            // First goal is most valuable, subsequent goals have diminishing returns
+            for (let i = 0; i < stats.goals; i++) {
+                let baseValue = 1.2; // Base value for first goal
+
+                // Diminishing returns: 1.2, 0.9, 0.7, 0.6...
+                if (i === 1) baseValue = 0.9;
+                else if (i === 2) baseValue = 0.7;
+                else if (i >= 3) baseValue = 0.6;
+
+                // Position multipliers
+                if (position.includes('gk')) {
+                    goalValue += baseValue * 2.5; // GK goal is legendary
+                } else if (isDefensive) {
+                    goalValue += baseValue * 1.8; // Defender goal is exceptional
+                } else if (position.includes('cdm') || position.includes('dm')) {
+                    goalValue += baseValue * 1.5; // DM goal is great
+                } else if (isMidfield) {
+                    goalValue += baseValue * 1.3; // Midfielder goal is good
+                } else if (isAttacking) {
+                    goalValue += baseValue * 1.1; // Forward goal is expected
+                }
             }
 
-            breakdown.goals = stats.goals * goalValue;
-            rating += breakdown.goals;
+            breakdown.goals = goalValue;
+            rating += goalValue;
         }
 
-        // Assists
+        // ========== ASSISTS ==========
+        // Assists are valuable but slightly less than goals
         if (stats.assists > 0) {
-            breakdown.assists = stats.assists * 0.8;
-            rating += breakdown.assists;
+            let assistValue = 0;
+
+            for (let i = 0; i < stats.assists; i++) {
+                let baseValue = 0.9; // Base value for first assist
+
+                if (i === 1) baseValue = 0.7;
+                else if (i === 2) baseValue = 0.6;
+                else if (i >= 3) baseValue = 0.5;
+
+                // Position multipliers for assists
+                if (isDefensive) {
+                    assistValue += baseValue * 1.3; // Defender assist is impressive
+                } else if (isMidfield || position.includes('wing')) {
+                    assistValue += baseValue * 1.1; // Expected from creative players
+                } else {
+                    assistValue += baseValue * 1.0;
+                }
+            }
+
+            breakdown.assists = assistValue;
+            rating += assistValue;
         }
 
-        // Eye Points (special moments)
+        // ========== EYE POINTS ==========
+        // Special moments (key passes, tackles, saves, etc.)
         if (stats.eyePoints > 0) {
-            breakdown.eyePoints = stats.eyePoints * 0.5;
-            rating += breakdown.eyePoints;
+            // Eye points are valuable but capped to prevent inflation
+            const eyeValue = Math.min(stats.eyePoints * 0.4, 1.5);
+            breakdown.eyePoints = eyeValue;
+            rating += eyeValue;
         }
 
-        // Shots on target
+        // ========== SHOTS ON TARGET ==========
+        // Reward attacking intent, but don't over-value
         if (stats.shotsOnTarget > 0) {
-            breakdown.shots = stats.shotsOnTarget * 0.2;
-            rating += breakdown.shots;
+            const shotValue = Math.min(stats.shotsOnTarget * 0.15, 0.6);
+            breakdown.shots = shotValue;
+            rating += shotValue;
         }
 
-        // Cards (penalties)
+        // ========== SHOTS OFF TARGET ==========
+        // Slight penalty for wastefulness (only if excessive)
+        if (stats.shotsOffTarget > 3) {
+            const wastefulness = -(stats.shotsOffTarget - 3) * 0.05;
+            breakdown.shots += Math.max(wastefulness, -0.3);
+            rating += Math.max(wastefulness, -0.3);
+        }
+
+        // ========== CARDS ==========
+        // Yellow cards are moderate penalties, red cards are severe
         if (stats.yellowCards > 0) {
-            breakdown.cards -= stats.yellowCards * 0.5;
-            rating += breakdown.cards;
+            const yellowPenalty = -stats.yellowCards * 0.4;
+            breakdown.cards = yellowPenalty;
+            rating += yellowPenalty;
         }
         if (stats.redCards > 0) {
-            breakdown.cards -= stats.redCards * 2.0;
-            rating += breakdown.cards;
+            const redPenalty = -stats.redCards * 1.5; // Severe penalty
+            breakdown.cards += redPenalty;
+            rating += redPenalty;
         }
 
-        // Fouls (small penalty)
-        if (stats.fouls > 0) {
-            breakdown.fouls = -Math.min(stats.fouls * 0.1, 0.5); // Cap at -0.5
-            rating += breakdown.fouls;
+        // ========== FOULS ==========
+        // Excessive fouls are penalized
+        if (stats.fouls > 2) {
+            const foulPenalty = -Math.min((stats.fouls - 2) * 0.1, 0.4);
+            breakdown.fouls = foulPenalty;
+            rating += foulPenalty;
         }
 
-        // Minutes played bonus (played full match)
+        // ========== MINUTES PLAYED ==========
+        // Full match bonus (stamina and consistency)
         if (stats.minutesPlayed >= 85 && !stats.isSubstituted) {
-            breakdown.positionBonus += 0.2;
-            rating += 0.2;
+            breakdown.positionBonus += 0.15;
+            rating += 0.15;
+        }
+        // Penalty for very early substitution (suggests poor performance)
+        else if (stats.isSubstituted && stats.minutesPlayed < 30) {
+            breakdown.positionBonus -= 0.3;
+            rating -= 0.3;
+        }
+
+        // ========== POSITION-SPECIFIC BASELINE ADJUSTMENTS ==========
+        // Defensive players often underrated by pure stats
+        if (isDefensive && stats.goals === 0 && stats.assists === 0) {
+            // If no attacking contributions but played full match, slight bonus
+            if (stats.minutesPlayed >= 75 && stats.yellowCards === 0 && stats.redCards === 0) {
+                breakdown.positionBonus += 0.2;
+                rating += 0.2;
+            }
         }
 
         // Cap rating between MIN and MAX

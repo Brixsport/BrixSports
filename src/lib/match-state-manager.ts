@@ -251,6 +251,9 @@ export class MatchStateManager {
         clock.absoluteMinute += minutesElapsed;
         clock.second = totalSeconds % 60;
 
+        // Check for automatic period end
+        this.checkPeriodEnd();
+
         // Update display minute based on period
         this.updateDisplayMinute();
 
@@ -259,6 +262,49 @@ export class MatchStateManager {
 
         this.notifyListeners();
         this.persistState();
+    }
+
+    /**
+     * Check if current period has reached its natural end
+     * Triggers extra time prompt and auto-pauses
+     */
+    private checkPeriodEnd(): void {
+        const { absoluteMinute, period, announcedStoppage } = this.state.clock;
+        const halfDuration = this.state.halfDuration;
+
+        // Calculate the effective end time (duration + announced stoppage)
+        let periodEndMinute = 0;
+        let nextPeriod: MatchPeriod | null = null;
+
+        switch (period) {
+            case 'FIRST_HALF':
+                periodEndMinute = halfDuration + (announcedStoppage || 0);
+                nextPeriod = 'HALF_TIME';
+                break;
+            case 'SECOND_HALF':
+                periodEndMinute = (halfDuration * 2) + (announcedStoppage || 0);
+                nextPeriod = 'FINISHED';
+                break;
+            case 'EXTRA_TIME_1':
+                periodEndMinute = (halfDuration * 2) + 15 + (announcedStoppage || 0);
+                nextPeriod = 'EXTRA_TIME_2';
+                break;
+            case 'EXTRA_TIME_2':
+                periodEndMinute = (halfDuration * 2) + 30 + (announcedStoppage || 0);
+                nextPeriod = 'FINISHED';
+                break;
+            default:
+                return; // No auto-transition for other periods
+        }
+
+        // If we've reached the period end
+        if (absoluteMinute >= periodEndMinute && nextPeriod) {
+            // Auto-pause the clock
+            this.stopClock();
+
+            // Trigger period end event for UI to handle
+            this.broadcastPeriodEnd(period, nextPeriod);
+        }
     }
 
     private updateDisplayMinute(): void {
@@ -365,6 +411,18 @@ export class MatchStateManager {
         this.broadcastStatusChange(from, to);
     }
 
+    /**
+     * Complete period transition after extra time has been set
+     * Called by UI after user confirms extra time amount
+     */
+    completePeriodTransition(nextPeriod: MatchPeriod): void {
+        // Reset announced stoppage for next period
+        this.state.clock.announcedStoppage = null;
+
+        // Transition to next period
+        this.transitionStatus(nextPeriod);
+    }
+
     private isValidTransition(from: MatchPeriod, to: MatchPeriod): boolean {
         const validTransitions: Record<MatchPeriod, MatchPeriod[]> = {
             'NOT_STARTED': ['FIRST_HALF'],
@@ -433,6 +491,7 @@ export class MatchStateManager {
         this.notifyListeners();
         this.persistState();
         this.broadcastEvent(fullEvent);
+        this.broadcastStatsUpdate(); // Update stats in real-time
 
         return fullEvent;
     }
@@ -730,6 +789,20 @@ export class MatchStateManager {
         }));
     }
 
+    private broadcastPeriodEnd(currentPeriod: MatchPeriod, nextPeriod: MatchPeriod): void {
+        if (typeof window === 'undefined') return;
+
+        window.dispatchEvent(new CustomEvent('MATCH_PERIOD_END', {
+            detail: {
+                matchId: this.state.matchId,
+                currentPeriod,
+                nextPeriod,
+                clock: this.state.clock,
+                requiresExtraTime: currentPeriod === 'FIRST_HALF' || currentPeriod === 'SECOND_HALF',
+            }
+        }));
+    }
+
     private triggerNotification(event: MatchEvent): void {
         const notifiableEvents: FootballEventType[] = ['Goal', 'Penalty', 'Red Card'];
         if (!notifiableEvents.includes(event.type)) return;
@@ -872,6 +945,108 @@ export class MatchStateManager {
             halfDuration: initial?.halfDuration || saved?.halfDuration || 45,
             version: 1,
         };
+    }
+
+    // ========== STATS CALCULATION ==========
+
+    /**
+     * Calculate match statistics from events
+     */
+    getMatchStats(): {
+        possession: [number, number];
+        shots: [number, number];
+        shotsOnTarget: [number, number];
+        shotsOffTarget: [number, number];
+        corners: [number, number];
+        fouls: [number, number];
+        yellowCards: [number, number];
+        redCards: [number, number];
+        offsides: [number, number];
+        freeKicks: [number, number];
+    } {
+        const stats = {
+            possession: [50, 50] as [number, number],
+            shots: [0, 0] as [number, number],
+            shotsOnTarget: [0, 0] as [number, number],
+            shotsOffTarget: [0, 0] as [number, number],
+            corners: [0, 0] as [number, number],
+            fouls: [0, 0] as [number, number],
+            yellowCards: [0, 0] as [number, number],
+            redCards: [0, 0] as [number, number],
+            offsides: [0, 0] as [number, number],
+            freeKicks: [0, 0] as [number, number],
+        };
+
+        // Count events by team
+        this.state.events.forEach(event => {
+            const isHome = event.teamId === this.state.homeTeamId;
+            const index = isHome ? 0 : 1;
+
+            switch (event.type) {
+                case 'Shot':
+                case 'Goal':
+                case 'Penalty':
+                    stats.shots[index]++;
+                    break;
+                case 'Shot on Target':
+                    stats.shots[index]++;
+                    stats.shotsOnTarget[index]++;
+                    break;
+                case 'Shot off Target':
+                    stats.shots[index]++;
+                    stats.shotsOffTarget[index]++;
+                    break;
+                case 'Corner':
+                    stats.corners[index]++;
+                    break;
+                case 'Foul':
+                    stats.fouls[index]++;
+                    break;
+                case 'Yellow Card':
+                    stats.yellowCards[index]++;
+                    break;
+                case 'Red Card':
+                    stats.redCards[index]++;
+                    break;
+                case 'Offside':
+                    stats.offsides[index]++;
+                    break;
+                case 'Free Kick':
+                    stats.freeKicks[index]++;
+                    break;
+            }
+        });
+
+        // Goals are always on target
+        stats.shotsOnTarget[0] += this.state.score.home;
+        stats.shotsOnTarget[1] += this.state.score.away;
+
+        // Calculate possession based on events (rough estimate)
+        const totalEvents = this.state.events.length;
+        if (totalEvents > 0) {
+            const homeEvents = this.state.events.filter(e => e.teamId === this.state.homeTeamId).length;
+            const awayEvents = totalEvents - homeEvents;
+
+            if (homeEvents + awayEvents > 0) {
+                stats.possession[0] = Math.round((homeEvents / totalEvents) * 100);
+                stats.possession[1] = 100 - stats.possession[0];
+            }
+        }
+
+        return stats;
+    }
+
+    private broadcastStatsUpdate(): void {
+        if (typeof window === 'undefined') return;
+
+        const stats = this.getMatchStats();
+
+        window.dispatchEvent(new CustomEvent('MATCH_STATS_UPDATE', {
+            detail: {
+                matchId: this.state.matchId,
+                stats
+            }
+        }));
     }
 
     // ========== CLEANUP ==========
