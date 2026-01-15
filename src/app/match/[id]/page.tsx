@@ -22,35 +22,22 @@ export default function MatchPage() {
                 setLoading(true);
                 setError(null);
 
-                // Try fetching from both football and basketball APIs
-                const [footballResponse, basketballResponse] = await Promise.all([
-                    fetch(`/api/football/matches/${matchId}`).catch(() => null),
-                    fetch(`/api/basketball/matches/${matchId}`).catch(() => null)
-                ]);
+                // Fetch from the unified matches endpoint
+                const response = await fetch(`/api/matches/${matchId}`);
 
-                let matchData = null;
-                let sport = null;
-
-                if (footballResponse && footballResponse.ok) {
-                    const data = await footballResponse.json();
-                    if (data.success && data.match) {
-                        matchData = data.match;
-                        sport = 'Football';
-                    }
-                }
-
-                if (!matchData && basketballResponse && basketballResponse.ok) {
-                    const data = await basketballResponse.json();
-                    if (data.success && data.match) {
-                        matchData = data.match;
-                        sport = 'Basketball';
-                    }
-                }
-
-                if (!matchData) {
+                if (!response.ok) {
                     setError('Match not found');
                     return;
                 }
+
+                const data = await response.json();
+
+                if (!data.match) {
+                    setError('Match not found');
+                    return;
+                }
+
+                const matchData = data.match;
 
                 // Parse stats if needed
                 let dbStats = {};
@@ -72,14 +59,15 @@ export default function MatchPage() {
                     startTime: matchData.startTime,
                     venue: matchData.venue,
                     competition: matchData.competition,
-                    sport: (sport || 'Football') as 'Football' | 'Basketball',
+                    sport: matchData.sport as 'Football' | 'Basketball',
                     homeTeam: matchData.homeTeam,
                     awayTeam: matchData.awayTeam,
-                    events: matchData.events || [],
+                    events: data.events || [],
                     stats: dbStats,
-                    isStreaming: matchData.isStreaming,
-                    streamUrl: matchData.streamUrl,
-                    streamType: matchData.streamType
+                    isStreaming: matchData.isStreaming || matchData.livestreamEnabled,
+                    streamUrl: matchData.streamUrl || matchData.livestreamUrl,
+                    streamType: matchData.streamType || matchData.livestreamType,
+                    lineups: matchData.lineups
                 });
             } catch (error) {
                 console.error('Error fetching match:', error);
