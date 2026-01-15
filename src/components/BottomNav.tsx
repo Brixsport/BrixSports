@@ -2,7 +2,7 @@
 
 import { usePathname, useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
-import { Calendar, Trophy, Heart, User, Users } from 'lucide-react';
+import { Calendar, Trophy, Heart, User } from 'lucide-react';
 import { useState, useEffect } from 'react';
 
 interface NavItem {
@@ -31,12 +31,6 @@ export function BottomNav() {
             label: 'Fixtures',
             icon: Calendar,
             path: '/',
-        },
-        {
-            id: 'lineups',
-            label: 'Lineups',
-            icon: Users,
-            path: '/lineups',
         },
         {
             id: 'competitions',
@@ -68,7 +62,7 @@ export function BottomNav() {
     };
 
     // Hide bottom nav on specific routes
-    const hiddenRoutes = ['/login', '/signup', '/admin', '/reset-password', '/forgot-password'];
+    const hiddenRoutes = ['/login', '/signup', '/admin', '/reset-password', '/forgot-password', '/lineups'];
     if (hiddenRoutes.some(route => pathname.startsWith(route))) {
         return null;
     }
