@@ -229,7 +229,12 @@ export default function LineupBuilderPage() {
 
         try {
             setSaving(true);
-            const dataUrl = await htmlToImage.toPng(pitchRef.current, { cacheBust: true, backgroundColor: '#050505' });
+            const dataUrl = await htmlToImage.toPng(pitchRef.current, {
+                cacheBust: true,
+                backgroundColor: '#050505',
+                pixelRatio: 4,
+                quality: 1.0
+            });
             download(dataUrl, `lineup-${selectedTeam}-${selectedMatch?.id}.png`);
         } catch (error) {
             console.error('Error downloading image:', error);
