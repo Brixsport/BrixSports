@@ -76,6 +76,17 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
     const handleRatingsUpdate = (event: any) => {
       if (event.detail.matchId === match.id) {
         setTeamRatings(event.detail.teamRatings);
+
+        // Update player ratings in lineups
+        if (event.detail.lineups) {
+          setMatch(prev => ({
+            ...prev,
+            lineups: {
+              home: event.detail.lineups.home || prev.lineups?.home || [],
+              away: event.detail.lineups.away || prev.lineups?.away || []
+            }
+          }));
+        }
       }
     };
 
@@ -804,16 +815,16 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
                         return homeLineup.starters.map((entry: any) => ({
                           playerId: entry.playerId,
                           position: entry.position,
-                          rating: ratings[entry.playerId]?.finalRating || ratings[entry.playerId]?.autoRating || 0,
+                          rating: entry.rating || 0, // Use live rating from lineup
                           isCaptain: entry.isCaptain || false,
-                          isMotM: ratings[entry.playerId]?.isMotM || false
+                          isMotM: entry.isMotM || false
                         }));
                       }
                       if (Array.isArray(homeLineup)) {
                         return homeLineup.map((entry: any) => ({
                           ...entry,
-                          rating: ratings[entry.playerId]?.finalRating || ratings[entry.playerId]?.autoRating || entry.rating || 0,
-                          isMotM: ratings[entry.playerId]?.isMotM || false
+                          rating: entry.rating || 0, // Use live rating from lineup
+                          isMotM: entry.isMotM || false
                         }));
                       }
                       return [];
@@ -825,16 +836,16 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
                         return awayLineup.starters.map((entry: any) => ({
                           playerId: entry.playerId,
                           position: entry.position,
-                          rating: ratings[entry.playerId]?.finalRating || ratings[entry.playerId]?.autoRating || 0,
+                          rating: entry.rating || 0, // Use live rating from lineup
                           isCaptain: entry.isCaptain || false,
-                          isMotM: ratings[entry.playerId]?.isMotM || false
+                          isMotM: entry.isMotM || false
                         }));
                       }
                       if (Array.isArray(awayLineup)) {
                         return awayLineup.map((entry: any) => ({
                           ...entry,
-                          rating: ratings[entry.playerId]?.finalRating || ratings[entry.playerId]?.autoRating || entry.rating || 0,
-                          isMotM: ratings[entry.playerId]?.isMotM || false
+                          rating: entry.rating || 0, // Use live rating from lineup
+                          isMotM: entry.isMotM || false
                         }));
                       }
                       return [];

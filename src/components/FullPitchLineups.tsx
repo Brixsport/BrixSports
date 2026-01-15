@@ -126,12 +126,19 @@ const DEFAULT_FORMATION = '4-4-2';
 // Helper to normalize position string to broad buckets for slot filling
 const parsePositionToBucket = (pos: string): string => {
     const p = pos.toLowerCase().trim();
-    if (p.includes('gk') || p.includes('goalkeeper')) return 'GK';
+    // Check for goalkeeper first - be more comprehensive
+    if (p.includes('gk') || p.includes('goalkeeper') || p.includes('goal keeper') ||
+        p === 'g' || p.includes('goalie') || p.includes('keeper')) return 'GK';
+    // Check for defensive midfielder
     if (p.includes('dm') || p.includes('defensive mid') || p.includes('cdm')) return 'DM';
+    // Check for attacking midfielder
     if (p.includes('am') || p.includes('attacking mid') || p.includes('cam')) return 'AM';
-    if (p.includes('def') || p.includes('back') || p.includes('cb') || p.includes('lb') || p.includes('rb')) return 'DEF';
-    if (p.includes('mid') || p.includes('wing') || p.includes('lm') || p.includes('rm')) return 'MID';
-    if (p.includes('fw') || p.includes('st') || p.includes('cf')) return 'FW';
+    // Check for defenders
+    if (p.includes('def') || p.includes('back') || p.includes('cb') || p.includes('lb') || p.includes('rb') || p.includes('wb')) return 'DEF';
+    // Check for midfielders (check this before forwards to avoid confusion)
+    if (p.includes('mid') || p.includes('wing') || p.includes('lm') || p.includes('rm') || p.includes('cm')) return 'MID';
+    // Check for forwards
+    if (p.includes('fw') || p.includes('st') || p.includes('cf') || p.includes('striker') || p.includes('forward')) return 'FW';
     return 'MID'; // Fallback
 };
 
@@ -236,102 +243,91 @@ export function FullPitchLineups({
         // Sort slots by X to ensure Left-to-Right filling
         Object.values(slotsByRole).forEach(slots => slots.sort((a, b) => a.x - b.x));
 
-        // 3. Assign Players to Slots
+        // 3. Assign Players to Slots by Role
+        // NEW APPROACH: Match players to slots within their role groups
+        // This ensures defenders go to defender slots, forwards to forward slots, etc.
         const pitchPlayers: PitchPlayer[] = [];
 
-        // We iterate through the roles. 
-        // If mapped exact role exists, use it.
-        // If not, we might have mismatch (e.g. Formation has DM, Player has MID).
-        // Resolving this dynamically.
+        // Process each role in order
+        rolesOrder.forEach(role => {
+            const rolePlayers = playersByRole[role];
+            const roleSlots = slotsByRole[role];
 
-        // ALTERNATIVE: 
-        // Just fill slots in order (GK, DEF, MID, FW) and players in order (GK, DEF, MID, FW).
-        // If 4-2-3-1: Slots are [GK], [4 DEF], [2 DM], [3 AM], [1 FW]. Total 11.
-        // Players are [GK], [4 DEF], [5 MID/AM?], [1 FW].
-        // We just map the lists index-to-index.
+            // Assign players to slots within this role
+            roleSlots.forEach((slot, slotIndex) => {
+                const playerEntry = rolePlayers[slotIndex];
 
-        const sortedTemplate = [...template].sort((a, b) => {
-            if (Math.abs(a.y - b.y) > 10) return a.y - b.y; // Sort by line (depth)
-            return a.x - b.x; // Sort by L->R
-        });
+                if (!playerEntry) {
+                    // If we don't have enough players for this role, try to find from adjacent roles
+                    // This handles cases like 4-2-3-1 where DM/AM might be labeled as MID
+                    const adjacentRoles = getAdjacentRoles(role);
+                    for (const adjRole of adjacentRoles) {
+                        const adjPlayers = playersByRole[adjRole];
+                        if (adjPlayers.length > slotsByRole[adjRole].length) {
+                            // This role has extra players, borrow one
+                            const borrowedPlayer = adjPlayers[slotsByRole[adjRole].length];
+                            if (borrowedPlayer) {
+                                assignPlayerToSlot(borrowedPlayer, slot, isHome, pitchPlayers, playerStats);
+                                break;
+                            }
+                        }
+                    }
+                    return;
+                }
 
-        // Sort players by "Line Depth" then "Order"
-        // We assign a depth score to player buckets
-        const bucketDepth: Record<string, number> = { 'GK': 0, 'DEF': 1, 'DM': 2, 'MID': 3, 'AM': 4, 'FW': 5 };
-
-        const sortedPlayers = [...availablePlayers].sort((a, b) => {
-            const depthA = bucketDepth[parsePositionToBucket(a.position || '')] || 3;
-            const depthB = bucketDepth[parsePositionToBucket(b.position || '')] || 3;
-            if (depthA !== depthB) return depthA - depthB;
-            // Stable sort otherwise (rely on lineup order)
-            return 0;
-        });
-
-        // Now we have 11 slots (usually) and 11 players.
-        // Map 1:1.
-        // This handles "Formation driven layout" perfectly. 
-        // If the formation is 4-2-3-1, we simply fill the 11 slots (GK->DEF->DM->AM->FW) with the 11 players (GK->DEF->MID...->FW).
-        // This assumes the API returns players in roughly the correct tactical order or grouped by line, which is standard.
-
-        sortedTemplate.forEach((slot, index) => {
-            const playerEntry = sortedPlayers[index];
-            if (!playerEntry) return;
-
-            // Calculate Final Position
-            // Home (Bottom): Y is normal (0-100 where 0=GK is wrong... 
-            // In our template, 5=GK, 85=FW. 
-            // But visually, Bottom is 100%. 
-            // FotMob Home is Bottom. So GK should be at ~90%.
-            // Our Template: 0=GK, 100=FW? 
-            // Let's redefine Template Y: 0 = Goal Line (GK), 100 = Halfway Line.
-            // Home Team (Bottom): GK at Y=95, FW at Y=50.
-            // Away Team (Top): GK at Y=5, FW at Y=50.
-
-            // Wait, standard Pitch Y is 0 (Top) to 100 (Bottom).
-            // Home Team (occupies 50-100):
-            // GK at 95. FW at 55.
-            // Template Y (0-100 relative to half): 
-            // Slot.y = 5 (GK). 
-            // Home Y = 100 - (Slot.y / 100 * 50). -> 100 - 2.5 = 97.5. 
-            // If Slot.y = 85 (FW) -> 100 - (85/100 * 50) = 100 - 42.5 = 57.5.
-
-            // Away Team (occupies 0-50):
-            // GK at 5. FW at 45.
-            // Away Y = Slot.y / 100 * 50. -> 2.5 (GK).
-            // If Slot.y = 85 (FW) -> 42.5.
-
-            let finalX = slot.x;
-            let finalY = 0;
-
-            if (isHome) {
-                // Home: Bottom Half (50 -> 100)
-                // Expanded slightly per FotMob logic
-                finalY = 100 - (slot.y / 100 * 52);
-            } else {
-                // Away: Top Half (0 -> 50)
-                // Compressed slightly per FotMob logic
-                finalY = (slot.y / 100 * 48);
-
-                // Mirror X for Away team to match broadcast perspective
-                // (Right Back on screen right for Away team)
-                finalX = 100 - slot.x;
-            }
-
-            // Get player stats
-            const stats = playerStats.get(playerEntry.playerId) || { goals: 0, assists: 0 };
-
-            pitchPlayers.push({
-                player: playerEntry.player,
-                position: { x: finalX, y: finalY },
-                rating: playerEntry.rating || 0,
-                isCaptain: !!playerEntry.isCaptain,
-                isMotM: !!playerEntry.isMotM,
-                goals: stats.goals,
-                assists: stats.assists,
+                assignPlayerToSlot(playerEntry, slot, isHome, pitchPlayers, playerStats);
             });
         });
 
         return pitchPlayers;
+    };
+
+    // Helper function to get adjacent roles for flexible assignment
+    const getAdjacentRoles = (role: string): string[] => {
+        const adjacencyMap: Record<string, string[]> = {
+            'GK': [], // GK is strict
+            'DEF': ['DM'], // Defenders can cover DM if needed
+            'DM': ['DEF', 'MID'], // DM can be filled by DEF or MID
+            'MID': ['DM', 'AM'], // MID can be filled by DM or AM
+            'AM': ['MID', 'FW'], // AM can be filled by MID or FW
+            'FW': ['AM'], // FW can be covered by AM
+        };
+        return adjacencyMap[role] || [];
+    };
+
+    // Helper function to assign a player to a slot
+    const assignPlayerToSlot = (
+        playerEntry: any,
+        slot: FormationSlot,
+        isHome: boolean,
+        pitchPlayers: PitchPlayer[],
+        playerStats: Map<string, { goals: number; assists: number }>
+    ) => {
+        let finalX = slot.x;
+        let finalY = 0;
+
+        if (isHome) {
+            // Home: Bottom Half (50 -> 100)
+            finalY = 100 - (slot.y / 100 * 52);
+        } else {
+            // Away: Top Half (0 -> 50)
+            finalY = (slot.y / 100 * 48);
+            // Mirror X for Away team
+            finalX = 100 - slot.x;
+        }
+
+        // Get player stats
+        const stats = playerStats.get(playerEntry.playerId) || { goals: 0, assists: 0 };
+
+        pitchPlayers.push({
+            player: playerEntry.player,
+            position: { x: finalX, y: finalY },
+            rating: playerEntry.rating || 0,
+            isCaptain: !!playerEntry.isCaptain,
+            isMotM: !!playerEntry.isMotM,
+            goals: stats.goals,
+            assists: stats.assists,
+        });
     };
 
     // Minimal fallback for non-football (not the focus of refactor)
