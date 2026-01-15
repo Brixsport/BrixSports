@@ -79,14 +79,14 @@ const FORMATION_TEMPLATES: Record<string, FormationTemplate> = {
     ],
     '5-3-2': [
         { x: 50, y: 5, role: 'GK' },
-        { x: 10, y: 25, role: 'DEF' }, { x: 30, y: 25, role: 'DEF' }, { x: 50, y: 25, role: 'DEF' }, { x: 70, y: 25, role: 'DEF' }, { x: 90, y: 25, role: 'DEF' },
-        { x: 30, y: 55, role: 'MID' }, { x: 50, y: 55, role: 'MID' }, { x: 70, y: 55, role: 'MID' },
+        { x: 5, y: 28, role: 'DEF' }, { x: 27, y: 28, role: 'DEF' }, { x: 50, y: 28, role: 'DEF' }, { x: 73, y: 28, role: 'DEF' }, { x: 95, y: 28, role: 'DEF' },
+        { x: 25, y: 55, role: 'MID' }, { x: 50, y: 50, role: 'MID' }, { x: 75, y: 55, role: 'MID' },
         { x: 35, y: 85, role: 'FW' }, { x: 65, y: 85, role: 'FW' }
     ],
     '5-4-1': [
         { x: 50, y: 5, role: 'GK' },
-        { x: 10, y: 30, role: 'DEF' }, { x: 30, y: 30, role: 'DEF' }, { x: 50, y: 30, role: 'DEF' }, { x: 70, y: 30, role: 'DEF' }, { x: 90, y: 30, role: 'DEF' },
-        { x: 15, y: 60, role: 'MID' }, { x: 38, y: 60, role: 'MID' }, { x: 62, y: 60, role: 'MID' }, { x: 85, y: 60, role: 'MID' },
+        { x: 5, y: 28, role: 'DEF' }, { x: 27, y: 28, role: 'DEF' }, { x: 50, y: 28, role: 'DEF' }, { x: 73, y: 28, role: 'DEF' }, { x: 95, y: 28, role: 'DEF' },
+        { x: 12, y: 58, role: 'MID' }, { x: 37, y: 58, role: 'MID' }, { x: 63, y: 58, role: 'MID' }, { x: 88, y: 58, role: 'MID' },
         { x: 50, y: 85, role: 'FW' }
     ],
     '3-4-2-1': [
