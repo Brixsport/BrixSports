@@ -42,6 +42,8 @@ export default function AdminMatchLineupsPage() {
     const [awayFormation, setAwayFormation] = useState('4-3-3');
     const [homeCaptain, setHomeCaptain] = useState('');
     const [awayCaptain, setAwayCaptain] = useState('');
+    const [homePositionOverrides, setHomePositionOverrides] = useState<Record<string, string>>({});
+    const [awayPositionOverrides, setAwayPositionOverrides] = useState<Record<string, string>>({});
     const [saving, setSaving] = useState(false);
     const [loadingData, setLoadingData] = useState(false);
     const [homeLineupStatus, setHomeLineupStatus] = useState<any>(null);
@@ -135,13 +137,34 @@ export default function AdminMatchLineupsPage() {
                     const captain = lineupData.lineups.home.starters.find((s: any) => s.isCaptain);
                     if (captain) setHomeCaptain(captain.playerId);
                     setHomeLineupStatus(lineupData.lineups.home);
+
+                    // Restore overrides
+                    const overrides: Record<string, string> = {};
+                    lineupData.lineups.home.starters.forEach((s: any) => {
+                        const player = homePlayers.find((p: any) => p.id === s.playerId);
+                        if (player && s.position && s.position !== player.position) {
+                            overrides[s.playerId] = s.position;
+                        }
+                    });
+                    setHomePositionOverrides(overrides);
                 }
+
                 if (lineupData.lineups.away) {
                     setAwayStarters(lineupData.lineups.away.starters.map((s: any) => s.playerId));
                     setAwayFormation(lineupData.lineups.away.formation);
                     const captain = lineupData.lineups.away.starters.find((s: any) => s.isCaptain);
                     if (captain) setAwayCaptain(captain.playerId);
                     setAwayLineupStatus(lineupData.lineups.away);
+
+                    // Restore overrides
+                    const overrides: Record<string, string> = {};
+                    lineupData.lineups.away.starters.forEach((s: any) => {
+                        const player = awayPlayers.find((p: any) => p.id === s.playerId);
+                        if (player && s.position && s.position !== player.position) {
+                            overrides[s.playerId] = s.position;
+                        }
+                    });
+                    setAwayPositionOverrides(overrides);
                 }
             }
         } catch (error) {
@@ -199,7 +222,7 @@ export default function AdminMatchLineupsPage() {
                     const player = homeRoster.find(p => p.id === playerId)!;
                     return {
                         playerId,
-                        position: player.position,
+                        position: homePositionOverrides[playerId] || player.position, // Use override if set
                         jerseyNumber: player.number,
                         jerseyName: player.jerseyName,
                         isCaptain: playerId === homeCaptain,
@@ -223,7 +246,7 @@ export default function AdminMatchLineupsPage() {
                     const player = awayRoster.find(p => p.id === playerId)!;
                     return {
                         playerId,
-                        position: player.position,
+                        position: awayPositionOverrides[playerId] || player.position, // Use override if set
                         jerseyNumber: player.number,
                         jerseyName: player.jerseyName,
                         isCaptain: playerId === awayCaptain,
@@ -515,9 +538,13 @@ export default function AdminMatchLineupsPage() {
                                     starters={homeStarters}
                                     formation={homeFormation}
                                     captain={homeCaptain}
+                                    positionOverrides={homePositionOverrides}
                                     onToggleStarter={(id) => toggleStarter(id, 'home')}
                                     onFormationChange={setHomeFormation}
                                     onCaptainChange={setHomeCaptain}
+                                    onPositionOverride={(playerId, position) => {
+                                        setHomePositionOverrides(prev => ({ ...prev, [playerId]: position }));
+                                    }}
                                     isDisabled={user?.role !== 'admin' && homeLineupStatus?.publishedByRole === 'admin' && !homeLineupStatus?.unlocked}
                                 />
 
@@ -528,9 +555,13 @@ export default function AdminMatchLineupsPage() {
                                     starters={awayStarters}
                                     formation={awayFormation}
                                     captain={awayCaptain}
+                                    positionOverrides={awayPositionOverrides}
                                     onToggleStarter={(id) => toggleStarter(id, 'away')}
                                     onFormationChange={setAwayFormation}
                                     onCaptainChange={setAwayCaptain}
+                                    onPositionOverride={(playerId, position) => {
+                                        setAwayPositionOverrides(prev => ({ ...prev, [playerId]: position }));
+                                    }}
                                     isDisabled={user?.role !== 'admin' && awayLineupStatus?.publishedByRole === 'admin' && !awayLineupStatus?.unlocked}
                                 />
                             </div>
@@ -560,9 +591,11 @@ function TeamLineupBuilder({
     starters,
     formation,
     captain,
+    positionOverrides = {},
     onToggleStarter,
     onFormationChange,
     onCaptainChange,
+    onPositionOverride,
     isDisabled = false
 }: {
     team: any;
@@ -570,12 +603,15 @@ function TeamLineupBuilder({
     starters: string[];
     formation: string;
     captain: string;
+    positionOverrides?: Record<string, string>;
     onToggleStarter: (id: string) => void;
     onFormationChange: (formation: string) => void;
     onCaptainChange: (id: string) => void;
+    onPositionOverride?: (playerId: string, position: string) => void;
     isDisabled?: boolean;
 }) {
     const formations = ['4-3-3', '4-4-2', '4-2-3-1', '3-5-2', '3-4-3', '5-3-2'];
+    const positions = ['GK', 'DEF', 'LB', 'RB', 'CB', 'DM', 'MID', 'CM', 'LM', 'RM', 'AM', 'CAM', 'FW', 'ST', 'CF', 'LW', 'RW'];
 
     return (
         <div className={`bg-white/5 rounded-xl border border-white/10 p-6 ${isDisabled ? 'opacity-50 pointer-events-none' : ''}`}>
@@ -600,6 +636,8 @@ function TeamLineupBuilder({
                 {roster.map(player => {
                     const isStarter = starters.includes(player.id);
                     const isCaptain = captain === player.id;
+                    const currentPosition = positionOverrides[player.id] || player.position;
+                    const hasOverride = !!positionOverrides[player.id];
 
                     return (
                         <div
@@ -609,15 +647,36 @@ function TeamLineupBuilder({
                                 : 'bg-white/5 border-white/10 hover:bg-white/10'
                                 }`}
                         >
-                            <div className="flex items-center gap-3">
+                            <div className="flex items-center gap-3 flex-1">
                                 <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold ${isStarter ? 'bg-primary text-black' : 'bg-white/10'
                                     }`}>
                                     {player.number}
                                 </div>
-                                <div>
+                                <div className="flex-1">
                                     <div className="font-semibold">{player.name}</div>
-                                    <div className="text-xs text-white/60">{player.position}</div>
+                                    <div className="flex items-center gap-2">
+                                        <div className="text-xs text-white/60">
+                                            {player.position}
+                                            {hasOverride && (
+                                                <span className="ml-1 text-primary">→ {currentPosition}</span>
+                                            )}
+                                        </div>
+                                    </div>
                                 </div>
+
+                                {/* Position Selector for Starters */}
+                                {isStarter && onPositionOverride && (
+                                    <select
+                                        value={currentPosition}
+                                        onChange={(e) => onPositionOverride(player.id, e.target.value)}
+                                        className="bg-white/10 border border-white/20 rounded px-2 py-1 text-xs text-white"
+                                        title="Tactical Position"
+                                    >
+                                        {positions.map(pos => (
+                                            <option key={pos} value={pos}>{pos}</option>
+                                        ))}
+                                    </select>
+                                )}
                             </div>
 
                             <div className="flex items-center gap-2">
