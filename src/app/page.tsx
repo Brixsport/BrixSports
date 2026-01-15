@@ -662,7 +662,7 @@ export default function Home() {
                         key={match.id}
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
-                        onClick={() => setSelectedMatch(match)}
+                        onClick={() => router.push(`/match/${match.id}`)}
                         className="bg-white/5 hover:bg-white/10 border border-white/10 hover:border-primary/50 rounded-xl p-4 cursor-pointer transition-all group"
                       >
                         <div className="flex items-center justify-between">

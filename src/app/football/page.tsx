@@ -1,13 +1,13 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowLeft, Trophy, Users, Activity, Star, Award, Zap, Shield, Goal, GitCompare } from 'lucide-react';
 import { PlayerProfileOverlay } from '@/components/PlayerProfileOverlay';
 import { TeamProfileOverlay } from '@/components/TeamProfileOverlay';
-import { MatchOverlay } from '@/components/MatchOverlay';
 import { Match, Player, Team } from '@/types';
 
 // Extend the shared interfaces if necessary for local state, or rely on transformations matching frontend needs.
@@ -47,6 +47,7 @@ interface BracketRound {
 }
 
 export default function FootballPage() {
+    const router = useRouter();
     const [activeTab, setActiveTab] = useState('STANDINGS');
     const [matches, setMatches] = useState<Match[]>([]);
     const [standings, setStandings] = useState<Standing[]>([]);
@@ -63,7 +64,6 @@ export default function FootballPage() {
     const [loading, setLoading] = useState(true);
     const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
     const [selectedTeam, setSelectedTeam] = useState<Team | null>(null);
-    const [selectedMatch, setSelectedMatch] = useState<Match | null>(null);
 
     useEffect(() => {
         fetchFootballData();
@@ -345,7 +345,7 @@ export default function FootballPage() {
                                 {matches.map((match) => (
                                     <div
                                         key={match.id}
-                                        onClick={() => setSelectedMatch(match)}
+                                        onClick={() => router.push(`/match/${match.id}`)}
                                         className="bg-white/5 rounded-2xl border border-white/10 p-6 hover:border-primary/50 transition-all cursor-pointer"
                                     >
                                         <div className="flex flex-col md:flex-row items-center justify-between gap-6 md:gap-0">
@@ -448,7 +448,7 @@ export default function FootballPage() {
                                                                 return (
                                                                     <div
                                                                         key={bracketMatch.id}
-                                                                        onClick={() => fullMatch && setSelectedMatch(fullMatch)}
+                                                                        onClick={() => fullMatch && router.push(`/match/${fullMatch.id}`)}
                                                                         className="relative group"
                                                                     >
                                                                         <div className="bg-white/5 border border-white/10 rounded-2xl p-4 hover:border-primary/40 hover:bg-white/[0.07] transition-all cursor-pointer relative z-10 backdrop-blur-sm">
@@ -673,16 +673,7 @@ export default function FootballPage() {
                 />
             )}
 
-            {selectedMatch && (
-                <MatchOverlay
-                    match={selectedMatch}
-                    onClose={() => setSelectedMatch(null)}
-                    onSelectPlayer={(player) => {
-                        setSelectedPlayer(player);
-                        setSelectedMatch(null);
-                    }}
-                />
-            )}
+
         </div>
     );
 }

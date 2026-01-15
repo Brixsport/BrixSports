@@ -2,7 +2,7 @@
 
 import { usePathname, useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
-import { Calendar, Trophy, Heart, User } from 'lucide-react';
+import { Calendar, Trophy, Heart, User, Users } from 'lucide-react';
 import { useState, useEffect } from 'react';
 
 interface NavItem {
@@ -26,12 +26,17 @@ export function BottomNav() {
     }, []);
 
     const navItems: NavItem[] = [
-
         {
             id: 'fixtures',
             label: 'Fixtures',
             icon: Calendar,
             path: '/',
+        },
+        {
+            id: 'lineups',
+            label: 'Lineups',
+            icon: Users,
+            path: '/lineups',
         },
         {
             id: 'competitions',
