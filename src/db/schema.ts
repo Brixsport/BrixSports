@@ -158,6 +158,17 @@ export const matches = sqliteTable('matches', {
     updatedAt: integer('updated_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
 });
 
+// Match-Logger Assignments table (many-to-many relationship for multi-logger support)
+export const matchLoggerAssignments = sqliteTable('match_logger_assignments', {
+    id: text('id').primaryKey(),
+    matchId: text('match_id').notNull().references(() => matches.id, { onDelete: 'cascade' }),
+    loggerId: text('logger_id').notNull().references(() => loggers.id, { onDelete: 'cascade' }),
+    role: text('role').default('primary'), // 'primary' | 'secondary' | 'backup'
+    assignedAt: integer('assigned_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
+    assignedBy: text('assigned_by'), // Admin who made the assignment
+    status: text('status').default('active'), // 'active' | 'removed'
+});
+
 // Match Events table
 export const matchEvents = sqliteTable('match_events', {
     id: text('id').primaryKey(),
@@ -666,6 +677,9 @@ export type PushSubscription = typeof pushSubscriptions.$inferSelect;
 export type NewPushSubscription = typeof pushSubscriptions.$inferInsert;
 export type MatchReminder = typeof matchReminders.$inferSelect;
 export type NewMatchReminder = typeof matchReminders.$inferInsert;
+export type MatchLoggerAssignment = typeof matchLoggerAssignments.$inferSelect;
+export type NewMatchLoggerAssignment = typeof matchLoggerAssignments.$inferInsert;
+
 
 export const newsRelationsRelations = relations(news, ({ many }) => ({
     relations: many(newsRelations),

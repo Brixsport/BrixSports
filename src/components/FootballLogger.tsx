@@ -197,7 +197,7 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
     }, [matchState, isSocketConnected, emit, match.id]);
 
     // Multi-logger Hook
-    const { activeLoggers, conflicts, isConnected, resolveConflict } = useMultiLogger({
+    const { activeLoggers, conflicts, isConnected, resolveConflict, syncStatus } = useMultiLogger({
         matchId: match.id,
         loggerId: currentLogger?.id || 'unknown',
         loggerName: currentLogger?.name || 'Unknown Logger',
@@ -560,6 +560,15 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                     </div>
                 </div>
             )}
+
+            <MultiLoggerStatus
+                activeLoggers={activeLoggers}
+                conflicts={conflicts}
+                isConnected={isConnected}
+                syncStatus={syncStatus}
+                currentLoggerName={currentLogger?.name || 'Unknown Logger'}
+                onResolveConflict={(id, resolution) => resolveConflict(id, resolution)}
+            />
         </div>
     );
 }

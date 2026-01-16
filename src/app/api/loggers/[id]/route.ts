@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
-import { loggers, matches } from '@/db/schema';
+import { loggers } from '@/db/schema';
 import { eq } from 'drizzle-orm';
 import bcrypt from 'bcryptjs';
+import { getLoggerMatches } from '@/lib/match-logger-helpers';
 
 // GET /api/loggers/[id] - Get a specific logger
 export async function GET(
@@ -25,11 +26,8 @@ export async function GET(
             );
         }
 
-        // Get assigned matches
-        const assignedMatches = await db
-            .select()
-            .from(matches)
-            .where(eq(matches.loggerId, id));
+        // Get assigned matches using the new multi-logger helper
+        const assignedMatches = await getLoggerMatches(id);
 
         return NextResponse.json({
             ...logger,
@@ -100,11 +98,9 @@ export async function DELETE(
     try {
         const { id } = await params;
 
-        // Unassign matches before deleting
-        await db
-            .update(matches)
-            .set({ loggerId: null })
-            .where(eq(matches.loggerId, id));
+        // Note: The foreign key constraint with ON DELETE CASCADE 
+        // will automatically remove assignments when the logger is deleted
+        // But we can also explicitly update the status to 'removed' if needed
 
         const deletedLogger = await db
             .delete(loggers)

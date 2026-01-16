@@ -18,7 +18,12 @@
     "set-admin": "tsx scripts/set-admin-role.ts",
     "check-loggers": "tsx scripts/check-logger-matches.ts",
     "assign-match": "tsx scripts/assign-match.ts",
-    "add-king-fc-players": "tsx scripts/add-king-fc-players.ts"
+    "add-king-fc-players": "tsx scripts/add-king-fc-players.ts",
+    "remove-test-players": "tsx scripts/remove-test-players.ts",
+    "remove-blacko": "tsx scripts/remove-blacko.ts",
+    "remove-blacko-duplicates": "tsx scripts/remove-blacko-duplicates.ts",
+    "remove-sk-duplicate": "tsx scripts/remove-sk-duplicate.ts",
+    "migrate:multi-logger": "tsx src/db/migrations/run-migrations.ts"
   },
   "dependencies": {
     "@babel/parser": "^7.28.5",
