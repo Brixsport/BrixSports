@@ -1,7 +1,7 @@
 'use client';
 
 import { motion } from 'framer-motion';
-import { Player, Team } from '@/lib/mock-data';
+import { Player, Team } from '@/types';
 import { Star, TrendingUp, Activity } from 'lucide-react';
 
 interface LineupVisualizerProps {
@@ -41,6 +41,19 @@ const FOOTBALL_FORMATIONS: Record<string, { position: string; x: number; y: numb
     { position: 'RM', x: 80, y: 50 },
     { position: 'ST', x: 40, y: 20 },
     { position: 'ST', x: 60, y: 20 },
+  ],
+  '3-2-4-1': [
+    { position: 'GK', x: 50, y: 95 },
+    { position: 'CB', x: 20, y: 75 },
+    { position: 'CB', x: 50, y: 75 },
+    { position: 'CB', x: 80, y: 75 },
+    { position: 'CDM', x: 35, y: 55 },
+    { position: 'CDM', x: 65, y: 55 },
+    { position: 'LM', x: 10, y: 35 },
+    { position: 'CAM', x: 35, y: 35 },
+    { position: 'CAM', x: 65, y: 35 },
+    { position: 'RM', x: 90, y: 35 },
+    { position: 'ST', x: 50, y: 15 },
   ],
 };
 
@@ -95,16 +108,16 @@ function FootballLineup({ team, players, formation }: { team: Team; players: Pla
             <div className="relative">
               {/* Player Circle */}
               <div className={`w-12 h-12 rounded-full flex items-center justify-center font-display text-lg font-bold transition-all group-hover:scale-110 border-2`}
-                style={{ 
-                  backgroundColor: team.color, 
-                  borderColor: player.rating >= 8 ? '#FFD700' : 'rgba(255,255,255,0.3)'
+                style={{
+                  backgroundColor: team.color,
+                  borderColor: (player.stats?.rating ?? 0) >= 8 ? '#FFD700' : 'rgba(255,255,255,0.3)'
                 }}
               >
                 {player.number}
               </div>
 
               {/* Rating Badge */}
-              {player.rating >= 8 && (
+              {(player.stats?.rating ?? 0) >= 8 && (
                 <div className="absolute -top-1 -right-1 w-5 h-5 bg-yellow-500 rounded-full flex items-center justify-center">
                   <Star size={12} className="text-black fill-black" />
                 </div>
@@ -116,7 +129,7 @@ function FootballLineup({ team, players, formation }: { team: Team; players: Pla
                 <p className="text-[10px] text-white/60 font-bold">{pos.position}</p>
                 <div className="flex items-center gap-1 mt-1">
                   <Star size={10} className="text-yellow-500" />
-                  <span className="text-xs font-bold text-yellow-500">{player.rating}</span>
+                  <span className="text-xs font-bold text-yellow-500">{player.stats?.rating ?? 'N/A'}</span>
                 </div>
               </div>
             </div>
@@ -162,15 +175,15 @@ function BasketballLineup({ team, players }: { team: Team; players: Player[] }) 
           >
             <div className="relative">
               <div className={`w-14 h-14 rounded-full flex items-center justify-center font-display text-xl font-bold transition-all group-hover:scale-110 border-2`}
-                style={{ 
-                  backgroundColor: team.color, 
-                  borderColor: player.rating >= 8 ? '#FFD700' : 'rgba(255,255,255,0.3)'
+                style={{
+                  backgroundColor: team.color,
+                  borderColor: (player.stats?.rating ?? 0) >= 8 ? '#FFD700' : 'rgba(255,255,255,0.3)'
                 }}
               >
                 {player.number}
               </div>
 
-              {player.rating >= 8 && (
+              {(player.stats?.rating ?? 0) >= 8 && (
                 <div className="absolute -top-1 -right-1 w-5 h-5 bg-yellow-500 rounded-full flex items-center justify-center">
                   <Star size={12} className="text-black fill-black" />
                 </div>
@@ -181,7 +194,7 @@ function BasketballLineup({ team, players }: { team: Team; players: Player[] }) 
                 <p className="text-[10px] text-white/60 font-bold">{pos.label}</p>
                 <div className="flex items-center gap-1 mt-1">
                   <Star size={10} className="text-yellow-500" />
-                  <span className="text-xs font-bold text-yellow-500">{player.rating}</span>
+                  <span className="text-xs font-bold text-yellow-500">{player.stats?.rating ?? 'N/A'}</span>
                 </div>
               </div>
             </div>
@@ -220,9 +233,9 @@ function TrackLineup({ team, players }: { team: Team; players: Player[] }) {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className={`w-10 h-10 rounded-full flex items-center justify-center font-display text-lg font-bold border-2`}
-                  style={{ 
-                    backgroundColor: team.color, 
-                    borderColor: player.rating >= 8 ? '#FFD700' : 'rgba(255,255,255,0.3)'
+                  style={{
+                    backgroundColor: team.color,
+                    borderColor: (player.stats?.rating ?? 0) >= 8 ? '#FFD700' : 'rgba(255,255,255,0.3)'
                   }}
                 >
                   {player.number}
@@ -233,10 +246,10 @@ function TrackLineup({ team, players }: { team: Team; players: Player[] }) {
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                {player.rating >= 8 && <Star size={14} className="text-yellow-500 fill-yellow-500" />}
+                {(player.stats?.rating ?? 0) >= 8 && <Star size={14} className="text-yellow-500 fill-yellow-500" />}
                 <div className="text-right">
                   <p className="text-xs font-bold text-white/60">Rating</p>
-                  <p className="text-lg font-display italic text-primary">{player.rating}</p>
+                  <p className="text-lg font-display italic text-primary">{player.stats?.rating ?? 'N/A'}</p>
                 </div>
               </div>
             </div>

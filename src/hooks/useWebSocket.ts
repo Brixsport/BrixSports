@@ -414,3 +414,34 @@ export function useMatchViewers(matchId: string) {
 
     return viewerCount;
 }
+
+/**
+ * Hook for subscribing to lineup updates
+ */
+export function useLineupUpdates(matchId: string) {
+    const [lineups, setLineups] = useState<{ home: any; away: any } | null>(null);
+
+    const { on, off } = useWebSocket({
+        matchId,
+        autoConnect: true,
+    });
+
+    useEffect(() => {
+        const handleLineupUpdate = (data: {
+            matchId: string;
+            lineups: { home: any; away: any };
+        }) => {
+            if (data.matchId === matchId) {
+                setLineups(data.lineups);
+            }
+        };
+
+        on('match:lineup:updated', handleLineupUpdate);
+
+        return () => {
+            off('match:lineup:updated', handleLineupUpdate);
+        };
+    }, [matchId, on, off]);
+
+    return lineups;
+}

@@ -188,6 +188,25 @@ export const footballFormations: Formation[] = [
             { id: 'rm', position: 'RM', x: 85, y: 45, zone: 'MID' },
             { id: 'st', position: 'ST', x: 50, y: 15, zone: 'FWD' },
         ]
+    },
+    {
+        id: '3-2-4-1',
+        name: '3-2-4-1',
+        sport: 'Football',
+        description: 'Modern possession-based formation',
+        positions: [
+            { id: 'gk', position: 'GK', x: 50, y: 92, zone: 'GK' },
+            { id: 'lcb', position: 'CB', x: 30, y: 80, zone: 'DEF' },
+            { id: 'cb', position: 'CB', x: 50, y: 82, zone: 'DEF' },
+            { id: 'rcb', position: 'CB', x: 70, y: 80, zone: 'DEF' },
+            { id: 'lcdm', position: 'CDM', x: 35, y: 60, zone: 'MID' },
+            { id: 'rcdm', position: 'CDM', x: 65, y: 60, zone: 'MID' },
+            { id: 'lm', position: 'LM', x: 10, y: 40, zone: 'MID' },
+            { id: 'lam', position: 'CAM', x: 35, y: 35, zone: 'MID' },
+            { id: 'ram', position: 'CAM', x: 65, y: 35, zone: 'MID' },
+            { id: 'rm', position: 'RM', x: 90, y: 40, zone: 'MID' },
+            { id: 'st', position: 'ST', x: 50, y: 15, zone: 'FWD' },
+        ]
     }
 ];
 

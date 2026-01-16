@@ -13,7 +13,7 @@ import { LivestreamChat } from '@/components/livestream/LivestreamChat';
 import { LivestreamPlayer } from '@/components/livestream/LivestreamPlayer';
 import { FootballPitch } from '@/components/FootballPitch';
 import { ResponsiveLineup } from '@/components/lineup/ResponsiveLineup';
-import { useMatchEvents, useMatchStatus, usePlayerRatings, useMatchViewers, useMatchTimer } from '@/hooks/useWebSocket';
+import { useMatchEvents, useMatchStatus, usePlayerRatings, useMatchViewers, useMatchTimer, useLineupUpdates } from '@/hooks/useWebSocket';
 
 interface MatchOverlayProps {
   match: Match;
@@ -49,6 +49,7 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
   const liveRatings = usePlayerRatings(match.id);
   const viewerCount = useMatchViewers(match.id);
   const liveTime = useMatchTimer(match.id);
+  const liveLineups = useLineupUpdates(match.id);
 
   // Ratings state (merge initial API fetch with live updates)
   const [ratings, setRatings] = useState<Record<string, { autoRating: number; finalRating: number | null; isMotM: boolean; notes: string | null }>>({});
@@ -142,6 +143,21 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
       setMatchTime(liveTime);
     }
   }, [liveTime]);
+
+  // Sync lineups from WebSocket updates
+  useEffect(() => {
+    if (liveLineups) {
+      setMatch(prev => ({
+        ...prev,
+        lineups: {
+          home: liveLineups.home || prev.lineups?.home,
+          away: liveLineups.away || prev.lineups?.away
+        }
+      }));
+      // If currently viewing lineups, force a refresh of player data if needed
+      setPlayersFetched(false); // Helper to trigger re-fetch of any new player IDs
+    }
+  }, [liveLineups]);
 
   // Also listen for local window events (for same-device logger)
   useEffect(() => {

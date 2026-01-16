@@ -117,6 +117,13 @@ const FORMATION_TEMPLATES: Record<string, FormationTemplate> = {
         { x: 30, y: 55, role: 'MID' }, { x: 70, y: 55, role: 'MID' }, // Wide CMs
         { x: 50, y: 70, role: 'AM' }, // CAM
         { x: 35, y: 85, role: 'FW' }, { x: 65, y: 85, role: 'FW' }
+    ],
+    '3-2-4-1': [
+        { x: 50, y: 5, role: 'GK' },
+        { x: 20, y: 25, role: 'DEF' }, { x: 50, y: 25, role: 'DEF' }, { x: 80, y: 25, role: 'DEF' },
+        { x: 35, y: 45, role: 'DM' }, { x: 65, y: 45, role: 'DM' },
+        { x: 10, y: 65, role: 'MID' }, { x: 35, y: 65, role: 'AM' }, { x: 65, y: 65, role: 'AM' }, { x: 90, y: 65, role: 'MID' },
+        { x: 50, y: 88, role: 'FW' }
     ]
 };
 
@@ -288,7 +295,7 @@ export function FullPitchLineups({
             'GK': [], // GK is strict
             'DEF': ['DM'], // Defenders can cover DM if needed
             'DM': ['DEF', 'MID'], // DM can be filled by DEF or MID
-            'MID': ['DM', 'AM'], // MID can be filled by DM or AM
+            'MID': ['DM', 'AM'], // MI D can be filled by DM or AM
             'AM': ['MID', 'FW'], // AM can be filled by MID or FW
             'FW': ['AM'], // FW can be covered by AM
         };

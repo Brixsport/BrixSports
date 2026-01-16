@@ -57,6 +57,13 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
     const [showPeriodEndModal, setShowPeriodEndModal] = useState(false);
     const [pendingPeriodTransition, setPendingPeriodTransition] = useState<{ current: string; next: string } | null>(null);
 
+    // Pre-match States
+    const [viewState, setViewState] = useState<'loading' | 'check_lineup' | 'confirm_lineup' | 'active'>('loading');
+    const [lineups, setLineups] = useState<any>({ home: null, away: null });
+    const [showLineupEditModal, setShowLineupEditModal] = useState(false);
+    const [editingTeam, setEditingTeam] = useState<'home' | 'away'>('home');
+    const [draftLineup, setDraftLineup] = useState<{ starters: Player[], subs: Player[] }>({ starters: [], subs: [] });
+
     // Initial Load & Manager Setup
     useEffect(() => {
         const init = async () => {
@@ -125,6 +132,15 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                 });
 
                 setMatchState(manager.getState());
+
+                // Lineup Check
+                if (lineupsData.success && lineupsData.lineups && (lineupsData.lineups.home || lineupsData.lineups.away)) {
+                    setLineups(lineupsData.lineups || { home: null, away: null });
+                    setViewState('confirm_lineup');
+                } else {
+                    setViewState('check_lineup');
+                }
+
                 setIsLoading(false);
 
                 return unsubscribe;
@@ -134,7 +150,15 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
             }
         };
 
+        const interval = setInterval(() => {
+            // Optional: Poll for lineups if stuck in check_lineup
+            if (viewState === 'check_lineup') {
+                init();
+            }
+        }, 10000);
+
         init();
+        return () => clearInterval(interval);
     }, [match.id, match.homeTeamId, match.awayTeamId]);
 
     // Listen for period end events
@@ -478,10 +502,274 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
         }
     };
 
-    if (isLoading) {
+    const fetchLineups = async () => {
+        setIsLoading(true);
+        try {
+            const lineupsRes = await fetch(`/api/matches/${match.id}/lineup`);
+            const lineupsData = await lineupsRes.json();
+            if (lineupsData.success && lineupsData.lineups && (lineupsData.lineups.home || lineupsData.lineups.away)) {
+                setLineups(lineupsData.lineups || { home: null, away: null });
+                setViewState('confirm_lineup');
+            } else {
+                setViewState('check_lineup');
+            }
+        } catch (e) { console.error(e); }
+        setIsLoading(false);
+    };
+
+    const handleConfirmLineup = () => {
+        setViewState('active');
+    };
+
+    const handleEditLineup = (team: 'home' | 'away') => {
+        setEditingTeam(team);
+        const currentLineup = lineups[team];
+        const allPlayers = team === 'home' ? homePlayers : awayPlayers;
+
+        let starters: Player[] = [];
+        let subs: Player[] = [];
+
+        // Support both 'starters' and legacy 'players' keys
+        const starterList = currentLineup ? (currentLineup.starters || currentLineup.players) : null;
+
+        if (starterList) {
+            const starterIds = new Set(starterList.map((p: any) => p.id || p));
+            starters = allPlayers.filter(p => starterIds.has(p.id));
+            subs = allPlayers.filter(p => !starterIds.has(p.id));
+        } else {
+            starters = allPlayers.slice(0, 11);
+            subs = allPlayers.slice(11);
+        }
+
+        setDraftLineup({ starters, subs });
+        setShowLineupEditModal(true);
+    };
+
+    const saveLineupDraft = async () => {
+        try {
+            const payload = {
+                team: editingTeam,
+                lineup: {
+                    starters: draftLineup.starters.map(p => ({
+                        id: p.id,
+                        name: p.name,
+                        number: p.number,
+                        position: p.position
+                    })),
+                    // Legacy support?
+                    players: draftLineup.starters.map(p => ({
+                        id: p.id,
+                        name: p.name,
+                        number: p.number,
+                        position: p.position
+                    })),
+                    subs: draftLineup.subs.map(p => ({
+                        id: p.id,
+                        name: p.name,
+                        number: p.number,
+                        position: p.position
+                    })),
+                    formation: lineups[editingTeam]?.formation || '4-4-2'
+                }
+            };
+
+            await fetch(`/api/matches/${match.id}/lineup`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+
+            // Refresh local
+            setLineups((prev: any) => ({
+                ...prev,
+                [editingTeam]: payload.lineup
+            }));
+
+            // Broadcast update
+            if (isConnected) {
+                emit('match:lineup:update', {
+                    matchId: match.id,
+                    lineups: {
+                        home: editingTeam === 'home' ? payload.lineup : lineups.home,
+                        away: editingTeam === 'away' ? payload.lineup : lineups.away
+                    }
+                });
+            }
+
+            setShowLineupEditModal(false);
+        } catch (e) {
+            console.error("Failed to save lineup", e);
+            alert("Failed to save lineup changes");
+        }
+    };
+
+    const toggleStarterStatus = (player: Player) => {
+        const isStarter = draftLineup.starters.some(p => p.id === player.id);
+        if (isStarter) {
+            setDraftLineup(prev => ({
+                starters: prev.starters.filter(p => p.id !== player.id),
+                subs: [...prev.subs, player]
+            }));
+        } else {
+            if (draftLineup.starters.length >= 11) {
+                alert("Max 11 starters allowed");
+                return;
+            }
+            setDraftLineup(prev => ({
+                starters: [...prev.starters, player],
+                subs: prev.subs.filter(p => p.id !== player.id)
+            }));
+        }
+    };
+
+    if (viewState === 'loading') {
         return (
             <div className="min-h-screen bg-[#050505] text-white flex items-center justify-center">
                 <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-primary"></div>
+            </div>
+        );
+    }
+
+    if (viewState === 'check_lineup') {
+        return (
+            <div className="min-h-screen bg-[#050505] text-white flex flex-col items-center justify-center p-8 space-y-6">
+                <div className="w-24 h-24 bg-white/5 rounded-full flex items-center justify-center mb-4">
+                    <Activity size={48} className="text-white/20" />
+                </div>
+                <h2 className="text-2xl font-display italic uppercase">No Lineup Available</h2>
+                <p className="text-white/40 text-center max-w-sm">
+                    The admin has not set a lineup for this match yet. Please wait for the lineup to be published.
+                </p>
+                <button
+                    onClick={fetchLineups}
+                    className="flex items-center gap-2 px-6 py-3 bg-primary text-black font-bold rounded-xl hover:scale-105 transition-transform"
+                >
+                    <Activity size={18} className={isLoading ? "animate-spin" : ""} />
+                    Refresh Check
+                </button>
+            </div>
+        );
+    }
+
+    if (viewState === 'confirm_lineup') {
+        return (
+            <div className="min-h-screen bg-[#050505] text-white overflow-y-auto p-4 md:p-8">
+                <div className="max-w-4xl mx-auto space-y-8">
+                    <header className="flex items-center justify-between">
+                        <h1 className="text-3xl font-display italic uppercase">Confirm Lineups</h1>
+                        <button onClick={handleConfirmLineup} className="px-8 py-3 bg-green-500 text-black font-black uppercase tracking-widest rounded-xl hover:scale-105 transition-transform shadow-lg shadow-green-500/20">
+                            Confirm & Start Match
+                        </button>
+                    </header>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                        {/* Home Team */}
+                        <div className="bg-white/5 border border-white/10 rounded-3xl p-6">
+                            <div className="flex items-center justify-between mb-6">
+                                <h3 className="font-bold text-xl">{homeTeam?.name || 'Home'}</h3>
+                                <button onClick={() => handleEditLineup('home')} className="px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-xs font-black uppercase tracking-widest transition-colors">
+                                    Edit
+                                </button>
+                            </div>
+                            <div className="space-y-4">
+                                <div>
+                                    <h4 className="text-[10px] font-black uppercase tracking-widest text-white/40 mb-2">Starting XI</h4>
+                                    <div className="space-y-1">
+                                        {(lineups.home?.starters || lineups.home?.players || []).map((p: any) => (
+                                            <div key={p.id || p} className="flex items-center gap-2 text-sm p-2 bg-black/20 rounded-lg">
+                                                <span className="font-mono text-white/40 w-6 text-right">{p.number}</span>
+                                                <span className="font-bold">{p.name}</span>
+                                                <span className="text-xs text-white/30 ml-auto">{p.position}</span>
+                                            </div>
+                                        ))}
+                                        {(!(lineups.home?.starters || lineups.home?.players) || (lineups.home?.starters || lineups.home?.players).length === 0) && (
+                                            <div className="text-white/20 text-sm italic p-2">No players set</div>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Away Team */}
+                        <div className="bg-white/5 border border-white/10 rounded-3xl p-6">
+                            <div className="flex items-center justify-between mb-6">
+                                <h3 className="font-bold text-xl">{awayTeam?.name || 'Away'}</h3>
+                                <button onClick={() => handleEditLineup('away')} className="px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-xs font-black uppercase tracking-widest transition-colors">
+                                    Edit
+                                </button>
+                            </div>
+                            <div className="space-y-4">
+                                <div>
+                                    <h4 className="text-[10px] font-black uppercase tracking-widest text-white/40 mb-2">Starting XI</h4>
+                                    <div className="space-y-1">
+                                        {(lineups.away?.starters || lineups.away?.players || []).map((p: any) => (
+                                            <div key={p.id || p} className="flex items-center gap-2 text-sm p-2 bg-black/20 rounded-lg">
+                                                <span className="font-mono text-white/40 w-6 text-right">{p.number}</span>
+                                                <span className="font-bold">{p.name}</span>
+                                                <span className="text-xs text-white/30 ml-auto">{p.position}</span>
+                                            </div>
+                                        ))}
+                                        {(!(lineups.away?.starters || lineups.away?.players) || (lineups.away?.starters || lineups.away?.players).length === 0) && (
+                                            <div className="text-white/20 text-sm italic p-2">No players set</div>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Edit Modal */}
+                {showLineupEditModal && (
+                    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                        <div className="bg-zinc-900 border border-white/10 w-full max-w-2xl max-h-[90vh] flex flex-col rounded-3xl shadow-2xl">
+                            <div className="p-6 border-b border-white/10 flex justify-between items-center bg-black/40">
+                                <div>
+                                    <h3 className="font-display italic text-2xl uppercase">Edit {editingTeam === 'home' ? homeTeam?.name : awayTeam?.name}</h3>
+                                    <p className="text-xs text-white/40">Select exactly 11 players for Starting XI</p>
+                                </div>
+                                <button onClick={() => setShowLineupEditModal(false)} className="p-2 hover:bg-white/10 rounded-full"><X size={24} /></button>
+                            </div>
+                            <div className="flex-1 overflow-y-auto p-6">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                    {[...draftLineup.starters, ...draftLineup.subs].sort((a, b) => (a.number || 99) - (b.number || 99)).map(player => {
+                                        const isStarter = draftLineup.starters.some(p => p.id === player.id);
+                                        return (
+                                            <button
+                                                key={player.id}
+                                                onClick={() => toggleStarterStatus(player)}
+                                                className={`flex items-center gap-4 p-4 rounded-xl border transition-all text-left ${isStarter
+                                                    ? 'bg-primary/10 border-primary shadow-[0_0_15px_-5px_var(--primary)]'
+                                                    : 'bg-white/5 border-white/5 hover:bg-white/10'
+                                                    }`}
+                                            >
+                                                <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black border ${isStarter ? 'bg-primary text-black border-primary' : 'bg-white/10 text-white/40 border-transparent'
+                                                    }`}>
+                                                    {isStarter ? 'XI' : 'SUB'}
+                                                </div>
+                                                <div>
+                                                    <div className={`font-bold ${isStarter ? 'text-white' : 'text-white/50'}`}>{player.name}</div>
+                                                    <div className="text-xs text-white/30">#{player.number} • {player.position}</div>
+                                                </div>
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                            <div className="p-6 border-t border-white/10 bg-black/40 flex justify-between items-center">
+                                <span className={`text-xs font-black uppercase tracking-widest ${draftLineup.starters.length === 11 ? 'text-green-500' : 'text-orange-500'}`}>
+                                    Selected: {draftLineup.starters.length}/11
+                                </span>
+                                <button
+                                    onClick={saveLineupDraft}
+                                    className="px-8 py-3 bg-primary text-black font-black uppercase tracking-widest rounded-xl hover:scale-105 transition-transform"
+                                >
+                                    Save Changes
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
             </div>
         );
     }
