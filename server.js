@@ -145,6 +145,12 @@ app.prepare().then(() => {
             io.to(`match:${data.matchId}`).emit('match:time:updated', data);
         });
 
+        // Match lineup update
+        socket.on('match:lineup:update', (data) => {
+            console.log(`[Socket.IO] Lineup update:`, data);
+            io.to(`match:${data.matchId}`).emit('match:lineup:updated', data);
+        });
+
         // Chat: Join Room
         socket.on('chat:join', ({ matchId }) => {
             socket.join(`chat:${matchId}`);
