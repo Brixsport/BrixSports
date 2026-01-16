@@ -629,6 +629,76 @@ export class MatchStateManager {
         };
     }
 
+    // ========== SYNC MANAGEMENT ==========
+
+    /**
+     * Merge events from external source (multi-logger sync)
+     */
+    mergeExternalEvents(externalEvents: MatchEvent[]): void {
+        let hasChanges = false;
+        // Create a map of existing events for easier lookup
+        // We handle temp IDs by checking if the external event matches a temp event's properties roughly?
+        // Ideally, if we have a temp ID and server sends back a real ID, we should have confirmed it already.
+        // But if we missed confirmation, we might duplicate.
+        // For now, assume IDs are authoritative.
+        const currentIds = new Set(this.state.events.map(e => e.id));
+        const newEvents: MatchEvent[] = [];
+
+        for (const extEvent of externalEvents) {
+            if (!currentIds.has(extEvent.id)) {
+                newEvents.push(extEvent);
+                hasChanges = true;
+            }
+        }
+
+        if (hasChanges) {
+            // Add new events
+            this.state.events = [...this.state.events, ...newEvents];
+
+            // Sort by time (primary: minute, secondary: second, tertiary: timestamp)
+            this.state.events.sort((a, b) => {
+                if (a.absoluteMinute !== b.absoluteMinute) return a.absoluteMinute - b.absoluteMinute;
+                if (a.second !== b.second) return a.second - b.second;
+                return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+            });
+
+            // Re-calculate derived state to ensure consistency
+            this.recalculateState();
+
+            this.notifyListeners();
+            this.persistState();
+        }
+    }
+
+    private recalculateState(): void {
+        // Reset score
+        this.state.score = { home: 0, away: 0 };
+
+        // Reset ratings
+        // First reset all player ratings to base (if we track them individually in state.players?)
+        // Currently updatePlayerRating modifies lineup entries.
+        // We should reset lineup ratings to default/initial.
+        // This is complex if we don't have initial ratings stored separately. 
+        // As a fallback, we just re-run score logic and re-apply rating deltas. 
+        // Note: This assumes lineup ratings were 6.0 adjusted by events only.
+
+        // Reset Lineup Ratings
+        const resetLineup = (lineup: LineupEntry[]) => {
+            lineup.forEach(p => p.rating = 6.0); // Reset to base
+        };
+        resetLineup(this.state.lineups.home);
+        resetLineup(this.state.lineups.away);
+
+        // Replay all events
+        this.state.events.forEach(e => {
+            this.updateScoreFromEvent(e);
+            this.applyEventRatingImpact(e, 1);
+        });
+
+        // Update Team Ratings
+        this.calculateTeamRatings();
+    }
+
     // ========== PERSISTENCE (HARDENED) ==========
 
     private persistState(): void {

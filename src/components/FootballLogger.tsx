@@ -197,12 +197,85 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
     }, [matchState, isSocketConnected, emit, match.id]);
 
     // Multi-logger Hook
-    const { activeLoggers, conflicts, isConnected, resolveConflict, syncStatus } = useMultiLogger({
+    const {
+        activeLoggers,
+        conflicts,
+        isConnected,
+        resolveConflict,
+        syncStatus,
+        syncEvents,
+        broadcastEvent
+    } = useMultiLogger({
         matchId: match.id,
         loggerId: currentLogger?.id || 'unknown',
         loggerName: currentLogger?.name || 'Unknown Logger',
         enabled: !!currentLogger,
     });
+
+    // Periodic Sync
+    useEffect(() => {
+        if (!isConnected || !stateManager.current) return;
+
+        const syncInterval = setInterval(async () => {
+            const manager = stateManager.current;
+            if (!manager) return;
+
+            const currentEvents = manager.getState().events;
+
+            // Map to SyncEvent
+            const syncableEvents: SyncEvent[] = currentEvents.map(e => ({
+                id: e.id,
+                type: e.type,
+                minute: e.absoluteMinute,
+                second: e.second,
+                teamId: e.teamId,
+                playerId: e.playerId || undefined,
+                relatedPlayerId: e.relatedPlayerId || undefined,
+                detail: e.detail,
+                loggerId: e.loggerId,
+                loggerName: 'Unknown',
+                timestamp: new Date(e.createdAt),
+                synced: true
+            }));
+
+            try {
+                const merged = await syncEvents(syncableEvents);
+
+                // Convert back to MatchEvent
+                const externalEvents: any[] = merged.map(s => {
+                    // Check if we already have it
+                    const existing = currentEvents.find(ce => ce.id === s.id);
+                    if (existing) return existing;
+
+                    // Reconstruct
+                    return {
+                        id: s.id,
+                        matchId: match.id,
+                        type: s.type as any,
+                        absoluteMinute: s.minute,
+                        displayMinute: s.minute, // Approximation
+                        second: s.second,
+                        period: s.minute <= 45 ? 'FIRST_HALF' : 'SECOND_HALF', // Rough heuristic
+                        playerId: s.playerId || null,
+                        playerSnapshot: s.playerId ? manager.createPlayerSnapshot(s.playerId) : null,
+                        relatedPlayerId: s.relatedPlayerId || null,
+                        relatedPlayerSnapshot: s.relatedPlayerId ? manager.createPlayerSnapshot(s.relatedPlayerId) : null,
+                        teamId: s.teamId,
+                        detail: s.detail,
+                        createdAt: s.timestamp instanceof Date ? s.timestamp : new Date(s.timestamp),
+                        loggerId: s.loggerId
+                    };
+                });
+
+                manager.mergeExternalEvents(externalEvents);
+            } catch (err) {
+                console.error("Sync failed:", err);
+            }
+
+        }, 10000); // 10s sync
+
+        return () => clearInterval(syncInterval);
+    }, [isConnected, syncEvents, match.id]);
 
     const requiresPlayerSelection = (type: FootballEventType): boolean => {
         const noPlayerEvents: FootballEventType[] = [
@@ -219,18 +292,8 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
         if (!stateManager.current || currentPeriod === 'NOT_STARTED' || currentPeriod === 'FINISHED') return;
 
         if (!requiresPlayerSelection(type)) {
-            const teamId = selectedTeam === 'home' ? match.homeTeamId : match.awayTeamId;
-            stateManager.current.recordEvent({
-                matchId: match.id,
-                type,
-                teamId,
-                playerId: null,
-                playerSnapshot: null,
-                relatedPlayerId: null,
-                relatedPlayerSnapshot: null,
-                detail: type,
-                loggerId: currentLogger?.id || 'unknown'
-            });
+            // Direct record without player
+            confirmEvent(type, 'TEAM', null); // Use TEAM or internal handling
             return;
         }
 
@@ -272,33 +335,89 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
         setPlayerComingOut(null);
     };
 
-    const confirmEvent = (type: FootballEventType, playerId: string, relatedPlayerId: string | null) => {
+    const confirmEvent = async (type: FootballEventType, playerId: string, relatedPlayerId: string | null) => {
         if (!stateManager.current) return;
 
+        const manager = stateManager.current;
         const teamId = selectedTeam === 'home' ? match.homeTeamId : match.awayTeamId;
-        const player = stateManager.current.getPlayer(playerId);
-        const playerSnapshot = stateManager.current.createPlayerSnapshot(playerId);
-        const relatedSnapshot = relatedPlayerId ? stateManager.current.createPlayerSnapshot(relatedPlayerId) : null;
 
-        let detail = player ? (player.jerseyName || player.name) : 'Unknown';
+        // Handle direct events where playerId is 'TEAM'
+        let actualPlayerId: string | null = playerId === 'TEAM' ? null : playerId;
+        let playerSnapshot = actualPlayerId ? manager.createPlayerSnapshot(actualPlayerId) : null;
+        const relatedSnapshot = relatedPlayerId ? manager.createPlayerSnapshot(relatedPlayerId) : null;
+
+        let detail = playerId === 'TEAM' ? type : (playerSnapshot ? (playerSnapshot.name) : 'Unknown');
+
         if (type === 'Substitution' && relatedSnapshot) {
-            const relatedPlayer = stateManager.current.getPlayer(relatedPlayerId!);
-            const relatedJerseyName = relatedPlayer?.jerseyName || relatedSnapshot.name;
-            const outJerseyName = player?.jerseyName || detail;
-            detail = `${relatedJerseyName} IN for ${outJerseyName}`;
+            const relatedPlayer = manager.getPlayer(relatedPlayerId!);
+            const relatedName = relatedPlayer?.name || relatedSnapshot.name;
+            const outName = playerSnapshot?.name || detail;
+            detail = `${relatedName} IN for ${outName}`;
         }
 
-        stateManager.current.recordEvent({
+        // 1. Record Locally
+        const localEvent = manager.recordEvent({
             matchId: match.id,
             type,
             teamId,
-            playerId,
+            playerId: actualPlayerId,
             playerSnapshot,
             relatedPlayerId: relatedPlayerId,
             relatedPlayerSnapshot: relatedSnapshot,
             detail,
             loggerId: currentLogger?.id || 'unknown'
         });
+
+        // 2. Broadcast (Multi-Logger)
+        if (isConnected) {
+            broadcastEvent({
+                id: localEvent.id,
+                type: localEvent.type,
+                minute: localEvent.absoluteMinute,
+                second: localEvent.second,
+                teamId: localEvent.teamId,
+                playerId: localEvent.playerId || undefined,
+                relatedPlayerId: localEvent.relatedPlayerId || undefined,
+                detail: localEvent.detail,
+                loggerId: localEvent.loggerId,
+                loggerName: currentLogger?.name || 'Unknown',
+                timestamp: localEvent.createdAt,
+                synced: false
+            });
+        }
+
+        // 3. Persist to API
+        try {
+            const payload = {
+                type: localEvent.type,
+                minute: localEvent.absoluteMinute,
+                second: localEvent.second,
+                teamId: localEvent.teamId,
+                playerId: localEvent.playerId,
+                relatedPlayerId: localEvent.relatedPlayerId,
+                detail: localEvent.detail,
+                loggerId: localEvent.loggerId,
+                loggerName: currentLogger?.name,
+                // MatchStateManager uses absoluteMinute for logic, sending it as minute
+            };
+
+            const res = await fetch(`/api/matches/${match.id}/events`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+
+            if (res.ok) {
+                const saved = await res.json();
+                if (saved.event && saved.event.id) {
+                    manager.confirmEvent(localEvent.id, saved.event.id);
+                }
+            } else {
+                console.warn("Failed to persist event to API");
+            }
+        } catch (e) {
+            console.error("API Error:", e);
+        }
     };
 
     const handleSetStoppage = (minutes: number) => {
