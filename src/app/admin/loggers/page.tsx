@@ -63,6 +63,17 @@ function AdminLoggersPageContent() {
         password: ''
     });
     const [isRegistering, setIsRegistering] = useState(false);
+    const [showEditModal, setShowEditModal] = useState(false);
+    const [editForm, setEditForm] = useState({
+        id: '',
+        name: '',
+        email: '',
+        password: '',
+        role: 'logger',
+        status: 'active',
+        isAvailable: true
+    });
+    const [isUpdating, setIsUpdating] = useState(false);
     const { toasts, removeToast, success, error } = useToast();
     const { socket, isConnected } = useWebSocket({ autoConnect: true });
 
@@ -209,6 +220,57 @@ function AdminLoggersPageContent() {
             console.error('Error registering logger:', err);
         } finally {
             setIsRegistering(false);
+        }
+    };
+
+    const handleEditClick = (logger: Logger) => {
+        setEditForm({
+            id: logger.id,
+            name: logger.name,
+            email: logger.email,
+            password: '', // Reset password field
+            role: logger.role,
+            status: logger.status,
+            isAvailable: logger.isAvailable
+        });
+        setShowEditModal(true);
+    };
+
+    const updateLogger = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setIsUpdating(true);
+
+        try {
+            const body: any = {
+                name: editForm.name,
+                email: editForm.email,
+                role: editForm.role,
+                status: editForm.status,
+                isAvailable: editForm.isAvailable
+            };
+            if (editForm.password) {
+                body.password = editForm.password;
+            }
+
+            const res = await fetch(`/api/loggers/${editForm.id}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            });
+
+            if (res.ok) {
+                success('Logger updated successfully');
+                setShowEditModal(false);
+                fetchData();
+            } else {
+                const data = await res.json();
+                error(data.error || 'Failed to update logger');
+            }
+        } catch (err) {
+            error('Failed to update logger');
+            console.error('Error updating logger:', err);
+        } finally {
+            setIsUpdating(false);
         }
     };
 
@@ -400,7 +462,10 @@ function AdminLoggersPageContent() {
                                                         </td>
                                                         <td className="p-6 text-right">
                                                             <div className="flex items-center justify-end gap-2">
-                                                                <button className="p-2 hover:bg-white/10 rounded-lg transition-colors text-white/40 hover:text-white">
+                                                                <button
+                                                                    onClick={() => handleEditClick(logger)}
+                                                                    className="p-2 hover:bg-white/10 rounded-lg transition-colors text-white/40 hover:text-white"
+                                                                >
                                                                     <Settings size={16} />
                                                                 </button>
                                                                 <button className="p-2 hover:bg-white/10 rounded-lg transition-colors text-white/40 hover:text-white">
@@ -733,6 +798,122 @@ function AdminLoggersPageContent() {
                                             </span>
                                         ) : (
                                             'Register Logger'
+                                        )}
+                                    </button>
+                                </div>
+                            </form>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
+
+            {/* Edit Logger Modal */}
+            <AnimatePresence>
+                {showEditModal && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center p-6">
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            onClick={() => setShowEditModal(false)}
+                            className="absolute inset-0 bg-black/80 backdrop-blur-xl"
+                        />
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.9, y: 20 }}
+                            animate={{ opacity: 1, scale: 1, y: 0 }}
+                            exit={{ opacity: 0, scale: 0.9, y: 20 }}
+                            className="relative w-full max-w-md bg-[#0a0a0a] border border-white/10 rounded-[32px] p-8 shadow-2xl"
+                        >
+                            <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-primary to-transparent opacity-50" />
+
+                            <h3 className="font-display italic text-2xl uppercase mb-6">Edit Logger</h3>
+
+                            <form onSubmit={updateLogger} className="space-y-6">
+                                <div>
+                                    <label className="block text-xs font-black uppercase tracking-widest text-white/40 mb-2">Full Name</label>
+                                    <input
+                                        type="text"
+                                        value={editForm.name}
+                                        onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                                        className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-primary transition-colors"
+                                        placeholder="John Doe"
+                                        required
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="block text-xs font-black uppercase tracking-widest text-white/40 mb-2">Email Address</label>
+                                    <input
+                                        type="email"
+                                        value={editForm.email}
+                                        onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
+                                        className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-primary transition-colors"
+                                        placeholder="logger@brixsport.com"
+                                        required
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="block text-xs font-black uppercase tracking-widest text-white/40 mb-2">
+                                        Password <span className="text-[10px] normal-case tracking-normal opacity-50">(Leave blank to keep current)</span>
+                                    </label>
+                                    <input
+                                        type="password"
+                                        value={editForm.password}
+                                        onChange={(e) => setEditForm({ ...editForm, password: e.target.value })}
+                                        className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-primary transition-colors"
+                                        placeholder="••••••••"
+                                        minLength={6}
+                                    />
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block text-xs font-black uppercase tracking-widest text-white/40 mb-2">Status</label>
+                                        <select
+                                            value={editForm.status}
+                                            onChange={(e) => setEditForm({ ...editForm, status: e.target.value })}
+                                            className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-primary transition-colors text-white"
+                                        >
+                                            <option value="active">Active</option>
+                                            <option value="inactive">Inactive</option>
+                                            <option value="on_break">On Break</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-black uppercase tracking-widest text-white/40 mb-2">Role</label>
+                                        <select
+                                            value={editForm.role}
+                                            onChange={(e) => setEditForm({ ...editForm, role: e.target.value })}
+                                            className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-primary transition-colors text-white"
+                                        >
+                                            <option value="logger">Logger</option>
+                                            <option value="admin">Admin</option>
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <div className="flex gap-3 pt-4">
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowEditModal(false)}
+                                        disabled={isUpdating}
+                                        className="flex-1 py-3 text-xs font-black uppercase tracking-widest text-white/40 hover:text-white transition-colors disabled:opacity-50"
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        type="submit"
+                                        disabled={isUpdating}
+                                        className="flex-1 bg-primary text-black px-6 py-3 rounded-xl font-bold text-xs uppercase italic transition-transform hover:scale-105 disabled:opacity-50 disabled:hover:scale-100"
+                                    >
+                                        {isUpdating ? (
+                                            <span className="flex items-center justify-center gap-2">
+                                                <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                                                Updating...
+                                            </span>
+                                        ) : (
+                                            'Save Changes'
                                         )}
                                     </button>
                                 </div>

@@ -4,6 +4,7 @@ import { loggers, matches } from '@/db/schema';
 import { eq, or } from 'drizzle-orm';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import { getLoggerMatches } from '@/lib/match-logger-helpers';
 
 // POST /api/loggers/auth - Authenticate a logger
 export async function POST(request: NextRequest) {
@@ -41,11 +42,8 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        // Get assigned matches
-        const assignedMatches = await db
-            .select()
-            .from(matches)
-            .where(eq(matches.loggerId, logger[0].id));
+        // Get assigned matches using the new multi-logger helper
+        const assignedMatches = await getLoggerMatches(logger[0].id);
 
         // Generate JWT token
         const token = jwt.sign(
