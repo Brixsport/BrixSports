@@ -40,6 +40,49 @@ export async function GET(request: Request) {
         // Create a map for quick access
         const teamsMap = new Map(teamsList.map(t => [t.id, t]));
 
+        // Fetch assigned loggers for these matches
+        const matchIds = allMatches.map(m => m.id);
+        let assignmentsList: any[] = [];
+
+        if (matchIds.length > 0) {
+            // Import matchLoggerAssignments and loggers if not imported
+            // Assuming they are available via '@/db/schema'
+            const { matchLoggerAssignments, loggers } = await import('@/db/schema');
+
+            assignmentsList = await db.select({
+                matchId: matchLoggerAssignments.matchId,
+                loggerId: loggers.id,
+                name: loggers.name,
+                email: loggers.email,
+                role: matchLoggerAssignments.role,
+                status: matchLoggerAssignments.status
+            })
+                .from(matchLoggerAssignments)
+                .leftJoin(loggers, eq(matchLoggerAssignments.loggerId, loggers.id))
+                .where(
+                    and(
+                        inArray(matchLoggerAssignments.matchId, matchIds),
+                        eq(matchLoggerAssignments.status, 'active')
+                    )
+                );
+        }
+
+        // Group assignments by matchId
+        const assignmentsMap = new Map<string, any[]>();
+        assignmentsList.forEach(a => {
+            if (!assignmentsMap.has(a.matchId)) {
+                assignmentsMap.set(a.matchId, []);
+            }
+            if (a.loggerId) { // Ensure logger exists
+                assignmentsMap.get(a.matchId)?.push({
+                    id: a.loggerId,
+                    name: a.name,
+                    email: a.email,
+                    role: a.role
+                });
+            }
+        });
+
         // Fetch events for each match (optional, keeping existing logic)
         // But optimizing to just attach teams first
         const matchesWithDetails = await Promise.all(
@@ -47,12 +90,15 @@ export async function GET(request: Request) {
                 const events = await db.select().from(matchEvents).where(eq(matchEvents.matchId, match.id));
                 const homeTeam = teamsMap.get(match.homeTeamId);
                 const awayTeam = teamsMap.get(match.awayTeamId);
+                const assignedLoggers = assignmentsMap.get(match.id) || [];
 
                 return {
                     ...match,
                     events,
                     stats: match.stats ? JSON.parse(match.stats) : {},
                     lineups: match.lineups ? JSON.parse(match.lineups) : null,
+                    assignedLoggers, // Add this field
+                    loggerId: assignedLoggers.length > 0 ? assignedLoggers[0].id : match.loggerId, // Fallback for backward compat
                     homeTeam: homeTeam ? {
                         name: homeTeam.name,
                         shortName: homeTeam.shortName,

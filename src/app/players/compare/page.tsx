@@ -49,27 +49,70 @@ function PlayerCompareContent() {
     const [searching2, setSearching2] = useState(false);
 
     useEffect(() => {
-        if (player1Id && player2Id) {
-            fetchComparison();
-        }
-    }, [player1Id, player2Id]);
+        const loadData = async () => {
+            // Handle loading states
+            const shouldFetchComparison = player1Id && player2Id;
+            if (shouldFetchComparison) setLoading(true);
 
-    const fetchComparison = async () => {
-        if (!player1Id || !player2Id) return;
+            // Fetch Player 1
+            if (player1Id) {
+                // Only fetch if not loaded or ID mismatch (prevent redundant fetches)
+                if (!player1 || player1.id !== player1Id) {
+                    try {
+                        const res = await fetch(`/api/players/${player1Id}`);
+                        if (res.ok) {
+                            const data = await res.json();
+                            setPlayer1(data.player || data);
+                        }
+                    } catch (error) {
+                        console.error('Error fetching player 1:', error);
+                    }
+                }
+            } else {
+                setPlayer1(null);
+            }
 
-        setLoading(true);
-        try {
-            const res = await fetch(`/api/players/compare?player1=${player1Id}&player2=${player2Id}`);
-            const data = await res.json();
-            setComparisonData(data);
-            setPlayer1(data.player1);
-            setPlayer2(data.player2);
-        } catch (error) {
-            console.error('Error fetching comparison:', error);
-        } finally {
-            setLoading(false);
-        }
-    };
+            // Fetch Player 2
+            if (player2Id) {
+                if (!player2 || player2.id !== player2Id) {
+                    try {
+                        const res = await fetch(`/api/players/${player2Id}`);
+                        if (res.ok) {
+                            const data = await res.json();
+                            setPlayer2(data.player || data);
+                        }
+                    } catch (error) {
+                        console.error('Error fetching player 2:', error);
+                    }
+                }
+            } else {
+                setPlayer2(null);
+            }
+
+            // Fetch Comparison if both present
+            if (shouldFetchComparison) {
+                try {
+                    const res = await fetch(`/api/players/compare?player1=${player1Id}&player2=${player2Id}`);
+                    if (res.ok) {
+                        const data = await res.json();
+                        setComparisonData(data);
+                        // Update with enriched data from comparison endpoint
+                        setPlayer1(data.player1);
+                        setPlayer2(data.player2);
+                    }
+                } catch (error) {
+                    console.error('Error fetching comparison:', error);
+                } finally {
+                    setLoading(false);
+                }
+            } else {
+                setComparisonData(null);
+                setLoading(false);
+            }
+        };
+
+        loadData();
+    }, [player1Id, player2Id]); // Only re-run when URL params change
 
     const searchPlayers = async (query: string, playerSlot: 1 | 2) => {
         if (!query.trim()) {

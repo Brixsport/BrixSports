@@ -9,31 +9,62 @@ export async function GET(request: NextRequest) {
     try {
         const allLoggers = await db.select().from(loggers);
 
-        // Get assigned matches for each logger
-        const loggersWithMatches = await Promise.all(
-            allLoggers.map(async (logger) => {
-                const assignedMatches = await db
-                    .select()
-                    .from(matches)
-                    .where(eq(matches.loggerId, logger.id));
+        // Fetch all active assignments
+        // Dynamically import to avoid circular dependency issues if any, though schema is already imported
+        const { matchLoggerAssignments } = await import('@/db/schema');
+        const assignments = await db.select().from(matchLoggerAssignments).where(eq(matchLoggerAssignments.status, 'active'));
 
-                return {
-                    ...logger,
-                    password: undefined, // Don't send password to client
-                    status: logger.status,
-                    isAvailable: logger.isAvailable,
-                    assignedMatches: assignedMatches.map(m => ({
-                        id: m.id,
-                        sport: m.sport,
-                        homeTeamId: m.homeTeamId,
-                        awayTeamId: m.awayTeamId,
-                        status: m.status,
-                        startTime: m.startTime,
-                        competition: m.competition,
-                    })),
-                };
-            })
-        );
+        // Get unique match IDs from assignments
+        const matchIds = [...new Set(assignments.map(a => a.matchId))];
+
+        // Fetch match details
+        let matchDetails: any[] = [];
+        if (matchIds.length > 0) {
+            const { inArray } = await import('drizzle-orm');
+            matchDetails = await db.select().from(matches).where(inArray(matches.id, matchIds));
+        }
+
+        // Create match map
+        const matchMap = new Map(matchDetails.map(m => [m.id, m]));
+
+        // Group assignments by loggerId
+        const assignmentsByLogger = new Map<string, any[]>();
+        assignments.forEach(a => {
+            if (!assignmentsByLogger.has(a.loggerId)) {
+                assignmentsByLogger.set(a.loggerId, []);
+            }
+            const match = matchMap.get(a.matchId);
+            if (match) {
+                assignmentsByLogger.get(a.loggerId)?.push({
+                    id: match.id,
+                    sport: match.sport,
+                    homeTeamId: match.homeTeamId,
+                    awayTeamId: match.awayTeamId,
+                    status: match.status,
+                    startTime: match.startTime,
+                    competition: match.competition,
+                    role: a.role // Include role info
+                });
+            }
+        });
+
+        // Combine data
+        const loggersWithMatches = allLoggers.map(logger => {
+            // Also check legacy loggerId if no assignments found in new table (backward compatibility)
+            // But for now, we prioritize the new table.
+            // If you want to merge both, you'd need to fetch matches where loggerId matches too.
+            // Assuming migration is done, we rely on assignment table. 
+
+            const assignedMatches = assignmentsByLogger.get(logger.id) || [];
+
+            return {
+                ...logger,
+                password: undefined, // Don't send password to client
+                status: logger.status,
+                isAvailable: logger.isAvailable,
+                assignedMatches
+            };
+        });
 
         return NextResponse.json(loggersWithMatches);
     } catch (error) {

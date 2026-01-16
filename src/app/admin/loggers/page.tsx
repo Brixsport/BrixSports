@@ -37,6 +37,12 @@ interface Match {
     startTime: string;
     competition: string;
     loggerId: string | null;
+    assignedLoggers?: {
+        id: string;
+        name: string;
+        email: string;
+        role: string;
+    }[];
     homeTeam?: any;
     awayTeam?: any;
 }
@@ -215,10 +221,10 @@ function AdminLoggersPageContent() {
     const activeMatches = matches.filter(m => m.status !== 'FINISHED');
     const coverageStats = {
         total: activeMatches.length,
-        assigned: activeMatches.filter(m => m.loggerId).length,
-        unassigned: activeMatches.filter(m => !m.loggerId).length,
+        assigned: activeMatches.filter(m => m.assignedLoggers && m.assignedLoggers.length > 0).length,
+        unassigned: activeMatches.filter(m => !m.assignedLoggers || m.assignedLoggers.length === 0).length,
         live: activeMatches.filter(m => m.status === 'LIVE').length,
-        liveAssigned: activeMatches.filter(m => m.status === 'LIVE' && m.loggerId).length
+        liveAssigned: activeMatches.filter(m => m.status === 'LIVE' && m.assignedLoggers && m.assignedLoggers.length > 0).length
     };
 
     if (loading && !loggers.length) {
@@ -429,13 +435,13 @@ function AdminLoggersPageContent() {
                                             </span>
                                         </div>
                                         <div className="space-y-4">
-                                            {activeMatches.filter(m => !m.loggerId).length === 0 ? (
+                                            {activeMatches.filter(m => !m.assignedLoggers || m.assignedLoggers.length === 0).length === 0 ? (
                                                 <div className="bg-white/5 border border-white/10 rounded-3xl p-12 text-center">
                                                     <CheckCircle2 size={32} className="text-primary mx-auto mb-4 opacity-20" />
                                                     <p className="text-xs font-bold uppercase tracking-widest text-white/40 italic">All matches covered</p>
                                                 </div>
                                             ) : (
-                                                activeMatches.filter(m => !m.loggerId).map((match) => (
+                                                activeMatches.filter(m => !m.assignedLoggers || m.assignedLoggers.length === 0).map((match) => (
                                                     <div key={match.id} className="bg-white/5 border border-white/10 rounded-3xl p-6 hover:border-white/20 transition-all group">
                                                         <div className="flex items-center justify-between">
                                                             <div className="flex items-center gap-4">
@@ -470,35 +476,54 @@ function AdminLoggersPageContent() {
                                     <div className="space-y-6">
                                         <h3 className="font-display italic uppercase tracking-tighter text-2xl">Covered Matches</h3>
                                         <div className="space-y-4">
-                                            {activeMatches.filter(m => m.loggerId).slice(0, 5).map((match) => {
-                                                const logger = loggers.find(l => l.id === match.loggerId);
+                                            {activeMatches.filter(m => m.assignedLoggers && m.assignedLoggers.length > 0).slice(0, 5).map((match) => {
                                                 return (
-                                                    <div key={match.id} className="bg-white/5 border border-white/10 rounded-3xl p-6 opacity-60 hover:opacity-100 transition-all">
-                                                        <div className="flex items-center justify-between">
-                                                            <div className="flex items-center gap-4">
-                                                                <div className="flex -space-x-3">
-                                                                    <div className="w-10 h-10 rounded-full bg-white/10 border-2 border-black flex items-center justify-center text-xl">🏀</div>
-                                                                    <div className="w-10 h-10 rounded-full bg-primary text-black border-2 border-black flex items-center justify-center text-[10px] font-black italic">
-                                                                        {logger?.name[0]}
+                                                    <div key={match.id} className="bg-white/5 border border-white/10 rounded-3xl p-6 opacity-80 hover:opacity-100 transition-all">
+                                                        <div className="flex flex-col gap-4">
+                                                            <div className="flex items-center justify-between">
+                                                                <div className="flex items-center gap-4">
+                                                                    <div className="w-10 h-10 rounded-full bg-white/10 border-2 border-black flex items-center justify-center text-xl">
+                                                                        {match.sport === 'Football' ? '⚽' : match.sport === 'Basketball' ? '🏀' : '🎮'}
+                                                                    </div>
+                                                                    <div>
+                                                                        <p className="text-xs font-bold italic">{match.competition}</p>
+                                                                        <p className="text-[10px] text-white/40 font-bold uppercase tracking-widest">{new Date(match.startTime).toLocaleString()}</p>
                                                                     </div>
                                                                 </div>
-                                                                <div>
-                                                                    <p className="text-xs font-bold italic">{match.competition}</p>
-                                                                    <p className="text-[10px] text-primary font-black uppercase tracking-widest">Logger: {logger?.name}</p>
-                                                                </div>
+                                                                <button
+                                                                    onClick={() => {
+                                                                        setSelectedMatch(match);
+                                                                        setShowAssignModal(true);
+                                                                    }}
+                                                                    className="px-3 py-1.5 bg-white/5 border border-white/10 rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-white/10 transition-all"
+                                                                >
+                                                                    Manage
+                                                                </button>
                                                             </div>
-                                                            <button
-                                                                onClick={() => {
-                                                                    if (confirm(`Remove ${logger?.name} from this match?`)) {
-                                                                        removeLogger(match.id, match.loggerId!);
-                                                                    }
-                                                                }}
-                                                                className="px-3 py-1.5 bg-red-500/10 border border-red-500/20 rounded-lg text-red-500 hover:bg-red-500/20 transition-all text-[10px] font-black uppercase tracking-widest flex items-center gap-1"
-                                                                title="Unassign Logger"
-                                                            >
-                                                                <RefreshCw size={12} />
-                                                                Unassign
-                                                            </button>
+
+                                                            <div className="flex flex-wrap gap-2">
+                                                                {match.assignedLoggers?.map(logger => (
+                                                                    <div key={logger.id} className="flex items-center gap-2 bg-black/40 rounded-full pl-1 pr-3 py-1 border border-white/5">
+                                                                        <div className="w-6 h-6 rounded-full bg-primary text-black flex items-center justify-center text-[10px] font-black italic">
+                                                                            {logger.name[0]}
+                                                                        </div>
+                                                                        <div className="flex flex-col">
+                                                                            <span className="text-[10px] font-bold text-white leading-none">{logger.name}</span>
+                                                                            <span className="text-[8px] text-primary uppercase font-black leading-none">{logger.role}</span>
+                                                                        </div>
+                                                                        <button
+                                                                            onClick={() => {
+                                                                                if (confirm(`Remove ${logger.name} from this match?`)) {
+                                                                                    removeLogger(match.id, logger.id);
+                                                                                }
+                                                                            }}
+                                                                            className="ml-1 p-1 hover:bg-white/10 rounded-full text-white/40 hover:text-red-500 transition-colors"
+                                                                        >
+                                                                            <RefreshCw size={8} />
+                                                                        </button>
+                                                                    </div>
+                                                                ))}
+                                                            </div>
                                                         </div>
                                                     </div>
                                                 );
