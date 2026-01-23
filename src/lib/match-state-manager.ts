@@ -103,6 +103,48 @@ export interface LineupEntry {
     isStarter?: boolean;
 }
 
+export interface MatchStats {
+    // Shooting
+    shots: [number, number];              // [home, away]
+    shotsOnTarget: [number, number];
+    shotsOffTarget: [number, number];
+
+    // Scoring
+    goals: [number, number];
+    penalties: [number, number];
+    ownGoals: [number, number];
+
+    // Possession (calculated from events)
+    possessionEvents: [number, number];   // Count of attacking events
+    possessionPercentage: [number, number]; // Calculated %
+
+    // Passing & Attacking
+    assists: [number, number];
+
+    // Defensive
+    saves: [number, number];
+    catches: [number, number];
+    blocks: [number, number];
+    interceptions: [number, number];
+    clearances: [number, number];
+    tackles: [number, number];
+
+    // Set Pieces
+    corners: [number, number];
+    freeKicks: [number, number];
+    throwIns: [number, number];
+    goalKicks: [number, number];
+
+    // Discipline
+    fouls: [number, number];
+    yellowCards: [number, number];
+    redCards: [number, number];
+
+    // Other
+    offsides: [number, number];
+    substitutions: [number, number];
+}
+
 export interface MatchState {
     matchId: string;
     homeTeamId: string;
@@ -116,6 +158,8 @@ export interface MatchState {
         home: number;
         away: number;
     };
+
+    stats: MatchStats;
 
     players: {
         home: Map<string, Player>;
@@ -497,10 +541,12 @@ export class MatchStateManager {
         // Update player ratings
         this.applyEventRatingImpact(fullEvent, 1);
 
+        // Update match statistics
+        this.calculateMatchStats();
+
         this.notifyListeners();
         this.persistState();
         this.broadcastEvent(fullEvent);
-        this.broadcastStatsUpdate(); // Update stats in real-time
 
         return fullEvent;
     }
@@ -927,6 +973,162 @@ export class MatchStateManager {
         }));
     }
 
+    // ========== STATS CALCULATION ==========
+
+    private calculateMatchStats(): void {
+        // Reset stats
+        const stats: MatchStats = {
+            shots: [0, 0],
+            shotsOnTarget: [0, 0],
+            shotsOffTarget: [0, 0],
+            goals: [0, 0],
+            penalties: [0, 0],
+            ownGoals: [0, 0],
+            possessionEvents: [0, 0],
+            possessionPercentage: [50, 50],
+            assists: [0, 0],
+            saves: [0, 0],
+            catches: [0, 0],
+            blocks: [0, 0],
+            interceptions: [0, 0],
+            clearances: [0, 0],
+            tackles: [0, 0],
+            corners: [0, 0],
+            freeKicks: [0, 0],
+            throwIns: [0, 0],
+            goalKicks: [0, 0],
+            fouls: [0, 0],
+            yellowCards: [0, 0],
+            redCards: [0, 0],
+            offsides: [0, 0],
+            substitutions: [0, 0],
+        };
+
+        // Process all events
+        this.state.events.forEach(event => {
+            const teamIndex = event.teamId === this.state.homeTeamId ? 0 : 1;
+
+            switch (event.type) {
+                // Shooting
+                case 'Shot':
+                    stats.shots[teamIndex]++;
+                    stats.possessionEvents[teamIndex]++;
+                    break;
+                case 'Shot on Target':
+                    stats.shots[teamIndex]++;
+                    stats.shotsOnTarget[teamIndex]++;
+                    stats.possessionEvents[teamIndex]++;
+                    break;
+                case 'Shot off Target':
+                    stats.shots[teamIndex]++;
+                    stats.shotsOffTarget[teamIndex]++;
+                    stats.possessionEvents[teamIndex]++;
+                    break;
+
+                // Scoring
+                case 'Goal':
+                    stats.goals[teamIndex]++;
+                    stats.shots[teamIndex]++;
+                    stats.shotsOnTarget[teamIndex]++;
+                    stats.possessionEvents[teamIndex]++;
+                    break;
+                case 'Penalty':
+                    stats.penalties[teamIndex]++;
+                    stats.goals[teamIndex]++;
+                    stats.shots[teamIndex]++;
+                    stats.shotsOnTarget[teamIndex]++;
+                    stats.possessionEvents[teamIndex]++;
+                    break;
+                case 'Own Goal':
+                    stats.ownGoals[teamIndex]++;
+                    break;
+                case 'Assist':
+                    stats.assists[teamIndex]++;
+                    break;
+
+                // Defensive
+                case 'Save':
+                    stats.saves[teamIndex]++;
+                    break;
+                case 'Catch':
+                    stats.catches[teamIndex]++;
+                    break;
+                case 'Block':
+                    stats.blocks[teamIndex]++;
+                    break;
+                case 'Interception':
+                    stats.interceptions[teamIndex]++;
+                    stats.possessionEvents[teamIndex]++;
+                    break;
+                case 'Clearance':
+                    stats.clearances[teamIndex]++;
+                    break;
+                case 'Tackle':
+                    stats.tackles[teamIndex]++;
+                    stats.possessionEvents[teamIndex]++;
+                    break;
+
+                // Set Pieces
+                case 'Corner':
+                    stats.corners[teamIndex]++;
+                    stats.possessionEvents[teamIndex]++;
+                    break;
+                case 'Free Kick':
+                    stats.freeKicks[teamIndex]++;
+                    stats.possessionEvents[teamIndex]++;
+                    break;
+                case 'Throw In':
+                    stats.throwIns[teamIndex]++;
+                    stats.possessionEvents[teamIndex]++;
+                    break;
+                case 'Goal Kick':
+                    stats.goalKicks[teamIndex]++;
+                    stats.possessionEvents[teamIndex]++;
+                    break;
+
+                // Discipline
+                case 'Foul':
+                    stats.fouls[teamIndex]++;
+                    break;
+                case 'Yellow Card':
+                    stats.yellowCards[teamIndex]++;
+                    break;
+                case 'Red Card':
+                    stats.redCards[teamIndex]++;
+                    break;
+
+                // Other
+                case 'Offside':
+                    stats.offsides[teamIndex]++;
+                    break;
+                case 'Substitution':
+                    stats.substitutions[teamIndex]++;
+                    break;
+            }
+        });
+
+        // Calculate possession percentage
+        const totalPossessionEvents = stats.possessionEvents[0] + stats.possessionEvents[1];
+        if (totalPossessionEvents > 0) {
+            stats.possessionPercentage[0] = Math.round((stats.possessionEvents[0] / totalPossessionEvents) * 100);
+            stats.possessionPercentage[1] = 100 - stats.possessionPercentage[0];
+        }
+
+        this.state.stats = stats;
+        this.broadcastStatsUpdate();
+    }
+
+    private broadcastStatsUpdate(): void {
+        if (typeof window === 'undefined') return;
+
+        window.dispatchEvent(new CustomEvent('MATCH_STATS_UPDATE', {
+            detail: {
+                matchId: this.state.matchId,
+                stats: this.state.stats
+            }
+        }));
+    }
+
     // ========== GETTERS ==========
 
     getState(): Readonly<MatchState> {
@@ -1013,6 +1215,33 @@ export class MatchStateManager {
                 ...initial?.teamRatings
             },
 
+            stats: saved?.stats || initial?.stats || {
+                shots: [0, 0],
+                shotsOnTarget: [0, 0],
+                shotsOffTarget: [0, 0],
+                goals: [0, 0],
+                penalties: [0, 0],
+                ownGoals: [0, 0],
+                possessionEvents: [0, 0],
+                possessionPercentage: [50, 50],
+                assists: [0, 0],
+                saves: [0, 0],
+                catches: [0, 0],
+                blocks: [0, 0],
+                interceptions: [0, 0],
+                clearances: [0, 0],
+                tackles: [0, 0],
+                corners: [0, 0],
+                freeKicks: [0, 0],
+                throwIns: [0, 0],
+                goalKicks: [0, 0],
+                fouls: [0, 0],
+                yellowCards: [0, 0],
+                redCards: [0, 0],
+                offsides: [0, 0],
+                substitutions: [0, 0],
+            },
+
             events: saved?.events || initial?.events || [],
 
             players: {
@@ -1025,108 +1254,6 @@ export class MatchStateManager {
             halfDuration: initial?.halfDuration || saved?.halfDuration || 45,
             version: 1,
         };
-    }
-
-    // ========== STATS CALCULATION ==========
-
-    /**
-     * Calculate match statistics from events
-     */
-    getMatchStats(): {
-        possession: [number, number];
-        shots: [number, number];
-        shotsOnTarget: [number, number];
-        shotsOffTarget: [number, number];
-        corners: [number, number];
-        fouls: [number, number];
-        yellowCards: [number, number];
-        redCards: [number, number];
-        offsides: [number, number];
-        freeKicks: [number, number];
-    } {
-        const stats = {
-            possession: [50, 50] as [number, number],
-            shots: [0, 0] as [number, number],
-            shotsOnTarget: [0, 0] as [number, number],
-            shotsOffTarget: [0, 0] as [number, number],
-            corners: [0, 0] as [number, number],
-            fouls: [0, 0] as [number, number],
-            yellowCards: [0, 0] as [number, number],
-            redCards: [0, 0] as [number, number],
-            offsides: [0, 0] as [number, number],
-            freeKicks: [0, 0] as [number, number],
-        };
-
-        // Count events by team
-        this.state.events.forEach(event => {
-            const isHome = event.teamId === this.state.homeTeamId;
-            const index = isHome ? 0 : 1;
-
-            switch (event.type) {
-                case 'Shot':
-                case 'Goal':
-                case 'Penalty':
-                    stats.shots[index]++;
-                    break;
-                case 'Shot on Target':
-                    stats.shots[index]++;
-                    stats.shotsOnTarget[index]++;
-                    break;
-                case 'Shot off Target':
-                    stats.shots[index]++;
-                    stats.shotsOffTarget[index]++;
-                    break;
-                case 'Corner':
-                    stats.corners[index]++;
-                    break;
-                case 'Foul':
-                    stats.fouls[index]++;
-                    break;
-                case 'Yellow Card':
-                    stats.yellowCards[index]++;
-                    break;
-                case 'Red Card':
-                    stats.redCards[index]++;
-                    break;
-                case 'Offside':
-                    stats.offsides[index]++;
-                    break;
-                case 'Free Kick':
-                    stats.freeKicks[index]++;
-                    break;
-            }
-        });
-
-        // Goals are always on target
-        stats.shotsOnTarget[0] += this.state.score.home;
-        stats.shotsOnTarget[1] += this.state.score.away;
-
-        // Calculate possession based on events (rough estimate)
-        const totalEvents = this.state.events.length;
-        if (totalEvents > 0) {
-            const homeEvents = this.state.events.filter(e => e.teamId === this.state.homeTeamId).length;
-            const awayEvents = totalEvents - homeEvents;
-
-            if (homeEvents + awayEvents > 0) {
-                stats.possession[0] = Math.round((homeEvents / totalEvents) * 100);
-                stats.possession[1] = 100 - stats.possession[0];
-            }
-        }
-
-        return stats;
-    }
-
-    private broadcastStatsUpdate(): void {
-        if (typeof window === 'undefined') return;
-
-        const stats = this.getMatchStats();
-
-        window.dispatchEvent(new CustomEvent('MATCH_STATS_UPDATE', {
-            detail: {
-                matchId: this.state.matchId,
-                stats
-            }
-        }));
     }
 
     // ========== CLEANUP ==========

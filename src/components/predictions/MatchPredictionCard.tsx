@@ -194,47 +194,82 @@ export function MatchPredictionCard({ match, onPredictionSubmit }: MatchPredicti
                         </div>
                     </div>
 
-                    {stats && (
-                        <button
-                            onClick={() => setShowStats(!showStats)}
-                            className="flex items-center gap-1 md:gap-2 bg-white/5 hover:bg-white/10 text-white px-2 md:px-4 py-1.5 md:py-2 rounded-lg transition-colors"
-                        >
-                            <TrendingUp className="w-3 h-3 md:w-4 md:h-4" />
+                    {stats && stats.totalPredictions > 0 && (
+                        <div className="flex items-center gap-1 md:gap-2 bg-white/5 text-white px-2 md:px-4 py-1.5 md:py-2 rounded-lg">
+                            <Users className="w-3 h-3 md:w-4 md:h-4 text-primary" />
                             <span className="text-xs md:text-sm font-semibold">
-                                {stats.totalPredictions}
+                                {stats.totalPredictions} {stats.totalPredictions === 1 ? 'prediction' : 'predictions'}
                             </span>
-                        </button>
+                        </div>
                     )}
                 </div>
             </div>
 
-            {/* Prediction Stats (Collapsible) */}
-            {showStats && stats && stats.totalPredictions > 0 && (
-                <div className="px-6 py-4 bg-white/5 border-b border-white/10">
-                    <div className="grid grid-cols-3 gap-4 text-center">
-                        <div>
-                            <div className="text-2xl font-bold text-primary">
-                                {stats.homeWinPercentage.toFixed(0)}%
-                            </div>
-                            <div className="text-xs text-white/40 mt-1">{match.homeTeam.shortName} Win</div>
+            {/* Live Prediction Stats - Always Visible */}
+            {stats && stats.totalPredictions > 0 && (
+                <div className="px-4 md:px-6 py-4 bg-white/5 border-b border-white/10">
+                    <div className="space-y-3">
+                        <div className="flex items-center justify-between text-xs text-white/60 mb-2">
+                            <span className="flex items-center gap-1">
+                                <TrendingUp className="w-3 h-3" />
+                                Community Predictions
+                            </span>
+                            <span>{stats.totalPredictions} votes</span>
                         </div>
-                        <div>
-                            <div className="text-2xl font-bold text-white/60">
-                                {stats.drawPercentage.toFixed(0)}%
-                            </div>
-                            <div className="text-xs text-white/40 mt-1">Draw</div>
-                        </div>
-                        <div>
-                            <div className="text-2xl font-bold text-primary">
-                                {stats.awayWinPercentage.toFixed(0)}%
-                            </div>
-                            <div className="text-xs text-white/40 mt-1">{match.awayTeam.shortName} Win</div>
-                        </div>
-                    </div>
 
-                    <div className="mt-4 flex items-center justify-center gap-2 text-sm text-white/40">
-                        <Users className="w-4 h-4" />
-                        <span>Average prediction: {stats.averageHomeScore.toFixed(1)} - {stats.averageAwayScore.toFixed(1)}</span>
+                        {/* Home Win */}
+                        <div className="space-y-1">
+                            <div className="flex items-center justify-between text-xs">
+                                <span className="text-white/80 font-medium">{match.homeTeam.shortName} Win</span>
+                                <span className="font-bold" style={{ color: match.homeTeam.color }}>{stats.homeWinPercentage.toFixed(0)}%</span>
+                            </div>
+                            <div className="h-2 bg-white/10 rounded-full overflow-hidden">
+                                <div
+                                    className="h-full rounded-full transition-all duration-500"
+                                    style={{
+                                        width: `${stats.homeWinPercentage}%`,
+                                        background: `linear-gradient(to right, ${match.homeTeam.color}, ${match.homeTeam.color}90)`
+                                    }}
+                                />
+                            </div>
+                        </div>
+
+                        {/* Draw */}
+                        <div className="space-y-1">
+                            <div className="flex items-center justify-between text-xs">
+                                <span className="text-white/80 font-medium">Draw</span>
+                                <span className="text-white/60 font-bold">{stats.drawPercentage.toFixed(0)}%</span>
+                            </div>
+                            <div className="h-2 bg-white/10 rounded-full overflow-hidden">
+                                <div
+                                    className="h-full bg-gradient-to-r from-white/40 to-white/20 rounded-full transition-all duration-500"
+                                    style={{ width: `${stats.drawPercentage}%` }}
+                                />
+                            </div>
+                        </div>
+
+                        {/* Away Win */}
+                        <div className="space-y-1">
+                            <div className="flex items-center justify-between text-xs">
+                                <span className="text-white/80 font-medium">{match.awayTeam.shortName} Win</span>
+                                <span className="font-bold" style={{ color: match.awayTeam.color }}>{stats.awayWinPercentage.toFixed(0)}%</span>
+                            </div>
+                            <div className="h-2 bg-white/10 rounded-full overflow-hidden">
+                                <div
+                                    className="h-full rounded-full transition-all duration-500"
+                                    style={{
+                                        width: `${stats.awayWinPercentage}%`,
+                                        background: `linear-gradient(to right, ${match.awayTeam.color}, ${match.awayTeam.color}90)`
+                                    }}
+                                />
+                            </div>
+                        </div>
+
+                        {/* Average Score Prediction */}
+                        <div className="mt-3 pt-3 border-t border-white/10 flex items-center justify-center gap-2 text-xs text-white/60">
+                            <span>Avg. Score:</span>
+                            <span className="font-bold text-white">{stats.averageHomeScore.toFixed(1)} - {stats.averageAwayScore.toFixed(1)}</span>
+                        </div>
                     </div>
                 </div>
             )}
@@ -277,17 +312,17 @@ export function MatchPredictionCard({ match, onPredictionSubmit }: MatchPredicti
                             <button
                                 onClick={() => setHomeScore(Math.max(0, homeScore - scoreStep))}
                                 disabled={submitted || match.status === 'LIVE' || match.status === 'FINISHED'}
-                                className="w-7 h-7 md:w-8 md:h-8 bg-white/10 hover:bg-white/20 disabled:bg-white/5 disabled:cursor-not-allowed text-white rounded-lg font-bold transition-colors text-sm md:text-base"
+                                className="w-7 h-7 md:w-8 md:h-8 bg-white/10 hover:bg-primary/50 active:bg-primary disabled:bg-white/5 disabled:cursor-not-allowed disabled:opacity-50 text-white rounded-lg font-bold transition-all text-sm md:text-base hover:scale-110 active:scale-95"
                             >
                                 -
                             </button>
-                            <div className="w-12 h-10 md:w-16 md:h-12 bg-white/10 rounded-lg flex items-center justify-center">
+                            <div className="w-12 h-10 md:w-16 md:h-12 bg-white/10 rounded-lg flex items-center justify-center border-2 border-white/20">
                                 <span className="text-xl md:text-2xl font-bold text-white">{homeScore}</span>
                             </div>
                             <button
                                 onClick={() => setHomeScore(Math.min(maxScore, homeScore + scoreStep))}
                                 disabled={submitted || match.status === 'LIVE' || match.status === 'FINISHED'}
-                                className="w-7 h-7 md:w-8 md:h-8 bg-white/10 hover:bg-white/20 disabled:bg-white/5 disabled:cursor-not-allowed text-white rounded-lg font-bold transition-colors text-sm md:text-base"
+                                className="w-7 h-7 md:w-8 md:h-8 bg-white/10 hover:bg-primary/50 active:bg-primary disabled:bg-white/5 disabled:cursor-not-allowed disabled:opacity-50 text-white rounded-lg font-bold transition-all text-sm md:text-base hover:scale-110 active:scale-95"
                             >
                                 +
                             </button>
@@ -314,17 +349,17 @@ export function MatchPredictionCard({ match, onPredictionSubmit }: MatchPredicti
                             <button
                                 onClick={() => setAwayScore(Math.max(0, awayScore - scoreStep))}
                                 disabled={submitted || match.status === 'LIVE' || match.status === 'FINISHED'}
-                                className="w-7 h-7 md:w-8 md:h-8 bg-white/10 hover:bg-white/20 disabled:bg-white/5 disabled:cursor-not-allowed text-white rounded-lg font-bold transition-colors text-sm md:text-base"
+                                className="w-7 h-7 md:w-8 md:h-8 bg-white/10 hover:bg-primary/50 active:bg-primary disabled:bg-white/5 disabled:cursor-not-allowed disabled:opacity-50 text-white rounded-lg font-bold transition-all text-sm md:text-base hover:scale-110 active:scale-95"
                             >
                                 -
                             </button>
-                            <div className="w-12 h-10 md:w-16 md:h-12 bg-white/10 rounded-lg flex items-center justify-center">
+                            <div className="w-12 h-10 md:w-16 md:h-12 bg-white/10 rounded-lg flex items-center justify-center border-2 border-white/20">
                                 <span className="text-xl md:text-2xl font-bold text-white">{awayScore}</span>
                             </div>
                             <button
                                 onClick={() => setAwayScore(Math.min(maxScore, awayScore + scoreStep))}
                                 disabled={submitted || match.status === 'LIVE' || match.status === 'FINISHED'}
-                                className="w-7 h-7 md:w-8 md:h-8 bg-white/10 hover:bg-white/20 disabled:bg-white/5 disabled:cursor-not-allowed text-white rounded-lg font-bold transition-colors text-sm md:text-base"
+                                className="w-7 h-7 md:w-8 md:h-8 bg-white/10 hover:bg-primary/50 active:bg-primary disabled:bg-white/5 disabled:cursor-not-allowed disabled:opacity-50 text-white rounded-lg font-bold transition-all text-sm md:text-base hover:scale-110 active:scale-95"
                             >
                                 +
                             </button>

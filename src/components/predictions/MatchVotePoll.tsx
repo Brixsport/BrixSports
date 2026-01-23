@@ -165,9 +165,9 @@ export function MatchVotePoll({ match, compact = false }: MatchVotePollProps) {
                 {/* Always show results in compact mode */}
                 <div className="space-y-2">
                     {[
-                        { label: match.homeTeam.shortName, votes: pollData.homeVotes, choice: 'home', color: 'blue' },
-                        { label: 'Draw', votes: pollData.drawVotes, choice: 'draw', color: 'gray' },
-                        { label: match.awayTeam.shortName, votes: pollData.awayVotes, choice: 'away', color: 'red' },
+                        { label: match.homeTeam.shortName, votes: pollData.homeVotes, choice: 'home', teamColor: match.homeTeam.color },
+                        { label: 'Draw', votes: pollData.drawVotes, choice: 'draw', teamColor: null },
+                        { label: match.awayTeam.shortName, votes: pollData.awayVotes, choice: 'away', teamColor: match.awayTeam.color },
                     ].map((option) => (
                         <div key={option.choice} className="space-y-1">
                             <div className="flex items-center justify-between text-xs">
@@ -182,13 +182,11 @@ export function MatchVotePoll({ match, compact = false }: MatchVotePollProps) {
                             </div>
                             <div className="h-1.5 bg-gray-700 rounded-full overflow-hidden">
                                 <div
-                                    className={cn(
-                                        "h-full transition-all duration-500",
-                                        option.color === 'blue' && "bg-blue-500",
-                                        option.color === 'gray' && "bg-gray-500",
-                                        option.color === 'red' && "bg-red-500"
-                                    )}
-                                    style={{ width: `${getPercentage(option.votes)}%` }}
+                                    className="h-full transition-all duration-500"
+                                    style={{
+                                        width: `${getPercentage(option.votes)}%`,
+                                        background: option.teamColor ? option.teamColor : '#6b7280'
+                                    }}
                                 />
                             </div>
                         </div>
@@ -274,7 +272,16 @@ export function MatchVotePoll({ match, compact = false }: MatchVotePollProps) {
                             <button
                                 onClick={() => handleVote('home')}
                                 disabled={voting}
-                                className="group relative bg-white/5 hover:bg-white/10 border-2 border-white/10 hover:border-primary/50 disabled:border-white/5 disabled:bg-white/5 rounded-xl p-4 md:p-6 transition-all transform hover:scale-[1.02] disabled:cursor-not-allowed"
+                                className="group relative bg-white/5 hover:bg-white/10 active:bg-white/15 border-2 border-white/10 hover:border-white/30 active:border-white/50 disabled:border-white/5 disabled:bg-white/5 rounded-xl p-4 md:p-6 transition-all transform hover:scale-[1.02] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
+                                style={{
+                                    borderColor: voting ? undefined : `${match.homeTeam.color}00`,
+                                }}
+                                onMouseEnter={(e) => {
+                                    if (!voting) e.currentTarget.style.borderColor = `${match.homeTeam.color}80`;
+                                }}
+                                onMouseLeave={(e) => {
+                                    if (!voting) e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.1)';
+                                }}
                             >
                                 <div className="flex items-center gap-3 md:gap-4">
                                     <img
@@ -286,7 +293,7 @@ export function MatchVotePoll({ match, compact = false }: MatchVotePollProps) {
                                         <h4 className="text-lg md:text-xl font-bold text-white">{match.homeTeam.name}</h4>
                                         <p className="text-xs md:text-sm text-white/70">Home Team</p>
                                     </div>
-                                    <CheckCircle className="w-5 h-5 md:w-6 md:h-6 text-white/50 group-hover:text-white transition-colors" />
+                                    <CheckCircle className="w-5 h-5 md:w-6 md:h-6 text-white/30 group-hover:text-white/80 transition-colors" />
                                 </div>
                             </button>
 
@@ -294,7 +301,7 @@ export function MatchVotePoll({ match, compact = false }: MatchVotePollProps) {
                             <button
                                 onClick={() => handleVote('draw')}
                                 disabled={voting}
-                                className="group relative bg-white/5 hover:bg-white/10 border-2 border-white/10 hover:border-primary/50 disabled:border-white/5 disabled:bg-white/5 rounded-xl p-4 md:p-6 transition-all transform hover:scale-[1.02] disabled:cursor-not-allowed"
+                                className="group relative bg-white/5 hover:bg-white/10 active:bg-white/15 border-2 border-white/10 hover:border-white/30 active:border-white/50 disabled:border-white/5 disabled:bg-white/5 rounded-xl p-4 md:p-6 transition-all transform hover:scale-[1.02] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
                             >
                                 <div className="flex items-center gap-3 md:gap-4">
                                     <div className="w-12 h-12 md:w-16 md:h-16 bg-white/10 rounded-full flex items-center justify-center">
@@ -304,7 +311,7 @@ export function MatchVotePoll({ match, compact = false }: MatchVotePollProps) {
                                         <h4 className="text-lg md:text-xl font-bold text-white">Draw</h4>
                                         <p className="text-xs md:text-sm text-white/70">Equal Score</p>
                                     </div>
-                                    <CheckCircle className="w-5 h-5 md:w-6 md:h-6 text-white/50 group-hover:text-white transition-colors" />
+                                    <CheckCircle className="w-5 h-5 md:w-6 md:h-6 text-white/30 group-hover:text-white/80 transition-colors" />
                                 </div>
                             </button>
 
@@ -312,7 +319,16 @@ export function MatchVotePoll({ match, compact = false }: MatchVotePollProps) {
                             <button
                                 onClick={() => handleVote('away')}
                                 disabled={voting}
-                                className="group relative bg-white/5 hover:bg-white/10 border-2 border-white/10 hover:border-primary/50 disabled:border-white/5 disabled:bg-white/5 rounded-xl p-4 md:p-6 transition-all transform hover:scale-[1.02] disabled:cursor-not-allowed"
+                                className="group relative bg-white/5 hover:bg-white/10 active:bg-white/15 border-2 border-white/10 hover:border-white/30 active:border-white/50 disabled:border-white/5 disabled:bg-white/5 rounded-xl p-4 md:p-6 transition-all transform hover:scale-[1.02] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
+                                style={{
+                                    borderColor: voting ? undefined : `${match.awayTeam.color}00`,
+                                }}
+                                onMouseEnter={(e) => {
+                                    if (!voting) e.currentTarget.style.borderColor = `${match.awayTeam.color}80`;
+                                }}
+                                onMouseLeave={(e) => {
+                                    if (!voting) e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.1)';
+                                }}
                             >
                                 <div className="flex items-center gap-3 md:gap-4">
                                     <img
@@ -324,7 +340,7 @@ export function MatchVotePoll({ match, compact = false }: MatchVotePollProps) {
                                         <h4 className="text-lg md:text-xl font-bold text-white">{match.awayTeam.name}</h4>
                                         <p className="text-xs md:text-sm text-white/70">Away Team</p>
                                     </div>
-                                    <CheckCircle className="w-5 h-5 md:w-6 md:h-6 text-white/50 group-hover:text-white transition-colors" />
+                                    <CheckCircle className="w-5 h-5 md:w-6 md:h-6 text-white/30 group-hover:text-white/80 transition-colors" />
                                 </div>
                             </button>
                         </div>
@@ -347,9 +363,9 @@ export function MatchVotePoll({ match, compact = false }: MatchVotePollProps) {
                         {/* Results */}
                         <div className="space-y-4">
                             {[
-                                { label: match.homeTeam.name, logo: match.homeTeam.logo, votes: pollData.homeVotes, choice: 'home', color: 'from-blue-600 to-blue-700' },
-                                { label: 'Draw', votes: pollData.drawVotes, choice: 'draw', color: 'from-gray-600 to-gray-700' },
-                                { label: match.awayTeam.name, logo: match.awayTeam.logo, votes: pollData.awayVotes, choice: 'away', color: 'from-red-600 to-red-700' },
+                                { label: match.homeTeam.name, logo: match.homeTeam.logo, votes: pollData.homeVotes, choice: 'home', teamColor: match.homeTeam.color },
+                                { label: 'Draw', votes: pollData.drawVotes, choice: 'draw', teamColor: null },
+                                { label: match.awayTeam.name, logo: match.awayTeam.logo, votes: pollData.awayVotes, choice: 'away', teamColor: match.awayTeam.color },
                             ].map((option) => {
                                 const percentage = getPercentage(option.votes);
                                 const isWinning = getWinningChoice() === option.choice && pollData.totalVotes > 0;
@@ -366,8 +382,11 @@ export function MatchVotePoll({ match, compact = false }: MatchVotePollProps) {
                                     >
                                         {/* Background Bar */}
                                         <div
-                                            className="absolute inset-0 bg-primary/20 transition-all duration-500"
-                                            style={{ width: `${percentage}%` }}
+                                            className="absolute inset-0 transition-all duration-500"
+                                            style={{
+                                                width: `${percentage}%`,
+                                                background: option.teamColor ? `${option.teamColor}33` : 'rgba(107, 114, 128, 0.2)'
+                                            }}
                                         />
 
                                         {/* Content */}
