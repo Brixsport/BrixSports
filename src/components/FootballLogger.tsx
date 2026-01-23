@@ -789,13 +789,71 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                         </div>
                     </div>
                     <div className="flex items-center gap-2">
+                        {/* Start Match Button - Only show when NOT_STARTED */}
+                        {currentPeriod === 'NOT_STARTED' && (
+                            <button
+                                onClick={() => {
+                                    if (stateManager.current) {
+                                        stateManager.current.transitionStatus('FIRST_HALF');
+                                    }
+                                }}
+                                className="px-6 py-3 bg-green-500 text-black font-black uppercase tracking-widest rounded-xl hover:scale-105 transition-transform shadow-lg shadow-green-500/20 animate-pulse"
+                            >
+                                ▶ Start Match
+                            </button>
+                        )}
+
+                        {/* End Half Button - Show during active periods */}
+                        {(currentPeriod === 'FIRST_HALF' || currentPeriod === 'SECOND_HALF') && (
+                            <button
+                                onClick={() => {
+                                    if (stateManager.current) {
+                                        const nextPeriod = currentPeriod === 'FIRST_HALF' ? 'HALF_TIME' : 'FINISHED';
+                                        setPendingPeriodTransition({ current: currentPeriod, next: nextPeriod });
+                                        setShowPeriodEndModal(true);
+                                    }
+                                }}
+                                className="px-4 py-2 bg-orange-500 text-black font-bold uppercase tracking-widest rounded-xl hover:scale-105 transition-transform"
+                            >
+                                ⏸ End {currentPeriod === 'FIRST_HALF' ? '1st' : '2nd'} Half
+                            </button>
+                        )}
+
+                        {/* Resume from Half Time */}
+                        {currentPeriod === 'HALF_TIME' && (
+                            <button
+                                onClick={() => {
+                                    if (stateManager.current) {
+                                        stateManager.current.transitionStatus('SECOND_HALF');
+                                    }
+                                }}
+                                className="px-6 py-3 bg-green-500 text-black font-black uppercase tracking-widest rounded-xl hover:scale-105 transition-transform shadow-lg shadow-green-500/20 animate-pulse"
+                            >
+                                ▶ Start 2nd Half
+                            </button>
+                        )}
+
+                        {/* Start Penalty Shootout - Show when match is FINISHED (for knockout competitions) */}
+                        {currentPeriod === 'FINISHED' && homeScore === awayScore && (
+                            <button
+                                onClick={() => {
+                                    if (stateManager.current && confirm('Start Penalty Shootout?')) {
+                                        stateManager.current.transitionStatus('PENALTY_SHOOTOUT');
+                                    }
+                                }}
+                                className="px-6 py-3 bg-purple-500 text-black font-black uppercase tracking-widest rounded-xl hover:scale-105 transition-transform shadow-lg shadow-purple-500/20"
+                            >
+                                🎯 Start Penalties
+                            </button>
+                        )}
+
                         <button onClick={handleUndo} className="p-2 bg-white/5 rounded-xl hover:bg-white/10">
                             <Undo2 size={20} />
                         </button>
                         <button onClick={() => setShowSettingsModal(true)} className="p-2 bg-white/5 rounded-xl hover:bg-white/10">
                             <Settings size={20} />
                         </button>
-                        {currentPeriod !== 'FINISHED' && (
+                        {currentPeriod !== 'FINISHED' && currentPeriod !== 'NOT_STARTED' && (
                             <button onClick={handleFinalize} disabled={isSaving} className="px-4 py-2 bg-green-500 text-black font-bold rounded-xl">
                                 {isSaving ? 'Saving...' : 'End Match'}
                             </button>
@@ -835,10 +893,10 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                         </div>
                     </div>
                 </div>
-            </div>
+            </div >
 
             {/* Controls */}
-            <div className="max-w-7xl mx-auto">
+            < div className="max-w-7xl mx-auto" >
                 <div className="grid grid-cols-2 gap-4 mb-6">
                     <button
                         onClick={() => setSelectedTeam('home')}
@@ -854,20 +912,60 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                     </button>
                 </div>
 
-                <div className="grid grid-cols-4 sm:grid-cols-6 gap-3 mb-8">
-                    <EventButton type="Goal" icon="⚽" onClick={() => handleEventClick('Goal', true)} />
-                    <EventButton type="Penalty" icon="🎯" onClick={() => handleEventClick('Penalty', true)} />
-                    <EventButton type="Yellow Card" icon="🟨" onClick={() => handleEventClick('Yellow Card')} />
-                    <EventButton type="Red Card" icon="🟥" onClick={() => handleEventClick('Red Card')} />
-                    <EventButton type="Substitution" icon="🔄" onClick={() => handleEventClick('Substitution')} />
-                    <EventButton type="Foul" icon="⚠️" onClick={() => handleEventClick('Foul')} />
-                    <EventButton type="Corner" icon="🚩" onClick={() => handleEventClick('Corner')} />
-                    <EventButton type="Offside" icon="🎌" onClick={() => handleEventClick('Offside')} />
-                    <EventButton type="Save" icon="🧤" onClick={() => handleEventClick('Save')} />
-                    <EventButton type="Shot" icon="⚡" onClick={() => handleEventClick('Shot')} />
-                    <EventButton type="Shot on Target" icon="🎯" label="Shot On" onClick={() => handleEventClick('Shot on Target')} />
-                    <EventButton type="Shot off Target" icon="❌" label="Shot Off" onClick={() => handleEventClick('Shot off Target')} />
-                </div>
+                {/* Event Buttons - Conditional based on period */}
+                {currentPeriod === 'PENALTY_SHOOTOUT' ? (
+                    // Penalty Shootout Buttons
+                    <div className="space-y-4 mb-8">
+                        <div className="bg-purple-500/10 border border-purple-500/30 rounded-xl p-4 mb-4">
+                            <h3 className="text-sm font-black uppercase tracking-widest text-purple-400 mb-2">Penalty Shootout</h3>
+                            <p className="text-xs text-white/60">Select team, then log each penalty</p>
+                        </div>
+                        <div className="grid grid-cols-3 gap-4">
+                            <EventButton type="Penalty" icon="⚽" label="Scored" onClick={() => handleEventClick('Penalty', true)} />
+                            <EventButton type="Penalty Missed" icon="❌" label="Missed" onClick={() => handleEventClick('Shot off Target')} />
+                            <EventButton type="Save" icon="🧤" label="Saved" onClick={() => handleEventClick('Save')} />
+                        </div>
+                    </div>
+                ) : (
+                    // Regular Match Buttons
+                    <div className="grid grid-cols-4 sm:grid-cols-6 lg:grid-cols-8 gap-3 mb-8">
+                        {/* Scoring */}
+                        <EventButton type="Goal" icon="⚽" onClick={() => handleEventClick('Goal', true)} />
+                        <EventButton type="Penalty" icon="🎯" onClick={() => handleEventClick('Penalty', true)} />
+                        <EventButton type="Own Goal" icon="🔴" label="Own Goal" onClick={() => handleEventClick('Own Goal')} />
+                        <EventButton type="Assist" icon="🅰️" onClick={() => handleEventClick('Assist')} />
+
+                        {/* Discipline */}
+                        <EventButton type="Yellow Card" icon="🟨" label="Yellow" onClick={() => handleEventClick('Yellow Card')} />
+                        <EventButton type="Red Card" icon="🟥" label="Red" onClick={() => handleEventClick('Red Card')} />
+                        <EventButton type="Foul" icon="⚠️" onClick={() => handleEventClick('Foul')} />
+                        <EventButton type="Push" icon="🤚" onClick={() => handleEventClick('Push')} />
+                        <EventButton type="Handball" icon="✋" onClick={() => handleEventClick('Handball')} />
+
+                        {/* Defensive */}
+                        <EventButton type="Save" icon="🧤" onClick={() => handleEventClick('Save')} />
+                        <EventButton type="Catch" icon="🤲" onClick={() => handleEventClick('Catch')} />
+                        <EventButton type="Block" icon="🛡️" onClick={() => handleEventClick('Block')} />
+                        <EventButton type="Interception" icon="🚫" label="Intercept" onClick={() => handleEventClick('Interception')} />
+                        <EventButton type="Clearance" icon="🦵" onClick={() => handleEventClick('Clearance')} />
+                        <EventButton type="Tackle" icon="⚡" onClick={() => handleEventClick('Tackle')} />
+
+                        {/* Attacking */}
+                        <EventButton type="Shot" icon="⚡" onClick={() => handleEventClick('Shot')} />
+                        <EventButton type="Shot on Target" icon="🎯" label="Shot On" onClick={() => handleEventClick('Shot on Target')} />
+                        <EventButton type="Shot off Target" icon="❌" label="Shot Off" onClick={() => handleEventClick('Shot off Target')} />
+
+                        {/* Set Pieces */}
+                        <EventButton type="Corner" icon="🚩" onClick={() => handleEventClick('Corner')} />
+                        <EventButton type="Free Kick" icon="🎯" label="Free Kick" onClick={() => handleEventClick('Free Kick')} />
+                        <EventButton type="Throw In" icon="👐" label="Throw In" onClick={() => handleEventClick('Throw In')} />
+                        <EventButton type="Goal Kick" icon="🥅" label="Goal Kick" onClick={() => handleEventClick('Goal Kick')} />
+
+                        {/* Other */}
+                        <EventButton type="Offside" icon="🎌" onClick={() => handleEventClick('Offside')} />
+                        <EventButton type="Substitution" icon="🔄" label="Sub" onClick={() => handleEventClick('Substitution')} />
+                    </div>
+                )}
 
                 <div className="bg-white/5 rounded-2xl border border-white/10 p-4">
                     <h3 className="text-sm font-bold uppercase tracking-widest mb-4 opacity-60">Recent Events</h3>
@@ -886,7 +984,7 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                         )}
                     </div>
                 </div>
-            </div>
+            </div >
 
             {showPlayerModal && (
                 <PlayerSelectionModal
@@ -898,75 +996,83 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                 />
             )}
 
-            {showAssistModal && (
-                <PlayerSelectionModal
-                    players={selectedTeam === 'home' ? homePlayers : awayPlayers}
-                    onSelect={handleAssistSelect}
-                    onClose={() => { setShowAssistModal(false); handleAssistSelect(null); }}
-                    title="Select Assist (Optional)"
-                />
-            )}
+            {
+                showAssistModal && (
+                    <PlayerSelectionModal
+                        players={selectedTeam === 'home' ? homePlayers : awayPlayers}
+                        onSelect={handleAssistSelect}
+                        onClose={() => { setShowAssistModal(false); handleAssistSelect(null); }}
+                        title="Select Assist (Optional)"
+                    />
+                )
+            }
 
-            {showSubInModal && (
-                <PlayerSelectionModal
-                    players={selectedTeam === 'home' ? homePlayers : awayPlayers}
-                    onSelect={handleSubIn}
-                    onClose={() => setShowSubInModal(false)}
-                    title="Select Player Coming IN"
-                />
-            )}
+            {
+                showSubInModal && (
+                    <PlayerSelectionModal
+                        players={selectedTeam === 'home' ? homePlayers : awayPlayers}
+                        onSelect={handleSubIn}
+                        onClose={() => setShowSubInModal(false)}
+                        title="Select Player Coming IN"
+                    />
+                )
+            }
 
-            {showStoppageModal && (
-                <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-                    <div className="bg-zinc-900 border border-white/10 w-full max-w-sm rounded-2xl overflow-hidden">
-                        <div className="p-4 border-b border-white/10 flex justify-between items-center">
-                            <h3 className="font-bold">Set Stoppage Time</h3>
-                            <button onClick={() => setShowStoppageModal(false)}><X size={20} /></button>
-                        </div>
-                        <div className="p-4 grid grid-cols-4 gap-2">
-                            {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(num => (
-                                <button
-                                    key={num}
-                                    onClick={() => handleSetStoppage(num)}
-                                    className="aspect-square bg-white/5 hover:bg-primary hover:text-black rounded-xl font-bold transition-colors"
-                                >
-                                    +{num}
-                                </button>
-                            ))}
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {showPeriodEndModal && pendingPeriodTransition && (
-                <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-50 flex items-center justify-center p-4">
-                    <div className="bg-zinc-900 border border-primary/50 w-full max-w-md rounded-2xl overflow-hidden shadow-2xl">
-                        <div className="p-6 border-b border-white/10 bg-gradient-to-r from-primary/10 to-transparent">
-                            <h3 className="font-bold text-xl text-primary">Half Ended</h3>
-                            <p className="text-sm text-white/60 mt-1">
-                                {pendingPeriodTransition.current === 'FIRST_HALF' ? 'First Half' : 'Second Half'} has ended
-                            </p>
-                        </div>
-                        <div className="p-6">
-                            <p className="text-white/80 mb-4">Add extra time played (optional):</p>
-                            <div className="grid grid-cols-5 gap-2 mb-6">
-                                {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(num => (
+            {
+                showStoppageModal && (
+                    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                        <div className="bg-zinc-900 border border-white/10 w-full max-w-sm rounded-2xl overflow-hidden">
+                            <div className="p-4 border-b border-white/10 flex justify-between items-center">
+                                <h3 className="font-bold">Set Stoppage Time</h3>
+                                <button onClick={() => setShowStoppageModal(false)}><X size={20} /></button>
+                            </div>
+                            <div className="p-4 grid grid-cols-4 gap-2">
+                                {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(num => (
                                     <button
                                         key={num}
-                                        onClick={() => handlePeriodEndConfirm(num)}
-                                        className="aspect-square bg-white/5 hover:bg-primary hover:text-black rounded-xl font-bold transition-all active:scale-95 border border-white/10 hover:border-primary"
+                                        onClick={() => handleSetStoppage(num)}
+                                        className="aspect-square bg-white/5 hover:bg-primary hover:text-black rounded-xl font-bold transition-colors"
                                     >
-                                        {num === 0 ? 'None' : `+${num}`}
+                                        +{num}
                                     </button>
                                 ))}
                             </div>
-                            <div className="text-xs text-white/40 text-center">
-                                Click to add extra time and proceed to {pendingPeriodTransition.next === 'HALF_TIME' ? 'Half Time' : 'Full Time'}
+                        </div>
+                    </div>
+                )
+            }
+
+            {
+                showPeriodEndModal && pendingPeriodTransition && (
+                    <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-50 flex items-center justify-center p-4">
+                        <div className="bg-zinc-900 border border-primary/50 w-full max-w-md rounded-2xl overflow-hidden shadow-2xl">
+                            <div className="p-6 border-b border-white/10 bg-gradient-to-r from-primary/10 to-transparent">
+                                <h3 className="font-bold text-xl text-primary">Half Ended</h3>
+                                <p className="text-sm text-white/60 mt-1">
+                                    {pendingPeriodTransition.current === 'FIRST_HALF' ? 'First Half' : 'Second Half'} has ended
+                                </p>
+                            </div>
+                            <div className="p-6">
+                                <p className="text-white/80 mb-4">Add extra time played (optional):</p>
+                                <div className="grid grid-cols-5 gap-2 mb-6">
+                                    {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(num => (
+                                        <button
+                                            key={num}
+                                            onClick={() => handlePeriodEndConfirm(num)}
+                                            className="aspect-square bg-white/5 hover:bg-primary hover:text-black rounded-xl font-bold transition-all active:scale-95 border border-white/10 hover:border-primary"
+                                        >
+                                            {num === 0 ? 'None' : `+${num}`}
+                                        </button>
+                                    ))}
+                                </div>
+                                <div className="text-xs text-white/40 text-center">
+                                    Click to add extra time and proceed to {pendingPeriodTransition.next === 'HALF_TIME' ? 'Half Time' : 'Full Time'}
+                                </div>
                             </div>
                         </div>
                     </div>
-                </div>
-            )}
+                )
+            }
 
             <MultiLoggerStatus
                 activeLoggers={activeLoggers}
@@ -976,7 +1082,7 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                 currentLoggerName={currentLogger?.name || 'Unknown Logger'}
                 onResolveConflict={(id, resolution) => resolveConflict(id, resolution)}
             />
-        </div>
+        </div >
     );
 }
 

@@ -86,6 +86,7 @@ export interface MatchClock {
     lastTickTimestamp: number;
     startTimestamp: number | null;
     announcedStoppage: number | null; // e.g., 3, 5 (minutes)
+    periodEndTriggered: boolean; // Prevents multiple period end triggers
 }
 
 export interface MatchScore {
@@ -269,8 +270,11 @@ export class MatchStateManager {
      * Triggers extra time prompt and auto-pauses
      */
     private checkPeriodEnd(): void {
-        const { absoluteMinute, period, announcedStoppage } = this.state.clock;
+        const { absoluteMinute, period, announcedStoppage, periodEndTriggered } = this.state.clock;
         const halfDuration = this.state.halfDuration;
+
+        // If period end already triggered, don't trigger again
+        if (periodEndTriggered) return;
 
         // Calculate the effective end time (duration + announced stoppage)
         let periodEndMinute = 0;
@@ -299,6 +303,9 @@ export class MatchStateManager {
 
         // If we've reached the period end
         if (absoluteMinute >= periodEndMinute && nextPeriod) {
+            // Mark as triggered to prevent multiple calls
+            this.state.clock.periodEndTriggered = true;
+
             // Auto-pause the clock
             this.stopClock();
 
@@ -360,6 +367,8 @@ export class MatchStateManager {
         }
 
         this.state.clock.period = to;
+        // Reset period end trigger for new period
+        this.state.clock.periodEndTriggered = false;
 
         // Handle period-specific logic
         switch (to) {
@@ -987,6 +996,7 @@ export class MatchStateManager {
                 ...initial?.clock,
                 lastTickTimestamp: now, // Always reset timestamp
                 announcedStoppage: null,
+                periodEndTriggered: false,
             },
 
             score: {

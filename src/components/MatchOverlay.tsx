@@ -377,6 +377,55 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
     return () => window.removeEventListener('RATINGS_PUBLISHED', handleRatingsPublished);
   }, [match.id, activeTab, match.status]);
 
+  // Listen for period transitions (Half Time, Full Time, etc.)
+  useEffect(() => {
+    const handlePeriodTransition = (event: any) => {
+      if (event.detail.matchId === match.id) {
+        const { from, to, clock } = event.detail;
+
+        // Create a synthetic timeline event for the period transition
+        const periodEvent: MatchEvent = {
+          id: `period_${Date.now()}`,
+          matchId: match.id,
+          type: 'Period Transition' as any, // Custom type for period changes
+          minute: clock?.displayMinute || 0,
+          teamId: '',
+          detail: `${from.replace('_', ' ')} → ${to.replace('_', ' ')}`,
+        };
+
+        // Add to events timeline
+        setMatch(prev => ({
+          ...prev,
+          events: [...(prev.events || []), periodEvent],
+        }));
+
+        // Show notification for major transitions
+        if (to === 'HALF_TIME') {
+          addNotification({
+            title: 'HALF TIME',
+            message: 'First half has ended',
+            type: 'match'
+          });
+        } else if (to === 'FINISHED') {
+          addNotification({
+            title: 'FULL TIME',
+            message: 'Match has ended',
+            type: 'match'
+          });
+        } else if (to === 'SECOND_HALF') {
+          addNotification({
+            title: 'SECOND HALF',
+            message: 'Second half has started',
+            type: 'match'
+          });
+        }
+      }
+    };
+
+    window.addEventListener('MATCH_STATUS_CHANGE', handlePeriodTransition);
+    return () => window.removeEventListener('MATCH_STATUS_CHANGE', handlePeriodTransition);
+  }, [match.id, addNotification]);
+
   const tabs = [
     ...(match.isStreaming ? [{ id: 'watch', label: 'Watch', icon: Play }] : []),
     { id: 'overview', label: 'Overview', icon: Trophy },
