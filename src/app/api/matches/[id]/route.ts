@@ -5,7 +5,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
-import { matches, teams, matchEvents, players } from '@/db/schema';
+import { matches, teams, matchEvents, players, bracketNodes, teamForm, headToHead } from '@/db/schema';
 import { eq, desc, sql } from 'drizzle-orm';
 import { playerRatings } from '@/db/schema-ratings';
 
@@ -446,7 +446,24 @@ export async function DELETE(
             );
         }
 
-        // Delete match (events will be cascade deleted)
+        // Handle constraint: bracketNodes - clear foreign key
+        await db
+            .update(bracketNodes)
+            .set({ matchId: null })
+            .where(eq(bracketNodes.matchId, matchId));
+
+        // Handle constraint: headToHead - clear foreign key
+        await db
+            .update(headToHead)
+            .set({ lastMatchId: null })
+            .where(eq(headToHead.lastMatchId, matchId));
+
+        // Handle constraint: teamForm - delete related records
+        await db
+            .delete(teamForm)
+            .where(eq(teamForm.matchId, matchId));
+
+        // Delete match (events, reminders, ratings, poll_votes, etc. will be cascade deleted)
         await db
             .delete(matches)
             .where(eq(matches.id, matchId));
