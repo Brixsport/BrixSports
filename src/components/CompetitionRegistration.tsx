@@ -469,19 +469,19 @@ export default function CompetitionRegistration({
                                                 </div>
                                                 <div>
                                                     <label className="block text-xs font-medium text-gray-400 mb-1">
-                                                        Jersey Name
+                                                        Name on Jersey (if different)
                                                     </label>
                                                     <input
                                                         type="text"
                                                         value={player.jerseyName}
                                                         onChange={(e) => updatePlayer(player.id, 'jerseyName', e.target.value)}
                                                         className="w-full px-3 py-2 bg-white/5 border border-gray-600 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
-                                                        placeholder="DOE"
+                                                        placeholder="Optional"
                                                     />
                                                 </div>
                                                 <div>
                                                     <label className="block text-xs font-medium text-gray-400 mb-1">
-                                                        Jersey Number *
+                                                        Number *
                                                     </label>
                                                     <input
                                                         type="number"
