@@ -370,8 +370,69 @@ export const competitions = sqliteTable('competitions', {
     numberOfTeams: integer('number_of_teams').default(0),
     numberOfGroups: integer('number_of_groups').default(0),
     teamsPerGroup: integer('teams_per_group').default(0),
+    playersPerSide: integer('players_per_side').default(11), // 11 for standard football, 5 for 5-aside
+    gender: text('gender').default('mixed'), // 'male' | 'female' | 'mixed'
+    registrationOpen: integer('registration_open', { mode: 'boolean' }).default(false),
+    registrationDeadline: integer('registration_deadline', { mode: 'timestamp' }),
+    maxTeams: integer('max_teams'), // Maximum teams allowed to register
+    entryFee: text('entry_fee'), // Entry fee if applicable
+    hostOrganization: text('host_organization'), // e.g., "Bells University"
     followersCount: integer('followers_count').default(0),
-    status: text('status').default('upcoming'), // 'upcoming' | 'ongoing' | 'completed'
+    status: text('status').default('upcoming'), // 'upcoming' | 'ongoing' | 'completed' | 'archived'
+    // Winner tracking
+    winnerId: text('winner_id').references(() => teams.id), // Champion team
+    runnerUpId: text('runner_up_id').references(() => teams.id), // Runner-up team
+    thirdPlaceId: text('third_place_id').references(() => teams.id), // Third place team
+    completedAt: integer('completed_at', { mode: 'timestamp' }), // When competition ended
+    finalStandings: text('final_standings'), // JSON: final standings/results
+    highlights: text('highlights'), // Competition highlights/summary
+    // Display settings
+    isFeatured: integer('is_featured', { mode: 'boolean' }).default(false), // Show on homepage
+    isArchived: integer('is_archived', { mode: 'boolean' }).default(false), // Hide from main views
+    displayOrder: integer('display_order').default(0), // Order on homepage (lower = higher priority)
+    createdAt: integer('created_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
+    updatedAt: integer('updated_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
+});
+
+// Team Registrations table (for competition sign-ups)
+export const teamRegistrations = sqliteTable('team_registrations', {
+    id: text('id').primaryKey(),
+    competitionId: text('competition_id').notNull().references(() => competitions.id, { onDelete: 'cascade' }),
+    teamName: text('team_name').notNull(),
+    schoolName: text('school_name').notNull(), // University/School name
+    shortName: text('short_name').notNull(),
+    logo: text('logo'), // Team logo URL
+    color: text('color').default('#000000'),
+    contactName: text('contact_name').notNull(), // Team manager/coach name
+    contactEmail: text('contact_email').notNull(),
+    contactPhone: text('contact_phone').notNull(),
+    status: text('status').default('pending'), // 'pending' | 'approved' | 'rejected'
+    playersSubmitted: integer('players_submitted', { mode: 'boolean' }).default(false),
+    numberOfPlayers: integer('number_of_players').default(0),
+    notes: text('notes'), // Additional notes or requirements
+    approvedBy: text('approved_by').references(() => users.id), // Admin who approved
+    approvedAt: integer('approved_at', { mode: 'timestamp' }),
+    createdTeamId: text('created_team_id').references(() => teams.id), // Team ID after approval
+    createdAt: integer('created_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
+    updatedAt: integer('updated_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
+});
+
+// Registered Players table (for players in team registrations)
+export const registeredPlayers = sqliteTable('registered_players', {
+    id: text('id').primaryKey(),
+    registrationId: text('registration_id').notNull().references(() => teamRegistrations.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    jerseyName: text('jersey_name'), // Name on jersey
+    number: integer('number').notNull(),
+    position: text('position').notNull(),
+    age: integer('age'),
+    height: text('height'),
+    weight: text('weight'),
+    nationality: text('nationality').default('Nigeria'),
+    college: text('college'), // For interdepartmental
+    department: text('department'),
+    image: text('image'), // Player photo URL
+    createdPlayerId: text('created_player_id').references(() => players.id), // Player ID after approval
     createdAt: integer('created_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
     updatedAt: integer('updated_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
 });
@@ -616,6 +677,25 @@ export const standingsRelations = relations(standings, ({ one }) => ({
     }),
 }));
 
+export const competitionsRelations = relations(competitions, ({ one }) => ({
+    winner: one(teams, {
+        fields: [competitions.winnerId],
+        references: [teams.id],
+        relationName: 'winner',
+    }),
+    runnerUp: one(teams, {
+        fields: [competitions.runnerUpId],
+        references: [teams.id],
+        relationName: 'runnerUp',
+    }),
+    thirdPlace: one(teams, {
+        fields: [competitions.thirdPlaceId],
+        references: [teams.id],
+        relationName: 'thirdPlace',
+    }),
+}));
+
+
 // Types
 export type Team = typeof teams.$inferSelect;
 export type NewTeam = typeof teams.$inferInsert;
@@ -679,6 +759,11 @@ export type MatchReminder = typeof matchReminders.$inferSelect;
 export type NewMatchReminder = typeof matchReminders.$inferInsert;
 export type MatchLoggerAssignment = typeof matchLoggerAssignments.$inferSelect;
 export type NewMatchLoggerAssignment = typeof matchLoggerAssignments.$inferInsert;
+export type TeamRegistration = typeof teamRegistrations.$inferSelect;
+export type NewTeamRegistration = typeof teamRegistrations.$inferInsert;
+export type RegisteredPlayer = typeof registeredPlayers.$inferSelect;
+export type NewRegisteredPlayer = typeof registeredPlayers.$inferInsert;
+
 
 
 export const newsRelationsRelations = relations(news, ({ many }) => ({
