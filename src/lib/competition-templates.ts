@@ -12,6 +12,8 @@ export interface CompetitionTemplate {
     numberOfTeams: number;
     numberOfGroups?: number;
     teamsPerGroup?: number;
+    playersPerSide?: number; // 11 for standard football, 5 for 5-aside
+    gender?: 'male' | 'female' | 'mixed';
     level: string;
     scope: 'internal' | 'external';
     rules: any;
@@ -247,6 +249,96 @@ export const COMPETITION_TEMPLATES: CompetitionTemplate[] = [
                 penalties: true,
                 rounds: ['Semi Finals', 'Final'],
             },
+        },
+    },
+
+    // 5-Aside Football Templates
+    {
+        id: 'football-5aside-knockout-8',
+        name: '5-Aside Football Tournament (8 Teams)',
+        description: 'Knockout tournament for 5-aside football',
+        sport: 'Football',
+        format: 'knockout',
+        numberOfTeams: 8,
+        playersPerSide: 5,
+        gender: 'mixed',
+        level: 'inter-university',
+        scope: 'external',
+        rules: {
+            matchDuration: 40,
+            playersPerSide: 5,
+            extraTime: false,
+            penalties: true,
+            rounds: ['Quarter Finals', 'Semi Finals', 'Final'],
+        },
+    },
+    {
+        id: 'football-5aside-female-knockout-8',
+        name: 'Female 5-Aside Football Tournament (8 Teams)',
+        description: 'Knockout tournament for female 5-aside football',
+        sport: 'Football',
+        format: 'knockout',
+        numberOfTeams: 8,
+        playersPerSide: 5,
+        gender: 'female',
+        level: 'inter-university',
+        scope: 'external',
+        rules: {
+            matchDuration: 40,
+            playersPerSide: 5,
+            extraTime: false,
+            penalties: true,
+            rounds: ['Quarter Finals', 'Semi Finals', 'Final'],
+        },
+    },
+    {
+        id: 'football-5aside-group-knockout-12',
+        name: '5-Aside Football Group + Knockout (12 Teams)',
+        description: 'Group stage followed by knockout for 5-aside football',
+        sport: 'Football',
+        format: 'group_knockout',
+        numberOfTeams: 12,
+        numberOfGroups: 3,
+        teamsPerGroup: 4,
+        playersPerSide: 5,
+        gender: 'mixed',
+        level: 'inter-university',
+        scope: 'external',
+        rules: {
+            matchDuration: 40,
+            playersPerSide: 5,
+            groupStage: {
+                pointsForWin: 3,
+                pointsForDraw: 1,
+                pointsForLoss: 0,
+                teamsToAdvance: 2,
+            },
+            knockout: {
+                extraTime: false,
+                penalties: true,
+                rounds: ['Quarter Finals', 'Semi Finals', 'Final'],
+            },
+        },
+    },
+    {
+        id: 'football-5aside-female-league-6',
+        name: 'Female 5-Aside Football League (6 Teams)',
+        description: 'League format for female 5-aside football',
+        sport: 'Football',
+        format: 'league',
+        numberOfTeams: 6,
+        playersPerSide: 5,
+        gender: 'female',
+        level: 'inter-university',
+        scope: 'internal',
+        rules: {
+            matchDuration: 40,
+            playersPerSide: 5,
+            pointsForWin: 3,
+            pointsForDraw: 1,
+            pointsForLoss: 0,
+            homeAndAway: false,
+            totalRounds: 5,
         },
     },
 ];
