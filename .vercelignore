@@ -1,5 +1,29 @@
+# Environment files
 .env.local
 .env
+
+# Database
 local.db
+*.db
+*.db-shm
+*.db-wal
+
+# Build artifacts
 node_modules
 .next
+
+# TypeScript build info (regenerated on each build)
+*.tsbuildinfo
+
+# Documentation and guides (not needed for deployment)
+*.md
+!README.md
+
+# Scripts (not needed for production)
+scripts/
+
+# Test files
+**/*.test.ts
+**/*.test.tsx
+**/*.spec.ts
+**/*.spec.tsx
