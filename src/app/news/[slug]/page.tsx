@@ -9,22 +9,13 @@ import {
     Share2,
     Bookmark,
     ArrowLeft,
-    Eye,
-    Calendar,
     User,
     Send,
-    Edit2,
     Trash2,
-    X,
-    Check,
     Facebook,
     Twitter,
-    Link as LinkIcon,
     Zap,
-    Star,
-    Clock,
-    ChevronDown,
-    ChevronUp,
+    Copy
 } from 'lucide-react';
 import Link from 'next/link';
 import { getReadingTime } from '@/lib/utils/reading-time';
@@ -62,28 +53,22 @@ interface Comment {
 
 export default function NewsDetailPage() {
     const params = useParams();
-    const router = useRouter();
     const slug = params.slug as string;
 
     const [article, setArticle] = useState<NewsArticle | null>(null);
     const [comments, setComments] = useState<Comment[]>([]);
-    const [relatedArticles, setRelatedArticles] = useState<NewsArticle[]>([]);
     const [loading, setLoading] = useState(true);
     const [isLiked, setIsLiked] = useState(false);
     const [isBookmarked, setIsBookmarked] = useState(false);
     const [likeCount, setLikeCount] = useState(0);
     const [commentCount, setCommentCount] = useState(0);
     const [showShareMenu, setShowShareMenu] = useState(false);
-    const [showCommentForm, setShowCommentForm] = useState(false);
     const [commentText, setCommentText] = useState('');
-    const [editingComment, setEditingComment] = useState<string | null>(null);
-    const [editText, setEditText] = useState('');
     const [readingTime, setReadingTime] = useState<string>('');
 
     // Nested comments state
     const [replyingTo, setReplyingTo] = useState<string | null>(null);
     const [replyText, setReplyText] = useState('');
-    const [expandedComments, setExpandedComments] = useState<Set<string>>(new Set());
     const [commentLikes, setCommentLikes] = useState<Record<string, { count: number; isLiked: boolean }>>({});
 
     // Mock user ID - replace with actual auth
@@ -95,7 +80,6 @@ export default function NewsDetailPage() {
         fetchComments();
         fetchLikeStatus();
         fetchBookmarkStatus();
-        fetchRelatedArticles();
     }, [slug]);
 
     useEffect(() => {
@@ -148,16 +132,6 @@ export default function NewsDetailPage() {
             }));
         } catch (error) {
             console.error('Error fetching comment likes:', error);
-        }
-    };
-
-    const fetchRelatedArticles = async () => {
-        try {
-            const response = await fetch(`/api/news/${slug}/related?limit=3`);
-            const data = await response.json();
-            setRelatedArticles(data.related || []);
-        } catch (error) {
-            console.error('Error fetching related articles:', error);
         }
     };
 
@@ -275,7 +249,6 @@ export default function NewsDetailPage() {
 
             if (response.ok) {
                 setCommentText('');
-                setShowCommentForm(false);
                 fetchComments();
             }
         } catch (error) {
@@ -308,41 +281,6 @@ export default function NewsDetailPage() {
         }
     };
 
-    const toggleExpandComment = (commentId: string) => {
-        setExpandedComments(prev => {
-            const newSet = new Set(prev);
-            if (newSet.has(commentId)) {
-                newSet.delete(commentId);
-            } else {
-                newSet.add(commentId);
-            }
-            return newSet;
-        });
-    };
-
-    const handleEditComment = async (commentId: string) => {
-        if (!editText.trim()) return;
-
-        try {
-            const response = await fetch(`/api/news/${slug}/comments/${commentId}`, {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    userId,
-                    content: editText,
-                }),
-            });
-
-            if (response.ok) {
-                setEditingComment(null);
-                setEditText('');
-                fetchComments();
-            }
-        } catch (error) {
-            console.error('Error editing comment:', error);
-        }
-    };
-
     const handleDeleteComment = async (commentId: string) => {
         if (!confirm('Delete this comment?')) return;
 
@@ -361,18 +299,18 @@ export default function NewsDetailPage() {
 
     if (loading) {
         return (
-            <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 flex items-center justify-center">
-                <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-cyan-500"></div>
+            <div className="min-h-screen bg-[#050505] flex items-center justify-center">
+                <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
             </div>
         );
     }
 
     if (!article) {
         return (
-            <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 flex items-center justify-center">
+            <div className="min-h-screen bg-[#050505] flex items-center justify-center">
                 <div className="text-center">
                     <h1 className="text-2xl font-bold text-white mb-4">Article not found</h1>
-                    <Link href="/news" className="text-cyan-400 hover:text-cyan-300">
+                    <Link href="/news" className="text-primary hover:text-white transition-colors">
                         ← Back to News
                     </Link>
                 </div>
@@ -381,596 +319,307 @@ export default function NewsDetailPage() {
     }
 
     return (
-        <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
-            {/* Header */}
-            <div className="border-b border-slate-800 bg-slate-900/50 backdrop-blur-xl sticky top-0 z-40">
-                <div className="max-w-4xl mx-auto px-6 py-4">
+        <div className="min-h-screen bg-[#050505] text-[#e0e0e0]">
+            {/* Minimalist Header */}
+            <div className="border-b border-white/5 bg-[#050505]/80 backdrop-blur-xl sticky top-0 z-40">
+                <div className="max-w-3xl mx-auto px-6 h-16 flex items-center justify-between">
                     <Link
                         href="/news"
-                        className="flex items-center gap-2 text-slate-400 hover:text-white transition-colors"
+                        className="flex items-center gap-2 text-white/40 hover:text-white transition-colors text-sm font-medium"
                     >
-                        <ArrowLeft className="w-5 h-5" />
+                        <ArrowLeft className="w-4 h-4" />
                         Back to News
                     </Link>
-                </div>
-            </div>
 
-            {/* Article */}
-            <article className="max-w-4xl mx-auto px-6 py-12">
-                {/* Title & Meta */}
-                <div className="mb-8">
-                    <div className="flex items-center gap-3 mb-4 flex-wrap">
-                        <span className="px-3 py-1 rounded-full bg-cyan-500/10 text-cyan-400 text-sm font-semibold capitalize border border-cyan-500/20">
-                            {article.category}
-                        </span>
-                        {article.isBreaking && (
-                            <span className="flex items-center gap-1 px-3 py-1 rounded-full bg-red-500/20 text-red-400 text-sm font-bold border border-red-500/20">
-                                <Zap className="w-4 h-4" />
-                                BREAKING
-                            </span>
-                        )}
-                        {article.isFeatured && (
-                            <span className="flex items-center gap-1 px-3 py-1 rounded-full bg-yellow-500/20 text-yellow-400 text-sm font-bold border border-yellow-500/20">
-                                <Star className="w-4 h-4" />
-                                FEATURED
-                            </span>
-                        )}
-                    </div>
-
-                    <h1 className="text-4xl md:text-5xl font-black text-white mb-6 leading-tight">
-                        {article.title}
-                    </h1>
-
-                    <div className="flex items-center gap-6 text-sm text-slate-400 flex-wrap">
-                        <span className="flex items-center gap-2">
-                            <User className="w-4 h-4" />
-                            {article.authorName}
-                        </span>
-                        <span className="flex items-center gap-2">
-                            <Calendar className="w-4 h-4" />
-                            {new Date(article.createdAt).toLocaleDateString('en-US', {
-                                month: 'long',
-                                day: 'numeric',
-                                year: 'numeric',
-                            })}
-                        </span>
-                        <span className="flex items-center gap-2">
-                            <Eye className="w-4 h-4" />
-                            {article.views} views
-                        </span>
-                        {readingTime && (
-                            <span className="flex items-center gap-2">
-                                <Clock className="w-4 h-4" />
-                                {readingTime}
-                            </span>
-                        )}
-                    </div>
-                </div>
-
-                {/* Featured Image */}
-                {article.imageUrl && (
-                    <div className="mb-8 rounded-2xl overflow-hidden">
-                        <img
-                            src={article.imageUrl}
-                            alt={article.title}
-                            className="w-full h-auto"
-                        />
-                    </div>
-                )}
-
-                {/* Engagement Bar */}
-                <div className="flex items-center justify-between p-4 bg-slate-800/50 rounded-xl border border-slate-700/50 mb-8">
                     <div className="flex items-center gap-4">
                         <button
-                            onClick={handleLike}
-                            className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all ${isLiked
-                                ? 'bg-red-500 text-white'
-                                : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
-                                }`}
-                        >
-                            <Heart className={`w-5 h-5 ${isLiked ? 'fill-current' : ''}`} />
-                            <span className="font-semibold">{likeCount}</span>
-                        </button>
-
-                        <button
-                            onClick={() => setShowCommentForm(!showCommentForm)}
-                            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-700 text-slate-300 hover:bg-slate-600 transition-colors"
-                        >
-                            <MessageCircle className="w-5 h-5" />
-                            <span className="font-semibold">{commentCount}</span>
-                        </button>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                        <button
                             onClick={handleBookmark}
-                            className={`p-2 rounded-lg transition-all ${isBookmarked
-                                ? 'bg-yellow-500 text-white'
-                                : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                            className={`p-2 rounded-full transition-all ${isBookmarked
+                                ? 'text-yellow-500'
+                                : 'text-white/40 hover:bg-white/5 hover:text-white'
                                 }`}
                             title={isBookmarked ? 'Remove bookmark' : 'Bookmark'}
                         >
                             <Bookmark className={`w-5 h-5 ${isBookmarked ? 'fill-current' : ''}`} />
                         </button>
-
-                        <div className="relative">
-                            <button
-                                onClick={() => setShowShareMenu(!showShareMenu)}
-                                className="p-2 rounded-lg bg-slate-700 text-slate-300 hover:bg-slate-600 transition-colors"
-                                title="Share"
-                            >
-                                <Share2 className="w-5 h-5" />
-                            </button>
-
-                            <AnimatePresence>
-                                {showShareMenu && (
-                                    <motion.div
-                                        initial={{ opacity: 0, y: -10 }}
-                                        animate={{ opacity: 1, y: 0 }}
-                                        exit={{ opacity: 0, y: -10 }}
-                                        className="absolute right-0 mt-2 w-48 bg-slate-800 border border-slate-700 rounded-xl shadow-xl overflow-hidden z-10"
-                                    >
-                                        <button
-                                            onClick={() => handleShare('facebook')}
-                                            className="w-full flex items-center gap-3 px-4 py-3 hover:bg-slate-700 transition-colors text-left"
-                                        >
-                                            <Facebook className="w-5 h-5 text-blue-500" />
-                                            <span className="text-white">Facebook</span>
-                                        </button>
-                                        <button
-                                            onClick={() => handleShare('twitter')}
-                                            className="w-full flex items-center gap-3 px-4 py-3 hover:bg-slate-700 transition-colors text-left"
-                                        >
-                                            <Twitter className="w-5 h-5 text-sky-500" />
-                                            <span className="text-white">Twitter</span>
-                                        </button>
-                                        <button
-                                            onClick={() => handleShare('whatsapp')}
-                                            className="w-full flex items-center gap-3 px-4 py-3 hover:bg-slate-700 transition-colors text-left"
-                                        >
-                                            <MessageCircle className="w-5 h-5 text-green-500" />
-                                            <span className="text-white">WhatsApp</span>
-                                        </button>
-                                        <button
-                                            onClick={() => handleShare('copy')}
-                                            className="w-full flex items-center gap-3 px-4 py-3 hover:bg-slate-700 transition-colors text-left"
-                                        >
-                                            <LinkIcon className="w-5 h-5 text-slate-400" />
-                                            <span className="text-white">Copy Link</span>
-                                        </button>
-                                    </motion.div>
-                                )}
-                            </AnimatePresence>
-                        </div>
+                        <button
+                            onClick={() => setShowShareMenu(!showShareMenu)}
+                            className="p-2 rounded-full text-white/40 hover:bg-white/5 hover:text-white transition-colors relative"
+                            title="Share"
+                        >
+                            <Share2 className="w-5 h-5" />
+                        </button>
                     </div>
                 </div>
 
-                {/* Content */}
+                {/* Share Dropdown */}
+                <AnimatePresence>
+                    {showShareMenu && (
+                        <>
+                            <div className="fixed inset-0 z-40" onClick={() => setShowShareMenu(false)} />
+                            <motion.div
+                                initial={{ opacity: 0, y: -10, scale: 0.95 }}
+                                animate={{ opacity: 1, y: 0, scale: 1 }}
+                                exit={{ opacity: 0, scale: 0.95 }}
+                                className="absolute right-4 md:right-[calc(50%-24rem)] top-14 w-56 bg-[#111] border border-white/10 rounded-xl shadow-2xl z-50 overflow-hidden"
+                            >
+                                <div className="p-1">
+                                    <button onClick={() => handleShare('facebook')} className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-white/5 rounded-lg transition-colors text-left text-sm text-white/80">
+                                        <Facebook className="w-4 h-4 text-[#1877f2]" /> Facebook
+                                    </button>
+                                    <button onClick={() => handleShare('twitter')} className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-white/5 rounded-lg transition-colors text-left text-sm text-white/80">
+                                        <Twitter className="w-4 h-4 text-[#1da1f2]" /> Twitter
+                                    </button>
+                                    <button onClick={() => handleShare('whatsapp')} className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-white/5 rounded-lg transition-colors text-left text-sm text-white/80">
+                                        <MessageCircle className="w-4 h-4 text-[#25d366]" /> WhatsApp
+                                    </button>
+                                    <div className="h-px bg-white/5 my-1" />
+                                    <button onClick={() => handleShare('copy')} className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-white/5 rounded-lg transition-colors text-left text-sm text-white/80">
+                                        <Copy className="w-4 h-4 text-white/40" /> Copy Link
+                                    </button>
+                                </div>
+                            </motion.div>
+                        </>
+                    )}
+                </AnimatePresence>
+            </div>
+
+            <article className="max-w-3xl mx-auto px-6 py-12">
+                {/* Article Header */}
+                <header className="mb-12 text-center">
+                    <div className="flex items-center justify-center gap-3 mb-6">
+                        <span className="text-primary font-bold tracking-wider text-xs uppercase bg-primary/10 px-3 py-1 rounded-full border border-primary/20">
+                            {article.category}
+                        </span>
+                        {article.isBreaking && (
+                            <span className="flex items-center gap-1 text-red-500 font-bold tracking-wider text-xs uppercase bg-red-500/10 px-3 py-1 rounded-full border border-red-500/20 animate-pulse">
+                                <Zap className="w-3 h-3" /> Breaking
+                            </span>
+                        )}
+                    </div>
+
+                    <h1 className="text-4xl md:text-5xl font-display font-bold text-white mb-6 leading-[1.15]">
+                        {article.title}
+                    </h1>
+
+                    <p className="text-xl text-white/60 leading-relaxed mb-8 max-w-2xl mx-auto">
+                        {article.excerpt}
+                    </p>
+
+                    <div className="flex items-center justify-center gap-4 border-t border-b border-white/5 py-4">
+                        <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center">
+                                <User className="w-5 h-5 text-white/60" />
+                            </div>
+                            <div className="text-left">
+                                <div className="text-sm font-bold text-white">{article.authorName}</div>
+                                <div className="flex items-center gap-2 text-xs text-white/40">
+                                    <span>{new Date(article.publishedAt || article.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                                    <span>•</span>
+                                    <span>{readingTime || '5 min read'}</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </header>
+
+                {/* Featured Image */}
+                {article.imageUrl && (
+                    <figure className="mb-12">
+                        <div className="rounded-xl overflow-hidden border border-white/10 shadow-2xl">
+                            <img
+                                src={article.imageUrl}
+                                alt={article.title}
+                                className="w-full h-auto"
+                            />
+                        </div>
+                    </figure>
+                )}
+
+                {/* Main Content */}
                 <div
-                    className="prose prose-invert prose-lg max-w-none mb-12 
-                    prose-headings:text-white prose-headings:font-bold prose-headings:mb-4 prose-headings:mt-8
-                    prose-h1:text-4xl prose-h2:text-3xl prose-h3:text-2xl prose-h4:text-xl
-                    prose-p:text-slate-300 prose-p:leading-relaxed prose-p:mb-6 prose-p:text-lg
-                    prose-a:text-cyan-400 prose-a:no-underline hover:prose-a:text-cyan-300 hover:prose-a:underline
-                    prose-strong:text-white prose-strong:font-semibold
-                    prose-em:text-slate-200 prose-em:italic
-                    prose-ul:list-disc prose-ul:pl-6 prose-ul:mb-6 prose-ul:text-slate-300
-                    prose-ol:list-decimal prose-ol:pl-6 prose-ol:mb-6 prose-ol:text-slate-300
-                    prose-li:mb-2 prose-li:leading-relaxed
-                    prose-blockquote:border-l-4 prose-blockquote:border-cyan-500 prose-blockquote:pl-6 prose-blockquote:italic prose-blockquote:text-slate-400 prose-blockquote:my-6
-                    prose-code:text-cyan-400 prose-code:bg-slate-800 prose-code:px-2 prose-code:py-1 prose-code:rounded
-                    prose-pre:bg-slate-800 prose-pre:border prose-pre:border-slate-700 prose-pre:rounded-xl prose-pre:p-4
-                    prose-img:rounded-xl prose-img:my-8 prose-img:shadow-2xl
-                    prose-hr:border-slate-700 prose-hr:my-8
-                    first-letter:text-5xl first-letter:font-bold first-letter:text-cyan-400 first-letter:mr-1 first-letter:float-left"
+                    className="prose prose-invert prose-lg max-w-none mb-16
+                    prose-headings:font-display prose-headings:font-bold prose-headings:text-white
+                    prose-p:text-[#d4d4d4] prose-p:font-sans prose-p:text-[18px] prose-p:leading-[1.8] prose-p:tracking-normal
+                    prose-a:text-primary prose-a:no-underline hover:prose-a:underline
+                    prose-strong:text-white prose-strong:font-bold
+                    prose-blockquote:border-l-primary prose-blockquote:bg-white/5 prose-blockquote:py-2 prose-blockquote:px-6 prose-blockquote:not-italic prose-blockquote:rounded-r-lg
+                    prose-img:rounded-xl prose-img:shadow-xl
+                    prose-code:text-primary prose-code:bg-white/5 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:before:content-none prose-code:after:content-none
+                    prose-li:text-[#d4d4d4]"
                     dangerouslySetInnerHTML={{ __html: formatNewsContent(article.content) }}
                 />
 
                 {/* Tags */}
                 {article.tags && (
-                    <div className="flex items-center gap-2 flex-wrap mb-12">
+                    <div className="flex items-center gap-2 flex-wrap mb-12 pb-12 border-b border-white/5">
                         {JSON.parse(article.tags).map((tag: string, index: number) => (
-                            <span
+                            <Link
                                 key={index}
-                                className="px-3 py-1 rounded-full bg-slate-800 text-slate-300 text-sm border border-slate-700"
+                                href={`/news?search=${tag}`}
+                                className="px-3 py-1.5 rounded-lg bg-white/5 text-white/60 text-sm hover:bg-white/10 hover:text-white transition-colors cursor-pointer"
                             >
                                 #{tag}
-                            </span>
+                            </Link>
                         ))}
                     </div>
                 )}
 
-                {/* Comments Section */}
-                <div className="border-t border-slate-800 pt-12">
-                    <h2 className="text-2xl font-bold text-white mb-6">
-                        Comments ({commentCount})
-                    </h2>
-
-                    {/* Add Comment Form */}
-                    <AnimatePresence>
-                        {showCommentForm && (
-                            <motion.form
-                                initial={{ opacity: 0, height: 0 }}
-                                animate={{ opacity: 1, height: 'auto' }}
-                                exit={{ opacity: 0, height: 0 }}
-                                onSubmit={handleAddComment}
-                                className="mb-8"
+                {/* Engagement / Comments */}
+                <div className="max-w-2xl mx-auto">
+                    <div className="flex items-center justify-between mb-8">
+                        <div className="flex items-center gap-4">
+                            <button
+                                onClick={handleLike}
+                                className={`flex items-center gap-2 px-4 py-2 rounded-full transition-all border ${isLiked
+                                    ? 'bg-red-500/10 border-red-500/50 text-red-500'
+                                    : 'bg-white/5 border-white/10 text-white/60 hover:bg-white/10 hover:text-white'
+                                    }`}
                             >
-                                <textarea
-                                    value={commentText}
-                                    onChange={(e) => setCommentText(e.target.value)}
-                                    placeholder="Write a comment..."
-                                    rows={4}
-                                    className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-cyan-500 resize-none"
-                                    maxLength={1000}
-                                />
-                                <div className="flex items-center justify-between mt-3">
-                                    <span className="text-sm text-slate-400">
-                                        {commentText.length}/1000
-                                    </span>
-                                    <div className="flex items-center gap-2">
-                                        <button
-                                            type="button"
-                                            onClick={() => {
-                                                setShowCommentForm(false);
-                                                setCommentText('');
-                                            }}
-                                            className="px-4 py-2 rounded-lg bg-slate-700 text-white hover:bg-slate-600 transition-colors"
-                                        >
-                                            Cancel
-                                        </button>
-                                        <button
-                                            type="submit"
-                                            disabled={!commentText.trim()}
-                                            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-cyan-500 text-white hover:bg-cyan-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                                        >
-                                            <Send className="w-4 h-4" />
-                                            Post Comment
-                                        </button>
-                                    </div>
-                                </div>
-                            </motion.form>
-                        )}
-                    </AnimatePresence>
+                                <Heart className={`w-4 h-4 ${isLiked ? 'fill-current' : ''}`} />
+                                <span className="font-bold text-sm">{likeCount}</span>
+                            </button>
+                            <h3 className="text-lg font-bold text-white/80">
+                                {commentCount} comments
+                            </h3>
+                        </div>
+                    </div>
+
+                    {/* Comment Input */}
+                    <form onSubmit={handleAddComment} className="mb-10">
+                        <div className="relative">
+                            <textarea
+                                value={commentText}
+                                onChange={(e) => setCommentText(e.target.value)}
+                                placeholder="What are your thoughts?"
+                                rows={3}
+                                className="w-full pl-4 pr-12 py-3 bg-[#0a0a0a] border border-white/10 rounded-xl text-white placeholder-white/30 focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/50 resize-none transition-all"
+                                maxLength={1000}
+                            />
+                            <button
+                                type="submit"
+                                disabled={!commentText.trim()}
+                                className="absolute right-3 bottom-3 p-1.5 rounded-lg bg-white/10 text-white/60 hover:bg-primary hover:text-black transition-colors disabled:opacity-0 disabled:pointer-events-none"
+                            >
+                                <Send className="w-4 h-4" />
+                            </button>
+                        </div>
+                    </form>
 
                     {/* Comments List */}
-                    <div className="space-y-4">
+                    <div className="space-y-6">
                         {comments.filter(c => !c.parentId).map((comment) => {
                             const replies = comments.filter(c => c.parentId === comment.id);
                             const hasReplies = replies.length > 0;
-                            const isExpanded = expandedComments.has(comment.id);
                             const commentLikeData = commentLikes[comment.id] || { count: 0, isLiked: false };
 
                             return (
                                 <motion.div
                                     key={comment.id}
-                                    initial={{ opacity: 0, y: 20 }}
-                                    animate={{ opacity: 1, y: 0 }}
-                                    className="bg-slate-800/50 rounded-xl border border-slate-700/50"
+                                    initial={{ opacity: 0 }}
+                                    animate={{ opacity: 1 }}
+                                    className="group"
                                 >
-                                    <div className="p-4">
-                                        {editingComment === comment.id ? (
-                                            <div>
-                                                <textarea
-                                                    value={editText}
-                                                    onChange={(e) => setEditText(e.target.value)}
-                                                    rows={3}
-                                                    className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-cyan-500 resize-none mb-3"
-                                                    maxLength={1000}
-                                                />
-                                                <div className="flex items-center gap-2">
-                                                    <button
-                                                        onClick={() => handleEditComment(comment.id)}
-                                                        className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-green-500 text-white hover:bg-green-600 transition-colors text-sm"
-                                                    >
-                                                        <Check className="w-4 h-4" />
-                                                        Save
-                                                    </button>
-                                                    <button
-                                                        onClick={() => {
-                                                            setEditingComment(null);
-                                                            setEditText('');
-                                                        }}
-                                                        className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-700 text-white hover:bg-slate-600 transition-colors text-sm"
-                                                    >
-                                                        <X className="w-4 h-4" />
-                                                        Cancel
-                                                    </button>
+                                    <div className="flex gap-3">
+                                        <div className="w-8 h-8 rounded-full bg-white/10 flex-shrink-0 flex items-center justify-center">
+                                            <span className="text-xs font-bold text-white/60">
+                                                {comment.userName.charAt(0).toUpperCase()}
+                                            </span>
+                                        </div>
+                                        <div className="flex-1">
+                                            <div className="bg-[#0a0a0a] border border-white/5 rounded-xl p-4 mb-2">
+                                                <div className="flex items-center justify-between mb-2">
+                                                    <span className="font-bold text-sm text-white">{comment.userName}</span>
+                                                    <span className="text-xs text-white/20">{new Date(comment.createdAt).toLocaleDateString()}</span>
                                                 </div>
+                                                <p className="text-white/80 text-sm leading-relaxed">{comment.content}</p>
                                             </div>
-                                        ) : (
-                                            <>
-                                                <div className="flex items-start justify-between mb-2">
-                                                    <div>
-                                                        <p className="font-semibold text-white">
-                                                            {comment.userName}
-                                                        </p>
-                                                        <p className="text-xs text-slate-400">
-                                                            {new Date(comment.createdAt).toLocaleString()}
-                                                        </p>
-                                                    </div>
-                                                    {comment.userId === userId && (
-                                                        <div className="flex items-center gap-2">
-                                                            <button
-                                                                onClick={() => {
-                                                                    setEditingComment(comment.id);
-                                                                    setEditText(comment.content);
-                                                                }}
-                                                                className="p-1.5 hover:bg-slate-700 rounded-lg transition-colors"
-                                                                title="Edit"
-                                                            >
-                                                                <Edit2 className="w-4 h-4 text-slate-400" />
-                                                            </button>
-                                                            <button
-                                                                onClick={() => handleDeleteComment(comment.id)}
-                                                                className="p-1.5 hover:bg-slate-700 rounded-lg transition-colors"
-                                                                title="Delete"
-                                                            >
-                                                                <Trash2 className="w-4 h-4 text-red-400" />
-                                                            </button>
-                                                        </div>
-                                                    )}
-                                                </div>
-                                                <p className="text-slate-300 mb-3">{comment.content}</p>
 
-                                                {/* Comment Actions */}
-                                                <div className="flex items-center gap-4">
+                                            {/* Comment Actions */}
+                                            <div className="flex items-center gap-4 px-2">
+                                                <button
+                                                    onClick={() => handleCommentLike(comment.id)}
+                                                    className={`flex items-center gap-1.5 text-xs font-medium transition-colors ${commentLikeData.isLiked ? 'text-red-500' : 'text-white/40 hover:text-white'}`}
+                                                >
+                                                    <Heart className={`w-3.5 h-3.5 ${commentLikeData.isLiked ? 'fill-current' : ''}`} />
+                                                    {commentLikeData.count > 0 && <span>{commentLikeData.count}</span>}
+                                                </button>
+                                                <button
+                                                    onClick={() => setReplyingTo(replyingTo === comment.id ? null : comment.id)}
+                                                    className="text-xs font-medium text-white/40 hover:text-white transition-colors"
+                                                >
+                                                    Reply
+                                                </button>
+                                                {comment.userId === userId && (
                                                     <button
-                                                        onClick={() => handleCommentLike(comment.id)}
-                                                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all text-sm ${commentLikeData.isLiked
-                                                            ? 'bg-red-500/20 text-red-400'
-                                                            : 'bg-slate-700/50 text-slate-400 hover:bg-slate-700'
-                                                            }`}
+                                                        onClick={() => handleDeleteComment(comment.id)}
+                                                        className="text-xs font-medium text-white/40 hover:text-red-500 transition-colors ml-auto"
                                                     >
-                                                        <Heart className={`w-4 h-4 ${commentLikeData.isLiked ? 'fill-current' : ''}`} />
-                                                        <span>{commentLikeData.count}</span>
+                                                        Delete
                                                     </button>
+                                                )}
+                                            </div>
 
-                                                    <button
-                                                        onClick={() => setReplyingTo(replyingTo === comment.id ? null : comment.id)}
-                                                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-700/50 text-slate-400 hover:bg-slate-700 transition-colors text-sm"
+                                            {/* Reply Input */}
+                                            <AnimatePresence>
+                                                {replyingTo === comment.id && (
+                                                    <motion.div
+                                                        initial={{ opacity: 0, height: 0 }}
+                                                        animate={{ opacity: 1, height: 'auto' }}
+                                                        exit={{ opacity: 0, height: 0 }}
+                                                        className="mt-3 ml-2"
                                                     >
-                                                        <MessageCircle className="w-4 h-4" />
-                                                        Reply
-                                                    </button>
-
-                                                    {hasReplies && (
-                                                        <button
-                                                            onClick={() => toggleExpandComment(comment.id)}
-                                                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-700/50 text-slate-400 hover:bg-slate-700 transition-colors text-sm"
-                                                        >
-                                                            {isExpanded ? (
-                                                                <>
-                                                                    <ChevronUp className="w-4 h-4" />
-                                                                    Hide {replies.length} {replies.length === 1 ? 'reply' : 'replies'}
-                                                                </>
-                                                            ) : (
-                                                                <>
-                                                                    <ChevronDown className="w-4 h-4" />
-                                                                    Show {replies.length} {replies.length === 1 ? 'reply' : 'replies'}
-                                                                </>
-                                                            )}
-                                                        </button>
-                                                    )}
-                                                </div>
-
-                                                {/* Reply Form */}
-                                                <AnimatePresence>
-                                                    {replyingTo === comment.id && (
-                                                        <motion.div
-                                                            initial={{ opacity: 0, height: 0 }}
-                                                            animate={{ opacity: 1, height: 'auto' }}
-                                                            exit={{ opacity: 0, height: 0 }}
-                                                            className="mt-4"
-                                                        >
+                                                        <div className="relative">
                                                             <textarea
                                                                 value={replyText}
                                                                 onChange={(e) => setReplyText(e.target.value)}
                                                                 placeholder="Write a reply..."
-                                                                rows={3}
-                                                                className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-cyan-500 resize-none"
+                                                                rows={2}
+                                                                className="w-full pl-4 pr-12 py-2 bg-[#0a0a0a] border border-white/10 rounded-xl text-white placeholder-white/30 focus:outline-none focus:border-primary/50 text-sm resize-none"
                                                                 maxLength={1000}
                                                             />
-                                                            <div className="flex items-center justify-between mt-2">
-                                                                <span className="text-sm text-slate-400">
-                                                                    {replyText.length}/1000
+                                                            <button
+                                                                onClick={() => handleAddReply(comment.id)}
+                                                                disabled={!replyText.trim()}
+                                                                className="absolute right-2 bottom-2 p-1.5 rounded-lg bg-white/10 text-white/60 hover:bg-primary hover:text-black transition-colors disabled:opacity-0"
+                                                            >
+                                                                <Send className="w-3 h-3" />
+                                                            </button>
+                                                        </div>
+                                                    </motion.div>
+                                                )}
+                                            </AnimatePresence>
+
+                                            {/* Replies */}
+                                            {hasReplies && (
+                                                <div className="mt-3 pl-4 border-l-2 border-white/5 space-y-4">
+                                                    {replies.map(reply => (
+                                                        <div key={reply.id} className="flex gap-3">
+                                                            <div className="w-6 h-6 rounded-full bg-white/10 flex-shrink-0 flex items-center justify-center">
+                                                                <span className="text-[10px] font-bold text-white/60">
+                                                                    {reply.userName.charAt(0).toUpperCase()}
                                                                 </span>
-                                                                <div className="flex items-center gap-2">
-                                                                    <button
-                                                                        onClick={() => {
-                                                                            setReplyingTo(null);
-                                                                            setReplyText('');
-                                                                        }}
-                                                                        className="px-3 py-1.5 rounded-lg bg-slate-700 text-white hover:bg-slate-600 transition-colors text-sm"
-                                                                    >
-                                                                        Cancel
-                                                                    </button>
-                                                                    <button
-                                                                        onClick={() => handleAddReply(comment.id)}
-                                                                        disabled={!replyText.trim()}
-                                                                        className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-cyan-500 text-white hover:bg-cyan-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
-                                                                    >
-                                                                        <Send className="w-4 h-4" />
-                                                                        Reply
-                                                                    </button>
+                                                            </div>
+                                                            <div className="flex-1">
+                                                                <div className="bg-[#0a0a0a] border border-white/5 rounded-lg p-3">
+                                                                    <div className="flex items-center justify-between mb-1">
+                                                                        <span className="font-bold text-xs text-white">{reply.userName}</span>
+                                                                        <span className="text-[10px] text-white/20">{new Date(reply.createdAt).toLocaleDateString()}</span>
+                                                                    </div>
+                                                                    <p className="text-white/80 text-sm leading-relaxed">{reply.content}</p>
                                                                 </div>
                                                             </div>
-                                                        </motion.div>
-                                                    )}
-                                                </AnimatePresence>
-                                            </>
-                                        )}
-                                    </div>
-
-                                    {/* Nested Replies */}
-                                    <AnimatePresence>
-                                        {isExpanded && hasReplies && (
-                                            <motion.div
-                                                initial={{ opacity: 0, height: 0 }}
-                                                animate={{ opacity: 1, height: 'auto' }}
-                                                exit={{ opacity: 0, height: 0 }}
-                                                className="border-t border-slate-700/50 bg-slate-900/30"
-                                            >
-                                                {replies.map((reply) => {
-                                                    const replyLikeData = commentLikes[reply.id] || { count: 0, isLiked: false };
-
-                                                    return (
-                                                        <div key={reply.id} className="p-4 pl-8 border-l-2 border-cyan-500/30">
-                                                            {editingComment === reply.id ? (
-                                                                <div>
-                                                                    <textarea
-                                                                        value={editText}
-                                                                        onChange={(e) => setEditText(e.target.value)}
-                                                                        rows={3}
-                                                                        className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-cyan-500 resize-none mb-3"
-                                                                        maxLength={1000}
-                                                                    />
-                                                                    <div className="flex items-center gap-2">
-                                                                        <button
-                                                                            onClick={() => handleEditComment(reply.id)}
-                                                                            className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-green-500 text-white hover:bg-green-600 transition-colors text-sm"
-                                                                        >
-                                                                            <Check className="w-4 h-4" />
-                                                                            Save
-                                                                        </button>
-                                                                        <button
-                                                                            onClick={() => {
-                                                                                setEditingComment(null);
-                                                                                setEditText('');
-                                                                            }}
-                                                                            className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-700 text-white hover:bg-slate-600 transition-colors text-sm"
-                                                                        >
-                                                                            <X className="w-4 h-4" />
-                                                                            Cancel
-                                                                        </button>
-                                                                    </div>
-                                                                </div>
-                                                            ) : (
-                                                                <>
-                                                                    <div className="flex items-start justify-between mb-2">
-                                                                        <div>
-                                                                            <p className="font-semibold text-white text-sm">
-                                                                                {reply.userName}
-                                                                            </p>
-                                                                            <p className="text-xs text-slate-400">
-                                                                                {new Date(reply.createdAt).toLocaleString()}
-                                                                            </p>
-                                                                        </div>
-                                                                        {reply.userId === userId && (
-                                                                            <div className="flex items-center gap-2">
-                                                                                <button
-                                                                                    onClick={() => {
-                                                                                        setEditingComment(reply.id);
-                                                                                        setEditText(reply.content);
-                                                                                    }}
-                                                                                    className="p-1.5 hover:bg-slate-700 rounded-lg transition-colors"
-                                                                                    title="Edit"
-                                                                                >
-                                                                                    <Edit2 className="w-3.5 h-3.5 text-slate-400" />
-                                                                                </button>
-                                                                                <button
-                                                                                    onClick={() => handleDeleteComment(reply.id)}
-                                                                                    className="p-1.5 hover:bg-slate-700 rounded-lg transition-colors"
-                                                                                    title="Delete"
-                                                                                >
-                                                                                    <Trash2 className="w-3.5 h-3.5 text-red-400" />
-                                                                                </button>
-                                                                            </div>
-                                                                        )}
-                                                                    </div>
-                                                                    <p className="text-slate-300 text-sm mb-2">{reply.content}</p>
-
-                                                                    {/* Reply Actions */}
-                                                                    <div className="flex items-center gap-3">
-                                                                        <button
-                                                                            onClick={() => handleCommentLike(reply.id)}
-                                                                            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg transition-all text-xs ${replyLikeData.isLiked
-                                                                                ? 'bg-red-500/20 text-red-400'
-                                                                                : 'bg-slate-700/50 text-slate-400 hover:bg-slate-700'
-                                                                                }`}
-                                                                        >
-                                                                            <Heart className={`w-3.5 h-3.5 ${replyLikeData.isLiked ? 'fill-current' : ''}`} />
-                                                                            <span>{replyLikeData.count}</span>
-                                                                        </button>
-                                                                    </div>
-                                                                </>
-                                                            )}
                                                         </div>
-                                                    );
-                                                })}
-                                            </motion.div>
-                                        )}
-                                    </AnimatePresence>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
                                 </motion.div>
                             );
                         })}
-
-                        {comments.length === 0 && !showCommentForm && (
-                            <div className="text-center py-12">
-                                <MessageCircle className="w-12 h-12 text-slate-600 mx-auto mb-4" />
-                                <p className="text-slate-400 mb-4">No comments yet</p>
-                                <button
-                                    onClick={() => setShowCommentForm(true)}
-                                    className="px-6 py-3 bg-cyan-500 text-white rounded-xl font-semibold hover:bg-cyan-600 transition-colors"
-                                >
-                                    Be the first to comment
-                                </button>
-                            </div>
-                        )}
                     </div>
                 </div>
-
-                {/* Related Articles Section */}
-                {relatedArticles.length > 0 && (
-                    <div className="border-t border-slate-800 pt-12 mt-12">
-                        <h2 className="text-2xl font-bold text-white mb-6">Related Articles</h2>
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                            {relatedArticles.map((related) => (
-                                <Link
-                                    key={related.id}
-                                    href={`/news/${related.slug}`}
-                                    className="group"
-                                >
-                                    <motion.div
-                                        whileHover={{ y: -4 }}
-                                        className="bg-slate-800/50 rounded-xl border border-slate-700/50 overflow-hidden hover:border-cyan-500/50 transition-all"
-                                    >
-                                        {related.imageUrl && (
-                                            <div className="aspect-video overflow-hidden">
-                                                <img
-                                                    src={related.imageUrl}
-                                                    alt={related.title}
-                                                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                                                />
-                                            </div>
-                                        )}
-                                        <div className="p-4">
-                                            <span className="inline-block px-2 py-1 rounded-full bg-cyan-500/10 text-cyan-400 text-xs font-semibold capitalize border border-cyan-500/20 mb-2">
-                                                {related.category}
-                                            </span>
-                                            <h3 className="text-white font-bold mb-2 line-clamp-2 group-hover:text-cyan-400 transition-colors">
-                                                {related.title}
-                                            </h3>
-                                            <p className="text-slate-400 text-sm line-clamp-2 mb-3">
-                                                {related.excerpt}
-                                            </p>
-                                            <div className="flex items-center gap-4 text-xs text-slate-500">
-                                                <span className="flex items-center gap-1">
-                                                    <Eye className="w-3 h-3" />
-                                                    {related.views}
-                                                </span>
-                                                <span className="flex items-center gap-1">
-                                                    <Heart className="w-3 h-3" />
-                                                    {related.likes}
-                                                </span>
-                                            </div>
-                                        </div>
-                                    </motion.div>
-                                </Link>
-                            ))}
-                        </div>
-                    </div>
-                )}
             </article>
         </div>
     );
