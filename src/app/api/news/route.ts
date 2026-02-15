@@ -55,7 +55,7 @@ export async function GET(request: NextRequest) {
 
         // Get total count
         const totalCount = await db
-            .select({ count: sql<number>`count(*)` })
+            .select({ count: sql<number>`count(*)`.mapWith(Number) })
             .from(news)
             .where(and(...conditions));
 
@@ -71,7 +71,7 @@ export async function GET(request: NextRequest) {
     } catch (error) {
         console.error('[News API] Error fetching news:', error);
         return NextResponse.json(
-            { error: 'Failed to fetch news articles' },
+            { error: 'Failed to fetch news articles', details: error instanceof Error ? error.message : String(error) },
             { status: 500 }
         );
     }
@@ -163,7 +163,7 @@ export async function POST(request: NextRequest) {
     } catch (error) {
         console.error('[News API] Error creating news:', error);
         return NextResponse.json(
-            { error: 'Failed to create news article' },
+            { error: 'Failed to create news article', details: error instanceof Error ? error.message : String(error) },
             { status: 500 }
         );
     }
