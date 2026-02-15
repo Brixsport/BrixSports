@@ -182,8 +182,8 @@ export default function CompetitionRegistration({
                                         animate={{ scale: 1, opacity: 1 }}
                                         transition={{ delay: index * 0.1 }}
                                         className={`w-12 h-12 rounded-full flex items-center justify-center mb-2 transition-all ${currentStep >= step.number
-                                                ? 'bg-purple-500 text-white shadow-lg shadow-purple-500/50'
-                                                : 'bg-gray-700 text-gray-400'
+                                            ? 'bg-purple-500 text-white shadow-lg shadow-purple-500/50'
+                                            : 'bg-gray-700 text-gray-400'
                                             }`}
                                     >
                                         {currentStep > step.number ? (
@@ -274,15 +274,70 @@ export default function CompetitionRegistration({
 
                                 <div>
                                     <label className="block text-sm font-medium text-gray-300 mb-2">
-                                        Team Logo URL (optional)
+                                        Team Logo
                                     </label>
-                                    <input
-                                        type="url"
-                                        value={teamInfo.logo}
-                                        onChange={(e) => setTeamInfo({ ...teamInfo, logo: e.target.value })}
-                                        className="w-full px-4 py-3 bg-white/5 border border-gray-600 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500"
-                                        placeholder="https://example.com/logo.png"
-                                    />
+                                    <div className="space-y-3">
+                                        {/* Logo Preview */}
+                                        {teamInfo.logo && (
+                                            <div className="flex items-center gap-4 p-4 bg-white/5 border border-gray-600 rounded-lg">
+                                                <img
+                                                    src={teamInfo.logo}
+                                                    alt="Team Logo"
+                                                    className="w-16 h-16 object-contain rounded-lg bg-white/10"
+                                                    onError={(e) => {
+                                                        (e.target as HTMLImageElement).src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><rect fill="%23374151" width="64" height="64"/><text x="50%" y="50%" text-anchor="middle" dy=".3em" fill="%239CA3AF" font-size="12">No Image</text></svg>';
+                                                    }}
+                                                />
+                                                <div className="flex-1">
+                                                    <p className="text-white text-sm font-medium">Logo Preview</p>
+                                                    <p className="text-gray-400 text-xs truncate">{teamInfo.logo}</p>
+                                                </div>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setTeamInfo({ ...teamInfo, logo: '' })}
+                                                    className="p-2 text-red-400 hover:bg-red-500/20 rounded-lg transition-all"
+                                                >
+                                                    <Trash2 className="w-4 h-4" />
+                                                </button>
+                                            </div>
+                                        )}
+
+                                        {/* Logo URL Input */}
+                                        <input
+                                            type="url"
+                                            value={teamInfo.logo}
+                                            onChange={(e) => setTeamInfo({ ...teamInfo, logo: e.target.value })}
+                                            className="w-full px-4 py-3 bg-white/5 border border-gray-600 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                                            placeholder="https://example.com/logo.png or upload below"
+                                        />
+
+                                        {/* File Upload Button */}
+                                        <div className="relative">
+                                            <input
+                                                type="file"
+                                                accept="image/*"
+                                                onChange={(e) => {
+                                                    const file = e.target.files?.[0];
+                                                    if (file) {
+                                                        const reader = new FileReader();
+                                                        reader.onloadend = () => {
+                                                            setTeamInfo({ ...teamInfo, logo: reader.result as string });
+                                                        };
+                                                        reader.readAsDataURL(file);
+                                                    }
+                                                }}
+                                                className="hidden"
+                                                id="logo-upload"
+                                            />
+                                            <label
+                                                htmlFor="logo-upload"
+                                                className="flex items-center justify-center gap-2 w-full px-4 py-3 bg-purple-500/20 hover:bg-purple-500/30 border border-purple-500/50 rounded-lg text-purple-300 cursor-pointer transition-all"
+                                            >
+                                                <Upload className="w-5 h-5" />
+                                                Upload Logo Image
+                                            </label>
+                                        </div>
+                                    </div>
                                 </div>
 
                                 <div className="border-t border-gray-700 pt-6">
@@ -479,27 +534,101 @@ export default function CompetitionRegistration({
                                                 </div>
                                                 <div>
                                                     <label className="block text-xs font-medium text-gray-400 mb-1">
-                                                        College/Faculty
+                                                        Weight (kg)
+                                                    </label>
+                                                    <input
+                                                        type="text"
+                                                        value={player.weight}
+                                                        onChange={(e) => updatePlayer(player.id, 'weight', e.target.value)}
+                                                        className="w-full px-3 py-2 bg-white/5 border border-gray-600 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+                                                        placeholder="70"
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className="block text-xs font-medium text-gray-400 mb-1">
+                                                        Nationality
+                                                    </label>
+                                                    <input
+                                                        type="text"
+                                                        value={player.nationality}
+                                                        onChange={(e) => updatePlayer(player.id, 'nationality', e.target.value)}
+                                                        className="w-full px-3 py-2 bg-white/5 border border-gray-600 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+                                                        placeholder="Nigeria"
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className="block text-xs font-medium text-gray-400 mb-1">
+                                                        College/Faculty (optional)
                                                     </label>
                                                     <input
                                                         type="text"
                                                         value={player.college}
                                                         onChange={(e) => updatePlayer(player.id, 'college', e.target.value)}
                                                         className="w-full px-3 py-2 bg-white/5 border border-gray-600 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
-                                                        placeholder="e.g., Engineering"
+                                                        placeholder="e.g., Engineering, Sciences, Arts"
                                                     />
                                                 </div>
                                                 <div>
                                                     <label className="block text-xs font-medium text-gray-400 mb-1">
-                                                        Department
+                                                        Department/Course (optional)
                                                     </label>
                                                     <input
                                                         type="text"
                                                         value={player.department}
                                                         onChange={(e) => updatePlayer(player.id, 'department', e.target.value)}
                                                         className="w-full px-3 py-2 bg-white/5 border border-gray-600 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
-                                                        placeholder="e.g., Computer Science"
+                                                        placeholder="e.g., Computer Science, Medicine"
                                                     />
+                                                </div>
+                                                <div className="md:col-span-3">
+                                                    <label className="block text-xs font-medium text-gray-400 mb-1">
+                                                        Player Photo
+                                                    </label>
+                                                    <div className="flex items-center gap-3">
+                                                        {player.image && (
+                                                            <img
+                                                                src={player.image}
+                                                                alt={player.name}
+                                                                className="w-12 h-12 object-cover rounded-lg bg-white/10"
+                                                                onError={(e) => {
+                                                                    (e.target as HTMLImageElement).src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48"><rect fill="%23374151" width="48" height="48"/><text x="50%" y="50%" text-anchor="middle" dy=".3em" fill="%239CA3AF" font-size="10">No Photo</text></svg>';
+                                                                }}
+                                                            />
+                                                        )}
+                                                        <div className="flex-1 flex gap-2">
+                                                            <input
+                                                                type="url"
+                                                                value={player.image}
+                                                                onChange={(e) => updatePlayer(player.id, 'image', e.target.value)}
+                                                                className="flex-1 px-3 py-2 bg-white/5 border border-gray-600 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+                                                                placeholder="Photo URL or upload"
+                                                            />
+                                                            <div className="relative">
+                                                                <input
+                                                                    type="file"
+                                                                    accept="image/*"
+                                                                    onChange={(e) => {
+                                                                        const file = e.target.files?.[0];
+                                                                        if (file) {
+                                                                            const reader = new FileReader();
+                                                                            reader.onloadend = () => {
+                                                                                updatePlayer(player.id, 'image', reader.result as string);
+                                                                            };
+                                                                            reader.readAsDataURL(file);
+                                                                        }
+                                                                    }}
+                                                                    className="hidden"
+                                                                    id={`player-image-${player.id}`}
+                                                                />
+                                                                <label
+                                                                    htmlFor={`player-image-${player.id}`}
+                                                                    className="flex items-center justify-center px-3 py-2 bg-purple-500/20 hover:bg-purple-500/30 border border-purple-500/50 rounded-lg text-purple-300 cursor-pointer transition-all"
+                                                                >
+                                                                    <Upload className="w-4 h-4" />
+                                                                </label>
+                                                            </div>
+                                                        </div>
+                                                    </div>
                                                 </div>
                                             </div>
                                         </motion.div>
