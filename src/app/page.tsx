@@ -4,19 +4,22 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
+import dynamic from 'next/dynamic';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Trophy, Calendar, User, Search, Bell, Menu, X, ChevronRight, ChevronLeft, Play } from 'lucide-react';
 import { format, addDays, isSameDay } from 'date-fns';
 import { Player, Team, Match } from '@/types';
-import { MatchOverlay } from '@/components/MatchOverlay';
-import { BasketballMatchOverlay } from '@/components/BasketballMatchOverlay';
 import GlobalSearch from '@/components/GlobalSearch';
-import { PlayerProfileOverlay } from '@/components/PlayerProfileOverlay';
 import { NotificationToast, useNotifications } from '@/components/Notifications';
-import { SettingsOverlay } from '@/components/SettingsOverlay';
-import { TeamProfileOverlay } from '@/components/TeamProfileOverlay';
 import { useFavorites } from '@/hooks/useFavorites';
 import { LiveNowSection } from '@/components/livestream';
+
+// Lazy load heavy overlay components
+const MatchOverlay = dynamic(() => import('@/components/MatchOverlay').then(mod => mod.MatchOverlay), { ssr: false });
+const BasketballMatchOverlay = dynamic(() => import('@/components/BasketballMatchOverlay').then(mod => mod.BasketballMatchOverlay), { ssr: false });
+const PlayerProfileOverlay = dynamic(() => import('@/components/PlayerProfileOverlay').then(mod => mod.PlayerProfileOverlay), { ssr: false });
+const SettingsOverlay = dynamic(() => import('@/components/SettingsOverlay').then(mod => mod.SettingsOverlay), { ssr: false });
+const TeamProfileOverlay = dynamic(() => import('@/components/TeamProfileOverlay').then(mod => mod.TeamProfileOverlay), { ssr: false });
 
 // Helper function to validate image paths
 const isValidImagePath = (path: string | undefined): boolean => {

@@ -51,13 +51,13 @@ export default function RootLayout({
         <Script
           id="orchids-browser-logs"
           src="https://slelguoygbfzlpylpxfs.supabase.co/storage/v1/object/public/scripts/orchids-browser-logs.js"
-          strategy="afterInteractive"
+          strategy="lazyOnload"
           data-orchids-project-id="014126df-de10-4764-9819-95edd7099944"
         />
         <ErrorReporter />
         <Script
           src="https://slelguoygbfzlpylpxfs.supabase.co/storage/v1/object/public/scripts//route-messenger.js"
-          strategy="afterInteractive"
+          strategy="lazyOnload"
           data-target-origin="*"
           data-message-type="ROUTE_CHANGE"
           data-include-search-params="true"
