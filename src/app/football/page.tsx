@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -51,6 +51,7 @@ interface Competition {
 
 export default function FootballPage() {
     const router = useRouter();
+    const searchParams = useSearchParams();
     const [activeTab, setActiveTab] = useState('STANDINGS');
     const [matches, setMatches] = useState<Match[]>([]);
     const [standings, setStandings] = useState<Standing[]>([]);
@@ -88,9 +89,18 @@ export default function FootballPage() {
                     validComps = compData.competitions;
                     setCompetitions(validComps);
 
-                    // Default to BUSA if present, else first one
-                    // This answers "if someone wanted to see busa league" -> It defaults to it if available.
-                    const defaultComp = validComps.find(c => c.name.toUpperCase().includes('BUSA')) || validComps[0];
+                    // Default to URL param, then BUSA, then first available
+                    const paramCompName = searchParams.get('competition');
+                    let defaultComp = null;
+
+                    if (paramCompName) {
+                        defaultComp = validComps.find(c => c.name === paramCompName);
+                    }
+
+                    if (!defaultComp) {
+                        defaultComp = validComps.find(c => c.name.toUpperCase().includes('BUSA')) || validComps[0];
+                    }
+
                     if (defaultComp) setSelectedCompetition(defaultComp);
                 }
 

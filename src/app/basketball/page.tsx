@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -63,6 +64,7 @@ interface Competition {
 }
 
 export default function BasketballPage() {
+    const searchParams = useSearchParams();
     const [activeTab, setActiveTab] = useState('STANDINGS');
     const [matches, setMatches] = useState<Match[]>([]);
     const [standings, setStandings] = useState<Standing[]>([]);
@@ -100,8 +102,18 @@ export default function BasketballPage() {
                     validComps = compData.competitions;
                     setCompetitions(validComps);
 
-                    // Default to BUSA if present, else first one
-                    const defaultComp = validComps.find(c => c.name.toUpperCase().includes('BUSA')) || validComps[0];
+                    // Default to URL param, then BUSA, then first available
+                    const paramCompName = searchParams.get('competition');
+                    let defaultComp = null;
+
+                    if (paramCompName) {
+                        defaultComp = validComps.find(c => c.name === paramCompName);
+                    }
+
+                    if (!defaultComp) {
+                        defaultComp = validComps.find(c => c.name.toUpperCase().includes('BUSA')) || validComps[0];
+                    }
+
                     if (defaultComp) setSelectedCompetition(defaultComp);
                 }
 

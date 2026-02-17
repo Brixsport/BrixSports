@@ -562,7 +562,10 @@ export default function Home() {
             {competitions.length > 0 && competitions
               .filter(c => activeSport === 'ALL' || c.sport.toUpperCase() === activeSport)
               .map((comp) => (
-                <Link key={comp.id} href={`/competitions?competition=${encodeURIComponent(comp.name)}`}>
+                <Link
+                  key={comp.id}
+                  href={comp.sport === 'Football' ? `/football?competition=${encodeURIComponent(comp.name)}` : comp.sport === 'Basketball' ? `/basketball?competition=${encodeURIComponent(comp.name)}` : `/competitions?competition=${encodeURIComponent(comp.name)}`}
+                >
                   <motion.div
                     initial={{ opacity: 0, y: -10 }}
                     animate={{ opacity: 1, y: 0 }}
@@ -857,6 +860,26 @@ export default function Home() {
           >
             <div className="flex flex-col gap-4 text-lg font-display uppercase">
               <Link href="/teams" className="text-white/60 hover:text-white transition-colors" onClick={() => setIsMenuOpen(false)}>Teams</Link>
+
+              {/* Competition Links */}
+              <div className="space-y-2">
+                <Link href="/competitions" className="text-white/60 hover:text-white transition-colors block" onClick={() => setIsMenuOpen(false)}>All Competitions</Link>
+                {competitions.length > 0 && (
+                  <div className="pl-4 border-l border-white/10 space-y-2 py-1">
+                    {competitions.map((comp) => (
+                      <Link
+                        key={comp.id}
+                        href={comp.sport === 'Football' ? `/football?competition=${encodeURIComponent(comp.name)}` : comp.sport === 'Basketball' ? `/basketball?competition=${encodeURIComponent(comp.name)}` : `/competitions?competition=${encodeURIComponent(comp.name)}`}
+                        className="block text-sm text-white/40 hover:text-primary transition-colors truncate"
+                        onClick={() => setIsMenuOpen(false)}
+                      >
+                        {comp.name}
+                      </Link>
+                    ))}
+                  </div>
+                )}
+              </div>
+
               <Link href="/lineups" className="text-white/60 hover:text-white transition-colors flex items-center gap-2" onClick={() => setIsMenuOpen(false)}>
                 Lineup Builder
                 <span className="bg-primary text-black text-[10px] font-black px-2 py-0.5 rounded">NEW</span>
