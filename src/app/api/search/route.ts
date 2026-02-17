@@ -5,7 +5,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
-import { teams, players, matches } from '@/db/schema';
+import { teams, players, matches, competitions } from '@/db/schema';
 import { like, or, and, desc, sql, eq } from 'drizzle-orm';
 
 export async function GET(request: NextRequest) {
@@ -23,6 +23,7 @@ export async function GET(request: NextRequest) {
                     teams: [],
                     players: [],
                     matches: [],
+                    competitions: [],
                 },
                 total: 0,
                 query,
@@ -34,6 +35,7 @@ export async function GET(request: NextRequest) {
             teams: [],
             players: [],
             matches: [],
+            competitions: [],
         };
 
         // Search Teams
@@ -120,11 +122,30 @@ export async function GET(request: NextRequest) {
             results.matches = matchesWithTeams;
         }
 
+        // Search Competitions
+        if (!category || category === 'all' || category === 'competitions') {
+            const compFilters = [
+                like(competitions.name, searchPattern),
+                like(competitions.season, searchPattern),
+            ];
+
+            const compWhere = sport
+                ? and(or(...compFilters), eq(competitions.sport, sport))
+                : or(...compFilters);
+
+            results.competitions = await db
+                .select()
+                .from(competitions)
+                .where(compWhere)
+                .limit(limit);
+        }
+
         // Calculate total results
         const total =
             results.teams.length +
             results.players.length +
-            results.matches.length;
+            results.matches.length +
+            results.competitions.length;
 
         return NextResponse.json({
             results,

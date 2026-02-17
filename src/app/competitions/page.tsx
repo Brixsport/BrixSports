@@ -3,7 +3,7 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { Trophy, ChevronRight, LayoutGrid, ListOrdered, Activity, Loader2, AlertCircle } from 'lucide-react';
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 
 type SportType = 'Football' | 'Basketball' | 'Track';
 
@@ -48,10 +48,13 @@ interface BracketRound {
 
 export default function CompetitionsPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const initialComp = searchParams.get('competition');
+
   const [view, setView] = useState<'standings' | 'brackets'>('standings');
-  const [selectedSport, setSelectedSport] = useState<SportType>('Basketball'); // Default to Basketball as it has data
+  const [selectedSport, setSelectedSport] = useState<SportType>('Basketball');
   const [competitions, setCompetitions] = useState<Competition[]>([]);
-  const [selectedComp, setSelectedComp] = useState<string | null>(null);
+  const [selectedComp, setSelectedComp] = useState<string | null>(initialComp); // Use URL param if exists
   const [standings, setStandings] = useState<Standing[]>([]);
   const [brackets, setBrackets] = useState<BracketRound[]>([]);
   const [loading, setLoading] = useState(true);
@@ -194,10 +197,6 @@ export default function CompetitionsPage() {
                 <button
                   key={comp.name}
                   onClick={() => {
-                    if (comp.sport === 'Basketball' && comp.name.includes('BUSA LEAGUE')) {
-                      router.push('/basketball');
-                      return;
-                    }
                     setSelectedComp(comp.name);
                   }}
                   className={`px-4 py-2 rounded-full text-[10px] font-bold uppercase tracking-widest whitespace-nowrap transition-all border ${selectedComp === comp.name ? 'border-primary text-primary bg-primary/10' : 'border-white/10 text-white/40 hover:text-white'}`}
