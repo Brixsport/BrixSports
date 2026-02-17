@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -49,7 +49,7 @@ interface Competition {
     status?: string;
 }
 
-export default function FootballPage() {
+function FootballContent() {
     const router = useRouter();
     const searchParams = useSearchParams();
     const [activeTab, setActiveTab] = useState('STANDINGS');
@@ -627,5 +627,18 @@ export default function FootballPage() {
             {selectedPlayer && <PlayerProfileOverlay player={selectedPlayer} onClose={() => setSelectedPlayer(null)} sport="Football" />}
             {selectedTeam && <TeamProfileOverlay team={selectedTeam} sport="Football" onClose={() => setSelectedTeam(null)} onSelectPlayer={(p) => { setSelectedPlayer(p); setSelectedTeam(null); }} />}
         </div>
+    );
+}
+
+export default function FootballPage() {
+    return (
+        <Suspense fallback={
+            <div className="min-h-screen bg-[#050505] text-white flex flex-col items-center justify-center">
+                <div className="w-16 h-16 border-4 border-primary border-t-transparent rounded-full animate-spin mb-4"></div>
+                <p className="text-white/40 font-display font-medium">Loading Football Hub...</p>
+            </div>
+        }>
+            <FootballContent />
+        </Suspense>
     );
 }

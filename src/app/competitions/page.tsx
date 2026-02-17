@@ -2,7 +2,7 @@
 
 import { motion, AnimatePresence } from 'framer-motion';
 import { Trophy, ChevronRight, LayoutGrid, ListOrdered, Activity, Loader2, AlertCircle, Calendar, Clock, MapPin } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Image from 'next/image';
 
@@ -63,7 +63,7 @@ interface BracketRound {
   matches: BracketNode[];
 }
 
-export default function CompetitionsPage() {
+function CompetitionsContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const initialComp = searchParams.get('competition');
@@ -452,5 +452,17 @@ export default function CompetitionsPage() {
         </AnimatePresence>
       </div>
     </div>
+  );
+}
+
+export default function CompetitionsPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-[#050505] flex items-center justify-center">
+        <Loader2 className="w-12 h-12 text-primary animate-spin" />
+      </div>
+    }>
+      <CompetitionsContent />
+    </Suspense>
   );
 }
