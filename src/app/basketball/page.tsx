@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -63,7 +63,7 @@ interface Competition {
     status?: string;
 }
 
-export default function BasketballPage() {
+function BasketballContent() {
     const searchParams = useSearchParams();
     const [activeTab, setActiveTab] = useState('STANDINGS');
     const [matches, setMatches] = useState<Match[]>([]);
@@ -547,5 +547,18 @@ export default function BasketballPage() {
             {selectedTeam && <TeamProfileOverlay team={selectedTeam} sport="Basketball" onClose={() => setSelectedTeam(null)} onSelectPlayer={(p) => { setSelectedPlayer(p); setSelectedTeam(null); }} />}
             {selectedMatch && <BasketballMatchOverlay match={selectedMatch} onClose={() => setSelectedMatch(null)} onSelectTeam={(t) => { setSelectedTeam(t); setSelectedMatch(null); }} onSelectPlayer={(p) => { setSelectedPlayer(p); setSelectedMatch(null); }} />}
         </div>
+    );
+}
+
+export default function BasketballPage() {
+    return (
+        <Suspense fallback={
+            <div className="min-h-screen bg-[#050505] text-white flex flex-col items-center justify-center">
+                <div className="w-16 h-16 border-4 border-[#E5FF00] border-t-transparent rounded-full animate-spin mb-4"></div>
+                <p className="text-white/40 font-display font-medium">Loading Basketball Hub...</p>
+            </div>
+        }>
+            <BasketballContent />
+        </Suspense>
     );
 }
