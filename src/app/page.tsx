@@ -76,14 +76,16 @@ export default function Home() {
       try {
         setLoading(true);
 
-        // Fetch both basketball and football matches in parallel
-        const [basketballResponse, footballResponse] = await Promise.all([
+        // Fetch football, basketball, AND other matches in parallel
+        const [basketballResponse, footballResponse, otherResponse] = await Promise.all([
           fetch('/api/basketball/matches'),
-          fetch('/api/football/matches')
+          fetch('/api/football/matches'),
+          fetch('/api/other/matches')
         ]);
 
         const basketballData = await basketballResponse.json();
         const footballData = await footballResponse.json();
+        const otherData = await otherResponse.json();
 
         const allMatches = [];
 
@@ -156,6 +158,15 @@ export default function Home() {
             };
           });
           allMatches.push(...footballMatches);
+        }
+
+        // Add OTHER matches
+        if (otherData.success && otherData.matches) {
+          const otherMatches = otherData.matches.map((match: any) => ({
+            ...match,
+            stats: typeof match.stats === 'string' ? JSON.parse(match.stats || '{}') : (match.stats || {})
+          }));
+          allMatches.push(...otherMatches);
         }
 
         setMatches(allMatches);
@@ -315,7 +326,8 @@ export default function Home() {
     // Sport filter
     if (activeSport !== 'ALL') {
       const sportMatch = activeSport === 'FOOTBALL' ? m.sport === 'Football' :
-        activeSport === 'BASKETBALL' ? m.sport === 'Basketball' : true;
+        activeSport === 'BASKETBALL' ? m.sport === 'Basketball' :
+          activeSport === 'OTHER' ? !['Football', 'Basketball'].includes(m.sport) : true;
       if (!sportMatch) return false;
     }
 
@@ -489,7 +501,7 @@ export default function Home() {
 
           {/* Sport Tabs */}
           <div className="flex items-center gap-1 pb-2 overflow-x-auto scrollbar-hide">
-            {['ALL', 'FOOTBALL', 'BASKETBALL'].map((sport) => (
+            {['ALL', 'FOOTBALL', 'BASKETBALL', 'OTHER'].map((sport) => (
               <button
                 key={sport}
                 onClick={() => setActiveSport(sport)}

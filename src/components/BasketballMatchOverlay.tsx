@@ -9,6 +9,7 @@ import { MatchPredictionCard } from '@/components/predictions/MatchPredictionCar
 import { MatchVotePoll } from '@/components/predictions/MatchVotePoll';
 import { LivestreamChat } from '@/components/livestream/LivestreamChat';
 import { LivestreamPlayer } from '@/components/livestream/LivestreamPlayer';
+import { StatBar } from '@/components/StatBar';
 
 interface BasketballMatchOverlayProps {
     match: Match;
@@ -858,44 +859,4 @@ export function BasketballMatchOverlay({ match, onClose, onSelectTeam, onSelectP
     );
 }
 
-function StatBar({
-    label,
-    homeValue,
-    awayValue,
-    homeTeam,
-    awayTeam,
-    suffix = ''
-}: {
-    label: string;
-    homeValue: number;
-    awayValue: number;
-    homeTeam: string;
-    awayTeam: string;
-    suffix?: string;
-}) {
-    const total = homeValue + awayValue;
-    const homePercent = (homeValue / (total || 1)) * 100;
-
-    return (
-        <div className="space-y-2">
-            <div className="flex justify-between text-xs font-semibold">
-                <span className={homeValue > awayValue ? 'text-primary' : 'text-white/60'}>
-                    {homeTeam} {homeValue}{suffix}
-                </span>
-                <span className="text-white/40">{label}</span>
-                <span className={awayValue > homeValue ? 'text-primary' : 'text-white/60'}>
-                    {awayValue}{suffix} {awayTeam}
-                </span>
-            </div>
-            <div className="h-2 bg-white/10 rounded-full flex overflow-hidden">
-                <motion.div
-                    initial={{ width: 0 }}
-                    animate={{ width: `${homePercent}%` }}
-                    className={`h-full ${homeValue > awayValue ? 'bg-primary' : 'bg-white/40'}`}
-                />
-                <div className={`flex-1 h-full ${awayValue > homeValue ? 'bg-primary' : 'bg-white/40'}`}></div>
-            </div>
-        </div>
-    );
-}
 

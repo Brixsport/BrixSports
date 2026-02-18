@@ -28,6 +28,7 @@ interface FullPitchLineupsProps {
     awaySubs?: Array<{ playerId: string; rating: number; position?: string; isCaptain?: boolean; isMotM?: boolean }>;
     onPlayerClick: (player: Player) => void;
     sport?: string; // 'Football' or 'Basketball'
+    variant?: '11-a-side' | '5-a-side' | 'basketball' | '3x3';
     events?: any[]; // Match events for goal/assist tracking
 }
 
@@ -39,13 +40,14 @@ interface FullPitchLineupsProps {
 
 type FormationSlot = {
     x: number;
-    y: number; // 0-100 relative to half-pitch depth (will be scaled)
+    y: number; // 0-100 relative to hal-pitch depth (will be scaled)
     role: string; // 'GK', 'DEF', 'MID', 'FW', etc. used for bucket matching
 };
 
 type FormationTemplate = FormationSlot[];
 
 const FORMATION_TEMPLATES: Record<string, FormationTemplate> = {
+    // === 11-a-side Formations ===
     '4-4-2': [
         { x: 50, y: 5, role: 'GK' },
         { x: 15, y: 25, role: 'DEF' }, { x: 38, y: 25, role: 'DEF' }, { x: 62, y: 25, role: 'DEF' }, { x: 85, y: 25, role: 'DEF' },
@@ -124,16 +126,71 @@ const FORMATION_TEMPLATES: Record<string, FormationTemplate> = {
         { x: 35, y: 45, role: 'DM' }, { x: 65, y: 45, role: 'DM' },
         { x: 10, y: 65, role: 'MID' }, { x: 35, y: 65, role: 'AM' }, { x: 65, y: 65, role: 'AM' }, { x: 90, y: 65, role: 'MID' },
         { x: 50, y: 88, role: 'FW' }
+    ],
+
+    // === 5-a-side Formations ===
+    '1-2-1': [ // Diamond
+        { x: 50, y: 5, role: 'GK' },
+        { x: 50, y: 30, role: 'DEF' },
+        { x: 20, y: 50, role: 'MID' }, { x: 80, y: 50, role: 'MID' },
+        { x: 50, y: 75, role: 'FW' }
+    ],
+    '2-2': [ // Box / Square
+        { x: 50, y: 5, role: 'GK' },
+        { x: 30, y: 30, role: 'DEF' }, { x: 70, y: 30, role: 'DEF' },
+        { x: 30, y: 70, role: 'FW' }, { x: 70, y: 70, role: 'FW' }
+    ],
+    '1-1-2': [ // Y / Attacking
+        { x: 50, y: 5, role: 'GK' },
+        { x: 50, y: 30, role: 'DEF' },
+        { x: 50, y: 55, role: 'MID' },
+        { x: 30, y: 80, role: 'FW' }, { x: 70, y: 80, role: 'FW' }
+    ],
+    '3-1': [ // Pyramid / Defensive
+        { x: 50, y: 5, role: 'GK' },
+        { x: 20, y: 30, role: 'DEF' }, { x: 50, y: 30, role: 'DEF' }, { x: 80, y: 30, role: 'DEF' },
+        { x: 50, y: 75, role: 'FW' }
+    ],
+    '1-3': [ // All Out Attack
+        { x: 50, y: 5, role: 'GK' },
+        { x: 50, y: 30, role: 'DEF' },
+        { x: 20, y: 70, role: 'FW' }, { x: 50, y: 75, role: 'FW' }, { x: 80, y: 70, role: 'FW' }
+    ],
+
+    // === Basketball Formations ===
+    'basketball': [
+        { x: 50, y: 85, role: 'PG' }, // Point Guard
+        { x: 20, y: 65, role: 'SG' }, // Shooting Guard
+        { x: 80, y: 65, role: 'SF' }, // Small Forward
+        { x: 35, y: 40, role: 'PF' }, // Power Forward
+        { x: 65, y: 40, role: 'C' }  // Center
+    ],
+    '3x3': [
+        { x: 50, y: 75, role: 'G' }, // Guard
+        { x: 25, y: 45, role: 'F' }, // Forward
+        { x: 75, y: 45, role: 'C' }  // Center
     ]
 };
 
 // Default fallback
 const DEFAULT_FORMATION = '4-4-2';
+const DEFAULT_FORMATION_5ASIDE = '1-2-1';
+const DEFAULT_FORMATION_BASKETBALL = 'basketball';
+const DEFAULT_FORMATION_3x3 = '3x3';
 
 // Helper to normalize position string to broad buckets for slot filling
 const parsePositionToBucket = (pos: string): string => {
     const p = pos.toLowerCase().trim();
-    // Check for goalkeeper first - be more comprehensive
+    // Basketball roles
+    if (p === 'pg' || p.includes('point guard')) return 'PG';
+    if (p === 'sg' || p.includes('shooting guard')) return 'SG';
+    if (p === 'sf' || p.includes('small forward')) return 'SF';
+    if (p === 'pf' || p.includes('power forward')) return 'PF';
+    if (p === 'c' || p === 'center') return 'C';
+    if (p === 'g' || p === 'guard') return 'G';
+    if (p === 'f' || p === 'forward') return 'F';
+
+    // Football roles
     if (p.includes('gk') || p.includes('goalkeeper') || p.includes('goal keeper') ||
         p === 'g' || p.includes('goalie') || p.includes('keeper')) return 'GK';
     // Check for defensive midfielder
@@ -141,11 +198,11 @@ const parsePositionToBucket = (pos: string): string => {
     // Check for attacking midfielder
     if (p.includes('am') || p.includes('attacking mid') || p.includes('cam')) return 'AM';
     // Check for defenders
-    if (p.includes('def') || p.includes('back') || p.includes('cb') || p.includes('lb') || p.includes('rb') || p.includes('wb')) return 'DEF';
+    if (p.includes('def') || p.includes('back') || p.includes('cb') || p.includes('lb') || p.includes('rb') || p.includes('wb') || p.includes('fix')) return 'DEF';
     // Check for midfielders (check this before forwards to avoid confusion)
-    if (p.includes('mid') || p.includes('wing') || p.includes('lm') || p.includes('rm') || p.includes('cm')) return 'MID';
+    if (p.includes('mid') || p.includes('wing') || p.includes('lm') || p.includes('rm') || p.includes('cm') || p.includes('ala')) return 'MID';
     // Check for forwards
-    if (p.includes('fw') || p.includes('st') || p.includes('cf') || p.includes('striker') || p.includes('forward')) return 'FW';
+    if (p.includes('fw') || p.includes('st') || p.includes('cf') || p.includes('striker') || p.includes('forward') || p.includes('pivot')) return 'FW';
     return 'MID'; // Fallback
 };
 
@@ -160,6 +217,7 @@ export function FullPitchLineups({
     awaySubs: propAwaySubs,
     onPlayerClick,
     sport = 'Football',
+    variant,
     events = []
 }: FullPitchLineupsProps) {
     const isBasketball = sport === 'Basketball';
@@ -198,7 +256,8 @@ export function FullPitchLineups({
             return processBasketballLineup(players, lineup, isHome);
         }
 
-        const cleanFormation = (Object.keys(FORMATION_TEMPLATES).includes(formation)) ? formation : DEFAULT_FORMATION;
+        const fallback = variant === '5-a-side' ? DEFAULT_FORMATION_5ASIDE : DEFAULT_FORMATION;
+        const cleanFormation = (formation && Object.keys(FORMATION_TEMPLATES).includes(formation)) ? formation : fallback;
         const template = FORMATION_TEMPLATES[cleanFormation];
 
         // 1. Prepare Players with Metadata
@@ -242,10 +301,15 @@ export function FullPitchLineups({
         });
 
         // Distribute slots into buckets
-        template.forEach(slot => {
-            if (slotsByRole[slot.role]) slotsByRole[slot.role].push(slot);
-            else if (slotsByRole['MID']) slotsByRole['MID'].push(slot); // Fallback
-        });
+        if (template) {
+            template.forEach(slot => {
+                if (slotsByRole[slot.role]) slotsByRole[slot.role].push(slot);
+                else if (slotsByRole['MID']) slotsByRole['MID'].push(slot); // Fallback
+            });
+        } else {
+            console.warn(`Formation template not found for ${cleanFormation}, defaulting...`);
+            // Fallback logic if somehow template is missing
+        }
 
         // Sort slots by X to ensure Left-to-Right filling
         Object.values(slotsByRole).forEach(slots => slots.sort((a, b) => a.x - b.x));
@@ -293,11 +357,11 @@ export function FullPitchLineups({
     const getAdjacentRoles = (role: string): string[] => {
         const adjacencyMap: Record<string, string[]> = {
             'GK': [], // GK is strict
-            'DEF': ['DM'], // Defenders can cover DM if needed
+            'DEF': ['DM', 'MID'], // Defenders can cover DM if needed
             'DM': ['DEF', 'MID'], // DM can be filled by DEF or MID
-            'MID': ['DM', 'AM'], // MI D can be filled by DM or AM
+            'MID': ['DM', 'AM', 'DEF', 'FW'], // MID can be filled by almost anything in 5-a-side
             'AM': ['MID', 'FW'], // AM can be filled by MID or FW
-            'FW': ['AM'], // FW can be covered by AM
+            'FW': ['AM', 'MID'], // FW can be covered by AM or MID
         };
         return adjacencyMap[role] || [];
     };
@@ -347,8 +411,15 @@ export function FullPitchLineups({
         })).filter(p => p.player) as PitchPlayer[];
     };
 
-    const homePitchPlayers = processLineupForPitch(homePlayers, homeLineup, true, homeTeam.formation || DEFAULT_FORMATION);
-    const awayPitchPlayers = processLineupForPitch(awayPlayers, awayLineup, false, awayTeam.formation || DEFAULT_FORMATION);
+    const getFallbackFormation = () => {
+        if (variant === '3x3') return DEFAULT_FORMATION_3x3;
+        if (variant === 'basketball') return DEFAULT_FORMATION_BASKETBALL;
+        if (variant === '5-a-side') return DEFAULT_FORMATION_5ASIDE;
+        return DEFAULT_FORMATION;
+    };
+
+    const homePitchPlayers = processLineupForPitch(homePlayers, homeLineup, true, homeTeam.formation || getFallbackFormation());
+    const awayPitchPlayers = processLineupForPitch(awayPlayers, awayLineup, false, awayTeam.formation || getFallbackFormation());
 
     const allPitchPlayers = [...homePitchPlayers, ...awayPitchPlayers];
 
@@ -392,13 +463,13 @@ export function FullPitchLineups({
                     <img src={homeTeam.logo} alt={homeTeam.name} className="w-10 h-10 object-contain" />
                     <div>
                         <span className="font-bold text-lg">{homeTeam.name}</span>
-                        <div className="text-sm text-white/60">{homeTeam.formation || '4-4-2'}</div>
+                        <div className="text-sm text-white/60">{homeTeam.formation || getFallbackFormation()}</div>
                     </div>
                 </div>
                 <div className="flex items-center gap-3">
                     <div className="text-right">
                         <span className="font-bold text-lg">{awayTeam.name}</span>
-                        <div className="text-sm text-white/60">{awayTeam.formation || '4-4-2'}</div>
+                        <div className="text-sm text-white/60">{awayTeam.formation || getFallbackFormation()}</div>
                     </div>
                     <img src={awayTeam.logo} alt={awayTeam.name} className="w-10 h-10 object-contain" />
                 </div>
@@ -407,13 +478,15 @@ export function FullPitchLineups({
             {/* Responsive Pitch Component - Full Width */}
             <div className="w-full max-w-none mx-auto px-0 py-2 sm:py-3 lg:py-4">
                 <div
-                    className="
+                    className={`
                         relative
                         w-full
-                        aspect-[7/10]
-                        sm:aspect-[3/5]
-                        lg:aspect-[3/4]
-                    "
+                        ${variant === '5-a-side' || variant === '3x3'
+                            ? 'aspect-[1/2] max-w-[400px] mx-auto'
+                            : variant === 'basketball'
+                                ? 'aspect-[2/3] max-w-[500px] mx-auto'
+                                : 'aspect-[7/10] sm:aspect-[3/5] lg:aspect-[3/4]'}
+                    `}
                 >
                     <ResponsivePitch
                         players={allPitchPlayers}
@@ -421,6 +494,7 @@ export function FullPitchLineups({
                         awayTeamColor={awayTeam.color}
                         onPlayerClick={onPlayerClick}
                         orientation="vertical"
+                        variant={variant}
                     />
                 </div>
             </div>

@@ -231,11 +231,13 @@ export function ResponsiveLineup({
     homeSubs = [],
     awaySubs = [],
     events = [],
-    onPlayerClick
-}: ResponsiveLineupProps) {
+    onPlayerClick,
+    variant
+}: ResponsiveLineupProps & { variant?: '11-a-side' | '5-a-side' | 'basketball' | '3x3' }) {
     const { isMobile } = useScreenSize();
     const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
     const [viewMode, setViewMode] = useState<'pitch' | 'list'>('pitch');
+
 
     // Auto-switch to list view on very small screens
     useEffect(() => {
@@ -324,6 +326,7 @@ export function ResponsiveLineup({
                                 homeSubs={homeSubs}
                                 awaySubs={awaySubs}
                                 onPlayerClick={handlePlayerClick}
+                                variant={variant}
                             />
                         </motion.div>
                     )}

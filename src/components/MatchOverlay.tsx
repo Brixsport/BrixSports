@@ -62,6 +62,17 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
   const { isFavoriteTeam, toggleTeam } = useFavorites();
   const { addNotification } = useNotifications();
 
+  const is5Aside = (match.sport as string) === 'Five-a-side' ||
+    (match.sport as string) === '5-a-side' ||
+    (match.sport as string) === '5-aside' ||
+    match.competition?.toLowerCase().includes('5-a-side') ||
+    match.competition?.toLowerCase().includes('futsal');
+
+  const isBasketball = match.sport === 'Basketball';
+  const is3x3 = (match.sport as string) === '3x3 Basketball' ||
+    (match.sport as string) === 'Basketball 3x3' ||
+    match.competition?.toLowerCase().includes('3x3');
+
   // Match time tracking (synced from logger)
   const [matchTime, setMatchTime] = useState<{ minute: number; extraTime: number; half: number; period?: string; announcedStoppage?: number }>({
     minute: 0,
@@ -943,6 +954,7 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
                     })()}
                     events={match.events || []}
                     onPlayerClick={onSelectPlayer}
+                    variant={is5Aside ? '5-a-side' : is3x3 ? '3x3' : isBasketball ? 'basketball' : '11-a-side'}
                   />
                 ) : (
                   <div className="py-12 text-center">

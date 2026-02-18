@@ -27,6 +27,7 @@ export interface ResponsivePitchProps {
     orientation?: 'vertical' | 'horizontal'; // Support both layouts
     className?: string;
     showMarkings?: boolean;
+    variant?: '11-a-side' | '5-a-side' | 'basketball' | '3x3';
 }
 
 // ========== COMPONENTS ==========
@@ -39,7 +40,9 @@ export function ResponsivePitch({
     orientation = 'horizontal',
     className,
     showMarkings = true,
+    variant = '11-a-side',
 }: ResponsivePitchProps) {
+    const isBasketball = variant === 'basketball' || variant === '3x3';
 
     // Decide aspect ratio based on orientation
     // Horizontal: 105m x 68m ≈ 1.54 ratio (using 16:9 or similar for screens)
@@ -52,28 +55,42 @@ export function ResponsivePitch({
             {/* Vertical: pb-[150%] */}
             <div
                 className={cn(
-                    "relative w-full h-full rounded-xl overflow-hidden shadow-2xl bg-[#2a2a2a] border border-white/10",
+                    "relative w-full h-full rounded-xl overflow-hidden shadow-2xl border border-white/10",
+                    isBasketball ? "bg-[#1a1c2c]" : "bg-[#2a2a2a]"
                 )}
             >
                 {/* Pitch Background - Dark Premium Theme */}
-                <div className="absolute inset-0 bg-[#1a1a1a]">
+                <div className={cn("absolute inset-0", isBasketball ? "bg-gradient-to-br from-[#121421] to-[#1a1c2c]" : "bg-[#1a1a1a]")}>
                     {/* Subtle gradient overlay */}
-                    <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-transparent to-black/40" />
+                    <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-transparent to-black/20" />
 
-                    {/* Mowed lawn stripes pattern - very subtle */}
-                    <div
-                        className="absolute inset-0 opacity-[0.03]"
-                        style={{
-                            backgroundImage: orientation === 'horizontal'
-                                ? 'repeating-linear-gradient(90deg, transparent, transparent 5%, #fff 5%, #fff 10%)'
-                                : 'repeating-linear-gradient(0deg, transparent, transparent 5%, #fff 5%, #fff 10%)'
-                        }}
-                    />
+                    {/* Background Pattern */}
+                    {isBasketball ? (
+                        <div className="absolute inset-0 opacity-[0.05]"
+                            style={{ backgroundImage: 'radial-gradient(circle at 2px 2px, #fff 1px, transparent 0)', backgroundSize: '24px 24px' }} />
+                    ) : (
+                        <div
+                            className="absolute inset-0 opacity-[0.03]"
+                            style={{
+                                backgroundImage: orientation === 'horizontal'
+                                    ? 'repeating-linear-gradient(90deg, transparent, transparent 5%, #fff 5%, #fff 10%)'
+                                    : 'repeating-linear-gradient(0deg, transparent, transparent 5%, #fff 5%, #fff 10%)'
+                            }}
+                        />
+                    )}
                 </div>
 
                 {/* Markings */}
                 {showMarkings && (
-                    <PitchMarkings orientation={orientation} strokeColor="rgba(255,255,255,0.2)" />
+                    variant === '5-a-side' ? (
+                        <PitchMarkings5Aside orientation={orientation} strokeColor="rgba(255,255,255,0.2)" />
+                    ) : variant === 'basketball' ? (
+                        <CourtMarkings orientation={orientation} strokeColor="rgba(255,255,255,0.2)" />
+                    ) : variant === '3x3' ? (
+                        <CourtMarkings3x3 orientation={orientation} strokeColor="rgba(255,255,255,0.2)" />
+                    ) : (
+                        <PitchMarkings orientation={orientation} strokeColor="rgba(255,255,255,0.2)" />
+                    )
                 )}
 
                 {/* Players Layer */}
@@ -85,6 +102,7 @@ export function ResponsivePitch({
                             color={homeTeamColor} // Logic for away color can be added if needed
                             onClick={() => onPlayerClick?.(p.player)}
                             orientation={orientation}
+                            variant={variant}
                         />
                     ))}
                 </div>
@@ -97,12 +115,14 @@ function PlayerDot({
     data,
     color,
     onClick,
-    orientation
+    orientation,
+    variant = '11-a-side'
 }: {
     data: PitchPlayer;
     color: string;
     onClick?: () => void;
     orientation: 'vertical' | 'horizontal';
+    variant?: '11-a-side' | '5-a-side' | 'basketball' | '3x3';
 }) {
     const { player, position, rating, isCaptain, isMotM, goals, assists } = data;
 
@@ -110,7 +130,8 @@ function PlayerDot({
     // Assuming inputs are: x (0-100 left-right), y (0-100 top-bottom)
 
     // Y-Coordinate Calibration (FotMob Logic)
-    const VISUAL_Y_SCALE = 0.92;
+    // For 5-a-side/Basketball, we might want less compression or different logic
+    const VISUAL_Y_SCALE = (variant === '5-a-side' || variant === 'basketball' || variant === '3x3') ? 0.85 : 0.92;
     const visualY = 50 + (position.y - 50) * VISUAL_Y_SCALE;
 
     return (
@@ -137,7 +158,7 @@ function PlayerDot({
                         "bg-zinc-900 text-white font-bold"
                     )}
                     style={{
-                        width: '3.5%', // 3.5% of pitch width
+                        width: (variant === '5-a-side' || variant === 'basketball' || variant === '3x3') ? '6%' : '3.5%', // Larger dots for small variants
                         aspectRatio: '1/1', // Keep it circular
                         minWidth: '22px', // Minimum visibility
                         minHeight: '22px',
@@ -319,3 +340,185 @@ function PitchMarkings({ orientation, strokeColor }: { orientation: 'vertical' |
         </svg>
     );
 }
+
+function PitchMarkings5Aside({ orientation, strokeColor }: { orientation: 'vertical' | 'horizontal'; strokeColor: string }) {
+    // 5-a-side dimensions (approx 40x20m relative)
+    // We'll normalize to a 40x20 aspect ratio visualization, but render into the component
+    // Let's use simpler geometries: Semicircle penalty areas (radius 6m)
+
+    if (orientation === 'horizontal') {
+        const aspectW = 100;
+        const aspectH = 50; // 2:1 ratio
+        // We will assume the viewBox is roughly matching this ratio or we render slightly differently
+        // Standard Futsal Pitch
+
+        return (
+            <svg className="absolute inset-0 w-full h-full pointer-events-none" viewBox="0 0 100 50" preserveAspectRatio="none">
+                {/* Border */}
+                <rect x="0" y="0" width="100" height="50" fill="none" stroke={strokeColor} strokeWidth="0.3" />
+
+                {/* Center Line */}
+                <line x1="50" y1="0" x2="50" y2="50" stroke={strokeColor} strokeWidth="0.3" />
+
+                {/* Center Circle (Radius 3m -> 7.5% width) */}
+                <circle cx="50" cy="25" r="7.5" fill="none" stroke={strokeColor} strokeWidth="0.3" />
+                <circle cx="50" cy="25" r="0.5" fill={strokeColor} />
+
+                {/* --- LEFT (HOME) --- */}
+                {/* Penalty Area (Semicircle radius 6m -> 15% width) */}
+                <path d="M 0 10 A 15 15 0 0 1 0 40" fill="none" stroke={strokeColor} strokeWidth="0.3" />
+                {/* Goal Post Line (approx) */}
+                <line x1="0" y1="10" x2="1" y2="10" stroke={strokeColor} strokeWidth="0.3" />
+                <line x1="0" y1="40" x2="1" y2="40" stroke={strokeColor} strokeWidth="0.3" />
+
+                {/* Penalty Spot (6m -> 15% width) */}
+                <circle cx="15" cy="25" r="0.5" fill={strokeColor} />
+                {/* Second Penalty Spot (10m -> 25% width) */}
+                <circle cx="25" cy="25" r="0.3" fill={strokeColor} opacity="0.7" />
+
+                {/* --- RIGHT (AWAY) --- */}
+                {/* Penalty Area (Semicircle) */}
+                <path d="M 100 10 A 15 15 0 0 0 100 40" fill="none" stroke={strokeColor} strokeWidth="0.3" />
+                <line x1="100" y1="10" x2="99" y2="10" stroke={strokeColor} strokeWidth="0.3" />
+                <line x1="100" y1="40" x2="99" y2="40" stroke={strokeColor} strokeWidth="0.3" />
+
+                {/* Penalty Spot */}
+                <circle cx="85" cy="25" r="0.5" fill={strokeColor} />
+                {/* Second Penalty Spot */}
+                <circle cx="75" cy="25" r="0.3" fill={strokeColor} opacity="0.7" />
+
+                {/* CORNERS */}
+                <path d="M 0 1 A 1 1 0 0 0 1 0" fill="none" stroke={strokeColor} strokeWidth="0.3" />
+                <path d="M 99 0 A 1 1 0 0 0 100 1" fill="none" stroke={strokeColor} strokeWidth="0.3" />
+                <path d="M 0 49 A 1 1 0 0 1 1 50" fill="none" stroke={strokeColor} strokeWidth="0.3" />
+                <path d="M 100 49 A 1 1 0 0 0 99 50" fill="none" stroke={strokeColor} strokeWidth="0.3" />
+            </svg>
+        );
+    }
+
+    // Vertical (Mobile) Orientation (20x40m -> 50x100)
+    return (
+        <svg className="absolute inset-0 w-full h-full pointer-events-none" viewBox="0 0 50 100" preserveAspectRatio="none">
+            {/* Border */}
+            <rect x="0" y="0" width="50" height="100" fill="none" stroke={strokeColor} strokeWidth="0.3" />
+
+            {/* Center Line */}
+            <line x1="0" y1="50" x2="50" y2="50" stroke={strokeColor} strokeWidth="0.3" />
+
+            {/* Center Circle */}
+            <circle cx="25" cy="50" r="7.5" fill="none" stroke={strokeColor} strokeWidth="0.3" />
+            <circle cx="25" cy="50" r="0.5" fill={strokeColor} />
+
+            {/* --- TOP (AWAY) --- */}
+            {/* Penalty Area (Semicircle radius 15) */}
+            <path d="M 10 0 A 15 15 0 0 0 40 0" fill="none" stroke={strokeColor} strokeWidth="0.3" />
+
+            {/* Penalty Spot (15% from top = 15) */}
+            <circle cx="25" cy="15" r="0.5" fill={strokeColor} />
+            {/* Second Spot (25) */}
+            <circle cx="25" cy="25" r="0.3" fill={strokeColor} opacity="0.7" />
+
+            {/* --- BOTTOM (HOME) --- */}
+            {/* Penalty Area */}
+            <path d="M 10 100 A 15 15 0 0 1 40 100" fill="none" stroke={strokeColor} strokeWidth="0.3" />
+
+            {/* Penalty Spot */}
+            <circle cx="25" cy="85" r="0.5" fill={strokeColor} />
+            {/* Second Spot */}
+            <circle cx="25" cy="75" r="0.3" fill={strokeColor} opacity="0.7" />
+
+            {/* CORNERS */}
+            <path d="M 1 0 A 1 1 0 0 0 0 1" fill="none" stroke={strokeColor} strokeWidth="0.3" />
+            <path d="M 50 1 A 1 1 0 0 0 49 0" fill="none" stroke={strokeColor} strokeWidth="0.3" />
+            <path d="M 0 99 A 1 1 0 0 0 1 100" fill="none" stroke={strokeColor} strokeWidth="0.3" />
+            <path d="M 49 100 A 1 1 0 0 0 50 99" fill="none" stroke={strokeColor} strokeWidth="0.3" />
+        </svg>
+    );
+}
+
+function CourtMarkings({ orientation, strokeColor }: { orientation: 'vertical' | 'horizontal'; strokeColor: string }) {
+    // 28x15m (Normalizing to 100x53.5 for SVG)
+    if (orientation === 'horizontal') {
+        return (
+            <svg className="absolute inset-0 w-full h-full pointer-events-none" viewBox="0 0 100 53.5" preserveAspectRatio="none">
+                {/* Border */}
+                <rect x="0" y="0" width="100" height="53.5" fill="none" stroke={strokeColor} strokeWidth="0.3" />
+
+                {/* Center Line */}
+                <line x1="50" y1="0" x2="50" y2="53.5" stroke={strokeColor} strokeWidth="0.3" />
+
+                {/* Center Circle (Radius 1.8m -> 6.4 unit) */}
+                <circle cx="50" cy="26.75" r="6.4" fill="none" stroke={strokeColor} strokeWidth="0.3" />
+
+                {/* --- LEFT SIDE --- */}
+                {/* 3 Point Line (Radius 6.75m -> 24 unit) */}
+                <path d="M 0 12 A 24 24 0 0 1 0 41.5" fill="none" stroke={strokeColor} strokeWidth="0.3" />
+                {/* Key / Restricted Area (4.9m x 5.8m -> 17.5 x 20.7 unit) */}
+                <rect x="0" y="16.375" width="20.7" height="17.5" fill="none" stroke={strokeColor} strokeWidth="0.3" />
+                {/* Free Throw Circle */}
+                <circle cx="20.7" cy="26.75" r="6.4" fill="none" stroke={strokeColor} strokeWidth="0.3" />
+
+                {/* --- RIGHT SIDE --- */}
+                <path d="M 100 12 A 24 24 0 0 0 100 41.5" fill="none" stroke={strokeColor} strokeWidth="0.3" />
+                <rect x="79.3" y="16.375" width="20.7" height="17.5" fill="none" stroke={strokeColor} strokeWidth="0.3" />
+                <circle cx="79.3" cy="26.75" r="6.4" fill="none" stroke={strokeColor} strokeWidth="0.3" />
+            </svg>
+        );
+    }
+
+    return (
+        <svg className="absolute inset-0 w-full h-full pointer-events-none" viewBox="0 0 53.5 100" preserveAspectRatio="none">
+            {/* Border */}
+            <rect x="0" y="0" width="53.5" height="100" fill="none" stroke={strokeColor} strokeWidth="0.3" />
+
+            {/* Center Line */}
+            <line x1="0" y1="50" x2="53.5" y2="50" stroke={strokeColor} strokeWidth="0.3" />
+
+            {/* Center Circle */}
+            <circle cx="26.75" cy="50" r="6.4" fill="none" stroke={strokeColor} strokeWidth="0.3" />
+
+            {/* --- TOP SIDE --- */}
+            <path d="M 12 0 A 24 24 0 0 0 41.5 0" fill="none" stroke={strokeColor} strokeWidth="0.3" />
+            <rect x="16.375" y="0" width="17.5" height="20.7" fill="none" stroke={strokeColor} strokeWidth="0.3" />
+            <circle cx="26.75" cy="20.7" r="6.4" fill="none" stroke={strokeColor} strokeWidth="0.3" />
+
+            {/* --- BOTTOM SIDE --- */}
+            <path d="M 12 100 A 24 24 0 0 1 41.5 100" fill="none" stroke={strokeColor} strokeWidth="0.3" />
+            <rect x="16.375" y="79.3" width="17.5" height="20.7" fill="none" stroke={strokeColor} strokeWidth="0.3" />
+            <circle cx="26.75" cy="79.3" r="6.4" fill="none" stroke={strokeColor} strokeWidth="0.3" />
+        </svg>
+    );
+}
+
+function CourtMarkings3x3({ orientation, strokeColor }: { orientation: 'vertical' | 'horizontal'; strokeColor: string }) {
+    // Half court (15m x 11m -> 100x73.3)
+    if (orientation === 'horizontal') {
+        return (
+            <svg className="absolute inset-0 w-full h-full pointer-events-none" viewBox="0 0 100 73.3" preserveAspectRatio="none">
+                <rect x="0" y="0" width="100" height="73.3" fill="none" stroke={strokeColor} strokeWidth="0.3" />
+                {/* 3 Point Line */}
+                <path d="M 0 10 A 45 45 0 0 1 0 63.3" fill="none" stroke={strokeColor} strokeWidth="0.3" />
+                {/* Key */}
+                <rect x="0" y="22.15" width="25" height="29" fill="none" stroke={strokeColor} strokeWidth="0.3" />
+                {/* Hoop / Circle */}
+                <circle cx="8" cy="36.65" r="1" fill={strokeColor} />
+            </svg>
+        );
+    }
+
+    return (
+        <svg className="absolute inset-0 w-full h-full pointer-events-none" viewBox="0 0 73.3 100" preserveAspectRatio="none">
+            <rect x="0" y="0" width="73.3" height="100" fill="none" stroke={strokeColor} strokeWidth="0.3" />
+            {/* 3 Point Line */}
+            <path d="M 10 0 A 45 45 0 0 0 63.3 0" fill="none" stroke={strokeColor} strokeWidth="0.3" />
+            {/* Key */}
+            <rect x="22.15" y="0" width="29" height="25" fill="none" stroke={strokeColor} strokeWidth="0.3" />
+            {/* Hoop */}
+            <circle cx="36.65" cy="8" r="1" fill={strokeColor} />
+        </svg>
+    );
+}
+
+
+
+

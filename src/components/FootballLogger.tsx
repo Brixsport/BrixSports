@@ -40,6 +40,15 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
     const awayScore = matchState?.score.away ?? (match.awayScore || 0);
     const recordedEvents = matchState?.events ?? [];
 
+    // Variant Detection
+    const is5Aside = (match.sport as string) === 'Five-a-side' ||
+        (match.sport as string) === '5-a-side' ||
+        (match.sport as string) === '5-aside' ||
+        match.competition?.toLowerCase().includes('5-a-side') ||
+        match.competition?.toLowerCase().includes('futsal');
+
+    const STARTER_COUNT = is5Aside ? 5 : 11;
+
     // WebSocket
     const { emit, isConnected: isSocketConnected } = useWebSocket({
         matchId: match.id,
@@ -537,8 +546,8 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
             starters = allPlayers.filter(p => starterIds.has(p.id));
             subs = allPlayers.filter(p => !starterIds.has(p.id));
         } else {
-            starters = allPlayers.slice(0, 11);
-            subs = allPlayers.slice(11);
+            starters = allPlayers.slice(0, STARTER_COUNT);
+            subs = allPlayers.slice(STARTER_COUNT);
         }
 
         setDraftLineup({ starters, subs });
@@ -611,8 +620,8 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                 subs: [...prev.subs, player]
             }));
         } else {
-            if (draftLineup.starters.length >= 11) {
-                alert("Max 11 starters allowed");
+            if (draftLineup.starters.length >= STARTER_COUNT) {
+                alert(`Max ${STARTER_COUNT} starters allowed`);
                 return;
             }
             setDraftLineup(prev => ({
@@ -673,7 +682,7 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                             </div>
                             <div className="space-y-4">
                                 <div>
-                                    <h4 className="text-[10px] font-black uppercase tracking-widest text-white/40 mb-2">Starting XI</h4>
+                                    <h4 className="text-[10px] font-black uppercase tracking-widest text-white/40 mb-2">Starters</h4>
                                     <div className="space-y-1">
                                         {(lineups.home?.starters || lineups.home?.players || []).map((p: any) => (
                                             <div key={p.id || p} className="flex items-center gap-2 text-sm p-2 bg-black/20 rounded-lg">
@@ -700,7 +709,7 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                             </div>
                             <div className="space-y-4">
                                 <div>
-                                    <h4 className="text-[10px] font-black uppercase tracking-widest text-white/40 mb-2">Starting XI</h4>
+                                    <h4 className="text-[10px] font-black uppercase tracking-widest text-white/40 mb-2">Starters</h4>
                                     <div className="space-y-1">
                                         {(lineups.away?.starters || lineups.away?.players || []).map((p: any) => (
                                             <div key={p.id || p} className="flex items-center gap-2 text-sm p-2 bg-black/20 rounded-lg">
@@ -726,7 +735,7 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                             <div className="p-6 border-b border-white/10 flex justify-between items-center bg-black/40">
                                 <div>
                                     <h3 className="font-display italic text-2xl uppercase">Edit {editingTeam === 'home' ? homeTeam?.name : awayTeam?.name}</h3>
-                                    <p className="text-xs text-white/40">Select exactly 11 players for Starting XI</p>
+                                    <p className="text-xs text-white/40">Select exactly {STARTER_COUNT} starters</p>
                                 </div>
                                 <button onClick={() => setShowLineupEditModal(false)} className="p-2 hover:bg-white/10 rounded-full"><X size={24} /></button>
                             </div>
@@ -745,7 +754,7 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                                             >
                                                 <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black border ${isStarter ? 'bg-primary text-black border-primary' : 'bg-white/10 text-white/40 border-transparent'
                                                     }`}>
-                                                    {isStarter ? 'XI' : 'SUB'}
+                                                    {isStarter ? (is5Aside ? '5' : 'XI') : 'SUB'}
                                                 </div>
                                                 <div>
                                                     <div className={`font-bold ${isStarter ? 'text-white' : 'text-white/50'}`}>{player.name}</div>
@@ -757,8 +766,8 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                                 </div>
                             </div>
                             <div className="p-6 border-t border-white/10 bg-black/40 flex justify-between items-center">
-                                <span className={`text-xs font-black uppercase tracking-widest ${draftLineup.starters.length === 11 ? 'text-green-500' : 'text-orange-500'}`}>
-                                    Selected: {draftLineup.starters.length}/11
+                                <span className={`text-xs font-black uppercase tracking-widest ${draftLineup.starters.length === STARTER_COUNT ? 'text-green-500' : 'text-orange-500'}`}>
+                                    Selected: {draftLineup.starters.length}/{STARTER_COUNT}
                                 </span>
                                 <button
                                     onClick={saveLineupDraft}

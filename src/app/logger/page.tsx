@@ -185,11 +185,11 @@ export default function LoggerPage() {
     if (!match) return null;
 
     // Render sport-specific logger
-    if (match.sport === 'Basketball') {
+    if (match.sport === 'Basketball' || (match.sport as string) === '3x3 Basketball' || (match.sport as string) === 'Basketball 3x3') {
       return <BasketballLogger match={match} onExit={() => setSelectedMatchId(null)} currentLogger={logger} />;
-    } else if (match.sport === 'Football') {
+    } else if (match.sport === 'Football' || (match.sport as string) === 'Five-a-side' || (match.sport as string) === '5-a-side' || (match.sport as string) === '5-aside' || (match.sport as string) === 'Futsal') {
       return <FootballLogger match={match} onExit={() => setSelectedMatchId(null)} currentLogger={logger} />;
-    } else if (match.sport === 'Track' || match.sport === 'Track & Field') {
+    } else if (match.sport === 'Track' || (match.sport as string) === 'Track & Field') {
       return <TrackLogger match={match} onExit={() => setSelectedMatchId(null)} teams={teams} players={players} />;
     } else {
       // Default to generic logger for other sports

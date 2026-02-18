@@ -22,6 +22,13 @@ type BasketballEventType = 'Field Goal' | 'Three Pointer' | 'Free Throw' | 'Rebo
 export function BasketballLogger({ match, onExit, currentLogger }: BasketballLoggerProps) {
     const [homeScore, setHomeScore] = useState(match.homeScore || 0);
     const [awayScore, setAwayScore] = useState(match.awayScore || 0);
+
+    // Determine if it's a 3x3 match
+    const is3x3 = (match.sport as string) === '3x3 Basketball' ||
+        (match.sport as string) === 'Basketball 3x3' ||
+        match.competition?.toLowerCase().includes('3x3');
+
+    const STARTER_COUNT = is3x3 ? 3 : 5;
     const [quarter, setQuarter] = useState(1);
     const [time, setTime] = useState('12:00');
     const [events, setEvents] = useState<any[]>([]);
@@ -1347,7 +1354,7 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                             <div className="flex items-center justify-between mb-6">
                                 <div>
                                     <h2 className="text-3xl font-display italic uppercase mb-2">Set Starting Lineup</h2>
-                                    <p className="text-sm text-white/40">Select 5 starters for each team before starting the match</p>
+                                    <p className="text-sm text-white/40">Select {STARTER_COUNT} starters for each team before starting the match</p>
                                 </div>
                                 {!lineupSet && (
                                     <button
@@ -1371,7 +1378,7 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                                         <div>
                                             <h3 className="text-xl font-black uppercase">{homeTeam?.name}</h3>
                                             <p className="text-xs text-white/40">
-                                                {homeStarters.length}/5 Starters Selected
+                                                {homeStarters.length}/{STARTER_COUNT} Starters Selected
                                             </p>
                                         </div>
                                     </div>
@@ -1386,7 +1393,7 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                                                     onClick={() => {
                                                         if (isStarter) {
                                                             setHomeStarters(homeStarters.filter(id => id !== player.id));
-                                                        } else if (homeStarters.length < 5) {
+                                                        } else if (homeStarters.length < STARTER_COUNT) {
                                                             setHomeStarters([...homeStarters, player.id]);
                                                             setHomeSubs(homeSubs.filter(id => id !== player.id));
                                                         }
@@ -1433,7 +1440,7 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                                         <div>
                                             <h3 className="text-xl font-black uppercase">{awayTeam?.name}</h3>
                                             <p className="text-xs text-white/40">
-                                                {awayStarters.length}/5 Starters Selected
+                                                {awayStarters.length}/{STARTER_COUNT} Starters Selected
                                             </p>
                                         </div>
                                     </div>
@@ -1448,7 +1455,7 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                                                     onClick={() => {
                                                         if (isStarter) {
                                                             setAwayStarters(awayStarters.filter(id => id !== player.id));
-                                                        } else if (awayStarters.length < 5) {
+                                                        } else if (awayStarters.length < STARTER_COUNT) {
                                                             setAwayStarters([...awayStarters, player.id]);
                                                             setAwaySubs(awaySubs.filter(id => id !== player.id));
                                                         }
@@ -1491,17 +1498,17 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                                     <div className="grid grid-cols-2 gap-4 text-sm">
                                         <div>
                                             <p className="text-white/40 text-xs">{homeTeam?.shortName} Starters</p>
-                                            <p className="font-bold text-white">{homeStarters.length}/5</p>
+                                            <p className="font-bold text-white">{homeStarters.length}/{STARTER_COUNT}</p>
                                         </div>
                                         <div>
                                             <p className="text-white/40 text-xs">{awayTeam?.shortName} Starters</p>
-                                            <p className="font-bold text-white">{awayStarters.length}/5</p>
+                                            <p className="font-bold text-white">{awayStarters.length}/{STARTER_COUNT}</p>
                                         </div>
                                     </div>
                                 </div>
                                 <button
                                     onClick={() => {
-                                        if (homeStarters.length === 5 && awayStarters.length === 5) {
+                                        if (homeStarters.length === STARTER_COUNT && awayStarters.length === STARTER_COUNT) {
                                             // Set remaining players as subs
                                             setHomeSubs(homePlayers.filter(p => !homeStarters.includes(p.id)).map(p => p.id));
                                             setAwaySubs(awayPlayers.filter(p => !awayStarters.includes(p.id)).map(p => p.id));
@@ -1509,7 +1516,7 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                                             setShowLineupModal(false);
                                         }
                                     }}
-                                    disabled={homeStarters.length !== 5 || awayStarters.length !== 5}
+                                    disabled={homeStarters.length !== STARTER_COUNT || awayStarters.length !== STARTER_COUNT}
                                     className="px-8 py-4 bg-primary text-black rounded-xl font-black uppercase tracking-widest hover:scale-105 transition-transform disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
                                 >
                                     Confirm Lineup & Start

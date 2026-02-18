@@ -4,6 +4,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { MatchOverlay } from '@/components/MatchOverlay';
 import { BasketballMatchOverlay } from '@/components/BasketballMatchOverlay';
+import { SimpleMatchOverlay } from '@/components/SimpleMatchOverlay';
 import { ArrowLeft } from 'lucide-react';
 import { Match, MatchStatus } from '@/types';
 
@@ -137,6 +138,12 @@ export default function MatchPage() {
                     onClose={handleClose}
                     onSelectTeam={() => { }}
                     onSelectPlayer={() => { }}
+                />
+            ) : ['Table Tennis', 'Chess', 'Scrabble', 'Badminton', 'Volleyball', 'Track'].includes(match.sport) || !['Football', 'Basketball'].includes(match.sport) ? (
+                <SimpleMatchOverlay
+                    match={match}
+                    onClose={handleClose}
+                    onSelectTeam={() => { }}
                 />
             ) : (
                 <MatchOverlay

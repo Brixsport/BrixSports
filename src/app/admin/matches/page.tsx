@@ -494,6 +494,9 @@ function AdminMatchesPageContent() {
                                         <option value="Basketball" className="bg-[#0a0a0a] text-white">Basketball</option>
                                         <option value="Volleyball" className="bg-[#0a0a0a] text-white">Volleyball</option>
                                         <option value="Track" className="bg-[#0a0a0a] text-white">Track & Field</option>
+                                        <option value="Table Tennis" className="bg-[#0a0a0a] text-white">Table Tennis</option>
+                                        <option value="Scrabble" className="bg-[#0a0a0a] text-white">Scrabble</option>
+                                        <option value="Chess" className="bg-[#0a0a0a] text-white">Chess</option>
                                     </select>
                                 </div>
                                 <div>
@@ -663,6 +666,9 @@ function AdminMatchesPageContent() {
                                         <option value="Basketball" className="bg-[#0a0a0a] text-white">Basketball</option>
                                         <option value="Volleyball" className="bg-[#0a0a0a] text-white">Volleyball</option>
                                         <option value="Track" className="bg-[#0a0a0a] text-white">Track & Field</option>
+                                        <option value="Table Tennis" className="bg-[#0a0a0a] text-white">Table Tennis</option>
+                                        <option value="Scrabble" className="bg-[#0a0a0a] text-white">Scrabble</option>
+                                        <option value="Chess" className="bg-[#0a0a0a] text-white">Chess</option>
                                     </select>
                                 </div>
                                 <div>
