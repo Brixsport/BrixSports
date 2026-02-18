@@ -39,6 +39,9 @@ export const players = sqliteTable('players', {
     department: text('department'), // For interdepartmental competitions
     image: text('image'),
     marketValue: text('market_value'),
+    // Multi-sport linking
+    profileId: text('profile_id'), // UUID to link same person across sports
+    email: text('email'), // For admin matching only
     // Attributes (stored as JSON string)
     attributes: text('attributes'), // JSON: {speed, shooting, passing, dribbling, defense, physical}
     createdAt: integer('created_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),

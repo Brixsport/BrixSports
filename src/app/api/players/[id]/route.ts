@@ -6,7 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
 import { players, teams, matchEvents, matches, playerStats, basketballPlayerStats, footballPlayerStats } from '@/db/schema';
-import { eq, desc, and, sql } from 'drizzle-orm';
+import { eq, desc, and, sql, ne } from 'drizzle-orm';
 
 interface RouteParams {
     params: {
@@ -205,6 +205,31 @@ export async function GET(
             ),
         };
 
+        // Check for related profiles (Multi-sport)
+        const relatedProfiles = [];
+        if (player.profileId) {
+            const relatedPlayers = await db
+                .select({
+                    id: players.id,
+                    name: players.name,
+                    position: players.position,
+                    rating: players.rating,
+                    teamName: teams.name,
+                    teamId: teams.id,
+                    sport: teams.sport
+                })
+                .from(players)
+                .leftJoin(teams, eq(players.teamId, teams.id))
+                .where(
+                    and(
+                        eq(players.profileId, player.profileId),
+                        ne(players.id, id) // Exclude current profile
+                    )
+                );
+
+            relatedProfiles.push(...relatedPlayers);
+        }
+
         return NextResponse.json({
             player: {
                 ...player,
@@ -212,6 +237,7 @@ export async function GET(
                     ...team,
                     sport: playerSport, // Add sport to team object
                 },
+                relatedProfiles, // Add related profiles
             },
             stats: seasonStats,
             competitionStats,
