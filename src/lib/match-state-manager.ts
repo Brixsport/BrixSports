@@ -310,52 +310,20 @@ export class MatchStateManager {
     }
 
     /**
-     * Check if current period has reached its natural end
-     * Triggers extra time prompt and auto-pauses
+     * Check if current period has reached its regulation end.
+     * 
+     * IMPORTANT: The clock does NOT auto-stop. Just like real football,
+     * the clock keeps ticking past regulation time and shows added time
+     * (e.g., 35'+1, 35'+2). The logger manually ends each half.
+     * 
+     * If announced stoppage time is set AND has been exceeded, we broadcast
+     * a notification to alert the logger, but DON'T auto-stop the clock.
      */
     private checkPeriodEnd(): void {
-        const { absoluteMinute, period, announcedStoppage, periodEndTriggered } = this.state.clock;
-        const halfDuration = this.state.halfDuration;
-
-        // If period end already triggered, don't trigger again
-        if (periodEndTriggered) return;
-
-        // Calculate the effective end time (duration + announced stoppage)
-        let periodEndMinute = 0;
-        let nextPeriod: MatchPeriod | null = null;
-
-        switch (period) {
-            case 'FIRST_HALF':
-                periodEndMinute = halfDuration + (announcedStoppage || 0);
-                nextPeriod = 'HALF_TIME';
-                break;
-            case 'SECOND_HALF':
-                periodEndMinute = (halfDuration * 2) + (announcedStoppage || 0);
-                nextPeriod = 'FINISHED';
-                break;
-            case 'EXTRA_TIME_1':
-                periodEndMinute = (halfDuration * 2) + 15 + (announcedStoppage || 0);
-                nextPeriod = 'EXTRA_TIME_2';
-                break;
-            case 'EXTRA_TIME_2':
-                periodEndMinute = (halfDuration * 2) + 30 + (announcedStoppage || 0);
-                nextPeriod = 'FINISHED';
-                break;
-            default:
-                return; // No auto-transition for other periods
-        }
-
-        // If we've reached the period end
-        if (absoluteMinute >= periodEndMinute && nextPeriod) {
-            // Mark as triggered to prevent multiple calls
-            this.state.clock.periodEndTriggered = true;
-
-            // Auto-pause the clock
-            this.stopClock();
-
-            // Trigger period end event for UI to handle
-            this.broadcastPeriodEnd(period, nextPeriod);
-        }
+        // No auto-pause behavior — the logger controls when the half ends.
+        // The clock simply keeps ticking. The display will show added time
+        // format automatically via updateDisplayMinute() and getStoppageTime().
+        return;
     }
 
     private updateDisplayMinute(): void {
@@ -485,7 +453,7 @@ export class MatchStateManager {
             'EXTRA_TIME_1': ['EXTRA_TIME_2', 'FINISHED'],
             'EXTRA_TIME_2': ['PENALTY_SHOOTOUT', 'FINISHED'],
             'PENALTY_SHOOTOUT': ['FINISHED'],
-            'FINISHED': [],
+            'FINISHED': ['EXTRA_TIME_1', 'PENALTY_SHOOTOUT'], // Allow knockout progression from FT
             'SUSPENDED': ['FIRST_HALF', 'SECOND_HALF', 'ABANDONED'],
             'ABANDONED': [],
         };
@@ -1136,18 +1104,20 @@ export class MatchStateManager {
     }
 
     getFormattedTime(): string {
-        const { displayMinute, period } = this.state.clock;
-        const stoppage = this.getStoppageTime();
+        const { absoluteMinute, second } = this.state.clock;
+        const secStr = second < 10 ? `0${second}` : `${second}`;
 
-        let time = `${displayMinute}'`;
-        if (stoppage > 0) {
-            time += `+${stoppage}`;
-        }
-
-        return time;
+        // Continuous clock like the Premier League: just keeps counting up
+        // e.g., 38:22, 47:05, 93:11
+        return `${absoluteMinute}:${secStr}`;
     }
 
-    private getStoppageTime(): number {
+    /**
+     * Get how many minutes of added time have actually elapsed
+     * beyond regulation for the current period.
+     * e.g., if halfDuration=35 and absoluteMinute=38, returns 3
+     */
+    getElapsedAddedTime(): number {
         const { absoluteMinute, period } = this.state.clock;
         const halfDuration = this.state.halfDuration;
 
@@ -1163,6 +1133,21 @@ export class MatchStateManager {
             default:
                 return 0;
         }
+    }
+
+    /**
+     * Get the announced stoppage time (the board the 4th official holds up).
+     * Returns null if not yet announced.
+     */
+    getAnnouncedStoppage(): number | null {
+        return this.state.clock.announcedStoppage;
+    }
+
+    /**
+     * Check whether we're currently in added time for the current period.
+     */
+    isInAddedTime(): boolean {
+        return this.getElapsedAddedTime() > 0;
     }
 
     isLive(): boolean {
