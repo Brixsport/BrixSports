@@ -35,6 +35,7 @@ interface PlayerRow {
     nationality: string;
     college: string;
     department: string;
+    email: string;
 }
 
 interface Team {
@@ -81,6 +82,7 @@ const createEmptyPlayer = (): PlayerRow => ({
     nationality: 'Nigeria',
     college: '',
     department: '',
+    email: '',
 });
 
 // ─── Component ───────────────────────────────────────────────────
@@ -217,6 +219,7 @@ export default function BulkRegisterPage() {
                 nationality: p.nationality.trim() || 'Nigeria',
                 college: p.college.trim() || undefined,
                 department: p.department.trim() || undefined,
+                email: p.email.trim() || undefined,
             })),
         };
 
@@ -530,6 +533,7 @@ export default function BulkRegisterPage() {
                                     <th className="text-left text-xs text-white/30 font-medium px-2 py-3 w-24">Weight</th>
                                     <th className="text-left text-xs text-white/30 font-medium px-2 py-3">College/Faculty</th>
                                     <th className="text-left text-xs text-white/30 font-medium px-2 py-3">Dept/Course</th>
+                                    <th className="text-left text-xs text-white/30 font-medium px-2 py-3">Email</th>
                                     <th className="text-left text-xs text-white/30 font-medium px-2 py-3 w-16"></th>
                                 </tr>
                             </thead>
@@ -637,6 +641,15 @@ export default function BulkRegisterPage() {
                                                         value={player.department}
                                                         onChange={(e) => updatePlayer(player.id, 'department', e.target.value)}
                                                         placeholder="Dept/Course"
+                                                        className="w-full bg-transparent border-0 text-sm text-white/60 placeholder-white/15 focus:outline-none focus:bg-white/[0.03] rounded px-2 py-1 transition-colors"
+                                                    />
+                                                </td>
+                                                <td className="px-2 py-2">
+                                                    <input
+                                                        type="email"
+                                                        value={player.email}
+                                                        onChange={(e) => updatePlayer(player.id, 'email', e.target.value)}
+                                                        placeholder="email@uni.edu"
                                                         className="w-full bg-transparent border-0 text-sm text-white/60 placeholder-white/15 focus:outline-none focus:bg-white/[0.03] rounded px-2 py-1 transition-colors"
                                                     />
                                                 </td>
@@ -773,6 +786,13 @@ export default function BulkRegisterPage() {
                                                     onChange={(e) => updatePlayer(player.id, 'department', e.target.value)}
                                                     placeholder="Dept/Course"
                                                     className="bg-white/[0.05] border border-white/[0.08] rounded-lg px-3 py-2 text-sm text-white/60 placeholder-white/20 focus:outline-none focus:ring-1 focus:ring-indigo-500/40"
+                                                />
+                                                <input
+                                                    type="email"
+                                                    value={player.email}
+                                                    onChange={(e) => updatePlayer(player.id, 'email', e.target.value)}
+                                                    placeholder="Email (multi-sport link)"
+                                                    className="col-span-2 bg-white/[0.05] border border-white/[0.08] rounded-lg px-3 py-2 text-sm text-white/60 placeholder-white/20 focus:outline-none focus:ring-1 focus:ring-indigo-500/40"
                                                 />
                                             </div>
                                         </motion.div>

@@ -11,6 +11,7 @@ import { db } from '@/db';
 import { teams, players, competitions } from '@/db/schema';
 import { eq } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
+import { getPlayerProfileId } from '@/db/utils/player-profile';
 
 interface PlayerInput {
     name: string;
@@ -24,6 +25,7 @@ interface PlayerInput {
     college?: string;
     department?: string;
     image?: string;
+    email?: string; // For multi-sport linking
 }
 
 interface BulkRegisterInput {
@@ -129,6 +131,9 @@ export async function POST(request: NextRequest) {
             }
 
             const playerId = nanoid();
+            // Get or create profileId for multi-sport linking
+            const profileId = await getPlayerProfileId(p.email);
+
             await db.insert(players).values({
                 id: playerId,
                 name: p.name,
@@ -143,6 +148,8 @@ export async function POST(request: NextRequest) {
                 college: p.college || null,
                 department: p.department || null,
                 image: p.image || null,
+                email: p.email || null,
+                profileId: profileId,
                 rating: 7.0,
                 eyePoints: 0,
                 createdAt: new Date(),
