@@ -9,6 +9,7 @@ import SessionProvider from "@/components/providers/SessionProvider";
 import { NotificationProvider } from "@/components/NotificationProvider";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { AuthModal } from "@/components/auth/AuthModal";
+import { SocketProvider } from "@/hooks/useWebSocket";
 
 export const metadata: Metadata = {
   title: "Brixsport | Nigerian University Sports Live",
@@ -69,9 +70,11 @@ export default function RootLayout({
           <SessionProvider>
             <AuthProvider>
               <NotificationProvider>
-                {children}
-                <BottomNav />
-                <AuthModal />
+                <SocketProvider>
+                  {children}
+                  <BottomNav />
+                  <AuthModal />
+                </SocketProvider>
               </NotificationProvider>
             </AuthProvider>
           </SessionProvider>

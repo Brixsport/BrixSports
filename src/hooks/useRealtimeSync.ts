@@ -1,14 +1,15 @@
 /**
  * WebSocket Hook for Real-time Multi-Logger Sync
- * Replaces polling with instant event synchronization
+ * Now uses the shared Socket.IO connection instead of raw WebSocket
  */
 
 'use client';
 
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback } from 'react';
+import { useSocket } from '@/hooks/useWebSocket';
 import type { SyncEvent } from '@/lib/multiLogger';
 
-interface UseWebSocketOptions {
+interface UseRealtimeSyncOptions {
     matchId: string;
     loggerId: string;
     loggerName: string;
@@ -16,11 +17,6 @@ interface UseWebSocketOptions {
     onEvent?: (event: SyncEvent) => void;
     onLoggerJoined?: (logger: { loggerId: string; loggerName: string }) => void;
     onLoggerLeft?: (loggerId: string) => void;
-}
-
-interface WebSocketMessage {
-    type: 'event' | 'logger-joined' | 'logger-left' | 'sync-request' | 'sync-response';
-    data: any;
 }
 
 export function useRealtimeSync({
@@ -31,146 +27,61 @@ export function useRealtimeSync({
     onEvent,
     onLoggerJoined,
     onLoggerLeft,
-}: UseWebSocketOptions) {
-    const [isConnected, setIsConnected] = useState(false);
+}: UseRealtimeSyncOptions) {
     const [activeLoggers, setActiveLoggers] = useState<Array<{ loggerId: string; loggerName: string }>>([]);
-    const wsRef = useRef<WebSocket | null>(null);
-    const reconnectTimeoutRef = useRef<NodeJS.Timeout | undefined>(undefined);
-    const heartbeatIntervalRef = useRef<NodeJS.Timeout | undefined>(undefined);
+    const { socket, isConnected } = useSocket();
 
-    // Connect to WebSocket
-    const connect = useCallback(() => {
-        if (!enabled || wsRef.current?.readyState === WebSocket.OPEN) return;
-
-        try {
-            // Use custom WebSocket server or fallback to polling
-            const wsUrl = process.env.NEXT_PUBLIC_WS_URL || `ws://localhost:3001`;
-            const ws = new WebSocket(`${wsUrl}/logger?matchId=${matchId}&loggerId=${loggerId}`);
-
-            ws.onopen = () => {
-                console.log('WebSocket connected');
-                setIsConnected(true);
-
-                // Send join message
-                ws.send(JSON.stringify({
-                    type: 'join',
-                    data: {
-                        matchId,
-                        loggerId,
-                        loggerName,
-                    },
-                }));
-
-                // Start heartbeat
-                heartbeatIntervalRef.current = setInterval(() => {
-                    if (ws.readyState === WebSocket.OPEN) {
-                        ws.send(JSON.stringify({ type: 'heartbeat', data: { loggerId } }));
-                    }
-                }, 30000); // Every 30 seconds
-            };
-
-            ws.onmessage = (event) => {
-                try {
-                    const message: WebSocketMessage = JSON.parse(event.data);
-
-                    switch (message.type) {
-                        case 'event':
-                            onEvent?.(message.data);
-                            break;
-
-                        case 'logger-joined':
-                            setActiveLoggers(prev => [...prev, message.data]);
-                            onLoggerJoined?.(message.data);
-                            break;
-
-                        case 'logger-left':
-                            setActiveLoggers(prev =>
-                                prev.filter(l => l.loggerId !== message.data.loggerId)
-                            );
-                            onLoggerLeft?.(message.data.loggerId);
-                            break;
-
-                        case 'sync-response':
-                            setActiveLoggers(message.data.loggers || []);
-                            break;
-                    }
-                } catch (error) {
-                    console.error('Error parsing WebSocket message:', error);
-                }
-            };
-
-            ws.onerror = (error) => {
-                console.error('WebSocket error:', error);
-            };
-
-            ws.onclose = () => {
-                console.log('WebSocket disconnected');
-                setIsConnected(false);
-
-                if (heartbeatIntervalRef.current) {
-                    clearInterval(heartbeatIntervalRef.current);
-                }
-
-                reconnectTimeoutRef.current = setTimeout(() => {
-                    connect();
-                }, 3000);
-            };
-
-            wsRef.current = ws;
-        } catch (error) {
-            console.error('Error connecting to WebSocket:', error);
-            setIsConnected(false);
-        }
-    }, [matchId, loggerId, loggerName, enabled, onEvent, onLoggerJoined, onLoggerLeft]);
-
-    const disconnect = useCallback(() => {
-        if (wsRef.current) {
-            if (wsRef.current.readyState === WebSocket.OPEN) {
-                wsRef.current.send(JSON.stringify({
-                    type: 'leave',
-                    data: { matchId, loggerId },
-                }));
-            }
-
-            wsRef.current.close();
-            wsRef.current = null;
-        }
-
-        if (reconnectTimeoutRef.current) {
-            clearTimeout(reconnectTimeoutRef.current);
-        }
-
-        if (heartbeatIntervalRef.current) {
-            clearInterval(heartbeatIntervalRef.current);
-        }
-
-        setIsConnected(false);
-    }, [matchId, loggerId]);
-
-    const broadcastEvent = useCallback((event: SyncEvent) => {
-        if (wsRef.current?.readyState === WebSocket.OPEN) {
-            wsRef.current.send(JSON.stringify({
-                type: 'event',
-                data: event,
-            }));
-        }
-    }, []);
-
+    // Join/leave logger room on the shared socket
     useEffect(() => {
-        if (enabled) {
-            connect();
-        }
+        if (!socket || !isConnected || !enabled) return;
+
+        // Send join message
+        socket.emit('logger:join', { matchId, loggerId, loggerName });
+
+        // Event handlers
+        const handleEvent = (data: SyncEvent) => {
+            onEvent?.(data);
+        };
+
+        const handleLoggerJoined = (data: { loggerId: string; loggerName: string }) => {
+            setActiveLoggers(prev => [...prev, data]);
+            onLoggerJoined?.(data);
+        };
+
+        const handleLoggerLeft = (data: { loggerId: string }) => {
+            setActiveLoggers(prev => prev.filter(l => l.loggerId !== data.loggerId));
+            onLoggerLeft?.(data.loggerId);
+        };
+
+        const handleSyncResponse = (data: { loggers: Array<{ loggerId: string; loggerName: string }> }) => {
+            setActiveLoggers(data.loggers || []);
+        };
+
+        socket.on('logger:event', handleEvent);
+        socket.on('logger-joined', handleLoggerJoined);
+        socket.on('logger-left', handleLoggerLeft);
+        socket.on('sync-response', handleSyncResponse);
 
         return () => {
-            disconnect();
+            socket.emit('logger:leave', { matchId, loggerId });
+            socket.off('logger:event', handleEvent);
+            socket.off('logger-joined', handleLoggerJoined);
+            socket.off('logger-left', handleLoggerLeft);
+            socket.off('sync-response', handleSyncResponse);
         };
-    }, [enabled, connect, disconnect]);
+    }, [socket, isConnected, enabled, matchId, loggerId, loggerName, onEvent, onLoggerJoined, onLoggerLeft]);
+
+    const broadcastEvent = useCallback((event: SyncEvent) => {
+        if (socket?.connected) {
+            socket.emit('logger:broadcast-event', { matchId, event });
+        }
+    }, [socket, matchId]);
 
     return {
         isConnected,
         activeLoggers,
         broadcastEvent,
-        reconnect: connect,
-        disconnect,
+        reconnect: () => { }, // No-op, shared socket handles reconnection
+        disconnect: () => { }, // No-op, shared socket managed by SocketProvider
     };
 }

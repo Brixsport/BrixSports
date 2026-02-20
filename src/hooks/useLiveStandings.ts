@@ -1,12 +1,12 @@
 /**
  * Live Standings Hook
- * Real-time standings updates using WebSocket
+ * Real-time standings updates using the shared WebSocket connection
  */
 
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { io, Socket } from 'socket.io-client';
+import { useSocket } from '@/hooks/useWebSocket';
 
 export interface StandingRow {
     position: number;
@@ -39,9 +39,10 @@ export function useLiveStandings({
     const [standings, setStandings] = useState<StandingRow[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-    const [socket, setSocket] = useState<Socket | null>(null);
-    const [isConnected, setIsConnected] = useState(false);
     const [liveMatches, setLiveMatches] = useState<string[]>([]);
+
+    // Use the shared socket connection
+    const { socket, isConnected } = useSocket();
 
     // Fetch initial standings
     const fetchStandings = useCallback(async () => {
@@ -49,13 +50,8 @@ export function useLiveStandings({
             setLoading(true);
             setError(null);
 
-            const params = new URLSearchParams({
-                competition: competitionId,
-            });
-
-            if (sport) {
-                params.append('sport', sport);
-            }
+            const params = new URLSearchParams({ competition: competitionId });
+            if (sport) params.append('sport', sport);
 
             const response = await fetch(`/api/standings?${params}`);
 
@@ -65,7 +61,6 @@ export function useLiveStandings({
 
             const data = await response.json();
 
-            // Transform and sort standings
             const transformedStandings = data
                 .map((standing: any, index: number) => ({
                     position: index + 1,
@@ -84,7 +79,6 @@ export function useLiveStandings({
                     form: standing.form || [],
                 }))
                 .sort((a: StandingRow, b: StandingRow) => {
-                    // Sort by points, then goal difference, then goals scored
                     if (b.points !== a.points) return b.points - a.points;
                     if (b.goalDifference !== a.goalDifference) return b.goalDifference - a.goalDifference;
                     return b.goalsFor - a.goalsFor;
@@ -98,106 +92,34 @@ export function useLiveStandings({
         }
     }, [competitionId, sport]);
 
-    // Connect to WebSocket
-    const connect = useCallback(() => {
-        if (socket?.connected) return;
+    // Subscribe to competition updates via shared socket
+    useEffect(() => {
+        if (!socket || !isConnected || !autoConnect) return;
 
-        // Determine socket URL
-        let socketUrl = process.env.NEXT_PUBLIC_WS_URL;
-        if (!socketUrl && typeof window !== 'undefined') {
-            const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-            if (isLocalhost) {
-                socketUrl = `${window.location.protocol}//${window.location.host}`;
-            } else {
-                console.warn('[LiveStandings] NEXT_PUBLIC_WS_URL not configured. Real-time standings disabled.');
-                return;
-            }
-        } else if (!socketUrl) {
-            return;
-        }
+        socket.emit('join-competition', competitionId);
 
-        const newSocket = io(socketUrl, {
-            path: '/api/socket', // Ensure we use the same path as main hook
-            transports: ['websocket', 'polling'], // Allow polling as fallback
-            reconnection: true,
-            reconnectionDelay: 1000,
-            reconnectionAttempts: 5,
-        });
-
-        newSocket.on('connect', () => {
-            console.log('Connected to standings WebSocket');
-            setIsConnected(true);
-
-            // Join competition room
-            newSocket.emit('join-competition', competitionId);
-        });
-
-        newSocket.on('disconnect', () => {
-            console.log('Disconnected from standings WebSocket');
-            setIsConnected(false);
-        });
-
-        // Listen for standings updates
-        newSocket.on('standings-update', (data: { standings: StandingRow[] }) => {
-            console.log('Received standings update:', data);
+        const handleStandingsUpdate = (data: { standings: StandingRow[] }) => {
             setStandings(data.standings);
-        });
+        };
 
-        // Listen for live match updates
-        newSocket.on('match-update', (data: { matchId: string; homeScore: number; awayScore: number }) => {
-            console.log('Match update:', data);
-            // Standings will be recalculated on the server and sent via standings-update
-        });
-
-        // Listen for live matches list
-        newSocket.on('live-matches', (data: { matches: string[] }) => {
+        const handleLiveMatches = (data: { matches: string[] }) => {
             setLiveMatches(data.matches);
-        });
+        };
 
-        // Listen for match events that affect standings
-        newSocket.on('match-event', (data: { type: string; matchId: string; teamId: string }) => {
-            console.log('Match event:', data);
-            // Could trigger optimistic UI updates here
-        });
+        socket.on('standings-update', handleStandingsUpdate);
+        socket.on('live-matches', handleLiveMatches);
 
-        newSocket.on('error', (error: any) => {
-            console.error('WebSocket error:', error);
-            setError('WebSocket connection error');
-        });
-
-        setSocket(newSocket);
-    }, [competitionId, socket]);
-
-    // Disconnect from WebSocket
-    const disconnect = useCallback(() => {
-        if (socket) {
+        return () => {
             socket.emit('leave-competition', competitionId);
-            socket.disconnect();
-            setSocket(null);
-            setIsConnected(false);
-        }
-    }, [socket, competitionId]);
-
-    // Manual refresh
-    const refresh = useCallback(() => {
-        fetchStandings();
-    }, [fetchStandings]);
+            socket.off('standings-update', handleStandingsUpdate);
+            socket.off('live-matches', handleLiveMatches);
+        };
+    }, [socket, isConnected, autoConnect, competitionId]);
 
     // Initial fetch
     useEffect(() => {
         fetchStandings();
     }, [fetchStandings]);
-
-    // Auto-connect to WebSocket
-    useEffect(() => {
-        if (autoConnect) {
-            connect();
-        }
-
-        return () => {
-            disconnect();
-        };
-    }, [autoConnect, connect, disconnect]);
 
     return {
         standings,
@@ -205,9 +127,7 @@ export function useLiveStandings({
         error,
         isConnected,
         liveMatches,
-        refresh,
-        connect,
-        disconnect,
+        refresh: fetchStandings,
     };
 }
 
@@ -221,13 +141,11 @@ export function useOptimisticStandings(initialStandings: StandingRow[]) {
                 if (standing.teamId === teamId) {
                     const newGoalsFor = isFor ? standing.goalsFor + 1 : standing.goalsFor;
                     const newGoalsAgainst = !isFor ? standing.goalsAgainst + 1 : standing.goalsAgainst;
-                    const newGD = newGoalsFor - newGoalsAgainst;
-
                     return {
                         ...standing,
                         goalsFor: newGoalsFor,
                         goalsAgainst: newGoalsAgainst,
-                        goalDifference: newGD,
+                        goalDifference: newGoalsFor - newGoalsAgainst,
                     };
                 }
                 return standing;
@@ -242,15 +160,13 @@ export function useOptimisticStandings(initialStandings: StandingRow[]) {
                     const newWon = result === 'W' ? standing.won + 1 : standing.won;
                     const newDrawn = result === 'D' ? standing.drawn + 1 : standing.drawn;
                     const newLost = result === 'L' ? standing.lost + 1 : standing.lost;
-                    const newPoints = newWon * 3 + newDrawn;
-
                     return {
                         ...standing,
                         played: standing.played + 1,
                         won: newWon,
                         drawn: newDrawn,
                         lost: newLost,
-                        points: newPoints,
+                        points: newWon * 3 + newDrawn,
                         form: [result, ...standing.form.slice(0, 4)],
                     };
                 }
@@ -263,10 +179,5 @@ export function useOptimisticStandings(initialStandings: StandingRow[]) {
         setStandings(initialStandings);
     }, [initialStandings]);
 
-    return {
-        standings,
-        updateForGoal,
-        updateForResult,
-        reset,
-    };
+    return { standings, updateForGoal, updateForResult, reset };
 }
