@@ -20,6 +20,9 @@ interface Match {
     loggerId?: string;
 }
 
+const FORMATIONS_11 = ['4-3-3', '4-4-2', '4-2-3-1', '3-5-2', '3-4-3', '5-3-2'];
+const FORMATIONS_5 = ['1-2-2', '2-1-2', '1-3-1', '2-2-1', '1-1-3'];
+
 interface Player {
     id: string;
     name: string;
@@ -49,6 +52,7 @@ export default function AdminMatchLineupsPage() {
     const [homeLineupStatus, setHomeLineupStatus] = useState<any>(null);
     const [awayLineupStatus, setAwayLineupStatus] = useState<any>(null);
     const [unlocking, setUnlocking] = useState(false);
+    const [playersPerSide, setPlayersPerSide] = useState(11);
 
     // Check authentication and role
     useEffect(() => {
@@ -175,8 +179,31 @@ export default function AdminMatchLineupsPage() {
         }
     };
 
-    const handleMatchSelect = (match: Match) => {
+    const handleMatchSelect = async (match: Match) => {
         setSelectedMatch(match);
+        // Fetch competition to determine playersPerSide
+        try {
+            const compRes = await fetch(`/api/competitions`);
+            const compData = await compRes.json();
+            const competitions = Array.isArray(compData) ? compData : (compData.competitions || []);
+            const matchComp = competitions.find((c: any) => c.name === match.competition);
+            if (matchComp && matchComp.playersPerSide) {
+                setPlayersPerSide(matchComp.playersPerSide);
+                // Set appropriate default formation
+                if (matchComp.playersPerSide === 5) {
+                    setHomeFormation('1-2-2');
+                    setAwayFormation('1-2-2');
+                } else {
+                    setHomeFormation('4-3-3');
+                    setAwayFormation('4-3-3');
+                }
+            } else {
+                setPlayersPerSide(11);
+            }
+        } catch (e) {
+            console.error('Could not fetch competition details:', e);
+            setPlayersPerSide(11);
+        }
         loadRosters(match);
     };
 
@@ -185,7 +212,7 @@ export default function AdminMatchLineupsPage() {
             setHomeStarters(prev =>
                 prev.includes(playerId)
                     ? prev.filter(id => id !== playerId)
-                    : prev.length < 11
+                    : prev.length < playersPerSide
                         ? [...prev, playerId]
                         : prev
             );
@@ -193,7 +220,7 @@ export default function AdminMatchLineupsPage() {
             setAwayStarters(prev =>
                 prev.includes(playerId)
                     ? prev.filter(id => id !== playerId)
-                    : prev.length < 11
+                    : prev.length < playersPerSide
                         ? [...prev, playerId]
                         : prev
             );
@@ -203,8 +230,8 @@ export default function AdminMatchLineupsPage() {
     const publishLineups = async () => {
         if (!selectedMatch) return;
 
-        if (homeStarters.length !== 11 || awayStarters.length !== 11) {
-            alert('Both teams must have exactly 11 starters');
+        if (homeStarters.length !== playersPerSide || awayStarters.length !== playersPerSide) {
+            alert(`Both teams must have exactly ${playersPerSide} starters`);
             return;
         }
 
@@ -430,13 +457,13 @@ export default function AdminMatchLineupsPage() {
 
                             {/* Validation Status */}
                             <div className="flex items-center gap-4 text-sm">
-                                <div className={`flex items-center gap-2 ${homeStarters.length === 11 ? 'text-green-400' : 'text-orange-400'}`}>
-                                    {homeStarters.length === 11 ? <CheckCircle size={16} /> : <AlertCircle size={16} />}
-                                    Home: {homeStarters.length}/11 starters
+                                <div className={`flex items-center gap-2 ${homeStarters.length === playersPerSide ? 'text-green-400' : 'text-orange-400'}`}>
+                                    {homeStarters.length === playersPerSide ? <CheckCircle size={16} /> : <AlertCircle size={16} />}
+                                    Home: {homeStarters.length}/{playersPerSide} starters {playersPerSide === 5 && <span className="text-xs opacity-60">(5-aside)</span>}
                                 </div>
-                                <div className={`flex items-center gap-2 ${awayStarters.length === 11 ? 'text-green-400' : 'text-orange-400'}`}>
-                                    {awayStarters.length === 11 ? <CheckCircle size={16} /> : <AlertCircle size={16} />}
-                                    Away: {awayStarters.length}/11 starters
+                                <div className={`flex items-center gap-2 ${awayStarters.length === playersPerSide ? 'text-green-400' : 'text-orange-400'}`}>
+                                    {awayStarters.length === playersPerSide ? <CheckCircle size={16} /> : <AlertCircle size={16} />}
+                                    Away: {awayStarters.length}/{playersPerSide} starters {playersPerSide === 5 && <span className="text-xs opacity-60">(5-aside)</span>}
                                 </div>
                             </div>
                         </div>
@@ -546,6 +573,7 @@ export default function AdminMatchLineupsPage() {
                                         setHomePositionOverrides(prev => ({ ...prev, [playerId]: position }));
                                     }}
                                     isDisabled={user?.role !== 'admin' && homeLineupStatus?.publishedByRole === 'admin' && !homeLineupStatus?.unlocked}
+                                    maxStarters={playersPerSide}
                                 />
 
                                 {/* Away Team */}
@@ -563,6 +591,7 @@ export default function AdminMatchLineupsPage() {
                                         setAwayPositionOverrides(prev => ({ ...prev, [playerId]: position }));
                                     }}
                                     isDisabled={user?.role !== 'admin' && awayLineupStatus?.publishedByRole === 'admin' && !awayLineupStatus?.unlocked}
+                                    maxStarters={playersPerSide}
                                 />
                             </div>
                         )}
@@ -571,7 +600,7 @@ export default function AdminMatchLineupsPage() {
                         <div className="flex justify-center">
                             <button
                                 onClick={publishLineups}
-                                disabled={saving || homeStarters.length !== 11 || awayStarters.length !== 11 || !homeCaptain || !awayCaptain || (user?.role !== 'admin' && ((homeLineupStatus?.publishedByRole === 'admin' && !homeLineupStatus?.unlocked) || (awayLineupStatus?.publishedByRole === 'admin' && !awayLineupStatus?.unlocked)))}
+                                disabled={saving || homeStarters.length !== playersPerSide || awayStarters.length !== playersPerSide || !homeCaptain || !awayCaptain || (user?.role !== 'admin' && ((homeLineupStatus?.publishedByRole === 'admin' && !homeLineupStatus?.unlocked) || (awayLineupStatus?.publishedByRole === 'admin' && !awayLineupStatus?.unlocked)))}
                                 className="px-8 py-4 bg-primary hover:bg-primary/90 disabled:bg-white/10 disabled:cursor-not-allowed text-black disabled:text-white/40 rounded-xl font-bold text-lg flex items-center gap-3 transition-colors"
                             >
                                 <Save size={20} />
@@ -596,7 +625,8 @@ function TeamLineupBuilder({
     onFormationChange,
     onCaptainChange,
     onPositionOverride,
-    isDisabled = false
+    isDisabled = false,
+    maxStarters = 11
 }: {
     team: any;
     roster: Player[];
@@ -609,9 +639,12 @@ function TeamLineupBuilder({
     onCaptainChange: (id: string) => void;
     onPositionOverride?: (playerId: string, position: string) => void;
     isDisabled?: boolean;
+    maxStarters?: number;
 }) {
-    const formations = ['4-3-3', '4-4-2', '4-2-3-1', '3-5-2', '3-4-3', '5-3-2'];
-    const positions = ['GK', 'DEF', 'LB', 'RB', 'CB', 'DM', 'MID', 'CM', 'LM', 'RM', 'AM', 'CAM', 'FW', 'ST', 'CF', 'LW', 'RW'];
+    const formations = maxStarters === 5 ? FORMATIONS_5 : FORMATIONS_11;
+    const positions = maxStarters === 5
+        ? ['GK', 'DEF', 'MID', 'FW', 'PIV']
+        : ['GK', 'DEF', 'LB', 'RB', 'CB', 'DM', 'MID', 'CM', 'LM', 'RM', 'AM', 'CAM', 'FW', 'ST', 'CF', 'LW', 'RW'];
 
     return (
         <div className={`bg-white/5 rounded-xl border border-white/10 p-6 ${isDisabled ? 'opacity-50 pointer-events-none' : ''}`}>
@@ -708,7 +741,7 @@ function TeamLineupBuilder({
 
             {/* Summary */}
             <div className="mt-4 pt-4 border-t border-white/10 text-sm text-white/60">
-                <div>Starters: {starters.length}/11</div>
+                <div>Starters: {starters.length}/{maxStarters} {maxStarters === 5 && '(5-aside)'}</div>
                 <div>Substitutes: {roster.length - starters.length}</div>
             </div>
         </div>

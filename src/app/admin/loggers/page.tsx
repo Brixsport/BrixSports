@@ -301,33 +301,8 @@ function AdminLoggersPageContent() {
     }
 
     return (
-        <div className="min-h-screen bg-[#050505] text-white">
-            {/* Toast Container */}
-            <ToastContainer toasts={toasts} onClose={removeToast} />
-            {/* Sidebar - Same as main admin page */}
-            <aside className="fixed left-0 top-0 bottom-0 w-64 bg-black border-r border-white/5 hidden lg:flex flex-col p-6 space-y-8">
-                <div className="flex items-center gap-3 mb-10">
-                    <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center text-black font-display text-xl -skew-x-12">B</div>
-                    <span className="font-display text-xl tracking-tight italic uppercase">Command</span>
-                </div>
-
-                <nav className="flex-1 space-y-1">
-                    <NavItem icon={<Activity size={18} />} label="Live Monitor" href="/admin" />
-                    <NavItem icon={<Calendar size={18} />} label="Matches" href="/admin/matches" />
-                    <NavItem icon={<Users size={18} />} label="Loggers" active />
-                    <NavItem icon={<Shield size={18} />} label="Access Control" href="/admin/access" />
-                </nav>
-
-                <div className="p-4 bg-white/5 rounded-2xl border border-white/10">
-                    <div className="flex items-center gap-2 mb-2">
-                        <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
-                        <span className="text-[10px] font-black uppercase tracking-widest text-white/40">Nexus Core</span>
-                    </div>
-                    <p className="text-[10px] text-white/60 font-bold">Health: Optimal</p>
-                </div>
-            </aside>
-
-            <main className="lg:pl-64 pt-8 p-6 lg:p-12">
+        <>
+            <div className="p-6 lg:p-12">
                 <div className="max-w-6xl mx-auto space-y-12">
                     <header className="flex flex-col md:flex-row md:items-center justify-between gap-6">
                         <div>
@@ -654,7 +629,7 @@ function AdminLoggersPageContent() {
                         )}
                     </AnimatePresence>
                 </div>
-            </main>
+            </div>
 
             {/* Assign Modal */}
             <AnimatePresence>
@@ -939,20 +914,10 @@ function AdminLoggersPageContent() {
           background: rgba(255, 255, 255, 0.2);
         }
       `}</style>
-        </div>
+        </>
     );
 }
 
-function NavItem({ icon, label, active = false, href = '#' }: { icon: React.ReactNode, label: string, active?: boolean, href?: string }) {
-    const className = `flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${active ? 'bg-primary text-black' : 'text-white/40 hover:text-white hover:bg-white/5'}`;
-
-    return (
-        <Link href={href} className={className}>
-            {icon}
-            <span className="text-xs font-bold italic uppercase tracking-tight">{label}</span>
-        </Link>
-    );
-}
 
 function StatCard({ label, value, subValue, icon }: { label: string, value: string, subValue: string, icon: React.ReactNode }) {
     return (

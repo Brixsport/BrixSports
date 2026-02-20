@@ -2,6 +2,7 @@ import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { jwtVerify } from 'jose';
 import { PWAProvider } from '@/components/pwa/PWAProvider';
+import { AdminDashboardLayout } from '@/components/admin/AdminDashboardLayout';
 
 export default async function AdminLayout({
     children,
@@ -16,8 +17,6 @@ export default async function AdminLayout({
     }
 
     try {
-        // Verify JWT signature using jose
-        // This runs on the server, so we can securely check the signature
         const secret = new TextEncoder().encode(
             process.env.JWT_SECRET || 'your-secret-key-change-in-production'
         );
@@ -34,7 +33,9 @@ export default async function AdminLayout({
 
     return (
         <PWAProvider swPath="/sw-admin.js" showInstallPrompt={false}>
-            {children}
+            <AdminDashboardLayout>
+                {children}
+            </AdminDashboardLayout>
         </PWAProvider>
     );
 }

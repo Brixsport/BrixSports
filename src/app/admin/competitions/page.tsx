@@ -157,12 +157,9 @@ function AdminCompetitionsPageContent() {
     };
 
     return (
-        <div className="min-h-screen bg-[#050505] text-white">
-            {/* Toast Container */}
-            <ToastContainer toasts={toasts} onClose={removeToast} />
-
-            {/* Header */}
-            <div className="border-b border-white/10 bg-black/50 backdrop-blur-xl sticky top-0 z-40">
+        <>
+            <div className="py-8 px-6">
+                <ToastContainer toasts={toasts} onClose={removeToast} />
                 <div className="max-w-7xl mx-auto px-6 py-4">
                     <div className="flex items-center justify-between">
                         <div className="flex items-center gap-4">
@@ -310,171 +307,173 @@ function AdminCompetitionsPageContent() {
             </div>
 
             {/* Create Competition Modal */}
-            {showCreateModal && (
-                <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-                    <motion.div
-                        initial={{ opacity: 0, scale: 0.95 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        className="bg-[#0a0a0a] rounded-2xl border border-white/10 max-w-2xl w-full max-h-[90vh] overflow-y-auto"
-                    >
-                        <div className="p-6 border-b border-white/10">
-                            <h2 className="text-2xl font-bold">Create New Competition</h2>
-                        </div>
-                        <form onSubmit={handleSubmit} className="p-6 space-y-6">
-                            <div>
-                                <label className="block text-sm font-semibold mb-2">Competition Name</label>
-                                <input
-                                    type="text"
-                                    value={formData.name}
-                                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                                    className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 focus:outline-none focus:border-primary"
-                                    placeholder="e.g., BUSA LEAGUE (FOOTBALL)"
-                                    required
-                                />
+            {
+                showCreateModal && (
+                    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.95 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            className="bg-[#0a0a0a] rounded-2xl border border-white/10 max-w-2xl w-full max-h-[90vh] overflow-y-auto"
+                        >
+                            <div className="p-6 border-b border-white/10">
+                                <h2 className="text-2xl font-bold">Create New Competition</h2>
                             </div>
-
-                            <div className="grid grid-cols-2 gap-4">
+                            <form onSubmit={handleSubmit} className="p-6 space-y-6">
                                 <div>
-                                    <label className="block text-sm font-semibold mb-2">Sport</label>
-                                    <select
-                                        value={formData.sport}
-                                        onChange={(e) => setFormData({ ...formData, sport: e.target.value })}
-                                        className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 focus:outline-none focus:border-primary"
-                                    >
-                                        <option value="Football">Football</option>
-                                        <option value="Basketball">Basketball</option>
-                                        <option value="Volleyball">Volleyball</option>
-                                        <option value="Track">Track & Field</option>
-                                    </select>
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-semibold mb-2">Scope</label>
-                                    <select
-                                        value={formData.scope}
-                                        onChange={(e) => setFormData({ ...formData, scope: e.target.value as any })}
-                                        className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 focus:outline-none focus:border-primary"
-                                    >
-                                        <option value="internal">Internal</option>
-                                        <option value="external">External</option>
-                                    </select>
-                                </div>
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <label className="block text-sm font-semibold mb-2">Level</label>
-                                    <select
-                                        value={formData.level}
-                                        onChange={(e) => setFormData({ ...formData, level: e.target.value as any })}
-                                        className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 focus:outline-none focus:border-primary"
-                                    >
-                                        <option value="busa-league">BUSA League</option>
-                                        <option value="college">College (INTERCOLLEGE)</option>
-                                        <option value="department">Department</option>
-                                        <option value="year-level">Year Level</option>
-                                        <option value="inter-university">Inter-University</option>
-                                    </select>
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-semibold mb-2">Format</label>
-                                    <select
-                                        value={formData.format}
-                                        onChange={(e) => setFormData({ ...formData, format: e.target.value as any })}
-                                        className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 focus:outline-none focus:border-primary"
-                                    >
-                                        <option value="league">League</option>
-                                        <option value="knockout">Knockout</option>
-                                        <option value="group-knockout">Group + Knockout</option>
-                                    </select>
-                                </div>
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <label className="block text-sm font-semibold mb-2">Season</label>
+                                    <label className="block text-sm font-semibold mb-2">Competition Name</label>
                                     <input
                                         type="text"
-                                        value={formData.season}
-                                        onChange={(e) => setFormData({ ...formData, season: e.target.value })}
+                                        value={formData.name}
+                                        onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                                         className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 focus:outline-none focus:border-primary"
-                                        placeholder="2024/2025"
+                                        placeholder="e.g., BUSA LEAGUE (FOOTBALL)"
+                                        required
                                     />
                                 </div>
-                                <div>
-                                    <label className="block text-sm font-semibold mb-2">Status</label>
-                                    <select
-                                        value={formData.status}
-                                        onChange={(e) => setFormData({ ...formData, status: e.target.value as any })}
-                                        className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 focus:outline-none focus:border-primary"
+
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block text-sm font-semibold mb-2">Sport</label>
+                                        <select
+                                            value={formData.sport}
+                                            onChange={(e) => setFormData({ ...formData, sport: e.target.value })}
+                                            className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 focus:outline-none focus:border-primary"
+                                        >
+                                            <option value="Football">Football</option>
+                                            <option value="Basketball">Basketball</option>
+                                            <option value="Volleyball">Volleyball</option>
+                                            <option value="Track">Track & Field</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-semibold mb-2">Scope</label>
+                                        <select
+                                            value={formData.scope}
+                                            onChange={(e) => setFormData({ ...formData, scope: e.target.value as any })}
+                                            className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 focus:outline-none focus:border-primary"
+                                        >
+                                            <option value="internal">Internal</option>
+                                            <option value="external">External</option>
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block text-sm font-semibold mb-2">Level</label>
+                                        <select
+                                            value={formData.level}
+                                            onChange={(e) => setFormData({ ...formData, level: e.target.value as any })}
+                                            className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 focus:outline-none focus:border-primary"
+                                        >
+                                            <option value="busa-league">BUSA League</option>
+                                            <option value="college">College (INTERCOLLEGE)</option>
+                                            <option value="department">Department</option>
+                                            <option value="year-level">Year Level</option>
+                                            <option value="inter-university">Inter-University</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-semibold mb-2">Format</label>
+                                        <select
+                                            value={formData.format}
+                                            onChange={(e) => setFormData({ ...formData, format: e.target.value as any })}
+                                            className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 focus:outline-none focus:border-primary"
+                                        >
+                                            <option value="league">League</option>
+                                            <option value="knockout">Knockout</option>
+                                            <option value="group-knockout">Group + Knockout</option>
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block text-sm font-semibold mb-2">Season</label>
+                                        <input
+                                            type="text"
+                                            value={formData.season}
+                                            onChange={(e) => setFormData({ ...formData, season: e.target.value })}
+                                            className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 focus:outline-none focus:border-primary"
+                                            placeholder="2024/2025"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-semibold mb-2">Status</label>
+                                        <select
+                                            value={formData.status}
+                                            onChange={(e) => setFormData({ ...formData, status: e.target.value as any })}
+                                            className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 focus:outline-none focus:border-primary"
+                                        >
+                                            <option value="upcoming">Upcoming</option>
+                                            <option value="ongoing">Ongoing</option>
+                                            <option value="completed">Completed</option>
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-3 gap-4">
+                                    <div>
+                                        <label className="block text-sm font-semibold mb-2">Number of Teams</label>
+                                        <input
+                                            type="number"
+                                            value={formData.numberOfTeams}
+                                            onChange={(e) => setFormData({ ...formData, numberOfTeams: parseInt(e.target.value) })}
+                                            className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 focus:outline-none focus:border-primary"
+                                            min="0"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-semibold mb-2">Number of Groups</label>
+                                        <input
+                                            type="number"
+                                            value={formData.numberOfGroups}
+                                            onChange={(e) => setFormData({ ...formData, numberOfGroups: parseInt(e.target.value) })}
+                                            className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 focus:outline-none focus:border-primary"
+                                            min="0"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-semibold mb-2">Teams per Group</label>
+                                        <input
+                                            type="number"
+                                            value={formData.teamsPerGroup}
+                                            onChange={(e) => setFormData({ ...formData, teamsPerGroup: parseInt(e.target.value) })}
+                                            className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 focus:outline-none focus:border-primary"
+                                            min="0"
+                                        />
+                                    </div>
+                                </div>
+
+                                <div className="flex gap-3 pt-4">
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowCreateModal(false)}
+                                        disabled={isCreating}
+                                        className="flex-1 bg-white/5 hover:bg-white/10 px-6 py-3 rounded-lg font-bold transition-colors disabled:opacity-50"
                                     >
-                                        <option value="upcoming">Upcoming</option>
-                                        <option value="ongoing">Ongoing</option>
-                                        <option value="completed">Completed</option>
-                                    </select>
+                                        Cancel
+                                    </button>
+                                    <button
+                                        type="submit"
+                                        disabled={isCreating}
+                                        className="flex-1 bg-primary text-black px-6 py-3 rounded-lg font-bold hover:bg-primary/90 transition-colors disabled:opacity-50"
+                                    >
+                                        {isCreating ? (
+                                            <span className="flex items-center justify-center gap-2">
+                                                <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                                                Creating...
+                                            </span>
+                                        ) : (
+                                            'Create Competition'
+                                        )}
+                                    </button>
                                 </div>
-                            </div>
-
-                            <div className="grid grid-cols-3 gap-4">
-                                <div>
-                                    <label className="block text-sm font-semibold mb-2">Number of Teams</label>
-                                    <input
-                                        type="number"
-                                        value={formData.numberOfTeams}
-                                        onChange={(e) => setFormData({ ...formData, numberOfTeams: parseInt(e.target.value) })}
-                                        className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 focus:outline-none focus:border-primary"
-                                        min="0"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-semibold mb-2">Number of Groups</label>
-                                    <input
-                                        type="number"
-                                        value={formData.numberOfGroups}
-                                        onChange={(e) => setFormData({ ...formData, numberOfGroups: parseInt(e.target.value) })}
-                                        className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 focus:outline-none focus:border-primary"
-                                        min="0"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-semibold mb-2">Teams per Group</label>
-                                    <input
-                                        type="number"
-                                        value={formData.teamsPerGroup}
-                                        onChange={(e) => setFormData({ ...formData, teamsPerGroup: parseInt(e.target.value) })}
-                                        className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 focus:outline-none focus:border-primary"
-                                        min="0"
-                                    />
-                                </div>
-                            </div>
-
-                            <div className="flex gap-3 pt-4">
-                                <button
-                                    type="button"
-                                    onClick={() => setShowCreateModal(false)}
-                                    disabled={isCreating}
-                                    className="flex-1 bg-white/5 hover:bg-white/10 px-6 py-3 rounded-lg font-bold transition-colors disabled:opacity-50"
-                                >
-                                    Cancel
-                                </button>
-                                <button
-                                    type="submit"
-                                    disabled={isCreating}
-                                    className="flex-1 bg-primary text-black px-6 py-3 rounded-lg font-bold hover:bg-primary/90 transition-colors disabled:opacity-50"
-                                >
-                                    {isCreating ? (
-                                        <span className="flex items-center justify-center gap-2">
-                                            <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                                            Creating...
-                                        </span>
-                                    ) : (
-                                        'Create Competition'
-                                    )}
-                                </button>
-                            </div>
-                        </form>
-                    </motion.div>
-                </div>
-            )}
+                            </form>
+                        </motion.div>
+                    </div>
+                )
+            }
 
             {/* Confirmation Dialog */}
             <ConfirmDialog
@@ -487,7 +486,7 @@ function AdminCompetitionsPageContent() {
                 variant="danger"
                 isLoading={deleteDialog.isDeleting}
             />
-        </div>
+        </>
     );
 }
 

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowLeft, Plus, Calendar, Users, MapPin, Trophy, Edit, Trash2, Eye, Filter, ClipboardList, Star } from 'lucide-react';
 import { nanoid } from 'nanoid';
 import { useToast } from '@/hooks/useToast';
@@ -221,7 +221,6 @@ function AdminMatchesPageContent() {
             });
 
             if (response.ok) {
-                // Update local state with proper type casting
                 setMatches(matches.map(m =>
                     m.id === editingMatch.id
                         ? {
@@ -231,10 +230,10 @@ function AdminMatchesPageContent() {
                             awayTeamId: formData.awayTeamId,
                             venue: formData.venue,
                             competition: formData.competition,
-                            status: formData.status as 'LIVE' | 'FINISHED' | 'UPCOMING' | 'HALF_TIME',
-                            matchType: formData.matchType as 'competition' | 'friendly',
-                            competitionLevel: formData.competitionLevel as 'busa-league' | 'college' | 'department' | 'year-level' | 'external',
-                            friendlyType: formData.friendlyType as 'internal' | 'external',
+                            status: formData.status as any,
+                            matchType: formData.matchType as any,
+                            competitionLevel: formData.competitionLevel as any,
+                            friendlyType: formData.friendlyType as any,
                             friendlyDescription: formData.friendlyDescription,
                             startTime: new Date(formData.startTime).toISOString()
                         }
@@ -266,79 +265,40 @@ function AdminMatchesPageContent() {
     });
 
     return (
-        <div className="min-h-screen bg-[#050505] text-white">
-            {/* Toast Container */}
-            <ToastContainer toasts={toasts} onClose={removeToast} />
-
-            {/* Header */}
-            <div className="border-b border-white/10 bg-black/50 backdrop-blur-xl sticky top-0 z-40">
-                <div className="max-w-7xl mx-auto px-6 py-4">
-                    <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-4">
-                            <Link href="/admin" className="p-2 hover:bg-white/5 rounded-lg transition-colors">
-                                <ArrowLeft size={20} />
-                            </Link>
-                            <div>
-                                <h1 className="text-2xl font-display font-bold">Match Management</h1>
-                                <p className="text-sm text-white/60">Create and manage matches</p>
-                            </div>
-                        </div>
-                        <button
-                            onClick={() => setShowCreateModal(true)}
-                            className="flex items-center gap-2 bg-primary text-black px-4 py-2 rounded-lg font-bold hover:bg-primary/90 transition-colors"
-                        >
-                            <Plus size={18} />
-                            Create Match
-                        </button>
+        <>
+            <div className="py-8 px-6">
+                <ToastContainer toasts={toasts} onClose={removeToast} />
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8">
+                    <div>
+                        <h1 className="text-4xl font-display italic uppercase tracking-tight leading-none mb-2">Match Management</h1>
+                        <p className="text-white/40 text-xs font-bold uppercase tracking-widest">Schedule and coordinate all active fixtures</p>
                     </div>
-                </div>
-            </div>
-
-            {/* Main Content */}
-            <div className="max-w-7xl mx-auto px-6 py-8">
-                {/* Stats */}
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-                    <div className="bg-white/5 rounded-2xl p-6 border border-white/10">
-                        <div className="flex items-center gap-3 mb-2">
-                            <Calendar className="text-primary" size={24} />
-                            <span className="text-white/60 text-sm">Total Matches</span>
-                        </div>
-                        <p className="text-3xl font-bold">{matches.length}</p>
-                    </div>
-                    <div className="bg-white/5 rounded-2xl p-6 border border-white/10">
-                        <div className="flex items-center gap-3 mb-2">
-                            <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse"></div>
-                            <span className="text-white/60 text-sm">Live</span>
-                        </div>
-                        <p className="text-3xl font-bold">{matches.filter(m => m.status === 'LIVE').length}</p>
-                    </div>
-                    <div className="bg-white/5 rounded-2xl p-6 border border-white/10">
-                        <div className="flex items-center gap-3 mb-2">
-                            <Calendar className="text-blue-500" size={24} />
-                            <span className="text-white/60 text-sm">Upcoming</span>
-                        </div>
-                        <p className="text-3xl font-bold">{matches.filter(m => m.status === 'UPCOMING').length}</p>
-                    </div>
-                    <div className="bg-white/5 rounded-2xl p-6 border border-white/10">
-                        <div className="flex items-center gap-3 mb-2">
-                            <Trophy className="text-blue-500" size={24} />
-                            <span className="text-white/60 text-sm">Finished</span>
-                        </div>
-                        <p className="text-3xl font-bold">{matches.filter(m => m.status === 'FINISHED').length}</p>
-                    </div>
+                    <button
+                        onClick={() => setShowCreateModal(true)}
+                        className="flex items-center gap-2 bg-primary text-black px-6 py-3 rounded-xl font-bold text-xs uppercase italic transition-transform hover:scale-105"
+                    >
+                        <Plus size={18} />
+                        Create Match
+                    </button>
                 </div>
 
-                {/* Filters */}
-                <div className="flex items-center gap-3 mb-6">
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-12">
+                    <StatCard label="Total Matches" value={matches.length.toString()} icon={<Calendar className="text-primary" size={24} />} />
+                    <StatCard label="Live" value={matches.filter(m => m.status === 'LIVE').length.toString()} icon={<div className="w-3 h-3 bg-red-500 rounded-full animate-pulse" />} />
+                    <StatCard label="Upcoming" value={matches.filter(m => m.status === 'UPCOMING').length.toString()} icon={<Calendar className="text-blue-500" size={24} />} />
+                    <StatCard label="Finished" value={matches.filter(m => m.status === 'FINISHED').length.toString()} icon={<Trophy className="text-yellow-500" size={24} />} />
+                </div>
+
+                <div className="flex items-center gap-3 mb-8">
                     <Filter size={18} className="text-white/60" />
                     <div className="flex gap-2">
-                        {['all', 'LIVE', 'UPCOMING', 'FINISHED'].map((status) => (
+                        {['all', 'LIVE', 'UPCOMING', 'HALF_TIME', 'FINISHED'].map((status) => (
                             <button
                                 key={status}
                                 onClick={() => setFilterStatus(status)}
-                                className={`px-4 py-2 rounded-lg text-sm font-bold transition-colors ${filterStatus === status
+                                className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${filterStatus === status
                                     ? 'bg-primary text-black'
-                                    : 'bg-white/5 hover:bg-white/10'
+                                    : 'bg-white/5 text-white/40 hover:text-white hover:bg-white/10'
                                     }`}
                             >
                                 {status.toUpperCase()}
@@ -347,8 +307,7 @@ function AdminMatchesPageContent() {
                     </div>
                 </div>
 
-                {/* Matches List */}
-                <div className="space-y-4">
+                <div className="space-y-4 font-bold">
                     {isLoading ? (
                         <SkeletonLoader type="card" count={5} />
                     ) : (
@@ -356,113 +315,100 @@ function AdminMatchesPageContent() {
                             {filteredMatches.map((match) => (
                                 <motion.div
                                     key={match.id}
-                                    initial={{ opacity: 0, y: 20 }}
+                                    initial={{ opacity: 0, y: 10 }}
                                     animate={{ opacity: 1, y: 0 }}
-                                    className="bg-white/5 rounded-2xl p-6 border border-white/10 hover:border-primary/50 transition-all"
+                                    className="bg-white/5 rounded-[32px] p-8 border border-white/10 hover:border-primary/50 transition-all group"
                                 >
-                                    <div className="flex items-start justify-between">
+                                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-8">
                                         <div className="flex-1">
-                                            <div className="flex items-center gap-3 mb-4">
-                                                <span className={`px-3 py-1 rounded-full text-xs font-bold ${match.status === 'LIVE' ? 'bg-red-500/20 text-red-500 animate-pulse' :
+                                            <div className="flex items-center gap-4 mb-6">
+                                                <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${match.status === 'LIVE' ? 'bg-red-500/20 text-red-500 animate-pulse' :
                                                     match.status === 'UPCOMING' ? 'bg-blue-500/20 text-blue-500' :
                                                         'bg-white/20 text-white/60'
                                                     }`}>
                                                     {match.status}
                                                 </span>
-                                                <span className="text-white/60 text-sm">{match.sport}</span>
-                                                <span className="text-white/40 text-sm">•</span>
-                                                <span className="text-white/60 text-sm">{match.competition}</span>
+                                                <span className="text-white/40 text-[10px] font-black uppercase tracking-widest">{match.sport}</span>
+                                                <div className="w-1 h-1 rounded-full bg-white/10" />
+                                                <span className="text-white/40 text-[10px] font-black uppercase tracking-widest">{match.competition}</span>
                                             </div>
 
-                                            {/* Teams */}
-                                            <div className="grid grid-cols-3 gap-4 items-center mb-4">
-                                                <div className="text-right">
-                                                    <p className="font-bold text-lg">{getTeamName(match.homeTeamId)}</p>
+                                            <div className="flex items-center gap-12 mb-6">
+                                                <div className="flex-1 text-right">
+                                                    <p className="text-2xl font-display italic uppercase truncate">{getTeamName(match.homeTeamId)}</p>
                                                 </div>
-                                                <div className="text-center">
+                                                <div className="px-6 py-2 bg-white/5 rounded-2xl border border-white/10 min-w-[120px] flex items-center justify-center">
                                                     {match.status === 'UPCOMING' ? (
-                                                        <p className="text-white/40 text-sm">vs</p>
+                                                        <span className="text-white/20 text-sm font-black italic">VS</span>
                                                     ) : (
-                                                        <div className="flex items-center justify-center gap-3">
-                                                            <span className="text-3xl font-bold">{match.homeScore}</span>
-                                                            <span className="text-white/40">-</span>
-                                                            <span className="text-3xl font-bold">{match.awayScore}</span>
+                                                        <div className="flex items-center gap-4">
+                                                            <span className="text-3xl font-display italic">{match.homeScore}</span>
+                                                            <span className="text-white/20 text-xl font-display">-</span>
+                                                            <span className="text-3xl font-display italic">{match.awayScore}</span>
                                                         </div>
                                                     )}
                                                 </div>
-                                                <div className="text-left">
-                                                    <p className="font-bold text-lg">{getTeamName(match.awayTeamId)}</p>
+                                                <div className="flex-1">
+                                                    <p className="text-2xl font-display italic uppercase truncate">{getTeamName(match.awayTeamId)}</p>
                                                 </div>
                                             </div>
 
-                                            {/* Match Info */}
-                                            <div className="flex items-center gap-6 text-sm text-white/60">
+                                            <div className="flex items-center gap-8 text-[10px] font-black uppercase tracking-widest text-white/20">
                                                 <div className="flex items-center gap-2">
-                                                    <Calendar size={14} />
+                                                    <Calendar size={14} className="text-primary" />
                                                     <span>{new Date(match.startTime).toLocaleString()}</span>
                                                 </div>
                                                 <div className="flex items-center gap-2">
-                                                    <MapPin size={14} />
+                                                    <MapPin size={14} className="text-primary" />
                                                     <span>{match.venue}</span>
                                                 </div>
                                             </div>
                                         </div>
 
-                                        <div className="flex items-center gap-2">
-                                            <Link
-                                                href={`/admin/match-lineups`}
-                                                className="p-2 hover:bg-blue-500/20 text-blue-400 rounded-lg transition-colors group relative"
-                                                title="Manage Lineups"
-                                            >
-                                                <ClipboardList size={18} />
-                                                <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-black text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
-                                                    Lineups
-                                                </span>
-                                            </Link>
-                                            {match.status === 'FINISHED' && (
+                                        <div className="flex flex-row md:flex-col gap-2">
+                                            <div className="flex gap-2">
                                                 <Link
-                                                    href={`/admin/match-ratings/${match.id}`}
-                                                    className="p-2 hover:bg-yellow-500/20 text-yellow-400 rounded-lg transition-colors group relative"
-                                                    title="Adjust Ratings"
+                                                    href={`/admin/match-lineups`}
+                                                    className="p-3 bg-white/5 border border-white/10 rounded-xl hover:bg-blue-500/20 text-blue-400 transition-colors"
+                                                    title="Manage Lineups"
                                                 >
-                                                    <Star size={18} />
-                                                    <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-black text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
-                                                        Ratings
-                                                    </span>
+                                                    <ClipboardList size={20} />
                                                 </Link>
-                                            )}
-                                            <Link href={`/logger?matchId=${match.id}`} className="p-2 hover:bg-white/10 rounded-lg transition-colors group relative">
-                                                <Eye size={18} />
-                                                <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-black text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
-                                                    Logger
-                                                </span>
-                                            </Link>
-                                            <button
-                                                onClick={() => openEditModal(match)}
-                                                className="p-2 hover:bg-white/10 rounded-lg transition-colors group relative"
-                                                title="Edit Match"
-                                            >
-                                                <Edit size={18} />
-                                                <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-black text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
-                                                    Edit
-                                                </span>
-                                            </button>
-                                            <button
-                                                onClick={() => confirmDelete(match.id, `${getTeamName(match.homeTeamId)} vs ${getTeamName(match.awayTeamId)}`)}
-                                                className="p-2 hover:bg-red-500/20 text-red-500 rounded-lg transition-colors"
-                                            >
-                                                <Trash2 size={18} />
-                                            </button>
+                                                {match.status === 'FINISHED' && (
+                                                    <Link
+                                                        href={`/admin/match-ratings/${match.id}`}
+                                                        className="p-3 bg-white/5 border border-white/10 rounded-xl hover:bg-yellow-500/20 text-yellow-400 transition-colors"
+                                                        title="Adjust Ratings"
+                                                    >
+                                                        <Star size={20} />
+                                                    </Link>
+                                                )}
+                                                <Link href={`/logger?matchId=${match.id}`} className="p-3 bg-white/5 border border-white/10 rounded-xl hover:bg-white/10 transition-colors">
+                                                    <Eye size={20} />
+                                                </Link>
+                                                <button
+                                                    onClick={() => openEditModal(match)}
+                                                    className="p-3 bg-white/5 border border-white/10 rounded-xl hover:bg-white/10 transition-colors"
+                                                >
+                                                    <Edit size={20} />
+                                                </button>
+                                                <button
+                                                    onClick={() => confirmDelete(match.id, `${getTeamName(match.homeTeamId)} vs ${getTeamName(match.awayTeamId)}`)}
+                                                    className="p-3 bg-white/5 border border-white/10 rounded-xl hover:bg-red-500/20 text-red-500 transition-colors"
+                                                >
+                                                    <Trash2 size={20} />
+                                                </button>
+                                            </div>
                                         </div>
                                     </div>
                                 </motion.div>
                             ))}
 
                             {filteredMatches.length === 0 && (
-                                <div className="text-center py-20 bg-white/5 rounded-2xl border border-white/10">
-                                    <Calendar size={48} className="mx-auto mb-4 opacity-20" />
-                                    <p className="text-white/40 font-bold text-lg">No matches found</p>
-                                    <p className="text-white/20">Schedule your first match to get started</p>
+                                <div className="text-center py-24 bg-white/5 rounded-[32px] border border-white/10">
+                                    <Calendar size={48} className="mx-auto mb-6 opacity-10" />
+                                    <h4 className="font-display italic text-2xl uppercase mb-2">No matches found</h4>
+                                    <p className="text-[10px] font-black uppercase tracking-widest text-white/20">Expand your filters or schedule a new fixture</p>
                                 </div>
                             )}
                         </>
@@ -470,350 +416,165 @@ function AdminMatchesPageContent() {
                 </div>
             </div>
 
-            {/* Create Match Modal */}
-            {showCreateModal && (
-                <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-                    <motion.div
-                        initial={{ opacity: 0, scale: 0.95 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        className="bg-[#0a0a0a] rounded-2xl border border-white/10 max-w-2xl w-full max-h-[90vh] overflow-y-auto"
-                    >
-                        <div className="p-6 border-b border-white/10">
-                            <h2 className="text-2xl font-bold">Create New Match</h2>
-                        </div>
-                        <form onSubmit={handleSubmit} className="p-6 space-y-6">
+            <AnimatePresence>
+                {showCreateModal && (
+                    <Modal onClose={() => setShowCreateModal(false)} title="Create New Match">
+                        <form onSubmit={handleSubmit} className="space-y-6">
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div>
-                                    <label className="block text-sm font-semibold mb-2">Sport</label>
+                                    <label className="block text-[10px] font-black uppercase tracking-widest text-white/40 mb-2">Sport</label>
                                     <select
                                         value={formData.sport}
                                         onChange={(e) => setFormData({ ...formData, sport: e.target.value })}
-                                        className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-primary"
+                                        className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-primary transition-colors text-white"
                                     >
-                                        <option value="Football" className="bg-[#0a0a0a] text-white">Football</option>
-                                        <option value="Basketball" className="bg-[#0a0a0a] text-white">Basketball</option>
-                                        <option value="Volleyball" className="bg-[#0a0a0a] text-white">Volleyball</option>
-                                        <option value="Track" className="bg-[#0a0a0a] text-white">Track & Field</option>
-                                        <option value="Table Tennis" className="bg-[#0a0a0a] text-white">Table Tennis</option>
-                                        <option value="Scrabble" className="bg-[#0a0a0a] text-white">Scrabble</option>
-                                        <option value="Chess" className="bg-[#0a0a0a] text-white">Chess</option>
+                                        <option value="Football">Football</option>
+                                        <option value="Basketball">Basketball</option>
+                                        <option value="Volleyball">Volleyball</option>
+                                        <option value="Track">Track & Field</option>
                                     </select>
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-semibold mb-2">Status</label>
+                                    <label className="block text-[10px] font-black uppercase tracking-widest text-white/40 mb-2">Status</label>
                                     <select
                                         value={formData.status}
                                         onChange={(e) => setFormData({ ...formData, status: e.target.value })}
-                                        className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-primary"
+                                        className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-primary transition-colors text-white"
                                     >
-                                        <option value="UPCOMING" className="bg-[#0a0a0a] text-white">Upcoming</option>
-                                        <option value="LIVE" className="bg-[#0a0a0a] text-white">Live</option>
-                                        <option value="HALF_TIME" className="bg-[#0a0a0a] text-white">Half Time</option>
-                                        <option value="FINISHED" className="bg-[#0a0a0a] text-white">Finished</option>
+                                        <option value="UPCOMING">Upcoming</option>
+                                        <option value="LIVE">Live</option>
+                                        <option value="HALF_TIME">Half Time</option>
+                                        <option value="FINISHED">Finished</option>
                                     </select>
                                 </div>
                             </div>
-
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div>
-                                    <label className="block text-sm font-semibold mb-2">Home Team</label>
+                                    <label className="block text-[10px] font-black uppercase tracking-widest text-white/40 mb-2">Home Team</label>
                                     <select
                                         value={formData.homeTeamId}
                                         onChange={(e) => setFormData({ ...formData, homeTeamId: e.target.value })}
-                                        className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-primary"
+                                        className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-primary transition-colors text-white"
                                         required
                                     >
-                                        <option value="" className="bg-[#0a0a0a] text-white">Select Home Team</option>
+                                        <option value="">Select Team</option>
                                         {teams.filter(t => t.sport === formData.sport).map(team => (
-                                            <option key={team.id} value={team.id} className="bg-[#0a0a0a] text-white">{team.name}</option>
+                                            <option key={team.id} value={team.id}>{team.name}</option>
                                         ))}
                                     </select>
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-semibold mb-2">Away Team</label>
+                                    <label className="block text-[10px] font-black uppercase tracking-widest text-white/40 mb-2">Away Team</label>
                                     <select
                                         value={formData.awayTeamId}
                                         onChange={(e) => setFormData({ ...formData, awayTeamId: e.target.value })}
-                                        className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-primary"
+                                        className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-primary transition-colors text-white"
                                         required
                                     >
-                                        <option value="" className="bg-[#0a0a0a] text-white">Select Away Team</option>
+                                        <option value="">Select Team</option>
                                         {teams.filter(t => t.sport === formData.sport).map(team => (
-                                            <option key={team.id} value={team.id} className="bg-[#0a0a0a] text-white">{team.name}</option>
+                                            <option key={team.id} value={team.id}>{team.name}</option>
                                         ))}
                                     </select>
                                 </div>
                             </div>
-
-                            <div>
-                                <label className="block text-sm font-semibold mb-2">Competition</label>
-                                <select
-                                    value={formData.competition}
-                                    onChange={(e) => setFormData({ ...formData, competition: e.target.value })}
-                                    className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-primary"
-                                    required
-                                >
-                                    <option value="" className="bg-[#0a0a0a] text-white">Select Competition</option>
-                                    {competitions.filter(c => c.sport === formData.sport).map(comp => (
-                                        <option key={comp.id} value={comp.name} className="bg-[#0a0a0a] text-white">{comp.name}</option>
-                                    ))}
-                                    <option value="Friendly Match" className="bg-[#0a0a0a] text-white">Friendly Match</option>
-                                </select>
-                            </div>
-
-                            <div>
-                                <label className="block text-sm font-semibold mb-2">Competition Level</label>
-                                <select
-                                    value={formData.competitionLevel}
-                                    onChange={(e) => setFormData({ ...formData, competitionLevel: e.target.value as any })}
-                                    className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-primary"
-                                >
-                                    <option value="busa-league" className="bg-[#0a0a0a] text-white">BUSA League</option>
-                                    <option value="college" className="bg-[#0a0a0a] text-white">College (INTERCOLLEGE)</option>
-                                    <option value="department" className="bg-[#0a0a0a] text-white">Department</option>
-                                    <option value="year-level" className="bg-[#0a0a0a] text-white">Year Level</option>
-                                    <option value="external" className="bg-[#0a0a0a] text-white">External (vs Other Universities)</option>
-                                </select>
-                            </div>
-
-                            <div>
-                                <label className="block text-sm font-semibold mb-2">Start Time</label>
-                                <input
-                                    type="datetime-local"
-                                    value={formData.startTime}
-                                    onChange={(e) => setFormData({ ...formData, startTime: e.target.value })}
-                                    className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 focus:outline-none focus:border-primary"
-                                    required
-                                />
-                            </div>
-
-                            <div>
-                                <label className="block text-sm font-semibold mb-2">Venue</label>
-                                <input
-                                    type="text"
-                                    value={formData.venue}
-                                    onChange={(e) => setFormData({ ...formData, venue: e.target.value })}
-                                    className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 focus:outline-none focus:border-primary"
-                                    placeholder="e.g., Bells University Main Pitch"
-                                    required
-                                />
-                            </div>
-
-                            <div className="flex items-center gap-3 bg-white/5 border border-white/10 rounded-lg px-4 py-3">
-                                <input
-                                    type="checkbox"
-                                    id="livestreamEnabled"
-                                    checked={formData.livestreamEnabled}
-                                    onChange={(e) => setFormData({ ...formData, livestreamEnabled: e.target.checked })}
-                                    className="w-5 h-5 rounded border-white/10 text-primary focus:ring-primary bg-transparent"
-                                />
-                                <label htmlFor="livestreamEnabled" className="text-sm font-semibold select-none cursor-pointer">
-                                    Enable Main Pitch Livestream
-                                </label>
-                            </div>
-
-                            <div className="flex gap-3 pt-4">
-                                <button
-                                    type="button"
-                                    onClick={() => setShowCreateModal(false)}
-                                    disabled={isCreating}
-                                    className="flex-1 bg-white/5 hover:bg-white/10 px-6 py-3 rounded-lg font-bold transition-colors disabled:opacity-50"
-                                >
-                                    Cancel
-                                </button>
-                                <button
-                                    type="submit"
-                                    disabled={isCreating}
-                                    className="flex-1 bg-primary text-black px-6 py-3 rounded-lg font-bold hover:bg-primary/90 transition-colors disabled:opacity-50"
-                                >
-                                    {isCreating ? (
-                                        <span className="flex items-center justify-center gap-2">
-                                            <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                                            Creating...
-                                        </span>
-                                    ) : (
-                                        'Create Match'
-                                    )}
+                            <div className="flex gap-4 pt-4">
+                                <button type="button" onClick={() => setShowCreateModal(false)} className="flex-1 py-4 text-[10px] font-black uppercase tracking-widest text-white/40 hover:text-white transition-colors">Cancel</button>
+                                <button type="submit" disabled={isCreating} className="flex-1 bg-primary text-black py-4 rounded-xl text-[10px] font-black uppercase italic tracking-widest hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-50">
+                                    {isCreating ? 'Creating...' : 'Create Fixture'}
                                 </button>
                             </div>
                         </form>
-                    </motion.div>
-                </div>
-            )}
+                    </Modal>
+                )}
+            </AnimatePresence>
 
-            {/* Edit Match Modal */}
-            {showEditModal && editingMatch && (
-                <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-                    <motion.div
-                        initial={{ opacity: 0, scale: 0.95 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        className="bg-[#0a0a0a] rounded-2xl border border-white/10 max-w-2xl w-full max-h-[90vh] overflow-y-auto"
-                    >
-                        <div className="p-6 border-b border-white/10">
-                            <h2 className="text-2xl font-bold">Edit Match</h2>
-                            <p className="text-sm text-white/60 mt-1">{getTeamName(editingMatch.homeTeamId)} vs {getTeamName(editingMatch.awayTeamId)}</p>
-                        </div>
-                        <form onSubmit={handleUpdate} className="p-6 space-y-6">
+            <AnimatePresence>
+                {showEditModal && editingMatch && (
+                    <Modal onClose={() => setShowEditModal(false)} title="Edit Fixture">
+                        <form onSubmit={handleUpdate} className="space-y-6">
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div>
-                                    <label className="block text-sm font-semibold mb-2">Sport</label>
-                                    <select
-                                        value={formData.sport}
-                                        onChange={(e) => setFormData({ ...formData, sport: e.target.value })}
-                                        className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-primary"
-                                    >
-                                        <option value="Football" className="bg-[#0a0a0a] text-white">Football</option>
-                                        <option value="Basketball" className="bg-[#0a0a0a] text-white">Basketball</option>
-                                        <option value="Volleyball" className="bg-[#0a0a0a] text-white">Volleyball</option>
-                                        <option value="Track" className="bg-[#0a0a0a] text-white">Track & Field</option>
-                                        <option value="Table Tennis" className="bg-[#0a0a0a] text-white">Table Tennis</option>
-                                        <option value="Scrabble" className="bg-[#0a0a0a] text-white">Scrabble</option>
-                                        <option value="Chess" className="bg-[#0a0a0a] text-white">Chess</option>
-                                    </select>
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-semibold mb-2">Status</label>
+                                    <label className="block text-[10px] font-black uppercase tracking-widest text-white/40 mb-2">Status</label>
                                     <select
                                         value={formData.status}
                                         onChange={(e) => setFormData({ ...formData, status: e.target.value })}
-                                        className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-primary"
+                                        className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-primary transition-colors text-white"
                                     >
-                                        <option value="UPCOMING" className="bg-[#0a0a0a] text-white">Upcoming</option>
-                                        <option value="LIVE" className="bg-[#0a0a0a] text-white">Live</option>
-                                        <option value="HALF_TIME" className="bg-[#0a0a0a] text-white">Half Time</option>
-                                        <option value="FINISHED" className="bg-[#0a0a0a] text-white">Finished</option>
-                                    </select>
-                                </div>
-                            </div>
-
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div>
-                                    <label className="block text-sm font-semibold mb-2">Home Team</label>
-                                    <select
-                                        value={formData.homeTeamId}
-                                        onChange={(e) => setFormData({ ...formData, homeTeamId: e.target.value })}
-                                        className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-primary"
-                                        required
-                                    >
-                                        <option value="" className="bg-[#0a0a0a] text-white">Select Home Team</option>
-                                        {teams.filter(t => t.sport === formData.sport).map(team => (
-                                            <option key={team.id} value={team.id} className="bg-[#0a0a0a] text-white">{team.name}</option>
-                                        ))}
+                                        <option value="UPCOMING">Upcoming</option>
+                                        <option value="LIVE">Live</option>
+                                        <option value="HALF_TIME">Half Time</option>
+                                        <option value="FINISHED">Finished</option>
                                     </select>
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-semibold mb-2">Away Team</label>
-                                    <select
-                                        value={formData.awayTeamId}
-                                        onChange={(e) => setFormData({ ...formData, awayTeamId: e.target.value })}
-                                        className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-primary"
-                                        required
-                                    >
-                                        <option value="" className="bg-[#0a0a0a] text-white">Select Away Team</option>
-                                        {teams.filter(t => t.sport === formData.sport).map(team => (
-                                            <option key={team.id} value={team.id} className="bg-[#0a0a0a] text-white">{team.name}</option>
-                                        ))}
-                                    </select>
+                                    <label className="block text-[10px] font-black uppercase tracking-widest text-white/40 mb-2">Venue</label>
+                                    <input
+                                        type="text"
+                                        value={formData.venue}
+                                        onChange={(e) => setFormData({ ...formData, venue: e.target.value })}
+                                        className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-primary transition-colors text-white"
+                                        placeholder="Venue name"
+                                    />
                                 </div>
                             </div>
-
-                            <div>
-                                <label className="block text-sm font-semibold mb-2">Competition</label>
-                                <select
-                                    value={formData.competition}
-                                    onChange={(e) => setFormData({ ...formData, competition: e.target.value })}
-                                    className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-primary"
-                                    required
-                                >
-                                    <option value="" className="bg-[#0a0a0a] text-white">Select Competition</option>
-                                    {competitions.filter(c => c.sport === formData.sport).map(comp => (
-                                        <option key={comp.id} value={comp.name} className="bg-[#0a0a0a] text-white">{comp.name}</option>
-                                    ))}
-                                    <option value="Friendly Match" className="bg-[#0a0a0a] text-white">Friendly Match</option>
-                                </select>
-                            </div>
-
-                            <div>
-                                <label className="block text-sm font-semibold mb-2">Competition Level</label>
-                                <select
-                                    value={formData.competitionLevel}
-                                    onChange={(e) => setFormData({ ...formData, competitionLevel: e.target.value as any })}
-                                    className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-primary"
-                                >
-                                    <option value="busa-league" className="bg-[#0a0a0a] text-white">BUSA League</option>
-                                    <option value="college" className="bg-[#0a0a0a] text-white">College (INTERCOLLEGE)</option>
-                                    <option value="department" className="bg-[#0a0a0a] text-white">Department</option>
-                                    <option value="year-level" className="bg-[#0a0a0a] text-white">Year Level</option>
-                                    <option value="external" className="bg-[#0a0a0a] text-white">External (vs Other Universities)</option>
-                                </select>
-                            </div>
-
-                            <div>
-                                <label className="block text-sm font-semibold mb-2">Start Time</label>
-                                <input
-                                    type="datetime-local"
-                                    value={formData.startTime}
-                                    onChange={(e) => setFormData({ ...formData, startTime: e.target.value })}
-                                    className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 focus:outline-none focus:border-primary"
-                                    required
-                                />
-                            </div>
-
-                            <div>
-                                <label className="block text-sm font-semibold mb-2">Venue</label>
-                                <input
-                                    type="text"
-                                    value={formData.venue}
-                                    onChange={(e) => setFormData({ ...formData, venue: e.target.value })}
-                                    className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 focus:outline-none focus:border-primary"
-                                    placeholder="e.g., Bells University Main Pitch"
-                                    required
-                                />
-                            </div>
-
-                            <div className="flex gap-3 pt-4">
-                                <button
-                                    type="button"
-                                    onClick={() => {
-                                        setShowEditModal(false);
-                                        setEditingMatch(null);
-                                    }}
-                                    disabled={isUpdating}
-                                    className="flex-1 bg-white/5 hover:bg-white/10 px-6 py-3 rounded-lg font-bold transition-colors disabled:opacity-50"
-                                >
-                                    Cancel
-                                </button>
-                                <button
-                                    type="submit"
-                                    disabled={isUpdating}
-                                    className="flex-1 bg-primary text-black px-6 py-3 rounded-lg font-bold hover:bg-primary/90 transition-colors disabled:opacity-50"
-                                >
-                                    {isUpdating ? (
-                                        <span className="flex items-center justify-center gap-2">
-                                            <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                                            Updating...
-                                        </span>
-                                    ) : (
-                                        'Update Match'
-                                    )}
+                            <div className="flex gap-4 pt-4">
+                                <button type="button" onClick={() => setShowEditModal(false)} className="flex-1 py-4 text-[10px] font-black uppercase tracking-widest text-white/40 hover:text-white transition-colors">Cancel</button>
+                                <button type="submit" disabled={isUpdating} className="flex-1 bg-primary text-black py-4 rounded-xl text-[10px] font-black uppercase italic tracking-widest hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-50">
+                                    {isUpdating ? 'Updating...' : 'Update Fixture'}
                                 </button>
                             </div>
                         </form>
-                    </motion.div>
-                </div>
-            )}
+                    </Modal>
+                )}
+            </AnimatePresence>
 
-            {/* Confirmation Dialog */}
             <ConfirmDialog
                 isOpen={deleteDialog.isOpen}
                 onClose={() => setDeleteDialog({ isOpen: false, itemId: null, itemName: '', isDeleting: false })}
                 onConfirm={handleDelete}
-                title="Delete Match?"
-                message={`Are you sure you want to delete "${deleteDialog.itemName}"? This action cannot be undone and will permanently remove all associated data.`}
-                confirmText="Delete Match"
+                title="Remove Fixture"
+                message={`Are you sure you want to remove the match between ${deleteDialog.itemName}? This action cannot be undone.`}
+                confirmText="Remove Match"
                 variant="danger"
                 isLoading={deleteDialog.isDeleting}
             />
+        </>
+    );
+}
+
+function Modal({ children, onClose, title }: { children: React.ReactNode, onClose: () => void, title: string }) {
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-6">
+            <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={onClose}
+                className="absolute inset-0 bg-black/80 backdrop-blur-xl"
+            />
+            <motion.div
+                initial={{ opacity: 0, scale: 0.9, y: 20 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.9, y: 20 }}
+                className="relative w-full max-w-2xl bg-[#0a0a0a] border border-white/10 rounded-[40px] p-10 shadow-2xl overflow-hidden"
+            >
+                <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-primary to-transparent opacity-50" />
+                <h3 className="font-display italic text-3xl uppercase mb-8">{title}</h3>
+                {children}
+            </motion.div>
+        </div>
+    );
+}
+
+function StatCard({ label, value, icon }: { label: string, value: string, icon: React.ReactNode }) {
+    return (
+        <div className="bg-white/5 border border-white/10 rounded-[32px] p-8 relative overflow-hidden group">
+            <div className="absolute top-0 right-0 p-6 opacity-10 group-hover:opacity-20 transition-opacity">
+                {icon}
+            </div>
+            <span className="text-[10px] font-black uppercase tracking-widest text-white/40">{label}</span>
+            <p className="text-4xl font-display italic uppercase leading-none mt-2">{value}</p>
         </div>
     );
 }
@@ -825,4 +586,3 @@ export default function AdminMatchesPage() {
         </ErrorBoundary>
     );
 }
-

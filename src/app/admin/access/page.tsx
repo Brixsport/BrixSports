@@ -93,7 +93,7 @@ export default function AccessControlPage() {
     };
 
     return (
-        <div className="min-h-screen bg-[#050505] text-white p-6 lg:p-12">
+        <div className="p-6 lg:p-12">
             <div className="max-w-7xl mx-auto space-y-8">
                 {/* Header */}
                 <div>
