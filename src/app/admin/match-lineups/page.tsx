@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/hooks/useAuth';
 import { useRouter } from 'next/navigation';
-import { Shield, Calendar, Users, CheckCircle, AlertCircle, Save } from 'lucide-react';
+import { Shield, Calendar, Users, CheckCircle, AlertCircle, Save, Lock as LockIcon } from 'lucide-react';
 
 interface Match {
     id: string;
@@ -447,12 +447,19 @@ export default function AdminMatchLineupsPage() {
                                         {selectedMatch.competition} • {new Date(selectedMatch.startTime).toLocaleString()}
                                     </p>
                                 </div>
-                                <button
-                                    onClick={() => setSelectedMatch(null)}
-                                    className="text-white/60 hover:text-white"
-                                >
-                                    ← Back to matches
-                                </button>
+                                <div className="flex items-center gap-4">
+                                    {selectedMatch.status !== 'UPCOMING' && (
+                                        <div className="flex items-center gap-2 px-3 py-1.5 bg-red-500/10 border border-red-500/20 rounded-lg text-red-500 text-xs font-bold">
+                                            <LockIcon size={14} /> Match Started
+                                        </div>
+                                    )}
+                                    <button
+                                        onClick={() => setSelectedMatch(null)}
+                                        className="text-white/60 hover:text-white"
+                                    >
+                                        ← Back to matches
+                                    </button>
+                                </div>
                             </div>
 
                             {/* Validation Status */}
@@ -466,6 +473,13 @@ export default function AdminMatchLineupsPage() {
                                     Away: {awayStarters.length}/{playersPerSide} starters {playersPerSide === 5 && <span className="text-xs opacity-60">(5-aside)</span>}
                                 </div>
                             </div>
+
+                            {selectedMatch.status !== 'UPCOMING' && (
+                                <div className="mt-4 p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-xs flex items-center gap-2">
+                                    <LockIcon size={14} />
+                                    <span>Lineups are locked because the match has already started. Contact a system administrator if corrections are required.</span>
+                                </div>
+                            )}
                         </div>
 
                         {/* Lineup Status Banners */}
@@ -572,7 +586,7 @@ export default function AdminMatchLineupsPage() {
                                     onPositionOverride={(playerId, position) => {
                                         setHomePositionOverrides(prev => ({ ...prev, [playerId]: position }));
                                     }}
-                                    isDisabled={user?.role !== 'admin' && homeLineupStatus?.publishedByRole === 'admin' && !homeLineupStatus?.unlocked}
+                                    isDisabled={(user?.role !== 'admin' && selectedMatch.status !== 'UPCOMING') || (user?.role !== 'admin' && homeLineupStatus?.publishedByRole === 'admin' && !homeLineupStatus?.unlocked)}
                                     maxStarters={playersPerSide}
                                 />
 
@@ -590,7 +604,7 @@ export default function AdminMatchLineupsPage() {
                                     onPositionOverride={(playerId, position) => {
                                         setAwayPositionOverrides(prev => ({ ...prev, [playerId]: position }));
                                     }}
-                                    isDisabled={user?.role !== 'admin' && awayLineupStatus?.publishedByRole === 'admin' && !awayLineupStatus?.unlocked}
+                                    isDisabled={(user?.role !== 'admin' && selectedMatch.status !== 'UPCOMING') || (user?.role !== 'admin' && awayLineupStatus?.publishedByRole === 'admin' && !awayLineupStatus?.unlocked)}
                                     maxStarters={playersPerSide}
                                 />
                             </div>
@@ -600,7 +614,7 @@ export default function AdminMatchLineupsPage() {
                         <div className="flex justify-center">
                             <button
                                 onClick={publishLineups}
-                                disabled={saving || homeStarters.length !== playersPerSide || awayStarters.length !== playersPerSide || !homeCaptain || !awayCaptain || (user?.role !== 'admin' && ((homeLineupStatus?.publishedByRole === 'admin' && !homeLineupStatus?.unlocked) || (awayLineupStatus?.publishedByRole === 'admin' && !awayLineupStatus?.unlocked)))}
+                                disabled={saving || homeStarters.length !== playersPerSide || awayStarters.length !== playersPerSide || !homeCaptain || !awayCaptain || (user?.role !== 'admin' && selectedMatch.status !== 'UPCOMING') || (user?.role !== 'admin' && ((homeLineupStatus?.publishedByRole === 'admin' && !homeLineupStatus?.unlocked) || (awayLineupStatus?.publishedByRole === 'admin' && !awayLineupStatus?.unlocked)))}
                                 className="px-8 py-4 bg-primary hover:bg-primary/90 disabled:bg-white/10 disabled:cursor-not-allowed text-black disabled:text-white/40 rounded-xl font-bold text-lg flex items-center gap-3 transition-colors"
                             >
                                 <Save size={20} />
@@ -647,7 +661,7 @@ function TeamLineupBuilder({
         : ['GK', 'DEF', 'LB', 'RB', 'CB', 'DM', 'MID', 'CM', 'LM', 'RM', 'AM', 'CAM', 'FW', 'ST', 'CF', 'LW', 'RW'];
 
     return (
-        <div className={`bg-white/5 rounded-xl border border-white/10 p-6 ${isDisabled ? 'opacity-50 pointer-events-none' : ''}`}>
+        <div className={`bg-white/5 rounded-xl border border-white/10 p-6 ${isDisabled ? 'opacity-70' : ''}`}>
             <h3 className="text-xl font-bold mb-4">{team.name}</h3>
 
             {/* Formation Selector */}

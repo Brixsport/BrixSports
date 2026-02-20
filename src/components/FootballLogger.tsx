@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Activity, Save, Undo2, Clock, Play, Pause, Settings } from 'lucide-react';
+import { X, Activity, Save, Undo2, Clock, Play, Pause, Settings, Lock as LockIcon } from 'lucide-react';
 import { useMultiLogger } from '@/hooks/useMultiLogger';
 import { useWebSocket } from '@/hooks/useWebSocket';
 import { MultiLoggerStatus } from '@/components/MultiLoggerStatus';
@@ -1459,10 +1459,21 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                             {/* Actions */}
                             <div className="space-y-2">
                                 <button
+                                    disabled={currentPeriod !== 'NOT_STARTED'}
                                     onClick={() => { setViewState('confirm_lineup'); setShowSettingsModal(false); }}
-                                    className="w-full px-4 py-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-sm font-bold text-left transition-colors"
+                                    className={`w-full px-4 py-3 border rounded-xl text-sm font-bold text-left transition-colors ${currentPeriod !== 'NOT_STARTED'
+                                        ? 'bg-white/5 border-white/5 opacity-50 cursor-not-allowed'
+                                        : 'bg-white/5 hover:bg-white/10 border-white/10'
+                                        }`}
                                 >
-                                    📋 View / Edit Lineups
+                                    <span className="flex items-center justify-between">
+                                        <span>📋 View / Edit Lineups</span>
+                                        {currentPeriod !== 'NOT_STARTED' && (
+                                            <span className="text-[10px] font-black uppercase tracking-widest text-white/20 flex items-center gap-1">
+                                                <LockIcon size={10} /> Locked
+                                            </span>
+                                        )}
+                                    </span>
                                 </button>
                                 <button
                                     onClick={() => { fetchLineups(); setShowSettingsModal(false); }}
