@@ -7,7 +7,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
     Activity, Shield, Users, Server, Settings,
     Trophy, Calendar, Video, Newspaper, TrendingUp,
-    Timer, Menu, X, ChevronRight, LogOut
+    Timer, Menu, X, ChevronRight, LogOut, UserPlus
 } from 'lucide-react';
 
 const navItems = [
@@ -18,6 +18,7 @@ const navItems = [
     { icon: <Video size={18} />, label: "Livestreams", href: "/admin/livestreams" },
     { icon: <Newspaper size={18} />, label: "News", href: "/admin/news" },
     { icon: <TrendingUp size={18} />, label: "Transfers", href: "/admin/transfers" },
+    { icon: <UserPlus size={18} />, label: "Bulk Register", href: "/admin/bulk-register" },
     { icon: <Users size={18} />, label: "Loggers", href: "/admin/loggers" },
     { icon: <Server size={18} />, label: "Infrastructure", href: "/admin/infrastructure" },
     { icon: <Shield size={18} />, label: "Access Control", href: "/admin/access" },
