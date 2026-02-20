@@ -502,6 +502,22 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                     awayScore,
                 }),
             });
+            // Send MATCH_END push notification
+            try {
+                await fetch('/api/notifications/match-event', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        matchId: match.id,
+                        homeTeamId: match.homeTeamId,
+                        awayTeamId: match.awayTeamId,
+                        eventType: 'MATCH_END',
+                        teamName: `${homeTeam?.name || 'Home'} vs ${awayTeam?.name || 'Away'}`,
+                        homeScore,
+                        awayScore,
+                    }),
+                });
+            } catch (e) { console.error('Failed to send match end notification:', e); }
             alert('Match finalized.');
         } catch (e) {
             console.error(e);
@@ -801,9 +817,31 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                         {/* Start Match Button - Only show when NOT_STARTED */}
                         {currentPeriod === 'NOT_STARTED' && (
                             <button
-                                onClick={() => {
+                                onClick={async () => {
                                     if (stateManager.current) {
                                         stateManager.current.transitionStatus('FIRST_HALF');
+                                        // Update match status to LIVE in the database
+                                        try {
+                                            await fetch(`/api/matches/${match.id}`, {
+                                                method: 'PATCH',
+                                                headers: { 'Content-Type': 'application/json' },
+                                                body: JSON.stringify({ status: 'LIVE' }),
+                                            });
+                                        } catch (e) { console.error('Failed to update match status:', e); }
+                                        // Send MATCH_START push notification
+                                        try {
+                                            await fetch('/api/notifications/match-event', {
+                                                method: 'POST',
+                                                headers: { 'Content-Type': 'application/json' },
+                                                body: JSON.stringify({
+                                                    matchId: match.id,
+                                                    homeTeamId: match.homeTeamId,
+                                                    awayTeamId: match.awayTeamId,
+                                                    eventType: 'MATCH_START',
+                                                    teamName: `${homeTeam?.name || 'Home'} vs ${awayTeam?.name || 'Away'}`,
+                                                }),
+                                            });
+                                        } catch (e) { console.error('Failed to send match start notification:', e); }
                                     }
                                 }}
                                 className="px-6 py-3 bg-green-500 text-black font-black uppercase tracking-widest rounded-xl hover:scale-105 transition-transform shadow-lg shadow-green-500/20 animate-pulse"
@@ -1082,6 +1120,66 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                     </div>
                 )
             }
+
+            {/* Settings Modal */}
+            {showSettingsModal && (
+                <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                    <div className="bg-zinc-900 border border-white/10 w-full max-w-md rounded-2xl overflow-hidden shadow-2xl">
+                        <div className="p-4 border-b border-white/10 flex justify-between items-center bg-black/40">
+                            <h3 className="font-display italic text-xl uppercase">Match Settings</h3>
+                            <button onClick={() => setShowSettingsModal(false)} className="p-2 hover:bg-white/10 rounded-full"><X size={20} /></button>
+                        </div>
+                        <div className="p-4 space-y-3">
+                            {/* Match Info */}
+                            <div className="bg-white/5 rounded-xl p-4 border border-white/5">
+                                <h4 className="text-[10px] font-black uppercase tracking-widest text-white/40 mb-2">Match Info</h4>
+                                <div className="text-sm space-y-1">
+                                    <p><span className="text-white/40">Competition:</span> <span className="font-bold">{match.competition}</span></p>
+                                    <p><span className="text-white/40">Sport:</span> <span className="font-bold">{match.sport}</span></p>
+                                    <p><span className="text-white/40">Variant:</span> <span className="font-bold">{is5Aside ? '5-a-side' : '11-a-side'}</span></p>
+                                    <p><span className="text-white/40">Period:</span> <span className="font-bold">{currentPeriod.replace('_', ' ')}</span></p>
+                                    <p><span className="text-white/40">Logger:</span> <span className="font-bold">{currentLogger?.name || 'Unknown'}</span></p>
+                                </div>
+                            </div>
+
+                            {/* Connection Status */}
+                            <div className="bg-white/5 rounded-xl p-4 border border-white/5">
+                                <h4 className="text-[10px] font-black uppercase tracking-widest text-white/40 mb-2">Connection</h4>
+                                <div className="flex items-center gap-2">
+                                    <span className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`}></span>
+                                    <span className="text-sm font-medium">{isConnected ? 'Connected' : 'Disconnected'}</span>
+                                </div>
+                                <div className="flex items-center gap-2 mt-1">
+                                    <span className={`w-2 h-2 rounded-full ${isSocketConnected ? 'bg-green-500' : 'bg-red-500'}`}></span>
+                                    <span className="text-sm font-medium">WebSocket: {isSocketConnected ? 'Connected' : 'Disconnected'}</span>
+                                </div>
+                            </div>
+
+                            {/* Actions */}
+                            <div className="space-y-2">
+                                <button
+                                    onClick={() => { setViewState('confirm_lineup'); setShowSettingsModal(false); }}
+                                    className="w-full px-4 py-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-sm font-bold text-left transition-colors"
+                                >
+                                    📋 View / Edit Lineups
+                                </button>
+                                <button
+                                    onClick={() => { fetchLineups(); setShowSettingsModal(false); }}
+                                    className="w-full px-4 py-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-sm font-bold text-left transition-colors"
+                                >
+                                    🔄 Refresh Lineup Data
+                                </button>
+                                <button
+                                    onClick={() => setShowSettingsModal(false)}
+                                    className="w-full px-4 py-3 bg-primary/10 hover:bg-primary/20 border border-primary/20 rounded-xl text-sm font-bold text-primary text-center transition-colors"
+                                >
+                                    Close
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             <MultiLoggerStatus
                 activeLoggers={activeLoggers}

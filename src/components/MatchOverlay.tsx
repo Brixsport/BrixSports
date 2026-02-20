@@ -347,13 +347,20 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
     }
   };
 
-  // Fetch complete match data on mount if events or stats are missing
+  // Fetch complete match data on mount if events, stats, or lineups are missing
   useEffect(() => {
-    const needsInitialFetch = !match.events || match.events.length === 0 || !match.stats;
+    const needsInitialFetch = !match.events || match.events.length === 0 || !match.stats || !match.lineups;
     if (needsInitialFetch) {
       refetchMatchData();
     }
   }, []);
+
+  // Refetch match data when lineups tab is opened (ensure latest lineup data)
+  useEffect(() => {
+    if (activeTab === 'lineups') {
+      refetchMatchData();
+    }
+  }, [activeTab]);
 
   // Listen for match status changes from logger
   useEffect(() => {
@@ -868,7 +875,7 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
                     <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
                     <p className="text-white/60 text-sm">Loading lineups...</p>
                   </div>
-                ) : isLineupPublished(match.lineups?.home) && isLineupPublished(match.lineups?.away) ? (
+                ) : (isLineupPublished(match.lineups?.home) || isLineupPublished(match.lineups?.away)) ? (
                   <ResponsiveLineup
                     homeTeam={{
                       name: homeTeam?.name || 'Home',
