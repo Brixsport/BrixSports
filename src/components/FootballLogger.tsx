@@ -40,6 +40,9 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
     const awayScore = matchState?.score.away ?? (match.awayScore || 0);
     const recordedEvents = matchState?.events ?? [];
 
+    // Can events be logged right now? (only during active play periods)
+    const canLogEvents = ['FIRST_HALF', 'SECOND_HALF', 'EXTRA_TIME_1', 'EXTRA_TIME_2', 'PENALTY_SHOOTOUT'].includes(currentPeriod);
+
     // Variant Detection
     const is5Aside = (match.sport as string) === 'Five-a-side' ||
         (match.sport as string) === '5-a-side' ||
@@ -102,10 +105,14 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                 setHomePlayers(hPlayers);
                 setAwayPlayers(aPlayers);
 
+                // Determine half duration based on sport/competition
+                const matchHalfDuration = is5Aside ? 20 : 35;
+
                 // Initialize Manager
                 const manager = getMatchStateManager(match.id, {
                     homeTeamId: match.homeTeamId,
                     awayTeamId: match.awayTeamId,
+                    halfDuration: matchHalfDuration,
                     score: {
                         home: match.homeScore || 0,
                         away: match.awayScore || 0
@@ -458,13 +465,8 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
         setShowStoppageModal(false);
     };
 
-    const handlePeriodEndConfirm = (extraTimeMinutes: number) => {
+    const handlePeriodEndConfirm = () => {
         if (!stateManager.current || !pendingPeriodTransition) return;
-
-        // Set the extra time
-        if (extraTimeMinutes > 0) {
-            stateManager.current.setAnnouncedStoppage(extraTimeMinutes);
-        }
 
         // Complete the transition to next period
         stateManager.current.completePeriodTransition(pendingPeriodTransition.next as any);
@@ -850,23 +852,67 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                             </button>
                         )}
 
-                        {/* End Half Button - Show during active periods */}
-                        {(currentPeriod === 'FIRST_HALF' || currentPeriod === 'SECOND_HALF') && (
+                        {/* End 1st Half */}
+                        {currentPeriod === 'FIRST_HALF' && (
                             <button
                                 onClick={() => {
                                     if (stateManager.current) {
-                                        const nextPeriod = currentPeriod === 'FIRST_HALF' ? 'HALF_TIME' : 'FINISHED';
-                                        setPendingPeriodTransition({ current: currentPeriod, next: nextPeriod });
+                                        setPendingPeriodTransition({ current: 'FIRST_HALF', next: 'HALF_TIME' });
                                         setShowPeriodEndModal(true);
                                     }
                                 }}
                                 className="px-4 py-2 bg-orange-500 text-black font-bold uppercase tracking-widest rounded-xl hover:scale-105 transition-transform"
                             >
-                                ⏸ End {currentPeriod === 'FIRST_HALF' ? '1st' : '2nd'} Half
+                                ⏸ End 1st Half
                             </button>
                         )}
 
-                        {/* Resume from Half Time */}
+                        {/* End 2nd Half - goes to FINISHED (or extra time available via separate button) */}
+                        {currentPeriod === 'SECOND_HALF' && (
+                            <button
+                                onClick={() => {
+                                    if (stateManager.current) {
+                                        setPendingPeriodTransition({ current: 'SECOND_HALF', next: 'FINISHED' });
+                                        setShowPeriodEndModal(true);
+                                    }
+                                }}
+                                className="px-4 py-2 bg-orange-500 text-black font-bold uppercase tracking-widest rounded-xl hover:scale-105 transition-transform"
+                            >
+                                ⏸ End 2nd Half
+                            </button>
+                        )}
+
+                        {/* End Extra Time 1st Half */}
+                        {currentPeriod === 'EXTRA_TIME_1' && (
+                            <button
+                                onClick={() => {
+                                    if (stateManager.current) {
+                                        setPendingPeriodTransition({ current: 'EXTRA_TIME_1', next: 'EXTRA_TIME_2' });
+                                        setShowPeriodEndModal(true);
+                                    }
+                                }}
+                                className="px-4 py-2 bg-orange-500 text-black font-bold uppercase tracking-widest rounded-xl hover:scale-105 transition-transform"
+                            >
+                                ⏸ End ET 1st Half
+                            </button>
+                        )}
+
+                        {/* End Extra Time 2nd Half */}
+                        {currentPeriod === 'EXTRA_TIME_2' && (
+                            <button
+                                onClick={() => {
+                                    if (stateManager.current) {
+                                        setPendingPeriodTransition({ current: 'EXTRA_TIME_2', next: 'FINISHED' });
+                                        setShowPeriodEndModal(true);
+                                    }
+                                }}
+                                className="px-4 py-2 bg-orange-500 text-black font-bold uppercase tracking-widest rounded-xl hover:scale-105 transition-transform"
+                            >
+                                ⏸ End ET 2nd Half
+                            </button>
+                        )}
+
+                        {/* Resume from Half Time → 2nd Half */}
                         {currentPeriod === 'HALF_TIME' && (
                             <button
                                 onClick={() => {
@@ -880,21 +926,38 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                             </button>
                         )}
 
-                        {/* Start Penalty Shootout - Show when match is FINISHED (for knockout competitions) */}
+                        {/* After Full Time: Extra Time option (knockout/cup) */}
                         {currentPeriod === 'FINISHED' && homeScore === awayScore && (
-                            <button
-                                onClick={() => {
-                                    if (stateManager.current && confirm('Start Penalty Shootout?')) {
-                                        stateManager.current.transitionStatus('PENALTY_SHOOTOUT');
-                                    }
-                                }}
-                                className="px-6 py-3 bg-purple-500 text-black font-black uppercase tracking-widest rounded-xl hover:scale-105 transition-transform shadow-lg shadow-purple-500/20"
-                            >
-                                🎯 Start Penalties
-                            </button>
+                            <>
+                                <button
+                                    onClick={() => {
+                                        if (stateManager.current && confirm('Start Extra Time? (2x 15 min halves)')) {
+                                            stateManager.current.transitionStatus('EXTRA_TIME_1');
+                                        }
+                                    }}
+                                    className="px-4 py-2 bg-amber-500 text-black font-black uppercase tracking-widest rounded-xl hover:scale-105 transition-transform shadow-lg shadow-amber-500/20"
+                                >
+                                    ⏱ Extra Time
+                                </button>
+                                <button
+                                    onClick={() => {
+                                        if (stateManager.current && confirm('Start Penalty Shootout?')) {
+                                            stateManager.current.transitionStatus('PENALTY_SHOOTOUT');
+                                        }
+                                    }}
+                                    className="px-4 py-2 bg-purple-500 text-black font-black uppercase tracking-widest rounded-xl hover:scale-105 transition-transform shadow-lg shadow-purple-500/20"
+                                >
+                                    🎯 Penalties
+                                </button>
+                            </>
                         )}
 
-                        <button onClick={handleUndo} className="p-2 bg-white/5 rounded-xl hover:bg-white/10">
+                        {/* Undo - only when events can be logged */}
+                        <button
+                            onClick={handleUndo}
+                            disabled={!canLogEvents || recordedEvents.length === 0}
+                            className={`p-2 rounded-xl transition-colors ${canLogEvents && recordedEvents.length > 0 ? 'bg-white/5 hover:bg-white/10' : 'bg-white/2 opacity-30 cursor-not-allowed'}`}
+                        >
                             <Undo2 size={20} />
                         </button>
                         <button onClick={() => setShowSettingsModal(true)} className="p-2 bg-white/5 rounded-xl hover:bg-white/10">
@@ -918,17 +981,39 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                             <div className="font-bold uppercase">{homeTeam?.shortName || 'Home'}</div>
                         </div>
                         <div className="text-center w-1/3">
-                            <div className="text-5xl font-mono font-bold tracking-tight mb-2">
+                            <div className="text-5xl font-mono font-bold tracking-tight mb-1">
                                 {displayTime}
                             </div>
+                            {/* Period indicator */}
+                            <div className="text-[10px] font-black uppercase tracking-widest mb-2">
+                                {currentPeriod === 'NOT_STARTED' && <span className="text-white/30">Not Started</span>}
+                                {currentPeriod === 'FIRST_HALF' && <span className="text-green-400">1st Half</span>}
+                                {currentPeriod === 'HALF_TIME' && <span className="text-orange-400">Half Time</span>}
+                                {currentPeriod === 'SECOND_HALF' && <span className="text-green-400">2nd Half</span>}
+                                {currentPeriod === 'EXTRA_TIME_1' && <span className="text-amber-400">ET 1st Half</span>}
+                                {currentPeriod === 'EXTRA_TIME_2' && <span className="text-amber-400">ET 2nd Half</span>}
+                                {currentPeriod === 'PENALTY_SHOOTOUT' && <span className="text-purple-400">Penalties</span>}
+                                {currentPeriod === 'FINISHED' && <span className="text-red-400">Full Time</span>}
+                            </div>
+                            {/* Announced stoppage badge */}
+                            {matchState?.clock.announcedStoppage && canLogEvents && (
+                                <div className="text-[10px] font-black uppercase tracking-widest text-amber-400 mb-1">
+                                    +{matchState.clock.announcedStoppage} added
+                                </div>
+                            )}
                             <div className="flex justify-center gap-2">
-                                <button onClick={toggleClock} className="p-2 rounded-full bg-white/10 hover:bg-white/20 transition-all">
+                                <button
+                                    onClick={toggleClock}
+                                    disabled={!canLogEvents}
+                                    className={`p-2 rounded-full transition-all ${canLogEvents ? 'bg-white/10 hover:bg-white/20' : 'bg-white/5 opacity-30 cursor-not-allowed'}`}
+                                >
                                     {isClockRunning ? <Pause size={24} /> : <Play size={24} />}
                                 </button>
                                 <button
                                     onClick={() => setShowStoppageModal(true)}
-                                    className="p-2 rounded-full bg-white/10 hover:bg-white/20 transition-all text-xs font-bold w-10 h-10 flex items-center justify-center"
-                                    title="Add Stoppage Time"
+                                    disabled={!canLogEvents}
+                                    className={`p-2 rounded-full transition-all text-xs font-bold w-10 h-10 flex items-center justify-center ${canLogEvents ? 'bg-white/10 hover:bg-white/20' : 'bg-white/5 opacity-30 cursor-not-allowed'}`}
+                                    title="Announce Stoppage Time"
                                 >
                                     +
                                 </button>
@@ -960,7 +1045,23 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                 </div>
 
                 {/* Event Buttons - Conditional based on period */}
-                {currentPeriod === 'PENALTY_SHOOTOUT' ? (
+                {!canLogEvents ? (
+                    // Show disabled state message when events can't be logged
+                    <div className="mb-8">
+                        <div className="bg-white/5 border border-white/10 rounded-xl p-6 text-center">
+                            <div className="text-3xl mb-3">
+                                {currentPeriod === 'NOT_STARTED' ? '⏳' : currentPeriod === 'HALF_TIME' ? '☕' : currentPeriod === 'FINISHED' ? '🏁' : '⏸'}
+                            </div>
+                            <p className="text-white/60 text-sm font-bold uppercase tracking-widest">
+                                {currentPeriod === 'NOT_STARTED' && 'Press Start Match to begin logging'}
+                                {currentPeriod === 'HALF_TIME' && 'Half Time — Start 2nd Half to resume logging'}
+                                {currentPeriod === 'FINISHED' && 'Match has ended'}
+                                {currentPeriod === 'SUSPENDED' && 'Match suspended'}
+                                {currentPeriod === 'ABANDONED' && 'Match abandoned'}
+                            </p>
+                        </div>
+                    </div>
+                ) : currentPeriod === 'PENALTY_SHOOTOUT' ? (
                     // Penalty Shootout Buttons
                     <div className="space-y-4 mb-8">
                         <div className="bg-purple-500/10 border border-purple-500/30 rounded-xl p-4 mb-4">
@@ -1092,28 +1193,40 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
             {
                 showPeriodEndModal && pendingPeriodTransition && (
                     <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-50 flex items-center justify-center p-4">
-                        <div className="bg-zinc-900 border border-primary/50 w-full max-w-md rounded-2xl overflow-hidden shadow-2xl">
+                        <div className="bg-zinc-900 border border-primary/50 w-full max-w-sm rounded-2xl overflow-hidden shadow-2xl">
                             <div className="p-6 border-b border-white/10 bg-gradient-to-r from-primary/10 to-transparent">
-                                <h3 className="font-bold text-xl text-primary">Half Ended</h3>
+                                <h3 className="font-bold text-xl text-primary">
+                                    {pendingPeriodTransition.current === 'FIRST_HALF' && 'End 1st Half?'}
+                                    {pendingPeriodTransition.current === 'SECOND_HALF' && 'End 2nd Half?'}
+                                    {pendingPeriodTransition.current === 'EXTRA_TIME_1' && 'End ET 1st Half?'}
+                                    {pendingPeriodTransition.current === 'EXTRA_TIME_2' && 'End ET 2nd Half?'}
+                                </h3>
                                 <p className="text-sm text-white/60 mt-1">
-                                    {pendingPeriodTransition.current === 'FIRST_HALF' ? 'First Half' : 'Second Half'} has ended
+                                    Current time: <span className="font-mono font-bold text-white">{displayTime}</span>
                                 </p>
                             </div>
                             <div className="p-6">
-                                <p className="text-white/80 mb-4">Add extra time played (optional):</p>
-                                <div className="grid grid-cols-5 gap-2 mb-6">
-                                    {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(num => (
-                                        <button
-                                            key={num}
-                                            onClick={() => handlePeriodEndConfirm(num)}
-                                            className="aspect-square bg-white/5 hover:bg-primary hover:text-black rounded-xl font-bold transition-all active:scale-95 border border-white/10 hover:border-primary"
-                                        >
-                                            {num === 0 ? 'None' : `+${num}`}
-                                        </button>
-                                    ))}
-                                </div>
-                                <div className="text-xs text-white/40 text-center">
-                                    Click to add extra time and proceed to {pendingPeriodTransition.next === 'HALF_TIME' ? 'Half Time' : 'Full Time'}
+                                <p className="text-white/70 text-sm mb-6">
+                                    {pendingPeriodTransition.next === 'HALF_TIME' && 'The referee has blown for Half Time.'}
+                                    {pendingPeriodTransition.next === 'FINISHED' && 'The referee has blown the final whistle.'}
+                                    {pendingPeriodTransition.next === 'EXTRA_TIME_2' && 'The referee has blown for the ET break.'}
+                                </p>
+                                <div className="flex gap-3">
+                                    <button
+                                        onClick={() => {
+                                            setShowPeriodEndModal(false);
+                                            setPendingPeriodTransition(null);
+                                        }}
+                                        className="flex-1 py-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl font-bold uppercase tracking-widest text-sm transition-colors"
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        onClick={handlePeriodEndConfirm}
+                                        className="flex-1 py-3 bg-primary text-black rounded-xl font-black uppercase tracking-widest text-sm hover:scale-105 transition-transform"
+                                    >
+                                        Confirm
+                                    </button>
                                 </div>
                             </div>
                         </div>
