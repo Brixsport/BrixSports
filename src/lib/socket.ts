@@ -1,6 +1,8 @@
 /**
  * Socket.IO Helper
- * Provides access to the Socket.IO instance from API routes
+ * 
+ * On local dev (custom server.js): Uses global.io directly
+ * On Vercel (serverless): Sends HTTP requests to the standalone WS server on Railway
  */
 
 import { Server as SocketIOServer } from 'socket.io';
@@ -11,37 +13,66 @@ declare global {
 }
 
 /**
- * Get the Socket.IO server instance
- * @returns Socket.IO server instance or null if not initialized
+ * Get the Socket.IO server instance (local dev only)
  */
 export function getIO(): SocketIOServer | null {
     if (typeof global.io === 'undefined') {
-        console.warn('[Socket.IO] Server not initialized. Make sure you are running with the custom server (server.js)');
         return null;
     }
     return global.io;
 }
 
 /**
- * Broadcast an event to a specific match room
- * @param matchId - The match ID
- * @param event - The event name
- * @param data - The data to broadcast
+ * Broadcast an event via the WS server.
+ * - Local dev: uses global.io directly
+ * - Production (Vercel): sends HTTP request to the standalone WS server
  */
-export function broadcastToMatch(matchId: string, event: string, data: any): void {
+async function broadcast(room: string | null, event: string, data: any): Promise<void> {
+    // Try local Socket.IO first (custom server.js in dev)
     const io = getIO();
     if (io) {
-        io.to(`match:${matchId}`).emit(event, {
-            ...data,
-            timestamp: Date.now(),
+        if (room) {
+            io.to(room).emit(event, { ...data, timestamp: Date.now() });
+        } else {
+            io.emit(event, { ...data, timestamp: Date.now() });
+        }
+        return;
+    }
+
+    // Fall back to HTTP broadcast via the standalone WS server
+    const wsServerUrl = process.env.NEXT_PUBLIC_WS_URL || process.env.WS_SERVER_URL;
+    const apiKey = process.env.WS_API_KEY;
+
+    if (!wsServerUrl || !apiKey) {
+        // Silently skip - WS server not configured
+        return;
+    }
+
+    try {
+        const broadcastUrl = wsServerUrl.replace(/\/+$/, '') + '/broadcast';
+        await fetch(broadcastUrl, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'x-api-key': apiKey,
+            },
+            body: JSON.stringify({ room, event, data }),
         });
+    } catch (error) {
+        // Don't crash API routes if WS broadcast fails
+        console.warn('[Socket] Broadcast failed (WS server may be down):', (error as Error).message);
     }
 }
 
 /**
+ * Broadcast an event to a specific match room
+ */
+export function broadcastToMatch(matchId: string, event: string, data: any): void {
+    broadcast(`match:${matchId}`, event, data);
+}
+
+/**
  * Broadcast a match event (goal, card, etc.)
- * @param matchId - The match ID
- * @param event - The match event data
  */
 export function broadcastMatchEvent(matchId: string, event: any): void {
     broadcastToMatch(matchId, 'event:new', {
@@ -52,9 +83,6 @@ export function broadcastMatchEvent(matchId: string, event: any): void {
 
 /**
  * Broadcast a score update
- * @param matchId - The match ID
- * @param homeScore - Home team score
- * @param awayScore - Away team score
  */
 export function broadcastScoreUpdate(matchId: string, homeScore: number, awayScore: number): void {
     broadcastToMatch(matchId, 'match:score:updated', {
@@ -66,9 +94,6 @@ export function broadcastScoreUpdate(matchId: string, homeScore: number, awaySco
 
 /**
  * Broadcast a rating update
- * @param matchId - The match ID
- * @param playerId - The player ID
- * @param rating - The new rating
  */
 export function broadcastRatingUpdate(matchId: string, playerId: string, rating: number): void {
     broadcastToMatch(matchId, 'rating:updated', {
@@ -80,9 +105,6 @@ export function broadcastRatingUpdate(matchId: string, playerId: string, rating:
 
 /**
  * Broadcast stats update
- * @param matchId - The match ID
- * @param teamId - The team ID
- * @param stats - The updated stats
  */
 export function broadcastStatsUpdate(matchId: string, teamId: string, stats: any): void {
     broadcastToMatch(matchId, 'stats:updated', {
@@ -94,8 +116,6 @@ export function broadcastStatsUpdate(matchId: string, teamId: string, stats: any
 
 /**
  * Broadcast match status change
- * @param matchId - The match ID
- * @param status - The new status
  */
 export function broadcastMatchStatus(matchId: string, status: string): void {
     broadcastToMatch(matchId, 'match:status:changed', {
@@ -106,8 +126,6 @@ export function broadcastMatchStatus(matchId: string, status: string): void {
 
 /**
  * Broadcast event deletion
- * @param matchId - The match ID
- * @param eventId - The deleted event ID
  */
 export function broadcastEventDeleted(matchId: string, eventId: string): void {
     broadcastToMatch(matchId, 'event:deleted', {

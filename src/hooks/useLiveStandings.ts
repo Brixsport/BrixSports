@@ -105,9 +105,15 @@ export function useLiveStandings({
         // Determine socket URL
         let socketUrl = process.env.NEXT_PUBLIC_WS_URL;
         if (!socketUrl && typeof window !== 'undefined') {
-            socketUrl = `${window.location.protocol}//${window.location.host}`;
+            const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+            if (isLocalhost) {
+                socketUrl = `${window.location.protocol}//${window.location.host}`;
+            } else {
+                console.warn('[LiveStandings] NEXT_PUBLIC_WS_URL not configured. Real-time standings disabled.');
+                return;
+            }
         } else if (!socketUrl) {
-            socketUrl = 'http://localhost:3000';
+            return;
         }
 
         const newSocket = io(socketUrl, {
