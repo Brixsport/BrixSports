@@ -36,7 +36,7 @@ export function AdminSidebar() {
     return (
         <>
             {/* Mobile Toggle Button */}
-            <div className="lg:hidden fixed top-4 right-4 z-[60]">
+            <div className="fixed top-4 right-4 z-[60]">
                 <button
                     onClick={() => setIsOpen(!isOpen)}
                     className="p-3 bg-primary text-black rounded-xl shadow-lg border border-black/10 transition-transform active:scale-95"
@@ -53,7 +53,7 @@ export function AdminSidebar() {
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
                         onClick={() => setIsOpen(false)}
-                        className="fixed inset-0 bg-black/80 backdrop-blur-md z-[50] lg:hidden"
+                        className="fixed inset-0 bg-black/80 backdrop-blur-md z-[50]"
                     />
                 )}
             </AnimatePresence>
@@ -61,8 +61,8 @@ export function AdminSidebar() {
             {/* Sidebar Content */}
             <aside className={`
         fixed left-0 top-0 bottom-0 w-72 bg-black border-r border-white/5 z-[55] 
-        transition-transform duration-500 ease-out lg:translate-x-0
-        ${isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
+        transition-transform duration-500 ease-out
+        ${isOpen ? 'translate-x-0' : '-translate-x-full'}
         flex flex-col p-6 space-y-8
       `}>
                 <div className="flex items-center justify-between mb-10">
@@ -73,7 +73,7 @@ export function AdminSidebar() {
                             <span className="text-[10px] font-black uppercase tracking-[0.2em] text-primary">Nexus v2.4</span>
                         </div>
                     </Link>
-                    <button className="lg:hidden text-white/40 hover:text-white" onClick={() => setIsOpen(false)}>
+                    <button className="text-white/40 hover:text-white" onClick={() => setIsOpen(false)}>
                         <X size={20} />
                     </button>
                 </div>
