@@ -619,6 +619,18 @@ export class MatchStateManager {
         return lastEvent;
     }
 
+    updateConfig(config: Partial<{ halfDuration: number }>): void {
+        if (config.halfDuration !== undefined) {
+            this.state.halfDuration = config.halfDuration;
+        }
+
+        // After updating config, we should refresh the clock state (display minutes)
+        this.updateDisplayMinute();
+
+        this.notifyListeners();
+        this.persistState();
+    }
+
     // ========== PLAYER MANAGEMENT ==========
 
     registerPlayer(player: Player, team: 'home' | 'away'): void {

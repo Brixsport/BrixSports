@@ -43,14 +43,20 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
     // Can events be logged right now? (only during active play periods)
     const canLogEvents = ['FIRST_HALF', 'SECOND_HALF', 'EXTRA_TIME_1', 'EXTRA_TIME_2', 'PENALTY_SHOOTOUT'].includes(currentPeriod);
 
-    // Variant Detection
-    const is5Aside = (match.sport as string) === 'Five-a-side' ||
+    // Variant Detection — fetched from competition data or string fallback
+    const [competitionPlayersPerSide, setCompetitionPlayersPerSide] = useState<number | null>(null);
+    const [halfDuration, setHalfDuration] = useState<number>(45); // Will be updated in init
+
+    const is5Aside = competitionPlayersPerSide === 5 ||
+        (match.sport as string) === 'Five-a-side' ||
         (match.sport as string) === '5-a-side' ||
         (match.sport as string) === '5-aside' ||
         match.competition?.toLowerCase().includes('5-a-side') ||
-        match.competition?.toLowerCase().includes('futsal');
+        match.competition?.toLowerCase().includes('5-aside') ||
+        match.competition?.toLowerCase().includes('futsal') ||
+        match.competition?.toLowerCase().includes('npuga');
 
-    const STARTER_COUNT = is5Aside ? 5 : 11;
+    const STARTER_COUNT = competitionPlayersPerSide || (is5Aside ? 5 : 11);
 
     // WebSocket
     const { emit, isConnected: isSocketConnected } = useWebSocket({
@@ -105,8 +111,30 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                 setHomePlayers(hPlayers);
                 setAwayPlayers(aPlayers);
 
-                // Determine half duration based on sport/competition
-                const matchHalfDuration = is5Aside ? 20 : 35;
+                // Fetch competition data for playersPerSide and auto-determine half duration
+                let detectedPlayersPerSide: number | null = null;
+                let matchHalfDuration = 35; // Default for Nigerian university football
+                try {
+                    const compRes = await fetch(`/api/competitions`);
+                    if (compRes.ok) {
+                        const data = await compRes.json();
+                        const comps = data.competitions || [];
+                        const comp = comps.find((c: any) => c.name === match.competition);
+                        if (comp?.playersPerSide) {
+                            detectedPlayersPerSide = comp.playersPerSide;
+                            setCompetitionPlayersPerSide(comp.playersPerSide);
+                        }
+                    }
+                } catch (e) { console.log('Could not fetch competition data:', e); }
+
+                // Determine half duration: 5-aside uses 20 min halves, standard uses 35
+                const isFiveAside = detectedPlayersPerSide === 5 ||
+                    match.competition?.toLowerCase().includes('5-a-side') ||
+                    match.competition?.toLowerCase().includes('5-aside') ||
+                    match.competition?.toLowerCase().includes('futsal') ||
+                    match.competition?.toLowerCase().includes('npuga');
+                matchHalfDuration = isFiveAside ? 20 : 35;
+                setHalfDuration(matchHalfDuration);
 
                 // Initialize Manager
                 const manager = getMatchStateManager(match.id, {
@@ -802,190 +830,73 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
     }
 
     return (
-        <div className="min-h-screen bg-[#050505] text-white p-4">
-            {/* Sticky Header */}
-            <div className="sticky top-0 z-40 bg-[#050505]/95 backdrop-blur-lg border-b border-white/10 -mx-4 px-4 pb-4 mb-4">
-                <div className="max-w-7xl mx-auto flex items-center justify-between">
-                    <div className="flex items-center gap-4">
-                        <button onClick={onExit} className="p-2 bg-white/5 rounded-xl hover:bg-white/10">
-                            <X size={20} />
+        <div className="min-h-screen bg-[#050505] text-white pb-4">
+            {/* ===== COMPACT MOBILE HEADER ===== */}
+            <div className="sticky top-0 z-40 bg-[#050505]/95 backdrop-blur-lg border-b border-white/10">
+                <div className="px-3 py-2 flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                        <button onClick={onExit} className="p-1.5 bg-white/5 rounded-lg hover:bg-white/10 shrink-0">
+                            <X size={16} />
                         </button>
-                        <div>
-                            <h1 className="text-xl font-display uppercase italic">{match.competition}</h1>
-                            <div className="text-xs text-white/40">{currentPeriod.replace('_', ' ')}</div>
+                        <div className="min-w-0">
+                            <h1 className="text-sm font-bold uppercase truncate">{match.competition}</h1>
+                            <div className="text-[9px] text-white/40 uppercase tracking-wider">
+                                {is5Aside ? '5-aside' : '11v11'} • {halfDuration} min halves
+                            </div>
                         </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                        {/* Start Match Button - Only show when NOT_STARTED */}
-                        {currentPeriod === 'NOT_STARTED' && (
-                            <button
-                                onClick={async () => {
-                                    if (stateManager.current) {
-                                        stateManager.current.transitionStatus('FIRST_HALF');
-                                        // Update match status to LIVE in the database
-                                        try {
-                                            await fetch(`/api/matches/${match.id}`, {
-                                                method: 'PATCH',
-                                                headers: { 'Content-Type': 'application/json' },
-                                                body: JSON.stringify({ status: 'LIVE' }),
-                                            });
-                                        } catch (e) { console.error('Failed to update match status:', e); }
-                                        // Send MATCH_START push notification
-                                        try {
-                                            await fetch('/api/notifications/match-event', {
-                                                method: 'POST',
-                                                headers: { 'Content-Type': 'application/json' },
-                                                body: JSON.stringify({
-                                                    matchId: match.id,
-                                                    homeTeamId: match.homeTeamId,
-                                                    awayTeamId: match.awayTeamId,
-                                                    eventType: 'MATCH_START',
-                                                    teamName: `${homeTeam?.name || 'Home'} vs ${awayTeam?.name || 'Away'}`,
-                                                }),
-                                            });
-                                        } catch (e) { console.error('Failed to send match start notification:', e); }
-                                    }
-                                }}
-                                className="px-6 py-3 bg-green-500 text-black font-black uppercase tracking-widest rounded-xl hover:scale-105 transition-transform shadow-lg shadow-green-500/20 animate-pulse"
-                            >
-                                ▶ Start Match
-                            </button>
-                        )}
-
-                        {/* End 1st Half */}
-                        {currentPeriod === 'FIRST_HALF' && (
-                            <button
-                                onClick={() => {
-                                    if (stateManager.current) {
-                                        setPendingPeriodTransition({ current: 'FIRST_HALF', next: 'HALF_TIME' });
-                                        setShowPeriodEndModal(true);
-                                    }
-                                }}
-                                className="px-4 py-2 bg-orange-500 text-black font-bold uppercase tracking-widest rounded-xl hover:scale-105 transition-transform"
-                            >
-                                ⏸ End 1st Half
-                            </button>
-                        )}
-
-                        {/* End 2nd Half - goes to FINISHED (or extra time available via separate button) */}
-                        {currentPeriod === 'SECOND_HALF' && (
-                            <button
-                                onClick={() => {
-                                    if (stateManager.current) {
-                                        setPendingPeriodTransition({ current: 'SECOND_HALF', next: 'FINISHED' });
-                                        setShowPeriodEndModal(true);
-                                    }
-                                }}
-                                className="px-4 py-2 bg-orange-500 text-black font-bold uppercase tracking-widest rounded-xl hover:scale-105 transition-transform"
-                            >
-                                ⏸ End 2nd Half
-                            </button>
-                        )}
-
-                        {/* End Extra Time 1st Half */}
-                        {currentPeriod === 'EXTRA_TIME_1' && (
-                            <button
-                                onClick={() => {
-                                    if (stateManager.current) {
-                                        setPendingPeriodTransition({ current: 'EXTRA_TIME_1', next: 'EXTRA_TIME_2' });
-                                        setShowPeriodEndModal(true);
-                                    }
-                                }}
-                                className="px-4 py-2 bg-orange-500 text-black font-bold uppercase tracking-widest rounded-xl hover:scale-105 transition-transform"
-                            >
-                                ⏸ End ET 1st Half
-                            </button>
-                        )}
-
-                        {/* End Extra Time 2nd Half */}
-                        {currentPeriod === 'EXTRA_TIME_2' && (
-                            <button
-                                onClick={() => {
-                                    if (stateManager.current) {
-                                        setPendingPeriodTransition({ current: 'EXTRA_TIME_2', next: 'FINISHED' });
-                                        setShowPeriodEndModal(true);
-                                    }
-                                }}
-                                className="px-4 py-2 bg-orange-500 text-black font-bold uppercase tracking-widest rounded-xl hover:scale-105 transition-transform"
-                            >
-                                ⏸ End ET 2nd Half
-                            </button>
-                        )}
-
-                        {/* Resume from Half Time → 2nd Half */}
-                        {currentPeriod === 'HALF_TIME' && (
-                            <button
-                                onClick={() => {
-                                    if (stateManager.current) {
-                                        stateManager.current.transitionStatus('SECOND_HALF');
-                                    }
-                                }}
-                                className="px-6 py-3 bg-green-500 text-black font-black uppercase tracking-widest rounded-xl hover:scale-105 transition-transform shadow-lg shadow-green-500/20 animate-pulse"
-                            >
-                                ▶ Start 2nd Half
-                            </button>
-                        )}
-
-                        {/* After Full Time: Extra Time option (knockout/cup) */}
-                        {currentPeriod === 'FINISHED' && homeScore === awayScore && (
-                            <>
-                                <button
-                                    onClick={() => {
-                                        if (stateManager.current && confirm('Start Extra Time? (2x 15 min halves)')) {
-                                            stateManager.current.transitionStatus('EXTRA_TIME_1');
-                                        }
-                                    }}
-                                    className="px-4 py-2 bg-amber-500 text-black font-black uppercase tracking-widest rounded-xl hover:scale-105 transition-transform shadow-lg shadow-amber-500/20"
-                                >
-                                    ⏱ Extra Time
-                                </button>
-                                <button
-                                    onClick={() => {
-                                        if (stateManager.current && confirm('Start Penalty Shootout?')) {
-                                            stateManager.current.transitionStatus('PENALTY_SHOOTOUT');
-                                        }
-                                    }}
-                                    className="px-4 py-2 bg-purple-500 text-black font-black uppercase tracking-widest rounded-xl hover:scale-105 transition-transform shadow-lg shadow-purple-500/20"
-                                >
-                                    🎯 Penalties
-                                </button>
-                            </>
-                        )}
-
-                        {/* Undo - only when events can be logged */}
+                    <div className="flex items-center gap-1.5 shrink-0">
                         <button
                             onClick={handleUndo}
                             disabled={!canLogEvents || recordedEvents.length === 0}
-                            className={`p-2 rounded-xl transition-colors ${canLogEvents && recordedEvents.length > 0 ? 'bg-white/5 hover:bg-white/10' : 'bg-white/2 opacity-30 cursor-not-allowed'}`}
+                            className={`p-1.5 rounded-lg transition-colors ${canLogEvents && recordedEvents.length > 0 ? 'bg-white/5 hover:bg-white/10' : 'opacity-20 cursor-not-allowed'}`}
                         >
-                            <Undo2 size={20} />
+                            <Undo2 size={16} />
                         </button>
-                        <button onClick={() => setShowSettingsModal(true)} className="p-2 bg-white/5 rounded-xl hover:bg-white/10">
-                            <Settings size={20} />
+                        <button onClick={() => setShowSettingsModal(true)} className="p-1.5 bg-white/5 rounded-lg hover:bg-white/10">
+                            <Settings size={16} />
                         </button>
-                        {currentPeriod !== 'FINISHED' && currentPeriod !== 'NOT_STARTED' && (
-                            <button onClick={handleFinalize} disabled={isSaving} className="px-4 py-2 bg-green-500 text-black font-bold rounded-xl">
-                                {isSaving ? 'Saving...' : 'End Match'}
-                            </button>
-                        )}
                     </div>
                 </div>
             </div>
 
-            {/* Scoreboard */}
-            <div className="max-w-7xl mx-auto mb-6">
-                <div className="bg-gradient-to-br from-green-900/20 to-black border border-green-500/20 rounded-2xl p-6">
-                    <div className="flex items-center justify-between">
-                        <div className="text-center w-1/3">
-                            <div className="text-4xl font-display italic text-primary mb-2">{homeScore}</div>
-                            <div className="font-bold uppercase">{homeTeam?.shortName || 'Home'}</div>
+            <div className="px-3 pt-3">
+                {/* ===== SCOREBOARD ===== */}
+                <div className="bg-gradient-to-b from-green-900/30 via-black/80 to-black border border-green-500/15 rounded-2xl p-4 mb-4 relative overflow-hidden">
+                    {/* Live pulse indicator */}
+                    {canLogEvents && isClockRunning && (
+                        <div className="absolute top-3 left-3 flex items-center gap-1.5">
+                            <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
+                            <span className="text-[9px] font-black uppercase tracking-widest text-red-400">LIVE</span>
                         </div>
-                        <div className="text-center w-1/3">
-                            <div className="text-5xl font-mono font-bold tracking-tight mb-1">
+                    )}
+
+                    {/* Scores + Teams */}
+                    <div className="flex items-center justify-between">
+                        {/* Home */}
+                        <div className="text-center flex-1 min-w-0">
+                            {homeTeam?.logo ? (
+                                <img src={homeTeam.logo} alt="" className="w-10 h-10 mx-auto mb-1.5 object-contain" />
+                            ) : (
+                                <div className="w-10 h-10 mx-auto mb-1.5 bg-white/10 rounded-full flex items-center justify-center text-xs font-black">
+                                    {homeTeam?.shortName?.charAt(0) || 'H'}
+                                </div>
+                            )}
+                            <div className="text-[10px] font-bold uppercase tracking-wider truncate px-1">{homeTeam?.shortName || 'Home'}</div>
+                        </div>
+
+                        {/* Score + Clock */}
+                        <div className="text-center shrink-0 px-3">
+                            <div className="flex items-center justify-center gap-3 mb-1">
+                                <span className="text-4xl font-display italic tabular-nums">{homeScore}</span>
+                                <span className="text-lg text-white/20 font-bold">:</span>
+                                <span className="text-4xl font-display italic tabular-nums">{awayScore}</span>
+                            </div>
+                            <div className="text-2xl font-mono font-bold tracking-tight tabular-nums">
                                 {displayTime}
                             </div>
                             {/* Period indicator */}
-                            <div className="text-[10px] font-black uppercase tracking-widest mb-2">
+                            <div className="text-[9px] font-black uppercase tracking-widest mt-0.5">
                                 {currentPeriod === 'NOT_STARTED' && <span className="text-white/30">Not Started</span>}
                                 {currentPeriod === 'FIRST_HALF' && <span className="text-green-400">1st Half</span>}
                                 {currentPeriod === 'HALF_TIME' && <span className="text-orange-400">Half Time</span>}
@@ -995,52 +906,132 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                                 {currentPeriod === 'PENALTY_SHOOTOUT' && <span className="text-purple-400">Penalties</span>}
                                 {currentPeriod === 'FINISHED' && <span className="text-red-400">Full Time</span>}
                             </div>
-                            {/* Announced stoppage badge */}
+                            {/* Announced stoppage */}
                             {matchState?.clock.announcedStoppage && canLogEvents && (
-                                <div className="text-[10px] font-black uppercase tracking-widest text-amber-400 mb-1">
-                                    +{matchState.clock.announcedStoppage} added
+                                <div className="text-[9px] font-black text-amber-400 mt-0.5">
+                                    +{matchState.clock.announcedStoppage} ADDED
                                 </div>
                             )}
-                            <div className="flex justify-center gap-2">
-                                <button
-                                    onClick={toggleClock}
-                                    disabled={!canLogEvents}
-                                    className={`p-2 rounded-full transition-all ${canLogEvents ? 'bg-white/10 hover:bg-white/20' : 'bg-white/5 opacity-30 cursor-not-allowed'}`}
-                                >
-                                    {isClockRunning ? <Pause size={24} /> : <Play size={24} />}
-                                </button>
-                                <button
-                                    onClick={() => setShowStoppageModal(true)}
-                                    disabled={!canLogEvents}
-                                    className={`p-2 rounded-full transition-all text-xs font-bold w-10 h-10 flex items-center justify-center ${canLogEvents ? 'bg-white/10 hover:bg-white/20' : 'bg-white/5 opacity-30 cursor-not-allowed'}`}
-                                    title="Announce Stoppage Time"
-                                >
-                                    +
-                                </button>
-                            </div>
                         </div>
-                        <div className="text-center w-1/3">
-                            <div className="text-4xl font-display italic text-primary mb-2">{awayScore}</div>
-                            <div className="font-bold uppercase">{awayTeam?.shortName || 'Away'}</div>
+
+                        {/* Away */}
+                        <div className="text-center flex-1 min-w-0">
+                            {awayTeam?.logo ? (
+                                <img src={awayTeam.logo} alt="" className="w-10 h-10 mx-auto mb-1.5 object-contain" />
+                            ) : (
+                                <div className="w-10 h-10 mx-auto mb-1.5 bg-white/10 rounded-full flex items-center justify-center text-xs font-black">
+                                    {awayTeam?.shortName?.charAt(0) || 'A'}
+                                </div>
+                            )}
+                            <div className="text-[10px] font-bold uppercase tracking-wider truncate px-1">{awayTeam?.shortName || 'Away'}</div>
                         </div>
                     </div>
-                </div>
-            </div >
 
-            {/* Controls */}
-            < div className="max-w-7xl mx-auto" >
-                <div className="grid grid-cols-2 gap-4 mb-6">
+                    {/* Clock Controls */}
+                    <div className="flex justify-center gap-2 mt-3 pt-3 border-t border-white/5">
+                        <button
+                            onClick={toggleClock}
+                            disabled={!canLogEvents}
+                            className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold transition-all ${canLogEvents ? 'bg-white/10 hover:bg-white/15 active:scale-95' : 'bg-white/5 opacity-30 cursor-not-allowed'}`}
+                        >
+                            {isClockRunning ? <><Pause size={14} /> Pause</> : <><Play size={14} /> Start</>}
+                        </button>
+                        <button
+                            onClick={() => setShowStoppageModal(true)}
+                            disabled={!canLogEvents}
+                            className={`px-3 py-2 rounded-xl text-xs font-bold transition-all ${canLogEvents ? 'bg-amber-500/20 text-amber-400 hover:bg-amber-500/30 active:scale-95 border border-amber-500/20' : 'bg-white/5 opacity-30 cursor-not-allowed'}`}
+                        >
+                            +⏱
+                        </button>
+                    </div>
+                </div>
+
+                {/* ===== PERIOD ACTION BUTTONS ===== */}
+                <div className="flex flex-wrap gap-2 mb-4">
+                    {currentPeriod === 'NOT_STARTED' && (
+                        <button
+                            onClick={async () => {
+                                if (stateManager.current) {
+                                    stateManager.current.transitionStatus('FIRST_HALF');
+                                    try { await fetch(`/api/matches/${match.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'LIVE' }) }); } catch (e) { console.error(e); }
+                                    try { await fetch('/api/notifications/match-event', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ matchId: match.id, homeTeamId: match.homeTeamId, awayTeamId: match.awayTeamId, eventType: 'MATCH_START', teamName: `${homeTeam?.name || 'Home'} vs ${awayTeam?.name || 'Away'}` }) }); } catch (e) { console.error(e); }
+                                }
+                            }}
+                            className="flex-1 py-3 bg-green-500 text-black font-black uppercase tracking-widest rounded-xl hover:scale-[1.02] transition-transform shadow-lg shadow-green-500/20 animate-pulse text-sm"
+                        >
+                            ▶ Start Match
+                        </button>
+                    )}
+
+                    {currentPeriod === 'FIRST_HALF' && (
+                        <button onClick={() => { setPendingPeriodTransition({ current: 'FIRST_HALF', next: 'HALF_TIME' }); setShowPeriodEndModal(true); }}
+                            className="flex-1 py-2.5 bg-orange-500 text-black font-bold uppercase tracking-widest rounded-xl text-xs active:scale-95 transition-transform">
+                            ⏸ End 1st Half
+                        </button>
+                    )}
+
+                    {currentPeriod === 'SECOND_HALF' && (
+                        <button onClick={() => { setPendingPeriodTransition({ current: 'SECOND_HALF', next: 'FINISHED' }); setShowPeriodEndModal(true); }}
+                            className="flex-1 py-2.5 bg-orange-500 text-black font-bold uppercase tracking-widest rounded-xl text-xs active:scale-95 transition-transform">
+                            ⏸ End 2nd Half
+                        </button>
+                    )}
+
+                    {currentPeriod === 'EXTRA_TIME_1' && (
+                        <button onClick={() => { setPendingPeriodTransition({ current: 'EXTRA_TIME_1', next: 'EXTRA_TIME_2' }); setShowPeriodEndModal(true); }}
+                            className="flex-1 py-2.5 bg-orange-500 text-black font-bold uppercase tracking-widest rounded-xl text-xs active:scale-95 transition-transform">
+                            ⏸ End ET 1st Half
+                        </button>
+                    )}
+
+                    {currentPeriod === 'EXTRA_TIME_2' && (
+                        <button onClick={() => { setPendingPeriodTransition({ current: 'EXTRA_TIME_2', next: 'FINISHED' }); setShowPeriodEndModal(true); }}
+                            className="flex-1 py-2.5 bg-orange-500 text-black font-bold uppercase tracking-widest rounded-xl text-xs active:scale-95 transition-transform">
+                            ⏸ End ET 2nd Half
+                        </button>
+                    )}
+
+                    {currentPeriod === 'HALF_TIME' && (
+                        <button onClick={() => { stateManager.current?.transitionStatus('SECOND_HALF'); }}
+                            className="flex-1 py-3 bg-green-500 text-black font-black uppercase tracking-widest rounded-xl text-sm animate-pulse shadow-lg shadow-green-500/20 active:scale-95 transition-transform">
+                            ▶ Start 2nd Half
+                        </button>
+                    )}
+
+                    {currentPeriod === 'FINISHED' && homeScore === awayScore && (
+                        <>
+                            <button onClick={() => { if (confirm('Start Extra Time?')) stateManager.current?.transitionStatus('EXTRA_TIME_1'); }}
+                                className="flex-1 py-2.5 bg-amber-500 text-black font-bold uppercase tracking-widest rounded-xl text-xs active:scale-95 transition-transform">
+                                ⏱ Extra Time
+                            </button>
+                            <button onClick={() => { if (confirm('Start Penalties?')) stateManager.current?.transitionStatus('PENALTY_SHOOTOUT'); }}
+                                className="flex-1 py-2.5 bg-purple-500 text-black font-bold uppercase tracking-widest rounded-xl text-xs active:scale-95 transition-transform">
+                                🎯 Penalties
+                            </button>
+                        </>
+                    )}
+
+                    {currentPeriod !== 'FINISHED' && currentPeriod !== 'NOT_STARTED' && (
+                        <button onClick={handleFinalize} disabled={isSaving}
+                            className="py-2.5 px-4 bg-white/5 border border-white/10 text-white/60 font-bold uppercase tracking-widest rounded-xl text-xs active:scale-95 transition-transform">
+                            {isSaving ? '...' : '🏁 End'}
+                        </button>
+                    )}
+                </div>
+
+                {/* Team Selector */}
+                <div className="grid grid-cols-2 gap-2 mb-3">
                     <button
                         onClick={() => setSelectedTeam('home')}
-                        className={`p-4 rounded-xl border transition-all ${selectedTeam === 'home' ? 'bg-primary text-black border-primary' : 'bg-white/5 border-white/10'}`}
+                        className={`py-2.5 px-3 rounded-xl border text-sm font-bold transition-all active:scale-95 ${selectedTeam === 'home' ? 'bg-primary text-black border-primary' : 'bg-white/5 border-white/10'}`}
                     >
-                        {homeTeam?.name || 'Home Team'}
+                        {homeTeam?.shortName || 'Home'}
                     </button>
                     <button
                         onClick={() => setSelectedTeam('away')}
-                        className={`p-4 rounded-xl border transition-all ${selectedTeam === 'away' ? 'bg-primary text-black border-primary' : 'bg-white/5 border-white/10'}`}
+                        className={`py-2.5 px-3 rounded-xl border text-sm font-bold transition-all active:scale-95 ${selectedTeam === 'away' ? 'bg-primary text-black border-primary' : 'bg-white/5 border-white/10'}`}
                     >
-                        {awayTeam?.name || 'Away Team'}
+                        {awayTeam?.shortName || 'Away'}
                     </button>
                 </div>
 
@@ -1075,64 +1066,89 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                         </div>
                     </div>
                 ) : (
-                    // Regular Match Buttons
-                    <div className="grid grid-cols-4 sm:grid-cols-6 lg:grid-cols-8 gap-3 mb-8">
-                        {/* Scoring */}
-                        <EventButton type="Goal" icon="⚽" onClick={() => handleEventClick('Goal', true)} />
-                        <EventButton type="Penalty" icon="🎯" onClick={() => handleEventClick('Penalty', true)} />
-                        <EventButton type="Own Goal" icon="🔴" label="Own Goal" onClick={() => handleEventClick('Own Goal')} />
-                        <EventButton type="Assist" icon="🅰️" onClick={() => handleEventClick('Assist')} />
+                    // Regular Match Buttons — mobile-first 4-col grid
+                    <div className="space-y-4 mb-4">
+                        {/* Key Events — Scoring */}
+                        <div className="grid grid-cols-4 gap-2">
+                            <EventButton type="Goal" icon="⚽" variant="success" onClick={() => handleEventClick('Goal', true)} />
+                            <EventButton type="Penalty" icon="🎯" variant="success" onClick={() => handleEventClick('Penalty', true)} />
+                            <EventButton type="Own Goal" icon="🔴" label="OG" variant="danger" onClick={() => handleEventClick('Own Goal')} />
+                            <EventButton type="Assist" icon="🅰️" variant="primary" onClick={() => handleEventClick('Assist')} />
+                        </div>
 
                         {/* Discipline */}
-                        <EventButton type="Yellow Card" icon="🟨" label="Yellow" onClick={() => handleEventClick('Yellow Card')} />
-                        <EventButton type="Red Card" icon="🟥" label="Red" onClick={() => handleEventClick('Red Card')} />
-                        <EventButton type="Foul" icon="⚠️" onClick={() => handleEventClick('Foul')} />
-                        <EventButton type="Push" icon="🤚" onClick={() => handleEventClick('Push')} />
-                        <EventButton type="Handball" icon="✋" onClick={() => handleEventClick('Handball')} />
+                        <div className="grid grid-cols-5 gap-1.5">
+                            <EventButton type="Yellow Card" icon="🟨" label="Yellow" variant="warning" onClick={() => handleEventClick('Yellow Card')} />
+                            <EventButton type="Red Card" icon="🟥" label="Red" variant="danger" onClick={() => handleEventClick('Red Card')} />
+                            <EventButton type="Foul" icon="⚠️" variant="warning" onClick={() => handleEventClick('Foul')} />
+                            <EventButton type="Push" icon="🤚" variant="warning" onClick={() => handleEventClick('Push')} />
+                            <EventButton type="Handball" icon="✋" variant="warning" onClick={() => handleEventClick('Handball')} />
+                        </div>
 
                         {/* Defensive */}
-                        <EventButton type="Save" icon="🧤" onClick={() => handleEventClick('Save')} />
-                        <EventButton type="Catch" icon="🤲" onClick={() => handleEventClick('Catch')} />
-                        <EventButton type="Block" icon="🛡️" onClick={() => handleEventClick('Block')} />
-                        <EventButton type="Interception" icon="🚫" label="Intercept" onClick={() => handleEventClick('Interception')} />
-                        <EventButton type="Clearance" icon="🦵" onClick={() => handleEventClick('Clearance')} />
-                        <EventButton type="Tackle" icon="⚡" onClick={() => handleEventClick('Tackle')} />
+                        <div className="grid grid-cols-5 gap-1.5">
+                            <EventButton type="Save" icon="🧤" variant="info" onClick={() => handleEventClick('Save')} />
+                            <EventButton type="Catch" icon="🤲" variant="info" onClick={() => handleEventClick('Catch')} />
+                            <EventButton type="Block" icon="🛡️" variant="info" onClick={() => handleEventClick('Block')} />
+                            <EventButton type="Interception" icon="🚫" label="Int" variant="info" onClick={() => handleEventClick('Interception')} />
+                            <EventButton type="Clearance" icon="🦵" label="Clr" variant="info" onClick={() => handleEventClick('Clearance')} />
+                        </div>
 
-                        {/* Attacking */}
-                        <EventButton type="Shot" icon="⚡" onClick={() => handleEventClick('Shot')} />
-                        <EventButton type="Shot on Target" icon="🎯" label="Shot On" onClick={() => handleEventClick('Shot on Target')} />
-                        <EventButton type="Shot off Target" icon="❌" label="Shot Off" onClick={() => handleEventClick('Shot off Target')} />
+                        {/* Attacking/General */}
+                        <div className="grid grid-cols-5 gap-1.5">
+                            <EventButton type="Tackle" icon="⚡" variant="info" onClick={() => handleEventClick('Tackle')} />
+                            <EventButton type="Shot on Target" icon="🎯" label="On" variant="primary" onClick={() => handleEventClick('Shot on Target')} />
+                            <EventButton type="Shot off Target" icon="❌" label="Off" variant="secondary" onClick={() => handleEventClick('Shot off Target')} />
+                            <EventButton type="Corner" icon="🚩" variant="primary" onClick={() => handleEventClick('Corner')} />
+                            <EventButton type="Free Kick" icon="🔵" label="FK" variant="primary" onClick={() => handleEventClick('Free Kick')} />
+                        </div>
 
-                        {/* Set Pieces */}
-                        <EventButton type="Corner" icon="🚩" onClick={() => handleEventClick('Corner')} />
-                        <EventButton type="Free Kick" icon="🎯" label="Free Kick" onClick={() => handleEventClick('Free Kick')} />
-                        <EventButton type="Throw In" icon="👐" label="Throw In" onClick={() => handleEventClick('Throw In')} />
-                        <EventButton type="Goal Kick" icon="🥅" label="Goal Kick" onClick={() => handleEventClick('Goal Kick')} />
-
-                        {/* Other */}
-                        <EventButton type="Offside" icon="🎌" onClick={() => handleEventClick('Offside')} />
-                        <EventButton type="Substitution" icon="🔄" label="Sub" onClick={() => handleEventClick('Substitution')} />
+                        {/* Set Pieces + Other */}
+                        <div className="grid grid-cols-4 gap-1.5">
+                            <EventButton type="Throw In" icon="👐" label="Throw" variant="secondary" onClick={() => handleEventClick('Throw In')} />
+                            <EventButton type="Goal Kick" icon="🥅" label="GK" variant="secondary" onClick={() => handleEventClick('Goal Kick')} />
+                            <EventButton type="Offside" icon="🎌" variant="secondary" onClick={() => handleEventClick('Offside')} />
+                            <EventButton type="Substitution" icon="🔄" label="Sub" variant="accent" onClick={() => handleEventClick('Substitution')} />
+                        </div>
                     </div>
                 )}
 
-                <div className="bg-white/5 rounded-2xl border border-white/10 p-4">
-                    <h3 className="text-sm font-bold uppercase tracking-widest mb-4 opacity-60">Recent Events</h3>
-                    <div className="space-y-2">
-                        {recordedEvents.slice().reverse().map((event) => (
-                            <div key={event.id} className="flex items-center gap-4 p-3 bg-black/40 rounded-xl border border-white/5">
-                                <div className="text-xs font-mono opacity-50">{event.displayMinute}'</div>
-                                <div className="flex-1">
-                                    <div className="font-bold text-sm">{event.type}</div>
-                                    <div className="text-xs opacity-60">{event.detail}</div>
+                {/* ===== RECENT EVENTS LOG ===== */}
+                <div className="bg-white/5 rounded-xl border border-white/10 p-3 mt-4">
+                    <div className="flex items-center justify-between mb-3 px-1">
+                        <h3 className="text-[9px] font-black uppercase tracking-widest text-white/30 italic">Live Feed</h3>
+                        <div className="flex items-center gap-1">
+                            <span className="w-1 h-1 bg-green-500 rounded-full animate-pulse" />
+                            <span className="text-[8px] font-bold text-white/40 uppercase tracking-tighter">Live</span>
+                        </div>
+                    </div>
+                    <div className="space-y-1.5 max-h-[220px] overflow-y-auto">
+                        {recordedEvents.slice().reverse().slice(0, 25).map((event) => (
+                            <div key={event.id} className="flex items-center gap-3 py-2 px-3 bg-black/40 rounded-lg border border-white/5 group">
+                                <div className="text-[10px] font-mono font-bold text-primary/70 w-6 text-right shrink-0">{event.displayMinute}'</div>
+                                <div className="flex-1 min-w-0">
+                                    <div className="font-bold text-[11px] uppercase tracking-wide group-hover:text-primary transition-colors truncate">
+                                        {event.type}
+                                    </div>
+                                    <div className="text-[9px] text-white/40 truncate mt-0.5">
+                                        {event.detail}
+                                    </div>
+                                </div>
+                                <div className="shrink-0 text-xs">
+                                    {event.type.includes('Goal') && '⚽'}
+                                    {event.type.includes('Card') && (event.type.includes('Yellow') ? '🟨' : '🟥')}
+                                    {event.type.includes('Sub') && '🔄'}
                                 </div>
                             </div>
                         ))}
                         {recordedEvents.length === 0 && (
-                            <div className="text-center opacity-30 py-8">No events recorded yet</div>
+                            <div className="flex flex-col items-center justify-center py-6 text-white/10">
+                                <span className="text-[10px] font-black uppercase tracking-widest">Waiting for events...</span>
+                            </div>
                         )}
                     </div>
                 </div>
-            </div >
+            </div>
 
             {showPlayerModal && (
                 <PlayerSelectionModal
@@ -1169,22 +1185,35 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
             {
                 showStoppageModal && (
                     <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-                        <div className="bg-zinc-900 border border-white/10 w-full max-w-sm rounded-2xl overflow-hidden">
-                            <div className="p-4 border-b border-white/10 flex justify-between items-center">
-                                <h3 className="font-bold">Set Stoppage Time</h3>
-                                <button onClick={() => setShowStoppageModal(false)}><X size={20} /></button>
+                        <div className="bg-[#0a0a0a] border border-white/10 w-full max-w-sm rounded-[2rem] overflow-hidden shadow-2xl p-6">
+                            <div className="flex justify-between items-center mb-6">
+                                <div>
+                                    <h3 className="font-black uppercase tracking-widest text-lg italic text-amber-500">Stoppage Time</h3>
+                                    <p className="text-[10px] text-white/40 uppercase">Announce minutes to be added</p>
+                                </div>
+                                <button onClick={() => setShowStoppageModal(false)} className="p-2 bg-white/5 rounded-full hover:bg-white/10"><X size={20} /></button>
                             </div>
-                            <div className="p-4 grid grid-cols-4 gap-2">
+                            <div className="grid grid-cols-4 gap-2.5">
                                 {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(num => (
                                     <button
                                         key={num}
-                                        onClick={() => handleSetStoppage(num)}
-                                        className="aspect-square bg-white/5 hover:bg-primary hover:text-black rounded-xl font-bold transition-colors"
+                                        onClick={() => {
+                                            handleSetStoppage(num);
+                                            setShowStoppageModal(false);
+                                        }}
+                                        className="aspect-square bg-gradient-to-br from-white/10 to-transparent border border-white/10 hover:border-amber-500/50 hover:bg-amber-500/10 hover:text-amber-500 rounded-2xl flex flex-col items-center justify-center transition-all active:scale-90"
                                     >
-                                        +{num}
+                                        <span className="text-[10px] opacity-40 leading-none mb-1">+</span>
+                                        <span className="text-xl font-black italic tabular-nums leading-none">{num}</span>
                                     </button>
                                 ))}
                             </div>
+                            <button
+                                onClick={() => handleSetStoppage(0)}
+                                className="w-full mt-4 py-3 bg-white/5 hover:bg-white/10 rounded-xl text-[10px] font-black uppercase tracking-widest text-white/30 border border-white/5"
+                            >
+                                Clear Stoppage
+                            </button>
                         </div>
                     </div>
                 )
@@ -1244,27 +1273,71 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                         </div>
                         <div className="p-4 space-y-3">
                             {/* Match Info */}
-                            <div className="bg-white/5 rounded-xl p-4 border border-white/5">
+                            <div className="bg-white/5 rounded-xl p-3 border border-white/5">
                                 <h4 className="text-[10px] font-black uppercase tracking-widest text-white/40 mb-2">Match Info</h4>
-                                <div className="text-sm space-y-1">
+                                <div className="text-xs space-y-1.5">
                                     <p><span className="text-white/40">Competition:</span> <span className="font-bold">{match.competition}</span></p>
                                     <p><span className="text-white/40">Sport:</span> <span className="font-bold">{match.sport}</span></p>
-                                    <p><span className="text-white/40">Variant:</span> <span className="font-bold">{is5Aside ? '5-a-side' : '11-a-side'}</span></p>
                                     <p><span className="text-white/40">Period:</span> <span className="font-bold">{currentPeriod.replace('_', ' ')}</span></p>
                                     <p><span className="text-white/40">Logger:</span> <span className="font-bold">{currentLogger?.name || 'Unknown'}</span></p>
                                 </div>
                             </div>
 
+                            {/* Timing & Variant */}
+                            <div className="bg-white/5 rounded-xl p-3 border border-white/5">
+                                <h4 className="text-[10px] font-black uppercase tracking-widest text-white/40 mb-2">Timing & Variant</h4>
+                                <div className="text-xs space-y-3">
+                                    <div className="flex items-center justify-between">
+                                        <span className="text-white/40">Format:</span>
+                                        <span className={`px-2 py-0.5 rounded-md text-[10px] font-black ${is5Aside ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' : 'bg-blue-500/20 text-blue-400 border border-blue-500/30'}`}>
+                                            {is5Aside ? '5-A-SIDE' : '11 v 11'}
+                                        </span>
+                                    </div>
+                                    <div className="space-y-1.5">
+                                        <div className="flex items-center justify-between text-white/40 mb-1">
+                                            <span>Half Duration:</span>
+                                            <span className="font-bold text-white">{halfDuration} min</span>
+                                        </div>
+                                        <div className="flex gap-2">
+                                            {[15, 20, 25, 30, 35, 40, 45].map(time => (
+                                                <button
+                                                    key={time}
+                                                    onClick={() => {
+                                                        setHalfDuration(time);
+                                                        stateManager.current?.updateConfig({ halfDuration: time });
+                                                    }}
+                                                    className={`flex-1 py-1.5 rounded-lg border text-[10px] font-bold transition-all ${halfDuration === time
+                                                        ? 'bg-primary text-black border-primary'
+                                                        : 'bg-white/5 border-white/10 hover:bg-white/10'}`}
+                                                >
+                                                    {time}m
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center justify-between border-t border-white/5 pt-2">
+                                        <span className="text-white/40">Starters:</span>
+                                        <span className="font-bold">{STARTER_COUNT} per side</span>
+                                    </div>
+                                    {competitionPlayersPerSide && (
+                                        <div className="flex items-center justify-between">
+                                            <span className="text-white/40">Config Source:</span>
+                                            <span className="text-green-400 text-[10px] font-bold uppercase tracking-wider">✓ Verified</span>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+
                             {/* Connection Status */}
-                            <div className="bg-white/5 rounded-xl p-4 border border-white/5">
+                            <div className="bg-white/5 rounded-xl p-3 border border-white/5">
                                 <h4 className="text-[10px] font-black uppercase tracking-widest text-white/40 mb-2">Connection</h4>
                                 <div className="flex items-center gap-2">
                                     <span className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`}></span>
-                                    <span className="text-sm font-medium">{isConnected ? 'Connected' : 'Disconnected'}</span>
+                                    <span className="text-xs font-medium">{isConnected ? 'Connected' : 'Disconnected'}</span>
                                 </div>
                                 <div className="flex items-center gap-2 mt-1">
                                     <span className={`w-2 h-2 rounded-full ${isSocketConnected ? 'bg-green-500' : 'bg-red-500'}`}></span>
-                                    <span className="text-sm font-medium">WebSocket: {isSocketConnected ? 'Connected' : 'Disconnected'}</span>
+                                    <span className="text-xs font-medium">WebSocket: {isSocketConnected ? 'Connected' : 'Disconnected'}</span>
                                 </div>
                             </div>
 
@@ -1302,18 +1375,28 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                 currentLoggerName={currentLogger?.name || 'Unknown Logger'}
                 onResolveConflict={(id, resolution) => resolveConflict(id, resolution)}
             />
-        </div >
+        </div>
     );
 }
 
-function EventButton({ type, icon, label, onClick }: { type: string, icon: string, label?: string, onClick: () => void }) {
+function EventButton({ type, icon, label, variant = 'secondary', onClick }: { type: string, icon: string, label?: string, variant?: 'primary' | 'secondary' | 'success' | 'warning' | 'danger' | 'info' | 'accent', onClick: () => void }) {
+    const variants = {
+        primary: 'bg-primary/10 border-primary/20 text-primary active:bg-primary/20',
+        secondary: 'bg-white/5 border-white/10 text-white/70 active:bg-white/10',
+        success: 'bg-green-500/10 border-green-500/20 text-green-400 active:bg-green-500/20',
+        warning: 'bg-amber-500/10 border-amber-500/20 text-amber-400 active:bg-amber-500/20',
+        danger: 'bg-red-500/10 border-red-500/20 text-red-400 active:bg-red-500/20',
+        info: 'bg-blue-500/10 border-blue-500/20 text-blue-400 active:bg-blue-500/20',
+        accent: 'bg-purple-500/10 border-purple-500/20 text-purple-400 active:bg-purple-500/20',
+    };
+
     return (
         <button
             onClick={onClick}
-            className="aspect-square bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl flex flex-col items-center justify-center gap-2 transition-all active:scale-95"
+            className={`aspect-square border rounded-xl flex flex-col items-center justify-center gap-1 transition-all active:scale-90 ${variants[variant]}`}
         >
-            <span className="text-2xl">{icon}</span>
-            <span className="text-[10px] font-bold uppercase tracking-tight">{label || type}</span>
+            <span className="text-xl">{icon}</span>
+            <span className="text-[8px] font-bold uppercase tracking-tight leading-tight text-center px-0.5">{label || type}</span>
         </button>
     );
 }
