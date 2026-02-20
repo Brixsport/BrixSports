@@ -102,8 +102,17 @@ export function useLiveStandings({
     const connect = useCallback(() => {
         if (socket?.connected) return;
 
-        const newSocket = io(process.env.NEXT_PUBLIC_WS_URL || 'http://localhost:3000', {
-            transports: ['websocket'],
+        // Determine socket URL
+        let socketUrl = process.env.NEXT_PUBLIC_WS_URL;
+        if (!socketUrl && typeof window !== 'undefined') {
+            socketUrl = `${window.location.protocol}//${window.location.host}`;
+        } else if (!socketUrl) {
+            socketUrl = 'http://localhost:3000';
+        }
+
+        const newSocket = io(socketUrl, {
+            path: '/api/socket', // Ensure we use the same path as main hook
+            transports: ['websocket', 'polling'], // Allow polling as fallback
             reconnection: true,
             reconnectionDelay: 1000,
             reconnectionAttempts: 5,

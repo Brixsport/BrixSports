@@ -38,7 +38,9 @@ export type FootballEventType =
     // Set Pieces
     | 'Corner' | 'Free Kick' | 'Throw In' | 'Goal Kick'
     // General
-    | 'Shot' | 'Shot on Target' | 'Shot off Target' | 'Offside' | 'Substitution';
+    | 'Shot' | 'Shot on Target' | 'Shot off Target' | 'Offside' | 'Substitution'
+    // Penalty outcomes
+    | 'Penalty Saved' | 'Penalty Missed';
 
 export interface PlayerSnapshot {
     name: string;
@@ -177,6 +179,7 @@ export interface MatchState {
 }
 
 export type StateListener = (state: MatchState) => void;
+export type EventListener = (event: MatchEvent) => void;
 
 // ========== SINGLETON REGISTRY ==========
 
@@ -225,6 +228,7 @@ export const RATING_IMPACTS: Partial<Record<FootballEventType, number>> = {
 export class MatchStateManager {
     private state: MatchState;
     private listeners = new Set<StateListener>();
+    private eventListeners = new Set<EventListener>();
     private timerId: NodeJS.Timeout | null = null;
     private destroyed = false;
 
@@ -235,6 +239,7 @@ export class MatchStateManager {
         }
 
         this.state = this.initializeState(matchId, initialState);
+        this.updateDisplayMinute();
 
         // Resume clock if it was running
         if (this.state.clock.isRunning) {
@@ -503,6 +508,32 @@ export class MatchStateManager {
         // Add to immutable event log
         this.state.events = [...this.state.events, fullEvent];
 
+        // LOGIC: Second Yellow = Red
+        if (event.type === 'Yellow Card' && event.playerId) {
+            const previousYellows = this.state.events.filter(e =>
+                e.playerId === event.playerId &&
+                e.type === 'Yellow Card' &&
+                e.id !== tempId
+            );
+
+            if (previousYellows.length >= 1) {
+                // Technically 1 previous yellow means this is the 2nd.
+                // We'll record an automatic Red Card with a small "id" and "timestamp" offset
+                // but for now just pushing it is fine as it's sequential.
+                const redEvent = this.recordEvent({
+                    matchId: fullEvent.matchId,
+                    type: 'Red Card',
+                    teamId: fullEvent.teamId,
+                    playerId: fullEvent.playerId,
+                    playerSnapshot: fullEvent.playerSnapshot,
+                    relatedPlayerId: null,
+                    relatedPlayerSnapshot: null,
+                    detail: `Red Card (Second Yellow)`,
+                    loggerId: fullEvent.loggerId
+                });
+            }
+        }
+
         // Update score if scoring event
         this.updateScoreFromEvent(fullEvent);
 
@@ -513,6 +544,7 @@ export class MatchStateManager {
         this.calculateMatchStats();
 
         this.notifyListeners();
+        this.notifyEventListeners(fullEvent);
         this.persistState();
         this.broadcastEvent(fullEvent);
 
@@ -783,7 +815,6 @@ export class MatchStateManager {
                 events: Array.isArray(parsed.events) ? parsed.events : [],
                 clock: {
                     ...parsed.clock,
-                    lastTickTimestamp: Date.now(), // Reset timestamp
                 }
             };
         } catch (error) {
@@ -797,26 +828,7 @@ export class MatchStateManager {
         localStorage.removeItem(`match_state_${this.state.matchId}`);
     }
 
-    // ========== SUBSCRIPTION ==========
 
-    subscribe(listener: StateListener): () => void {
-        this.listeners.add(listener);
-
-        // Immediately notify with current state
-        listener(this.state);
-
-        return () => this.listeners.delete(listener);
-    }
-
-    private notifyListeners(): void {
-        this.listeners.forEach(listener => {
-            try {
-                listener(this.state);
-            } catch (error) {
-                console.error('Listener error:', error);
-            }
-        });
-    }
 
     // ========== BROADCASTING ==========
 
@@ -1019,6 +1031,17 @@ export class MatchStateManager {
                     stats.shotsOnTarget[teamIndex]++;
                     stats.possessionEvents[teamIndex]++;
                     break;
+                case 'Penalty Saved':
+                    stats.penalties[teamIndex]++;
+                    stats.shots[teamIndex]++;
+                    stats.shotsOnTarget[teamIndex]++;
+                    stats.saves[1 - teamIndex]++; // Give save to opponent
+                    break;
+                case 'Penalty Missed':
+                    stats.penalties[teamIndex]++;
+                    stats.shots[teamIndex]++;
+                    stats.shotsOffTarget[teamIndex]++;
+                    break;
                 case 'Own Goal':
                     stats.ownGoals[teamIndex]++;
                     break;
@@ -1179,23 +1202,39 @@ export class MatchStateManager {
         const saved = this.loadState(matchId);
         const now = Date.now();
 
+        const baseClock = {
+            absoluteMinute: 0,
+            displayMinute: 0,
+            second: 0,
+            period: 'NOT_STARTED' as const,
+            isRunning: false,
+            startTimestamp: null,
+            ...saved?.clock,
+            ...initial?.clock,
+            announcedStoppage: null,
+            periodEndTriggered: false,
+        };
+
+        // Handle catch-up if clock was running
+        if (baseClock.isRunning && saved?.clock?.lastTickTimestamp) {
+            const elapsedMs = now - saved.clock.lastTickTimestamp;
+            const elapsedSeconds = Math.floor(elapsedMs / 1000);
+            if (elapsedSeconds > 0) {
+                const totalSeconds = baseClock.second + elapsedSeconds;
+                baseClock.absoluteMinute += Math.floor(totalSeconds / 60);
+                baseClock.second = totalSeconds % 60;
+                // Note: displayMinute will be refreshed in the manager logic
+            }
+        }
+
         return {
             matchId,
             homeTeamId: initial?.homeTeamId || saved?.homeTeamId || '',
             awayTeamId: initial?.awayTeamId || saved?.awayTeamId || '',
 
             clock: {
-                absoluteMinute: 0,
-                displayMinute: 0,
-                second: 0,
-                period: 'NOT_STARTED',
-                isRunning: false,
-                startTimestamp: null,
-                ...saved?.clock,
-                ...initial?.clock,
-                lastTickTimestamp: now, // Always reset timestamp
-                announcedStoppage: null,
-                periodEndTriggered: false,
+                ...baseClock,
+                lastTickTimestamp: now, // Resume from exactly now
             },
 
             score: {
@@ -1258,6 +1297,48 @@ export class MatchStateManager {
     destroy(): void {
         this.stopClock();
         this.listeners.clear();
+        this.eventListeners.clear();
         this.destroyed = true;
+    }
+
+    // ========== SUBSCRIPTION & NOTIFICATION ==========
+
+    subscribe(listener: StateListener): () => void {
+        this.listeners.add(listener);
+        listener(this.state); // Immediate sync
+        return () => this.listeners.delete(listener);
+    }
+
+    subscribeToEvents(listener: EventListener): () => void {
+        this.eventListeners.add(listener);
+        return () => this.eventListeners.delete(listener);
+    }
+
+    unsubscribe(listener: StateListener): void {
+        this.listeners.delete(listener);
+    }
+
+    unsubscribeFromEvents(listener: EventListener): void {
+        this.eventListeners.delete(listener);
+    }
+
+    private notifyListeners(): void {
+        this.listeners.forEach(listener => {
+            try {
+                listener(this.state);
+            } catch (error) {
+                console.error('State listener error:', error);
+            }
+        });
+    }
+
+    private notifyEventListeners(event: MatchEvent): void {
+        this.eventListeners.forEach(listener => {
+            try {
+                listener(event);
+            } catch (error) {
+                console.error('Event listener error:', error);
+            }
+        });
     }
 }

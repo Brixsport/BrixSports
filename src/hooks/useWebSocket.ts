@@ -56,25 +56,41 @@ export function useWebSocket(options: UseWebSocketOptions = {}): UseWebSocketRet
         // Initialize Socket.IO connection
         let socketUrl = process.env.NEXT_PUBLIC_WS_URL;
 
-        // Determine if we are on localhost
-        const isLocalhost = typeof window !== 'undefined' && window.location.hostname === 'localhost';
+        // Determine if we are on localhost or a local network IP
+        const isLocalhost = typeof window !== 'undefined' && (
+            window.location.hostname === 'localhost' ||
+            window.location.hostname === '127.0.0.1' ||
+            window.location.hostname.startsWith('192.168.') ||
+            window.location.hostname.startsWith('172.') ||
+            window.location.hostname.startsWith('10.') ||
+            window.location.hostname.endsWith('.local')
+        );
 
-        // If no URL is provided and we are NOT on localhost, do not attempt to connect to avoiding polling Vercel
-        if (!socketUrl && !isLocalhost) {
-            console.warn('WebSocket URL not configured. Real-time features disabled.');
-            return;
-        }
+        // Check if we are on Vercel (often doesn't support stateful WebSockets without a separate server)
+        const isVercel = typeof window !== 'undefined' && window.location.hostname.endsWith('.vercel.app');
 
-        // If on localhost and no URL, default to current origin (handled by server.js)
+        // If no URL is provided:
         if (!socketUrl) {
-            socketUrl = '';
+            if (isVercel) {
+                // On Vercel, we definitely want a dedicated WS URL, otherwise polling will kill performance
+                console.warn('⚠️ WebSocket URL not configured on Vercel. Real-time features disabled.');
+                return;
+            }
+
+            // On other domains (like brixsports.com) or localhost, fallback to current origin
+            if (typeof window !== 'undefined') {
+                socketUrl = `${window.location.protocol}//${window.location.host}`;
+                console.info(`WebSocket: No URL configured, falling back to ${socketUrl}`);
+            } else {
+                return; // Server-side execution
+            }
         }
 
         // Safety check: specific fix for local development to avoid connecting to production
         if (isLocalhost) {
-            if (socketUrl.includes('vercel.app') || socketUrl.includes('herokuapp.com')) {
+            if (socketUrl.includes('vercel.app') || socketUrl.includes('herokuapp.com') || socketUrl.includes('brixsports.com')) {
                 console.warn('⚠️ Dev mode detected: Ignoring production WS URL to prevent connection errors. Using local origin.');
-                socketUrl = ''; // Use current origin (relative path)
+                socketUrl = `${window.location.protocol}//${window.location.host}`; // Use current local origin
             }
         }
 
