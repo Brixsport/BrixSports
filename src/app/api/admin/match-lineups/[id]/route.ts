@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthUser } from '@/lib/auth';
 import { db } from '@/db';
-import { matches } from '@/db/schema';
+import { matches, competitions } from '@/db/schema';
 import { eq } from 'drizzle-orm';
 
 // POST /api/admin/match-lineups/[id] - Publish official lineup
@@ -64,10 +64,21 @@ export async function POST(
             );
         }
 
-        // Validate lineup has 11 starters
-        if (!lineup.starters || lineup.starters.length !== 11) {
+        // Determine required starters from competition's playersPerSide
+        let requiredStarters = 11; // default
+        if (match[0].competition) {
+            const comp = await db.select().from(competitions)
+                .where(eq(competitions.name, match[0].competition))
+                .limit(1);
+            if (comp.length > 0 && comp[0].playersPerSide) {
+                requiredStarters = comp[0].playersPerSide;
+            }
+        }
+
+        // Validate lineup has the correct number of starters
+        if (!lineup.starters || lineup.starters.length !== requiredStarters) {
             return NextResponse.json(
-                { error: 'Lineup must have exactly 11 starters' },
+                { error: `Lineup must have exactly ${requiredStarters} starters` },
                 { status: 400 }
             );
         }
