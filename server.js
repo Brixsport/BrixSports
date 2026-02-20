@@ -25,7 +25,27 @@ app.prepare().then(() => {
     const io = new Server(httpServer, {
         path: '/api/socket',
         cors: {
-            origin: process.env.NEXT_PUBLIC_APP_URL || `http://localhost:${port}`,
+            origin: (origin, callback) => {
+                // Allow requests with no origin (like mobile apps or curl)
+                if (!origin) return callback(null, true);
+
+                const allowedOrigins = [
+                    process.env.NEXT_PUBLIC_APP_URL,
+                    process.env.NEXT_PUBLIC_BASE_URL,
+                    'http://localhost:3000',
+                    'http://localhost:3001',
+                    'http://localhost:3002',
+                    'https://brixsports.com',
+                    'https://www.brixsports.com'
+                ].filter(Boolean);
+
+                if (allowedOrigins.includes(origin) || dev) {
+                    callback(null, true);
+                } else {
+                    console.warn(`[Socket.IO] Blocked connection from unauthorized origin: ${origin}`);
+                    callback(new Error('Not allowed by CORS'));
+                }
+            },
             methods: ['GET', 'POST'],
             credentials: true,
         },
