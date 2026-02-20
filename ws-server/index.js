@@ -265,6 +265,50 @@ io.on('connection', (socket) => {
         io.to('admin:loggers').emit('logger:updated', data);
     });
 
+    // ── Multi-Logger Real-time Sync ─────────────────────────────
+    // Tracks which loggers are active in each match room
+    socket.on('logger:join', ({ matchId, loggerId, loggerName }) => {
+        const room = `logger:${matchId}`;
+        socket.join(room);
+        // Store logger info on the socket for disconnect handling
+        socket.data.loggerInfo = { matchId, loggerId, loggerName };
+
+        console.log(`[WS] Logger ${loggerName} (${loggerId}) joined match ${matchId}`);
+
+        // Notify others in the room
+        socket.to(room).emit('logger-joined', { loggerId, loggerName });
+
+        // Send back the list of active loggers in this room
+        const roomSockets = io.sockets.adapter.rooms.get(room);
+        const loggers = [];
+        if (roomSockets) {
+            for (const socketId of roomSockets) {
+                const s = io.sockets.sockets.get(socketId);
+                if (s?.data?.loggerInfo) {
+                    loggers.push({
+                        loggerId: s.data.loggerInfo.loggerId,
+                        loggerName: s.data.loggerInfo.loggerName,
+                    });
+                }
+            }
+        }
+        socket.emit('sync-response', { loggers });
+    });
+
+    socket.on('logger:leave', ({ matchId, loggerId }) => {
+        const room = `logger:${matchId}`;
+        socket.leave(room);
+        console.log(`[WS] Logger ${loggerId} left match ${matchId}`);
+        socket.to(room).emit('logger-left', { loggerId });
+        socket.data.loggerInfo = null;
+    });
+
+    socket.on('logger:broadcast-event', ({ matchId, event }) => {
+        const room = `logger:${matchId}`;
+        // Broadcast to all other loggers in this match room (not the sender)
+        socket.to(room).emit('logger:event', event);
+    });
+
     // ── Polls & Predictions ─────────────────────────────────────
     socket.on('poll:vote', (data) => {
         io.to(`match:${data.matchId}`).emit('poll:updated', data);
@@ -279,9 +323,17 @@ io.on('connection', (socket) => {
         socket.emit('pong', { timestamp: Date.now() });
     });
 
-    // ── Disconnect ──────────────────────────────────────────────
+    // ── Disconnect ──────────────────────────────────────────
     socket.on('disconnect', (reason) => {
         console.log(`[WS] Disconnected: ${socket.id} (${reason})`);
+
+        // Clean up logger room if this socket was a logger
+        if (socket.data.loggerInfo) {
+            const { matchId, loggerId } = socket.data.loggerInfo;
+            const room = `logger:${matchId}`;
+            socket.to(room).emit('logger-left', { loggerId });
+            console.log(`[WS] Logger ${loggerId} disconnected from match ${matchId}`);
+        }
     });
 
     socket.on('error', (error) => {
