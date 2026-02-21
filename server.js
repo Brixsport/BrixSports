@@ -171,7 +171,7 @@ app.prepare().then(() => {
             io.to(`match:${data.matchId}`).emit('match:status:changed', data);
 
             // Global notification for Kick-off and Full-time
-            if (data.status === 'LIVE') {
+            if (data.status === 'LIVE' || data.status === 'FIRST_HALF') {
                 io.emit('notification:global', {
                     type: 'MATCH_START',
                     matchId: data.matchId,

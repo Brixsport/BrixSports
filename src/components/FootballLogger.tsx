@@ -278,6 +278,30 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
         }
     }, [matchState, isSocketConnected, emit, match.id]);
 
+    // Broadcast Score/Status Updates for Overlays
+    useEffect(() => {
+        if (!matchState || !isSocketConnected) return;
+
+        // Broadcast Score
+        emit('match:score:update', {
+            matchId: match.id,
+            homeScore: matchState.score.home,
+            awayScore: matchState.score.away
+        });
+
+        // Broadcast Status (Period)
+        emit('match:status:change', {
+            matchId: match.id,
+            status: matchState.clock.period,
+            homeTeamId: match.homeTeamId,
+            awayTeamId: match.awayTeamId,
+            homeTeam: homeTeam?.name,
+            awayTeam: awayTeam?.name,
+            homeScore: matchState.score.home,
+            awayScore: matchState.score.away
+        });
+    }, [matchState?.score.home, matchState?.score.away, matchState?.clock.period, isSocketConnected, emit, match.id, match.homeTeamId, match.awayTeamId, homeTeam?.name, awayTeam?.name]);
+
     // Multi-logger Hook
     const {
         activeLoggers,
@@ -389,10 +413,14 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
             if (isSocketConnected) {
                 emit('event:log', {
                     matchId: match.id,
-                    event: event,
-                    type: event.type, // server.js checks this for global notification
+                    event: {
+                        ...event,
+                        minute: event.absoluteMinute // Add 'minute' for UI compatibility
+                    },
+                    type: event.type,
                     detail: event.detail,
                     teamId: event.teamId,
+                    minute: event.absoluteMinute,
                     timestamp: Date.now()
                 });
             }
