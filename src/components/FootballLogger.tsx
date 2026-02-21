@@ -90,6 +90,8 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
 
     // Initial Load & Manager Setup
     useEffect(() => {
+        let unsubscribe: (() => void) | null = null;
+
         const init = async () => {
             try {
                 const [teamsRes, playersRes, lineupsRes] = await Promise.all([
@@ -133,14 +135,13 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                     }
                 } catch (e) { console.log('Could not fetch competition data:', e); }
 
-                // Determine half duration: 5-aside uses 20 min halves, standard uses 35
+                // Determine half duration
                 const isFiveAside = detectedPlayersPerSide === 5 ||
                     match.competition?.toLowerCase().includes('5-a-side') ||
                     match.competition?.toLowerCase().includes('5-aside') ||
                     match.competition?.toLowerCase().includes('futsal') ||
                     match.competition?.toLowerCase().includes('npuga');
                 matchHalfDuration = isFiveAside ? 20 : 35;
-                setHalfDuration(matchHalfDuration);
 
                 // Initialize Manager
                 const manager = getMatchStateManager(match.id, {
@@ -153,34 +154,12 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                     },
                 });
 
-                // Force sync detected duration (in case manager was already in memory with different default)
-                manager.updateConfig({ halfDuration: matchHalfDuration });
-
                 manager.registerPlayers(hPlayers, 'home');
                 manager.registerPlayers(aPlayers, 'away');
 
-                // Auto-load published lineups if available
-                if (lineupsData.success && lineupsData.lineups) {
-                    const { home: homeLineup, away: awayLineup } = lineupsData.lineups;
-
-                    // Check if home lineup is published
-                    if (homeLineup && homeLineup.status === 'published') {
-                        console.log('Auto-loading published home lineup');
-                        // The lineup data is already stored in the match, no need to do anything
-                        // The overlay and other components will fetch it from the match API
-                    }
-
-                    // Check if away lineup is published
-                    if (awayLineup && awayLineup.status === 'published') {
-                        console.log('Auto-loading published away lineup');
-                        // The lineup data is already stored in the match, no need to do anything
-                        // The overlay and other components will fetch it from the match API
-                    }
-                }
-
                 stateManager.current = manager;
 
-                const unsubscribe = manager.subscribe((newState) => {
+                unsubscribe = manager.subscribe((newState) => {
                     setMatchState({ ...newState });
                     // Sync local UI halfDuration with manager state
                     setHalfDuration(newState.halfDuration);
@@ -188,7 +167,7 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
 
                 setMatchState(manager.getState());
 
-                // Lineup Check - Skip if already ongoing
+                // Lineup Check
                 const currentState = manager.getState();
                 if (currentState.clock.period !== 'NOT_STARTED') {
                     setViewState('active');
@@ -200,23 +179,16 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                 }
 
                 setIsLoading(false);
-
-                return unsubscribe;
             } catch (err) {
                 console.error("Failed to init logger:", err);
                 setIsLoading(false);
             }
         };
 
-        const interval = setInterval(() => {
-            // Optional: Poll for lineups if stuck in check_lineup
-            if (viewState === 'check_lineup') {
-                init();
-            }
-        }, 10000);
-
         init();
-        return () => clearInterval(interval);
+        return () => {
+            if (unsubscribe) unsubscribe();
+        };
     }, [match.id, match.homeTeamId, match.awayTeamId]);
 
     // Listen for period end events
@@ -1379,21 +1351,34 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                                     {pendingPeriodTransition.next === 'FINISHED' && 'The referee has blown the final whistle.'}
                                     {pendingPeriodTransition.next === 'EXTRA_TIME_2' && 'The referee has blown for the ET break.'}
                                 </p>
-                                <div className="flex gap-3">
+                                <div className="flex flex-col gap-3">
+                                    <div className="flex gap-3">
+                                        <button
+                                            onClick={() => {
+                                                setShowPeriodEndModal(false);
+                                                setPendingPeriodTransition(null);
+                                            }}
+                                            className="flex-1 py-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl font-bold uppercase tracking-widest text-sm transition-colors"
+                                        >
+                                            Cancel
+                                        </button>
+                                        <button
+                                            onClick={handlePeriodEndConfirm}
+                                            className="flex-1 py-3 bg-primary text-black rounded-xl font-black uppercase tracking-widest text-sm hover:scale-105 transition-transform"
+                                        >
+                                            Confirm End
+                                        </button>
+                                    </div>
+
+                                    {/* Additional option: Set Stoppage Time */}
                                     <button
                                         onClick={() => {
                                             setShowPeriodEndModal(false);
-                                            setPendingPeriodTransition(null);
+                                            setShowStoppageModal(true);
                                         }}
-                                        className="flex-1 py-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl font-bold uppercase tracking-widest text-sm transition-colors"
+                                        className="w-full py-3 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 rounded-xl font-black uppercase tracking-widest text-sm text-amber-500 transition-colors flex items-center justify-center gap-2"
                                     >
-                                        Cancel
-                                    </button>
-                                    <button
-                                        onClick={handlePeriodEndConfirm}
-                                        className="flex-1 py-3 bg-primary text-black rounded-xl font-black uppercase tracking-widest text-sm hover:scale-105 transition-transform"
-                                    >
-                                        Confirm
+                                        <Clock size={16} /> Set Stoppage Time
                                     </button>
                                 </div>
                             </div>

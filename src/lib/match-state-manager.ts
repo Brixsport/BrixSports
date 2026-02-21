@@ -316,36 +316,63 @@ export class MatchStateManager {
 
     /**
      * Check if current period has reached its regulation end.
-     * 
-     * IMPORTANT: The clock does NOT auto-stop. Just like real football,
-     * the clock keeps ticking past regulation time and shows added time
-     * (e.g., 35'+1, 35'+2). The logger manually ends each half.
-     * 
-     * If announced stoppage time is set AND has been exceeded, we broadcast
-     * a notification to alert the logger, but DON'T auto-stop the clock.
      */
     private checkPeriodEnd(): void {
-        // No auto-pause behavior — the logger controls when the half ends.
-        // The clock simply keeps ticking. The display will show added time
-        // format automatically via updateDisplayMinute() and getStoppageTime().
-        return;
-    }
+        const { absoluteMinute, period, periodEndTriggered, announcedStoppage } = this.state.clock;
+        const halfDuration = this.state.halfDuration;
 
-    private updateDisplayMinute(): void {
-        const { absoluteMinute, period } = this.state.clock;
+        if (periodEndTriggered) return;
+
+        let regulationTime = 0;
+        let nextPeriod: MatchPeriod = 'HALF_TIME';
 
         switch (period) {
             case 'FIRST_HALF':
-                this.state.clock.displayMinute = Math.min(absoluteMinute, this.state.halfDuration);
+                regulationTime = halfDuration;
+                nextPeriod = 'HALF_TIME';
                 break;
             case 'SECOND_HALF':
-                this.state.clock.displayMinute = Math.min(absoluteMinute, this.state.halfDuration * 2);
+                regulationTime = halfDuration * 2;
+                nextPeriod = 'FINISHED';
                 break;
             case 'EXTRA_TIME_1':
-                this.state.clock.displayMinute = Math.min(absoluteMinute, this.state.halfDuration * 2 + 15);
+                regulationTime = halfDuration * 2 + 15;
+                nextPeriod = 'EXTRA_TIME_2';
                 break;
             case 'EXTRA_TIME_2':
-                this.state.clock.displayMinute = Math.min(absoluteMinute, this.state.halfDuration * 2 + 30);
+                regulationTime = halfDuration * 2 + 30;
+                nextPeriod = 'FINISHED';
+                break;
+            default:
+                return;
+        }
+
+        // Trigger if regulation is reached and NO stoppage time set, 
+        // OR if regulation + stoppage time reached.
+        const targetTime = regulationTime + (announcedStoppage || 0);
+
+        if (absoluteMinute >= targetTime) {
+            this.state.clock.periodEndTriggered = true;
+            this.broadcastPeriodEnd(period, nextPeriod);
+        }
+    }
+
+    private updateDisplayMinute(): void {
+        const { absoluteMinute, period, announcedStoppage } = this.state.clock;
+        const halfDuration = this.state.halfDuration;
+
+        switch (period) {
+            case 'FIRST_HALF':
+                this.state.clock.displayMinute = Math.min(absoluteMinute, halfDuration);
+                break;
+            case 'SECOND_HALF':
+                this.state.clock.displayMinute = Math.min(absoluteMinute, halfDuration * 2);
+                break;
+            case 'EXTRA_TIME_1':
+                this.state.clock.displayMinute = Math.min(absoluteMinute, halfDuration * 2 + 15);
+                break;
+            case 'EXTRA_TIME_2':
+                this.state.clock.displayMinute = Math.min(absoluteMinute, halfDuration * 2 + 30);
                 break;
             default:
                 this.state.clock.displayMinute = absoluteMinute;
@@ -359,6 +386,7 @@ export class MatchStateManager {
         this.state.clock.absoluteMinute = minute;
         this.state.clock.second = second;
         this.state.clock.lastTickTimestamp = Date.now();
+        this.state.clock.periodEndTriggered = false; // Reset trigger if time adjusted back
 
         this.updateDisplayMinute();
         this.notifyListeners();
@@ -368,6 +396,7 @@ export class MatchStateManager {
 
     setAnnouncedStoppage(minutes: number): void {
         this.state.clock.announcedStoppage = minutes;
+        this.state.clock.periodEndTriggered = false; // Reset so prompt shows again after stoppage
         this.notifyListeners();
         this.persistState();
         this.broadcastTimeUpdate();
@@ -1240,15 +1269,15 @@ export class MatchStateManager {
             score: {
                 home: 0,
                 away: 0,
-                ...saved?.score,
                 ...initial?.score,
+                ...saved?.score,
             },
 
             teamRatings: {
                 home: 6.0,
                 away: 6.0,
-                ...saved?.teamRatings,
-                ...initial?.teamRatings
+                ...initial?.teamRatings,
+                ...saved?.teamRatings
             },
 
             stats: saved?.stats || initial?.stats || {
@@ -1287,7 +1316,7 @@ export class MatchStateManager {
 
             lineups: saved?.lineups || initial?.lineups || { home: [], away: [] },
 
-            halfDuration: initial?.halfDuration || saved?.halfDuration || 45,
+            halfDuration: saved?.halfDuration || initial?.halfDuration || 45,
             version: 1,
         };
     }
