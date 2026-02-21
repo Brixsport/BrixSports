@@ -6,7 +6,8 @@ import Script from "next/script";
 import { BottomNav } from "@/components/BottomNav";
 import { PWAProvider } from "@/components/pwa/PWAProvider";
 import SessionProvider from "@/components/providers/SessionProvider";
-import { NotificationProvider } from "@/components/NotificationProvider";
+import { NotificationProvider } from "@/components/Notifications";
+import { GlobalNotificationListener } from "@/components/GlobalNotificationListener";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { AuthModal } from "@/components/auth/AuthModal";
 import { SocketProvider } from "@/hooks/useWebSocket";
@@ -71,6 +72,7 @@ export default function RootLayout({
             <AuthProvider>
               <NotificationProvider>
                 <SocketProvider>
+                  <GlobalNotificationListener />
                   {children}
                   <BottomNav />
                   <AuthModal />

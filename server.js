@@ -100,14 +100,24 @@ app.prepare().then(() => {
                     timestamp: new Date().toISOString(),
                 });
 
-                // GLOBAL NOTIFICATION: If it's a Goal, broadcast to EVERYONE connected (e.g. for "Goal in other match" toasts)
+                // GLOBAL NOTIFICATION: Broadcast important events to EVERYONE connected
                 if (data.type === 'Goal') {
+                    const assistName = data.event?.relatedPlayerId ? data.event?.assistByName : null;
                     io.emit('notification:global', {
                         type: 'GOAL',
                         matchId: data.matchId,
                         detail: data.detail,
                         teamId: data.teamId,
-                        message: `GOAL! ${data.detail} scores!`
+                        message: `GOAL! ${data.detail} scores!${assistName ? ` (Assist: ${assistName})` : ''}`
+                    });
+                } else if (data.type === 'Yellow Card' || data.type === 'Red Card') {
+                    io.emit('notification:global', {
+                        type: data.type === 'Yellow Card' ? 'YELLOW_CARD' : 'RED_CARD',
+                        matchId: data.matchId,
+                        playerId: data.event?.playerId,
+                        playerName: data.detail,
+                        teamId: data.teamId,
+                        message: `${data.type.toUpperCase()}: ${data.detail} booked.`
                     });
                 }
 
@@ -159,11 +169,58 @@ app.prepare().then(() => {
         socket.on('match:status:change', (data) => {
             console.log(`[Socket.IO] Match status change:`, data);
             io.to(`match:${data.matchId}`).emit('match:status:changed', data);
+
+            // Global notification for Kick-off and Full-time
+            if (data.status === 'LIVE') {
+                io.emit('notification:global', {
+                    type: 'MATCH_START',
+                    matchId: data.matchId,
+                    homeTeamId: data.homeTeamId,
+                    awayTeamId: data.awayTeamId,
+                    homeTeam: data.homeTeam,
+                    awayTeam: data.awayTeam,
+                    message: `KICK-OFF! ${data.homeTeam || 'Home'} vs ${data.awayTeam || 'Away'} has started!`
+                });
+            } else if (data.status === 'FINISHED') {
+                io.emit('notification:global', {
+                    type: 'MATCH_END',
+                    matchId: data.matchId,
+                    homeTeamId: data.homeTeamId,
+                    awayTeamId: data.awayTeamId,
+                    homeTeam: data.homeTeam,
+                    awayTeam: data.awayTeam,
+                    message: `FULL TIME: ${data.homeTeam || 'Home'} ${data.homeScore || 0} - ${data.awayScore || 0} ${data.awayTeam || 'Away'}`
+                });
+            }
         });
 
         // Match time update
         socket.on('match:time:update', (data) => {
-            // console.log(`[Socket.IO] Match time update:`, data); // Optional logging
+            const prevTime = matchTimes.get(data.matchId);
+
+            // Period Change Notification
+            if (prevTime && prevTime.period !== data.period) {
+                let periodName = data.period;
+                let msg = '';
+
+                if (data.period === 'HALFTIME') {
+                    msg = 'Half-time reached.';
+                } else if (data.period === 'SECOND_HALF') {
+                    msg = 'Second half underway!';
+                } else if (data.period === 'FIRST_HALF') {
+                    msg = 'Match has started!';
+                }
+
+                if (msg) {
+                    io.emit('notification:global', {
+                        type: 'PERIOD_CHANGE',
+                        period: data.period,
+                        matchId: data.matchId,
+                        message: msg
+                    });
+                }
+            }
+
             matchTimes.set(data.matchId, data);
             io.to(`match:${data.matchId}`).emit('match:time:updated', data);
         });
@@ -172,6 +229,19 @@ app.prepare().then(() => {
         socket.on('match:lineup:update', (data) => {
             console.log(`[Socket.IO] Lineup update:`, data);
             io.to(`match:${data.matchId}`).emit('match:lineup:updated', data);
+
+            // Global notification for Lineup publication
+            if (data.status === 'published') {
+                io.emit('notification:global', {
+                    type: 'LINEUP_PUBLISHED',
+                    matchId: data.matchId,
+                    homeTeamId: data.homeTeamId,
+                    awayTeamId: data.awayTeamId,
+                    homeTeam: data.homeTeam,
+                    awayTeam: data.awayTeam,
+                    message: `Lineups are out for ${data.homeTeam || 'Home'} vs ${data.awayTeam || 'Away'}!`
+                });
+            }
         });
 
         // Chat: Join Room
