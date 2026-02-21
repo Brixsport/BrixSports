@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Radio, Users, ChevronRight, Play } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import LiveMatchStatus from '@/components/LiveMatchStatus';
 
 interface LiveStream {
     id: string;
@@ -122,10 +123,7 @@ export function LiveNowSection() {
                             {/* Live Badge & Viewers */}
                             <div className="flex items-center justify-between">
                                 {stream.isLive ? (
-                                    <div className="flex items-center gap-2 bg-red-600 text-white px-3 py-1 rounded-full text-xs font-bold">
-                                        <div className="w-2 h-2 bg-white rounded-full animate-pulse" />
-                                        LIVE
-                                    </div>
+                                    <LiveMatchStatus matchId={stream.id} sport={stream.sport} variant="badge" />
                                 ) : (
                                     <div className="flex items-center gap-2 bg-orange-600 text-white px-3 py-1 rounded-full text-xs font-bold">
                                         <Play className="w-3 h-3" />

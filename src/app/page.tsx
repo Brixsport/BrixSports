@@ -10,9 +10,10 @@ import { Trophy, Calendar, User, Search, Bell, Menu, X, ChevronRight, ChevronLef
 import { format, addDays, isSameDay } from 'date-fns';
 import { Player, Team, Match } from '@/types';
 import GlobalSearch from '@/components/GlobalSearch';
-import { NotificationToast, useNotifications } from '@/components/Notifications';
+import { useNotifications } from '@/components/Notifications';
 import { useFavorites } from '@/hooks/useFavorites';
 import { LiveNowSection } from '@/components/livestream';
+import LiveMatchStatus from '@/components/LiveMatchStatus';
 
 // Lazy load heavy overlay components
 const MatchOverlay = dynamic(() => import('@/components/MatchOverlay').then(mod => mod.MatchOverlay), { ssr: false });
@@ -67,7 +68,7 @@ export default function Home() {
     fetchCompetitions();
   }, []);
 
-  const { notifications, addNotification, removeNotification } = useNotifications();
+  const { notifications, addNotification } = useNotifications();
   const { favoriteTeams, favoritePlayers } = useFavorites();
 
   // Fetch matches from API (both basketball and football)
@@ -731,10 +732,7 @@ export default function Home() {
                                     )}
 
                                     {match.status === 'LIVE' ? (
-                                      <div className="text-red-500 text-xs font-bold flex items-center gap-1">
-                                        <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse"></span>
-                                        LIVE
-                                      </div>
+                                      <LiveMatchStatus matchId={match.id} sport={match.sport} />
                                     ) : match.status === 'FINISHED' ? (
                                       <span className="text-xs text-white/40 font-bold">FT</span>
                                     ) : (
@@ -832,10 +830,7 @@ export default function Home() {
         )}
       </AnimatePresence>
 
-      <NotificationToast
-        notifications={notifications}
-        onClose={removeNotification}
-      />
+
 
       {/* Mobile Menu */}
       <AnimatePresence>

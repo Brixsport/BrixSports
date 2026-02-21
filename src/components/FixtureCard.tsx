@@ -145,7 +145,7 @@ export default function FixtureCard({ fixture }: FixtureCardProps) {
                                 {fixture.competition?.name || 'Match'}
                             </span>
                         </div>
-                        <MatchStatusBadge status={fixture.status} />
+                        <MatchStatusBadge status={fixture.status} matchId={fixture.id} />
                     </div>
 
                     {/* Teams */}

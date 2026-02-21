@@ -1,10 +1,12 @@
 'use client';
 
 import { motion } from 'framer-motion';
+import { useMatchTimer } from '@/hooks/useWebSocket';
 
 interface MatchStatusBadgeProps {
     status: string;
     className?: string;
+    matchId?: string; // Added matchId for real-time updates
     matchTime?: {
         minute: number;
         extraTime: number;
@@ -12,7 +14,11 @@ interface MatchStatusBadgeProps {
     };
 }
 
-export default function MatchStatusBadge({ status, className = '', matchTime }: MatchStatusBadgeProps) {
+export default function MatchStatusBadge({ status, className = '', matchId, matchTime: initialTime }: MatchStatusBadgeProps) {
+    // Subscribe to real-time updates if matchId is provided
+    const liveTime = useMatchTimer(matchId || '');
+    const matchTime = liveTime || initialTime;
+
     const getStatusConfig = () => {
         switch (status) {
             case 'LIVE':

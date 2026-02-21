@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import Link from 'next/link';
 import { Clock, MapPin, Trophy, TrendingUp } from 'lucide-react';
 import { format } from 'date-fns';
+import LiveMatchStatus from '@/components/LiveMatchStatus';
 
 interface MatchCardProps {
     match: {
@@ -53,6 +54,8 @@ export default function MatchCard({ match, variant = 'compact', showCompetition 
     };
 
     const getStatusText = () => {
+        // For real-time updates, we can't easily use a hook here if we want to keep the same function signature
+        // but we can at least make it consistent with other components if they pass more data.
         switch (match.status) {
             case 'LIVE':
                 return 'LIVE';
@@ -61,7 +64,11 @@ export default function MatchCard({ match, variant = 'compact', showCompetition 
             case 'FINISHED':
                 return 'FT';
             default:
-                return format(new Date(match.startTime), 'HH:mm');
+                try {
+                    return format(new Date(match.startTime), 'HH:mm');
+                } catch (e) {
+                    return '--:--';
+                }
         }
     };
 
@@ -110,8 +117,7 @@ export default function MatchCard({ match, variant = 'compact', showCompetition 
                             )}
                             {isLive && (
                                 <div className="flex items-center gap-1.5">
-                                    <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
-                                    <span className="text-red-400 text-xs font-semibold">{getStatusText()}</span>
+                                    <LiveMatchStatus matchId={match.id} sport={match.sport} />
                                 </div>
                             )}
                             {isFinished && (
