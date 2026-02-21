@@ -243,23 +243,32 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
   // Update match state from live socket data
   useEffect(() => {
     if (liveStatus && liveStatus !== match.status) {
+      console.log(`[MatchOverlay] Updating status: ${match.status} -> ${liveStatus}`);
       setMatch(prev => ({ ...prev, status: liveStatus as import('@/types').MatchStatus }));
       if (liveStatus === 'FINISHED') {
         setTimeout(() => refetchMatchData(), 100);
       }
     }
     if (liveScore) {
-      setMatch(prev => ({ ...prev, homeScore: liveScore.home, awayScore: liveScore.away }));
+      if (liveScore.home !== match.homeScore || liveScore.away !== match.awayScore) {
+        console.log(`[MatchOverlay] Updating score: ${match.homeScore}-${match.awayScore} -> ${liveScore.home}-${liveScore.away}`);
+        setMatch(prev => ({ ...prev, homeScore: liveScore.home, awayScore: liveScore.away }));
+      }
     }
-  }, [liveStatus, liveScore, match.status]);
+  }, [liveStatus, liveScore, match.status, match.homeScore, match.awayScore]);
 
   // Handle new live events from WebSocket
   useEffect(() => {
     if (latestEvent) {
+      console.log('[MatchOverlay] Received latestEvent from hook:', latestEvent);
       setMatch(prev => {
         const eventExists = prev.events?.some(e => e.id === latestEvent.id);
-        if (eventExists) return prev;
+        if (eventExists) {
+          console.log('[MatchOverlay] Event already exists, skipping:', latestEvent.id);
+          return prev;
+        }
 
+        console.log('[MatchOverlay] Adding new event to match state:', latestEvent.id);
         const matchEvent: MatchEvent = {
           id: latestEvent.id,
           matchId: latestEvent.matchId,

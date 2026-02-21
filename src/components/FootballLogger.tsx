@@ -365,7 +365,9 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
             if (event.loggerId !== currentLogger.id) return;
 
             // 1. Broadcast (Multi-Logger & Sockets)
+            // Sync with other loggers
             if (isConnected) {
+                console.log('[FootballLogger] Broadcasting sync-event to other loggers');
                 broadcastEvent({
                     id: event.id,
                     type: event.type,
@@ -377,12 +379,14 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                     detail: event.detail,
                     loggerId: event.loggerId,
                     loggerName: currentLogger?.name || 'Unknown',
-                    timestamp: event.createdAt,
+                    timestamp: event.createdAt, // This is a Date
                     synced: false
                 });
             }
 
+            // Sync with overlay clients via standard match room
             if (isSocketConnected) {
+                console.log('[FootballLogger] Emitting event:log to standard match room');
                 emit('event:log', {
                     matchId: match.id,
                     event: {
@@ -395,6 +399,8 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                     minute: event.absoluteMinute,
                     timestamp: Date.now()
                 });
+            } else {
+                console.warn('[FootballLogger] Socket NOT connected, skipping event:log emit');
             }
 
             // 2. Persist to API
@@ -429,7 +435,7 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
         });
 
         return unsubscribe;
-    }, [isConnected, isSocketConnected, emit, broadcastEvent, currentLogger, match.id]);
+    }, [isConnected, isSocketConnected, emit, broadcastEvent, currentLogger, match.id, isLoading]);
 
     const requiresPlayerSelection = (type: FootballEventType): boolean => {
         const noPlayerEvents: FootballEventType[] = [

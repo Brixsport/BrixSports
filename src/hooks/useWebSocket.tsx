@@ -210,13 +210,17 @@ export function useMatchEvents(matchId: string) {
         if (!socket) return;
 
         const handleNewEvent = (data: SocketEventData) => {
+            console.log(`[WS] New event received for Match ${matchId}:`, data);
             if (data.matchId === matchId) {
                 setLatestEvent(data.event);
                 setEvents(prev => [...prev, data.event]);
+            } else {
+                console.warn(`[WS] MatchId mismatch! Expected ${matchId}, got ${data.matchId}`);
             }
         };
 
         const handleEventDeleted = (data: { matchId: string; eventId: string }) => {
+            console.log(`[WS] Event deleted for Match ${matchId}:`, data);
             if (data.matchId === matchId) {
                 setEvents(prev => prev.filter(e => e.id !== data.eventId));
             }
@@ -245,6 +249,7 @@ export function usePlayerRatings(matchId: string) {
         if (!socket) return;
 
         const handleRatingUpdate = (data: { matchId: string; playerId: string; rating: number }) => {
+            console.log(`[WS] Rating update received for Match ${matchId}:`, data);
             if (data.matchId === matchId) {
                 setRatings(prev => ({ ...prev, [data.playerId]: data.rating }));
             }

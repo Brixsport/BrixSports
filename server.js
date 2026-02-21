@@ -62,9 +62,11 @@ app.prepare().then(() => {
     io.on('connection', (socket) => {
         console.log(`[Socket.IO] Client connected: ${socket.id}`);
 
-        // Subscribe to match updates
+        // Match Room Management
         socket.on('match:subscribe', ({ matchId }) => {
+            console.log(`[Socket.IO] Client ${socket.id} subscribing to Match ${matchId}`);
             socket.join(`match:${matchId}`);
+            console.log(`[Socket.IO] Client ${socket.id} joined room match:${matchId}`);
             console.log(`[Socket.IO] Client ${socket.id} subscribed to match ${matchId}`);
             socket.emit('match:subscribed', { matchId });
 
@@ -92,28 +94,43 @@ app.prepare().then(() => {
         // Log event (from logger)
         socket.on('event:log', async (data) => {
             try {
-                console.log(`[Socket.IO] Event logged:`, data);
+                console.log(`[Socket.IO] Event logging request received for Match ${data.matchId}:`, data);
 
                 // Broadcast to all subscribers of this match
                 io.to(`match:${data.matchId}`).emit('event:new', {
                     ...data,
                     timestamp: new Date().toISOString(),
                 });
+                console.log(`[Socket.IO] Broadcasted event:new to room match:${data.matchId}`);
 
                 // GLOBAL NOTIFICATION: Broadcast important events to EVERYONE connected
                 if (data.type === 'Goal') {
-                    const assistName = data.event?.relatedPlayerId ? data.event?.assistByName : null;
-                    io.emit('notification:global', {
-                        type: 'GOAL',
-                        matchId: data.matchId,
-                        detail: data.detail,
-                        teamId: data.teamId,
-                        message: `GOAL! ${data.detail} scores!${assistName ? ` (Assist: ${assistName})` : ''}`
-                    });
+                    try {
+                        const { matches, teams } = await import('./src/db/schema');
+                        const matchRecord = await db.select().from(matches).where(eq(matches.id, data.matchId)).get();
+
+                        if (matchRecord) {
+                            const homeTeam = await db.select().from(teams).where(eq(teams.id, matchRecord.homeTeamId)).get();
+                            const awayTeam = await db.select().from(teams).where(eq(teams.id, matchRecord.awayTeamId)).get();
+
+                            io.emit('notification:global', {
+                                type: 'GOAL',
+                                matchId: data.matchId,
+                                message: `${data.detail || 'Goal!'} for ${data.teamId === matchRecord.homeTeamId ? (homeTeam?.name || 'Home') : (awayTeam?.name || 'Away')}`,
+                                score: { home: matchRecord.homeScore, away: matchRecord.awayScore }
+                            });
+                        }
+                    } catch (err) {
+                        console.error('Error fetching data for global notification:', err);
+                        io.emit('notification:global', {
+                            type: 'GOAL',
+                            matchId: data.matchId,
+                            message: `GOAL! ${data.detail || ''}`,
+                            score: data.score
+                        });
+                    }
                 } else if (data.type === 'Yellow Card' || data.type === 'Red Card') {
                     io.emit('notification:global', {
-                        type: data.type === 'Yellow Card' ? 'YELLOW_CARD' : 'RED_CARD',
-                        matchId: data.matchId,
                         playerId: data.event?.playerId,
                         playerName: data.detail,
                         teamId: data.teamId,
@@ -127,7 +144,7 @@ app.prepare().then(() => {
                     eventId: data.id || `evt_${Date.now()}`
                 });
             } catch (error) {
-                console.error('[Socket.IO] Error logging event:', error);
+                console.error(`[Socket.IO] Error logging event:`, error);
                 socket.emit('error', {
                     message: error.message,
                     type: 'event:log:error'
@@ -137,8 +154,9 @@ app.prepare().then(() => {
 
         // Update match score
         socket.on('match:score:update', (data) => {
-            console.log(`[Socket.IO] Score update:`, data);
+            console.log(`[Socket.IO] Score update received for Match ${data.matchId}:`, data);
             io.to(`match:${data.matchId}`).emit('match:score:updated', data);
+            console.log(`[Socket.IO] Broadcasted match:score:updated to room match:${data.matchId}`);
         });
 
         // Update player rating
