@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { X, Star, Share2, TrendingUp, MapPin, Calendar, Ruler, Weight, Award, Activity, Heart, GitCompare } from 'lucide-react';
 import { useFavorites } from '@/hooks/useFavorites';
+import { useNotifications } from './Notifications';
 
 interface PlayerProfileOverlayProps {
   player: any;
@@ -14,6 +15,7 @@ interface PlayerProfileOverlayProps {
 export function PlayerProfileOverlay({ player: initialPlayer, onClose, sport }: PlayerProfileOverlayProps) {
   const [playerData, setPlayerData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const { addNotification } = useNotifications();
 
   useEffect(() => {
     const fetchPlayerData = async () => {
@@ -109,7 +111,15 @@ export function PlayerProfileOverlay({ player: initialPlayer, onClose, sport }: 
               <Share2 size={20} />
             </button>
             <button
-              onClick={() => togglePlayer(String(player.id))}
+              onClick={() => {
+                const isNowFollowing = !isFav;
+                togglePlayer(String(player.id));
+                addNotification({
+                  title: isNowFollowing ? 'Player Followed' : 'Player Unfollowed',
+                  message: isNowFollowing ? `You are now following ${player.name}` : `You have unfollowed ${player.name}`,
+                  type: 'match'
+                });
+              }}
               className={`p-2 rounded-full transition-colors ${isFav ? 'bg-primary text-black' : 'hover:bg-white/10 text-primary'}`}
             >
               <Heart size={20} fill={isFav ? "currentColor" : "none"} />

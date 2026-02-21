@@ -62,6 +62,16 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
   const { isFavoriteTeam, toggleTeam } = useFavorites();
   const { addNotification } = useNotifications();
 
+  const handleToggleFollow = (team: Team) => {
+    const isNowFollowing = !isFavoriteTeam(team.id);
+    toggleTeam(team.id);
+    addNotification({
+      title: isNowFollowing ? 'Team Followed' : 'Team Unfollowed',
+      message: isNowFollowing ? `You are now following ${team.name}` : `You have unfollowed ${team.name}`,
+      type: 'match'
+    });
+  };
+
   const is5Aside = (match.sport as string) === 'Five-a-side' ||
     (match.sport as string) === '5-a-side' ||
     (match.sport as string) === '5-aside' ||
@@ -712,7 +722,7 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
                         </span>
                       )}
                       <button
-                        onClick={(e) => { e.stopPropagation(); if (homeTeam) toggleTeam(homeTeam.id); }}
+                        onClick={(e) => { e.stopPropagation(); if (homeTeam) handleToggleFollow(homeTeam); }}
                         className="text-xs text-white/40 hover:text-primary transition-colors flex items-center gap-1"
                       >
                         <Heart size={12} fill={isFavoriteTeam(homeTeam?.id || '') ? "currentColor" : "none"} />
@@ -773,7 +783,7 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
                         </span>
                       )}
                       <button
-                        onClick={(e) => { e.stopPropagation(); if (awayTeam) toggleTeam(awayTeam.id); }}
+                        onClick={(e) => { e.stopPropagation(); if (awayTeam) handleToggleFollow(awayTeam); }}
                         className="text-xs text-white/40 hover:text-primary transition-colors flex items-center gap-1"
                       >
                         <Heart size={12} fill={isFavoriteTeam(awayTeam?.id || '') ? "currentColor" : "none"} />
