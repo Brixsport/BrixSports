@@ -667,7 +667,31 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
                 {match.competition}
               </span>
 
-              <button className="w-8 h-8 flex items-center justify-center hover:bg-white/10 rounded-full transition-colors">
+              <button
+                onClick={async () => {
+                  const shareData = {
+                    title: `${homeTeam?.name} vs ${awayTeam?.name} - Brix Sports`,
+                    text: `Check out the live scores for ${homeTeam?.name} vs ${awayTeam?.name} on Brix Sports!`,
+                    url: window.location.href,
+                  };
+
+                  try {
+                    if (navigator.share) {
+                      await navigator.share(shareData);
+                    } else {
+                      await navigator.clipboard.writeText(window.location.href);
+                      addNotification({
+                        title: 'Link Copied',
+                        message: 'Match link copied to clipboard!',
+                        type: 'match'
+                      });
+                    }
+                  } catch (err) {
+                    console.error('Share failed:', err);
+                  }
+                }}
+                className="w-8 h-8 flex items-center justify-center hover:bg-white/10 rounded-full transition-colors"
+              >
                 <Share2 size={18} className="text-white/80" />
               </button>
             </div>

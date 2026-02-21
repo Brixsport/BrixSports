@@ -90,6 +90,25 @@ export function PlayerProfileOverlay({ player: initialPlayer, onClose, sport }: 
               <GitCompare size={20} />
             </a>
             <button
+              onClick={async () => {
+                const shareData = {
+                  title: `${player.name} - Player Profile`,
+                  text: `Check out ${player.name}'s profile on Brix Sports!`,
+                  url: `${window.location.origin}/players/${player.id}`,
+                };
+                if (navigator.share) {
+                  await navigator.share(shareData);
+                } else {
+                  await navigator.clipboard.writeText(`${window.location.origin}/players/${player.id}`);
+                  alert('Profile link copied to clipboard!');
+                }
+              }}
+              className="p-2 rounded-full hover:bg-white/10 text-white/60 hover:text-white transition-colors"
+              title="Share Profile"
+            >
+              <Share2 size={20} />
+            </button>
+            <button
               onClick={() => togglePlayer(String(player.id))}
               className={`p-2 rounded-full transition-colors ${isFav ? 'bg-primary text-black' : 'hover:bg-white/10 text-primary'}`}
             >
@@ -248,7 +267,7 @@ export function PlayerProfileOverlay({ player: initialPlayer, onClose, sport }: 
           </section>
         </div>
       </div>
-    </motion.div>
+    </motion.div >
   );
 }
 

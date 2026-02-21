@@ -55,7 +55,24 @@ export function SimpleMatchOverlay({ match, onClose, onSelectTeam }: SimpleMatch
                                 </span>
                             </div>
 
-                            <div className="w-10"></div>
+                            <button
+                                onClick={async () => {
+                                    const shareData = {
+                                        title: `${match.homeTeam?.name} vs ${match.awayTeam?.name} - Brix Sports`,
+                                        text: `Check out the live scores for ${match.homeTeam?.name} vs ${match.awayTeam?.name} on Brix Sports!`,
+                                        url: window.location.href,
+                                    };
+                                    if (navigator.share) {
+                                        await navigator.share(shareData);
+                                    } else {
+                                        await navigator.clipboard.writeText(window.location.href);
+                                        alert('Link copied to clipboard!');
+                                    }
+                                }}
+                                className="w-10 h-10 flex items-center justify-center hover:bg-white/10 rounded-full transition-colors"
+                            >
+                                <Share2 size={20} className="text-white/80" />
+                            </button>
                         </div>
 
                         {/* Scoreboard */}

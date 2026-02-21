@@ -16,6 +16,7 @@ import { HeadToHeadComparison } from '@/components/HeadToHead';
 import MatchPoll from '@/components/MatchPoll';
 import { MatchPredictionCard, MatchVotePoll } from '@/components/predictions';
 import { LivestreamView } from '@/components/livestream/LivestreamView';
+import { useNotifications } from '@/components/Notifications';
 
 interface MatchData {
     match: any;
@@ -41,6 +42,30 @@ export default function MatchDetailPage() {
     const { isConnected, on, off } = useWebSocket({ matchId, autoConnect: true });
     const { events: liveEvents, latestEvent } = useMatchEvents(matchId);
     const matchTime = useMatchTimer(matchId);
+    const { addNotification } = useNotifications();
+
+    const handleShare = async () => {
+        const shareData = {
+            title: `${matchData?.match?.homeTeam?.name} vs ${matchData?.match?.awayTeam?.name} - Brix Sports`,
+            text: `Check out the live scores for ${matchData?.match?.homeTeam?.name} vs ${matchData?.match?.awayTeam?.name} on Brix Sports!`,
+            url: window.location.href,
+        };
+
+        try {
+            if (navigator.share) {
+                await navigator.share(shareData);
+            } else {
+                await navigator.clipboard.writeText(window.location.href);
+                addNotification({
+                    title: 'Link Copied',
+                    message: 'Match link copied to clipboard!',
+                    type: 'match'
+                });
+            }
+        } catch (err) {
+            console.error('Share failed:', err);
+        }
+    };
 
     // Update match time in real-time
     useEffect(() => {
@@ -243,7 +268,10 @@ export default function MatchDetailPage() {
                                 <Heart className={`w-5 h-5 ${isFavorited ? 'fill-current' : ''}`} />
                             </button>
 
-                            <button className="p-2 rounded-lg bg-white/5 text-white/60 hover:bg-white/10 transition-colors">
+                            <button
+                                onClick={handleShare}
+                                className="p-2 rounded-lg bg-white/5 text-white/60 hover:bg-white/10 transition-colors"
+                            >
                                 <Share2 className="w-5 h-5" />
                             </button>
                         </div>
