@@ -5,7 +5,7 @@
 
 'use client';
 
-import React, { createContext, useContext, useEffect, useRef, useState, useCallback, ReactNode } from 'react';
+import React, { createContext, useContext, useEffect, useRef, useState, useCallback, useMemo, ReactNode } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { MatchEvent } from '@/db/schema';
 
@@ -30,6 +30,8 @@ const SocketContext = createContext<SocketContextValue>({
     socket: null,
     isConnected: false,
 });
+
+let stableFallback: SocketContextValue | null = null;
 
 // ─── Singleton Connection ───────────────────────────────────────
 // Kept outside React to survive re-renders and StrictMode double-mounts
@@ -140,8 +142,13 @@ export function SocketProvider({ children }: { children: ReactNode }) {
         };
     }, []);
 
+    const contextValue = useMemo(() => ({
+        socket: socketRef.current || sharedSocket,
+        isConnected
+    }), [isConnected]);
+
     return (
-        <SocketContext.Provider value={{ socket: socketRef.current || sharedSocket, isConnected }}>
+        <SocketContext.Provider value={contextValue}>
             {children}
         </SocketContext.Provider>
     );
@@ -158,7 +165,13 @@ export function useSocket() {
 
     // Fallback: if used outside provider, return the shared socket directly
     if (!context.socket && sharedSocket) {
-        return { socket: sharedSocket, isConnected: sharedSocket.connected };
+        if (!stableFallback || stableFallback.socket !== sharedSocket || stableFallback.isConnected !== sharedSocket.connected) {
+            stableFallback = {
+                socket: sharedSocket,
+                isConnected: sharedSocket.connected
+            };
+        }
+        return stableFallback;
     }
 
     return context;
