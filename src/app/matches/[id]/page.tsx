@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useWebSocket, useMatchEvents } from '@/hooks/useWebSocket';
+import { useWebSocket, useMatchEvents, useMatchTimer } from '@/hooks/useWebSocket';
 import {
     ArrowLeft, Clock, MapPin, Users, TrendingUp, Eye,
     Activity, BarChart3, Share2, Heart, Bell, Trophy, Play
@@ -40,6 +40,22 @@ export default function MatchDetailPage() {
 
     const { isConnected, on, off } = useWebSocket({ matchId, autoConnect: true });
     const { events: liveEvents, latestEvent } = useMatchEvents(matchId);
+    const matchTime = useMatchTimer(matchId);
+
+    // Update match time in real-time
+    useEffect(() => {
+        if (matchData && matchTime) {
+            setMatchData(prev => ({
+                ...prev!,
+                match: {
+                    ...prev!.match,
+                    minute: matchTime.minute,
+                    extraTime: matchTime.extraTime,
+                    status: matchTime.period || prev!.match.status
+                },
+            }));
+        }
+    }, [matchTime]);
 
     // Handle scroll for hide/show header behavior
     useEffect(() => {
@@ -83,13 +99,17 @@ export default function MatchDetailPage() {
 
     // Update events in real-time
     useEffect(() => {
-        if (matchData && liveEvents.length > 0) {
-            setMatchData(prev => ({
-                ...prev!,
-                events: [...liveEvents, ...prev!.events],
-            }));
+        if (matchData && latestEvent) {
+            // Check if event already exists to avoid duplicates
+            const exists = matchData.events.some(e => e.id === latestEvent.id);
+            if (!exists) {
+                setMatchData(prev => ({
+                    ...prev!,
+                    events: [latestEvent, ...prev!.events],
+                }));
+            }
         }
-    }, [liveEvents]);
+    }, [latestEvent]);
 
     // Listen for score updates
     useEffect(() => {
@@ -251,8 +271,15 @@ export default function MatchDetailPage() {
                                 <div className="text-2xl text-white/40">-</div>
                                 <div className="text-4xl font-black">{match.awayScore}</div>
                             </div>
-                            <div className="text-sm text-white/60 mt-1">
-                                {match.status === 'live' && match.minute ? `${match.minute}'` : match.status}
+                            <div className="text-sm text-white/60 mt-1 uppercase font-bold tracking-wider">
+                                {['LIVE', 'FIRST_HALF', 'SECOND_HALF', 'EXTRA_TIME_1', 'EXTRA_TIME_2'].includes(match.status) ? (
+                                    <span className="flex items-center gap-1 justify-center">
+                                        <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse" />
+                                        {match.minute}'{match.extraTime > 0 ? `+${match.extraTime}` : ''}
+                                    </span>
+                                ) : (
+                                    match.status.replace('_', ' ')
+                                )}
                             </div>
                         </div>
 

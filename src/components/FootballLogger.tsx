@@ -387,9 +387,12 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
             }
 
             if (isSocketConnected) {
-                emit('event:new', {
+                emit('event:log', {
                     matchId: match.id,
                     event: event,
+                    type: event.type, // server.js checks this for global notification
+                    detail: event.detail,
+                    teamId: event.teamId,
                     timestamp: Date.now()
                 });
             }
@@ -426,7 +429,7 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
         });
 
         return unsubscribe;
-    }, [isConnected, currentLogger, match.id]);
+    }, [isConnected, isSocketConnected, emit, broadcastEvent, currentLogger, match.id]);
 
     const requiresPlayerSelection = (type: FootballEventType): boolean => {
         const noPlayerEvents: FootballEventType[] = [
@@ -907,7 +910,13 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                         >
                             <Undo2 size={16} />
                         </button>
-                        <button onClick={() => setShowSettingsModal(true)} className="p-1.5 bg-white/5 rounded-lg hover:bg-white/10">
+                        <div className="flex items-center gap-1.5 px-2 py-1 bg-white/5 rounded-lg border border-white/10 shrink-0">
+                            <span className={`w-1.5 h-1.5 rounded-full ${isSocketConnected ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.5)]' : 'bg-red-500 animate-pulse'}`} />
+                            <span className="text-[8px] font-black uppercase tracking-tighter opacity-60">
+                                {isSocketConnected ? 'Live Sync' : 'Offline'}
+                            </span>
+                        </div>
+                        <button onClick={() => setShowSettingsModal(true)} className="p-1.5 bg-white/5 rounded-lg hover:bg-white/10 shrink-0">
                             <Settings size={16} />
                         </button>
                     </div>
@@ -1222,7 +1231,7 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
             {
                 showAssistModal && (
                     <PlayerSelectionModal
-                        players={selectedTeam === 'home' ? homePlayers : awayPlayers}
+                        players={(selectedTeam === 'home' ? homePlayers : awayPlayers).filter(p => p.id !== selectedEventPlayer)}
                         onSelect={handleAssistSelect}
                         onClose={() => { setShowAssistModal(false); handleAssistSelect(null); }}
                         title="Select Assist (Optional)"

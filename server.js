@@ -50,6 +50,9 @@ app.prepare().then(() => {
             credentials: true,
         },
         transports: ['websocket', 'polling'],
+        pingTimeout: 60000,
+        pingInterval: 25000,
+        connectTimeout: 45000,
     });
 
     // In-memory cache for match times
@@ -242,6 +245,10 @@ app.prepare().then(() => {
 
     // Make io accessible globally for API routes
     global.io = io;
+
+    httpServer.timeout = 0;
+    httpServer.keepAliveTimeout = 120000; // 2 minutes
+    httpServer.headersTimeout = 121000;
 
     httpServer
         .once('error', (err) => {

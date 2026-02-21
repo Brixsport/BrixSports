@@ -73,9 +73,10 @@ function getOrCreateSocket(): Socket | null {
         path: '/api/socket',
         transports: ['websocket', 'polling'],
         reconnection: true,
-        reconnectionAttempts: 10,
+        reconnectionAttempts: Infinity,
         reconnectionDelay: 1000,
-        reconnectionDelayMax: 5000,
+        reconnectionDelayMax: 10000,
+        timeout: 20000,
     });
 
     sharedSocket.on('connect', () => {
@@ -114,12 +115,20 @@ export function SocketProvider({ children }: { children: ReactNode }) {
         socket.on('connect', handleConnect);
         socket.on('disconnect', handleDisconnect);
 
+        // Heartbeat to prevent idle timeouts on proxies/load-balancers
+        const heartbeatInterval = setInterval(() => {
+            if (socket.connected) {
+                socket.emit('ping');
+            }
+        }, 30000); // Every 30 seconds
+
         // Set initial state
         setIsConnected(socket.connected);
 
         return () => {
             socket.off('connect', handleConnect);
             socket.off('disconnect', handleDisconnect);
+            clearInterval(heartbeatInterval);
             connectionCount--;
 
             // Only disconnect if no one is using it
