@@ -7,8 +7,9 @@ import { eq, desc, and } from 'drizzle-orm';
 export async function GET(request: NextRequest) {
     try {
         const { searchParams } = new URL(request.url);
-        const type = searchParams.get('type') || 'goals'; // goals, assists, rating, appearances, points, rebounds, etc.
+        const type = searchParams.get('type') || 'goals';
         const competition = searchParams.get('competition');
+        const competitionId = searchParams.get('competitionId');
         const sport = searchParams.get('sport');
         const limit = parseInt(searchParams.get('limit') || '10');
 
@@ -39,6 +40,14 @@ export async function GET(request: NextRequest) {
                     orderColumn = basketballPlayerStats.totalPoints;
             }
 
+            const { or } = await import('drizzle-orm');
+            const basketballConditions = [];
+            if (competitionId) {
+                basketballConditions.push(or(eq(basketballPlayerStats.competitionId, competitionId), eq(basketballPlayerStats.competition, competition || '')));
+            } else if (competition) {
+                basketballConditions.push(eq(basketballPlayerStats.competition, competition));
+            }
+
             const results = await db
                 .select({
                     player: players,
@@ -48,6 +57,7 @@ export async function GET(request: NextRequest) {
                 .from(basketballPlayerStats)
                 .leftJoin(players, eq(basketballPlayerStats.playerId, players.id))
                 .leftJoin(teams, eq(players.teamId, teams.id))
+                .where(basketballConditions.length > 0 ? and(...basketballConditions) : undefined)
                 .orderBy(desc(orderColumn))
                 .limit(limit);
 
@@ -96,7 +106,10 @@ export async function GET(request: NextRequest) {
 
         // Existing Football/Generic Logic
         const conditions = [];
-        if (competition) {
+        const { or } = await import('drizzle-orm');
+        if (competitionId) {
+            conditions.push(or(eq(playerStats.competitionId, competitionId), eq(playerStats.competition, competition || '')));
+        } else if (competition) {
             conditions.push(eq(playerStats.competition, competition));
         }
         if (sport) {

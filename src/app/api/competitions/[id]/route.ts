@@ -9,7 +9,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
 import { teams, matches, standings, bracketNodes, competitions } from '@/db/schema';
-import { eq, sql } from 'drizzle-orm';
+import { eq, sql, or } from 'drizzle-orm';
 
 interface RouteParams {
     params: {
@@ -55,7 +55,7 @@ export async function GET(
         const competitionMatches = await db
             .select()
             .from(matches)
-            .where(eq(matches.competition, competitionName));
+            .where(or(eq(matches.competitionId, competition.id), eq(matches.competition, competitionName)));
 
         // Get standings for this competition
         const competitionStandings = await db
@@ -65,13 +65,13 @@ export async function GET(
             })
             .from(standings)
             .leftJoin(teams, eq(standings.teamId, teams.id))
-            .where(eq(standings.competition, competitionName));
+            .where(or(eq(standings.competitionId, competition.id), eq(standings.competition, competitionName)));
 
         // Get brackets (if tournament)
         const brackets = await db
             .select()
             .from(bracketNodes)
-            .where(eq(bracketNodes.competition, competitionName));
+            .where(or(eq(bracketNodes.competitionId, competition.id), eq(bracketNodes.competition, competitionName)));
 
         // Get unique teams from matches
         const teamIds = new Set<string>();
@@ -139,6 +139,7 @@ export async function PATCH(
             numberOfGroups,
             teamsPerGroup,
             status,
+            isMultiSport,
         } = body;
 
         // Check if competition exists
@@ -173,6 +174,7 @@ export async function PATCH(
         if (numberOfGroups !== undefined) updateData.numberOfGroups = numberOfGroups;
         if (teamsPerGroup !== undefined) updateData.teamsPerGroup = teamsPerGroup;
         if (status !== undefined) updateData.status = status;
+        if (isMultiSport !== undefined) updateData.isMultiSport = isMultiSport;
 
         // Update competition
         await db

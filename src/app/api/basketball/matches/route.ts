@@ -1,17 +1,25 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/db';
 import { matches, teams } from '@/db/schema';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, or } from 'drizzle-orm';
 
 export async function GET(request: Request) {
     try {
         const { searchParams } = new URL(request.url);
         const status = searchParams.get('status'); // 'LIVE', 'FINISHED', 'UPCOMING'
+        const competitionId = searchParams.get('competitionId');
+        const competition = searchParams.get('competition');
 
         // Build query with conditional filters
-        const whereConditions = status
-            ? and(eq(matches.sport, 'Basketball'), eq(matches.status, status))
-            : eq(matches.sport, 'Basketball');
+        const conditions = [eq(matches.sport, 'Basketball')];
+        if (status) conditions.push(eq(matches.status, status));
+        if (competitionId) {
+            conditions.push(or(eq(matches.competitionId, competitionId), eq(matches.competition, competition || '')));
+        } else if (competition) {
+            conditions.push(eq(matches.competition, competition));
+        }
+
+        const whereConditions = and(...conditions);
 
         // Get all basketball matches
         const basketballMatches = await db

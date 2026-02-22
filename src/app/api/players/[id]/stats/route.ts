@@ -11,6 +11,7 @@ export async function GET(
     try {
         const { id: playerId } = await params;
         const { searchParams } = new URL(request.url);
+        const competitionId = searchParams.get('competitionId');
         const competition = searchParams.get('competition');
         const season = searchParams.get('season');
 
@@ -41,7 +42,11 @@ export async function GET(
         // Apply filters
         const conditions = [eq(playerStats.playerId, playerId)];
 
-        if (competition) {
+        const { or } = await import('drizzle-orm');
+
+        if (competitionId) {
+            conditions.push(or(eq(playerStats.competitionId, competitionId), eq(playerStats.competition, competition || '')));
+        } else if (competition) {
             conditions.push(eq(playerStats.competition, competition));
         }
 
@@ -116,6 +121,7 @@ export async function POST(
         const { id: playerId } = await params;
         const body = await request.json();
         const {
+            competitionId,
             competition,
             sport,
             goals = 0,
@@ -130,12 +136,14 @@ export async function POST(
         } = body;
 
         // Validate required fields
-        if (!competition || !sport) {
+        if ((!competition && !competitionId) || !sport) {
             return NextResponse.json(
-                { error: 'Competition and sport are required' },
+                { error: 'Competition(Id) and sport are required' },
                 { status: 400 }
             );
         }
+
+        const { or } = await import('drizzle-orm');
 
         // Verify player exists
         const player = await db
@@ -158,7 +166,9 @@ export async function POST(
             .where(
                 and(
                     eq(playerStats.playerId, playerId),
-                    eq(playerStats.competition, competition)
+                    competitionId
+                        ? or(eq(playerStats.competitionId, competitionId), eq(playerStats.competition, competition || ''))
+                        : eq(playerStats.competition, competition || '')
                 )
             )
             .get();
@@ -168,6 +178,8 @@ export async function POST(
             await db
                 .update(playerStats)
                 .set({
+                    competitionId: competitionId || existingStats.competitionId,
+                    competition: competition || existingStats.competition,
                     goals,
                     assists,
                     appearances,
@@ -188,11 +200,12 @@ export async function POST(
             });
         } else {
             // Create new stats
-            const statsId = `${playerId}_${competition}`;
+            const statsId = `${playerId}_${competitionId || competition}`;
             const newStats = {
                 id: statsId,
                 playerId,
-                competition,
+                competition: competition || '',
+                competitionId: competitionId || null,
                 sport,
                 goals,
                 assists,
@@ -232,6 +245,7 @@ export async function PATCH(
         const { id: playerId } = await params;
         const body = await request.json();
         const {
+            competitionId,
             competition,
             sport,
             incrementGoals = 0,
@@ -243,12 +257,14 @@ export async function PATCH(
         } = body;
 
         // Validate required fields
-        if (!competition || !sport) {
+        if ((!competition && !competitionId) || !sport) {
             return NextResponse.json(
-                { error: 'Competition and sport are required' },
+                { error: 'Competition(Id) and sport are required' },
                 { status: 400 }
             );
         }
+
+        const { or } = await import('drizzle-orm');
 
         // Verify player exists
         const player = await db
@@ -271,7 +287,9 @@ export async function PATCH(
             .where(
                 and(
                     eq(playerStats.playerId, playerId),
-                    eq(playerStats.competition, competition)
+                    competitionId
+                        ? or(eq(playerStats.competitionId, competitionId), eq(playerStats.competition, competition || ''))
+                        : eq(playerStats.competition, competition || '')
                 )
             )
             .get();
@@ -290,7 +308,11 @@ export async function PATCH(
 
             await db
                 .update(playerStats)
-                .set(updatedStats)
+                .set({
+                    ...updatedStats,
+                    competitionId: competitionId || existingStats.competitionId,
+                    competition: competition || existingStats.competition
+                })
                 .where(eq(playerStats.id, existingStats.id));
 
             return NextResponse.json({
@@ -300,11 +322,12 @@ export async function PATCH(
             });
         } else {
             // Create new stats with incremented values
-            const statsId = `${playerId}_${competition}`;
+            const statsId = `${playerId}_${competitionId || competition}`;
             const newStats = {
                 id: statsId,
                 playerId,
-                competition,
+                competition: competition || '',
+                competitionId: competitionId || null,
                 sport,
                 goals: incrementGoals,
                 assists: incrementAssists,

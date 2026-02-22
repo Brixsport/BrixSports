@@ -17,8 +17,11 @@ export async function GET(
     { params }: { params: { id: string } }
 ) {
     try {
-        const competitionId = params.id;
+        const compIdOrName = params.id;
         const { searchParams } = new URL(request.url);
+
+        const { or } = await import('drizzle-orm');
+        const competitionFilter = or(eq(playerStats.competitionId, compIdOrName), eq(playerStats.competition, compIdOrName));
         const type = searchParams.get('type') || 'scorers'; // 'scorers' | 'assists' | 'discipline'
         const limit = parseInt(searchParams.get('limit') || '10');
 
@@ -35,7 +38,7 @@ export async function GET(
                     .from(playerStats)
                     .leftJoin(players, eq(playerStats.playerId, players.id))
                     .leftJoin(teams, eq(players.teamId, teams.id))
-                    .where(eq(playerStats.competition, competitionId))
+                    .where(competitionFilter)
                     .orderBy(desc(playerStats.goals), desc(playerStats.assists))
                     .limit(limit);
                 break;
@@ -50,7 +53,7 @@ export async function GET(
                     .from(playerStats)
                     .leftJoin(players, eq(playerStats.playerId, players.id))
                     .leftJoin(teams, eq(players.teamId, teams.id))
-                    .where(eq(playerStats.competition, competitionId))
+                    .where(competitionFilter)
                     .orderBy(desc(playerStats.assists), desc(playerStats.goals))
                     .limit(limit);
                 break;
@@ -105,9 +108,9 @@ export async function POST(
     { params }: { params: { id: string } }
 ) {
     try {
-        const competitionId = params.id;
+        const compIdOrName = params.id;
         const body = await request.json();
-        const { playerId, goals, assists, yellowCards, redCards, appearances, minutesPlayed } = body;
+        const { playerId, goals, assists, yellowCards, redCards, appearances, minutesPlayed, competition } = body;
 
         if (!playerId) {
             return NextResponse.json(
@@ -123,7 +126,7 @@ export async function POST(
             .where(
                 and(
                     eq(playerStats.playerId, playerId),
-                    eq(playerStats.competition, competitionId)
+                    or(eq(playerStats.competitionId, compIdOrName), eq(playerStats.competition, compIdOrName))
                 )
             );
 
@@ -132,6 +135,8 @@ export async function POST(
             await db
                 .update(playerStats)
                 .set({
+                    competitionId: compIdOrName.length > 20 ? compIdOrName : existing.competitionId, // Simple heuristic for UUID
+                    competition: competition || existing.competition,
                     goals: goals !== undefined ? existing.goals + goals : existing.goals,
                     assists: assists !== undefined ? existing.assists + assists : existing.assists,
                     yellowCards: yellowCards !== undefined ? existing.yellowCards + yellowCards : existing.yellowCards,
@@ -165,7 +170,8 @@ export async function POST(
             await db.insert(playerStats).values({
                 id: statId,
                 playerId,
-                competition: competitionId,
+                competition: competition || compIdOrName,
+                competitionId: compIdOrName.length > 20 ? compIdOrName : null,
                 sport: 'Football', // Get from competition
                 goals: goals || 0,
                 assists: assists || 0,

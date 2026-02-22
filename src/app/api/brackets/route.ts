@@ -8,18 +8,28 @@ import { nanoid } from 'nanoid';
 export async function GET(request: NextRequest) {
     try {
         const { searchParams } = new URL(request.url);
+        const competitionId = searchParams.get('competitionId');
         const competition = searchParams.get('competition');
         const sport = searchParams.get('sport');
 
-        if (!competition) {
+        if (!competitionId && !competition) {
             return NextResponse.json(
-                { error: 'Competition parameter is required' },
+                { error: 'Competition or Competition ID parameter is required' },
                 { status: 400 }
             );
         }
 
         // Build query conditions
-        const conditions = [eq(bracketNodes.competition, competition)];
+        const conditions = [];
+
+        const { or } = await import('drizzle-orm');
+
+        if (competitionId) {
+            conditions.push(or(eq(bracketNodes.competitionId, competitionId), eq(bracketNodes.competition, competition || '')));
+        } else if (competition) {
+            conditions.push(eq(bracketNodes.competition, competition));
+        }
+
         if (sport) {
             conditions.push(eq(bracketNodes.sport, sport));
         }
@@ -117,11 +127,11 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
     try {
         const body = await request.json();
-        const { competition, sport, rounds } = body;
+        const { competition, competitionId, sport, rounds } = body;
 
-        if (!competition || !sport || !rounds || !Array.isArray(rounds)) {
+        if ((!competition && !competitionId) || !sport || !rounds || !Array.isArray(rounds)) {
             return NextResponse.json(
-                { error: 'Competition, sport, and rounds array are required' },
+                { error: 'Competition (or CompetitionId), sport, and rounds array are required' },
                 { status: 400 }
             );
         }
@@ -136,7 +146,8 @@ export async function POST(request: NextRequest) {
                 const nodeId = nanoid();
                 const newNode = {
                     id: nodeId,
-                    competition,
+                    competition: competition || '',
+                    competitionId: competitionId || null,
                     sport,
                     title: match.title || `${roundName} Match`,
                     matchId: match.matchId || null,

@@ -11,7 +11,8 @@ type SportType = 'Football' | 'Basketball' | 'Track';
 interface Competition {
   id: string;
   name: string;
-  sport: SportType;
+  sport: SportType | null;
+  isMultiSport?: boolean;
   season?: string;
   status?: string;
   description?: string;
@@ -103,7 +104,10 @@ function CompetitionsContent() {
 
           if (defaultComp) {
             setSelectedComp(defaultComp);
-            setSelectedSport(defaultComp.sport); // Sync sport
+            // If it's a specific sport competition, set that sport
+            if (defaultComp.sport) {
+              setSelectedSport(defaultComp.sport as SportType);
+            }
           }
         }
       } catch (err) {
@@ -126,23 +130,22 @@ function CompetitionsContent() {
         setLoading(true);
 
         // Fetch Standings
-        const standingsRes = await fetch(`/api/${selectedComp.sport.toLowerCase()}/standings?competition=${encodeURIComponent(selectedComp.name)}`);
+        const standingsRes = await fetch(`/api/${selectedSport.toLowerCase()}/standings?competitionId=${selectedComp.id}&competition=${encodeURIComponent(selectedComp.name)}`);
         const sData = await standingsRes.json();
         if (sData.success) setStandings(sData.standings || []);
         else setStandings([]);
 
-        // Fetch Matches (Filter client-side for now as API returns all)
-        const matchesRes = await fetch(`/api/${selectedComp.sport.toLowerCase()}/matches`);
+        // Fetch Matches
+        const matchesRes = await fetch(`/api/${selectedSport.toLowerCase()}/matches?competitionId=${selectedComp.id}&competition=${encodeURIComponent(selectedComp.name)}`);
         const mData = await matchesRes.json();
         if (mData.success && mData.matches) {
-          const filteredMatches = mData.matches.filter((m: any) => m.competition === selectedComp.name);
-          setMatches(filteredMatches);
+          setMatches(mData.matches);
         } else {
           setMatches([]);
         }
 
         // Fetch Brackets
-        const bracketRes = await fetch(`/api/brackets?competition=${encodeURIComponent(selectedComp.name)}&sport=${selectedComp.sport}`);
+        const bracketRes = await fetch(`/api/brackets?competitionId=${selectedComp.id}&competition=${encodeURIComponent(selectedComp.name)}&sport=${selectedSport}`);
         const bData = await bracketRes.json();
         if (bData.rounds) setBrackets(bData.rounds);
         else setBrackets([]);
@@ -155,11 +158,11 @@ function CompetitionsContent() {
     };
 
     fetchDetails();
-  }, [selectedComp]);
+  }, [selectedComp, selectedSport]);
 
-  // Filter and de-duplicate competitions by name for the tabs
+  // Filter competitions for the current sport tab
   const filteredCompetitions = competitions
-    .filter(c => c.sport === selectedSport)
+    .filter(c => c.isMultiSport || c.sport === selectedSport);
 
   if (loading && competitions.length === 0) {
     return (
@@ -240,7 +243,12 @@ function CompetitionsContent() {
               {filteredCompetitions.map((comp) => (
                 <button
                   key={comp.id}
-                  onClick={() => setSelectedComp(comp)}
+                  onClick={() => {
+                    setSelectedComp(comp);
+                    if (comp.sport && comp.sport !== selectedSport) {
+                      setSelectedSport(comp.sport as SportType);
+                    }
+                  }}
                   className={`px-4 py-2 rounded-full text-[10px] font-bold uppercase tracking-widest whitespace-nowrap transition-all border ${selectedComp?.id === comp.id ? 'border-primary text-primary bg-primary/10' : 'border-white/10 text-white/40 hover:text-white'}`}
                 >
                   {comp.name}

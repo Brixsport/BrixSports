@@ -392,6 +392,7 @@ export async function PATCH(
         if (body.startTime) updateData.startTime = new Date(body.startTime);
         if (body.venue) updateData.venue = body.venue;
         if (body.competition) updateData.competition = body.competition;
+        if (body.competitionId) updateData.competitionId = body.competitionId;
         if (body.competitionLevel) updateData.competitionLevel = body.competitionLevel;
         if (body.matchType) updateData.matchType = body.matchType;
         if (body.friendlyType) updateData.friendlyType = body.friendlyType;

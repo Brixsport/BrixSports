@@ -1,22 +1,25 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/db';
 import { standings, teams } from '@/db/schema';
-import { eq, desc } from 'drizzle-orm';
+import { eq, desc, and, or } from 'drizzle-orm';
 
 export async function GET(request: Request) {
     try {
         const { searchParams } = new URL(request.url);
         const competition = searchParams.get('competition');
+        const competitionId = searchParams.get('competitionId');
 
         const conditions = [eq(standings.sport, 'Basketball')];
-        if (competition) {
+        if (competitionId) {
+            conditions.push(or(eq(standings.competitionId, competitionId), eq(standings.competition, competition || '')));
+        } else if (competition) {
             conditions.push(eq(standings.competition, competition));
         }
 
         const basketballStandings = await db
             .select()
             .from(standings)
-            .where(conditions.length > 1 ? require('drizzle-orm').and(...conditions) : conditions[0])
+            .where(conditions.length > 1 ? and(...conditions) : conditions[0])
             .orderBy(desc(standings.points), desc(standings.goalDifference))
             .all();
 

@@ -52,6 +52,8 @@ export const basketballPlayerStats = sqliteTable('basketball_player_stats', {
     id: text('id').primaryKey(),
     playerId: text('player_id').notNull().references(() => players.id, { onDelete: 'cascade' }),
     season: text('season').notNull().default('2024'),
+    competition: text('competition'),
+    competitionId: text('competition_id').references(() => competitions.id),
     // Game stats
     gamesPlayed: integer('games_played').default(0),
     gamesStarted: integer('games_started').default(0),
@@ -92,6 +94,8 @@ export const footballPlayerStats = sqliteTable('football_player_stats', {
     id: text('id').primaryKey(),
     playerId: text('player_id').notNull().references(() => players.id, { onDelete: 'cascade' }),
     season: text('season').notNull().default('2024'),
+    competition: text('competition'),
+    competitionId: text('competition_id').references(() => competitions.id),
     // Game stats
     appearances: integer('appearances').default(0),
     starts: integer('starts').default(0),
@@ -138,6 +142,7 @@ export const matches = sqliteTable('matches', {
     startTime: text('start_time').notNull(), // ISO 8601 date string
     venue: text('venue').notNull(),
     competition: text('competition').notNull(),
+    competitionId: text('competition_id').references(() => competitions.id),
     matchType: text('match_type').default('competition'), // 'competition' | 'friendly'
     competitionLevel: text('competition_level'), // 'busa-league' | 'college' | 'department' | 'year-level' | 'external'
     friendlyType: text('friendly_type'), // 'internal' | 'external'
@@ -214,6 +219,7 @@ export const standings = sqliteTable('standings', {
     teamId: text('team_id').notNull().references(() => teams.id),
     sport: text('sport').notNull(),
     competition: text('competition').notNull(),
+    competitionId: text('competition_id').references(() => competitions.id),
     played: integer('played').default(0),
     won: integer('won').default(0),
     drawn: integer('drawn').default(0),
@@ -228,6 +234,7 @@ export const standings = sqliteTable('standings', {
 // Bracket/Tournament nodes
 export const bracketNodes = sqliteTable('bracket_nodes', {
     id: text('id').primaryKey(),
+    competitionId: text('competition_id').references(() => competitions.id),
     competition: text('competition').notNull(),
     sport: text('sport').notNull(),
     title: text('title').notNull(),
@@ -316,6 +323,7 @@ export const playerStats = sqliteTable('player_stats', {
     id: text('id').primaryKey(),
     playerId: text('player_id').notNull().references(() => players.id),
     competition: text('competition').notNull(),
+    competitionId: text('competition_id').references(() => competitions.id),
     sport: text('sport').notNull(),
     // Football/Basketball stats
     goals: integer('goals').default(0),
@@ -339,6 +347,7 @@ export const teamForm = sqliteTable('team_form', {
     teamId: text('team_id').notNull().references(() => teams.id),
     matchId: text('match_id').notNull().references(() => matches.id),
     competition: text('competition').notNull(),
+    competitionId: text('competition_id').references(() => competitions.id),
     result: text('result').notNull(), // 'W' | 'D' | 'L'
     goalsFor: integer('goals_for').notNull(),
     goalsAgainst: integer('goals_against').notNull(),
@@ -352,6 +361,7 @@ export const headToHead = sqliteTable('head_to_head', {
     team1Id: text('team1_id').notNull().references(() => teams.id),
     team2Id: text('team2_id').notNull().references(() => teams.id),
     competition: text('competition'),
+    competitionId: text('competition_id').references(() => competitions.id),
     totalMatches: integer('total_matches').default(0),
     team1Wins: integer('team1_wins').default(0),
     team2Wins: integer('team2_wins').default(0),
@@ -366,7 +376,8 @@ export const headToHead = sqliteTable('head_to_head', {
 export const competitions = sqliteTable('competitions', {
     id: text('id').primaryKey(),
     name: text('name').notNull(),
-    sport: text('sport').notNull(),
+    sport: text('sport'), // Optional for multi-sport competitions
+    isMultiSport: integer('is_multi_sport', { mode: 'boolean' }).default(false),
     format: text('format').notNull(), // 'league' | 'knockout' | 'group_knockout'
     season: text('season').notNull(),
     startDate: integer('start_date', { mode: 'timestamp' }),

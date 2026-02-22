@@ -26,18 +26,23 @@ export async function GET(request: NextRequest) {
         // Filter by sport if provided
         let filteredCompetitions = allCompetitions;
         if (sport) {
-            filteredCompetitions = filteredCompetitions.filter(c => c.sport === sport);
+            filteredCompetitions = filteredCompetitions.filter(c =>
+                c.isMultiSport || c.sport === sport
+            );
         }
 
         // If includeStats, fetch additional data
         if (includeStats) {
             const competitionsWithStats = await Promise.all(
                 filteredCompetitions.map(async (comp) => {
-                    // Get match count
+                    // Get match count - prioritize ID, fallback to name for safety during transition
                     const matchCount = await db
                         .select({ count: sql<number>`count(*)` })
                         .from(matches)
-                        .where(eq(matches.competition, comp.name));
+                        .where(
+                            comp.id ? or(eq(matches.competitionId, comp.id), eq(matches.competition, comp.name))
+                                : eq(matches.competition, comp.name)
+                        );
 
                     // Get unique teams count
                     const allMatches = await db
@@ -46,7 +51,10 @@ export async function GET(request: NextRequest) {
                             awayTeamId: matches.awayTeamId,
                         })
                         .from(matches)
-                        .where(eq(matches.competition, comp.name));
+                        .where(
+                            comp.id ? or(eq(matches.competitionId, comp.id), eq(matches.competition, comp.name))
+                                : eq(matches.competition, comp.name)
+                        );
 
                     const teamIds = new Set<string>();
                     allMatches.forEach(m => {
@@ -58,7 +66,10 @@ export async function GET(request: NextRequest) {
                     const standingsCount = await db
                         .select({ count: sql<number>`count(*)` })
                         .from(standings)
-                        .where(eq(standings.competition, comp.name));
+                        .where(
+                            comp.id ? or(eq(standings.competitionId, comp.id), eq(standings.competition, comp.name))
+                                : eq(standings.competition, comp.name)
+                        );
 
                     return {
                         ...comp,
@@ -99,12 +110,12 @@ export async function POST(request: NextRequest) {
         const {
             name, sport, format, season, status,
             numberOfTeams, numberOfGroups, teamsPerGroup,
-            level, scope, rules, description
+            level, scope, rules, description, isMultiSport
         } = body;
 
-        if (!name || !sport || !format || !season) {
+        if (!name || (!sport && !isMultiSport) || !format || !season) {
             return NextResponse.json(
-                { error: 'Missing required fields: name, sport, format, season' },
+                { error: 'Missing required fields: name, sport (required for single-sport), format, season' },
                 { status: 400 }
             );
         }
@@ -112,7 +123,8 @@ export async function POST(request: NextRequest) {
         const newCompetition = {
             id: nanoid(),
             name,
-            sport,
+            sport: sport || null,
+            isMultiSport: !!isMultiSport,
             format,
             season,
             status: status || 'upcoming',

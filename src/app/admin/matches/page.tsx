@@ -23,6 +23,7 @@ interface Match {
     venue: string;
     matchType: 'competition' | 'friendly';
     competition: string;
+    competitionId?: string;
     competitionLevel?: 'busa-league' | 'college' | 'department' | 'year-level' | 'external';
     friendlyType?: 'internal' | 'external';
     friendlyDescription?: string;
@@ -70,6 +71,7 @@ function AdminMatchesPageContent() {
         venue: '',
         matchType: 'competition',
         competition: '',
+        competitionId: '',
         competitionLevel: 'busa-league',
         friendlyType: 'internal',
         friendlyDescription: '',
@@ -134,6 +136,7 @@ function AdminMatchesPageContent() {
                     venue: '',
                     matchType: 'competition',
                     competition: '',
+                    competitionId: '',
                     competitionLevel: 'busa-league',
                     friendlyType: 'internal',
                     friendlyDescription: '',
@@ -198,6 +201,7 @@ function AdminMatchesPageContent() {
             venue: match.venue,
             matchType: match.matchType,
             competition: match.competition,
+            competitionId: match.competitionId || '',
             competitionLevel: match.competitionLevel || 'busa-league',
             friendlyType: match.friendlyType || 'internal',
             friendlyDescription: match.friendlyDescription || '',
@@ -230,6 +234,7 @@ function AdminMatchesPageContent() {
                             awayTeamId: formData.awayTeamId,
                             venue: formData.venue,
                             competition: formData.competition,
+                            competitionId: formData.competitionId,
                             status: formData.status as any,
                             matchType: formData.matchType as any,
                             competitionLevel: formData.competitionLevel as any,
@@ -446,6 +451,76 @@ function AdminMatchesPageContent() {
                                         <option value="HALF_TIME">Half Time</option>
                                         <option value="FINISHED">Finished</option>
                                     </select>
+                                </div>
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-[10px] font-black uppercase tracking-widest text-white/40 mb-2">Match Type</label>
+                                    <select
+                                        value={formData.matchType}
+                                        onChange={(e) => setFormData({ ...formData, matchType: e.target.value as any })}
+                                        className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-primary transition-colors text-white"
+                                    >
+                                        <option value="competition">Competition</option>
+                                        <option value="friendly">Friendly</option>
+                                    </select>
+                                </div>
+                                {formData.matchType === 'competition' ? (
+                                    <div>
+                                        <label className="block text-[10px] font-black uppercase tracking-widest text-white/40 mb-2">Competition</label>
+                                        <select
+                                            value={formData.competitionId}
+                                            onChange={(e) => {
+                                                const comp = competitions.find(c => c.id === e.target.value);
+                                                setFormData({
+                                                    ...formData,
+                                                    competitionId: e.target.value,
+                                                    competition: comp ? comp.name : ''
+                                                });
+                                            }}
+                                            className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-primary transition-colors text-white"
+                                            required
+                                        >
+                                            <option value="">Select Competition</option>
+                                            {competitions.filter(c => !c.sport || c.sport === formData.sport).map(comp => (
+                                                <option key={comp.id} value={comp.id}>{comp.name}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                ) : (
+                                    <div>
+                                        <label className="block text-[10px] font-black uppercase tracking-widest text-white/40 mb-2">Friendly Description</label>
+                                        <input
+                                            type="text"
+                                            value={formData.friendlyDescription}
+                                            onChange={(e) => setFormData({ ...formData, friendlyDescription: e.target.value })}
+                                            className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-primary transition-colors text-white"
+                                            placeholder="e.g. Pre-season friendly"
+                                        />
+                                    </div>
+                                )}
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-[10px] font-black uppercase tracking-widest text-white/40 mb-2">Start Time</label>
+                                    <input
+                                        type="datetime-local"
+                                        value={formData.startTime}
+                                        onChange={(e) => setFormData({ ...formData, startTime: e.target.value })}
+                                        className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-primary transition-colors text-white"
+                                        required
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-[10px] font-black uppercase tracking-widest text-white/40 mb-2">Venue</label>
+                                    <input
+                                        type="text"
+                                        value={formData.venue}
+                                        onChange={(e) => setFormData({ ...formData, venue: e.target.value })}
+                                        className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-primary transition-colors text-white"
+                                        placeholder="Stadium/Court name"
+                                        required
+                                    />
                                 </div>
                             </div>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

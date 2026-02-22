@@ -22,6 +22,7 @@ interface Competition {
     numberOfTeams?: number;
     numberOfGroups?: number;
     teamsPerGroup?: number;
+    isMultiSport?: boolean;
 }
 
 function AdminCompetitionsPageContent() {
@@ -48,7 +49,8 @@ function AdminCompetitionsPageContent() {
         status: 'upcoming',
         numberOfTeams: 0,
         numberOfGroups: 0,
-        teamsPerGroup: 0
+        teamsPerGroup: 0,
+        isMultiSport: false
     });
 
     useEffect(() => {
@@ -106,7 +108,8 @@ function AdminCompetitionsPageContent() {
                     status: 'upcoming',
                     numberOfTeams: 0,
                     numberOfGroups: 0,
-                    teamsPerGroup: 0
+                    teamsPerGroup: 0,
+                    isMultiSport: false
                 });
                 success('Competition created successfully!');
             } else {
@@ -337,7 +340,8 @@ function AdminCompetitionsPageContent() {
                                         <select
                                             value={formData.sport}
                                             onChange={(e) => setFormData({ ...formData, sport: e.target.value })}
-                                            className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 focus:outline-none focus:border-primary"
+                                            className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 focus:outline-none focus:border-primary disabled:opacity-50"
+                                            disabled={formData.isMultiSport}
                                         >
                                             <option value="Football">Football</option>
                                             <option value="Basketball">Basketball</option>
@@ -356,6 +360,16 @@ function AdminCompetitionsPageContent() {
                                             <option value="external">External</option>
                                         </select>
                                     </div>
+                                </div>
+                                <div className="flex items-center gap-2 mb-6">
+                                    <input
+                                        type="checkbox"
+                                        id="isMultiSport"
+                                        checked={formData.isMultiSport}
+                                        onChange={(e) => setFormData({ ...formData, isMultiSport: e.target.checked })}
+                                        className="w-4 h-4 rounded border-white/10 bg-white/5 text-primary focus:ring-primary"
+                                    />
+                                    <label htmlFor="isMultiSport" className="text-sm font-semibold">Multi-Sport Competition</label>
                                 </div>
 
                                 <div className="grid grid-cols-2 gap-4">
@@ -469,9 +483,9 @@ function AdminCompetitionsPageContent() {
                                         )}
                                     </button>
                                 </div>
-                            </form>
-                        </motion.div>
-                    </div>
+                            </form >
+                        </motion.div >
+                    </div >
                 )
             }
 

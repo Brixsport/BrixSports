@@ -8,10 +8,18 @@ export async function GET(request: Request) {
         const { searchParams } = new URL(request.url);
         const sport = searchParams.get('sport');
         const competition = searchParams.get('competition');
+        const competitionId = searchParams.get('competitionId');
 
         const whereConditions = [];
         if (sport) whereConditions.push(eq(standings.sport, sport));
-        if (competition) whereConditions.push(eq(standings.competition, competition));
+
+        const { or } = await import('drizzle-orm');
+
+        if (competitionId) {
+            whereConditions.push(or(eq(standings.competitionId, competitionId), eq(standings.competition, competition || '')));
+        } else if (competition) {
+            whereConditions.push(eq(standings.competition, competition));
+        }
 
         const allStandings = await db.query.standings.findMany({
             where: whereConditions.length > 0 ? and(...whereConditions) : undefined,
@@ -42,6 +50,7 @@ export async function POST(request: Request) {
             teamId: entry.teamId,
             sport: entry.sport,
             competition: entry.competition,
+            competitionId: entry.competitionId || null,
             played: entry.played || 0,
             won: entry.won || 0,
             drawn: entry.drawn || 0,

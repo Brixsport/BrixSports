@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/db';
 import { matches, matchEvents, teams } from '@/db/schema';
-import { eq, and, inArray } from 'drizzle-orm';
+import { eq, and, inArray, or } from 'drizzle-orm';
 
 export async function GET(request: Request) {
     try {
@@ -9,6 +9,8 @@ export async function GET(request: Request) {
         const sport = searchParams.get('sport');
         const loggerId = searchParams.get('loggerId');
         const status = searchParams.get('status');
+        const competitionId = searchParams.get('competitionId');
+        const competition = searchParams.get('competition');
 
         let query = db.select().from(matches);
 
@@ -17,6 +19,12 @@ export async function GET(request: Request) {
         if (sport) conditions.push(eq(matches.sport, sport));
         if (loggerId) conditions.push(eq(matches.loggerId, loggerId));
         if (status) conditions.push(eq(matches.status, status));
+
+        if (competitionId) {
+            conditions.push(or(eq(matches.competitionId, competitionId), eq(matches.competition, competition || '')));
+        } else if (competition) {
+            conditions.push(eq(matches.competition, competition));
+        }
 
         if (conditions.length > 0) {
             query = query.where(and(...conditions)) as typeof query;

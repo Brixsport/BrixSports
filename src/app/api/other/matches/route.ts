@@ -2,17 +2,28 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/db';
 import { matches, teams } from '@/db/schema';
-import { or, notInArray, eq } from 'drizzle-orm';
+import { or, notInArray, eq, and } from 'drizzle-orm';
 
 export async function GET(request: Request) {
     try {
         const { searchParams } = new URL(request.url);
+        const competitionId = searchParams.get('competitionId');
+        const competition = searchParams.get('competition');
+        const status = searchParams.get('status');
 
         // Filter out Football and Basketball
         const sportsToExclude = ['Football', 'Basketball'];
 
+        const conditions = [notInArray(matches.sport, sportsToExclude)];
+        if (status) conditions.push(eq(matches.status, status));
+        if (competitionId) {
+            conditions.push(or(eq(matches.competitionId, competitionId), eq(matches.competition, competition || '')));
+        } else if (competition) {
+            conditions.push(eq(matches.competition, competition));
+        }
+
         const otherMatches = await db.select().from(matches)
-            .where(notInArray(matches.sport, sportsToExclude))
+            .where(and(...conditions))
             .all();
 
         // Get team details
