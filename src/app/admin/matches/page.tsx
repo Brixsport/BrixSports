@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowLeft, Plus, Calendar, Users, MapPin, Trophy, Edit, Trash2, Eye, Filter, ClipboardList, Star } from 'lucide-react';
@@ -254,6 +254,16 @@ function AdminMatchesPageContent() {
         });
         setShowEditModal(true);
     };
+
+    const filteredTeams = useMemo(() => {
+        if (formData.competitionId && competitionTeams.length > 0) {
+            if (formData.groupName) {
+                return competitionTeams.filter(t => t.groupName?.toLowerCase() === formData.groupName.toLowerCase());
+            }
+            return competitionTeams;
+        }
+        return teams.filter(t => t.sport === formData.sport || t.sport === 'Multi-Sport');
+    }, [formData.competitionId, formData.groupName, competitionTeams, teams, formData.sport]);
 
     const handleUpdate = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -629,12 +639,7 @@ function AdminMatchesPageContent() {
                                         required
                                     >
                                         <option value="" className="bg-[#0a0a0a]">{isFetchingTeams ? 'Loading competition teams...' : 'Select Team'}</option>
-                                        {(formData.competitionId
-                                            ? (formData.groupName
-                                                ? competitionTeams.filter(t => t.groupName?.toLowerCase() === formData.groupName.toLowerCase())
-                                                : competitionTeams)
-                                            : teams.filter(t => t.sport === formData.sport || t.sport === 'Multi-Sport')
-                                        ).map(team => (
+                                        {filteredTeams.map((team: Team) => (
                                             <option key={team.id} value={team.id} className="bg-[#0a0a0a]">
                                                 {team.name} {team.groupName ? `(${team.groupName})` : ''}
                                             </option>
@@ -650,12 +655,7 @@ function AdminMatchesPageContent() {
                                         required
                                     >
                                         <option value="" className="bg-[#0a0a0a]">{isFetchingTeams ? 'Loading competition teams...' : 'Select Team'}</option>
-                                        {(formData.competitionId
-                                            ? (formData.groupName
-                                                ? competitionTeams.filter(t => t.groupName?.toLowerCase() === formData.groupName.toLowerCase())
-                                                : competitionTeams)
-                                            : teams.filter(t => t.sport === formData.sport || t.sport === 'Multi-Sport')
-                                        ).map(team => (
+                                        {filteredTeams.map((team: Team) => (
                                             <option key={team.id} value={team.id} className="bg-[#0a0a0a]">
                                                 {team.name} {team.groupName ? `(${team.groupName})` : ''}
                                             </option>
