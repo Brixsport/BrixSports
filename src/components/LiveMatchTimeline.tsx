@@ -12,6 +12,8 @@ interface Event {
     type: string;
     minute: number;
     second?: number;
+    period?: string;
+    displayMinute?: number;
     player?: {
         id: string;
         name: string;
@@ -310,8 +312,19 @@ export default function LiveMatchTimeline({ events, homeTeam, awayTeam, eyePoint
     // Group events by period (first half, second half, etc.)
     const groupedEvents = events.reduce((acc, event) => {
         let period = 'First Half';
-        if (event.minute > 45 && event.minute <= 90) period = 'Second Half';
-        else if (event.minute > 90) period = 'Extra Time';
+        if (event.period) {
+            switch (event.period) {
+                case 'FIRST_HALF': period = 'First Half'; break;
+                case 'SECOND_HALF': period = 'Second Half'; break;
+                case 'EXTRA_TIME_1': period = 'Extra Time 1'; break;
+                case 'EXTRA_TIME_2': period = 'Extra Time 2'; break;
+                case 'PENALTY_SHOOTOUT': period = 'Penalties'; break;
+                default: period = event.period.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, l => l.toUpperCase());
+            }
+        } else {
+            if (event.minute > 45 && event.minute <= 90) period = 'Second Half';
+            else if (event.minute > 90) period = 'Extra Time';
+        }
 
         if (!acc[period]) acc[period] = [];
         acc[period].push(event);
@@ -358,7 +371,19 @@ export default function LiveMatchTimeline({ events, homeTeam, awayTeam, eyePoint
                                     {/* Time */}
                                     <div className="flex-shrink-0 w-16 text-center">
                                         <div className="text-sm font-bold text-primary">
-                                            {event.minute}'
+                                            {(() => {
+                                                const min = event.minute;
+                                                const p = event.period;
+                                                const isFootball = sport?.toLowerCase() === 'football' || sport?.toLowerCase() === '5-a-side' || sport?.toLowerCase() === 'five-a-side';
+
+                                                if (isFootball && p) {
+                                                    if (p === 'FIRST_HALF' && min > 45) return `45+${min - 45}`;
+                                                    if (p === 'SECOND_HALF' && min > 90) return `90+${min - 90}`;
+                                                    if (p === 'EXTRA_TIME_1' && min > 105) return `105+${min - 105}`;
+                                                    if (p === 'EXTRA_TIME_2' && min > 120) return `120+${min - 120}`;
+                                                }
+                                                return min;
+                                            })()}'
                                             {event.second ? <span className="text-xs">:{event.second}</span> : ''}
                                         </div>
                                     </div>

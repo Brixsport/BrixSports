@@ -67,6 +67,7 @@ export async function POST(
             value,
             loggerId,
             loggerName,
+            period,
         } = body;
 
         // Validate required fields
@@ -107,6 +108,7 @@ export async function POST(
             value: value ? JSON.stringify(value) : null,
             loggerId: loggerId || null,
             loggerName: loggerName || null,
+            period: period || null,
             createdAt: new Date(),
         };
 

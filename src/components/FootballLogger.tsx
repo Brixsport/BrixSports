@@ -312,14 +312,14 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
         if (!matchState || !isSocketConnected) return;
 
         // Broadcast Score
-        emit('match:score:update', {
+        emit('match:score:updated', {
             matchId: match.id,
             homeScore: matchState.score.home,
             awayScore: matchState.score.away
         });
 
         // Broadcast Status (Period)
-        emit('match:status:change', {
+        emit('match:status:changed', {
             matchId: match.id,
             status: matchState.clock.period,
             homeTeamId: match.homeTeamId,
@@ -479,6 +479,7 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                     detail: event.detail,
                     loggerId: event.loggerId,
                     loggerName: currentLogger?.name,
+                    period: event.period,
                 };
 
                 const res = await fetch(`/api/matches/${match.id}/events`, {
@@ -707,6 +708,17 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                     stats: matchState?.stats
                 }),
             });
+
+            // Sync status via socket immediately
+            if (isSocketConnected) {
+                emit('match:status:changed', {
+                    matchId: match.id,
+                    status: 'FINISHED',
+                    homeScore,
+                    awayScore,
+                });
+            }
+
             // Send MATCH_END push notification
             try {
                 await fetch('/api/notifications/match-event', {

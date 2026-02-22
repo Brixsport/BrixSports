@@ -192,6 +192,7 @@ export const matchEvents = sqliteTable('match_events', {
     type: text('type').notNull(), // Event type varies by sport
     minute: integer('minute').notNull(),
     second: integer('second'),
+    period: text('period'), // 'FIRST_HALF', 'SECOND_HALF', etc.
     teamId: text('team_id').references(() => teams.id),
     playerId: text('player_id').references(() => players.id),
     relatedPlayerId: text('related_player_id').references(() => players.id),
