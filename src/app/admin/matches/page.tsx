@@ -41,6 +41,8 @@ interface Competition {
     id: string;
     name: string;
     sport: string;
+    isMultiSport: boolean;
+    level?: string;
 }
 
 function AdminMatchesPageContent() {
@@ -430,13 +432,30 @@ function AdminMatchesPageContent() {
                                     <label className="block text-[10px] font-black uppercase tracking-widest text-white/40 mb-2">Sport</label>
                                     <select
                                         value={formData.sport}
-                                        onChange={(e) => setFormData({ ...formData, sport: e.target.value })}
-                                        className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-primary transition-colors text-white"
+                                        onChange={(e) => {
+                                            const newSport = e.target.value;
+                                            setFormData(prev => {
+                                                // If current competition doesn't match new sport, clear it
+                                                const currentComp = competitions.find(c => c.id === prev.competitionId);
+                                                const clearComp = currentComp && !currentComp.isMultiSport && currentComp.sport !== newSport;
+
+                                                return {
+                                                    ...prev,
+                                                    sport: newSport,
+                                                    competitionId: clearComp ? '' : prev.competitionId,
+                                                    competition: clearComp ? '' : prev.competition
+                                                };
+                                            });
+                                        }}
+                                        className="w-full bg-[#121212] border border-white/10 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-primary transition-colors text-white hover:border-white/20"
                                     >
-                                        <option value="Football">Football</option>
-                                        <option value="Basketball">Basketball</option>
-                                        <option value="Volleyball">Volleyball</option>
-                                        <option value="Track">Track & Field</option>
+                                        <option value="Football" className="bg-[#0a0a0a]">Football</option>
+                                        <option value="Basketball" className="bg-[#0a0a0a]">Basketball</option>
+                                        <option value="Table Tennis" className="bg-[#0a0a0a]">Table Tennis</option>
+                                        <option value="Scrabble" className="bg-[#0a0a0a]">Scrabble</option>
+                                        <option value="Chess" className="bg-[#0a0a0a]">Chess</option>
+                                        <option value="Volleyball" className="bg-[#0a0a0a]">Volleyball</option>
+                                        <option value="Track" className="bg-[#0a0a0a]">Track & Field</option>
                                     </select>
                                 </div>
                                 <div>
@@ -444,12 +463,12 @@ function AdminMatchesPageContent() {
                                     <select
                                         value={formData.status}
                                         onChange={(e) => setFormData({ ...formData, status: e.target.value })}
-                                        className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-primary transition-colors text-white"
+                                        className="w-full bg-[#121212] border border-white/10 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-primary transition-colors text-white hover:border-white/20"
                                     >
-                                        <option value="UPCOMING">Upcoming</option>
-                                        <option value="LIVE">Live</option>
-                                        <option value="HALF_TIME">Half Time</option>
-                                        <option value="FINISHED">Finished</option>
+                                        <option value="UPCOMING" className="bg-[#0a0a0a]">Upcoming</option>
+                                        <option value="LIVE" className="bg-[#0a0a0a]">Live</option>
+                                        <option value="HALF_TIME" className="bg-[#0a0a0a]">Half Time</option>
+                                        <option value="FINISHED" className="bg-[#0a0a0a]">Finished</option>
                                     </select>
                                 </div>
                             </div>
@@ -459,10 +478,10 @@ function AdminMatchesPageContent() {
                                     <select
                                         value={formData.matchType}
                                         onChange={(e) => setFormData({ ...formData, matchType: e.target.value as any })}
-                                        className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-primary transition-colors text-white"
+                                        className="w-full bg-[#121212] border border-white/10 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-primary transition-colors text-white hover:border-white/20"
                                     >
-                                        <option value="competition">Competition</option>
-                                        <option value="friendly">Friendly</option>
+                                        <option value="competition" className="bg-[#0a0a0a]">Competition</option>
+                                        <option value="friendly" className="bg-[#0a0a0a]">Friendly</option>
                                     </select>
                                 </div>
                                 {formData.matchType === 'competition' ? (
@@ -472,18 +491,28 @@ function AdminMatchesPageContent() {
                                             value={formData.competitionId}
                                             onChange={(e) => {
                                                 const comp = competitions.find(c => c.id === e.target.value);
-                                                setFormData({
-                                                    ...formData,
-                                                    competitionId: e.target.value,
-                                                    competition: comp ? comp.name : ''
-                                                });
+                                                if (comp) {
+                                                    setFormData(prev => ({
+                                                        ...prev,
+                                                        competitionId: comp.id,
+                                                        competition: comp.name,
+                                                        sport: comp.isMultiSport ? prev.sport : (comp.sport || prev.sport),
+                                                        competitionLevel: (comp.level as any) || prev.competitionLevel
+                                                    }));
+                                                } else {
+                                                    setFormData(prev => ({
+                                                        ...prev,
+                                                        competitionId: '',
+                                                        competition: ''
+                                                    }));
+                                                }
                                             }}
-                                            className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-primary transition-colors text-white"
+                                            className="w-full bg-[#121212] border border-white/10 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-primary transition-colors text-white hover:border-white/20"
                                             required
                                         >
-                                            <option value="">Select Competition</option>
-                                            {competitions.filter(c => !c.sport || c.sport === formData.sport).map(comp => (
-                                                <option key={comp.id} value={comp.id}>{comp.name}</option>
+                                            <option value="" className="bg-[#0a0a0a]">Select Competition</option>
+                                            {competitions.filter(c => c.isMultiSport || !c.sport || c.sport === formData.sport).map(comp => (
+                                                <option key={comp.id} value={comp.id} className="bg-[#0a0a0a]">{comp.name}</option>
                                             ))}
                                         </select>
                                     </div>
@@ -494,7 +523,7 @@ function AdminMatchesPageContent() {
                                             type="text"
                                             value={formData.friendlyDescription}
                                             onChange={(e) => setFormData({ ...formData, friendlyDescription: e.target.value })}
-                                            className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-primary transition-colors text-white"
+                                            className="w-full bg-[#121212] border border-white/10 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-primary transition-colors text-white placeholder-white/20"
                                             placeholder="e.g. Pre-season friendly"
                                         />
                                     </div>
@@ -507,7 +536,7 @@ function AdminMatchesPageContent() {
                                         type="datetime-local"
                                         value={formData.startTime}
                                         onChange={(e) => setFormData({ ...formData, startTime: e.target.value })}
-                                        className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-primary transition-colors text-white"
+                                        className="w-full bg-[#121212] border border-white/10 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-primary transition-colors text-white placeholder-white/20"
                                         required
                                     />
                                 </div>
@@ -517,7 +546,7 @@ function AdminMatchesPageContent() {
                                         type="text"
                                         value={formData.venue}
                                         onChange={(e) => setFormData({ ...formData, venue: e.target.value })}
-                                        className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-primary transition-colors text-white"
+                                        className="w-full bg-[#121212] border border-white/10 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-primary transition-colors text-white placeholder-white/20"
                                         placeholder="Stadium/Court name"
                                         required
                                     />
@@ -529,12 +558,12 @@ function AdminMatchesPageContent() {
                                     <select
                                         value={formData.homeTeamId}
                                         onChange={(e) => setFormData({ ...formData, homeTeamId: e.target.value })}
-                                        className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-primary transition-colors text-white"
+                                        className="w-full bg-[#121212] border border-white/10 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-primary transition-colors text-white hover:border-white/20"
                                         required
                                     >
-                                        <option value="">Select Team</option>
-                                        {teams.filter(t => t.sport === formData.sport).map(team => (
-                                            <option key={team.id} value={team.id}>{team.name}</option>
+                                        <option value="" className="bg-[#0a0a0a]">Select Team</option>
+                                        {teams.filter(t => t.sport === formData.sport || t.sport === 'Multi-Sport').map(team => (
+                                            <option key={team.id} value={team.id} className="bg-[#0a0a0a]">{team.name}</option>
                                         ))}
                                     </select>
                                 </div>
@@ -543,12 +572,12 @@ function AdminMatchesPageContent() {
                                     <select
                                         value={formData.awayTeamId}
                                         onChange={(e) => setFormData({ ...formData, awayTeamId: e.target.value })}
-                                        className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-primary transition-colors text-white"
+                                        className="w-full bg-[#121212] border border-white/10 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-primary transition-colors text-white hover:border-white/20"
                                         required
                                     >
-                                        <option value="">Select Team</option>
-                                        {teams.filter(t => t.sport === formData.sport).map(team => (
-                                            <option key={team.id} value={team.id}>{team.name}</option>
+                                        <option value="" className="bg-[#0a0a0a]">Select Team</option>
+                                        {teams.filter(t => t.sport === formData.sport || t.sport === 'Multi-Sport').map(team => (
+                                            <option key={team.id} value={team.id} className="bg-[#0a0a0a]">{team.name}</option>
                                         ))}
                                     </select>
                                 </div>
@@ -574,12 +603,12 @@ function AdminMatchesPageContent() {
                                     <select
                                         value={formData.status}
                                         onChange={(e) => setFormData({ ...formData, status: e.target.value })}
-                                        className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-primary transition-colors text-white"
+                                        className="w-full bg-[#121212] border border-white/10 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-primary transition-colors text-white hover:border-white/20"
                                     >
-                                        <option value="UPCOMING">Upcoming</option>
-                                        <option value="LIVE">Live</option>
-                                        <option value="HALF_TIME">Half Time</option>
-                                        <option value="FINISHED">Finished</option>
+                                        <option value="UPCOMING" className="bg-[#0a0a0a]">Upcoming</option>
+                                        <option value="LIVE" className="bg-[#0a0a0a]">Live</option>
+                                        <option value="HALF_TIME" className="bg-[#0a0a0a]">Half Time</option>
+                                        <option value="FINISHED" className="bg-[#0a0a0a]">Finished</option>
                                     </select>
                                 </div>
                                 <div>
@@ -588,7 +617,7 @@ function AdminMatchesPageContent() {
                                         type="text"
                                         value={formData.venue}
                                         onChange={(e) => setFormData({ ...formData, venue: e.target.value })}
-                                        className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-primary transition-colors text-white"
+                                        className="w-full bg-[#121212] border border-white/10 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-primary transition-colors text-white placeholder-white/20"
                                         placeholder="Venue name"
                                     />
                                 </div>
