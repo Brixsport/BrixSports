@@ -44,6 +44,16 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
     // Can events be logged right now? (only during active play periods)
     const canLogEvents = ['FIRST_HALF', 'SECOND_HALF', 'EXTRA_TIME_1', 'EXTRA_TIME_2', 'PENALTY_SHOOTOUT'].includes(currentPeriod);
 
+    // Players who have received a red card (cannot be selected for events)
+    const redCardedPlayerIds = new Set(
+        recordedEvents
+            .filter(e => e.type === 'Red Card' && e.playerId)
+            .map(e => e.playerId!)
+    );
+
+    const homeRedCards = recordedEvents.filter(e => e.type === 'Red Card' && e.teamId === match.homeTeamId).length;
+    const awayRedCards = recordedEvents.filter(e => e.type === 'Red Card' && e.teamId === match.awayTeamId).length;
+
     // Variant Detection — fetched from competition data or string fallback
     const [competitionPlayersPerSide, setCompetitionPlayersPerSide] = useState<number | null>(null);
     const [halfDuration, setHalfDuration] = useState<number>(45); // Will be updated in init
@@ -603,6 +613,33 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                 confirmEvent('Assist', relatedPlayerId, playerId);
             }, 500);
         }
+
+        // 2. Send Push Notifications for key discipline and scoring events
+        const isGoalEvent = type === 'Goal' || type === 'Penalty' || type === 'Own Goal';
+        const isCardEvent = type === 'Yellow Card' || type === 'Red Card';
+        if (isGoalEvent || isCardEvent) {
+            const currentState = manager.getState();
+            const notifEventType = (type === 'Goal' || type === 'Penalty' || type === 'Own Goal') ? 'GOAL' :
+                type === 'Red Card' ? 'RED_CARD' : 'YELLOW_CARD';
+            const playerName = playerSnapshot?.name || 'Unknown Player';
+            const teamName = selectedTeam === 'home' ? (homeTeam?.name || 'Home') : (awayTeam?.name || 'Away');
+
+            fetch('/api/notifications/match-event', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    matchId: match.id,
+                    homeTeamId: match.homeTeamId,
+                    awayTeamId: match.awayTeamId,
+                    eventType: notifEventType,
+                    playerName,
+                    teamName,
+                    minute: currentState.clock.displayMinute,
+                    homeScore: currentState.score.home,
+                    awayScore: currentState.score.away,
+                })
+            }).catch(e => console.warn('[FootballLogger] Push notification failed:', e));
+        }
     };
 
     const handleSetStoppage = (minutes: number) => {
@@ -740,31 +777,34 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
 
     const saveLineupDraft = async () => {
         try {
-            const payload = {
-                team: editingTeam,
-                lineup: {
-                    starters: draftLineup.starters.map(p => ({
-                        id: p.id,
-                        name: p.name,
-                        number: p.number,
-                        position: p.position
-                    })),
-                    // Legacy support?
-                    players: draftLineup.starters.map(p => ({
-                        id: p.id,
-                        name: p.name,
-                        number: p.number,
-                        position: p.position
-                    })),
-                    subs: draftLineup.subs.map(p => ({
-                        id: p.id,
-                        name: p.name,
-                        number: p.number,
-                        position: p.position
-                    })),
-                    formation: lineups[editingTeam]?.formation || '4-4-2'
-                }
+            const lineupPayload = {
+                starters: draftLineup.starters.map(p => ({
+                    playerId: p.id,
+                    id: p.id, // legacy
+                    name: p.name,
+                    number: p.number,
+                    position: p.position
+                })),
+                substitutes: draftLineup.subs.map(p => ({
+                    playerId: p.id,
+                    id: p.id, // legacy
+                    name: p.name,
+                    number: p.number,
+                    position: p.position
+                })),
+                // Legacy support
+                players: draftLineup.starters.map(p => ({
+                    playerId: p.id,
+                    id: p.id,
+                    name: p.name,
+                    number: p.number,
+                    position: p.position
+                })),
+                formation: lineups[editingTeam]?.formation || '4-4-2',
+                status: 'published' // Mark as published so MatchOverlay shows it
             };
+
+            const payload = { team: editingTeam, lineup: lineupPayload };
 
             await fetch(`/api/matches/${match.id}/lineup`, {
                 method: 'POST',
@@ -775,16 +815,16 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
             // Refresh local
             setLineups((prev: any) => ({
                 ...prev,
-                [editingTeam]: payload.lineup
+                [editingTeam]: lineupPayload
             }));
 
-            // Broadcast update
-            if (isConnected) {
+            // Broadcast update via socket
+            if (isSocketConnected) {
                 emit('match:lineup:update', {
                     matchId: match.id,
                     lineups: {
-                        home: editingTeam === 'home' ? payload.lineup : lineups.home,
-                        away: editingTeam === 'away' ? payload.lineup : lineups.away
+                        home: editingTeam === 'home' ? lineupPayload : lineups.home,
+                        away: editingTeam === 'away' ? lineupPayload : lineups.away
                     }
                 });
             }
@@ -1032,7 +1072,16 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                                     {homeTeam?.shortName?.charAt(0) || 'H'}
                                 </div>
                             )}
-                            <div className="text-[10px] font-bold uppercase tracking-wider truncate px-1">{homeTeam?.shortName || 'Home'}</div>
+                            <div className="text-[10px] font-bold uppercase tracking-wider truncate px-1 flex items-center justify-center gap-1">
+                                {homeTeam?.shortName || 'Home'}
+                                {homeRedCards > 0 && (
+                                    <span className="flex gap-0.5 shrink-0">
+                                        {Array.from({ length: homeRedCards }).map((_, i) => (
+                                            <div key={i} className="w-1.5 h-2.5 bg-red-600 rounded-[1px] shadow-[0_0_3px_rgba(220,38,38,0.5)]" />
+                                        ))}
+                                    </span>
+                                )}
+                            </div>
                         </div>
 
                         {/* Score + Clock */}
@@ -1073,7 +1122,16 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                                     {awayTeam?.shortName?.charAt(0) || 'A'}
                                 </div>
                             )}
-                            <div className="text-[10px] font-bold uppercase tracking-wider truncate px-1">{awayTeam?.shortName || 'Away'}</div>
+                            <div className="text-[10px] font-bold uppercase tracking-wider truncate px-1 flex items-center justify-center gap-1">
+                                {awayTeam?.shortName || 'Away'}
+                                {awayRedCards > 0 && (
+                                    <span className="flex gap-0.5 shrink-0">
+                                        {Array.from({ length: awayRedCards }).map((_, i) => (
+                                            <div key={i} className="w-1.5 h-2.5 bg-red-600 rounded-[1px] shadow-[0_0_3px_rgba(220,38,38,0.5)]" />
+                                        ))}
+                                    </span>
+                                )}
+                            </div>
                         </div>
                     </div>
 
@@ -1173,15 +1231,17 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                 <div className="grid grid-cols-2 gap-2 mb-3">
                     <button
                         onClick={() => setSelectedTeam('home')}
-                        className={`py-2.5 px-3 rounded-xl border text-sm font-bold transition-all active:scale-95 ${selectedTeam === 'home' ? 'bg-primary text-black border-primary' : 'bg-white/5 border-white/10'}`}
+                        className={`py-2.5 px-3 rounded-xl border text-sm font-bold transition-all active:scale-95 flex items-center justify-center gap-1.5 ${selectedTeam === 'home' ? 'bg-primary text-black border-primary' : 'bg-white/5 border-white/10'}`}
                     >
                         {homeTeam?.shortName || 'Home'}
+                        {homeRedCards > 0 && <span className="flex gap-0.5">{Array.from({ length: homeRedCards }).map((_, i) => <div key={i} className={`w-1 h-2 rounded-sm ${selectedTeam === 'home' ? 'bg-black/40' : 'bg-red-600'}`} />)}</span>}
                     </button>
                     <button
                         onClick={() => setSelectedTeam('away')}
-                        className={`py-2.5 px-3 rounded-xl border text-sm font-bold transition-all active:scale-95 ${selectedTeam === 'away' ? 'bg-primary text-black border-primary' : 'bg-white/5 border-white/10'}`}
+                        className={`py-2.5 px-3 rounded-xl border text-sm font-bold transition-all active:scale-95 flex items-center justify-center gap-1.5 ${selectedTeam === 'away' ? 'bg-primary text-black border-primary' : 'bg-white/5 border-white/10'}`}
                     >
                         {awayTeam?.shortName || 'Away'}
+                        {awayRedCards > 0 && <span className="flex gap-0.5">{Array.from({ length: awayRedCards }).map((_, i) => <div key={i} className={`w-1 h-2 rounded-sm ${selectedTeam === 'away' ? 'bg-black/40' : 'bg-red-600'}`} />)}</span>}
                     </button>
                 </div>
 
@@ -1312,6 +1372,7 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                     onClose={() => setShowPlayerModal(false)}
                     title={`Select Player for ${pendingEvent?.type}`}
                     filterGoalkeepersOnly={pendingEvent ? isGoalkeeperOnlyEvent(pendingEvent.type) : false}
+                    redCardedPlayerIds={redCardedPlayerIds}
                 />
             )}
 
@@ -1322,6 +1383,7 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                         onSelect={handleAssistSelect}
                         onClose={() => { setShowAssistModal(false); handleAssistSelect(null); }}
                         title="Select Assist (Optional)"
+                        redCardedPlayerIds={redCardedPlayerIds}
                     />
                 )
             }
@@ -1333,6 +1395,7 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                         onSelect={handleSubIn}
                         onClose={() => setShowSubInModal(false)}
                         title="Select Player Coming IN"
+                        redCardedPlayerIds={redCardedPlayerIds}
                     />
                 )
             }
@@ -1341,8 +1404,8 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                 showPenaltyModal && (
                     <PenaltySequenceModal
                         attackingTeam={selectedTeam}
-                        homePlayers={homePlayers}
-                        awayPlayers={awayPlayers}
+                        homePlayers={homePlayers.filter((p: Player) => !redCardedPlayerIds.has(p.id))}
+                        awayPlayers={awayPlayers.filter((p: Player) => !redCardedPlayerIds.has(p.id))}
                         onClose={() => setShowPenaltyModal(false)}
                         onSubmit={(takerId, foulerId, outcome) => {
                             const attackingTeamId = selectedTeam === 'home' ? match.homeTeamId : match.awayTeamId;
@@ -1901,15 +1964,19 @@ function EventButton({ type, icon, label, variant = 'secondary', onClick }: { ty
     );
 }
 
-function PlayerSelectionModal({ players, onSelect, onClose, title, filterGoalkeepersOnly = false }: any) {
-    // Filter players based on event type
-    const filteredPlayers = filterGoalkeepersOnly
-        ? players.filter((p: Player) => {
+function PlayerSelectionModal({ players, onSelect, onClose, title, filterGoalkeepersOnly = false, redCardedPlayerIds }: any) {
+    // Filter players: remove red-carded players and optionally only show goalkeepers
+    const filteredPlayers = players.filter((p: Player) => {
+        // Always exclude red-carded players
+        if (redCardedPlayerIds && redCardedPlayerIds.has(p.id)) return false;
+
+        if (filterGoalkeepersOnly) {
             const pos = p.position?.toLowerCase() || '';
             return pos.includes('gk') || pos.includes('goalkeeper') || pos.includes('goal keeper') ||
                 pos === 'g' || pos.includes('goalie') || pos.includes('keeper');
-        })
-        : players;
+        }
+        return true;
+    });
 
     return (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">

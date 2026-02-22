@@ -226,6 +226,73 @@ export async function GET(
             }
         }
 
+        // If stats are not available and this is a football match, calculate from events
+        const isFootball = !match.match.sport || match.match.sport === 'Football' ||
+            (match.match.sport as string) === '5-a-side' || (match.match.sport as string) === 'Five-a-side';
+        if (!stats && isFootball && events.length > 0) {
+            const homeIdx = 0; // home = index 0
+            const awayIdx = 1; // away = index 1
+            const s: number[][] = Array.from({ length: 18 }, () => [0, 0]);
+
+            events.forEach((event: any) => {
+                const idx = event.teamId === match.match.homeTeamId ? 0 : 1;
+                switch (event.type) {
+                    case 'Goal': s[0][idx]++; s[2][idx]++; break; // goals, shots
+                    case 'Penalty': s[0][idx]++; s[3][idx]++; break; // goals, penalties
+                    case 'Own Goal': s[0][idx === 0 ? 1 : 0]++; break; // goals for opponent
+                    case 'Shot on Target': s[2][idx]++; s[4][idx]++; break; // shots, shotsOnTarget
+                    case 'Shot off Target': s[2][idx]++; s[5][idx]++; break; // shots, shotsOffTarget
+                    case 'Corner': s[6][idx]++; break;
+                    case 'Foul': case 'Push': case 'Handball': s[7][idx]++; break; // fouls
+                    case 'Yellow Card': s[8][idx]++; break;
+                    case 'Red Card': s[9][idx]++; break;
+                    case 'Offside': s[10][idx]++; break;
+                    case 'Free Kick': s[11][idx]++; break;
+                    case 'Assist': s[12][idx]++; break;
+                    case 'Save': s[13][idx]++; break;
+                    case 'Catch': s[14][idx]++; break;
+                    case 'Block': s[15][idx]++; break;
+                    case 'Interception': s[16][idx]++; break;
+                    case 'Clearance': s[17][idx]++; break;
+                }
+            });
+
+            // Compute possession from attacking events (shots + corners + free kicks)
+            const homePossession = (s[2][0] + s[6][0] + s[11][0]) || 0;
+            const awayPossession = (s[2][1] + s[6][1] + s[11][1]) || 0;
+            const totalPoss = homePossession + awayPossession;
+            const homePct = totalPoss > 0 ? Math.round((homePossession / totalPoss) * 100) : 50;
+            const awayPct = 100 - homePct;
+
+            stats = {
+                shots: [s[2][0], s[2][1]],
+                shotsOnTarget: [s[4][0], s[4][1]],
+                shotsOffTarget: [s[5][0], s[5][1]],
+                goals: [s[0][0], s[0][1]],
+                penalties: [s[3][0], s[3][1]],
+                corners: [s[6][0], s[6][1]],
+                fouls: [s[7][0], s[7][1]],
+                yellowCards: [s[8][0], s[8][1]],
+                redCards: [s[9][0], s[9][1]],
+                offsides: [s[10][0], s[10][1]],
+                freeKicks: [s[11][0], s[11][1]],
+                assists: [s[12][0], s[12][1]],
+                saves: [s[13][0], s[13][1]],
+                catches: [s[14][0], s[14][1]],
+                blocks: [s[15][0], s[15][1]],
+                interceptions: [s[16][0], s[16][1]],
+                clearances: [s[17][0], s[17][1]],
+                possession: [homePct, awayPct],
+                possessionEvents: [homePossession, awayPossession],
+                expectedGoals: [s[0][0], s[0][1]], // xG approx from goals
+                ownGoals: [s[0][1], s[0][0]], // simplified
+                tackles: [0, 0],
+                throwIns: [0, 0],
+                goalKicks: [0, 0],
+                substitutions: [0, 0],
+            };
+        }
+
         // If stats are not available and this is a basketball match, calculate from events
         if (!stats && match.match.sport === 'Basketball' && events.length > 0) {
             stats = {

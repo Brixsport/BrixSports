@@ -65,9 +65,9 @@ export async function POST(
             return NextResponse.json({ error: 'Match not found' }, { status: 404 });
         }
 
-        // Check if match has started
-        if (match[0].status === 'LIVE' || match[0].status === 'FINISHED') {
-            return NextResponse.json({ error: 'Cannot edit lineup for live or finished matches' }, { status: 400 });
+        // Check if match has finished (allow LIVE - logger saves lineups when match starts)
+        if (match[0].status === 'FINISHED') {
+            return NextResponse.json({ error: 'Cannot edit lineup for finished matches' }, { status: 400 });
         }
 
         // Get existing lineups or create new object

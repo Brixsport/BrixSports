@@ -40,14 +40,19 @@ export default function MatchLineups({ lineups, sport, homeTeam, awayTeam, event
     const awayLineupArray: any[] = [];
 
     // Process home team
-    if (lineups.home && Array.isArray(lineups.home)) {
-        lineups.home.forEach((player: any, index: number) => {
-            const playerId = player.id || `home-${index}`;
+    const homeLineupData = lineups.home;
+    if (homeLineupData) {
+        const homeStarters = Array.isArray(homeLineupData)
+            ? homeLineupData
+            : (homeLineupData.starters || []);
+
+        homeStarters.forEach((player: any, index: number) => {
+            const playerId = player.id || player.playerId || `home-${index}`;
             homePlayers[playerId] = {
                 id: playerId,
                 name: player.name || 'Unknown',
                 jerseyName: player.jerseyName || player.name?.split(' ').pop() || 'Unknown',
-                number: player.number || index + 1,
+                number: player.number || player.jerseyNumber || index + 1,
                 position: player.position || 'MID',
                 team: homeTeam,
             };
@@ -63,14 +68,19 @@ export default function MatchLineups({ lineups, sport, homeTeam, awayTeam, event
     }
 
     // Process away team
-    if (lineups.away && Array.isArray(lineups.away)) {
-        lineups.away.forEach((player: any, index: number) => {
-            const playerId = player.id || `away-${index}`;
+    const awayLineupData = lineups.away;
+    if (awayLineupData) {
+        const awayStarters = Array.isArray(awayLineupData)
+            ? awayLineupData
+            : (awayLineupData.starters || []);
+
+        awayStarters.forEach((player: any, index: number) => {
+            const playerId = player.id || player.playerId || `away-${index}`;
             awayPlayers[playerId] = {
                 id: playerId,
                 name: player.name || 'Unknown',
                 jerseyName: player.jerseyName || player.name?.split(' ').pop() || 'Unknown',
-                number: player.number || index + 1,
+                number: player.number || player.jerseyNumber || index + 1,
                 position: player.position || 'MID',
                 team: awayTeam,
             };
@@ -120,11 +130,15 @@ export default function MatchLineups({ lineups, sport, homeTeam, awayTeam, event
     const handleResetZoom = () => setZoomLevel(1);
 
     // Get substitutes for both teams
-    const homeSubstitutes = lineups.home?.filter((p: any) => p.isStarter === false) || [];
-    const awaySubstitutes = lineups.away?.filter((p: any) => p.isStarter === false) || [];
+    const homeSubstitutes = Array.isArray(lineups.home)
+        ? lineups.home.filter((p: any) => p.isStarter === false)
+        : (lineups.home?.substitutes || []);
+    const awaySubstitutes = Array.isArray(lineups.away)
+        ? lineups.away.filter((p: any) => p.isStarter === false)
+        : (lineups.away?.substitutes || []);
 
     // Get substitutions if available
-    const substitutions = lineups.substitutions || [];
+    const substitutions = lineups.substitutions || lineups.home?.substitutions || lineups.away?.substitutions || [];
 
     return (
         <div className="space-y-8">

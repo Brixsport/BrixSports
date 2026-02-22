@@ -214,7 +214,7 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
         }));
 
         // Show notification for significant events
-        if (newEvent.type === 'Goal' || newEvent.type === 'Penalty') {
+        if (newEvent.type === 'Goal' || newEvent.type === 'Penalty' || newEvent.type === 'Own Goal') {
           addNotification({
             title: 'GOAL!',
             message: `${newEvent.detail} has scored!`,
@@ -302,10 +302,10 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
         setTeamRatings((latestEvent as any).teamRatings);
       }
 
-      if (latestEvent.type === 'Goal') {
+      if (latestEvent.type === 'Goal' || latestEvent.type === 'Penalty' || latestEvent.type === 'Own Goal') {
         addNotification({
-          title: 'GOAL!',
-          message: `${latestEvent.detail} has scored!`,
+          title: latestEvent.type === 'Own Goal' ? 'OWN GOAL!' : 'GOAL!',
+          message: latestEvent.detail || 'The score has changed!',
           type: 'match'
         });
       }
@@ -398,13 +398,27 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
       const response = await fetch(`/api/matches/${match.id}`);
       if (response.ok) {
         const data = await response.json();
+        const matchData = data.match;
+
+        // Ensure lineups are parsed
+        let parsedLineups = matchData.lineups;
+        if (typeof parsedLineups === 'string') {
+          try {
+            parsedLineups = JSON.parse(parsedLineups);
+          } catch (e) {
+            console.error("Lineup parse error", e);
+            parsedLineups = null;
+          }
+        }
+
         setMatch(prev => ({
           ...prev,
-          ...data.match,
-          homeTeam: data.match.homeTeam || prev.homeTeam,
-          awayTeam: data.match.awayTeam || prev.awayTeam,
+          ...matchData,
+          homeTeam: matchData.homeTeam || prev.homeTeam,
+          awayTeam: matchData.awayTeam || prev.awayTeam,
           events: data.events || prev.events || [],
-          stats: data.match.stats || prev.stats,
+          stats: matchData.stats || prev.stats,
+          lineups: parsedLineups || prev.lineups,
         }));
       }
     } catch (error) {
@@ -420,9 +434,9 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
     }
   }, []);
 
-  // Refetch match data when lineups tab is opened (ensure latest lineup data)
+  // Refetch match data when lineups or stats tab is opened (ensure latest data)
   useEffect(() => {
-    if (activeTab === 'lineups') {
+    if (activeTab === 'lineups' || activeTab === 'stats') {
       refetchMatchData();
     }
   }, [activeTab]);
@@ -528,19 +542,29 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
   // Helper function to extract player IDs from lineup
   const getLineupPlayerIds = (lineup: any): string[] => {
     if (!lineup) return [];
+
+    // Support stringified input
+    let data = lineup;
+    if (typeof lineup === 'string') {
+      try { data = JSON.parse(lineup); } catch (e) { return []; }
+    }
+
     let ids: string[] = [];
 
     // Check for structured lineup (starters + substitutes)
-    if (lineup.starters && Array.isArray(lineup.starters)) {
-      ids = [...ids, ...lineup.starters.map((p: any) => p.playerId)];
+    if (data.starters && Array.isArray(data.starters)) {
+      ids = [...ids, ...data.starters.map((p: any) => p.playerId || p.id)];
     }
-    if (lineup.substitutes && Array.isArray(lineup.substitutes)) {
-      ids = [...ids, ...lineup.substitutes.map((p: any) => p.playerId)];
+    if (data.substitutes && Array.isArray(data.substitutes)) {
+      ids = [...ids, ...data.substitutes.map((p: any) => p.playerId || p.id)];
+    }
+    if (data.subs && Array.isArray(data.subs)) {
+      ids = [...ids, ...data.subs.map((p: any) => p.playerId || p.id)];
     }
 
     // Fallback for flat array or empty structured lineup
-    if (ids.length === 0 && Array.isArray(lineup)) {
-      return lineup.map((e: any) => e.playerId);
+    if (ids.length === 0 && Array.isArray(data)) {
+      return data.map((e: any) => e.playerId || e.id);
     }
 
     return ids;
@@ -549,15 +573,28 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
   // Helper function to check if lineup is published
   const isLineupPublished = (lineup: any): boolean => {
     if (!lineup) return false;
-    if (lineup.status) {
-      return lineup.status === 'published';
+
+    // Support stringified input
+    let data = lineup;
+    if (typeof lineup === 'string') {
+      try { data = JSON.parse(lineup); } catch (e) { return false; }
     }
-    if (Array.isArray(lineup) && lineup.length > 0) {
+
+    // Check status first
+    if (data.status === 'published' || data.status === 'Published') {
       return true;
     }
-    if (lineup.starters && Array.isArray(lineup.starters) && lineup.starters.length > 0) {
+
+    // Check if it's a flat array with players
+    if (Array.isArray(data) && data.length > 0) {
       return true;
     }
+
+    // Check if it's a structured object with starters
+    if (data.starters && Array.isArray(data.starters) && data.starters.length > 0) {
+      return true;
+    }
+
     return false;
   };
 
@@ -708,6 +745,10 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
     return match.status;
   };
 
+  // Calculate red cards for UI indicators
+  const homeRedCardsCount = (match.events || []).filter(e => e.type === 'Red Card' && e.teamId === match.homeTeamId).length;
+  const awayRedCardsCount = (match.events || []).filter(e => e.type === 'Red Card' && e.teamId === match.awayTeamId).length;
+
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -767,7 +808,14 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
                 {/* Home Team */}
                 <div className="flex items-center gap-3 sm:gap-4 flex-1 justify-end min-w-0">
                   <div className="flex flex-col items-end min-w-0">
-                    <h3 className="font-bold text-sm sm:text-xl text-white leading-tight text-right truncate w-full">
+                    <h3 className="font-bold text-sm sm:text-xl text-white leading-tight text-right truncate w-full flex items-center justify-end gap-1.5">
+                      {homeRedCardsCount > 0 && (
+                        <span className="flex gap-0.5">
+                          {Array.from({ length: homeRedCardsCount }).map((_, i) => (
+                            <div key={i} className="w-1.5 h-2.5 sm:w-2 sm:h-3 bg-red-600 rounded-[1px] shadow-[0_0_5px_rgba(220,38,38,0.5)]" />
+                          ))}
+                        </span>
+                      )}
                       {homeTeam?.name}
                     </h3>
                     <div className="flex items-center gap-2 mt-1">
@@ -828,8 +876,15 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
                     )}
                   </div>
                   <div className="flex flex-col items-start min-w-0">
-                    <h3 className="font-bold text-sm sm:text-xl text-white leading-tight text-left truncate w-full">
+                    <h3 className="font-bold text-sm sm:text-xl text-white leading-tight text-left truncate w-full flex items-center gap-1.5">
                       {awayTeam?.name}
+                      {awayRedCardsCount > 0 && (
+                        <span className="flex gap-0.5">
+                          {Array.from({ length: awayRedCardsCount }).map((_, i) => (
+                            <div key={i} className="w-1.5 h-2.5 sm:w-2 sm:h-3 bg-red-600 rounded-[1px] shadow-[0_0_5px_rgba(220,38,38,0.5)]" />
+                          ))}
+                        </span>
+                      )}
                     </h3>
                     <div className="flex items-center gap-2 mt-1">
                       {teamRatings.away > 0 && (
@@ -1083,24 +1138,13 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
                 {match.stats?.offsides && <StatRow label="Offsides" values={match.stats.offsides} showBar={false} />}
                 {match.stats?.freeKicks && <StatRow label="Free Kicks" values={match.stats.freeKicks} showBar={false} />}
 
-                {(!match.stats || (
-                  (!match.stats.possession || (match.stats.possession[0] === 50 && match.stats.possession[1] === 50 && match.events?.length === 0)) &&
-                  (!match.stats.shots || (match.stats.shots[0] === 0 && match.stats.shots[1] === 0)) &&
-                  (!match.stats.shotsOnTarget || (match.stats.shotsOnTarget[0] === 0 && match.stats.shotsOnTarget[1] === 0)) &&
-                  (!match.stats.corners || (match.stats.corners[0] === 0 && match.stats.corners[1] === 0)) &&
-                  (!match.stats.fouls || (match.stats.fouls[0] === 0 && match.stats.fouls[1] === 0)) &&
-                  (!match.stats.yellowCards || (match.stats.yellowCards[0] === 0 && match.stats.yellowCards[1] === 0)) &&
-                  (!match.stats.redCards || (match.stats.redCards[0] === 0 && match.stats.redCards[1] === 0)) &&
-                  (!match.stats.offsides || (match.stats.offsides[0] === 0 && match.stats.offsides[1] === 0)) &&
-                  (!match.stats.freeKicks || (match.stats.freeKicks[0] === 0 && match.stats.freeKicks[1] === 0)) &&
-                  (!match.stats.expectedGoals || (match.stats.expectedGoals[0] === 0 && match.stats.expectedGoals[1] === 0))
-                )) && (
-                    <div className="py-12 text-center">
-                      <BarChart3 className="mx-auto mb-3 text-white/20" size={48} />
-                      <p className="text-white/60 text-sm">No statistics available yet</p>
-                      <p className="text-white/40 text-xs mt-1">Statistics will be available during the match</p>
-                    </div>
-                  )}
+                {!match.stats && (
+                  <div className="py-12 text-center">
+                    <BarChart3 className="mx-auto mb-3 text-white/20" size={48} />
+                    <p className="text-white/60 text-sm">No statistics available yet</p>
+                    <p className="text-white/40 text-xs mt-1">Statistics will be available during the match</p>
+                  </div>
+                )}
               </motion.div>
             )}
 
