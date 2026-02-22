@@ -152,6 +152,25 @@ app.prepare().then(() => {
             }
         });
 
+        // Undo last event
+        socket.on('event:undo', (data) => {
+            try {
+                console.log(`[Socket.IO] Undo event request received for Match ${data.matchId}:`, data);
+                io.to(`match:${data.matchId}`).emit('event:deleted', {
+                    matchId: data.matchId,
+                    eventId: data.eventId,
+                    score: data.score,
+                    stats: data.stats,
+                    lineups: data.lineups,
+                    teamRatings: data.teamRatings,
+                    timestamp: new Date().toISOString(),
+                });
+                console.log(`[Socket.IO] Broadcasted event:deleted to room match:${data.matchId}`);
+            } catch (error) {
+                console.error(`[Socket.IO] Error undoing event:`, error);
+            }
+        });
+
         // Update match score
         socket.on('match:score:update', (data) => {
             console.log(`[Socket.IO] Score update received for Match ${data.matchId}:`, data);

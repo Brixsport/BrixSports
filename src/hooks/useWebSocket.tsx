@@ -209,10 +209,19 @@ export function useMatchEvents(matchId: string) {
     useEffect(() => {
         if (!socket) return;
 
-        const handleNewEvent = (data: SocketEventData) => {
+        const handleNewEvent = (data: SocketEventData & { score?: any; teamRatings?: any; stats?: any; lineups?: any; status?: string }) => {
             console.log(`[WS] New event received for Match ${matchId}:`, data);
             if (data.matchId === matchId) {
-                setLatestEvent(data.event);
+                // Enrich the event with top-level match state if provided
+                const enrichedEvent = {
+                    ...data.event,
+                    score: data.score,
+                    teamRatings: data.teamRatings,
+                    stats: data.stats,
+                    lineups: data.lineups,
+                    status: data.status
+                };
+                setLatestEvent(enrichedEvent);
                 setEvents(prev => [...prev, data.event]);
             } else {
                 console.warn(`[WS] MatchId mismatch! Expected ${matchId}, got ${data.matchId}`);

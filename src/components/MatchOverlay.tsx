@@ -45,7 +45,7 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
     match.status,
     { home: match.homeScore, away: match.awayScore }
   );
-  const { events: liveEvents, latestEvent } = useMatchEvents(match.id);
+  const { events: liveEvents, latestEvent, socket, isConnected } = useMatchEvents(match.id);
   const liveRatings = usePlayerRatings(match.id);
   const viewerCount = useMatchViewers(match.id);
   const liveTime = useMatchTimer(match.id);
@@ -261,30 +261,46 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
   useEffect(() => {
     if (latestEvent) {
       console.log('[MatchOverlay] Received latestEvent from hook:', latestEvent);
+
+      // Update match state with new event and optional enriched data
       setMatch(prev => {
         const eventExists = prev.events?.some(e => e.id === latestEvent.id);
-        if (eventExists) {
-          console.log('[MatchOverlay] Event already exists, skipping:', latestEvent.id);
-          return prev;
-        }
 
-        console.log('[MatchOverlay] Adding new event to match state:', latestEvent.id);
-        const matchEvent: MatchEvent = {
-          id: latestEvent.id,
-          matchId: latestEvent.matchId,
-          type: latestEvent.type as MatchEvent['type'],
-          minute: latestEvent.minute,
-          teamId: latestEvent.teamId || '',
-          playerId: latestEvent.playerId ?? undefined,
-          detail: latestEvent.detail || '',
-          isEyePoint: latestEvent.isEyePoint ?? undefined,
-        };
+        // If event doesn't exist, add it. If it does, we still might want to update other fields.
+        let nextEvents = prev.events || [];
+        if (!eventExists) {
+          console.log('[MatchOverlay] Adding new event to match state:', latestEvent.id);
+          const matchEvent: MatchEvent = {
+            id: latestEvent.id,
+            matchId: (latestEvent as any).matchId,
+            type: (latestEvent as any).type as MatchEvent['type'],
+            minute: (latestEvent as any).minute,
+            teamId: (latestEvent as any).teamId || '',
+            playerId: (latestEvent as any).playerId ?? undefined,
+            detail: (latestEvent as any).detail || '',
+            isEyePoint: (latestEvent as any).isEyePoint ?? undefined,
+          };
+          nextEvents = [...nextEvents, matchEvent];
+        } else {
+          console.log('[MatchOverlay] Event already exists, updating other state if present:', latestEvent.id);
+        }
 
         return {
           ...prev,
-          events: [...(prev.events || []), matchEvent],
+          events: nextEvents,
+          // Atomic updates from enriched payload
+          homeScore: (latestEvent as any).score?.home ?? prev.homeScore,
+          awayScore: (latestEvent as any).score?.away ?? prev.awayScore,
+          status: (latestEvent as any).status ?? prev.status,
+          stats: (latestEvent as any).stats ?? prev.stats,
+          lineups: (latestEvent as any).lineups ?? prev.lineups,
         };
       });
+
+      // Update team ratings separately if provided
+      if ((latestEvent as any).teamRatings) {
+        setTeamRatings((latestEvent as any).teamRatings);
+      }
 
       if (latestEvent.type === 'Goal') {
         addNotification({
@@ -293,7 +309,7 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
           type: 'match'
         });
       }
-      if (latestEvent.isEyePoint) {
+      if ((latestEvent as any).isEyePoint) {
         addNotification({
           title: 'EYE POINT AWARDED',
           message: `Exceptional performance by ${latestEvent.detail}`,
@@ -303,8 +319,38 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
     }
   }, [latestEvent, addNotification]);
 
+  // Handle event deletions (Undo) from WebSocket
+  useEffect(() => {
+    if (!socket) return;
+
+    const handleEventDeleted = (data: any) => {
+      console.log('[MatchOverlay] Received event:deleted from socket:', data);
+      if (data.matchId === match.id) {
+        setMatch(prev => ({
+          ...prev,
+          events: (prev.events || []).filter(e => e.id !== data.eventId),
+          // Update other state if provided in undo payload
+          homeScore: data.score?.home ?? prev.homeScore,
+          awayScore: data.score?.away ?? prev.awayScore,
+          status: data.status ?? prev.status,
+          stats: data.stats ?? prev.stats,
+          lineups: data.lineups ?? prev.lineups,
+        }));
+
+        if (data.teamRatings) {
+          setTeamRatings(data.teamRatings);
+        }
+      }
+    };
+
+    socket.on('event:deleted', handleEventDeleted);
+    return () => {
+      socket.off('event:deleted', handleEventDeleted);
+    };
+  }, [socket, match.id]);
+
   // Global Goal Notifications
-  const { socket, isConnected } = useMatchEvents(match.id);
+
   useEffect(() => {
     if (isConnected && socket) {
       const handleGlobalNotification = (data: { type: string, matchId: string, message: string }) => {

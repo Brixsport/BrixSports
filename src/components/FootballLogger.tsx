@@ -386,7 +386,8 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
 
             // Sync with overlay clients via standard match room
             if (isSocketConnected) {
-                console.log('[FootballLogger] Emitting event:log to standard match room');
+                const fullState = manager.getState();
+                console.log(`[FootballLogger] Emitting event:log for match ${match.id}. Type: ${event.type}`);
                 emit('event:log', {
                     matchId: match.id,
                     event: {
@@ -397,10 +398,16 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                     detail: event.detail,
                     teamId: event.teamId,
                     minute: event.absoluteMinute,
-                    timestamp: Date.now()
+                    timestamp: Date.now(),
+                    // Include full state for atomic updates on overlay
+                    score: fullState.score,
+                    teamRatings: fullState.teamRatings,
+                    stats: fullState.stats,
+                    lineups: fullState.lineups,
+                    status: fullState.clock.period
                 });
             } else {
-                console.warn('[FootballLogger] Socket NOT connected, skipping event:log emit');
+                console.warn(`[FootballLogger] Socket NOT connected for match ${match.id}, skipping event:log emit`);
             }
 
             // 2. Persist to API
@@ -577,7 +584,27 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
     };
 
     const handleUndo = () => {
-        stateManager.current?.undoLastEvent();
+        if (!stateManager.current) return;
+        const manager = stateManager.current;
+        const currentEvents = manager.getState().events;
+        if (currentEvents.length === 0) return;
+
+        const eventToUndo = currentEvents[currentEvents.length - 1];
+        manager.undoLastEvent();
+
+        // Sync Undo with overlay clients
+        if (isSocketConnected) {
+            const fullState = manager.getState();
+            console.log(`[FootballLogger] Emitting event:undo for match ${match.id}, eventId: ${eventToUndo.id}`);
+            emit('event:undo', {
+                matchId: match.id,
+                eventId: eventToUndo.id,
+                score: fullState.score,
+                stats: fullState.stats,
+                lineups: fullState.lineups,
+                teamRatings: fullState.teamRatings
+            });
+        }
     };
 
     const handleFinalize = async () => {
