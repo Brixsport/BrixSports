@@ -629,7 +629,7 @@ function AdminMatchesPageContent() {
                                         required
                                     >
                                         <option value="" className="bg-[#0a0a0a]">{isFetchingTeams ? 'Loading competition teams...' : 'Select Team'}</option>
-                                        {(competitionTeams.length > 0
+                                        {(formData.competitionId
                                             ? (formData.groupName
                                                 ? competitionTeams.filter(t => t.groupName?.toLowerCase() === formData.groupName.toLowerCase())
                                                 : competitionTeams)
@@ -650,7 +650,7 @@ function AdminMatchesPageContent() {
                                         required
                                     >
                                         <option value="" className="bg-[#0a0a0a]">{isFetchingTeams ? 'Loading competition teams...' : 'Select Team'}</option>
-                                        {(competitionTeams.length > 0
+                                        {(formData.competitionId
                                             ? (formData.groupName
                                                 ? competitionTeams.filter(t => t.groupName?.toLowerCase() === formData.groupName.toLowerCase())
                                                 : competitionTeams)
