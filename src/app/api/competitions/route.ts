@@ -7,7 +7,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
 import { competitions, matches, standings } from '@/db/schema';
-import { sql, eq } from 'drizzle-orm';
+import { sql, eq, or } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 
 export async function GET(request: NextRequest) {

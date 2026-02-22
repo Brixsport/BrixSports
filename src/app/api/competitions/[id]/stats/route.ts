@@ -6,7 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
 import { playerStats, players, teams } from '@/db/schema';
-import { eq, desc, and } from 'drizzle-orm';
+import { eq, desc, and, or } from 'drizzle-orm';
 
 /**
  * GET player statistics
@@ -20,7 +20,6 @@ export async function GET(
         const compIdOrName = params.id;
         const { searchParams } = new URL(request.url);
 
-        const { or } = await import('drizzle-orm');
         const competitionFilter = or(eq(playerStats.competitionId, compIdOrName), eq(playerStats.competition, compIdOrName));
         const type = searchParams.get('type') || 'scorers'; // 'scorers' | 'assists' | 'discipline'
         const limit = parseInt(searchParams.get('limit') || '10');
@@ -68,7 +67,7 @@ export async function GET(
                     .from(playerStats)
                     .leftJoin(players, eq(playerStats.playerId, players.id))
                     .leftJoin(teams, eq(players.teamId, teams.id))
-                    .where(eq(playerStats.competition, competitionId))
+                    .where(competitionFilter)
                     .orderBy(desc(playerStats.redCards), desc(playerStats.yellowCards))
                     .limit(limit);
                 break;
