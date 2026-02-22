@@ -59,12 +59,13 @@ export async function POST(request: Request) {
             goalsAgainst: entry.goalsAgainst || 0,
             goalDifference: (entry.goalsFor || 0) - (entry.goalsAgainst || 0),
             points: entry.points || 0,
+            groupName: entry.groupName || null,
             updatedAt: new Date(),
         }));
 
         // Use a transaction for bulk insert/replace
         const result = await db.insert(standings).values(newEntries).onConflictDoUpdate({
-            target: standings.id,
+            target: [standings.teamId, standings.competitionId],
             set: {
                 played: sql`excluded.played`,
                 won: sql`excluded.won`,
@@ -74,6 +75,7 @@ export async function POST(request: Request) {
                 goalsAgainst: sql`excluded.goals_against`,
                 goalDifference: sql`excluded.goal_difference`,
                 points: sql`excluded.points`,
+                groupName: sql`excluded.group_name`,
                 updatedAt: new Date(),
             }
         }).returning();

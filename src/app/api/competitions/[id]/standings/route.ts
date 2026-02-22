@@ -49,6 +49,7 @@ export async function GET(
             .leftJoin(teams, eq(standings.teamId, teams.id))
             .where(eq(standings.competition, competition.name))
             .orderBy(
+                standings.groupName,
                 desc(standings.points),
                 desc(standings.goalDifference),
                 desc(standings.goalsFor)

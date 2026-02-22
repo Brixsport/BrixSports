@@ -1,15 +1,7 @@
-/**
- * Competition Teams API
- * Get teams participating in a competition
- * 
- * Note: Competitions are stored as text fields in the current schema.
- * This endpoint returns teams that have matches in the specified competition.
- */
-
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
-import { teams, matches } from '@/db/schema';
-import { eq, sql } from 'drizzle-orm';
+import { teams, matches, competitions, standings } from '@/db/schema';
+import { eq, sql, or, inArray } from 'drizzle-orm';
 
 /**
  * GET teams in a competition
@@ -20,41 +12,79 @@ export async function GET(
     { params }: { params: { id: string } }
 ) {
     try {
-        const competitionName = decodeURIComponent(params.id);
+        const competitionId = params.id;
 
-        // Get all matches for this competition
-        const competitionMatches = await db
+        // 1. Get competition to find its name if ID was provided
+        const [competition] = await db
             .select()
-            .from(matches)
-            .where(eq(matches.competition, competitionName));
+            .from(competitions)
+            .where(eq(competitions.id, competitionId));
 
-        if (competitionMatches.length === 0) {
-            return NextResponse.json(
-                { error: 'Competition not found' },
-                { status: 404 }
-            );
-        }
+        const competitionName = competition ? competition.name : decodeURIComponent(competitionId);
+        const actualId = competition ? competition.id : null;
 
-        // Extract unique team IDs
-        const teamIds = new Set<string>();
-        competitionMatches.forEach(match => {
-            teamIds.add(match.homeTeamId);
-            teamIds.add(match.awayTeamId);
+        // 2. Find unique team IDs and their groups from standings (most reliable source)
+        const teamGroupMap = new Map<string, string | null>();
+
+        const competitionStandings = await db
+            .select()
+            .from(standings)
+            .where(actualId
+                ? or(eq(standings.competitionId, actualId), eq(standings.competition, competitionName))
+                : eq(standings.competition, competitionName));
+
+        competitionStandings.forEach(s => {
+            teamGroupMap.set(s.teamId, s.groupName);
         });
 
-        // Fetch team details
+        // 3. Fallback to matches if no standings found
+        if (teamGroupMap.size === 0) {
+            const competitionMatches = await db
+                .select()
+                .from(matches)
+                .where(actualId
+                    ? or(eq(matches.competitionId, actualId), eq(matches.competition, competitionName))
+                    : eq(matches.competition, competitionName));
+
+            competitionMatches.forEach(match => {
+                if (!teamGroupMap.has(match.homeTeamId)) teamGroupMap.set(match.homeTeamId, match.groupName);
+                if (!teamGroupMap.has(match.awayTeamId)) teamGroupMap.set(match.awayTeamId, match.groupName);
+            });
+        }
+
+        const teamIds = Array.from(teamGroupMap.keys());
+
+        if (teamIds.length === 0) {
+            return NextResponse.json({
+                competition: {
+                    id: actualId,
+                    name: competitionName,
+                    teamCount: 0,
+                },
+                teams: [],
+            });
+        }
+
+        // 4. Fetch team details
         const teamsData = await db
             .select()
             .from(teams)
-            .where(sql`${teams.id} IN (${Array.from(teamIds).map(id => `'${id}'`).join(',')})`);
+            .where(inArray(teams.id, teamIds));
+
+        // 5. Merge group names into team data
+        const enrichedTeams = teamsData.map(team => ({
+            ...team,
+            groupName: teamGroupMap.get(team.id) || null
+        }));
 
         return NextResponse.json({
             competition: {
+                id: actualId,
                 name: competitionName,
-                sport: competitionMatches[0]?.sport || 'Football',
-                teamCount: teamIds.size,
+                sport: competition ? competition.sport : (enrichedTeams[0]?.sport || 'Football'),
+                teamCount: teamIds.length,
             },
-            teams: teamsData,
+            teams: enrichedTeams,
         });
     } catch (error) {
         console.error('Error fetching competition teams:', error);
@@ -63,28 +93,4 @@ export async function GET(
             { status: 500 }
         );
     }
-}
-
-/**
- * POST and DELETE not supported
- * Team-competition relationships are managed through matches
- */
-export async function POST(
-    request: NextRequest,
-    { params }: { params: { id: string } }
-) {
-    return NextResponse.json(
-        { error: 'Adding teams not supported. Teams are associated through matches.' },
-        { status: 501 }
-    );
-}
-
-export async function DELETE(
-    request: NextRequest,
-    { params }: { params: { id: string } }
-) {
-    return NextResponse.json(
-        { error: 'Removing teams not supported. Teams are associated through matches.' },
-        { status: 501 }
-    );
 }

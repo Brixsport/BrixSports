@@ -22,6 +22,7 @@ export interface StandingRow {
     goalsAgainst: number;
     goalDifference: number;
     points: number;
+    groupName?: string | null;
     form: string[];
 }
 
@@ -50,7 +51,12 @@ export function useLiveStandings({
             setLoading(true);
             setError(null);
 
-            const params = new URLSearchParams({ competition: competitionId });
+            const params = new URLSearchParams();
+            if (competitionId.length > 10) { // Likely an ID
+                params.append('competitionId', competitionId);
+            } else {
+                params.append('competition', competitionId);
+            }
             if (sport) params.append('sport', sport);
 
             const response = await fetch(`/api/standings?${params}`);
@@ -76,6 +82,7 @@ export function useLiveStandings({
                     goalsAgainst: standing.goalsAgainst,
                     goalDifference: standing.goalDifference,
                     points: standing.points,
+                    groupName: standing.groupName,
                     form: standing.form || [],
                 }))
                 .sort((a: StandingRow, b: StandingRow) => {

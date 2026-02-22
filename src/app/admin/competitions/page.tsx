@@ -282,19 +282,25 @@ function AdminCompetitionsPageContent() {
                                             </div>
                                         )}
                                     </div>
-                                    <div className="flex items-center gap-2">
-                                        <Link href={`/admin/competitions/${competition.id}`} className="p-2 hover:bg-white/10 rounded-lg transition-colors">
-                                            <Eye size={18} />
-                                        </Link>
-                                        <button className="p-2 hover:bg-white/10 rounded-lg transition-colors">
-                                            <Edit size={18} />
-                                        </button>
-                                        <button
-                                            onClick={() => confirmDelete(competition.id, competition.name)}
-                                            className="p-2 hover:bg-red-500/20 text-red-500 rounded-lg transition-colors"
+                                    <div className="flex flex-col md:flex-row items-center gap-2">
+                                        <Link 
+                                            href={`/admin/competitions/${competition.id}`}
+                                            className="flex items-center gap-2 bg-white/5 hover:bg-primary hover:text-black px-4 py-2 rounded-xl transition-all text-[10px] font-black uppercase tracking-widest border border-white/10"
                                         >
-                                            <Trash2 size={18} />
-                                        </button>
+                                            <Users size={14} />
+                                            Manage Teams
+                                        </Link>
+                                        <div className="flex items-center gap-1">
+                                            <button className="p-2 hover:bg-white/10 rounded-lg transition-colors group">
+                                                <Edit size={18} className="text-white/40 group-hover:text-white" />
+                                            </button>
+                                            <button
+                                                onClick={() => confirmDelete(competition.id, competition.name)}
+                                                className="p-2 hover:bg-red-500/20 text-red-500 rounded-lg transition-colors opacity-40 hover:opacity-100"
+                                            >
+                                                <Trash2 size={18} />
+                                            </button>
+                                        </div>
                                     </div>
                                 </div>
                             </motion.div>

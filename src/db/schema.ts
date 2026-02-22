@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer, real } from 'drizzle-orm/sqlite-core';
+import { sqliteTable, text, integer, real, uniqueIndex } from 'drizzle-orm/sqlite-core';
 import { relations } from 'drizzle-orm';
 
 // Teams table
@@ -158,6 +158,9 @@ export const matches = sqliteTable('matches', {
     livestreamType: text('livestream_type'), // 'youtube' | 'twitch' | 'facebook' | 'hls' | 'dash' | 'custom'
     livestreamEnabled: integer('livestream_enabled', { mode: 'boolean' }).default(false),
     livestreamStartTime: integer('livestream_start_time', { mode: 'timestamp' }),
+    round: text('round'), // 'GROUP_A' | 'QUARTER_FINAL' | 'SEMI_FINAL' | 'FINAL'
+    matchday: integer('matchday'), // For league competitions
+    groupName: text('group_name'), // Specifically for group stage matches
     livestreamEndTime: integer('livestream_end_time', { mode: 'timestamp' }),
     livestreamViewers: integer('livestream_viewers').default(0),
     livestreamChatEnabled: integer('livestream_chat_enabled', { mode: 'boolean' }).default(true),
@@ -228,8 +231,11 @@ export const standings = sqliteTable('standings', {
     goalsAgainst: integer('goals_against').default(0),
     goalDifference: integer('goal_difference').default(0),
     points: integer('points').default(0),
+    groupName: text('group_name'), // For group stages
     updatedAt: integer('updated_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
-});
+}, (table) => ({
+    teamCompetitionIdx: uniqueIndex('team_competition_idx').on(table.teamId, table.competitionId),
+}));
 
 // Bracket/Tournament nodes
 export const bracketNodes = sqliteTable('bracket_nodes', {

@@ -27,6 +27,9 @@ interface Match {
     competitionLevel?: 'busa-league' | 'college' | 'department' | 'year-level' | 'external';
     friendlyType?: 'internal' | 'external';
     friendlyDescription?: string;
+    round?: string;
+    groupName?: string;
+    matchday?: number;
 }
 
 interface Team {
@@ -35,6 +38,7 @@ interface Team {
     shortName: string;
     logo: string;
     sport: string;
+    groupName?: string | null;
 }
 
 interface Competition {
@@ -65,6 +69,9 @@ function AdminMatchesPageContent() {
         isDeleting: false,
     });
 
+    const [competitionTeams, setCompetitionTeams] = useState<Team[]>([]);
+    const [isFetchingTeams, setIsFetchingTeams] = useState(false);
+
     const [formData, setFormData] = useState({
         sport: 'Football',
         homeTeamId: '',
@@ -78,14 +85,43 @@ function AdminMatchesPageContent() {
         friendlyType: 'internal',
         friendlyDescription: '',
         status: 'UPCOMING',
-        livestreamEnabled: false
+        livestreamEnabled: false,
+        round: '',
+        groupName: '',
+        matchday: null as number | null
     });
 
     useEffect(() => {
-        fetchData();
+        fetchMatches();
     }, []);
 
-    const fetchData = async () => {
+    const fetchCompetitionTeams = async (compId: string) => {
+        setIsFetchingTeams(true);
+        try {
+            const response = await fetch(`/api/competitions/${compId}/teams`);
+            if (response.ok) {
+                const data = await response.json();
+                setCompetitionTeams(data.teams || []);
+            } else {
+                setCompetitionTeams([]);
+            }
+        } catch (err) {
+            console.error('Error fetching competition teams:', err);
+            setCompetitionTeams([]);
+        } finally {
+            setIsFetchingTeams(false);
+        }
+    };
+
+    useEffect(() => {
+        if (formData.competitionId) {
+            fetchCompetitionTeams(formData.competitionId);
+        } else {
+            setCompetitionTeams([]);
+        }
+    }, [formData.competitionId]);
+
+    const fetchMatches = async () => {
         setIsLoading(true);
         try {
             const [matchesRes, teamsRes, compsRes] = await Promise.all([
@@ -143,7 +179,10 @@ function AdminMatchesPageContent() {
                     friendlyType: 'internal',
                     friendlyDescription: '',
                     status: 'UPCOMING',
-                    livestreamEnabled: false
+                    livestreamEnabled: false,
+                    round: '',
+                    groupName: '',
+                    matchday: null
                 });
                 success('Match created successfully!');
             } else {
@@ -208,7 +247,10 @@ function AdminMatchesPageContent() {
             friendlyType: match.friendlyType || 'internal',
             friendlyDescription: match.friendlyDescription || '',
             status: match.status,
-            livestreamEnabled: false
+            livestreamEnabled: false,
+            round: match.round || '',
+            groupName: match.groupName || '',
+            matchday: match.matchday || null
         });
         setShowEditModal(true);
     };
@@ -529,6 +571,31 @@ function AdminMatchesPageContent() {
                                     </div>
                                 )}
                             </div>
+
+                            {formData.matchType === 'competition' && (
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 animate-in fade-in slide-in-from-top-2 duration-300">
+                                    <div>
+                                        <label className="block text-[10px] font-black uppercase tracking-widest text-white/40 mb-2">Round / Stage</label>
+                                        <input
+                                            type="text"
+                                            value={formData.round || ''}
+                                            onChange={(e) => setFormData({ ...formData, round: e.target.value })}
+                                            className="w-full bg-[#121212] border border-white/10 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-primary transition-colors text-white placeholder-white/20"
+                                            placeholder="e.g. Group Stage, Semi Final"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-[10px] font-black uppercase tracking-widest text-white/40 mb-2">Group Name (Optional)</label>
+                                        <input
+                                            type="text"
+                                            value={formData.groupName || ''}
+                                            onChange={(e) => setFormData({ ...formData, groupName: e.target.value })}
+                                            className="w-full bg-[#121212] border border-white/10 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-primary transition-colors text-white placeholder-white/20"
+                                            placeholder="e.g. Group A"
+                                        />
+                                    </div>
+                                </div>
+                            )}
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div>
                                     <label className="block text-[10px] font-black uppercase tracking-widest text-white/40 mb-2">Start Time</label>
@@ -561,9 +628,16 @@ function AdminMatchesPageContent() {
                                         className="w-full bg-[#121212] border border-white/10 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-primary transition-colors text-white hover:border-white/20"
                                         required
                                     >
-                                        <option value="" className="bg-[#0a0a0a]">Select Team</option>
-                                        {teams.filter(t => t.sport === formData.sport || t.sport === 'Multi-Sport').map(team => (
-                                            <option key={team.id} value={team.id} className="bg-[#0a0a0a]">{team.name}</option>
+                                        <option value="" className="bg-[#0a0a0a]">{isFetchingTeams ? 'Loading competition teams...' : 'Select Team'}</option>
+                                        {(competitionTeams.length > 0
+                                            ? (formData.groupName
+                                                ? competitionTeams.filter(t => t.groupName?.toLowerCase() === formData.groupName.toLowerCase())
+                                                : competitionTeams)
+                                            : teams.filter(t => t.sport === formData.sport || t.sport === 'Multi-Sport')
+                                        ).map(team => (
+                                            <option key={team.id} value={team.id} className="bg-[#0a0a0a]">
+                                                {team.name} {team.groupName ? `(${team.groupName})` : ''}
+                                            </option>
                                         ))}
                                     </select>
                                 </div>
@@ -575,9 +649,16 @@ function AdminMatchesPageContent() {
                                         className="w-full bg-[#121212] border border-white/10 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-primary transition-colors text-white hover:border-white/20"
                                         required
                                     >
-                                        <option value="" className="bg-[#0a0a0a]">Select Team</option>
-                                        {teams.filter(t => t.sport === formData.sport || t.sport === 'Multi-Sport').map(team => (
-                                            <option key={team.id} value={team.id} className="bg-[#0a0a0a]">{team.name}</option>
+                                        <option value="" className="bg-[#0a0a0a]">{isFetchingTeams ? 'Loading competition teams...' : 'Select Team'}</option>
+                                        {(competitionTeams.length > 0
+                                            ? (formData.groupName
+                                                ? competitionTeams.filter(t => t.groupName?.toLowerCase() === formData.groupName.toLowerCase())
+                                                : competitionTeams)
+                                            : teams.filter(t => t.sport === formData.sport || t.sport === 'Multi-Sport')
+                                        ).map(team => (
+                                            <option key={team.id} value={team.id} className="bg-[#0a0a0a]">
+                                                {team.name} {team.groupName ? `(${team.groupName})` : ''}
+                                            </option>
                                         ))}
                                     </select>
                                 </div>

@@ -144,12 +144,41 @@ const mockCompetitionData = {
     ],
 };
 
+import { useParams } from 'next/navigation';
+import { useEffect } from 'react';
+
 type TabType = 'standings' | 'scorers' | 'assists' | 'discipline' | 'rules';
 
 export default function CompetitionStandingsPage() {
+    const { id } = useParams();
+    const competitionId = id as string;
+
     const [activeTab, setActiveTab] = useState<TabType>('standings');
     const [expandedRow, setExpandedRow] = useState<string | null>(null);
-    const [data] = useState(mockCompetitionData);
+    const [compData, setCompData] = useState<any>(null);
+    const [isLoadingComp, setIsLoadingComp] = useState(true);
+
+    const { standings, loading: isLoadingStandings } = useLiveStandings({
+        competitionId
+    });
+
+    useEffect(() => {
+        const fetchCompDetail = async () => {
+            setIsLoadingComp(true);
+            try {
+                const res = await fetch(`/api/competitions/${competitionId}`);
+                if (res.ok) {
+                    const data = await res.json();
+                    setCompData(data.competition || data);
+                }
+            } catch (err) {
+                console.error('Error fetching competition:', err);
+            } finally {
+                setIsLoadingComp(false);
+            }
+        };
+        fetchCompDetail();
+    }, [competitionId]);
 
     const tabs: { key: TabType; label: string; icon: React.ReactNode }[] = [
         { key: 'standings', label: 'Standings', icon: <Trophy size={14} /> },
@@ -159,6 +188,40 @@ export default function CompetitionStandingsPage() {
         { key: 'rules', label: 'Rules', icon: <Info size={14} /> },
     ];
 
+    // Group standings
+    const groupedStandings = useMemo(() => {
+        const groups: Record<string, any[]> = {};
+        standings.forEach(s => {
+            const g = s.groupName || 'Standings';
+            if (!groups[g]) groups[g] = [];
+            groups[g].push(s);
+        });
+        return groups;
+    }, [standings]);
+
+    if (isLoadingComp || (isLoadingStandings && standings.length === 0)) {
+        return (
+            <div className="min-h-screen bg-[#050505] text-white p-6 md:p-12 flex items-center justify-center">
+                <div className="space-y-4 text-center">
+                    <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto"></div>
+                    <p className="text-white/40 font-black uppercase tracking-widest text-xs">Loading Championship Data...</p>
+                </div>
+            </div>
+        );
+    }
+
+    if (!compData) {
+        return (
+            <div className="min-h-screen bg-[#050505] text-white p-6 md:p-12 flex items-center justify-center">
+                <div className="text-center">
+                    <AlertCircle size={48} className="text-red-500 mx-auto mb-4 opacity-50" />
+                    <h2 className="text-2xl font-display italic uppercase">Championship Not Found</h2>
+                    <Link href="/competitions" className="text-primary hover:underline mt-4 inline-block">View All Competitions</Link>
+                </div>
+            </div>
+        );
+    }
+
     return (
         <div className="min-h-screen bg-[#050505] text-white p-6 md:p-12">
             <div className="max-w-7xl mx-auto space-y-8">
@@ -167,24 +230,24 @@ export default function CompetitionStandingsPage() {
                     <div className="flex items-center gap-3 mb-2">
                         <Trophy size={16} className="text-primary" />
                         <span className="text-[10px] font-black uppercase tracking-widest text-white/40">
-                            {data.competition.season}
+                            {compData.season}
                         </span>
                     </div>
                     <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
                         <div>
                             <h1 className="font-display text-5xl tracking-tighter italic uppercase leading-none mb-2">
-                                {data.competition.name}
+                                {compData.name}
                             </h1>
-                            <p className="text-sm text-white/60">{data.competition.description}</p>
+                            <p className="text-sm text-white/60">{compData.description || `${compData.sport} Tournament`}</p>
                         </div>
                         <div className="flex items-center gap-4">
                             <div className="flex items-center gap-2 px-4 py-2 bg-white/5 border border-white/10 rounded-xl">
                                 <Users size={16} className="text-primary" />
-                                <span className="text-sm font-bold">{data.competition.numberOfTeams} Teams</span>
+                                <span className="text-sm font-bold">{compData.teamCount || compData.numberOfTeams || 0} Teams</span>
                             </div>
                             <div className="flex items-center gap-2 px-4 py-2 bg-green-500/20 border border-green-500/30 rounded-xl">
                                 <Zap size={16} className="text-green-500" />
-                                <span className="text-sm font-bold text-green-500 uppercase">{data.competition.status}</span>
+                                <span className="text-sm font-bold text-green-500 uppercase">{compData.status}</span>
                             </div>
                         </div>
                     </div>
@@ -217,16 +280,29 @@ export default function CompetitionStandingsPage() {
                         transition={{ duration: 0.2 }}
                     >
                         {activeTab === 'standings' && (
-                            <StandingsTable
-                                standings={data.standings}
-                                expandedRow={expandedRow}
-                                onRowExpand={setExpandedRow}
-                            />
+                            <div className="space-y-12">
+                                {Object.entries(groupedStandings).sort().map(([groupName, groupStandings]) => (
+                                    <div key={groupName} className="space-y-4">
+                                        {groupName !== 'Standings' && (
+                                            <div className="flex items-center gap-4">
+                                                <div className="h-[1px] flex-1 bg-white/10"></div>
+                                                <h3 className="font-display text-xl italic uppercase tracking-widest text-primary">{groupName}</h3>
+                                                <div className="h-[1px] flex-1 bg-white/10"></div>
+                                            </div>
+                                        )}
+                                        <StandingsTable
+                                            standings={groupStandings}
+                                            expandedRow={expandedRow}
+                                            onRowExpand={setExpandedRow}
+                                        />
+                                    </div>
+                                ))}
+                            </div>
                         )}
-                        {activeTab === 'scorers' && <TopScorersTable players={data.topScorers} />}
-                        {activeTab === 'assists' && <TopAssistsTable players={data.topAssists} />}
-                        {activeTab === 'discipline' && <DisciplinaryTable players={data.disciplinary} />}
-                        {activeTab === 'rules' && <CompetitionRules competition={data.competition} />}
+                        {activeTab === 'scorers' && <TopScorersTable players={[]} />}
+                        {activeTab === 'assists' && <TopAssistsTable players={[]} />}
+                        {activeTab === 'discipline' && <DisciplinaryTable players={[]} />}
+                        {activeTab === 'rules' && <CompetitionRules competition={compData} />}
                     </motion.div>
                 </AnimatePresence>
             </div>
