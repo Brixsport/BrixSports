@@ -30,8 +30,8 @@ export async function middleware(request: NextRequest) {
             const { payload } = await jwtVerify(token, secret);
             console.log('[Middleware] Token verified, role:', payload.role);
 
-            if (payload.role !== 'admin') {
-                console.log('[Middleware] User is not admin, redirecting to home');
+            if (payload.role !== 'admin' && payload.role !== 'logger_manager') {
+                console.log('[Middleware] User is not authorized for admin area, redirecting to home');
                 return NextResponse.redirect(new URL('/', request.url));
             }
 

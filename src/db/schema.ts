@@ -157,6 +157,11 @@ export const matches = sqliteTable('matches', {
     livestreamViewers: integer('livestream_viewers').default(0),
     livestreamChatEnabled: integer('livestream_chat_enabled', { mode: 'boolean' }).default(true),
     livestreamChatUrl: text('livestream_chat_url'), // Optional separate chat URL
+    // Approval Workflow
+    approvalStatus: text('approval_status').default('PENDING'), // 'PENDING' | 'APPROVED' | 'REJECTED' | 'NEEDS_REVIEW'
+    managerNotes: text('manager_notes'),
+    approvedBy: text('approved_by').references(() => users.id),
+    approvedAt: integer('approved_at', { mode: 'timestamp' }),
     createdAt: integer('created_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
     updatedAt: integer('updated_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
 });
@@ -604,6 +609,18 @@ export const systemSettingsHistory = sqliteTable('system_settings_history', {
     createdAt: integer('created_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
 });
 
+// Staff Communication table (Internal chat/notes between loggers and managers)
+export const staffComms = sqliteTable('staff_comms', {
+    id: text('id').primaryKey(),
+    matchId: text('match_id').notNull().references(() => matches.id, { onDelete: 'cascade' }),
+    userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    content: text('content').notNull(),
+    type: text('type').default('note'), // 'note' | 'alert' | 'correction_request'
+    priority: text('priority').default('normal'), // 'normal' | 'high' | 'urgent'
+    isRead: integer('is_read', { mode: 'boolean' }).default(false),
+    createdAt: integer('created_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
+});
+
 // Push Subscriptions table (for Web Push notifications)
 export const pushSubscriptions = sqliteTable('push_subscriptions', {
     id: text('id').primaryKey(),
@@ -766,6 +783,8 @@ export type TeamRegistration = typeof teamRegistrations.$inferSelect;
 export type NewTeamRegistration = typeof teamRegistrations.$inferInsert;
 export type RegisteredPlayer = typeof registeredPlayers.$inferSelect;
 export type NewRegisteredPlayer = typeof registeredPlayers.$inferInsert;
+export type StaffComm = typeof staffComms.$inferSelect;
+export type NewStaffComm = typeof staffComms.$inferInsert;
 
 
 

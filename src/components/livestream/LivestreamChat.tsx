@@ -96,46 +96,59 @@ export function LivestreamChat({ matchId, enabled = true, className }: Livestrea
 
     const handleSendMessage = async (e: React.FormEvent) => {
         e.preventDefault();
+        console.log('[Chat] handleSendMessage triggered. Input:', inputMessage);
 
-        if (!inputMessage.trim() || isSending) return;
+        if (!inputMessage.trim() || isSending) {
+            console.log('[Chat] Send ignored:', { empty: !inputMessage.trim(), isSending });
+            return;
+        }
 
         if (!user) {
+            console.log('[Chat] No user, opening auth modal');
             openAuthModal();
             return;
         }
 
         setIsSending(true);
 
-        const newMessage: ChatMessage = {
-            id: Date.now().toString(),
-            userId: user.id || 'anonymous',
-            userName: user.name || 'Anonymous',
-            userAvatar: user.avatar,
-            message: inputMessage.trim(),
-            timestamp: new Date()
-        };
-
-        // Add message optimistically to UI
-        setMessages(prev => [...prev, newMessage]);
-        setInputMessage('');
-
         try {
+            console.log('[Chat] Creating message for user:', user.id);
+            const newMessage: ChatMessage = {
+                id: `msg_${Date.now()}_${Math.random().toString(36).substring(7)}`,
+                userId: user.id || 'anonymous',
+                userName: user.name || 'Anonymous',
+                userAvatar: user.avatar,
+                message: inputMessage.trim(),
+                timestamp: new Date()
+            };
+
+            // Add message optimistically to UI
+            console.log('[Chat] Adding message optimistically:', newMessage.id);
+            setMessages(prev => [...prev, newMessage]);
+            setInputMessage('');
+
             if (isConnected) {
+                console.log('[Chat] Emitting chat:message via WS');
                 // Emit to server if connected
                 emit('chat:message', {
                     matchId,
                     ...newMessage
                 });
             } else {
+                console.warn('[Chat] Socket not connected, trying HTTP fallback');
                 // HTTP Fallback
-                await fetch('/api/chat/send', {
+                const response = await fetch('/api/chat/send', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ matchId, message: newMessage }),
                 });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP Error: ${response.status}`);
+                }
             }
         } catch (error) {
-            console.error('Failed to send message:', error);
+            console.error('[Chat] Failed to send message:', error);
             // Show error message
             setMessages(prev => [...prev, {
                 id: `error_${Date.now()}`,

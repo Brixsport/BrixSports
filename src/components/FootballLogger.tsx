@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Activity, Save, Undo2, Clock, Play, Pause, Settings, Lock as LockIcon } from 'lucide-react';
+import { X, Activity, Save, Undo2, Clock, Play, Pause, Settings, Lock as LockIcon, MessageSquare, AlertTriangle, Send } from 'lucide-react';
+import { useAuth } from '@/hooks/useAuth';
 import { useMultiLogger } from '@/hooks/useMultiLogger';
 import { useWebSocket } from '@/hooks/useWebSocket';
 import { MultiLoggerStatus } from '@/components/MultiLoggerStatus';
@@ -84,9 +85,55 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
     // Pre-match States
     const [viewState, setViewState] = useState<'loading' | 'check_lineup' | 'confirm_lineup' | 'active'>('loading');
     const [lineups, setLineups] = useState<any>({ home: null, away: null });
+    const [showCommsModal, setShowCommsModal] = useState(false);
+    const [comms, setComms] = useState<any[]>([]);
+    const [noteContent, setNoteContent] = useState('');
+    const { user } = useAuth();
     const [showLineupEditModal, setShowLineupEditModal] = useState(false);
     const [editingTeam, setEditingTeam] = useState<'home' | 'away'>('home');
     const [draftLineup, setDraftLineup] = useState<{ starters: Player[], subs: Player[] }>({ starters: [], subs: [] });
+
+    // Fetch staff comms
+    useEffect(() => {
+        const fetchComms = async () => {
+            try {
+                const res = await fetch(`/api/staff-comms?matchId=${match.id}`);
+                if (res.ok) {
+                    const data = await res.json();
+                    setComms(data);
+                }
+            } catch (err) {
+                console.error(err);
+            }
+        };
+
+        fetchComms();
+        const interval = setInterval(fetchComms, 15000);
+        return () => clearInterval(interval);
+    }, [match.id]);
+
+    const handleSendNote = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!noteContent || !user) return;
+
+        try {
+            await fetch('/api/staff-comms', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    matchId: match.id,
+                    userId: user.id,
+                    content: noteContent,
+                    type: 'note'
+                })
+            });
+            setNoteContent('');
+            const res = await fetch(`/api/staff-comms?matchId=${match.id}`);
+            if (res.ok) setComms(await res.json());
+        } catch (err) {
+            console.error(err);
+        }
+    };
 
     // Initial Load & Manager Setup
     useEffect(() => {
@@ -620,6 +667,7 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                     status: 'FINISHED',
                     homeScore,
                     awayScore,
+                    stats: matchState?.stats
                 }),
             });
             // Send MATCH_END push notification
@@ -949,6 +997,12 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                                 {isSocketConnected ? 'Live Sync' : 'Offline'}
                             </span>
                         </div>
+                        <button onClick={() => setShowCommsModal(true)} className="p-1.5 bg-white/5 rounded-lg hover:bg-white/10 shrink-0 relative">
+                            <MessageSquare size={16} />
+                            {comms.some(c => !c.isRead) && (
+                                <span className="absolute -top-1 -right-1 w-2 h-2 bg-primary rounded-full animate-pulse shadow-[0_0_5px_rgba(var(--primary-rgb),0.5)]" />
+                            )}
+                        </button>
                         <button onClick={() => setShowSettingsModal(true)} className="p-1.5 bg-white/5 rounded-lg hover:bg-white/10 shrink-0">
                             <Settings size={16} />
                         </button>
@@ -1614,6 +1668,79 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                 currentLoggerName={currentLogger?.name || 'Unknown Logger'}
                 onResolveConflict={(id, resolution) => resolveConflict(id, resolution)}
             />
+
+            {/* Staff Communication Modal */}
+            <AnimatePresence>
+                {showCommsModal && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 bg-black/90 backdrop-blur-md z-[100] flex items-center justify-center p-4"
+                    >
+                        <motion.div
+                            initial={{ scale: 0.9, y: 20 }}
+                            animate={{ scale: 1, y: 0 }}
+                            exit={{ scale: 0.9, y: 20 }}
+                            className="bg-zinc-900 border border-white/10 w-full max-w-sm rounded-[2.5rem] overflow-hidden flex flex-col h-[80vh] shadow-2xl"
+                        >
+                            <div className="p-6 border-b border-white/10 flex justify-between items-center bg-black/40">
+                                <div>
+                                    <h3 className="font-black uppercase tracking-widest text-primary italic">Staff Comms</h3>
+                                    <div className="flex items-center gap-1.5 mt-0.5">
+                                        <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />
+                                        <span className="text-[10px] font-black uppercase tracking-widest text-white/40">Secure Channel</span>
+                                    </div>
+                                </div>
+                                <button onClick={() => setShowCommsModal(false)} className="p-2 hover:bg-white/10 rounded-full transition-colors"><X size={20} /></button>
+                            </div>
+
+                            <div className="flex-1 overflow-y-auto p-6 space-y-4 custom-scrollbar">
+                                {comms.length === 0 ? (
+                                    <div className="h-full flex flex-col items-center justify-center opacity-20 py-12">
+                                        <MessageSquare size={48} className="mb-4" />
+                                        <p className="text-[10px] font-black uppercase tracking-widest">No reports yet</p>
+                                    </div>
+                                ) : (
+                                    comms.map((comm: any) => (
+                                        <div key={comm.id} className="space-y-1.5">
+                                            <div className="flex items-center justify-between">
+                                                <span className="text-[9px] font-black uppercase text-primary/60">{comm.user?.name} · {comm.user?.role}</span>
+                                                <span className="text-[8px] text-white/20 tabular-nums">{new Date(comm.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                                            </div>
+                                            <div className={`p-4 rounded-2xl text-xs font-medium leading-relaxed ${comm.user?.role === 'admin' || comm.user?.role === 'logger_manager' ? 'bg-primary/10 border border-primary/20 text-white' : 'bg-white/5 border border-white/10 text-white/80'}`}>
+                                                {comm.content}
+                                            </div>
+                                        </div>
+                                    ))
+                                )}
+                            </div>
+
+                            <form onSubmit={handleSendNote} className="p-6 bg-black/40 border-t border-white/10 space-y-3">
+                                <div className="relative">
+                                    <textarea
+                                        value={noteContent}
+                                        onChange={(e) => setNoteContent(e.target.value)}
+                                        placeholder="Report incident or update manager..."
+                                        className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 text-xs font-bold outline-none focus:border-primary/50 transition-all resize-none h-24"
+                                    />
+                                    <div className="absolute top-4 right-4 text-white/10">
+                                        <AlertTriangle size={14} />
+                                    </div>
+                                </div>
+                                <button
+                                    type="submit"
+                                    disabled={!noteContent}
+                                    className="w-full py-4 bg-primary text-black font-black uppercase tracking-widest text-[10px] rounded-xl flex items-center justify-center gap-2 transition-all hover:scale-[1.02] active:scale-95 disabled:grayscale"
+                                >
+                                    Transmit Report
+                                    <Send size={14} />
+                                </button>
+                            </form>
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
         </div>
     );
 }

@@ -846,7 +846,7 @@ export function BasketballMatchOverlay({ match, onClose, onSelectTeam, onSelectP
                                 <div className="h-[calc(100vh-300px)] min-h-[500px]">
                                     <LivestreamChat
                                         matchId={match.id}
-                                        enabled={false}
+                                        enabled={true}
                                         className="h-full"
                                     />
                                 </div>

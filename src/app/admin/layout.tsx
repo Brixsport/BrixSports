@@ -23,7 +23,7 @@ export default async function AdminLayout({
 
         const { payload } = await jwtVerify(token, secret);
 
-        if (payload.role !== 'admin') {
+        if (payload.role !== 'admin' && payload.role !== 'logger_manager') {
             redirect('/');
         }
     } catch (error) {

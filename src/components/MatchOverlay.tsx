@@ -1084,15 +1084,16 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
                 {match.stats?.freeKicks && <StatRow label="Free Kicks" values={match.stats.freeKicks} showBar={false} />}
 
                 {(!match.stats || (
-                  !match.stats.possession &&
-                  !match.stats.shots &&
-                  !match.stats.shotsOnTarget &&
-                  !match.stats.corners &&
-                  !match.stats.fouls &&
-                  !match.stats.yellowCards &&
-                  !match.stats.redCards &&
-                  !match.stats.offsides &&
-                  !match.stats.freeKicks
+                  (!match.stats.possession || (match.stats.possession[0] === 50 && match.stats.possession[1] === 50 && match.events?.length === 0)) &&
+                  (!match.stats.shots || (match.stats.shots[0] === 0 && match.stats.shots[1] === 0)) &&
+                  (!match.stats.shotsOnTarget || (match.stats.shotsOnTarget[0] === 0 && match.stats.shotsOnTarget[1] === 0)) &&
+                  (!match.stats.corners || (match.stats.corners[0] === 0 && match.stats.corners[1] === 0)) &&
+                  (!match.stats.fouls || (match.stats.fouls[0] === 0 && match.stats.fouls[1] === 0)) &&
+                  (!match.stats.yellowCards || (match.stats.yellowCards[0] === 0 && match.stats.yellowCards[1] === 0)) &&
+                  (!match.stats.redCards || (match.stats.redCards[0] === 0 && match.stats.redCards[1] === 0)) &&
+                  (!match.stats.offsides || (match.stats.offsides[0] === 0 && match.stats.offsides[1] === 0)) &&
+                  (!match.stats.freeKicks || (match.stats.freeKicks[0] === 0 && match.stats.freeKicks[1] === 0)) &&
+                  (!match.stats.expectedGoals || (match.stats.expectedGoals[0] === 0 && match.stats.expectedGoals[1] === 0))
                 )) && (
                     <div className="py-12 text-center">
                       <BarChart3 className="mx-auto mb-3 text-white/20" size={48} />
@@ -1329,7 +1330,7 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
                 <div className="h-[calc(100vh-300px)] min-h-[500px]">
                   <LivestreamChat
                     matchId={match.id}
-                    enabled={false}
+                    enabled={true}
                     className="h-full"
                   />
                 </div>

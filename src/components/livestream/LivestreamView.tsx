@@ -317,7 +317,7 @@ export function LivestreamView({ match, livestream, onExit }: LivestreamViewProp
                         <div className="sticky top-24 h-[calc(100vh-7rem)]">
                             <LivestreamChat
                                 matchId={match.id}
-                                enabled={false}
+                                enabled={true}
                                 className="h-full"
                             />
                         </div>

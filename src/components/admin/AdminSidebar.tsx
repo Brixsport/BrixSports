@@ -7,27 +7,35 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
     Activity, Shield, Users, Server, Settings,
     Trophy, Calendar, Video, Newspaper, TrendingUp,
-    Timer, Menu, X, ChevronRight, LogOut, UserPlus
+    Timer, Menu, X, ChevronRight, LogOut, UserPlus, Briefcase
 } from 'lucide-react';
+import { useAuth } from '@/hooks/useAuth';
 
 const navItems = [
     { icon: <Activity size={18} />, label: "Live Monitor", href: "/admin" },
+    { icon: <Briefcase size={18} />, label: "Manager Center", href: "/admin/manager" },
     { icon: <Trophy size={18} />, label: "Competitions", href: "/admin/competitions" },
     { icon: <Calendar size={18} />, label: "Matches", href: "/admin/matches" },
     { icon: <Timer size={18} />, label: "Track Events", href: "/admin/track-events" },
-    { icon: <Video size={18} />, label: "Livestreams", href: "/admin/livestreams" },
-    { icon: <Newspaper size={18} />, label: "News", href: "/admin/news" },
-    { icon: <TrendingUp size={18} />, label: "Transfers", href: "/admin/transfers" },
+    { icon: <Video size={18} />, label: "Livestreams", href: "/admin/livestreams", adminOnly: true },
+    { icon: <Newspaper size={18} />, label: "News", href: "/admin/news", adminOnly: true },
+    { icon: <TrendingUp size={18} />, label: "Transfers", href: "/admin/transfers", adminOnly: true },
     { icon: <UserPlus size={18} />, label: "Bulk Register", href: "/admin/bulk-register" },
     { icon: <Users size={18} />, label: "Loggers", href: "/admin/loggers" },
-    { icon: <Server size={18} />, label: "Infrastructure", href: "/admin/infrastructure" },
-    { icon: <Shield size={18} />, label: "Access Control", href: "/admin/access" },
-    { icon: <Settings size={18} />, label: "Algorithm Setup", href: "/admin/settings" },
+    { icon: <Server size={18} />, label: "Infrastructure", href: "/admin/infrastructure", adminOnly: true },
+    { icon: <Shield size={18} />, label: "Access Control", href: "/admin/access", adminOnly: true },
+    { icon: <Settings size={18} />, label: "Algorithm Setup", href: "/admin/settings", adminOnly: true },
 ];
 
 export function AdminSidebar() {
+    const { user } = useAuth();
     const [isOpen, setIsOpen] = useState(false);
     const pathname = usePathname();
+
+    const filteredNavItems = navItems.filter(item => {
+        if (item.adminOnly && user?.role !== 'admin') return false;
+        return true;
+    });
 
     // Close sidebar on navigation
     useEffect(() => {
@@ -80,7 +88,7 @@ export function AdminSidebar() {
                 </div>
 
                 <nav className="flex-1 space-y-1 overflow-y-auto pr-2 custom-scrollbar">
-                    {navItems.map((item) => {
+                    {filteredNavItems.map((item) => {
                         const active = pathname === item.href || (item.href !== '/admin' && pathname.startsWith(item.href));
                         return (
                             <Link

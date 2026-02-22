@@ -118,7 +118,10 @@ export interface MatchStats {
 
     // Possession (calculated from events)
     possessionEvents: [number, number];   // Count of attacking events
-    possessionPercentage: [number, number]; // Calculated %
+    possession: [number, number]; // Calculated %
+
+    // Football-specific stats
+    expectedGoals: [number, number];
 
     // Passing & Attacking
     assists: [number, number];
@@ -673,6 +676,9 @@ export class MatchStateManager {
         // Remove event
         this.state.events = this.state.events.slice(0, -1);
 
+        // Recalculate stats
+        this.calculateMatchStats();
+
         this.notifyListeners();
         this.persistState();
         this.broadcastUndo(lastEvent);
@@ -1006,7 +1012,8 @@ export class MatchStateManager {
             penalties: [0, 0],
             ownGoals: [0, 0],
             possessionEvents: [0, 0],
-            possessionPercentage: [50, 50],
+            possession: [50, 50],
+            expectedGoals: [0, 0],
             assists: [0, 0],
             saves: [0, 0],
             catches: [0, 0],
@@ -1142,9 +1149,24 @@ export class MatchStateManager {
         // Calculate possession percentage
         const totalPossessionEvents = stats.possessionEvents[0] + stats.possessionEvents[1];
         if (totalPossessionEvents > 0) {
-            stats.possessionPercentage[0] = Math.round((stats.possessionEvents[0] / totalPossessionEvents) * 100);
-            stats.possessionPercentage[1] = 100 - stats.possessionPercentage[0];
+            stats.possession[0] = Math.round((stats.possessionEvents[0] / totalPossessionEvents) * 100);
+            stats.possession[1] = 100 - stats.possession[0];
         }
+
+        // Rough Expected Goals (xG) calculation
+        // Goals are 0.8, Penalties 0.75, shots on target 0.3, shots off target 0.05
+        stats.expectedGoals[0] = Number((
+            stats.goals[0] * 0.15 + // Subtract some because goals are already in shots
+            stats.penalties[0] * 0.75 +
+            stats.shotsOnTarget[0] * 0.3 +
+            stats.shotsOffTarget[0] * 0.05
+        ).toFixed(2));
+        stats.expectedGoals[1] = Number((
+            stats.goals[1] * 0.15 +
+            stats.penalties[1] * 0.75 +
+            stats.shotsOnTarget[1] * 0.3 +
+            stats.shotsOffTarget[1] * 0.05
+        ).toFixed(2));
 
         this.state.stats = stats;
         this.broadcastStatsUpdate();
@@ -1288,7 +1310,8 @@ export class MatchStateManager {
                 penalties: [0, 0],
                 ownGoals: [0, 0],
                 possessionEvents: [0, 0],
-                possessionPercentage: [50, 50],
+                possession: [50, 50],
+                expectedGoals: [0, 0],
                 assists: [0, 0],
                 saves: [0, 0],
                 catches: [0, 0],

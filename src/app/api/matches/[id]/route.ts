@@ -396,6 +396,10 @@ export async function PATCH(
         if (body.matchType) updateData.matchType = body.matchType;
         if (body.friendlyType) updateData.friendlyType = body.friendlyType;
         if (body.friendlyDescription !== undefined) updateData.friendlyDescription = body.friendlyDescription;
+        if (body.approvalStatus) updateData.approvalStatus = body.approvalStatus;
+        if (body.managerNotes !== undefined) updateData.managerNotes = body.managerNotes;
+        if (body.approvedBy) updateData.approvedBy = body.approvedBy;
+        if (body.approvedAt) updateData.approvedAt = new Date(body.approvedAt);
 
         await db
             .update(matches)
