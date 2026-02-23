@@ -130,9 +130,6 @@ export async function POST(request: NextRequest) {
                 teamId,
                 affiliationType: 'club', // This is their primary club team
                 isActive: true,
-                joinedDate: new Date(),
-                leftDate: null,
-                createdAt: new Date(),
             });
 
             createdPlayerIds.push(playerId);

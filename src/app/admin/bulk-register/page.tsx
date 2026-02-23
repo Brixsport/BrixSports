@@ -70,6 +70,8 @@ interface SubmitResult {
 const POSITIONS = ['Goalkeeper', 'Defender', 'Midfielder', 'Forward'];
 const POSITIONS_5ASIDE = ['Goalkeeper', 'Defender', 'Midfielder', 'Forward'];
 
+const SPORTS = ['Football', 'Basketball', 'Scrabble', 'Chess', 'Table Tennis'];
+
 const createEmptyPlayer = (): PlayerRow => ({
     id: crypto.randomUUID(),
     name: '',
@@ -97,6 +99,7 @@ export default function BulkRegisterPage() {
     // Form state
     const [mode, setMode] = useState<'existing' | 'new'>('existing');
     const [selectedTeamId, setSelectedTeamId] = useState('');
+    const [selectedSport, setSelectedSport] = useState('Football');
     const [selectedCompetitionId, setSelectedCompetitionId] = useState('');
     const [newTeamName, setNewTeamName] = useState('');
     const [newUniversity, setNewUniversity] = useState('');
@@ -118,12 +121,16 @@ export default function BulkRegisterPage() {
     // Fetch teams & competitions
     useEffect(() => {
         async function fetchData() {
+            setLoading(true);
             try {
-                const res = await fetch('/api/players/bulk-register?sport=Football');
+                const res = await fetch(`/api/players/bulk-register?sport=${encodeURIComponent(selectedSport)}`);
                 if (res.ok) {
                     const data = await res.json();
                     setTeams(data.teams || []);
                     setCompetitions(data.competitions || []);
+                    // reset selected team/competition when sport changes
+                    setSelectedTeamId('');
+                    setSelectedCompetitionId('');
                 }
             } catch (e) {
                 console.error('Failed to fetch data:', e);
@@ -132,7 +139,7 @@ export default function BulkRegisterPage() {
             }
         }
         fetchData();
-    }, []);
+    }, [selectedSport]);
 
     // Player management
     const addPlayer = useCallback(() => {

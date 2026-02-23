@@ -259,25 +259,25 @@ function AdminPlayersPageContent() {
             <ToastContainer toasts={toasts} onClose={removeToast} />
 
             {/* Header */}
-            <div className="sticky top-0 z-30 bg-black/80 backdrop-blur-xl border-b border-white/5 py-6 px-8">
-                <div className="max-w-7xl mx-auto flex flex-col md:flex-row md:items-center justify-between gap-6">
-                    <div className="flex items-center gap-4">
-                        <Link href="/admin" className="p-2 hover:bg-white/5 rounded-xl transition-colors border border-transparent hover:border-white/10 group">
-                            <ArrowLeft size={20} className="group-hover:-translate-x-1 transition-transform" />
+            <div className="sticky top-0 z-30 bg-black/80 backdrop-blur-xl border-b border-white/5 py-4 md:py-6 px-4 md:px-8">
+                <div className="max-w-7xl mx-auto flex flex-col md:flex-row md:items-center justify-between gap-4 md:gap-6">
+                    <div className="flex items-center gap-3 md:gap-4">
+                        <Link href="/admin" className="p-1.5 md:p-2 hover:bg-white/5 rounded-xl transition-colors border border-transparent hover:border-white/10 group">
+                            <ArrowLeft size={18} className="group-hover:-translate-x-1 transition-transform" />
                         </Link>
                         <div>
-                            <h1 className="text-2xl font-display font-black uppercase italic tracking-tighter flex items-center gap-3">
-                                <Users className="text-primary" />
+                            <h1 className="text-xl md:text-2xl font-display font-black uppercase italic tracking-tighter flex items-center gap-2 md:gap-3">
+                                <Users className="text-primary" size={24} />
                                 Player Profiles
                             </h1>
-                            <p className="text-[10px] uppercase tracking-widest font-bold text-white/40">Nexus Athlete Management System</p>
+                            <p className="text-[8px] md:text-[10px] uppercase tracking-widest font-bold text-white/40">Nexus Athlete Management System</p>
                         </div>
                     </div>
 
                     <div className="flex items-center gap-3">
                         <button
                             onClick={handleOpenCreate}
-                            className="flex items-center gap-2 bg-primary text-black px-6 py-3 rounded-2xl font-black uppercase italic text-xs tracking-widest hover:scale-[1.02] active:scale-[0.98] transition-all shadow-[0_0_20px_rgba(var(--primary-rgb),0.3)]"
+                            className="w-full md:w-auto flex items-center justify-center gap-2 bg-primary text-black px-4 md:px-6 py-2.5 md:py-3 rounded-xl md:rounded-2xl font-black uppercase italic text-[10px] md:text-xs tracking-widest hover:scale-[1.02] active:scale-[0.98] transition-all shadow-[0_0_20px_rgba(var(--primary-rgb),0.3)]"
                         >
                             <Plus size={18} strokeWidth={3} />
                             Add Athlete
@@ -286,26 +286,26 @@ function AdminPlayersPageContent() {
                 </div>
             </div>
 
-            <div className="max-w-7xl mx-auto p-8">
+            <div className="max-w-7xl mx-auto p-4 md:p-8">
                 {/* Filters & Search */}
-                <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 mb-8">
-                    <div className="lg:col-span-2 relative group">
-                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20 group-focus-within:text-primary transition-colors" size={20} />
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3 md:gap-4 mb-6 md:mb-8">
+                    <div className="md:col-span-2 lg:col-span-2 relative group">
+                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20 group-focus-within:text-primary transition-colors" size={18} />
                         <input
                             type="text"
-                            placeholder="Search by name, team, university, college..."
+                            placeholder="Search athletes..."
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
-                            className="w-full bg-white/5 border border-white/10 rounded-2xl pl-12 pr-4 py-4 focus:outline-none focus:border-primary/50 transition-all font-bold text-sm"
+                            className="w-full bg-white/5 border border-white/10 rounded-xl md:rounded-2xl pl-11 pr-4 py-3 md:py-4 focus:outline-none focus:border-primary/50 transition-all font-bold text-xs md:text-sm"
                         />
                     </div>
                     {/* University filter — shows players across ALL teams under a university */}
                     <div className="relative">
-                        <Shield className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" size={18} />
+                        <Shield className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" size={16} />
                         <select
                             value={universityFilter}
                             onChange={(e) => { setUniversityFilter(e.target.value); setTeamFilter('all'); }}
-                            className="w-full bg-white/5 border border-white/10 rounded-2xl pl-12 pr-4 py-4 focus:outline-none focus:border-primary/50 transition-all font-bold text-sm appearance-none"
+                            className="w-full bg-white/5 border border-white/10 rounded-xl md:rounded-2xl pl-11 pr-4 py-3 md:py-4 focus:outline-none focus:border-primary/50 transition-all font-bold text-xs md:text-sm appearance-none"
                         >
                             <option value="all">All Universities</option>
                             {universities.map(u => (
@@ -314,11 +314,11 @@ function AdminPlayersPageContent() {
                         </select>
                     </div>
                     <div className="relative">
-                        <Filter className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" size={18} />
+                        <Filter className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" size={16} />
                         <select
                             value={sportFilter}
                             onChange={(e) => setSportFilter(e.target.value)}
-                            className="w-full bg-white/5 border border-white/10 rounded-2xl pl-12 pr-4 py-4 focus:outline-none focus:border-primary/50 transition-all font-bold text-sm appearance-none"
+                            className="w-full bg-white/5 border border-white/10 rounded-xl md:rounded-2xl pl-11 pr-4 py-3 md:py-4 focus:outline-none focus:border-primary/50 transition-all font-bold text-xs md:text-sm appearance-none"
                         >
                             <option value="all">All Sports</option>
                             <option value="Football">Football</option>
@@ -326,11 +326,11 @@ function AdminPlayersPageContent() {
                         </select>
                     </div>
                     <div className="relative">
-                        <Users className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" size={18} />
+                        <Users className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" size={16} />
                         <select
                             value={teamFilter}
                             onChange={(e) => setTeamFilter(e.target.value)}
-                            className="w-full bg-white/5 border border-white/10 rounded-2xl pl-12 pr-4 py-4 focus:outline-none focus:border-primary/50 transition-all font-bold text-sm appearance-none"
+                            className="w-full bg-white/5 border border-white/10 rounded-xl md:rounded-2xl pl-11 pr-4 py-3 md:py-4 focus:outline-none focus:border-primary/50 transition-all font-bold text-xs md:text-sm appearance-none"
                         >
                             <option value="all">All Teams</option>
                             {teams
@@ -343,7 +343,7 @@ function AdminPlayersPageContent() {
                 </div>
 
                 {/* Table */}
-                <div className="bg-white/5 rounded-[2.5rem] border border-white/10 overflow-hidden backdrop-blur-sm">
+                <div className="bg-white/5 rounded-2xl md:rounded-[2.5rem] border border-white/10 overflow-hidden backdrop-blur-sm">
                     {isLoading ? (
                         <div className="p-12 flex flex-col items-center justify-center gap-4">
                             <Loader2 className="animate-spin text-primary" size={40} />
@@ -353,11 +353,11 @@ function AdminPlayersPageContent() {
                         <div className="overflow-x-auto">
                             <table className="w-full text-left border-collapse">
                                 <thead>
-                                    <tr className="border-b border-white/5">
-                                        <th className="px-8 py-6 text-[10px] font-black uppercase tracking-widest text-primary/60 italic">Athlete Info</th>
-                                        <th className="px-8 py-6 text-[10px] font-black uppercase tracking-widest text-primary/60 italic">Position & Team</th>
-                                        <th className="px-8 py-6 text-[10px] font-black uppercase tracking-widest text-primary/60 italic text-center">Stats</th>
-                                        <th className="px-8 py-6 text-[10px] font-black uppercase tracking-widest text-primary/60 italic text-right">Actions</th>
+                                    <tr className="border-b border-white/5 text-nowrap">
+                                        <th className="px-4 md:px-8 py-4 md:py-6 text-[8px] md:text-[10px] font-black uppercase tracking-widest text-primary/60 italic">Athlete Info</th>
+                                        <th className="px-4 md:px-8 py-4 md:py-6 text-[8px] md:text-[10px] font-black uppercase tracking-widest text-primary/60 italic">Position & Team</th>
+                                        <th className="px-4 md:px-8 py-4 md:py-6 text-[8px] md:text-[10px] font-black uppercase tracking-widest text-primary/60 italic text-center">Stats</th>
+                                        <th className="px-4 md:px-8 py-4 md:py-6 text-[8px] md:text-[10px] font-black uppercase tracking-widest text-primary/60 italic text-right">Actions</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -369,63 +369,58 @@ function AdminPlayersPageContent() {
                                                 key={player.id}
                                                 className="border-b border-white/5 hover:bg-white/[0.02] transition-colors group"
                                             >
-                                                <td className="px-8 py-6">
-                                                    <div className="flex items-center gap-4">
-                                                        <div className="w-12 h-12 bg-white/10 rounded-xl flex items-center justify-center overflow-hidden border border-white/10 group-hover:border-primary/30 transition-colors">
+                                                <td className="px-4 md:px-8 py-4 md:py-6">
+                                                    <div className="flex items-center gap-3 md:gap-4">
+                                                        <div className="w-10 h-10 md:w-12 md:h-12 bg-white/10 rounded-lg md:rounded-xl flex items-center justify-center overflow-hidden border border-white/10 group-hover:border-primary/30 transition-colors shrink-0">
                                                             {player.image ? (
                                                                 <img src={player.image} alt="" className="w-full h-full object-cover" />
                                                             ) : (
                                                                 <User className="text-white/20" size={24} />
                                                             )}
                                                         </div>
-                                                        <div>
-                                                            <div className="font-display font-black text-base italic uppercase">{player.name}</div>
-                                                            <div className="text-[10px] font-bold text-white/40 uppercase tracking-tight flex items-center gap-2">
-                                                                {player.jerseyName && <span>{player.jerseyName}</span>}
-                                                                {player.jerseyName && <span className="w-1 h-1 bg-white/10 rounded-full" />}
-                                                                <span className="text-primary/60">ID: {player.id}</span>
+                                                        <div className="min-w-0">
+                                                            <div className="font-display font-black text-sm md:text-base italic uppercase truncate">{player.name}</div>
+                                                            <div className="text-[8px] md:text-[10px] font-bold text-white/40 uppercase tracking-tight flex items-center gap-2">
+                                                                {player.jerseyName && <span className="truncate max-w-[60px] md:max-w-none">{player.jerseyName}</span>}
+                                                                {player.jerseyName && <span className="w-1 h-1 bg-white/10 rounded-full shrink-0" />}
+                                                                <span className="text-primary/60 shrink-0">ID: {player.id.slice(0, 8)}</span>
                                                             </div>
                                                         </div>
                                                     </div>
                                                 </td>
-                                                <td className="px-8 py-6">
-                                                    <div>
+                                                <td className="px-4 md:px-8 py-4 md:py-6">
+                                                    <div className="min-w-[120px]">
                                                         <div className="flex items-center gap-2 mb-1">
-                                                            <span className="px-2 py-0.5 bg-primary/20 text-primary text-[10px] font-black rounded uppercase italic">#{player.number}</span>
-                                                            <span className="font-bold text-sm">{player.position}</span>
+                                                            <span className="px-1.5 py-0.5 bg-primary/20 text-primary text-[8px] md:text-[10px] font-black rounded uppercase italic">#{player.number}</span>
+                                                            <span className="font-bold text-xs md:text-sm">{player.position}</span>
                                                         </div>
-                                                        <div className="text-xs text-white/40 font-semibold">{team?.name || 'Unknown Team'}</div>
-                                                        <div className="text-[10px] text-white/20 uppercase font-black tracking-tighter mt-1 flex items-center gap-1">
-                                                            <span>{player.university || 'Bells University'}</span>
-                                                            {(player.college || player.department) && <span className="w-1 h-1 bg-white/10 rounded-full" />}
-                                                            <span>{player.department || player.college || ''}</span>
+                                                        <div className="text-[10px] md:text-xs text-white/40 font-semibold truncate max-w-[150px]">{team?.name || 'Unknown Team'}</div>
+                                                    </div>
+                                                </td>
+                                                <td className="px-4 md:px-8 py-4 md:py-6">
+                                                    <div className="flex items-center justify-center gap-3 md:gap-4">
+                                                        <div className="text-center">
+                                                            <p className="text-[8px] md:text-[10px] font-black text-white/20 uppercase tracking-tighter">Rating</p>
+                                                            <p className="font-display font-black text-primary italic leading-none text-base md:text-lg">{player.rating?.toFixed(1) || '—'}</p>
+                                                        </div>
+                                                        <div className="w-px h-4 md:h-6 bg-white/10" />
+                                                        <div className="text-center">
+                                                            <p className="text-[8px] md:text-[10px] font-black text-white/20 uppercase tracking-tighter">Age</p>
+                                                            <p className="font-display font-black text-white italic leading-none text-base md:text-lg">{player.age || '—'}</p>
                                                         </div>
                                                     </div>
                                                 </td>
-                                                <td className="px-8 py-6">
-                                                    <div className="flex items-center justify-center gap-4">
-                                                        <div className="text-center">
-                                                            <p className="text-[10px] font-black text-white/20 uppercase tracking-tighter">Rating</p>
-                                                            <p className="font-display font-black text-primary italic leading-none text-lg">{player.rating?.toFixed(1) || '—'}</p>
-                                                        </div>
-                                                        <div className="w-px h-6 bg-white/10" />
-                                                        <div className="text-center">
-                                                            <p className="text-[10px] font-black text-white/20 uppercase tracking-tighter">Age</p>
-                                                            <p className="font-display font-black text-white italic leading-none text-lg">{player.age || '—'}</p>
-                                                        </div>
-                                                    </div>
-                                                </td>
-                                                <td className="px-8 py-6 text-right">
-                                                    <div className="flex items-center justify-end gap-2">
+                                                <td className="px-4 md:px-8 py-4 md:py-6 text-right">
+                                                    <div className="flex items-center justify-end gap-1 md:gap-2">
                                                         <button
                                                             onClick={() => handleOpenEdit(player)}
-                                                            className="p-2 hover:bg-white/10 rounded-xl transition-all border border-transparent hover:border-white/10 group/btn"
+                                                            className="p-1.5 md:p-2 hover:bg-white/5 rounded-lg md:rounded-xl transition-all border border-transparent hover:border-white/10 group/btn"
                                                         >
                                                             <Edit size={18} className="text-white/40 group-hover/btn:text-white" />
                                                         </button>
                                                         <button
                                                             onClick={() => confirmDelete(player)}
-                                                            className="p-2 hover:bg-red-500/10 rounded-xl transition-all border border-transparent hover:border-red-500/20 group/btn"
+                                                            className="p-1.5 md:p-2 hover:bg-red-500/10 rounded-lg md:rounded-xl transition-all border border-transparent hover:border-red-500/20 group/btn"
                                                         >
                                                             <Trash2 size={18} className="text-white/40 group-hover/btn:text-red-500" />
                                                         </button>
