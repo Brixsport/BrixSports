@@ -72,13 +72,13 @@ function LoginPageContent() {
             const data = await response.json();
 
             if (!response.ok) {
-                throw new Error(data.error || "Something went wrong");
+                const error = new Error(data.error || "Something went wrong") as any;
+                error.code = data.code;
+                throw error;
             }
 
             // Store token and user data
             localStorage.setItem("authToken", data.token);
-            localStorage.setItem("user", JSON.stringify(data.user));
-
             setSuccess(true);
             toast.success("Welcome back!", {
                 description: "You have successfully logged in.",
@@ -93,7 +93,14 @@ function LoginPageContent() {
         } catch (error) {
             console.error("Login error:", error);
             toast.error("Login failed", {
-                description: error instanceof Error ? error.message : "Please check your credentials and try again.",
+                description: (
+                    <div className="flex flex-col gap-1">
+                        <p>{error instanceof Error ? error.message : "Please check your credentials and try again."}</p>
+                        {(error as any).code && (
+                            <p className="text-[10px] font-mono uppercase opacity-50">Code: {(error as any).code}</p>
+                        )}
+                    </div>
+                ),
             });
         } finally {
             if (!success) setIsLoading(false);

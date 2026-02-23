@@ -93,7 +93,9 @@ export default function SignupPage() {
             const data = await response.json();
 
             if (!response.ok) {
-                throw new Error(data.error || "Something went wrong");
+                const error = new Error(data.error || "Something went wrong") as any;
+                error.code = data.code;
+                throw error;
             }
 
             // Store token and user data
@@ -118,7 +120,14 @@ export default function SignupPage() {
         } catch (error) {
             console.error("Signup error:", error);
             toast.error("Registration failed", {
-                description: error instanceof Error ? error.message : "Please try again later.",
+                description: (
+                    <div className="flex flex-col gap-1">
+                        <p>{error instanceof Error ? error.message : "Please try again later."}</p>
+                        {(error as any).code && (
+                            <p className="text-[10px] font-mono uppercase opacity-50">Code: {(error as any).code}</p>
+                        )}
+                    </div>
+                ),
             });
         } finally {
             if (!success) setIsLoading(false);

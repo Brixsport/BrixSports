@@ -20,7 +20,7 @@ export function AuthModal() {
     const [password, setPassword] = useState('');
     const [showPassword, setShowPassword] = useState(false);
     const [loading, setLoading] = useState(false);
-    const [error, setError] = useState('');
+    const [error, setError] = useState<{ message: string; code?: string } | null>(null);
     const [success, setSuccess] = useState('');
 
     // Password strength indicator
@@ -32,7 +32,7 @@ export function AuthModal() {
             setName('');
             setEmail('');
             setPassword('');
-            setError('');
+            setError(null);
             setSuccess('');
             setShowPassword(false);
         }
@@ -58,7 +58,7 @@ export function AuthModal() {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        setError('');
+        setError(null);
         setSuccess('');
         setLoading(true);
 
@@ -68,12 +68,12 @@ export function AuthModal() {
                 if (result.success) {
                     setSuccess('Login successful!');
                 } else {
-                    setError(result.error || 'Login failed');
+                    setError({ message: result.error || 'Login failed', code: result.code });
                 }
             } else {
                 // Validate password strength for registration
                 if (passwordStrength === 'weak') {
-                    setError('Please use a stronger password');
+                    setError({ message: 'Please use a stronger password', code: 'AUTH_WEAK_PASSWORD' });
                     setLoading(false);
                     return;
                 }
@@ -82,11 +82,11 @@ export function AuthModal() {
                 if (result.success) {
                     setSuccess('Registration successful!');
                 } else {
-                    setError(result.error || 'Registration failed');
+                    setError({ message: result.error || 'Registration failed', code: result.code });
                 }
             }
         } catch (err) {
-            setError('An unexpected error occurred');
+            setError({ message: 'An unexpected error occurred', code: 'AUTH_UNKNOWN_ERROR' });
         } finally {
             setLoading(false);
         }
@@ -147,9 +147,16 @@ export function AuthModal() {
                         <form onSubmit={handleSubmit} className="p-6 space-y-4">
                             {/* Error/Success Messages */}
                             {error && (
-                                <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-3 flex items-center gap-2">
-                                    <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0" />
-                                    <p className="text-sm text-red-200">{error}</p>
+                                <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-3 flex flex-col gap-1">
+                                    <div className="flex items-center gap-2">
+                                        <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0" />
+                                        <p className="text-sm text-red-200 font-medium">{error.message}</p>
+                                    </div>
+                                    {error.code && (
+                                        <p className="text-[10px] text-red-500/60 font-mono uppercase ml-7">
+                                            Code: {error.code}
+                                        </p>
+                                    )}
                                 </div>
                             )}
 

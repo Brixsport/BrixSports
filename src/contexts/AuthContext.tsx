@@ -15,8 +15,8 @@ interface AuthContextType {
     user: User | null;
     loading: boolean;
     isAuthenticated: boolean;
-    login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
-    register: (name: string, email: string, password: string) => Promise<{ success: boolean; error?: string }>;
+    login: (email: string, password: string) => Promise<{ success: boolean; error?: string; code?: string }>;
+    register: (name: string, email: string, password: string) => Promise<{ success: boolean; error?: string; code?: string }>;
     logout: () => Promise<void>;
     refreshSession: () => Promise<void>;
     openAuthModal: (returnUrl?: string) => void;
@@ -117,11 +117,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
                 return { success: true };
             } else {
-                return { success: false, error: data.error || 'Login failed' };
+                return { success: false, error: data.error || 'Login failed', code: data.code };
             }
         } catch (error) {
             console.error('Login error:', error);
-            return { success: false, error: 'Network error' };
+            return { success: false, error: 'Network error', code: 'AUTH_NETWORK_ERROR' };
         }
     }, [returnUrl, router]);
 
@@ -149,11 +149,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
                 return { success: true };
             } else {
-                return { success: false, error: data.error || 'Registration failed' };
+                return { success: false, error: data.error || 'Registration failed', code: data.code };
             }
         } catch (error) {
             console.error('Registration error:', error);
-            return { success: false, error: 'Network error' };
+            return { success: false, error: 'Network error', code: 'AUTH_NETWORK_ERROR' };
         }
     }, [returnUrl, router]);
 

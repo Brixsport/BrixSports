@@ -9,6 +9,13 @@ export const metadata: Metadata = {
     title: 'Brix Admin | Statistics & Management',
     description: 'Admin dashboard for Brixsport',
     manifest: '/manifest-admin.json',
+    icons: {
+        icon: [
+            { url: '/assests/Logos/BRIX-SPORT-LOGO.png', type: 'image/png' },
+            { url: '/favicon.ico', sizes: 'any' },
+        ],
+        apple: '/assests/Logos/BRIX-SPORT-LOGO.png',
+    },
 };
 
 export default async function AdminLayout({

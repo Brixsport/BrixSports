@@ -15,7 +15,10 @@ export async function POST(request: NextRequest) {
         // Validate input
         if (!email || !password || !name) {
             return NextResponse.json(
-                { error: 'Email, password, and name are required' },
+                {
+                    error: 'Email, password, and name are required',
+                    code: 'AUTH_MISSING_CREDENTIALS'
+                },
                 { status: 400 }
             );
         }
@@ -24,7 +27,10 @@ export async function POST(request: NextRequest) {
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
         if (!emailRegex.test(email)) {
             return NextResponse.json(
-                { error: 'Invalid email format' },
+                {
+                    error: 'Invalid email format',
+                    code: 'AUTH_INVALID_EMAIL'
+                },
                 { status: 400 }
             );
         }
@@ -32,7 +38,10 @@ export async function POST(request: NextRequest) {
         // Validate password strength
         if (password.length < 6) {
             return NextResponse.json(
-                { error: 'Password must be at least 6 characters' },
+                {
+                    error: 'Password must be at least 6 characters',
+                    code: 'AUTH_WEAK_PASSWORD'
+                },
                 { status: 400 }
             );
         }
@@ -46,7 +55,10 @@ export async function POST(request: NextRequest) {
 
         if (existingUser) {
             return NextResponse.json(
-                { error: 'User with this email already exists' },
+                {
+                    error: 'User with this email already exists',
+                    code: 'AUTH_USER_EXISTS'
+                },
                 { status: 409 }
             );
         }
@@ -103,7 +115,10 @@ export async function POST(request: NextRequest) {
     } catch (error) {
         console.error('Registration error:', error);
         return NextResponse.json(
-            { error: 'Registration failed. Please try again.' },
+            {
+                error: 'Registration failed. Please try again.',
+                code: 'AUTH_INTERNAL_ERROR'
+            },
             { status: 500 }
         );
     }
