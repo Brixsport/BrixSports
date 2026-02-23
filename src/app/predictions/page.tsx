@@ -61,9 +61,8 @@ export default function PredictionsPage() {
     const [loading, setLoading] = useState(true);
     const [activeTab, setActiveTab] = useState<'predict' | 'leaderboard'>('predict');
 
-    // Mock user ID
+    // Mock user ID - in a real app this would come from auth
     const userId = 'user-1';
-    const userName = 'Guest User';
 
     useEffect(() => {
         fetchUpcomingMatches();
@@ -162,39 +161,39 @@ export default function PredictionsPage() {
     };
 
     return (
-        <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
+        <div className="min-h-screen bg-[#050505] text-white">
             {/* Header */}
-            <div className="border-b border-slate-800 bg-slate-900/50 backdrop-blur-xl sticky top-0 z-40">
+            <div className="border-b border-white/10 bg-[#0a0a0a]/50 backdrop-blur-xl sticky top-0 z-40">
                 <div className="max-w-7xl mx-auto px-6 py-4">
                     <div className="flex items-center justify-between">
                         <div className="flex items-center gap-4">
                             <Link
                                 href="/"
-                                className="flex items-center gap-2 text-slate-400 hover:text-white transition-colors"
+                                className="flex items-center gap-2 text-white/40 hover:text-white transition-colors"
                             >
                                 <ArrowLeft className="w-5 h-5" />
-                                Back
+                                <span className="text-sm font-bold uppercase tracking-widest">Back</span>
                             </Link>
-                            <div className="h-6 w-px bg-slate-700" />
-                            <h1 className="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-400">
+                            <div className="h-6 w-px bg-white/10" />
+                            <h1 className="text-2xl font-display italic uppercase tracking-tighter text-transparent bg-clip-text bg-gradient-to-r from-primary to-primary/60">
                                 Match Predictions
                             </h1>
                         </div>
 
                         {/* User Stats */}
                         <div className="flex items-center gap-4">
-                            <div className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-yellow-500/20 to-orange-500/20 rounded-lg border border-yellow-500/20">
-                                <Trophy className="w-5 h-5 text-yellow-400" />
-                                <span className="font-bold text-white">{userStats.totalPoints} pts</span>
+                            <div className="flex items-center gap-2 px-4 py-2 bg-primary/10 rounded-xl border border-primary/20">
+                                <Trophy className="w-4 h-4 text-primary" />
+                                <span className="font-bold text-sm">{userStats.totalPoints} PTS</span>
                             </div>
-                            <div className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-500/20 to-blue-500/20 rounded-lg border border-blue-500/20">
-                                <Target className="w-5 h-5 text-blue-400" />
-                                <span className="font-bold text-white">{userStats.accuracy}%</span>
+                            <div className="flex items-center gap-2 px-4 py-2 bg-white/5 rounded-xl border border-white/10">
+                                <Target className="w-4 h-4 text-white/60" />
+                                <span className="font-bold text-sm">{userStats.accuracy}%</span>
                             </div>
                             {userStats.streak > 0 && (
-                                <div className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-red-500/20 to-orange-500/20 rounded-lg border border-red-500/20">
-                                    <Flame className="w-5 h-5 text-orange-400" />
-                                    <span className="font-bold text-white">{userStats.streak} streak</span>
+                                <div className="flex items-center gap-2 px-4 py-2 bg-orange-500/10 rounded-xl border border-orange-500/20">
+                                    <Flame className="w-4 h-4 text-orange-500" />
+                                    <span className="font-bold text-sm">{userStats.streak} STREAK</span>
                                 </div>
                             )}
                         </div>
@@ -203,23 +202,23 @@ export default function PredictionsPage() {
             </div>
 
             {/* Tabs */}
-            <div className="max-w-7xl mx-auto px-6 py-6">
-                <div className="flex gap-2 mb-8">
+            <div className="max-w-7xl mx-auto px-6 py-8">
+                <div className="flex gap-2 mb-10">
                     <button
                         onClick={() => setActiveTab('predict')}
-                        className={`flex items-center gap-2 px-6 py-3 rounded-xl font-semibold transition-all ${activeTab === 'predict'
-                            ? 'bg-gradient-to-r from-cyan-500 to-blue-500 text-white shadow-lg shadow-cyan-500/50'
-                            : 'bg-slate-800/50 text-slate-300 hover:bg-slate-700/50'
+                        className={`flex items-center gap-2 px-8 py-4 rounded-2xl font-black uppercase tracking-widest transition-all ${activeTab === 'predict'
+                            ? 'bg-primary text-black shadow-lg shadow-primary/20 scale-105'
+                            : 'bg-white/5 text-white/40 hover:bg-white/10'
                             }`}
                     >
                         <Target className="w-5 h-5" />
-                        Make Predictions
+                        Predict
                     </button>
                     <button
                         onClick={() => setActiveTab('leaderboard')}
-                        className={`flex items-center gap-2 px-6 py-3 rounded-xl font-semibold transition-all ${activeTab === 'leaderboard'
-                            ? 'bg-gradient-to-r from-cyan-500 to-blue-500 text-white shadow-lg shadow-cyan-500/50'
-                            : 'bg-slate-800/50 text-slate-300 hover:bg-slate-700/50'
+                        className={`flex items-center gap-2 px-8 py-4 rounded-2xl font-black uppercase tracking-widest transition-all ${activeTab === 'leaderboard'
+                            ? 'bg-primary text-black shadow-lg shadow-primary/20 scale-105'
+                            : 'bg-white/5 text-white/40 hover:bg-white/10'
                             }`}
                     >
                         <Trophy className="w-5 h-5" />
@@ -229,18 +228,18 @@ export default function PredictionsPage() {
 
                 {/* Content */}
                 {activeTab === 'predict' ? (
-                    <div className="space-y-6">
+                    <div className="space-y-8">
                         {loading ? (
                             <div className="space-y-4">
                                 {[...Array(3)].map((_, i) => (
-                                    <div key={i} className="animate-pulse bg-slate-800/50 rounded-2xl h-48" />
+                                    <div key={i} className="animate-pulse bg-white/5 rounded-3xl h-64" />
                                 ))}
                             </div>
                         ) : upcomingMatches.length === 0 ? (
-                            <div className="text-center py-20">
-                                <Calendar className="w-16 h-16 text-slate-600 mx-auto mb-4" />
-                                <h3 className="text-2xl font-bold text-slate-400 mb-2">No upcoming matches</h3>
-                                <p className="text-slate-500">Check back later for new matches to predict!</p>
+                            <div className="text-center py-24 bg-white/5 border border-white/10 rounded-[40px]">
+                                <Calendar className="w-16 h-16 text-white/10 mx-auto mb-6" />
+                                <h3 className="text-2xl font-display italic uppercase tracking-tight text-white/60 mb-2">No upcoming matches</h3>
+                                <p className="text-white/40 text-sm">Check back later for new matches to predict!</p>
                             </div>
                         ) : (
                             upcomingMatches.map((match, index) => (
@@ -256,10 +255,10 @@ export default function PredictionsPage() {
                         )}
                     </div>
                 ) : (
-                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                         {/* Top 3 Podium */}
                         <div className="lg:col-span-3">
-                            <div className="grid grid-cols-3 gap-4 mb-8">
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
                                 {leaderboard.slice(0, 3).map((entry, index) => (
                                     <PodiumCard key={entry.userId} entry={entry} position={index + 1} />
                                 ))}
@@ -268,11 +267,11 @@ export default function PredictionsPage() {
 
                         {/* Full Leaderboard */}
                         <div className="lg:col-span-3">
-                            <div className="bg-slate-800/50 backdrop-blur-sm border border-slate-700/50 rounded-2xl overflow-hidden">
-                                <div className="p-6 border-b border-slate-700">
-                                    <h2 className="text-2xl font-bold text-white">Full Leaderboard</h2>
+                            <div className="bg-white/5 backdrop-blur-sm border border-white/10 rounded-[40px] overflow-hidden">
+                                <div className="px-8 py-8 border-b border-white/10 bg-white/5">
+                                    <h2 className="text-3xl font-display italic uppercase tracking-tighter text-white">Full Leaderboard</h2>
                                 </div>
-                                <div className="divide-y divide-slate-700">
+                                <div className="divide-y divide-white/5">
                                     {leaderboard.map((entry) => (
                                         <LeaderboardRow key={entry.userId} entry={entry} />
                                     ))}
@@ -315,85 +314,111 @@ function PredictionCard({ match, prediction, onPredictionChange, onSubmit, index
 
     return (
         <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
             transition={{ delay: index * 0.1 }}
-            className="bg-slate-800/50 backdrop-blur-sm border border-slate-700/50 rounded-2xl p-6 hover:border-cyan-500/50 transition-all"
+            className="bg-white/5 backdrop-blur-sm border border-white/10 rounded-[40px] p-8 md:p-12 hover:border-primary/40 transition-all group"
         >
             {/* Match Info */}
-            <div className="flex items-center justify-between mb-6">
-                <div className="flex items-center gap-3">
-                    <div className="px-3 py-1 rounded-full bg-purple-500/20 text-purple-400 text-sm font-semibold border border-purple-500/20">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-10">
+                <div className="flex flex-wrap items-center gap-3">
+                    <div className="px-4 py-1.5 rounded-full bg-primary/10 text-primary text-[10px] font-black uppercase tracking-widest border border-primary/20">
                         {match.competition}
                     </div>
-                    <div className="flex items-center gap-2 text-sm text-slate-400">
-                        <Calendar className="w-4 h-4" />
+                    <div className="flex items-center gap-2 text-xs font-bold text-white/40 uppercase tracking-wider">
+                        <Calendar className="w-4 h-4 opacity-50" />
                         {new Date(match.date).toLocaleDateString()}
                     </div>
-                    <div className="flex items-center gap-2 text-sm text-slate-400">
-                        <Clock className="w-4 h-4" />
+                    <div className="flex items-center gap-2 text-xs font-bold text-white/40 uppercase tracking-wider">
+                        <Clock className="w-4 h-4 opacity-50" />
                         {match.time}
                     </div>
                 </div>
             </div>
 
             {/* Teams and Scores */}
-            <div className="grid grid-cols-7 gap-4 items-center mb-6">
+            <div className="grid grid-cols-1 md:grid-cols-7 gap-8 md:gap-4 items-center mb-12">
                 {/* Home Team */}
-                <div className="col-span-3 flex items-center gap-3">
-                    <div className="w-16 h-16 rounded-full bg-slate-700 flex items-center justify-center flex-shrink-0">
-                        <Users className="w-8 h-8 text-slate-400" />
+                <div className="col-span-3 flex items-center gap-6">
+                    <div className="w-20 h-20 md:w-24 md:h-24 rounded-full bg-white/5 border border-white/10 flex items-center justify-center flex-shrink-0 shadow-2xl">
+                        {match.homeTeam.logo ? (
+                            <img src={match.homeTeam.logo} alt={match.homeTeam.name} className="w-12 h-12 md:w-16 md:h-16 object-contain" />
+                        ) : (
+                            <Users className="w-10 h-10 text-white/10" />
+                        )}
                     </div>
                     <div className="flex-1 min-w-0">
-                        <h3 className="font-bold text-white text-lg truncate">{match.homeTeam.name}</h3>
+                        <h3 className="font-display italic uppercase text-2xl md:text-3xl text-white tracking-tighter truncate">{match.homeTeam.name}</h3>
                     </div>
                 </div>
 
-                {/* Score Inputs */}
-                <div className="col-span-1 flex flex-col items-center gap-2">
-                    <input
-                        type="number"
-                        min="0"
-                        max="10"
-                        value={homeScore}
-                        onChange={(e) => handleScoreChange('home', parseInt(e.target.value) || 0)}
-                        className="w-16 h-16 text-center text-3xl font-bold bg-slate-700 border-2 border-slate-600 rounded-xl text-white focus:outline-none focus:border-cyan-500 transition-colors"
-                    />
-                    <span className="text-xs text-slate-500 font-semibold">HOME</span>
-                </div>
+                {/* Score Controls - Desktop & Mobile */}
+                <div className="col-span-1 flex flex-row md:flex-col items-center justify-center gap-4">
+                    <div className="flex flex-col items-center gap-3">
+                        <button
+                            onClick={() => handleScoreChange('home', homeScore + 1)}
+                            className="w-12 h-12 bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl flex items-center justify-center transition-all active:scale-95"
+                        >
+                            <ChevronRight className="w-6 h-6 rotate-[270deg]" />
+                        </button>
+                        <div className="w-20 h-20 bg-white/10 border-2 border-primary/50 rounded-3xl flex items-center justify-center shadow-lg shadow-primary/10">
+                            <span className="text-4xl font-black text-white">{homeScore}</span>
+                        </div>
+                        <button
+                            onClick={() => handleScoreChange('home', homeScore - 1)}
+                            className="w-12 h-12 bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl flex items-center justify-center transition-all active:scale-95"
+                        >
+                            <ChevronRight className="w-6 h-6 rotate-90" />
+                        </button>
+                        <span className="text-[10px] font-black uppercase text-white/20 tracking-widest mt-2">HOME</span>
+                    </div>
 
-                <div className="col-span-1 flex items-center justify-center">
-                    <span className="text-2xl font-bold text-slate-600">VS</span>
-                </div>
+                    <div className="hidden md:flex flex-col items-center py-4">
+                        <div className="w-px h-12 bg-white/10" />
+                        <span className="text-xl font-black text-white/20 italic my-2">VS</span>
+                        <div className="w-px h-12 bg-white/10" />
+                    </div>
 
-                <div className="col-span-1 flex flex-col items-center gap-2">
-                    <input
-                        type="number"
-                        min="0"
-                        max="10"
-                        value={awayScore}
-                        onChange={(e) => handleScoreChange('away', parseInt(e.target.value) || 0)}
-                        className="w-16 h-16 text-center text-3xl font-bold bg-slate-700 border-2 border-slate-600 rounded-xl text-white focus:outline-none focus:border-cyan-500 transition-colors"
-                    />
-                    <span className="text-xs text-slate-500 font-semibold">AWAY</span>
+                    <div className="flex flex-col items-center gap-3">
+                        <button
+                            onClick={() => handleScoreChange('away', awayScore + 1)}
+                            className="w-12 h-12 bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl flex items-center justify-center transition-all active:scale-95"
+                        >
+                            <ChevronRight className="w-6 h-6 rotate-[270deg]" />
+                        </button>
+                        <div className="w-20 h-20 bg-white/10 border-2 border-primary/50 rounded-3xl flex items-center justify-center shadow-lg shadow-primary/10">
+                            <span className="text-4xl font-black text-white">{awayScore}</span>
+                        </div>
+                        <button
+                            onClick={() => handleScoreChange('away', awayScore - 1)}
+                            className="w-12 h-12 bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl flex items-center justify-center transition-all active:scale-95"
+                        >
+                            <ChevronRight className="w-6 h-6 rotate-90" />
+                        </button>
+                        <span className="text-[10px] font-black uppercase text-white/20 tracking-widest mt-2">AWAY</span>
+                    </div>
                 </div>
 
                 {/* Away Team */}
-                <div className="col-span-3 flex items-center gap-3 flex-row-reverse">
-                    <div className="w-16 h-16 rounded-full bg-slate-700 flex items-center justify-center flex-shrink-0">
-                        <Users className="w-8 h-8 text-slate-400" />
+                <div className="col-span-3 flex items-center gap-6 flex-row-reverse">
+                    <div className="w-20 h-20 md:w-24 md:h-24 rounded-full bg-white/5 border border-white/10 flex items-center justify-center flex-shrink-0 shadow-2xl">
+                        {match.awayTeam.logo ? (
+                            <img src={match.awayTeam.logo} alt={match.awayTeam.name} className="w-12 h-12 md:w-16 md:h-16 object-contain" />
+                        ) : (
+                            <Users className="w-10 h-10 text-white/10" />
+                        )}
                     </div>
                     <div className="flex-1 min-w-0 text-right">
-                        <h3 className="font-bold text-white text-lg truncate">{match.awayTeam.name}</h3>
+                        <h3 className="font-display italic uppercase text-2xl md:text-3xl text-white tracking-tighter truncate">{match.awayTeam.name}</h3>
                     </div>
                 </div>
             </div>
 
             {/* Confidence Slider */}
-            <div className="mb-6">
-                <div className="flex items-center justify-between mb-2">
-                    <label className="text-sm font-semibold text-slate-300">Confidence Level</label>
-                    <span className="text-sm font-bold text-cyan-400">{confidence}%</span>
+            <div className="mb-10 p-8 bg-white/5 border border-white/10 rounded-[32px]">
+                <div className="flex items-center justify-between mb-6">
+                    <label className="text-[10px] font-black uppercase tracking-[0.2em] text-white/40">Confidence Level</label>
+                    <span className="text-3xl font-black italic text-primary">{confidence}%</span>
                 </div>
                 <input
                     type="range"
@@ -401,79 +426,105 @@ function PredictionCard({ match, prediction, onPredictionChange, onSubmit, index
                     max="100"
                     value={confidence}
                     onChange={(e) => handleConfidenceChange(parseInt(e.target.value))}
-                    className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-cyan-500"
+                    className="w-full h-3 bg-white/10 rounded-full appearance-none cursor-pointer accent-primary"
+                    style={{
+                        background: `linear-gradient(to right, var(--primary) 0%, var(--primary) ${confidence}%, #ffffff10 ${confidence}%, #ffffff10 100%)`
+                    }}
                 />
+                <div className="flex justify-between mt-4">
+                    <span className="text-[9px] font-black uppercase tracking-widest text-white/20">Not Sure</span>
+                    <span className="text-[9px] font-black uppercase tracking-widest text-white/20">Absolute Certain</span>
+                </div>
             </div>
 
             {/* Submit Button */}
             <button
                 onClick={() => onSubmit(match.id)}
-                className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-gradient-to-r from-cyan-500 to-blue-500 text-white rounded-xl font-semibold hover:shadow-lg hover:shadow-cyan-500/50 transition-all"
+                className="w-full relative group/btn overflow-hidden px-8 py-6 bg-primary text-black rounded-3xl font-black uppercase tracking-[0.3em] transition-all hover:scale-[1.02] active:scale-[0.98] shadow-2xl shadow-primary/20"
             >
-                <Target className="w-5 h-5" />
-                Submit Prediction
+                <div className="relative z-10 flex items-center justify-center gap-3">
+                    <Target className="w-6 h-6" />
+                    <span>Confirm Prediction</span>
+                </div>
+                <div className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/20 to-white/0 -translate-x-full group-hover/btn:animate-[shimmer_2s_infinite]" />
             </button>
         </motion.div>
     );
 }
 
 function PodiumCard({ entry, position }: { entry: LeaderboardEntry; position: number }) {
-    const colors = {
-        1: 'from-yellow-500 to-orange-500',
-        2: 'from-slate-400 to-slate-500',
-        3: 'from-amber-700 to-amber-800',
-    };
-
-    const heights = {
-        1: 'h-48',
-        2: 'h-40',
-        3: 'h-32',
-    };
+    const isFirst = position === 1;
 
     return (
         <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: position * 0.1 }}
-            className={`bg-gradient-to-br ${colors[position as keyof typeof colors]} rounded-2xl p-6 ${heights[position as keyof typeof heights]} flex flex-col items-center justify-center text-white relative overflow-hidden`}
+            className={`relative group bg-white/5 border ${isFirst ? 'border-primary' : 'border-white/10'} rounded-[40px] p-8 flex flex-col items-center justify-center overflow-hidden transition-all hover:bg-white/10`}
         >
-            <div className="absolute top-4 right-4 text-6xl font-black opacity-10">#{position}</div>
-            <Trophy className="w-12 h-12 mb-3" />
-            <h3 className="font-bold text-lg mb-1">{entry.userName}</h3>
-            <p className="text-2xl font-black mb-1">{entry.totalPoints} pts</p>
-            <p className="text-sm opacity-90">{entry.accuracy}% accuracy</p>
+            {isFirst && (
+                <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-primary to-transparent" />
+            )}
+
+            <div className={`w-16 h-16 rounded-3xl ${isFirst ? 'bg-primary text-black' : 'bg-white/10 text-white/60'} flex items-center justify-center mb-6 relative z-10 shadow-2xl`}>
+                <Trophy size={32} />
+                <div className="absolute -top-2 -right-2 w-8 h-8 rounded-full bg-[#050505] border border-white/10 flex items-center justify-center text-xs font-black">
+                    #{position}
+                </div>
+            </div>
+
+            <h3 className="font-display italic uppercase text-2xl tracking-tighter mb-2">{entry.userName}</h3>
+            <div className="flex items-baseline gap-1 mb-4">
+                <span className="text-4xl font-black text-primary tracking-tighter">{entry.totalPoints}</span>
+                <span className="text-[10px] font-black uppercase text-white/40 tracking-widest">PTS</span>
+            </div>
+
+            <div className="w-full grid grid-cols-2 gap-4 pt-6 border-t border-white/5">
+                <div className="text-center">
+                    <p className="text-[9px] font-black uppercase tracking-widest text-white/20 mb-1">Accuracy</p>
+                    <p className="font-bold text-white/80">{entry.accuracy}%</p>
+                </div>
+                <div className="text-center">
+                    <p className="text-[9px] font-black uppercase tracking-widest text-white/20 mb-1">Streak</p>
+                    <div className="flex items-center justify-center gap-1">
+                        <Flame size={12} className="text-orange-500" />
+                        <p className="font-bold text-white/80">{entry.streak}</p>
+                    </div>
+                </div>
+            </div>
         </motion.div>
     );
 }
 
 function LeaderboardRow({ entry }: { entry: LeaderboardEntry }) {
     return (
-        <div className="p-4 hover:bg-slate-700/30 transition-colors">
+        <div className="px-8 py-6 hover:bg-white/5 transition-all group border-l-4 border-transparent hover:border-primary">
             <div className="flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-cyan-500 to-blue-500 flex items-center justify-center text-white font-bold">
+                <div className="flex items-center gap-6">
+                    <div className="w-12 h-12 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-white/60 font-black italic text-xl group-hover:text-primary group-hover:border-primary/20 transition-all">
                         #{entry.rank}
                     </div>
                     <div>
-                        <h3 className="font-bold text-white">{entry.userName}</h3>
-                        <p className="text-sm text-slate-400">
-                            {entry.correctPredictions}/{entry.totalPredictions} correct
+                        <h3 className="font-bold text-white group-hover:text-primary transition-colors">{entry.userName}</h3>
+                        <p className="text-[10px] font-black uppercase tracking-[0.2em] text-white/20">
+                            {entry.correctPredictions}/{entry.totalPredictions} Correct
                         </p>
                     </div>
                 </div>
-                <div className="flex items-center gap-6">
+
+                <div className="flex items-center gap-12">
                     <div className="text-right">
-                        <p className="text-2xl font-bold text-white">{entry.totalPoints}</p>
-                        <p className="text-xs text-slate-400">points</p>
+                        <p className="text-2xl font-black text-primary tracking-tighter">{entry.totalPoints}</p>
+                        <p className="text-[9px] font-black uppercase tracking-widest text-white/20">Points</p>
                     </div>
-                    <div className="text-right">
-                        <p className="text-lg font-bold text-blue-400">{entry.accuracy}%</p>
-                        <p className="text-xs text-slate-400">accuracy</p>
+                    <div className="hidden md:block text-right">
+                        <p className="text-lg font-bold text-white/80">{entry.accuracy}%</p>
+                        <p className="text-[9px] font-black uppercase tracking-widest text-white/20">Accuracy</p>
                     </div>
                     {entry.streak > 0 && (
-                        <div className="flex items-center gap-1 px-3 py-1 rounded-full bg-orange-500/20 text-orange-400 border border-orange-500/20">
+                        <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-orange-500/10 text-orange-500 border border-orange-500/20">
                             <Flame className="w-4 h-4" />
-                            <span className="font-bold">{entry.streak}</span>
+                            <span className="font-black italic text-sm">{entry.streak}</span>
                         </div>
                     )}
                 </div>
@@ -481,4 +532,5 @@ function LeaderboardRow({ entry }: { entry: LeaderboardEntry }) {
         </div>
     );
 }
+
 
