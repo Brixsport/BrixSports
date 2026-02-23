@@ -38,16 +38,17 @@ export async function POST(
             );
         }
 
-        // Only initialize for LIVE matches
-        if (match[0].status !== 'LIVE') {
+        // Allow initialization for LIVE or FINISHED matches
+        if (match[0].status !== 'LIVE' && match[0].status !== 'FINISHED') {
             return NextResponse.json(
-                { error: 'Can only initialize ratings for live matches' },
+                { error: 'Can only initialize ratings for live or finished matches' },
                 { status: 400 }
             );
         }
 
         // Get lineups
-        const lineups = match[0].lineups ? JSON.parse(match[0].lineups) : null;
+        const lineupsRaw = match[0].lineups;
+        const lineups = typeof lineupsRaw === 'string' ? JSON.parse(lineupsRaw) : lineupsRaw;
 
         if (!lineups) {
             return NextResponse.json(
@@ -56,9 +57,20 @@ export async function POST(
             );
         }
 
+        // Helper to extract players with team info
+        const getPlayersFromTeam = (teamLineup: any, teamLabel: 'home' | 'away') => {
+            if (!teamLineup) return [];
+            let list = [];
+            if (Array.isArray(teamLineup)) list = teamLineup;
+            else if (teamLineup.starters || teamLineup.bench) {
+                list = [...(teamLineup.starters || []), ...(teamLineup.bench || [])];
+            }
+            return list.map(p => ({ ...p, team: teamLabel }));
+        };
+
         const allPlayers = [
-            ...(lineups.home || []),
-            ...(lineups.away || [])
+            ...getPlayersFromTeam(lineups.home, 'home'),
+            ...getPlayersFromTeam(lineups.away, 'away')
         ];
 
         // Check if ratings already exist
@@ -75,31 +87,36 @@ export async function POST(
         }
 
         // Create initial ratings for all players
-        const ratingsToCreate = allPlayers.map(entry => ({
-            id: `rating-${matchId}-${entry.playerId}-${Date.now()}`,
-            matchId,
-            playerId: entry.playerId,
-            teamId: entry.playerId.includes('home') ? match[0].homeTeamId : match[0].awayTeamId, // Simplified - should be determined properly
-            autoRating: 6.0,
-            finalRating: null,
-            adjustedBy: null,
-            adjustmentNotes: null,
-            adjustmentTime: null,
-            isMotM: false,
-            ratingBreakdown: JSON.stringify({
-                goals: 0,
-                assists: 0,
-                eyePoints: 0,
-                cards: 0,
-                shots: 0,
-                fouls: 0,
-                positionBonus: 0
-            })
-        }));
+        const ratingsToCreate = allPlayers.map(entry => {
+            const playerId = entry.playerId || entry.id; // Handle both formats
+            if (!playerId) return null;
+
+            return {
+                id: `rating-${matchId}-${playerId}-${Date.now()}`,
+                matchId,
+                playerId,
+                teamId: entry.team === 'home' ? match[0].homeTeamId : match[0].awayTeamId,
+                autoRating: 6.0,
+                finalRating: null,
+                adjustedBy: null,
+                adjustmentNotes: null,
+                adjustmentTime: null,
+                isMotM: false,
+                ratingBreakdown: {
+                    goals: 0,
+                    assists: 0,
+                    eyePoints: 0,
+                    cards: 0,
+                    shots: 0,
+                    fouls: 0,
+                    positionBonus: 0
+                }
+            };
+        }).filter(Boolean);
 
         // Insert all ratings
         if (ratingsToCreate.length > 0) {
-            await db.insert(playerRatings).values(ratingsToCreate);
+            await db.insert(playerRatings).values(ratingsToCreate as any);
         }
 
         return NextResponse.json({

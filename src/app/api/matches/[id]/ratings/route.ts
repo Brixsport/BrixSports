@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
 import { playerRatings, ratingHistory } from '@/db/schema-ratings';
 import { matches, players, matchEvents } from '@/db/schema';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, sql } from 'drizzle-orm';
 import { getAuthUser } from '@/lib/auth';
 import { RatingCalculator } from '@/lib/ratingCalculator';
 
@@ -40,6 +40,51 @@ export async function GET(
             .from(playerRatings)
             .leftJoin(players, eq(playerRatings.playerId, players.id))
             .where(eq(playerRatings.matchId, matchId));
+
+        // Check if ratings exist
+        if (ratings.length === 0 && match[0].status === 'FINISHED') {
+            console.log(`[Public Ratings] No ratings for finished match ${matchId}, attempting auto-calc...`);
+
+            try {
+                const protocol = request.headers.get('x-forwarded-proto') || 'http';
+                const host = request.headers.get('host');
+                const baseUrl = `${protocol}://${host}`;
+
+                // Trigger calculation (which also initializes if needed)
+                // Note: We use a POST to ourselves. This requires no specific auth if we allow it, 
+                // but usually ratings calculation requires logger/admin.
+                // For public safety, we might just return empty, but let's try to be helpful.
+
+                const calcRes = await fetch(`${baseUrl}/api/matches/${matchId}/ratings`, {
+                    method: 'POST',
+                    headers: { 'Cookie': request.headers.get('cookie') || '' }
+                });
+
+                if (calcRes.ok) {
+                    // Re-fetch
+                    const newRatings = await db
+                        .select({
+                            rating: playerRatings,
+                            player: players
+                        })
+                        .from(playerRatings)
+                        .leftJoin(players, eq(playerRatings.playerId, players.id))
+                        .where(eq(playerRatings.matchId, matchId));
+
+                    return NextResponse.json({
+                        matchId,
+                        matchStatus: match[0].status,
+                        ratings: newRatings.map(r => ({
+                            ...r.rating,
+                            player: r.player
+                        })),
+                        autoCalculated: true
+                    });
+                }
+            } catch (e) {
+                console.error('[Public Ratings] Auto-calc trigger failed:', e);
+            }
+        }
 
         return NextResponse.json({
             matchId,
@@ -129,44 +174,47 @@ export async function POST(
             return [];
         };
 
-        const allPlayers = [
-            ...getPlayersFromTeam(lineups.home),
-            ...getPlayersFromTeam(lineups.away)
-        ];
+        // Initialize players with team info
+        const homePlayers = getPlayersFromTeam(lineups.home).map(p => ({ ...p, team: 'home' }));
+        const awayPlayers = getPlayersFromTeam(lineups.away).map(p => ({ ...p, team: 'away' }));
+        const allPlayers = [...homePlayers, ...awayPlayers];
+
+        // Fetch all relevant players in one query
+        const playerIds = allPlayers.map(p => p.playerId).filter(Boolean);
+        const playersList = await db
+            .select()
+            .from(players)
+            .where(sql`${players.id} IN (${sql.join(playerIds.map(id => sql`${id}`), sql`, `)})`);
+
+        const playersMap = new Map(playersList.map(p => [p.id, p]));
 
         // Calculate stats for each player
         const playerStats = new Map();
 
         for (const lineupEntry of allPlayers) {
             const playerId = lineupEntry.playerId;
+            if (!playerId) continue;
 
-            // Get player details
-            const playerData = await db
-                .select()
-                .from(players)
-                .where(eq(players.id, playerId))
-                .limit(1);
-
-            if (playerData.length === 0) continue;
-
-            const player = playerData[0];
+            const player = playersMap.get(playerId);
+            if (!player) continue;
 
             // Count events for this player
             const playerEvents = events.filter(e => e.playerId === playerId);
 
             const stats = {
                 playerId,
-                position: lineupEntry.position || player.position,
+                teamId: lineupEntry.team === 'home' ? match[0].homeTeamId : match[0].awayTeamId,
+                position: lineupEntry.position || player.position || 'CM', // Fallback to CM if unknown
                 goals: playerEvents.filter(e => e.type === 'Goal').length,
                 assists: playerEvents.filter(e => e.detail?.includes('assist')).length,
                 eyePoints: playerEvents.filter(e => e.isEyePoint).length,
                 yellowCards: playerEvents.filter(e => e.type === 'Yellow Card').length,
                 redCards: playerEvents.filter(e => e.type === 'Red Card').length,
-                shotsOnTarget: 0, // Would need to track this
+                shotsOnTarget: 0,
                 shotsOffTarget: 0,
                 fouls: playerEvents.filter(e => e.type === 'Foul').length,
                 isSubstituted: playerEvents.some(e => e.type === 'Substitution' && e.detail?.includes('out')),
-                minutesPlayed: 90 // Simplified - would need actual tracking
+                minutesPlayed: 90
             };
 
             playerStats.set(playerId, stats);
@@ -214,7 +262,7 @@ export async function POST(
                     id: ratingId,
                     matchId,
                     playerId,
-                    teamId: stats.position.includes('home') ? match[0].homeTeamId : match[0].awayTeamId,
+                    teamId: stats.teamId,
                     autoRating: rating,
                     ratingBreakdown: breakdown
                 });

@@ -95,13 +95,76 @@ export async function GET(
 
         // Check if ratings exist
         if (ratings.length === 0) {
+            console.log('[Ratings Adjust] No ratings found, attempting auto-calculation...');
+
+            // Call the ratings' POST handler logic internally (by making a request to itself)
+            // or better, just tell the client how to fix it via a more helpful 404
+            // but even better: Let's actually trigger the calculation here.
+
+            try {
+                const protocol = request.headers.get('x-forwarded-proto') || 'http';
+                const host = request.headers.get('host');
+                const baseUrl = `${protocol}://${host}`;
+
+                // Initialize first
+                await fetch(`${baseUrl}/api/matches/${matchId}/ratings/initialize`, {
+                    method: 'POST',
+                    headers: { 'Cookie': request.headers.get('cookie') || '' }
+                });
+
+                // Then calculate
+                const calcRes = await fetch(`${baseUrl}/api/matches/${matchId}/ratings`, {
+                    method: 'POST',
+                    headers: { 'Cookie': request.headers.get('cookie') || '' }
+                });
+
+                if (calcRes.ok) {
+                    // Re-fetch ratings
+                    const newRatings = await db
+                        .select({
+                            rating: playerRatings,
+                            player: players
+                        })
+                        .from(playerRatings)
+                        .leftJoin(players, eq(playerRatings.playerId, players.id))
+                        .where(eq(playerRatings.matchId, matchId));
+
+                    if (newRatings.length > 0) {
+                        return NextResponse.json({
+                            matchId,
+                            match: match,
+                            ratings: newRatings.map(r => {
+                                const position = r.player?.position || '';
+                                const homeScore = match.homeScore ?? 0;
+                                const awayScore = match.awayScore ?? 0;
+
+                                // Simplified logic consistent with the rest of the route
+                                const teamCleanSheet = homeScore === 0 || awayScore === 0;
+                                const teamWon = homeScore > awayScore || awayScore > homeScore;
+
+                                return {
+                                    ...r.rating,
+                                    playerName: r.player?.name,
+                                    playerNumber: r.player?.number,
+                                    playerPosition: position,
+                                    suggestions: RatingCalculator.getSuggestedRange(position, teamCleanSheet, teamWon)
+                                };
+                            }),
+                            lineups: match.lineups ? JSON.parse(match.lineups) : null,
+                            autoCalculated: true
+                        });
+                    }
+                }
+            } catch (e) {
+                console.error('[Ratings Adjust] Auto-calc failed:', e);
+            }
+
             return NextResponse.json(
                 {
                     error: 'No ratings found',
-                    message: 'No player ratings have been calculated for this match yet. Please ensure ratings are initialized first.',
+                    message: 'No player ratings have been calculated for this match yet. We tried to auto-calculate them but failed. Please ensure match lineups are set.',
                     code: 'NO_RATINGS',
-                    matchId,
-                    suggestion: 'Try calculating ratings first using the logger interface or POST /api/matches/' + matchId + '/ratings'
+                    matchId
                 },
                 { status: 404 }
             );

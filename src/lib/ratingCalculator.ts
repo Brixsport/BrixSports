@@ -46,7 +46,7 @@ export class RatingCalculator {
             positionBonus: 0
         };
 
-        const position = stats.position.toLowerCase();
+        const position = (stats.position || 'CM').toLowerCase();
         const isDefensive = position.includes('gk') || position.includes('def') || position.includes('cb') || position.includes('lb') || position.includes('rb');
         const isMidfield = position.includes('mid') || position.includes('cm') || position.includes('cdm') || position.includes('cam');
         const isAttacking = position.includes('fw') || position.includes('st') || position.includes('cf') || position.includes('wing');
