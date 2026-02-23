@@ -40,6 +40,7 @@ interface Team {
     name: string;
     shortName: string;
     sport: string;
+    university: string;
 }
 
 function AdminPlayersPageContent() {
@@ -112,14 +113,22 @@ function AdminPlayersPageContent() {
 
     const filteredPlayers = useMemo(() => {
         return players.filter(p => {
-            const matchesSearch = p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                p.jerseyName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                p.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                p.university?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                p.college?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                p.department?.toLowerCase().includes(searchQuery.toLowerCase());
-
             const team = teams.find(t => t.id === p.teamId);
+            const q = searchQuery.toLowerCase();
+
+            const matchesSearch = !q ||
+                p.name.toLowerCase().includes(q) ||
+                p.jerseyName?.toLowerCase().includes(q) ||
+                p.id.toLowerCase().includes(q) ||
+                // Player-level fields
+                p.university?.toLowerCase().includes(q) ||
+                p.college?.toLowerCase().includes(q) ||
+                p.department?.toLowerCase().includes(q) ||
+                // Team-level fields — catches BUSA teams where university is on the team row
+                team?.university?.toLowerCase().includes(q) ||
+                team?.name?.toLowerCase().includes(q) ||
+                team?.shortName?.toLowerCase().includes(q);
+
             const matchesSport = sportFilter === 'all' || team?.sport === sportFilter;
             const matchesTeam = teamFilter === 'all' || p.teamId === teamFilter;
 
