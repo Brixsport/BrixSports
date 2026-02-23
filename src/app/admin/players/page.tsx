@@ -122,12 +122,13 @@ function AdminPlayersPageContent() {
         }
     };
 
-    // Unique universities derived from teams
+    // Unique universities derived from teams AND players
     const universities = useMemo(() => {
         const seen = new Set<string>();
         teams.forEach(t => { if (t.university) seen.add(t.university); });
+        players.forEach(p => { if (p.university) seen.add(p.university); });
         return Array.from(seen).sort();
-    }, [teams]);
+    }, [teams, players]);
 
     const filteredPlayers = useMemo(() => {
         return players.filter(p => {
