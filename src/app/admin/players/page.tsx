@@ -13,6 +13,7 @@ import { ToastContainer } from '@/components/admin/Toast';
 import ConfirmDialog from '@/components/admin/ConfirmDialog';
 import SkeletonLoader from '@/components/admin/SkeletonLoader';
 import ErrorBoundary from '@/components/admin/ErrorBoundary';
+import ImageUpload from '@/components/ImageUpload';
 
 interface Player {
     id: string;
@@ -75,7 +76,8 @@ function AdminPlayersPageContent() {
         nationality: '',
         college: '',
         department: '',
-        email: ''
+        email: '',
+        image: ''
     });
 
     useEffect(() => {
@@ -134,7 +136,8 @@ function AdminPlayersPageContent() {
             nationality: '',
             college: '',
             department: '',
-            email: ''
+            email: '',
+            image: ''
         });
         setShowModal(true);
     };
@@ -423,9 +426,27 @@ function AdminPlayersPageContent() {
 
                             <form onSubmit={handleSubmit} className="p-8 max-h-[70vh] overflow-y-auto custom-scrollbar space-y-8">
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                                    {/* Primary Info */}
+                                    {/* Profile Image & Core Identity */}
                                     <div className="space-y-6">
-                                        <h3 className="text-[10px] font-black uppercase tracking-[0.3em] text-white/20 border-b border-white/5 pb-2">Core Identity</h3>
+                                        <h3 className="text-[10px] font-black uppercase tracking-[0.3em] text-white/20 border-b border-white/5 pb-2">Profile Visualization</h3>
+                                        <div className="space-y-4">
+                                            <ImageUpload
+                                                value={formData.image || ''}
+                                                onChange={url => setFormData({ ...formData, image: url })}
+                                            />
+                                            <div>
+                                                <label className="block text-[10px] font-black uppercase tracking-widest text-white/40 mb-2 italic">Image URL (Manual Override)</label>
+                                                <input
+                                                    type="text"
+                                                    value={formData.image || ''}
+                                                    onChange={e => setFormData({ ...formData, image: e.target.value })}
+                                                    className="w-full bg-white/5 border border-white/10 rounded-[1.25rem] px-5 py-4 focus:outline-none focus:border-primary/50 font-bold transition-all text-[10px]"
+                                                    placeholder="Paste image URL here..."
+                                                />
+                                            </div>
+                                        </div>
+
+                                        <h3 className="text-[10px] font-black uppercase tracking-[0.3em] text-white/20 border-b border-white/5 pb-2 mt-8">Core Identity</h3>
                                         <div>
                                             <label className="block text-[10px] font-black uppercase tracking-widest text-white/40 mb-2 italic">Full Name</label>
                                             <input
