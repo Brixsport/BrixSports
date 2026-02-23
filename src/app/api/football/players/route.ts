@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/db';
-import { players, teams } from '@/db/schema';
-import { eq, desc, inArray } from 'drizzle-orm';
+import { players, teams, playerTeamAffiliations } from '@/db/schema';
+import { eq, desc, inArray, and } from 'drizzle-orm';
 
 export async function GET(request: Request) {
     try {
@@ -33,44 +33,35 @@ export async function GET(request: Request) {
                 desc(players.rating);
 
         let query = db
-            .select()
-            .from(players);
+            .select({ player: players, team: teams })
+            .from(playerTeamAffiliations)
+            .innerJoin(players, eq(playerTeamAffiliations.playerId, players.id))
+            .innerJoin(teams, eq(playerTeamAffiliations.teamId, teams.id));
 
         // Apply filters
-        const conditions = [];
+        const conditions = [eq(playerTeamAffiliations.isActive, true)];
 
         if (search) {
             conditions.push(eq(players.name, search));
         }
 
         if (teamId) {
-            conditions.push(eq(players.teamId, teamId));
-        } else if (!search) {
-            conditions.push(inArray(players.teamId, footballTeamIds));
+            conditions.push(eq(playerTeamAffiliations.teamId, teamId));
+        } else {
+            conditions.push(inArray(playerTeamAffiliations.teamId, footballTeamIds));
         }
 
-        if (conditions.length > 0) {
-            const { and } = require('drizzle-orm');
-            query = query.where(and(...conditions)) as any;
-        }
+        query = query.where(and(...conditions)) as any;
 
         const footballPlayers = await query
             .orderBy(orderByClause)
             .all();
 
         const transformedPlayers = await Promise.all(
-            footballPlayers.map(async (player) => {
-                const team = await db
-                    .select()
-                    .from(teams)
-                    .where(eq(teams.id, player.teamId))
-                    .get();
-
-                return {
-                    ...player,
-                    team,
-                };
-            })
+            footballPlayers.map(async ({ player, team }) => ({
+                ...player,
+                team,
+            }))
         );
 
         return NextResponse.json({

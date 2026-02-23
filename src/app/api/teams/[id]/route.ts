@@ -5,7 +5,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
-import { teams, players, matches, basketballPlayerStats } from '@/db/schema';
+import { teams, players, matches, basketballPlayerStats, playerTeamAffiliations } from '@/db/schema';
 import { eq, or, desc, and, sql, inArray } from 'drizzle-orm';
 
 interface RouteParams {
@@ -35,46 +35,45 @@ export async function GET(
             );
         }
 
-        // Get team players (directly registered to this team)
-        const teamPlayers = await db
-            .select()
-            .from(players)
-            .where(eq(players.teamId, id))
+        // Get team players via active affiliations
+        const teamPlayerRows = await db
+            .select({ player: players })
+            .from(playerTeamAffiliations)
+            .innerJoin(players, eq(playerTeamAffiliations.playerId, players.id))
+            .where(
+                and(
+                    eq(playerTeamAffiliations.teamId, id),
+                    eq(playerTeamAffiliations.isActive, true)
+                )
+            )
             .orderBy(desc(players.rating));
+
+        const teamPlayers = teamPlayerRows.map(row => row.player);
 
         // UNIVERSITY POOL — all students eligible to represent this university
         // Football analogy: all Spaniards (university affiliation) who can play for Spain (University Team)
         let universityPlayers: typeof teamPlayers = [];
         if (team.university) {
-            universityPlayers = await db
-                .select({
-                    id: players.id, name: players.name, jerseyName: players.jerseyName,
-                    number: players.number, teamId: players.teamId, position: players.position,
-                    rating: players.rating, eyePoints: players.eyePoints, age: players.age,
-                    height: players.height, weight: players.weight, nationality: players.nationality,
-                    college: players.college, department: players.department,
-                    university: players.university, image: players.image,
-                    marketValue: players.marketValue, profileId: players.profileId,
-                    email: players.email, attributes: players.attributes,
-                    createdAt: players.createdAt,
-                })
+            const universityRows = await db
+                .select({ player: players })
                 .from(players)
                 .leftJoin(teams, eq(players.teamId, teams.id))
                 .where(
                     or(
-                        eq(players.university, team.university), // Affiliated personally
-                        eq(teams.university, team.university)    // Affiliated via club
+                        eq(players.university, team.university),
+                        eq(teams.university, team.university)
                     )
                 )
                 .orderBy(desc(players.rating));
 
-            // Deduplicate by ID
+            const deduped: typeof teamPlayers = [];
             const seen = new Set<string>();
-            universityPlayers = universityPlayers.filter(p => {
-                if (seen.has(p.id)) return false;
-                seen.add(p.id);
-                return true;
-            });
+            for (const row of universityRows) {
+                if (seen.has(row.player.id)) continue;
+                seen.add(row.player.id);
+                deduped.push(row.player);
+            }
+            universityPlayers = deduped;
         }
 
         // Get player stats (Basketball)

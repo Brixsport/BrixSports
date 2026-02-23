@@ -8,8 +8,8 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
-import { teams, players, competitions } from '@/db/schema';
-import { eq } from 'drizzle-orm';
+import { teams, players, competitions, playerTeamAffiliations } from '@/db/schema';
+import { eq, and } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { getPlayerProfileId } from '@/db/utils/player-profile';
 
@@ -37,14 +37,23 @@ interface BulkRegisterInput {
     shortName?: string;
     teamColor?: string;
     sport?: string;
+    gender?: string;
     // Players
     players: PlayerInput[];
 }
 
+const BELLS_UNIVERSITY_ALIASES = [
+    'Bells University',
+    'Bells University of Technology',
+];
+
+const isBellsUniversity = (name?: string | null) =>
+    !!name && BELLS_UNIVERSITY_ALIASES.includes(name);
+
 export async function POST(request: NextRequest) {
     try {
         const body: BulkRegisterInput = await request.json();
-        const { players: playerList, teamId, teamName, university, shortName, teamColor, sport, competitionId } = body;
+        const { players: playerList, teamId, teamName, university, shortName, teamColor, sport, competitionId, gender } = body;
 
         // Validate players
         if (!playerList || !Array.isArray(playerList) || playerList.length === 0) {
@@ -65,39 +74,91 @@ export async function POST(request: NextRequest) {
             }
         }
 
+        const npugaCompetitionIds = ['npuga-special-edition-2026', 'npuga-special-edition'];
+        const isNpugaCompetition = !!competitionId && npugaCompetitionIds.includes(competitionId);
+        const normalizedSport = sport || 'Football';
+        const normalizedGender =
+            (gender === 'M' || gender === 'male') ? 'male' :
+                (gender === 'F' || gender === 'female') ? 'female' :
+                    'mixed';
+
         let resolvedTeamId = teamId;
+        let isHomeInstitution = false;
 
-        // If no teamId, create a new team
+        // Resolve or create team
         if (!resolvedTeamId) {
-            if (!teamName || !university || !shortName) {
-                return NextResponse.json(
-                    { error: 'Either teamId or teamName, university, and shortName are required' },
-                    { status: 400 }
-                );
-            }
-
-            // Check if team already exists for this university
-            const existingTeam = await db.query.teams.findFirst({
-                where: (t, { eq, and }) => and(
-                    eq(t.name, teamName),
-                    eq(t.sport, sport || 'Football')
-                ),
-            });
-
-            if (existingTeam) {
-                resolvedTeamId = existingTeam.id;
-            } else {
-                resolvedTeamId = nanoid();
-                await db.insert(teams).values({
-                    id: resolvedTeamId,
-                    name: teamName,
-                    shortName: shortName,
-                    logo: '',
-                    university: university,
-                    color: teamColor || '#6366F1',
-                    sport: sport || 'Football',
-                    createdAt: new Date(),
+            if (isNpugaCompetition && university && sport && gender) {
+                // For NPUGA, derive the team from university + sport + gender
+                const existingTeam = await db.query.teams.findFirst({
+                    where: (t, { and, eq }) => and(
+                        eq(t.university, university),
+                        eq(t.sport, normalizedSport),
+                        eq(t.gender, normalizedGender),
+                    ),
                 });
+
+                if (existingTeam) {
+                    resolvedTeamId = existingTeam.id;
+                    isHomeInstitution =
+                        existingTeam.isHomeInstitution ?? isBellsUniversity(existingTeam.university);
+                } else {
+                    const teamIdGenerated = nanoid();
+                    const sportKey = normalizedSport;
+                    const genderSuffix = normalizedGender === 'male' ? 'Men' : normalizedGender === 'female' ? 'Women' : 'Mixed';
+                    const defaultTeamName = `${university} ${sportKey} ${genderSuffix}`;
+
+                    await db.insert(teams).values({
+                        id: teamIdGenerated,
+                        name: teamName || defaultTeamName,
+                        shortName: shortName || `${university?.slice(0, 3)?.toUpperCase() || 'TMP'}-${sportKey[0]?.toUpperCase() || 'S'}-${genderSuffix[0]}`,
+                        logo: '',
+                        university,
+                        gender: normalizedGender,
+                        isHomeInstitution: isBellsUniversity(university),
+                        color: teamColor || '#6366F1',
+                        sport: normalizedSport,
+                        createdAt: new Date(),
+                    });
+
+                    resolvedTeamId = teamIdGenerated;
+                    isHomeInstitution = isBellsUniversity(university);
+                }
+            } else {
+                // Generic bulk registration: require explicit team data
+                if (!teamName || !university || !shortName) {
+                    return NextResponse.json(
+                        { error: 'Either teamId or teamName, university, and shortName are required' },
+                        { status: 400 }
+                    );
+                }
+
+                const existingTeam = await db.query.teams.findFirst({
+                    where: (t, { and, eq }) => and(
+                        eq(t.name, teamName),
+                        eq(t.sport, normalizedSport)
+                    ),
+                });
+
+                if (existingTeam) {
+                    resolvedTeamId = existingTeam.id;
+                    isHomeInstitution =
+                        existingTeam.isHomeInstitution ?? isBellsUniversity(existingTeam.university);
+                } else {
+                    resolvedTeamId = nanoid();
+                    await db.insert(teams).values({
+                        id: resolvedTeamId,
+                        name: teamName,
+                        shortName: shortName,
+                        logo: '',
+                        university,
+                        gender: normalizedGender,
+                        isHomeInstitution: isBellsUniversity(university),
+                        color: teamColor || '#6366F1',
+                        sport: normalizedSport,
+                        createdAt: new Date(),
+                    });
+                    isHomeInstitution = isBellsUniversity(university);
+                }
             }
         } else {
             // Verify team exists
@@ -110,7 +171,11 @@ export async function POST(request: NextRequest) {
                     { status: 404 }
                 );
             }
+            isHomeInstitution =
+                existingTeam.isHomeInstitution ?? isBellsUniversity(existingTeam.university);
         }
+
+        const isExternalTeam = isNpugaCompetition && !isHomeInstitution;
 
         // Create player records
         const createdPlayers = [];
@@ -130,28 +195,85 @@ export async function POST(request: NextRequest) {
                 continue;
             }
 
-            const playerId = nanoid();
-            // Get or create profileId for multi-sport linking
-            const profileId = await getPlayerProfileId(p.email);
+            let playerId: string;
+            let profileId: string | null = null;
 
-            await db.insert(players).values({
-                id: playerId,
-                name: p.name,
-                jerseyName: p.jerseyName || p.name.split(' ').pop()?.toUpperCase() || p.name,
-                number: p.number,
+            // For Bells players in NPUGA, try to reuse existing player profiles by email
+            const isBellsHome =
+                isNpugaCompetition &&
+                isHomeInstitution &&
+                !!p.email;
+
+            if (isBellsHome) {
+                const existingPlayer = await db.query.players.findFirst({
+                    where: (pl, { eq }) => eq(pl.email, p.email!),
+                });
+
+                if (existingPlayer) {
+                    playerId = existingPlayer.id;
+                    profileId = existingPlayer.profileId;
+                } else {
+                    playerId = nanoid();
+                    profileId = await getPlayerProfileId(p.email);
+
+                    await db.insert(players).values({
+                        id: playerId,
+                        name: p.name,
+                        jerseyName: p.jerseyName || p.name.split(' ').pop()?.toUpperCase() || p.name,
+                        number: p.number,
+                        teamId: resolvedTeamId!,
+                        position: p.position,
+                        age: p.age || null,
+                        height: p.height || null,
+                        weight: p.weight || null,
+                        nationality: p.nationality || 'Nigeria',
+                        college: isExternalTeam ? null : p.college || null,
+                        department: isExternalTeam ? null : p.department || null,
+                        image: p.image || null,
+                        email: p.email || null,
+                        profileId,
+                        rating: 7.0,
+                        eyePoints: 0,
+                        createdAt: new Date(),
+                    });
+                }
+            } else {
+                playerId = nanoid();
+                profileId = await getPlayerProfileId(p.email);
+
+                await db.insert(players).values({
+                    id: playerId,
+                    name: p.name,
+                    jerseyName: p.jerseyName || p.name.split(' ').pop()?.toUpperCase() || p.name,
+                    number: p.number,
+                    teamId: resolvedTeamId!,
+                    position: p.position,
+                    age: p.age || null,
+                    height: p.height || null,
+                    weight: p.weight || null,
+                    nationality: p.nationality || 'Nigeria',
+                    college: isExternalTeam ? null : p.college || null,
+                    department: isExternalTeam ? null : p.department || null,
+                    image: p.image || null,
+                    email: p.email || null,
+                    profileId,
+                    rating: 7.0,
+                    eyePoints: 0,
+                    createdAt: new Date(),
+                });
+            }
+
+            // Create affiliation to the resolved team
+            await db.insert(playerTeamAffiliations).values({
+                id: nanoid(),
+                playerId,
                 teamId: resolvedTeamId!,
-                position: p.position,
-                age: p.age || null,
-                height: p.height || null,
-                weight: p.weight || null,
-                nationality: p.nationality || 'Nigeria',
-                college: p.college || null,
-                department: p.department || null,
-                image: p.image || null,
-                email: p.email || null,
-                profileId: profileId,
-                rating: 7.0,
-                eyePoints: 0,
+                affiliationType: isNpugaCompetition
+                    ? (isHomeInstitution ? 'university' : 'external')
+                    : 'club',
+                isActive: true,
+                joinedDate: new Date(),
+                leftDate: null,
                 createdAt: new Date(),
             });
 

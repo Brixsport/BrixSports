@@ -65,27 +65,20 @@ export async function GET(
                 );
             }
 
-            // Get all players (with affiliations)
+            // Get all players via active affiliations
             const teamAssociatedPlayers = await db
                 .select({
                     player: players,
                     team: teams,
                     affiliation: playerTeamAffiliations,
                 })
-                .from(players)
-                .leftJoin(teams, eq(players.teamId, teams.id))
-                .leftJoin(
-                    playerTeamAffiliations,
+                .from(playerTeamAffiliations)
+                .innerJoin(players, eq(playerTeamAffiliations.playerId, players.id))
+                .innerJoin(teams, eq(playerTeamAffiliations.teamId, teams.id))
+                .where(
                     and(
-                        eq(playerTeamAffiliations.playerId, players.id),
                         eq(playerTeamAffiliations.teamId, teamId),
                         eq(playerTeamAffiliations.isActive, true)
-                    )
-                )
-                .where(
-                    or(
-                        eq(players.teamId, teamId), // Primary team members
-                        eq(playerTeamAffiliations.teamId, teamId) // Affiliated players
                     )
                 );
 
@@ -94,27 +87,45 @@ export async function GET(
                 .map(row => row.player)
                 .filter(p => isPlayerEligible(p, selectedTeam, compLevel));
         } else {
-            // Get all eligible players for both teams
-            const homeTeamPlayers = await db
-                .select()
-                .from(players)
-                .where(eq(players.teamId, match.homeTeamId));
+            // Get all eligible players for both teams via active affiliations
+            const homeAffiliations = await db
+                .select({
+                    player: players,
+                    affiliation: playerTeamAffiliations,
+                })
+                .from(playerTeamAffiliations)
+                .innerJoin(players, eq(playerTeamAffiliations.playerId, players.id))
+                .where(
+                    and(
+                        eq(playerTeamAffiliations.teamId, match.homeTeamId),
+                        eq(playerTeamAffiliations.isActive, true)
+                    )
+                );
 
-            const awayTeamPlayers = await db
-                .select()
-                .from(players)
-                .where(eq(players.teamId, match.awayTeamId));
+            const awayAffiliations = await db
+                .select({
+                    player: players,
+                    affiliation: playerTeamAffiliations,
+                })
+                .from(playerTeamAffiliations)
+                .innerJoin(players, eq(playerTeamAffiliations.playerId, players.id))
+                .where(
+                    and(
+                        eq(playerTeamAffiliations.teamId, match.awayTeamId),
+                        eq(playerTeamAffiliations.isActive, true)
+                    )
+                );
 
             const [homeTeam] = await db.select().from(teams).where(eq(teams.id, match.homeTeamId));
             const [awayTeam] = await db.select().from(teams).where(eq(teams.id, match.awayTeamId));
 
             // Filter eligible players by institutional eligibility
-            const eligibleHome = homeTeamPlayers.filter(p =>
-                isPlayerEligible(p, homeTeam, compLevel)
-            );
-            const eligibleAway = awayTeamPlayers.filter(p =>
-                isPlayerEligible(p, awayTeam, compLevel)
-            );
+            const eligibleHome = homeAffiliations
+                .map(row => row.player)
+                .filter(p => isPlayerEligible(p, homeTeam, compLevel));
+            const eligibleAway = awayAffiliations
+                .map(row => row.player)
+                .filter(p => isPlayerEligible(p, awayTeam, compLevel));
 
             eligiblePlayers = [...eligibleHome, ...eligibleAway];
         }

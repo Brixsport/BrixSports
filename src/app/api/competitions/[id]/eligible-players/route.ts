@@ -55,27 +55,20 @@ export async function GET(
                 );
             }
 
-            // Get players affiliated with this team
+            // Get players affiliated with this team via active affiliations
             const teamPlayers = await db
                 .select({
                     player: players,
                     team: teams,
                     affiliation: playerTeamAffiliations,
                 })
-                .from(players)
-                .leftJoin(teams, eq(players.teamId, teams.id))
-                .leftJoin(
-                    playerTeamAffiliations,
+                .from(playerTeamAffiliations)
+                .innerJoin(players, eq(playerTeamAffiliations.playerId, players.id))
+                .innerJoin(teams, eq(playerTeamAffiliations.teamId, teams.id))
+                .where(
                     and(
-                        eq(playerTeamAffiliations.playerId, players.id),
                         eq(playerTeamAffiliations.teamId, teamId),
                         eq(playerTeamAffiliations.isActive, true)
-                    )
-                )
-                .where(
-                    or(
-                        eq(players.teamId, teamId), // Players with primary team = this team
-                        eq(playerTeamAffiliations.teamId, teamId) // Players affiliated with this team
                     )
                 );
 

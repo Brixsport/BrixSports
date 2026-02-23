@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/db';
-import { teams, players } from '@/db/schema';
-import { eq, inArray } from 'drizzle-orm';
+import { teams, players, playerTeamAffiliations } from '@/db/schema';
+import { eq, inArray, and } from 'drizzle-orm';
 
 export async function GET() {
     try {
@@ -14,14 +14,22 @@ export async function GET() {
             basketballTeamNames.includes(team.name)
         );
 
-        // Fetch players for each team
+        // Fetch players for each team via affiliations
         const teamsWithPlayers = await Promise.all(
             basketballTeams.map(async (team) => {
-                const teamPlayers = await db
-                    .select()
-                    .from(players)
-                    .where(eq(players.teamId, team.id))
+                const teamPlayerRows = await db
+                    .select({ player: players })
+                    .from(playerTeamAffiliations)
+                    .innerJoin(players, eq(playerTeamAffiliations.playerId, players.id))
+                    .where(
+                        and(
+                            eq(playerTeamAffiliations.teamId, team.id),
+                            eq(playerTeamAffiliations.isActive, true)
+                        )
+                    )
                     .all();
+
+                const teamPlayers = teamPlayerRows.map(row => row.player);
 
                 return {
                     ...team,

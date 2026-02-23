@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
-import { fplPlayerData, players, teams } from '@/db/schema';
-import { eq, and, desc, asc, sql } from 'drizzle-orm';
+import { fplPlayerData, players, teams, playerTeamAffiliations } from '@/db/schema';
+import { eq, and, desc, asc } from 'drizzle-orm';
 
 // GET /api/fpl/players - Get FPL player data
 export async function GET(request: NextRequest) {
@@ -23,7 +23,8 @@ export async function GET(request: NextRequest) {
         }
 
         if (teamId) {
-            whereConditions.push(eq(players.teamId, teamId));
+            whereConditions.push(eq(playerTeamAffiliations.teamId, teamId));
+            whereConditions.push(eq(playerTeamAffiliations.isActive, true));
         }
 
         // Determine sort column
@@ -54,7 +55,8 @@ export async function GET(request: NextRequest) {
             })
             .from(fplPlayerData)
             .leftJoin(players, eq(fplPlayerData.playerId, players.id))
-            .leftJoin(teams, eq(players.teamId, teams.id))
+            .leftJoin(playerTeamAffiliations, eq(playerTeamAffiliations.playerId, players.id))
+            .leftJoin(teams, eq(playerTeamAffiliations.teamId, teams.id))
             .where(and(...whereConditions))
             .orderBy(orderFn(orderByColumn))
             .limit(limit);

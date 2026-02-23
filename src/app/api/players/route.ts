@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/db';
-import { players, teams } from '@/db/schema';
+import { players, teams, playerTeamAffiliations } from '@/db/schema';
 import { eq, inArray, or, like } from 'drizzle-orm';
 import { getAuthUser } from '@/lib/auth';
 
@@ -25,21 +25,11 @@ export async function GET(request: Request) {
         }
 
         // Hierarchy filters (Department, College, University)
-        // For university, we also check the team's university field because BUSA teams
-        // (e.g. Kings FC) store the university on the team row, not on each player row.
         if (department || college || university) {
             if (university && !department && !college) {
-                // JOIN teams so we can match either player.university or team.university
-                const results = await db
-                    .select({
-                        id: players.id, name: players.name, jerseyName: players.jerseyName,
-                        number: players.number, teamId: players.teamId, position: players.position,
-                        rating: players.rating, eyePoints: players.eyePoints, age: players.age,
-                        height: players.height, weight: players.weight, nationality: players.nationality,
-                        college: players.college, department: players.department, university: players.university,
-                        image: players.image, marketValue: players.marketValue, profileId: players.profileId,
-                        email: players.email, attributes: players.attributes, createdAt: players.createdAt,
-                    })
+                // Match players by university on either the player row, the primary team, or any affiliation team
+                const primaryRows = await db
+                    .select({ player: players })
                     .from(players)
                     .leftJoin(teams, eq(players.teamId, teams.id))
                     .where(
@@ -48,7 +38,26 @@ export async function GET(request: Request) {
                             eq(teams.university, university)
                         )
                     );
-                return NextResponse.json({ success: true, players: results });
+
+                const affiliationRows = await db
+                    .select({ player: players })
+                    .from(playerTeamAffiliations)
+                    .innerJoin(players, eq(playerTeamAffiliations.playerId, players.id))
+                    .innerJoin(teams, eq(playerTeamAffiliations.teamId, teams.id))
+                    .where(eq(teams.university, university));
+
+                const combinedMap = new Map<string, typeof players.$inferSelect>();
+                for (const row of primaryRows) {
+                    combinedMap.set(row.player.id, row.player);
+                }
+                for (const row of affiliationRows) {
+                    combinedMap.set(row.player.id, row.player);
+                }
+
+                return NextResponse.json({
+                    success: true,
+                    players: Array.from(combinedMap.values()),
+                });
             }
 
             let query = db.select().from(players);
@@ -62,21 +71,79 @@ export async function GET(request: Request) {
             return NextResponse.json({ success: true, players: results });
         }
 
-        // Fetch by team ID
+        // Fetch by team ID via active affiliations
         if (teamId) {
-            const teamPlayers = await db.select().from(players).where(eq(players.teamId, teamId));
-            return NextResponse.json({ success: true, players: teamPlayers });
+            const affiliatedRows = await db
+                .select({ player: players })
+                .from(playerTeamAffiliations)
+                .innerJoin(players, eq(playerTeamAffiliations.playerId, players.id))
+                .where(
+                    and(
+                        eq(playerTeamAffiliations.teamId, teamId),
+                        eq(playerTeamAffiliations.isActive, true)
+                    )
+                );
+
+            return NextResponse.json({
+                success: true,
+                players: affiliatedRows.map(row => row.player),
+            });
         }
 
-        // Search by name
+        // Search across player profile and all affiliations
         if (search) {
-            const searchResults = await db.select().from(players).where(
-                or(
-                    like(players.name, `%${search}%`),
-                    like(players.jerseyName, `%${search}%`)
-                )
-            );
-            return NextResponse.json({ success: true, players: searchResults });
+            const pattern = `%${search}%`;
+
+            // Players matching by their own fields
+            const profileRows = await db
+                .select({ player: players })
+                .from(players)
+                .where(
+                    or(
+                        like(players.name, pattern),
+                        like(players.jerseyName, pattern),
+                        like(players.college, pattern),
+                        like(players.department, pattern),
+                        like(players.university, pattern),
+                        like(players.email, pattern),
+                    )
+                );
+
+            // Teams that match the search text
+            const matchingTeams = await db
+                .select({ id: teams.id })
+                .from(teams)
+                .where(
+                    or(
+                        like(teams.name, pattern),
+                        like(teams.shortName, pattern),
+                        like(teams.university, pattern),
+                    )
+                );
+
+            const teamIds = matchingTeams.map(t => t.id);
+
+            // Players affiliated to matching teams
+            const affiliationRows = teamIds.length
+                ? await db
+                    .select({ player: players })
+                    .from(playerTeamAffiliations)
+                    .innerJoin(players, eq(playerTeamAffiliations.playerId, players.id))
+                    .where(inArray(playerTeamAffiliations.teamId, teamIds))
+                : [];
+
+            const combinedMap = new Map<string, typeof players.$inferSelect>();
+            for (const row of profileRows) {
+                combinedMap.set(row.player.id, row.player);
+            }
+            for (const row of affiliationRows) {
+                combinedMap.set(row.player.id, row.player);
+            }
+
+            return NextResponse.json({
+                success: true,
+                players: Array.from(combinedMap.values()),
+            });
         }
 
         // Fetch all players
