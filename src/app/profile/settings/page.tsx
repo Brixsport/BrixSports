@@ -330,6 +330,7 @@ export default function SettingsPage() {
 
                     {/* Privacy */}
                     <SettingsSection
+                        id="privacy"
                         icon={<Shield size={20} />}
                         title="Privacy & Security"
                         description="Manage your privacy settings"
@@ -399,7 +400,8 @@ export default function SettingsPage() {
     );
 }
 
-function SettingsSection({ icon, title, description, children }: {
+function SettingsSection({ id, icon, title, description, children }: {
+    id?: string;
     icon: React.ReactNode;
     title: string;
     description: string;
@@ -407,7 +409,7 @@ function SettingsSection({ icon, title, description, children }: {
 }) {
     // ... (implementation remains same)
     return (
-        <div className="bg-white/5 border border-white/10 rounded-[32px] p-6 md:p-8">
+        <div id={id} className="bg-white/5 border border-white/10 rounded-[32px] p-6 md:p-8 scroll-mt-24">
             <div className="flex items-start gap-4 mb-6">
                 <div className="w-12 h-12 bg-primary/20 rounded-2xl flex items-center justify-center text-primary">
                     {icon}
