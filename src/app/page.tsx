@@ -458,7 +458,10 @@ export default function Home() {
                 <Search size={18} className="text-white/60" />
               </button>
               <button
-                onClick={() => setIsSettingsOpen(true)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsSettingsOpen(true);
+                }}
                 className="p-2 hover:bg-white/5 rounded-lg transition-colors relative"
               >
                 <Bell size={18} className="text-white/60" />

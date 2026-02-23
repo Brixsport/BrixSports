@@ -22,19 +22,25 @@ export function SettingsOverlay({ onClose }: { onClose: () => void }) {
   const pushService = getPushService();
 
   useEffect(() => {
-    // Load local preferences as fallback
-    const savedPrefs = localStorage.getItem('brixsport_preferences');
-    if (savedPrefs) {
-      setPreferences(JSON.parse(savedPrefs));
-    }
+    try {
+      // Load local preferences as fallback
+      const savedPrefs = localStorage.getItem('brixsport_preferences');
+      if (savedPrefs) {
+        setPreferences(JSON.parse(savedPrefs));
+      }
 
-    // Get user info
-    const userData = localStorage.getItem('user');
-    if (userData) {
-      const parsedUser = JSON.parse(userData);
-      setUser(parsedUser);
-      // Fetch from API
-      fetchPreferences(parsedUser.id);
+      // Get user info
+      const userData = localStorage.getItem('user');
+      if (userData) {
+        const parsedUser = JSON.parse(userData);
+        if (parsedUser && parsedUser.id) {
+          setUser(parsedUser);
+          // Fetch from API
+          fetchPreferences(parsedUser.id);
+        }
+      }
+    } catch (error) {
+      console.error('Error initializing settings:', error);
     }
 
     // Check notification status
@@ -65,13 +71,17 @@ export function SettingsOverlay({ onClose }: { onClose: () => void }) {
   };
 
   const checkPushStatus = async () => {
-    await pushService.init();
-    const permission = pushService.getPermission();
-    setPushStatus(permission);
+    try {
+      await pushService.init();
+      const permission = pushService.getPermission();
+      setPushStatus(permission);
 
-    if (permission === 'granted') {
-      const subscribed = await pushService.isSubscribed();
-      setIsSubscribed(subscribed);
+      if (permission === 'granted') {
+        const subscribed = await pushService.isSubscribed();
+        setIsSubscribed(subscribed);
+      }
+    } catch (error) {
+      console.error('Error checking push status:', error);
     }
   };
 
@@ -164,9 +174,13 @@ export function SettingsOverlay({ onClose }: { onClose: () => void }) {
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
+      onClick={onClose}
       className="fixed inset-0 z-[200] bg-black/98 backdrop-blur-2xl flex items-center justify-center p-4"
     >
-      <div className="max-w-lg w-full bg-white/5 border border-white/10 rounded-[48px] p-8 md:p-12 relative overflow-hidden">
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="max-w-lg w-full bg-white/5 border border-white/10 rounded-[48px] p-8 md:p-12 relative overflow-hidden"
+      >
         <div className="absolute top-0 right-0 p-8 opacity-5 pointer-events-none">
           <Bell size={200} />
         </div>
