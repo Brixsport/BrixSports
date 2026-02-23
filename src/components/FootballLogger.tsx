@@ -145,6 +145,26 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
         }
     };
 
+    // Helper to get only players from the published lineup
+    const getActiveRoster = (team: 'home' | 'away') => {
+        const roster = team === 'home' ? homePlayers : awayPlayers;
+        const teamLineup = lineups[team];
+        if (!teamLineup) return roster;
+
+        const starterList = teamLineup.starters || teamLineup.players || [];
+        const subList = teamLineup.substitutes || [];
+
+        const lineupIds = new Set([
+            ...starterList.map((p: any) => p.playerId || p.id || p),
+            ...subList.map((p: any) => p.playerId || p.id || p)
+        ].filter(Boolean));
+
+        if (lineupIds.size > 0) {
+            return roster.filter(p => lineupIds.has(p.id));
+        }
+        return roster;
+    };
+
     // Initial Load & Manager Setup
     useEffect(() => {
         let unsubscribe: (() => void) | null = null;
@@ -1379,23 +1399,27 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
 
             {showPlayerModal && (
                 <PlayerSelectionModal
-                    players={selectedTeam === 'home' ? homePlayers : awayPlayers}
+                    players={getActiveRoster(selectedTeam)}
                     onSelect={handlePlayerSelect}
                     onClose={() => setShowPlayerModal(false)}
                     title={`Select Player for ${pendingEvent?.type}`}
                     filterGoalkeepersOnly={pendingEvent ? isGoalkeeperOnlyEvent(pendingEvent.type) : false}
                     redCardedPlayerIds={redCardedPlayerIds}
+                    teamLineup={lineups[selectedTeam]}
+                    filterStartersOnly={pendingEvent?.type !== 'Substitution'}
                 />
             )}
 
             {
                 showAssistModal && (
                     <PlayerSelectionModal
-                        players={(selectedTeam === 'home' ? homePlayers : awayPlayers).filter(p => p.id !== selectedEventPlayer)}
+                        players={getActiveRoster(selectedTeam).filter(p => p.id !== selectedEventPlayer)}
                         onSelect={handleAssistSelect}
                         onClose={() => { setShowAssistModal(false); handleAssistSelect(null); }}
                         title="Select Assist (Optional)"
                         redCardedPlayerIds={redCardedPlayerIds}
+                        teamLineup={lineups[selectedTeam]}
+                        filterStartersOnly={true}
                     />
                 )
             }
@@ -1403,11 +1427,13 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
             {
                 showSubInModal && (
                     <PlayerSelectionModal
-                        players={selectedTeam === 'home' ? homePlayers : awayPlayers}
+                        players={getActiveRoster(selectedTeam)}
                         onSelect={handleSubIn}
                         onClose={() => setShowSubInModal(false)}
                         title="Select Player Coming IN"
                         redCardedPlayerIds={redCardedPlayerIds}
+                        teamLineup={lineups[selectedTeam]}
+                        filterSubsOnly={true}
                     />
                 )
             }
@@ -1416,8 +1442,10 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                 showPenaltyModal && (
                     <PenaltySequenceModal
                         attackingTeam={selectedTeam}
-                        homePlayers={homePlayers.filter((p: Player) => !redCardedPlayerIds.has(p.id))}
-                        awayPlayers={awayPlayers.filter((p: Player) => !redCardedPlayerIds.has(p.id))}
+                        homePlayers={getActiveRoster('home').filter((p: Player) => !redCardedPlayerIds.has(p.id))}
+                        awayPlayers={getActiveRoster('away').filter((p: Player) => !redCardedPlayerIds.has(p.id))}
+                        homeLineup={lineups.home}
+                        awayLineup={lineups.away}
                         onClose={() => setShowPenaltyModal(false)}
                         onSubmit={(takerId, foulerId, outcome) => {
                             const attackingTeamId = selectedTeam === 'home' ? match.homeTeamId : match.awayTeamId;
@@ -1824,12 +1852,16 @@ function PenaltySequenceModal({
     attackingTeam,
     homePlayers,
     awayPlayers,
+    homeLineup,
+    awayLineup,
     onClose,
     onSubmit
 }: {
     attackingTeam: 'home' | 'away',
     homePlayers: Player[],
     awayPlayers: Player[],
+    homeLineup: any,
+    awayLineup: any,
     onClose: () => void,
     onSubmit: (takerId: string | null, foulerId: string | null, outcome: 'Scored' | 'Saved' | 'Missed') => void
 }) {
@@ -1840,6 +1872,11 @@ function PenaltySequenceModal({
 
     const attackers = attackingTeam === 'home' ? homePlayers : awayPlayers;
     const defenders = attackingTeam === 'home' ? awayPlayers : homePlayers;
+    const attackerLineup = attackingTeam === 'home' ? homeLineup : awayLineup;
+    const defenderLineup = attackingTeam === 'home' ? awayLineup : homeLineup;
+
+    const attackerStarterIds = new Set((attackerLineup?.starters || attackerLineup?.players || []).map((p: any) => p.playerId || p.id));
+    const defenderStarterIds = new Set((defenderLineup?.starters || defenderLineup?.players || []).map((p: any) => p.playerId || p.id));
 
     return (
         <div className="fixed inset-0 bg-black/95 backdrop-blur-md z-50 flex items-center justify-center p-4 overflow-y-auto">
@@ -1867,12 +1904,14 @@ function PenaltySequenceModal({
                                     <button
                                         key={p.id}
                                         onClick={() => { setFoulerId(p.id); setStep(2); }}
-                                        className="p-3 text-left hover:bg-white/5 bg-black/20 border border-white/5 rounded-xl flex items-center gap-3"
+                                        className={`p-3 text-left hover:bg-white/5 bg-black/20 border rounded-xl flex items-center gap-3 ${defenderStarterIds.has(p.id) ? 'border-primary/20' : 'border-white/5 opacity-60'}`}
                                     >
-                                        <div className="w-8 h-8 bg-white/10 rounded-full flex items-center justify-center text-xs font-black">{p.number}</div>
+                                        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-black ${defenderStarterIds.has(p.id) ? 'bg-primary/20 text-primary' : 'bg-white/10 text-white/40'}`}>
+                                            {p.number}
+                                        </div>
                                         <div>
                                             <div className="font-bold text-sm">{p.name}</div>
-                                            <div className="text-[10px] text-white/40">{p.position}</div>
+                                            <div className="text-[10px] text-white/40">{p.position} {!defenderStarterIds.has(p.id) && '(Bench)'}</div>
                                         </div>
                                     </button>
                                 ))}
@@ -1884,11 +1923,11 @@ function PenaltySequenceModal({
                         <div className="space-y-4">
                             <h4 className="text-sm font-bold text-center mb-4">Who is taking the penalty?</h4>
                             <div className="grid grid-cols-1 gap-2">
-                                {attackers.map((p: Player) => (
+                                {attackers.filter(p => attackerStarterIds.has(p.id)).map((p: Player) => (
                                     <button
                                         key={p.id}
                                         onClick={() => { setTakerId(p.id); setStep(3); }}
-                                        className="p-3 text-left hover:bg-white/5 bg-black/20 border border-white/5 rounded-xl flex items-center gap-3"
+                                        className="p-3 text-left hover:bg-white/5 bg-black/20 border border-primary/20 rounded-xl flex items-center gap-3 shadow-[0_0_15px_-8px_var(--primary)]"
                                     >
                                         <div className="w-8 h-8 bg-primary/20 text-primary rounded-full flex items-center justify-center text-xs font-black border border-primary/20">{p.number}</div>
                                         <div>
@@ -1897,6 +1936,19 @@ function PenaltySequenceModal({
                                         </div>
                                     </button>
                                 ))}
+                                {attackers.filter(p => !attackerStarterIds.has(p.id)).length > 0 && (
+                                    <div className="py-2">
+                                        <p className="text-[9px] font-black uppercase tracking-widest text-white/20 mb-2">Players on Bench</p>
+                                        <div className="grid grid-cols-1 gap-2 opacity-40">
+                                            {attackers.filter(p => !attackerStarterIds.has(p.id)).map(p => (
+                                                <div key={p.id} className="p-2 bg-black/20 border border-white/5 rounded-lg flex items-center gap-3 grayscale">
+                                                    <div className="w-6 h-6 bg-white/5 rounded-full flex items-center justify-center text-[10px] font-bold">{p.number}</div>
+                                                    <div className="text-xs font-bold">{p.name}</div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         </div>
                     )}
@@ -1976,16 +2028,37 @@ function EventButton({ type, icon, label, variant = 'secondary', onClick }: { ty
     );
 }
 
-function PlayerSelectionModal({ players, onSelect, onClose, title, filterGoalkeepersOnly = false, redCardedPlayerIds }: any) {
+function PlayerSelectionModal({
+    players,
+    onSelect,
+    onClose,
+    title,
+    filterGoalkeepersOnly = false,
+    redCardedPlayerIds,
+    teamLineup,
+    filterStartersOnly = false,
+    filterSubsOnly = false
+}: any) {
+    const starterIds = new Set((teamLineup?.starters || teamLineup?.players || []).map((p: any) => p.playerId || p.id));
+
     // Filter players: remove red-carded players and optionally only show goalkeepers
     const filteredPlayers = players.filter((p: Player) => {
         // Always exclude red-carded players
         if (redCardedPlayerIds && redCardedPlayerIds.has(p.id)) return false;
 
+        if (filterStartersOnly && !starterIds.has(p.id)) return false;
+        if (filterSubsOnly && starterIds.has(p.id)) return false;
+
         if (filterGoalkeepersOnly) {
             const pos = p.position?.toLowerCase() || '';
-            return pos.includes('gk') || pos.includes('goalkeeper') || pos.includes('goal keeper') ||
+            const isGK = pos.includes('gk') || pos.includes('goalkeeper') || pos.includes('goal keeper') ||
                 pos === 'g' || pos.includes('goalie') || pos.includes('keeper');
+
+            // Also check if position assigned in lineup is GK
+            const lineupPos = (teamLineup?.starters || []).find((lp: any) => (lp.playerId || lp.id) === p.id)?.position?.toLowerCase() || '';
+            const isLineupGK = lineupPos.includes('gk') || lineupPos.includes('goalkeeper');
+
+            return isGK || isLineupGK;
         }
         return true;
     });
@@ -1994,7 +2067,11 @@ function PlayerSelectionModal({ players, onSelect, onClose, title, filterGoalkee
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
             <div className="bg-zinc-900 border border-white/10 w-full max-w-md max-h-[80vh] flex flex-col rounded-2xl">
                 <div className="p-4 border-b border-white/10 flex justify-between items-center">
-                    <h3 className="font-bold">{title}</h3>
+                    <div>
+                        <h3 className="font-bold">{title}</h3>
+                        {filterStartersOnly && <p className="text-[10px] text-primary uppercase font-black tracking-widest">Active Players Only</p>}
+                        {filterSubsOnly && <p className="text-[10px] text-amber-500 uppercase font-black tracking-widest">Bench Players Only</p>}
+                    </div>
                     <button onClick={onClose}><X size={20} /></button>
                 </div>
                 {filterGoalkeepersOnly && (
@@ -2006,8 +2083,10 @@ function PlayerSelectionModal({ players, onSelect, onClose, title, filterGoalkee
                     {filteredPlayers.length > 0 ? (
                         <div className="grid grid-cols-1 gap-1">
                             {filteredPlayers.map((p: Player) => {
-                                // Logic to determine if they are on the bench (simplified for UI)
-                                const isBench = p.position?.toLowerCase().includes('sub') || p.position?.toLowerCase().includes('reserve');
+                                // Logic to determine if they are on the bench
+                                const isBench = teamLineup
+                                    ? !starterIds.has(p.id)
+                                    : (p.position?.toLowerCase().includes('sub') || p.position?.toLowerCase().includes('reserve'));
 
                                 return (
                                     <button
@@ -2015,7 +2094,7 @@ function PlayerSelectionModal({ players, onSelect, onClose, title, filterGoalkee
                                         onClick={() => onSelect(p.id)}
                                         className="p-3 text-left hover:bg-white/5 rounded-lg flex items-center gap-3 group relative overflow-hidden"
                                     >
-                                        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-colors ${isBench ? 'bg-white/5 text-white/30' : 'bg-white/10 text-white'}`}>
+                                        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-colors ${isBench ? 'bg-white/5 text-white/40' : 'bg-primary/20 text-primary border border-primary/20'}`}>
                                             {p.number}
                                         </div>
                                         <div className="flex-1">
