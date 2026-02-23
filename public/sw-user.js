@@ -43,7 +43,6 @@ self.addEventListener('install', (event) => {
                 console.log('[SW User] Caching static assets');
                 return cache.addAll(STATIC_ASSETS);
             })
-            .then(() => self.skipWaiting())
     );
 });
 

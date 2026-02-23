@@ -45,7 +45,6 @@ self.addEventListener('install', (event) => {
                     console.warn('[SW Admin] Some assets failed to cache:', err);
                 });
             })
-            .then(() => self.skipWaiting())
     );
 });
 

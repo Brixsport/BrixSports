@@ -1,48 +1,99 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { RefreshCw, X } from 'lucide-react';
+import { RefreshCw, X, Loader2 } from 'lucide-react';
 
 export function UpdatePrompt() {
     const [showPrompt, setShowPrompt] = useState(false);
+    const [isUpdating, setIsUpdating] = useState(false);
     const [registration, setRegistration] = useState<ServiceWorkerRegistration | null>(null);
 
-    useEffect(() => {
-        if (!('serviceWorker' in navigator)) {
+    const checkRegistration = useCallback((reg: ServiceWorkerRegistration) => {
+        setRegistration(reg);
+
+        // 1. Check if there's already a waiting worker
+        if (reg.waiting) {
+            console.log('[UpdatePrompt] Waiting worker found on mount');
+            setShowPrompt(true);
             return;
         }
 
-        navigator.serviceWorker.getRegistration().then((reg) => {
-            if (reg) {
-                setRegistration(reg);
+        // 2. Listen for a new worker being installed
+        reg.addEventListener('updatefound', () => {
+            const newWorker = reg.installing;
+            if (!newWorker) return;
 
-                reg.addEventListener('updatefound', () => {
-                    const newWorker = reg.installing;
-
-                    if (newWorker) {
-                        newWorker.addEventListener('statechange', () => {
-                            if (
-                                newWorker.state === 'installed' &&
-                                navigator.serviceWorker.controller
-                            ) {
-                                // New service worker available
-                                setShowPrompt(true);
-                            }
-                        });
-                    }
-                });
-            }
+            console.log('[UpdatePrompt] New worker installing');
+            newWorker.addEventListener('statechange', () => {
+                if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                    console.log('[UpdatePrompt] New worker installed and waiting');
+                    setShowPrompt(true);
+                }
+            });
         });
     }, []);
 
-    const handleUpdate = () => {
-        if (registration?.waiting) {
-            registration.waiting.postMessage({ type: 'SKIP_WAITING' });
+    useEffect(() => {
+        if (typeof window === 'undefined' || !('serviceWorker' in navigator)) {
+            return;
+        }
 
-            navigator.serviceWorker.addEventListener('controllerchange', () => {
+        // Get current registration
+        navigator.serviceWorker.getRegistration().then((reg) => {
+            if (reg) {
+                checkRegistration(reg);
+            }
+        });
+
+        // Also listen for controller change to reload
+        const handleControllerChange = () => {
+            console.log('[UpdatePrompt] Controller changed, reloading...');
+            window.location.reload();
+        };
+
+        navigator.serviceWorker.addEventListener('controllerchange', handleControllerChange);
+
+        return () => {
+            navigator.serviceWorker.removeEventListener('controllerchange', handleControllerChange);
+        };
+    }, [checkRegistration]);
+
+    const handleUpdate = async () => {
+        if (!registration) {
+            console.error('[UpdatePrompt] No registration found');
+            // Try to get it again as a fallback
+            const reg = await navigator.serviceWorker.getRegistration();
+            if (reg?.waiting) {
+                setIsUpdating(true);
+                reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+            } else {
+                // If all else fails, just reload
                 window.location.reload();
-            });
+            }
+            return;
+        }
+
+        if (registration.waiting) {
+            console.log('[UpdatePrompt] Sending SKIP_WAITING message');
+            setIsUpdating(true);
+            registration.waiting.postMessage({ type: 'SKIP_WAITING' });
+        } else {
+            console.warn('[UpdatePrompt] No waiting worker found during update click');
+            // If it disappeared but we think there's an update, maybe it already activated?
+            // Or maybe it's still installing? Let's check reg.installing
+            if (registration.installing) {
+                setIsUpdating(true);
+                // Wait for it to install
+                registration.installing.addEventListener('statechange', (e: any) => {
+                    if (e.target.state === 'installed') {
+                        registration.waiting?.postMessage({ type: 'SKIP_WAITING' });
+                    }
+                });
+            } else {
+                // Last ditch effort
+                window.location.reload();
+            }
         }
     };
 
@@ -59,10 +110,17 @@ export function UpdatePrompt() {
                     exit={{ y: 100, opacity: 0 }}
                     className="fixed bottom-20 left-4 right-4 md:left-auto md:right-4 md:w-96 z-[100] pointer-events-auto"
                 >
-                    <div className="bg-gradient-to-br from-blue-500/20 via-blue-500/10 to-transparent border border-blue-500/30 rounded-3xl p-6 backdrop-blur-xl shadow-2xl shadow-blue-500/20 pointer-events-auto">
+                    <div className="bg-gradient-to-br from-blue-500/20 via-blue-500/10 to-transparent border border-blue-500/30 rounded-3xl p-6 backdrop-blur-xl shadow-2xl shadow-blue-500/20 pointer-events-auto relative overflow-hidden">
+                        {isUpdating && (
+                            <div className="absolute inset-0 bg-black/40 backdrop-blur-sm z-20 flex items-center justify-center">
+                                <Loader2 className="text-white animate-spin" size={32} />
+                            </div>
+                        )}
+
                         <button
                             onClick={handleDismiss}
-                            className="absolute top-4 right-4 text-white/40 hover:text-white transition-colors cursor-pointer z-10"
+                            disabled={isUpdating}
+                            className="absolute top-4 right-4 text-white/40 hover:text-white transition-colors cursor-pointer z-10 disabled:opacity-0"
                             type="button"
                         >
                             <X size={20} />
@@ -85,19 +143,31 @@ export function UpdatePrompt() {
                         <div className="flex gap-3">
                             <button
                                 onClick={handleUpdate}
+                                disabled={isUpdating}
                                 type="button"
-                                className="flex-1 bg-blue-500 text-white font-black uppercase tracking-widest text-xs py-3 px-4 rounded-xl hover:scale-105 transition-transform active:scale-95 shadow-lg shadow-blue-500/30 flex items-center justify-center gap-2 cursor-pointer"
+                                className="flex-1 bg-blue-500 text-white font-black uppercase tracking-widest text-xs py-3 px-4 rounded-xl hover:scale-105 transition-transform active:scale-95 shadow-lg shadow-blue-500/30 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:scale-100"
                             >
-                                <RefreshCw size={16} />
-                                Update Now
+                                {isUpdating ? (
+                                    <>
+                                        <Loader2 size={16} className="animate-spin" />
+                                        Updating...
+                                    </>
+                                ) : (
+                                    <>
+                                        <RefreshCw size={16} />
+                                        Update Now
+                                    </>
+                                )}
                             </button>
-                            <button
-                                onClick={handleDismiss}
-                                type="button"
-                                className="px-4 py-3 text-white/60 hover:text-white text-xs font-bold uppercase tracking-widest transition-colors cursor-pointer"
-                            >
-                                Later
-                            </button>
+                            {!isUpdating && (
+                                <button
+                                    onClick={handleDismiss}
+                                    type="button"
+                                    className="px-4 py-3 text-white/60 hover:text-white text-xs font-bold uppercase tracking-widest transition-colors cursor-pointer"
+                                >
+                                    Later
+                                </button>
+                            )}
                         </div>
                     </div>
                 </motion.div>
@@ -105,3 +175,4 @@ export function UpdatePrompt() {
         </AnimatePresence>
     );
 }
+
