@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
 import { bracketNodes, teams, matches } from '@/db/schema';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, sql } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 
 // GET /api/brackets - Get bracket structure for a competition
@@ -24,10 +24,23 @@ export async function GET(request: NextRequest) {
 
         const { or } = await import('drizzle-orm');
 
-        if (competitionId) {
-            conditions.push(or(eq(bracketNodes.competitionId, competitionId), eq(bracketNodes.competition, competition || '')));
-        } else if (competition) {
-            conditions.push(eq(bracketNodes.competition, competition));
+        if (competitionId || competition) {
+            // Brackets are often seeded without competitionId, and competition casing may differ,
+            // so we match by ID when possible, otherwise case-insensitive by name.
+            const name = competition || '';
+            const nameLower = name.toLowerCase();
+
+            const matchByName = name
+                ? sql`lower(${bracketNodes.competition}) = ${nameLower}`
+                : undefined;
+
+            if (competitionId && matchByName) {
+                conditions.push(or(eq(bracketNodes.competitionId, competitionId), matchByName));
+            } else if (competitionId) {
+                conditions.push(eq(bracketNodes.competitionId, competitionId));
+            } else if (matchByName) {
+                conditions.push(matchByName);
+            }
         }
 
         if (sport) {

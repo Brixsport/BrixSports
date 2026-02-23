@@ -254,9 +254,9 @@ export function ResponsiveLineup({
     };
 
     return (
-        <div className="w-full">
-            {/* View Toggle - Sticky with Backdrop Blur */}
-            <div className="sticky top-0 z-20 bg-[#0a0a0a]/95 backdrop-blur-md border-b border-white/10 p-4 mb-4">
+        <div className="w-full relative">
+            {/* View Toggle - Fixed at top, won't scroll */}
+            <div className="sticky top-0 z-30 bg-[#0a0a0a]/95 backdrop-blur-md border-b border-white/10 p-4 -mx-4 -mt-6 mb-4">
                 <div className="flex items-center justify-between max-w-5xl mx-auto">
                     <h3 className="font-bold text-lg text-white">Lineups</h3>
                     <div className="flex gap-2 bg-white/5 p-1 rounded-lg">
@@ -282,8 +282,8 @@ export function ResponsiveLineup({
                 </div>
             </div>
 
-            {/* Content - Fixed min-height to prevent layout shift */}
-            <div className="min-h-[600px] relative">
+            {/* Content - Relative positioning, scrollable */}
+            <div className="relative min-h-[600px]">
                 <AnimatePresence mode="wait">
                     {viewMode === 'list' ? (
                         <motion.div
@@ -292,7 +292,7 @@ export function ResponsiveLineup({
                             animate={{ opacity: 1, y: 0 }}
                             exit={{ opacity: 0, y: -10 }}
                             transition={{ duration: 0.2, ease: "easeInOut" }}
-                            className="pb-8 absolute inset-0"
+                            className="pb-8"
                         >
                             <ListView
                                 homeTeam={homeTeam}
@@ -314,7 +314,7 @@ export function ResponsiveLineup({
                             animate={{ opacity: 1, y: 0 }}
                             exit={{ opacity: 0, y: -10 }}
                             transition={{ duration: 0.2, ease: "easeInOut" }}
-                            className="pb-8 absolute inset-0"
+                            className="pb-8"
                         >
                             <FullPitchLineups
                                 homeTeam={homeTeam}

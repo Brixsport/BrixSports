@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/db';
 import { standings, teams } from '@/db/schema';
-import { eq, desc, and, or } from 'drizzle-orm';
+import { eq, desc, and, or, sql } from 'drizzle-orm';
 
 export async function GET(request: Request) {
     try {
@@ -10,10 +10,29 @@ export async function GET(request: Request) {
         const competitionId = searchParams.get('competitionId');
 
         const conditions = [eq(standings.sport, 'Football')];
-        if (competitionId) {
-            conditions.push(or(eq(standings.competitionId, competitionId), eq(standings.competition, competition || '')));
-        } else if (competition) {
-            conditions.push(eq(standings.competition, competition));
+        if (competitionId || competition) {
+            // We match using competitionId when available, otherwise by competition name.
+            // IMPORTANT: Seeded data isn't always consistent (case differences, and some competitions store group standings like
+            // "BUSA League Football - Group A"), so we do case-insensitive matching and a prefix match fallback.
+            const name = competition || '';
+            const nameLower = name.toLowerCase();
+
+            const matchByName = name
+                ? or(
+                    // exact (case-insensitive)
+                    sql`lower(${standings.competition}) = ${nameLower}`,
+                    // prefix (case-insensitive) e.g. "BUSA League Football - Group A"
+                    sql`lower(${standings.competition}) like ${nameLower + '%'}`
+                )
+                : undefined;
+
+            if (competitionId && matchByName) {
+                conditions.push(or(eq(standings.competitionId, competitionId), matchByName));
+            } else if (competitionId) {
+                conditions.push(eq(standings.competitionId, competitionId));
+            } else if (matchByName) {
+                conditions.push(matchByName);
+            }
         }
 
         const footballStandings = await db
