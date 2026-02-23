@@ -5,14 +5,21 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Download, X, Smartphone } from 'lucide-react';
 import { BeforeInstallPromptEvent, setupInstallPrompt, showInstallPrompt, isAppInstalled } from '@/lib/pwa';
 
-export function InstallPrompt() {
+export function InstallPrompt({ appType = 'user' }: { appType?: 'user' | 'admin' }) {
     const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
     const [showPrompt, setShowPrompt] = useState(false);
     const [isInstalled, setIsInstalled] = useState(false);
 
     useEffect(() => {
-        // Check if already installed
+        // Check if already installed (current session)
         if (isAppInstalled()) {
+            setIsInstalled(true);
+            return;
+        }
+
+        // Check if any part of the app is already installed (persisted flag)
+        const persistentInstall = localStorage.getItem(`brix-${appType}-installed`) === 'true';
+        if (persistentInstall) {
             setIsInstalled(true);
             return;
         }
@@ -49,6 +56,7 @@ export function InstallPrompt() {
         if (outcome === 'accepted') {
             console.log('User accepted the install prompt');
             setIsInstalled(true);
+            localStorage.setItem(`brix-${appType}-installed`, 'true');
         }
 
         setShowPrompt(false);

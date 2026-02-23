@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
-import { users } from '@/db/schema';
-import { eq } from 'drizzle-orm';
+import { users, passwordResetTokens } from '@/db/schema';
+import { eq, and, gte } from 'drizzle-orm';
 import crypto from 'crypto';
-
-// In-memory store for password reset tokens (in production, use Redis or database)
-const resetTokens = new Map<string, { userId: string; expiresAt: Date }>();
+import { nanoid } from 'nanoid';
+import { sendPasswordResetEmail } from '@/lib/email';
+import bcrypt from 'bcryptjs';
 
 // POST /api/auth/forgot-password - Request password reset
 export async function POST(request: NextRequest) {
@@ -44,25 +44,29 @@ export async function POST(request: NextRequest) {
         const resetToken = crypto.randomBytes(32).toString('hex');
         const expiresAt = new Date(Date.now() + 3600000); // 1 hour from now
 
-        // Store token (in production, store in database with expiry)
-        resetTokens.set(resetToken, {
+        // Store token in database
+        await db.insert(passwordResetTokens).values({
+            id: nanoid(),
             userId: user.id,
+            token: resetToken,
             expiresAt,
         });
 
-        // In production, send email with reset link
-        // For now, we'll return the token in development mode
-        const resetLink = `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/reset-password?token=${resetToken}`;
+        // Generate reset link
+        const baseUrl = process.env.NEXT_PUBLIC_APP_URL || (request.headers.get('origin') || 'http://localhost:3000');
+        const resetLink = `${baseUrl}/reset-password?token=${resetToken}`;
 
-        console.log('Password reset link:', resetLink);
-        console.log('Token expires at:', expiresAt);
-
-        // TODO: Send email with reset link
-        // await sendPasswordResetEmail(user.email, resetLink);
+        // Send email
+        try {
+            await sendPasswordResetEmail(user.email, resetLink);
+        } catch (emailError) {
+            console.error('Failed to send reset email:', emailError);
+            // Even if email fails, we continue if in development so the link appears in terminal
+        }
 
         return NextResponse.json({
             ...response,
-            // Only include token in development
+            // Only include debug info in development
             ...(process.env.NODE_ENV === 'development' && {
                 resetToken,
                 resetLink,
@@ -91,19 +95,20 @@ export async function GET(request: NextRequest) {
             );
         }
 
-        const tokenData = resetTokens.get(token);
+        const tokenData = await db
+            .select()
+            .from(passwordResetTokens)
+            .where(
+                and(
+                    eq(passwordResetTokens.token, token),
+                    gte(passwordResetTokens.expiresAt, new Date())
+                )
+            )
+            .get();
 
         if (!tokenData) {
             return NextResponse.json(
                 { error: 'Invalid or expired reset token' },
-                { status: 400 }
-            );
-        }
-
-        if (new Date() > tokenData.expiresAt) {
-            resetTokens.delete(token);
-            return NextResponse.json(
-                { error: 'Reset token has expired' },
                 { status: 400 }
             );
         }
@@ -142,7 +147,16 @@ export async function PATCH(request: NextRequest) {
             );
         }
 
-        const tokenData = resetTokens.get(token);
+        const tokenData = await db
+            .select()
+            .from(passwordResetTokens)
+            .where(
+                and(
+                    eq(passwordResetTokens.token, token),
+                    gte(passwordResetTokens.expiresAt, new Date())
+                )
+            )
+            .get();
 
         if (!tokenData) {
             return NextResponse.json(
@@ -151,16 +165,7 @@ export async function PATCH(request: NextRequest) {
             );
         }
 
-        if (new Date() > tokenData.expiresAt) {
-            resetTokens.delete(token);
-            return NextResponse.json(
-                { error: 'Reset token has expired' },
-                { status: 400 }
-            );
-        }
-
         // Hash new password
-        const bcrypt = require('bcryptjs');
         const hashedPassword = await bcrypt.hash(newPassword, 10);
 
         // Update user password
@@ -173,7 +178,7 @@ export async function PATCH(request: NextRequest) {
             .where(eq(users.id, tokenData.userId));
 
         // Delete used token
-        resetTokens.delete(token);
+        await db.delete(passwordResetTokens).where(eq(passwordResetTokens.token, token));
 
         return NextResponse.json({
             success: true,

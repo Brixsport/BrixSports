@@ -3,23 +3,32 @@
 import { useState, useEffect } from 'react';
 import { registerServiceWorker } from '@/lib/pwa';
 
-export function usePWA(swPath: string) {
+export function usePWA(swPath: string, scope?: string, appType: 'user' | 'admin' = 'user') {
     const [registration, setRegistration] = useState<ServiceWorkerRegistration | null>(null);
     const [isRegistered, setIsRegistered] = useState(false);
     const [error, setError] = useState<Error | null>(null);
 
     useEffect(() => {
-        registerServiceWorker(swPath)
+        registerServiceWorker(swPath, { scope })
             .then((reg) => {
                 if (reg) {
                     setRegistration(reg);
                     setIsRegistered(true);
+
+                    // Check if running in standalone mode and persist this info
+                    // This helps suppress prompts on the user side if already installed
+                    const isStandalone = window.matchMedia('(display-mode: standalone)').matches ||
+                        (window.navigator as any).standalone === true;
+
+                    if (isStandalone) {
+                        localStorage.setItem(`brix-${appType}-installed`, 'true');
+                    }
                 }
             })
             .catch((err) => {
                 setError(err);
             });
-    }, [swPath]);
+    }, [swPath, scope, appType]);
 
     return { registration, isRegistered, error };
 }

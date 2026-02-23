@@ -280,6 +280,10 @@ export const userPreferences = sqliteTable('user_preferences', {
     language: text('language').default('en'),
     notifications: integer('notifications', { mode: 'boolean' }).default(true),
     emailNotifications: integer('email_notifications', { mode: 'boolean' }).default(true),
+    matchAlerts: integer('match_alerts', { mode: 'boolean' }).default(true),
+    playerRatings: integer('player_ratings', { mode: 'boolean' }).default(true),
+    scoutUpdates: integer('scout_updates', { mode: 'boolean' }).default(true),
+    milestones: integer('milestones', { mode: 'boolean' }).default(true),
     matchReminders: integer('match_reminders', { mode: 'boolean' }).default(true),
     favoriteTeamUpdates: integer('favorite_team_updates', { mode: 'boolean' }).default(true),
     weeklyDigest: integer('weekly_digest', { mode: 'boolean' }).default(false),
@@ -662,6 +666,17 @@ export const matchReminders = sqliteTable('match_reminders', {
     notificationSentAt: integer('notification_sent_at', { mode: 'timestamp' }),
     createdAt: integer('created_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
 });
+
+// Password Reset Tokens table
+export const passwordResetTokens = sqliteTable('password_reset_tokens', {
+    id: text('id').primaryKey(),
+    userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    token: text('token').notNull(),
+    expiresAt: integer('expires_at', { mode: 'timestamp' }).notNull(),
+    createdAt: integer('created_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
+}, (table) => ({
+    tokenIndex: uniqueIndex('password_reset_tokens_token_idx').on(table.token),
+}));
 
 // Relations
 export const teamsRelations = relations(teams, ({ many }) => ({

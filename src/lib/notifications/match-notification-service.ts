@@ -4,7 +4,7 @@
  */
 
 import { db } from '@/db';
-import { pushSubscriptions, userFollows, userFavorites, teams, players } from '@/db/schema';
+import { pushSubscriptions, userFollows, userFavorites, teams, players, users, userPreferences } from '@/db/schema';
 import { eq, and, or, inArray } from 'drizzle-orm';
 import webpush from 'web-push';
 
@@ -68,7 +68,7 @@ export async function sendMatchEventNotification(event: MatchEventNotification):
                 )
             );
 
-        // Also get users who have favorited either team
+        // Also get users who have favorited either team via the userFavorites table
         const teamFavorites = await db
             .select({
                 userId: userFavorites.userId,
@@ -85,14 +85,48 @@ export async function sendMatchEventNotification(event: MatchEventNotification):
                 )
             );
 
+        // Also get users who have either team as their primary favoriteTeamId in the users table
+        const primaryTeamFans = await db
+            .select({
+                userId: users.id,
+            })
+            .from(users)
+            .where(
+                or(
+                    eq(users.favoriteTeamId, event.homeTeamId),
+                    eq(users.favoriteTeamId, event.awayTeamId)
+                )
+            );
+
         // Combine and deduplicate user IDs
-        const allUserIds = Array.from(new Set([
+        const potentialUserIds = Array.from(new Set([
             ...teamFollowers.map(f => f.userId),
-            ...teamFavorites.map(f => f.userId)
+            ...teamFavorites.map(f => f.userId),
+            ...primaryTeamFans.map(f => f.userId)
         ]));
 
-        if (allUserIds.length === 0) {
+        if (potentialUserIds.length === 0) {
             console.log('[MatchNotificationService] No users following these teams');
+            return { success: true, sentCount: 0, totalSubscriptions: 0 };
+        }
+
+        // Filter out users who have disabled matchAlerts in their preferences
+        // Note: If no preference record exists, we assume TRUE as per schema default
+        const disabledPrefUsers = await db
+            .select({ userId: userPreferences.userId })
+            .from(userPreferences)
+            .where(
+                and(
+                    inArray(userPreferences.userId, potentialUserIds),
+                    eq(userPreferences.matchAlerts, false)
+                )
+            );
+
+        const disabledUserIds = new Set(disabledPrefUsers.map(p => p.userId));
+        const allUserIds = potentialUserIds.filter(id => !disabledUserIds.has(id));
+
+        if (allUserIds.length === 0) {
+            console.log('[MatchNotificationService] All interested users have disabled alerts');
             return { success: true, sentCount: 0, totalSubscriptions: 0 };
         }
 

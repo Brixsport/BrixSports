@@ -6,7 +6,7 @@ import { motion } from 'framer-motion';
 import { toast } from 'sonner';
 import {
     User, Mail, Calendar, Trophy, Heart, Settings, Edit2, Camera,
-    Star, TrendingUp, Activity, Award, Shield, Loader2, LogOut
+    Star, TrendingUp, Activity, Award, Shield, Loader2, LogOut, Check, X
 } from 'lucide-react';
 
 interface Team {
@@ -46,8 +46,58 @@ export default function ProfilePage() {
     const [user, setUser] = useState<UserProfile | null>(null);
     const [loading, setLoading] = useState(true);
     const [isEditing, setIsEditing] = useState(false);
+    const [showTeamModal, setShowTeamModal] = useState(false);
+    const [allTeams, setAllTeams] = useState<Team[]>([]);
     const avatarInputRef = useRef<HTMLInputElement>(null);
     const coverInputRef = useRef<HTMLInputElement>(null);
+
+    const fetchTeams = async () => {
+        try {
+            const response = await fetch('/api/teams');
+            if (response.ok) {
+                const data = await response.json();
+                setAllTeams(data);
+            }
+        } catch (error) {
+            console.error('Error fetching teams:', error);
+        }
+    };
+
+    const handleSelectTeam = async (team: Team) => {
+        if (!user) return;
+
+        // Optimistic update
+        const updatedUser = { ...user, favoriteTeam: team };
+        setUser(updatedUser);
+        setShowTeamModal(false);
+
+        try {
+            const token = localStorage.getItem('authToken');
+            const response = await fetch(`/api/users/${user.id}`, {
+                method: 'PATCH',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({ favoriteTeamId: team.id })
+            });
+
+            if (!response.ok) throw new Error("Failed to update favorite team");
+
+            toast.success(`Favorite team set to ${team.name}`);
+
+            // Update local storage user
+            const storedUser = localStorage.getItem('user');
+            if (storedUser) {
+                const parsed = JSON.parse(storedUser);
+                localStorage.setItem('user', JSON.stringify({ ...parsed, favoriteTeamId: team.id }));
+            }
+        } catch (error) {
+            toast.error("Failed to save favorite team.");
+            // Refresh to revert
+            window.location.reload();
+        }
+    };
 
     const handleCoverChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
@@ -360,13 +410,30 @@ export default function ProfilePage() {
                         </div>
 
                         {/* Favorite Team */}
-                        {user.favoriteTeam ? (
-                            <div className="bg-white/5 border border-white/10 rounded-[32px] p-6 md:p-8">
-                                <h2 className="text-xs font-black uppercase tracking-widest text-white/40 mb-6 flex items-center gap-2">
+                        <div className="bg-white/5 border border-white/10 rounded-[32px] p-6 md:p-8">
+                            <h2 className="text-xs font-black uppercase tracking-widest text-white/40 mb-6 flex items-center justify-between">
+                                <div className="flex items-center gap-2">
                                     <Heart size={14} className="text-primary" />
                                     Favorite Team
-                                </h2>
-                                <div className="bg-gradient-to-br from-white/5 to-white/10 border border-white/10 rounded-3xl p-6 relative overflow-hidden group hover:border-primary/30 transition-all">
+                                </div>
+                                {(user.favoriteTeam || isEditing) && (
+                                    <button
+                                        onClick={() => {
+                                            fetchTeams();
+                                            setShowTeamModal(true);
+                                        }}
+                                        className="text-primary text-[10px] font-black uppercase tracking-widest hover:underline"
+                                    >
+                                        {user.favoriteTeam ? 'Change' : 'Select'}
+                                    </button>
+                                )}
+                            </h2>
+
+                            {user.favoriteTeam ? (
+                                <div
+                                    onClick={() => isEditing && setShowTeamModal(true)}
+                                    className={`bg-gradient-to-br from-white/5 to-white/10 border border-white/10 rounded-3xl p-6 relative overflow-hidden group hover:border-primary/30 transition-all ${isEditing ? 'cursor-pointer' : ''}`}
+                                >
                                     <div className="flex items-center gap-6 relative z-10">
                                         <div className="w-16 h-16 md:w-20 md:h-20 bg-white/5 rounded-2xl flex items-center justify-center p-2">
                                             <img src={user.favoriteTeam.logo} alt={user.favoriteTeam.name} className="w-full h-full object-contain" />
@@ -382,15 +449,23 @@ export default function ProfilePage() {
                                         style={{ backgroundColor: user.favoriteTeam.color }}
                                     />
                                 </div>
-                            </div>
-                        ) : (
-                            <div className="bg-white/5 border border-white/10 rounded-[32px] p-8 text-center">
-                                <Heart size={32} className="mx-auto text-white/20 mb-4" />
-                                <h3 className="text-lg font-bold text-white mb-2">No Favorite Team</h3>
-                                <p className="text-white/40 text-sm mb-4">Select your favorite university team to support them!</p>
-                                <button className="text-primary text-xs font-black uppercase tracking-widest hover:underline">Select Team</button>
-                            </div>
-                        )}
+                            ) : (
+                                <div className="bg-white/5 border border-white/10 rounded-[32px] p-8 text-center">
+                                    <Heart size={32} className="mx-auto text-white/20 mb-4" />
+                                    <h3 className="text-lg font-bold text-white mb-2">No Favorite Team</h3>
+                                    <p className="text-white/40 text-sm mb-4">Select your favorite university team to support them!</p>
+                                    <button
+                                        onClick={() => {
+                                            fetchTeams();
+                                            setShowTeamModal(true);
+                                        }}
+                                        className="text-primary text-xs font-black uppercase tracking-widest hover:underline"
+                                    >
+                                        Select Team
+                                    </button>
+                                </div>
+                            )}
+                        </div>
 
                         {/* Quick Actions */}
                         <div className="bg-white/5 border border-white/10 rounded-[32px] p-6 md:p-8">
@@ -516,6 +591,86 @@ export default function ProfilePage() {
                     </div>
                 </div>
             </div>
+            {/* Team Selector Modal */}
+            <TeamSelectorModal
+                isOpen={showTeamModal}
+                onClose={() => setShowTeamModal(false)}
+                teams={allTeams}
+                onSelect={handleSelectTeam}
+            />
+        </div>
+    );
+}
+
+function TeamSelectorModal({ isOpen, onClose, teams, onSelect }: { isOpen: boolean, onClose: () => void, teams: Team[], onSelect: (team: Team) => void }) {
+    const [search, setSearch] = useState("");
+
+    const filteredTeams = teams.filter(t =>
+        t.name.toLowerCase().includes(search.toLowerCase()) ||
+        t.university.toLowerCase().includes(search.toLowerCase())
+    );
+
+    if (!isOpen) return null;
+
+    return (
+        <div className="fixed inset-0 z-[300] bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+            <motion.div
+                initial={{ opacity: 0, scale: 0.9, y: 20 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                className="bg-[#0A0A0A] border border-white/10 rounded-[40px] w-full max-w-2xl max-h-[80vh] flex flex-col overflow-hidden shadow-2xl"
+            >
+                <div className="p-8 border-b border-white/10 flex items-center justify-between">
+                    <div>
+                        <h2 className="text-2xl font-display italic uppercase tracking-tighter">Support Your Team</h2>
+                        <p className="text-[10px] font-black uppercase tracking-[0.2em] text-white/40">Select your primary favorite university</p>
+                    </div>
+                    <button onClick={onClose} className="p-3 hover:bg-white/10 rounded-2xl transition-colors">
+                        <X size={20} />
+                    </button>
+                </div>
+
+                <div className="p-6 bg-white/5 flex items-center gap-4">
+                    <div className="flex-1 bg-black/40 rounded-2xl border border-white/10 px-6 py-3 flex items-center gap-3">
+                        <Activity size={18} className="text-white/20" />
+                        <input
+                            type="text"
+                            placeholder="Search by team or university..."
+                            className="bg-transparent border-none outline-none text-sm w-full font-medium"
+                            value={search}
+                            onChange={(e) => setSearch(e.target.value)}
+                            autoFocus
+                        />
+                    </div>
+                </div>
+
+                <div className="flex-1 overflow-y-auto p-6 space-y-3 custom-scrollbar">
+                    {filteredTeams.length > 0 ? (
+                        filteredTeams.map((team) => (
+                            <button
+                                key={team.id}
+                                onClick={() => onSelect(team)}
+                                className="w-full group bg-white/5 border border-white/5 rounded-3xl p-4 md:p-6 flex items-center gap-6 hover:bg-white/10 hover:border-primary/30 transition-all text-left"
+                            >
+                                <div className="w-12 h-12 md:w-16 md:h-16 bg-black/40 rounded-2xl flex items-center justify-center p-2 group-hover:scale-110 transition-transform">
+                                    <img src={team.logo} alt={team.name} className="w-full h-full object-contain" />
+                                </div>
+                                <div className="flex-1">
+                                    <p className="text-lg md:text-xl font-black uppercase tracking-tight group-hover:text-primary transition-colors">{team.name}</p>
+                                    <p className="text-[10px] font-bold uppercase tracking-widest text-white/40">{team.university}</p>
+                                </div>
+                                <div className="w-8 h-8 rounded-full border border-white/10 flex items-center justify-center group-hover:bg-primary group-hover:border-primary transition-all">
+                                    <Check size={16} className="text-white group-hover:text-black transition-colors" />
+                                </div>
+                            </button>
+                        ))
+                    ) : (
+                        <div className="py-20 text-center opacity-40">
+                            <Activity size={40} className="mx-auto mb-4" />
+                            <p className="font-black uppercase tracking-widest text-xs">No teams found matching "{search}"</p>
+                        </div>
+                    )}
+                </div>
+            </motion.div>
         </div>
     );
 }

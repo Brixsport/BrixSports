@@ -12,7 +12,8 @@ export interface BeforeInstallPromptEvent extends Event {
  * Register service worker
  */
 export async function registerServiceWorker(
-    swPath: string
+    swPath: string,
+    options: { scope?: string } = {}
 ): Promise<ServiceWorkerRegistration | null> {
     if (!('serviceWorker' in navigator)) {
         console.warn('Service Worker not supported');
@@ -21,7 +22,7 @@ export async function registerServiceWorker(
 
     try {
         const registration = await navigator.serviceWorker.register(swPath, {
-            scope: '/',
+            scope: options.scope || '/',
         });
 
         console.log('Service Worker registered:', swPath);

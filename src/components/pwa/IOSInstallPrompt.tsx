@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Share, Plus, Smartphone } from 'lucide-react';
 
-export function IOSInstallPrompt() {
+export function IOSInstallPrompt({ appType = 'user' }: { appType?: 'user' | 'admin' }) {
     const [showPrompt, setShowPrompt] = useState(false);
     const [isIOS, setIsIOS] = useState(false);
     const [isInstalled, setIsInstalled] = useState(false);
@@ -31,13 +31,20 @@ export function IOSInstallPrompt() {
             }
         }
 
+        // Check if any part of the app is already installed (persisted flag)
+        const persistentInstall = localStorage.getItem(`brix-${appType}-installed`) === 'true';
+        if (persistentInstall) {
+            setIsInstalled(true);
+            return;
+        }
+
         // Show prompt after 30 seconds for iOS users who haven't installed
         if (isIOSDevice && !isStandalone) {
             setTimeout(() => {
                 setShowPrompt(true);
             }, 30000);
         }
-    }, []);
+    }, [appType]);
 
     const handleDismiss = () => {
         setShowPrompt(false);
@@ -143,7 +150,7 @@ export function IOSInstallPrompt() {
     );
 }
 
-export function IOSInstallBanner() {
+export function IOSInstallBanner({ appType = 'user' }: { appType?: 'user' | 'admin' }) {
     const [showBanner, setShowBanner] = useState(false);
     const [isIOS, setIsIOS] = useState(false);
     const [isInstalled, setIsInstalled] = useState(false);
@@ -161,11 +168,14 @@ export function IOSInstallBanner() {
         // Check if banner was dismissed
         const bannerDismissed = localStorage.getItem('ios-banner-dismissed');
 
+        // Check if any part of the app is already installed (persisted flag)
+        const persistentInstall = localStorage.getItem(`brix-${appType}-installed`) === 'true';
+
         // Show banner for iOS users who haven't installed
-        if (isIOSDevice && !isStandalone && !bannerDismissed) {
+        if (isIOSDevice && !isStandalone && !bannerDismissed && !persistentInstall) {
             setShowBanner(true);
         }
-    }, []);
+    }, [appType]);
 
     const handleDismiss = () => {
         setShowBanner(false);

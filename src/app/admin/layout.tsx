@@ -46,7 +46,12 @@ export default async function AdminLayout({
     }
 
     return (
-        <PWAProvider swPath="/sw-admin.js" showInstallPrompt={true}>
+        <PWAProvider
+            swPath="/sw-admin.js"
+            scope="/admin"
+            appType="admin"
+            showInstallPrompt={true}
+        >
             <AdminDashboardLayout>
                 {children}
             </AdminDashboardLayout>

@@ -13,16 +13,19 @@ interface PWAProviderProps {
     showInstallPrompt?: boolean;
     showOfflineIndicator?: boolean;
     showUpdatePrompt?: boolean;
+    appType?: 'user' | 'admin';
 }
 
 export function PWAProvider({
     children,
     swPath,
+    scope = '/',
     showInstallPrompt = true,
     showOfflineIndicator = true,
     showUpdatePrompt = true,
-}: PWAProviderProps) {
-    const { registration, isRegistered, error } = usePWA(swPath);
+    appType = 'user',
+}: PWAProviderProps & { scope?: string }) {
+    const { registration, isRegistered, error } = usePWA(swPath, scope, appType);
 
     useEffect(() => {
         // Prevent sw-user.js from registering when we are in admin/logger routes
@@ -61,9 +64,9 @@ export function PWAProvider({
             {children}
             {showInstallPrompt && (
                 <>
-                    <InstallPrompt />
-                    <IOSInstallPrompt />
-                    <IOSInstallBanner />
+                    <InstallPrompt appType={appType} />
+                    <IOSInstallPrompt appType={appType} />
+                    <IOSInstallBanner appType={appType} />
                 </>
             )}
             {showOfflineIndicator && (

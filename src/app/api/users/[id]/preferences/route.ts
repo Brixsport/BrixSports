@@ -35,6 +35,10 @@ export async function GET(
                 language: 'en',
                 notifications: true,
                 emailNotifications: true,
+                matchAlerts: true,
+                playerRatings: true,
+                scoutUpdates: true,
+                milestones: true,
                 matchReminders: true,
                 favoriteTeamUpdates: true,
                 weeklyDigest: false,
@@ -111,6 +115,10 @@ export async function PATCH(
         if (body.favoriteSports !== undefined) {
             updateData.favoriteSports = JSON.stringify(body.favoriteSports);
         }
+        if (body.matchAlerts !== undefined) updateData.matchAlerts = body.matchAlerts;
+        if (body.playerRatings !== undefined) updateData.playerRatings = body.playerRatings;
+        if (body.scoutUpdates !== undefined) updateData.scoutUpdates = body.scoutUpdates;
+        if (body.milestones !== undefined) updateData.milestones = body.milestones;
         if (body.defaultView !== undefined) updateData.defaultView = body.defaultView;
         if (body.timezone !== undefined) updateData.timezone = body.timezone;
 
