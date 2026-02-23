@@ -39,14 +39,16 @@ export function InteractivePitch({
         );
     }
 
+    const is5Aside = formationData.positions.length === 5 && sport === 'Football';
+
     const getPlayerAtPosition = (positionId: string) => {
         return starters.find(p => p.position === positionId);
     };
 
     return (
-        <div className="relative w-full aspect-[2/3] md:aspect-[3/4] bg-gradient-to-b from-green-900/30 to-green-800/30 rounded-3xl overflow-hidden border border-white/10">
+        <div className={`relative w-full ${is5Aside ? 'aspect-[4/5] sm:aspect-[1/1]' : 'aspect-[2/3] md:aspect-[3/4]'} bg-gradient-to-b from-green-900/40 to-green-800/20 rounded-3xl overflow-hidden border border-white/10 shadow-2xl transition-all duration-300`}>
             {/* Pitch Markings */}
-            <PitchMarkings sport={sport} />
+            <PitchMarkings sport={sport} is5Aside={is5Aside} />
 
             {/* Position Slots */}
             {formationData.positions.map((position) => {
@@ -64,25 +66,26 @@ export function InteractivePitch({
                         onSetViceCaptain={() => assignedPlayer && onSetViceCaptain(assignedPlayer.playerId)}
                         teamSide={teamSide}
                         isTarget={!assignedPlayer && !!selectedPlayer}
+                        is5Aside={is5Aside}
                     />
                 );
             })}
 
             {/* Team Side Label */}
-            <div className="absolute top-4 left-4">
+            <div className="absolute top-4 left-4 z-10">
                 <div className={`px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider ${teamSide === 'combined'
-                    ? 'bg-gradient-to-r from-purple-500/20 to-primary/20 text-primary border border-primary/30'
+                    ? 'bg-gradient-to-r from-purple-500/30 to-primary/30 text-primary border border-primary/30 backdrop-blur-md'
                     : teamSide === 'home'
-                        ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
-                        : 'bg-red-500/20 text-red-400 border border-red-500/30'
+                        ? 'bg-blue-500/30 text-blue-400 border border-blue-500/30 backdrop-blur-md'
+                        : 'bg-red-500/30 text-red-400 border border-red-500/30 backdrop-blur-md'
                     }`}>
                     {teamSide === 'combined' ? 'Combined XI' : `${teamSide} Team`}
                 </div>
             </div>
 
             {/* Formation Name */}
-            <div className="absolute top-4 right-4">
-                <div className="px-3 py-1 bg-black/40 rounded-lg backdrop-blur-sm border border-white/10">
+            <div className="absolute top-4 right-4 z-10">
+                <div className="px-3 py-1 bg-black/50 rounded-lg backdrop-blur-md border border-white/10">
                     <span className="text-xs font-display italic font-bold text-white uppercase tracking-wider">
                         {formationData.name}
                     </span>
@@ -90,8 +93,8 @@ export function InteractivePitch({
             </div>
 
             {/* Branding Tag */}
-            <div className="absolute bottom-4 right-4 pointer-events-none">
-                <h1 className="font-display text-3xl md:text-4xl italic font-black uppercase tracking-tighter text-white/20 select-none">
+            <div className="absolute bottom-6 right-6 pointer-events-none opacity-20">
+                <h1 className="font-display text-4xl md:text-5xl italic font-black uppercase tracking-tighter text-white select-none">
                     BrixSport
                 </h1>
             </div>
@@ -99,8 +102,31 @@ export function InteractivePitch({
     );
 }
 
-function PitchMarkings({ sport }: { sport: 'Football' | 'Basketball' }) {
+function PitchMarkings({ sport, is5Aside }: { sport: 'Football' | 'Basketball'; is5Aside?: boolean }) {
     if (sport === 'Football') {
+        if (is5Aside) {
+            return (
+                <div className="absolute inset-0 p-4 opacity-50">
+                    <div className="w-full h-full border-2 border-white/15 rounded-xl relative">
+                        {/* Halfway Line */}
+                        <div className="absolute top-1/2 left-0 right-0 h-0.5 bg-white/15" />
+
+                        {/* Center Circle */}
+                        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-24 h-24 border-2 border-white/15 rounded-full" />
+                        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-1.5 h-1.5 bg-white/20 rounded-full" />
+
+                        {/* Futsal Penalty D (Semicircles) */}
+                        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-32 h-16 border-2 border-white/15 border-t-0 rounded-b-full bg-white/5" />
+                        <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-32 h-16 border-2 border-white/15 border-b-0 rounded-t-full bg-white/5" />
+
+                        {/* Goals */}
+                        <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-16 h-1 bg-white/40" />
+                        <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-16 h-1 bg-white/40" />
+                    </div>
+                </div>
+            );
+        }
+
         return (
             <>
                 {/* Center Circle */}
@@ -146,7 +172,8 @@ function PositionSlot({
     onSetCaptain,
     onSetViceCaptain,
     teamSide,
-    isTarget
+    isTarget,
+    is5Aside
 }: {
     position: any;
     player?: LineupPlayer;
@@ -157,6 +184,7 @@ function PositionSlot({
     onSetViceCaptain: () => void;
     teamSide: 'home' | 'away' | 'combined';
     isTarget?: boolean;
+    is5Aside?: boolean;
 }) {
     const [showMenu, setShowMenu] = useState(false);
     const hasPlayer = !!(player && playerDetails);
@@ -176,7 +204,7 @@ function PositionSlot({
                     {/* Player Card */}
                     <button
                         onClick={() => setShowMenu(!showMenu)}
-                        className={`relative w-16 h-20 rounded-xl border-2 transition-all ${teamSide === 'combined'
+                        className={`relative ${is5Aside ? 'w-20 h-24' : 'w-16 h-20'} rounded-xl border-2 transition-all ${teamSide === 'combined'
                             ? playerDetails?.originalTeam === 'home'
                                 ? 'bg-gradient-to-br from-cyan-500 to-blue-600 border-cyan-400 shadow-cyan-500/50'
                                 : 'bg-gradient-to-br from-pink-500 to-rose-600 border-pink-400 shadow-pink-500/50'
@@ -187,26 +215,26 @@ function PositionSlot({
                     >
                         {/* Captain/Vice-Captain Badge */}
                         {player!.isCaptain && (
-                            <div className="absolute -top-2 -right-2 w-6 h-6 bg-yellow-500 rounded-full flex items-center justify-center border-2 border-black">
-                                <span className="text-black text-[10px] font-black">C</span>
+                            <div className={`absolute -top-2 -right-2 ${is5Aside ? 'w-8 h-8' : 'w-6 h-6'} bg-yellow-500 rounded-full flex items-center justify-center border-2 border-black`}>
+                                <span className={`${is5Aside ? 'text-xs' : 'text-[10px]'} font-black`}>C</span>
                             </div>
                         )}
                         {player!.isViceCaptain && (
-                            <div className="absolute -top-2 -right-2 w-6 h-6 bg-gray-400 rounded-full flex items-center justify-center border-2 border-black">
-                                <span className="text-black text-[10px] font-black">VC</span>
+                            <div className={`absolute -top-2 -right-2 ${is5Aside ? 'w-8 h-8' : 'w-6 h-6'} bg-gray-400 rounded-full flex items-center justify-center border-2 border-black`}>
+                                <span className={`${is5Aside ? 'text-xs' : 'text-[10px]'} font-black`}>VC</span>
                             </div>
                         )}
 
                         {/* Jersey Number */}
                         <div className="absolute top-1 left-1/2 transform -translate-x-1/2">
-                            <span className="text-white text-xl font-display font-bold">
+                            <span className={`text-white ${is5Aside ? 'text-2xl' : 'text-xl'} font-display font-bold`}>
                                 {player!.jerseyNumber}
                             </span>
                         </div>
 
                         {/* Player Name */}
                         <div className="absolute bottom-1 left-0 right-0 px-1">
-                            <p className="text-white text-[8px] font-black uppercase truncate text-center">
+                            <p className={`text-white ${is5Aside ? 'text-[10px]' : 'text-[8px]'} font-black uppercase truncate text-center`}>
                                 {displayName}
                             </p>
                         </div>
@@ -214,8 +242,8 @@ function PositionSlot({
                         {/* Rating */}
                         <div className="absolute top-1 right-1">
                             <div className="flex items-center gap-0.5 bg-black/30 rounded px-1">
-                                <Star size={8} className="text-yellow-400 fill-yellow-400" />
-                                <span className="text-[8px] font-bold text-white">
+                                <Star size={is5Aside ? 10 : 8} className="text-yellow-400 fill-yellow-400" />
+                                <span className={`${is5Aside ? 'text-[10px]' : 'text-[8px]'} font-bold text-white`}>
                                     {playerDetails!.rating.toFixed(1)}
                                 </span>
                             </div>
@@ -224,9 +252,9 @@ function PositionSlot({
                         {/* Team Indicator for Combined XI */}
                         {teamSide === 'combined' && (
                             <div className="absolute bottom-1 left-1">
-                                <div className={`w-4 h-4 rounded-full flex items-center justify-center border ${playerDetails?.originalTeam === 'home'
-                                        ? 'bg-cyan-500 border-cyan-300'
-                                        : 'bg-pink-500 border-pink-300'
+                                <div className={`${is5Aside ? 'w-5 h-5' : 'w-4 h-4'} rounded-full flex items-center justify-center border ${playerDetails?.originalTeam === 'home'
+                                    ? 'bg-cyan-500 border-cyan-300'
+                                    : 'bg-pink-500 border-pink-300'
                                     }`}>
                                     <span className="text-white text-[6px] font-black">
                                         {playerDetails?.originalTeam === 'home' ? 'H' : 'A'}
@@ -270,12 +298,12 @@ function PositionSlot({
                     animate={isTarget ? { scale: [1, 1.1, 1], borderColor: '#22c55e' } : { scale: 1 }}
                     transition={isTarget ? { repeat: Infinity, duration: 2 } : {}}
                     onClick={onAssign}
-                    className={`w-12 h-12 rounded-full border-2 border-dashed flex items-center justify-center transition-all cursor-pointer ${isTarget
+                    className={`${is5Aside ? 'w-16 h-16' : 'w-12 h-12'} rounded-full border-2 border-dashed flex items-center justify-center transition-all cursor-pointer ${isTarget
                         ? 'border-green-500 bg-green-500/20 shadow-[0_0_15px_rgba(34,197,94,0.5)]'
                         : 'border-white/30 bg-white/5 hover:border-primary hover:bg-primary/10'
                         }`}
                 >
-                    <span className={`text-[10px] font-black uppercase ${isTarget ? 'text-green-400' : 'text-white/60'}`}>
+                    <span className={`${is5Aside ? 'text-xs' : 'text-[10px]'} font-black uppercase ${isTarget ? 'text-green-400' : 'text-white/60'}`}>
                         {position.position}
                     </span>
                 </motion.div>

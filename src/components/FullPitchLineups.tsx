@@ -135,7 +135,13 @@ const FORMATION_TEMPLATES: Record<string, FormationTemplate> = {
         { x: 20, y: 50, role: 'MID' }, { x: 80, y: 50, role: 'MID' },
         { x: 50, y: 75, role: 'FW' }
     ],
-    '2-2': [ // Box / Square
+    '2-1-1': [ // Box / 2-1-1
+        { x: 50, y: 5, role: 'GK' },
+        { x: 30, y: 30, role: 'DEF' }, { x: 70, y: 30, role: 'DEF' },
+        { x: 50, y: 55, role: 'MID' },
+        { x: 50, y: 80, role: 'FW' }
+    ],
+    '2-2': [ // Box / Square (Legacy ID)
         { x: 50, y: 5, role: 'GK' },
         { x: 30, y: 30, role: 'DEF' }, { x: 70, y: 30, role: 'DEF' },
         { x: 30, y: 70, role: 'FW' }, { x: 70, y: 70, role: 'FW' }

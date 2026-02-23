@@ -207,6 +207,32 @@ export const footballFormations: Formation[] = [
             { id: 'rm', position: 'RM', x: 90, y: 40, zone: 'MID' },
             { id: 'st', position: 'ST', x: 50, y: 15, zone: 'FWD' },
         ]
+    },
+    {
+        id: '1-2-1',
+        name: '5-Aside (Lead)',
+        sport: 'Football',
+        description: 'Diamond formation for 5-aside',
+        positions: [
+            { id: 'gk', position: 'GK', x: 50, y: 90, zone: 'GK' },
+            { id: 'def', position: 'DEF', x: 50, y: 70, zone: 'DEF' },
+            { id: 'lm', position: 'LM', x: 20, y: 45, zone: 'MID' },
+            { id: 'rm', position: 'RM', x: 80, y: 45, zone: 'MID' },
+            { id: 'st', position: 'ST', x: 50, y: 20, zone: 'FWD' },
+        ]
+    },
+    {
+        id: '2-1-1',
+        name: '5-Aside (Box)',
+        sport: 'Football',
+        description: 'Defensive box formation for 5-aside',
+        positions: [
+            { id: 'gk', position: 'GK', x: 50, y: 90, zone: 'GK' },
+            { id: 'ldef', position: 'LB', x: 30, y: 70, zone: 'DEF' },
+            { id: 'rdef', position: 'RB', x: 70, y: 70, zone: 'DEF' },
+            { id: 'mid', position: 'MID', x: 50, y: 45, zone: 'MID' },
+            { id: 'st', position: 'ST', x: 50, y: 20, zone: 'FWD' },
+        ]
     }
 ];
 

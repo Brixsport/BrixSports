@@ -21,8 +21,8 @@ interface Match {
     loggerId?: string;
 }
 
-const FORMATIONS_11 = ['4-3-3', '4-4-2', '4-2-3-1', '3-5-2', '3-4-3', '5-3-2'];
-const FORMATIONS_5 = ['1-2-2', '2-1-2', '1-3-1', '2-2-1', '1-1-3'];
+const FORMATIONS_11 = ['4-3-3', '4-4-2', '4-2-3-1', '3-5-2', '3-4-3', '5-3-2', '4-1-4-1', '3-1-4-2', '4-5-1', '3-2-4-1'];
+const FORMATIONS_5 = ['1-2-1', '2-1-1'];
 
 interface Player {
     id: string;
@@ -213,8 +213,8 @@ export default function AdminMatchLineupsPage() {
                 setPlayersPerSide(matchComp.playersPerSide);
                 // Set appropriate default formation
                 if (matchComp.playersPerSide === 5) {
-                    setHomeFormation('1-2-2');
-                    setAwayFormation('1-2-2');
+                    setHomeFormation('1-2-1');
+                    setAwayFormation('1-2-1');
                 } else {
                     setHomeFormation('4-3-3');
                     setAwayFormation('4-3-3');
@@ -312,24 +312,24 @@ export default function AdminMatchLineupsPage() {
                 status: 'published'
             };
 
-            // Save both lineups
-            const [homeRes, awayRes] = await Promise.all([
-                fetch(`/api/admin/match-lineups/${selectedMatch.id}`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ team: 'home', lineup: homeLineup })
-                }),
-                fetch(`/api/admin/match-lineups/${selectedMatch.id}`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ team: 'away', lineup: awayLineup })
-                })
-            ]);
+            // Save lineups sequentially to avoid race conditions in the database
+            const homeRes = await fetch(`/api/admin/match-lineups/${selectedMatch.id}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ team: 'home', lineup: homeLineup })
+            });
 
             if (!homeRes.ok) {
                 const data = await homeRes.json();
                 throw new Error(`Home Lineup: ${data.error || 'Failed to publish'}`);
             }
+
+            const awayRes = await fetch(`/api/admin/match-lineups/${selectedMatch.id}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ team: 'away', lineup: awayLineup })
+            });
+
             if (!awayRes.ok) {
                 const data = await awayRes.json();
                 throw new Error(`Away Lineup: ${data.error || 'Failed to publish'}`);
@@ -679,7 +679,7 @@ function TeamLineupBuilder({
 }) {
     const formations = maxStarters === 5 ? FORMATIONS_5 : FORMATIONS_11;
     const positions = maxStarters === 5
-        ? ['GK', 'DEF', 'MID', 'FW', 'PIV']
+        ? ['GK', 'DEF', 'LB', 'RB', 'MID', 'FW', 'PIV']
         : ['GK', 'DEF', 'LB', 'RB', 'CB', 'DM', 'MID', 'CM', 'LM', 'RM', 'AM', 'CAM', 'FW', 'ST', 'CF', 'LW', 'RW'];
 
     return (
