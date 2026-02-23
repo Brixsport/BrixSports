@@ -256,14 +256,20 @@ function AdminMatchesPageContent() {
     };
 
     const filteredTeams = useMemo(() => {
-        if (formData.competitionId && competitionTeams.length > 0) {
-            if (formData.groupName) {
-                return competitionTeams.filter(t => t.groupName?.toLowerCase() === formData.groupName.toLowerCase());
+        // If competition is selected and we have competition teams, use those
+        if (formData.competitionId && formData.matchType === 'competition') {
+            if (competitionTeams.length > 0) {
+                if (formData.groupName) {
+                    return competitionTeams.filter(t => t.groupName?.toLowerCase() === formData.groupName.toLowerCase());
+                }
+                return competitionTeams;
             }
-            return competitionTeams;
+            // If competition is selected but teams haven't loaded yet, return empty array
+            return [];
         }
+        // For friendly matches or when no competition is selected, show all teams for the sport
         return teams.filter(t => t.sport === formData.sport || t.sport === 'Multi-Sport');
-    }, [formData.competitionId, formData.groupName, competitionTeams, teams, formData.sport]);
+    }, [formData.competitionId, formData.matchType, formData.groupName, competitionTeams, teams, formData.sport]);
 
     const handleUpdate = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -549,13 +555,17 @@ function AdminMatchesPageContent() {
                                                         competitionId: comp.id,
                                                         competition: comp.name,
                                                         sport: comp.isMultiSport ? prev.sport : (comp.sport || prev.sport),
-                                                        competitionLevel: (comp.level as any) || prev.competitionLevel
+                                                        competitionLevel: (comp.level as any) || prev.competitionLevel,
+                                                        homeTeamId: '', // Clear team selections when competition changes
+                                                        awayTeamId: ''  // Clear team selections when competition changes
                                                     }));
                                                 } else {
                                                     setFormData(prev => ({
                                                         ...prev,
                                                         competitionId: '',
-                                                        competition: ''
+                                                        competition: '',
+                                                        homeTeamId: '', // Clear team selections when competition is cleared
+                                                        awayTeamId: ''  // Clear team selections when competition is cleared
                                                     }));
                                                 }
                                             }}

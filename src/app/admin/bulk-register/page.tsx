@@ -777,14 +777,14 @@ export default function BulkRegisterPage() {
                                                     type="text"
                                                     value={player.college}
                                                     onChange={(e) => updatePlayer(player.id, 'college', e.target.value)}
-                                                    placeholder="College/Faculty"
+                                                    placeholder="College/Faculty/School"
                                                     className="bg-white/[0.05] border border-white/[0.08] rounded-lg px-3 py-2 text-sm text-white/60 placeholder-white/20 focus:outline-none focus:ring-1 focus:ring-indigo-500/40"
                                                 />
                                                 <input
                                                     type="text"
                                                     value={player.department}
                                                     onChange={(e) => updatePlayer(player.id, 'department', e.target.value)}
-                                                    placeholder="Dept/Course"
+                                                    placeholder="Dept/Course/Program"
                                                     className="bg-white/[0.05] border border-white/[0.08] rounded-lg px-3 py-2 text-sm text-white/60 placeholder-white/20 focus:outline-none focus:ring-1 focus:ring-indigo-500/40"
                                                 />
                                                 <input

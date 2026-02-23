@@ -29,6 +29,7 @@ interface Player {
     nationality: string | null;
     college: string | null;
     department: string | null;
+    university: string | null;
     image: string | null;
     profileId: string | null;
     email: string | null;
@@ -76,6 +77,7 @@ function AdminPlayersPageContent() {
         nationality: '',
         college: '',
         department: '',
+        university: 'Bells University',
         email: '',
         image: ''
     });
@@ -112,7 +114,10 @@ function AdminPlayersPageContent() {
         return players.filter(p => {
             const matchesSearch = p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
                 p.jerseyName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                p.id.toLowerCase().includes(searchQuery.toLowerCase());
+                p.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                p.university?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                p.college?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                p.department?.toLowerCase().includes(searchQuery.toLowerCase());
 
             const team = teams.find(t => t.id === p.teamId);
             const matchesSport = sportFilter === 'all' || team?.sport === sportFilter;
@@ -136,6 +141,7 @@ function AdminPlayersPageContent() {
             nationality: '',
             college: '',
             department: '',
+            university: 'Bells University',
             email: '',
             image: ''
         });
@@ -338,6 +344,11 @@ function AdminPlayersPageContent() {
                                                             <span className="font-bold text-sm">{player.position}</span>
                                                         </div>
                                                         <div className="text-xs text-white/40 font-semibold">{team?.name || 'Unknown Team'}</div>
+                                                        <div className="text-[10px] text-white/20 uppercase font-black tracking-tighter mt-1 flex items-center gap-1">
+                                                            <span>{player.university || 'Bells University'}</span>
+                                                            {(player.college || player.department) && <span className="w-1 h-1 bg-white/10 rounded-full" />}
+                                                            <span>{player.department || player.college || ''}</span>
+                                                        </div>
                                                     </div>
                                                 </td>
                                                 <td className="px-8 py-6">
@@ -550,6 +561,16 @@ function AdminPlayersPageContent() {
                                     <h3 className="text-[10px] font-black uppercase tracking-[0.3em] text-white/20 border-b border-white/5 pb-2">Academic & Metadata</h3>
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                                         <div className="space-y-6">
+                                            <div>
+                                                <label className="block text-[10px] font-black uppercase tracking-widest text-white/40 mb-2 italic">University</label>
+                                                <input
+                                                    type="text"
+                                                    value={formData.university || ''}
+                                                    onChange={e => setFormData({ ...formData, university: e.target.value })}
+                                                    className="w-full bg-white/5 border border-white/10 rounded-[1.25rem] px-5 py-4 focus:outline-none focus:border-primary/50 font-bold transition-all"
+                                                    placeholder="e.g. Bells University"
+                                                />
+                                            </div>
                                             <div>
                                                 <label className="block text-[10px] font-black uppercase tracking-widest text-white/40 mb-2 italic">College</label>
                                                 <input

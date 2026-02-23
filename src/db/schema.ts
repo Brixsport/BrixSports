@@ -37,6 +37,7 @@ export const players = sqliteTable('players', {
     nationality: text('nationality'),
     college: text('college'), // For interdepartmental competitions (e.g., COLENG, COLNAS)
     department: text('department'), // For interdepartmental competitions
+    university: text('university').notNull().default('Bells University'),
     image: text('image'),
     marketValue: text('market_value'),
     // Multi-sport linking
@@ -674,9 +675,9 @@ export const passwordResetTokens = sqliteTable('password_reset_tokens', {
     token: text('token').notNull(),
     expiresAt: integer('expires_at', { mode: 'timestamp' }).notNull(),
     createdAt: integer('created_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
-}, (table) => ({
+}/*, (table) => ({
     tokenIndex: uniqueIndex('password_reset_tokens_token_idx').on(table.token),
-}));
+})*/);
 
 // Relations
 export const teamsRelations = relations(teams, ({ many }) => ({

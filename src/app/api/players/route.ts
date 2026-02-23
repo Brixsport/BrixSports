@@ -10,6 +10,9 @@ export async function GET(request: Request) {
         const teamId = searchParams.get('teamId');
         const ids = searchParams.get('ids');
         const search = searchParams.get('search');
+        const department = searchParams.get('department');
+        const college = searchParams.get('college');
+        const university = searchParams.get('university');
 
         // Fetch by multiple IDs
         if (ids) {
@@ -19,6 +22,19 @@ export async function GET(request: Request) {
             }
             const foundPlayers = await db.select().from(players).where(inArray(players.id, playerIds));
             return NextResponse.json({ success: true, players: foundPlayers });
+        }
+
+        // Hierarchy filters (Department, College, University)
+        if (department || college || university) {
+            let query = db.select().from(players);
+            const conditions = [];
+
+            if (department) conditions.push(eq(players.department, department));
+            if (college) conditions.push(eq(players.college, college));
+            if (university) conditions.push(eq(players.university, university));
+
+            const results = await query.where(conditions.length > 1 ? or(...conditions) : conditions[0]);
+            return NextResponse.json({ success: true, players: results });
         }
 
         // Fetch by team ID

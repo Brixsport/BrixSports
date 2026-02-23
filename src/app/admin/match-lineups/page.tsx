@@ -16,6 +16,7 @@ interface Match {
     startTime: string;
     venue: string;
     competition: string;
+    competitionLevel?: string;
     status: string;
     loggerId?: string;
 }
@@ -30,6 +31,9 @@ interface Player {
     number: number;
     position: string;
     teamId: string;
+    college?: string;
+    department?: string;
+    university?: string;
 }
 
 export default function AdminMatchLineupsPage() {
@@ -92,10 +96,28 @@ export default function AdminMatchLineupsPage() {
             console.log('Loading rosters for match:', match.id);
             console.log('Home Team ID:', match.homeTeamId);
             console.log('Away Team ID:', match.awayTeamId);
+            console.log('Competition Level:', match.competitionLevel);
+
+            let homeUrl = `/api/players?teamId=${match.homeTeamId}`;
+            let awayUrl = `/api/players?teamId=${match.awayTeamId}`;
+
+            // Smart Roster Fetching based on competition level
+            if (match.competitionLevel === 'department') {
+                homeUrl = `/api/players?department=${encodeURIComponent(match.homeTeam.name)}`;
+                awayUrl = `/api/players?department=${encodeURIComponent(match.awayTeam.name)}`;
+            } else if (match.competitionLevel === 'college') {
+                homeUrl = `/api/players?college=${encodeURIComponent(match.homeTeam.name)}`;
+                awayUrl = `/api/players?college=${encodeURIComponent(match.awayTeam.name)}`;
+            } else if (match.competitionLevel === 'university' || match.competitionLevel === 'external') {
+                // If it's a school team match, we pull from the university field
+                // Usually one of the teams will be the school team
+                homeUrl = `/api/players?university=${encodeURIComponent(match.homeTeam.name)}`;
+                awayUrl = `/api/players?university=${encodeURIComponent(match.awayTeam.name)}`;
+            }
 
             const [homeResponse, awayResponse] = await Promise.all([
-                fetch(`/api/players?teamId=${match.homeTeamId}`),
-                fetch(`/api/players?teamId=${match.awayTeamId}`)
+                fetch(homeUrl),
+                fetch(awayUrl)
             ]);
 
             console.log('Home response status:', homeResponse.status);
@@ -708,6 +730,20 @@ function TeamLineupBuilder({
                                                 <span className="ml-1 text-primary">→ {currentPosition}</span>
                                             )}
                                         </div>
+                                        {(player.department || player.college) && (
+                                            <div className="flex gap-1">
+                                                {player.department && (
+                                                    <span className="px-1.5 py-0.5 bg-white/5 border border-white/10 rounded text-[8px] uppercase font-bold text-white/40">
+                                                        {player.department}
+                                                    </span>
+                                                )}
+                                                {player.college && !player.department && (
+                                                    <span className="px-1.5 py-0.5 bg-white/5 border border-white/10 rounded text-[8px] uppercase font-bold text-white/40">
+                                                        {player.college}
+                                                    </span>
+                                                )}
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
 

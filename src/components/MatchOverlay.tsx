@@ -534,7 +534,7 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
       { id: 'predict', label: 'Predict', icon: Target },
       { id: 'poll', label: 'Poll', icon: BarChart3 },
     ] : []),
-    ...(['UPCOMING', 'LIVE', 'FINISHED'].includes(match.status) ? [
+    ...(['UPCOMING', 'LIVE'].includes(match.status) ? [
       { id: 'chat', label: 'Chat', icon: MessageSquare },
     ] : []),
   ];
@@ -853,7 +853,7 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
                   </div>
 
                   {/* Status Pill */}
-                  <div className="mt-[-10px] bg-[#0a0a0a] px-3 py-1 rounded-full border border-white/10 flex items-center gap-1.5 shadow-sm">
+                  <div className="mt-[-10px] bg-[#0a0a0a] px-3 py-1 rounded-full border border-white/10 flex items-center gap-1.5 shadow-lg relative z-20">
                     {match.status === 'LIVE' && ['FIRST_HALF', 'SECOND_HALF', 'EXTRA_TIME_1', 'EXTRA_TIME_2', 'PENALTY_SHOOTOUT'].includes(matchTime.period || '') && <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse shadow-[0_0_8px_rgba(239,68,68,0.6)]" />}
                     <span className={`text-[10px] sm:text-xs font-bold uppercase tracking-wider ${match.status === 'LIVE' ? 'text-red-500' : 'text-white/60'}`}>
                       <div className="flex items-center gap-1">
@@ -1126,17 +1126,17 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
                 exit={{ opacity: 0, y: -20 }}
                 className="space-y-1"
               >
-                {match.stats?.possession && <StatRow label="Ball Possession" values={match.stats.possession} suffix="%" showBar={true} />}
-                {match.stats?.expectedGoals && <StatRow label="Expected Goals (xG)" values={match.stats.expectedGoals} suffix="" showBar={true} />}
-                {match.stats?.shots && <StatRow label="Total Shots" values={match.stats.shots} showBar={false} />}
-                {match.stats?.shotsOnTarget && <StatRow label="Shots on Target" values={match.stats.shotsOnTarget} showBar={false} />}
-                {match.stats?.shotsOffTarget && <StatRow label="Shots off Target" values={match.stats.shotsOffTarget} showBar={false} />}
-                {match.stats?.corners && <StatRow label="Corners" values={match.stats.corners} showBar={false} />}
-                {match.stats?.fouls && <StatRow label="Fouls" values={match.stats.fouls} showBar={false} />}
-                {match.stats?.yellowCards && <StatRow label="Yellow Cards" values={match.stats.yellowCards} showBar={false} />}
-                {match.stats?.redCards && <StatRow label="Red Cards" values={match.stats.redCards} showBar={false} />}
-                {match.stats?.offsides && <StatRow label="Offsides" values={match.stats.offsides} showBar={false} />}
-                {match.stats?.freeKicks && <StatRow label="Free Kicks" values={match.stats.freeKicks} showBar={false} />}
+                {match.stats?.possession && <StatRow label="Ball Possession" values={match.stats.possession} suffix="%" showBar={true} homeTeam={homeTeam?.shortName || 'Home'} awayTeam={awayTeam?.shortName || 'Away'} />}
+                {match.stats?.expectedGoals && <StatRow label="Expected Goals (xG)" values={match.stats.expectedGoals} suffix="" showBar={true} homeTeam={homeTeam?.shortName || 'Home'} awayTeam={awayTeam?.shortName || 'Away'} />}
+                {match.stats?.shots && <StatRow label="Total Shots" values={match.stats.shots} showBar={false} homeTeam={homeTeam?.shortName || 'Home'} awayTeam={awayTeam?.shortName || 'Away'} />}
+                {match.stats?.shotsOnTarget && <StatRow label="Shots on Target" values={match.stats.shotsOnTarget} showBar={false} homeTeam={homeTeam?.shortName || 'Home'} awayTeam={awayTeam?.shortName || 'Away'} />}
+                {match.stats?.shotsOffTarget && <StatRow label="Shots off Target" values={match.stats.shotsOffTarget} showBar={false} homeTeam={homeTeam?.shortName || 'Home'} awayTeam={awayTeam?.shortName || 'Away'} />}
+                {match.stats?.corners && <StatRow label="Corners" values={match.stats.corners} showBar={false} homeTeam={homeTeam?.shortName || 'Home'} awayTeam={awayTeam?.shortName || 'Away'} />}
+                {match.stats?.fouls && <StatRow label="Fouls" values={match.stats.fouls} showBar={false} homeTeam={homeTeam?.shortName || 'Home'} awayTeam={awayTeam?.shortName || 'Away'} />}
+                {match.stats?.yellowCards && <StatRow label="Yellow Cards" values={match.stats.yellowCards} showBar={false} homeTeam={homeTeam?.shortName || 'Home'} awayTeam={awayTeam?.shortName || 'Away'} />}
+                {match.stats?.redCards && <StatRow label="Red Cards" values={match.stats.redCards} showBar={false} homeTeam={homeTeam?.shortName || 'Home'} awayTeam={awayTeam?.shortName || 'Away'} />}
+                {match.stats?.offsides && <StatRow label="Offsides" values={match.stats.offsides} showBar={false} homeTeam={homeTeam?.shortName || 'Home'} awayTeam={awayTeam?.shortName || 'Away'} />}
+                {match.stats?.freeKicks && <StatRow label="Free Kicks" values={match.stats.freeKicks} showBar={false} homeTeam={homeTeam?.shortName || 'Home'} awayTeam={awayTeam?.shortName || 'Away'} />}
 
                 {!match.stats && (
                   <div className="py-12 text-center">
@@ -1362,7 +1362,7 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
             )}
 
             {/* Chat Tab */}
-            {activeTab === 'chat' && ['UPCOMING', 'LIVE', 'FINISHED'].includes(match.status) && (
+            {activeTab === 'chat' && ['UPCOMING', 'LIVE'].includes(match.status) && (
               <motion.div
                 key="chat"
                 initial={{ opacity: 0, y: 20 }}
@@ -1400,8 +1400,8 @@ function InfoCard({ icon: Icon, label, value }: { icon: any; label: string; valu
   );
 }
 
-// StatRow Component - Sofascore Style
-function StatRow({ label, values, suffix = '', showBar = false }: { label: string; values: [number, number] | any; suffix?: string; showBar?: boolean }) {
+// StatRow Component - Redesigned with separate percentages
+function StatRow({ label, values, suffix = '', showBar = false, homeTeam = 'Home', awayTeam = 'Away' }: { label: string; values: [number, number] | any; suffix?: string; showBar?: boolean; homeTeam?: string; awayTeam?: string }) {
   let homeValue = 0;
   let awayValue = 0;
 
@@ -1415,27 +1415,49 @@ function StatRow({ label, values, suffix = '', showBar = false }: { label: strin
   }
 
   const total = homeValue + awayValue;
-  const homePercent = (homeValue / (total || 1)) * 100;
+  const homePercent = total > 0 ? (homeValue / total) * 100 : 0;
+  const awayPercent = total > 0 ? (awayValue / total) * 100 : 0;
 
   return (
     <div className="bg-white/5 border-b border-white/5 last:border-b-0 py-4 px-4">
-      {/* Top: Values and centered label */}
-      <div className="flex justify-between items-center mb-2">
-        <span className="text-sm font-semibold tabular-nums">{homeValue}{suffix}</span>
+      {/* Label */}
+      <div className="text-center mb-3">
         <span className="text-xs text-white/60 font-medium">{label}</span>
-        <span className="text-sm font-semibold tabular-nums">{awayValue}{suffix}</span>
       </div>
 
-      {/* Bottom: Progress bar (only for possession and xG) */}
+      {/* Values and Percentages Row */}
+      <div className="flex justify-between items-center mb-2">
+        <div className="flex flex-col items-start">
+          <span className="text-base font-bold tabular-nums text-white">{homeValue}{suffix}</span>
+          {showBar && (
+            <span className="text-[10px] text-white/50 font-medium mt-0.5">{homePercent.toFixed(1)}%</span>
+          )}
+          <span className="text-[10px] text-white/40 mt-1">{homeTeam}</span>
+        </div>
+        <div className="flex flex-col items-end">
+          <span className="text-base font-bold tabular-nums text-white">{awayValue}{suffix}</span>
+          {showBar && (
+            <span className="text-[10px] text-white/50 font-medium mt-0.5">{awayPercent.toFixed(1)}%</span>
+          )}
+          <span className="text-[10px] text-white/40 mt-1">{awayTeam}</span>
+        </div>
+      </div>
+
+      {/* Progress bar (only for possession and xG) */}
       {showBar && (
-        <div className="h-1 bg-white/10 rounded-full flex overflow-hidden">
+        <div className="h-2 bg-white/10 rounded-full flex overflow-hidden mt-2">
           <motion.div
             initial={{ width: 0 }}
             animate={{ width: `${homePercent}%` }}
             className="bg-primary h-full"
             transition={{ duration: 0.5, ease: "easeOut" }}
           />
-          <div className="flex-1 bg-white/20 h-full" />
+          <motion.div
+            initial={{ width: 0 }}
+            animate={{ width: `${awayPercent}%` }}
+            className="bg-white/30 h-full"
+            transition={{ duration: 0.5, ease: "easeOut", delay: 0.1 }}
+          />
         </div>
       )}
     </div>
