@@ -456,80 +456,84 @@ function PodiumCard({ entry, position }: { entry: LeaderboardEntry; position: nu
     const isFirst = position === 1;
 
     return (
-        <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: position * 0.1 }}
-            className={`relative group bg-white/5 border ${isFirst ? 'border-primary' : 'border-white/10'} rounded-[40px] p-8 flex flex-col items-center justify-center overflow-hidden transition-all hover:bg-white/10`}
-        >
-            {isFirst && (
-                <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-primary to-transparent" />
-            )}
+        <Link href={`/user/${entry.userId}`}>
+            <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: position * 0.1 }}
+                className={`relative group bg-white/5 border ${isFirst ? 'border-primary' : 'border-white/10'} rounded-[40px] p-8 flex flex-col items-center justify-center overflow-hidden transition-all hover:bg-white/10 hover:border-primary/40 cursor-pointer`}
+            >
+                {isFirst && (
+                    <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-primary to-transparent" />
+                )}
 
-            <div className={`w-16 h-16 rounded-3xl ${isFirst ? 'bg-primary text-black' : 'bg-white/10 text-white/60'} flex items-center justify-center mb-6 relative z-10 shadow-2xl`}>
-                <Trophy size={32} />
-                <div className="absolute -top-2 -right-2 w-8 h-8 rounded-full bg-[#050505] border border-white/10 flex items-center justify-center text-xs font-black">
-                    #{position}
-                </div>
-            </div>
-
-            <h3 className="font-display italic uppercase text-2xl tracking-tighter mb-2">{entry.userName}</h3>
-            <div className="flex items-baseline gap-1 mb-4">
-                <span className="text-4xl font-black text-primary tracking-tighter">{entry.totalPoints}</span>
-                <span className="text-[10px] font-black uppercase text-white/40 tracking-widest">PTS</span>
-            </div>
-
-            <div className="w-full grid grid-cols-2 gap-4 pt-6 border-t border-white/5">
-                <div className="text-center">
-                    <p className="text-[9px] font-black uppercase tracking-widest text-white/20 mb-1">Accuracy</p>
-                    <p className="font-bold text-white/80">{entry.accuracy}%</p>
-                </div>
-                <div className="text-center">
-                    <p className="text-[9px] font-black uppercase tracking-widest text-white/20 mb-1">Streak</p>
-                    <div className="flex items-center justify-center gap-1">
-                        <Flame size={12} className="text-orange-500" />
-                        <p className="font-bold text-white/80">{entry.streak}</p>
+                <div className={`w-16 h-16 rounded-3xl ${isFirst ? 'bg-primary text-black' : 'bg-white/10 text-white/60'} flex items-center justify-center mb-6 relative z-10 shadow-2xl`}>
+                    <Trophy size={32} />
+                    <div className="absolute -top-2 -right-2 w-8 h-8 rounded-full bg-[#050505] border border-white/10 flex items-center justify-center text-xs font-black">
+                        #{position}
                     </div>
                 </div>
-            </div>
-        </motion.div>
+
+                <h3 className="font-display italic uppercase text-2xl tracking-tighter mb-2">{entry.userName}</h3>
+                <div className="flex items-baseline gap-1 mb-4">
+                    <span className="text-4xl font-black text-primary tracking-tighter">{entry.totalPoints}</span>
+                    <span className="text-[10px] font-black uppercase text-white/40 tracking-widest">PTS</span>
+                </div>
+
+                <div className="w-full grid grid-cols-2 gap-4 pt-6 border-t border-white/5">
+                    <div className="text-center">
+                        <p className="text-[9px] font-black uppercase tracking-widest text-white/20 mb-1">Accuracy</p>
+                        <p className="font-bold text-white/80">{entry.accuracy}%</p>
+                    </div>
+                    <div className="text-center">
+                        <p className="text-[9px] font-black uppercase tracking-widest text-white/20 mb-1">Streak</p>
+                        <div className="flex items-center justify-center gap-1">
+                            <Flame size={12} className="text-orange-500" />
+                            <p className="font-bold text-white/80">{entry.streak}</p>
+                        </div>
+                    </div>
+                </div>
+            </motion.div>
+        </Link>
     );
 }
 
 function LeaderboardRow({ entry }: { entry: LeaderboardEntry }) {
     return (
-        <div className="px-8 py-6 hover:bg-white/5 transition-all group border-l-4 border-transparent hover:border-primary">
-            <div className="flex items-center justify-between">
-                <div className="flex items-center gap-6">
-                    <div className="w-12 h-12 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-white/60 font-black italic text-xl group-hover:text-primary group-hover:border-primary/20 transition-all">
-                        #{entry.rank}
-                    </div>
-                    <div>
-                        <h3 className="font-bold text-white group-hover:text-primary transition-colors">{entry.userName}</h3>
-                        <p className="text-[10px] font-black uppercase tracking-[0.2em] text-white/20">
-                            {entry.correctPredictions}/{entry.totalPredictions} Correct
-                        </p>
-                    </div>
-                </div>
-
-                <div className="flex items-center gap-12">
-                    <div className="text-right">
-                        <p className="text-2xl font-black text-primary tracking-tighter">{entry.totalPoints}</p>
-                        <p className="text-[9px] font-black uppercase tracking-widest text-white/20">Points</p>
-                    </div>
-                    <div className="hidden md:block text-right">
-                        <p className="text-lg font-bold text-white/80">{entry.accuracy}%</p>
-                        <p className="text-[9px] font-black uppercase tracking-widest text-white/20">Accuracy</p>
-                    </div>
-                    {entry.streak > 0 && (
-                        <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-orange-500/10 text-orange-500 border border-orange-500/20">
-                            <Flame className="w-4 h-4" />
-                            <span className="font-black italic text-sm">{entry.streak}</span>
+        <Link href={`/user/${entry.userId}`} className="block">
+            <div className="px-8 py-6 hover:bg-white/5 transition-all group border-l-4 border-transparent hover:border-primary cursor-pointer">
+                <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-6">
+                        <div className="w-12 h-12 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-white/60 font-black italic text-xl group-hover:text-primary group-hover:border-primary/20 transition-all">
+                            #{entry.rank}
                         </div>
-                    )}
+                        <div>
+                            <h3 className="font-bold text-white group-hover:text-primary transition-colors">{entry.userName}</h3>
+                            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-white/20">
+                                {entry.correctPredictions}/{entry.totalPredictions} Correct
+                            </p>
+                        </div>
+                    </div>
+
+                    <div className="flex items-center gap-12">
+                        <div className="text-right">
+                            <p className="text-2xl font-black text-primary tracking-tighter">{entry.totalPoints}</p>
+                            <p className="text-[9px] font-black uppercase tracking-widest text-white/20">Points</p>
+                        </div>
+                        <div className="hidden md:block text-right">
+                            <p className="text-lg font-bold text-white/80">{entry.accuracy}%</p>
+                            <p className="text-[9px] font-black uppercase tracking-widest text-white/20">Accuracy</p>
+                        </div>
+                        {entry.streak > 0 && (
+                            <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-orange-500/10 text-orange-500 border border-orange-500/20">
+                                <Flame className="w-4 h-4" />
+                                <span className="font-black italic text-sm">{entry.streak}</span>
+                            </div>
+                        )}
+                    </div>
                 </div>
             </div>
-        </div>
+        </Link>
     );
 }
 
