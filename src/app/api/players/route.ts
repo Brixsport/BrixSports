@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { db } from '@/db';
 import { players } from '@/db/schema';
 import { eq, inArray, or, like } from 'drizzle-orm';
+import { getAuthUser } from '@/lib/auth';
 
 export async function GET(request: Request) {
     try {
@@ -48,8 +49,25 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
     try {
+        const user = await getAuthUser(request as any);
+        if (!user || user.role !== 'admin') {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+
         const body = await request.json();
-        const newPlayer = await db.insert(players).values(body).returning();
+
+        // Basic validation
+        if (!body.name || !body.teamId) {
+            return NextResponse.json({ error: 'Name and Team ID are required' }, { status: 400 });
+        }
+
+        const playerId = body.id || `player-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
+        const newPlayer = await db.insert(players).values({
+            ...body,
+            id: playerId,
+        }).returning();
+
         return NextResponse.json(newPlayer[0], { status: 201 });
     } catch (error) {
         console.error('Error creating player:', error);

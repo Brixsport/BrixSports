@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
 import { players, teams, matchEvents, matches, playerStats, basketballPlayerStats, footballPlayerStats } from '@/db/schema';
 import { eq, desc, and, sql, ne } from 'drizzle-orm';
+import { getAuthUser } from '@/lib/auth';
 
 interface RouteParams {
     params: {
@@ -254,5 +255,69 @@ export async function GET(
             { error: 'Failed to fetch player details' },
             { status: 500 }
         );
+    }
+}
+
+export async function PATCH(
+    request: NextRequest,
+    { params }: RouteParams
+) {
+    try {
+        const user = await getAuthUser(request);
+        if (!user || user.role !== 'admin') {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+
+        const { id } = await params;
+        const body = await request.json();
+
+        // Prevent updating id
+        delete body.id;
+
+        const updated = await db
+            .update(players)
+            .set({
+                ...body,
+                updatedAt: new Date() // Note: schema says createdAt is defaultFn, but we can add updatedAt manually if needed or just update body
+            })
+            .where(eq(players.id, id))
+            .returning();
+
+        if (updated.length === 0) {
+            return NextResponse.json({ error: 'Player not found' }, { status: 404 });
+        }
+
+        return NextResponse.json(updated[0]);
+    } catch (error) {
+        console.error('Error updating player:', error);
+        return NextResponse.json({ error: 'Failed to update player' }, { status: 500 });
+    }
+}
+
+export async function DELETE(
+    request: NextRequest,
+    { params }: RouteParams
+) {
+    try {
+        const user = await getAuthUser(request);
+        if (!user || user.role !== 'admin') {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+
+        const { id } = await params;
+
+        const deleted = await db
+            .delete(players)
+            .where(eq(players.id, id))
+            .returning();
+
+        if (deleted.length === 0) {
+            return NextResponse.json({ error: 'Player not found' }, { status: 404 });
+        }
+
+        return NextResponse.json({ message: 'Player deleted successfully', deleted: deleted[0] });
+    } catch (error) {
+        console.error('Error deleting player:', error);
+        return NextResponse.json({ error: 'Failed to delete player' }, { status: 500 });
     }
 }
