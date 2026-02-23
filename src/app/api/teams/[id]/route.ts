@@ -35,12 +35,47 @@ export async function GET(
             );
         }
 
-        // Get team players
+        // Get team players (directly registered to this team)
         const teamPlayers = await db
             .select()
             .from(players)
             .where(eq(players.teamId, id))
             .orderBy(desc(players.rating));
+
+        // UNIVERSITY POOL — all students eligible to represent this university
+        // Football analogy: all Spaniards (university affiliation) who can play for Spain (University Team)
+        let universityPlayers: typeof teamPlayers = [];
+        if (team.university) {
+            universityPlayers = await db
+                .select({
+                    id: players.id, name: players.name, jerseyName: players.jerseyName,
+                    number: players.number, teamId: players.teamId, position: players.position,
+                    rating: players.rating, eyePoints: players.eyePoints, age: players.age,
+                    height: players.height, weight: players.weight, nationality: players.nationality,
+                    college: players.college, department: players.department,
+                    university: players.university, image: players.image,
+                    marketValue: players.marketValue, profileId: players.profileId,
+                    email: players.email, attributes: players.attributes,
+                    createdAt: players.createdAt,
+                })
+                .from(players)
+                .leftJoin(teams, eq(players.teamId, teams.id))
+                .where(
+                    or(
+                        eq(players.university, team.university), // Affiliated personally
+                        eq(teams.university, team.university)    // Affiliated via club
+                    )
+                )
+                .orderBy(desc(players.rating));
+
+            // Deduplicate by ID
+            const seen = new Set<string>();
+            universityPlayers = universityPlayers.filter(p => {
+                if (seen.has(p.id)) return false;
+                seen.add(p.id);
+                return true;
+            });
+        }
 
         // Get player stats (Basketball)
         let playersWithStats = teamPlayers;
@@ -164,6 +199,7 @@ export async function GET(
         return NextResponse.json({
             team,
             players: playersWithStats,
+            universityPlayers,       // all players from ALL teams under this university
             recentMatches: enrichedRecent,
             upcomingMatches: enrichedUpcoming,
             stats,

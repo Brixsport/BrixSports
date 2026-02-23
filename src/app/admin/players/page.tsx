@@ -50,6 +50,7 @@ function AdminPlayersPageContent() {
     const [searchQuery, setSearchQuery] = useState('');
     const [sportFilter, setSportFilter] = useState('all');
     const [teamFilter, setTeamFilter] = useState('all');
+    const [universityFilter, setUniversityFilter] = useState('all');
 
     // Modal & Dialog state
     const [showModal, setShowModal] = useState(false);
@@ -83,6 +84,16 @@ function AdminPlayersPageContent() {
         image: ''
     });
 
+    // Auto-update university from team selection
+    useEffect(() => {
+        if (formData.teamId && modalMode === 'create') {
+            const selectedTeam = teams.find(t => t.id === formData.teamId);
+            if (selectedTeam?.university) {
+                setFormData(prev => ({ ...prev, university: selectedTeam.university }));
+            }
+        }
+    }, [formData.teamId, teams, modalMode]);
+
     useEffect(() => {
         Promise.all([fetchPlayers(), fetchTeams()]).then(() => setIsLoading(false));
     }, []);
@@ -111,6 +122,13 @@ function AdminPlayersPageContent() {
         }
     };
 
+    // Unique universities derived from teams
+    const universities = useMemo(() => {
+        const seen = new Set<string>();
+        teams.forEach(t => { if (t.university) seen.add(t.university); });
+        return Array.from(seen).sort();
+    }, [teams]);
+
     const filteredPlayers = useMemo(() => {
         return players.filter(p => {
             const team = teams.find(t => t.id === p.teamId);
@@ -130,11 +148,18 @@ function AdminPlayersPageContent() {
                 team?.shortName?.toLowerCase().includes(q);
 
             const matchesSport = sportFilter === 'all' || team?.sport === sportFilter;
+
+            // University filter: match player.university OR the team's university
+            const matchesUniversity = universityFilter === 'all' ||
+                p.university === universityFilter ||
+                team?.university === universityFilter;
+
+            // Team filter: only apply if university filter is not narrowing things down
             const matchesTeam = teamFilter === 'all' || p.teamId === teamFilter;
 
-            return matchesSearch && matchesSport && matchesTeam;
+            return matchesSearch && matchesSport && matchesUniversity && matchesTeam;
         });
-    }, [players, teams, searchQuery, sportFilter, teamFilter]);
+    }, [players, teams, searchQuery, sportFilter, teamFilter, universityFilter]);
 
     const handleOpenCreate = () => {
         setModalMode('create');
@@ -262,16 +287,30 @@ function AdminPlayersPageContent() {
 
             <div className="max-w-7xl mx-auto p-8">
                 {/* Filters & Search */}
-                <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 mb-8">
+                <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 mb-8">
                     <div className="lg:col-span-2 relative group">
                         <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20 group-focus-within:text-primary transition-colors" size={20} />
                         <input
                             type="text"
-                            placeholder="Search by name, ID or jersey name..."
+                            placeholder="Search by name, team, university, college..."
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
                             className="w-full bg-white/5 border border-white/10 rounded-2xl pl-12 pr-4 py-4 focus:outline-none focus:border-primary/50 transition-all font-bold text-sm"
                         />
+                    </div>
+                    {/* University filter — shows players across ALL teams under a university */}
+                    <div className="relative">
+                        <Shield className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" size={18} />
+                        <select
+                            value={universityFilter}
+                            onChange={(e) => { setUniversityFilter(e.target.value); setTeamFilter('all'); }}
+                            className="w-full bg-white/5 border border-white/10 rounded-2xl pl-12 pr-4 py-4 focus:outline-none focus:border-primary/50 transition-all font-bold text-sm appearance-none"
+                        >
+                            <option value="all">All Universities</option>
+                            {universities.map(u => (
+                                <option key={u} value={u}>{u}</option>
+                            ))}
+                        </select>
                     </div>
                     <div className="relative">
                         <Filter className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" size={18} />
@@ -293,9 +332,11 @@ function AdminPlayersPageContent() {
                             className="w-full bg-white/5 border border-white/10 rounded-2xl pl-12 pr-4 py-4 focus:outline-none focus:border-primary/50 transition-all font-bold text-sm appearance-none"
                         >
                             <option value="all">All Teams</option>
-                            {teams.map(t => (
-                                <option key={t.id} value={t.id}>{t.name} ({t.sport})</option>
-                            ))}
+                            {teams
+                                .filter(t => universityFilter === 'all' || t.university === universityFilter)
+                                .map(t => (
+                                    <option key={t.id} value={t.id}>{t.name} ({t.sport})</option>
+                                ))}
                         </select>
                     </div>
                 </div>

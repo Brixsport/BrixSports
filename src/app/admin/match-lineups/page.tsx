@@ -101,19 +101,19 @@ export default function AdminMatchLineupsPage() {
             let homeUrl = `/api/players?teamId=${match.homeTeamId}`;
             let awayUrl = `/api/players?teamId=${match.awayTeamId}`;
 
-            // Smart Roster Fetching based on competition level
+            // For interdepartmental/intercollege competitions, players are grouped by
+            // department or college, not by teamId — use those filters instead.
+            // NOTE: Do NOT use university filter with team.name — the university field
+            //       stores the institution name (e.g. "Bells University"), not the team name.
             if (match.competitionLevel === 'department') {
                 homeUrl = `/api/players?department=${encodeURIComponent(match.homeTeam.name)}`;
                 awayUrl = `/api/players?department=${encodeURIComponent(match.awayTeam.name)}`;
             } else if (match.competitionLevel === 'college') {
                 homeUrl = `/api/players?college=${encodeURIComponent(match.homeTeam.name)}`;
                 awayUrl = `/api/players?college=${encodeURIComponent(match.awayTeam.name)}`;
-            } else if (match.competitionLevel === 'university' || match.competitionLevel === 'external') {
-                // If it's a school team match, we pull from the university field
-                // Usually one of the teams will be the school team
-                homeUrl = `/api/players?university=${encodeURIComponent(match.homeTeam.name)}`;
-                awayUrl = `/api/players?university=${encodeURIComponent(match.awayTeam.name)}`;
             }
+            // For 'busa-league', 'inter-university', 'external', or any other level:
+            // use teamId (already set as default above) — always correct for real teams.
 
             const [homeResponse, awayResponse] = await Promise.all([
                 fetch(homeUrl),

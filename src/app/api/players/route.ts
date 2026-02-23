@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/db';
-import { players } from '@/db/schema';
+import { players, teams } from '@/db/schema';
 import { eq, inArray, or, like } from 'drizzle-orm';
 import { getAuthUser } from '@/lib/auth';
 
@@ -25,7 +25,32 @@ export async function GET(request: Request) {
         }
 
         // Hierarchy filters (Department, College, University)
+        // For university, we also check the team's university field because BUSA teams
+        // (e.g. Kings FC) store the university on the team row, not on each player row.
         if (department || college || university) {
+            if (university && !department && !college) {
+                // JOIN teams so we can match either player.university or team.university
+                const results = await db
+                    .select({
+                        id: players.id, name: players.name, jerseyName: players.jerseyName,
+                        number: players.number, teamId: players.teamId, position: players.position,
+                        rating: players.rating, eyePoints: players.eyePoints, age: players.age,
+                        height: players.height, weight: players.weight, nationality: players.nationality,
+                        college: players.college, department: players.department, university: players.university,
+                        image: players.image, marketValue: players.marketValue, profileId: players.profileId,
+                        email: players.email, attributes: players.attributes, createdAt: players.createdAt,
+                    })
+                    .from(players)
+                    .leftJoin(teams, eq(players.teamId, teams.id))
+                    .where(
+                        or(
+                            eq(players.university, university),
+                            eq(teams.university, university)
+                        )
+                    );
+                return NextResponse.json({ success: true, players: results });
+            }
+
             let query = db.select().from(players);
             const conditions = [];
 

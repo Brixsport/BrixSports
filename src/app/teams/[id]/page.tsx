@@ -20,6 +20,7 @@ const TeamStatsChart = dynamic(() => import('@/components/TeamStatsChart'), {
 interface TeamData {
     team: any;
     players: any[];
+    universityPlayers?: any[];
     recentMatches: any[];
     upcomingMatches: any[];
     stats: any;
@@ -83,7 +84,7 @@ export default function TeamDetailPage() {
         );
     }
 
-    const { team, players = [], recentMatches = [], upcomingMatches = [], stats: rawStats = {}, form = [], competitions = [] } = data;
+    const { team, players = [], universityPlayers = [], recentMatches = [], upcomingMatches = [], stats: rawStats = {}, form = [], competitions = [] } = data;
     const stats = { played: 0, won: 0, drawn: 0, lost: 0, goalsFor: 0, goalsAgainst: 0, goalDifference: 0, ...rawStats };
 
     const getFormColor = (result: string) => {
@@ -405,65 +406,105 @@ export default function TeamDetailPage() {
                             )}
 
                             {activeTab === 'players' && (
-                                <motion.div variants={containerVariants} initial="hidden" animate="visible">
-                                    <div className="flex items-center justify-between mb-8">
-                                        <h2 className="text-2xl font-bold flex items-center gap-3">
-                                            <Users className="w-6 h-6 text-primary" />
-                                            Active Squad
-                                            <span className="text-sm font-medium text-white/40 bg-white/5 px-2 py-1 rounded-md">{players.length}</span>
-                                        </h2>
+                                <motion.div variants={containerVariants} initial="hidden" animate="visible" className="space-y-12">
+                                    {/* Active Squad Section */}
+                                    <div>
+                                        <div className="flex items-center justify-between mb-8">
+                                            <h2 className="text-2xl font-bold flex items-center gap-3">
+                                                <Users className="w-6 h-6 text-primary" />
+                                                Active Squad
+                                                <span className="text-sm font-medium text-white/40 bg-white/5 px-2 py-1 rounded-md">{players.length}</span>
+                                            </h2>
+                                        </div>
+
+                                        {players.length > 0 ? (
+                                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                                                {players.map((player) => (
+                                                    <Link key={player.id} href={`/players/${player.id}`}>
+                                                        <motion.div
+                                                            variants={itemVariants}
+                                                            whileHover={{ y: -5 }}
+                                                            className="group p-1 rounded-2xl bg-gradient-to-b from-white/10 to-white/5 border border-white/10 hover:border-primary/50 transition-all duration-300"
+                                                        >
+                                                            <div className="bg-[#0A0A0A] rounded-xl p-5 h-full relative overflow-hidden">
+                                                                <div className="absolute top-0 right-0 p-4 opacity-10 font-black text-6xl text-white group-hover:opacity-20 transition-opacity select-none">
+                                                                    {player.number}
+                                                                </div>
+                                                                <div className="relative z-10 flex flex-col h-full">
+                                                                    <div className="flex items-center gap-4 mb-4">
+                                                                        <div className="w-12 h-12 rounded-full bg-gradient-to-br from-primary to-primary/50 flex items-center justify-center text-black font-bold text-lg shadow-lg group-hover:scale-110 transition-transform">
+                                                                            {player.number}
+                                                                        </div>
+                                                                        <div>
+                                                                            <div className="text-xs font-bold uppercase text-white/40 tracking-widest mb-0.5">{player.position}</div>
+                                                                            <div className="font-bold text-lg leading-tight group-hover:text-primary transition-colors">{player.name}</div>
+                                                                        </div>
+                                                                    </div>
+                                                                    {team.sport === 'Basketball' && player.stats && (
+                                                                        <div className="mt-auto grid grid-cols-3 gap-2 py-3 border-t border-white/5">
+                                                                            <div className="text-center">
+                                                                                <div className="text-[10px] uppercase text-white/30 font-bold">PTS</div>
+                                                                                <div className="font-mono font-bold text-blue-500">{(player.stats.pointsPerGame || 0).toFixed(1)}</div>
+                                                                            </div>
+                                                                            <div className="text-center border-l border-white/5">
+                                                                                <div className="text-[10px] uppercase text-white/30 font-bold">REB</div>
+                                                                                <div className="font-mono font-bold">{player.stats.reboundsPerGame || 0}</div>
+                                                                            </div>
+                                                                            <div className="text-center border-l border-white/5">
+                                                                                <div className="text-[10px] uppercase text-white/30 font-bold">AST</div>
+                                                                                <div className="font-mono font-bold">{player.stats.assistsPerGame || 0}</div>
+                                                                            </div>
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                            </div>
+                                                        </motion.div>
+                                                    </Link>
+                                                ))}
+                                            </div>
+                                        ) : (
+                                            <div className="h-64 flex flex-col items-center justify-center bg-white/5 rounded-3xl border border-dashed border-white/10">
+                                                <Users className="w-12 h-12 text-white/20 mb-4" />
+                                                <p className="text-white/40 font-medium">No players registered yet.</p>
+                                            </div>
+                                        )}
                                     </div>
 
-                                    {players.length > 0 ? (
-                                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                                            {players.map((player) => (
-                                                <Link key={player.id} href={`/players/${player.id}`}>
-                                                    <motion.div
-                                                        variants={itemVariants}
-                                                        whileHover={{ y: -5 }}
-                                                        className="group p-1 rounded-2xl bg-gradient-to-b from-white/10 to-white/5 border border-white/10 hover:border-primary/50 transition-all duration-300"
-                                                    >
-                                                        <div className="bg-[#0A0A0A] rounded-xl p-5 h-full relative overflow-hidden">
-                                                            <div className="absolute top-0 right-0 p-4 opacity-10 font-black text-6xl text-white group-hover:opacity-20 transition-opacity select-none">
-                                                                {player.number}
-                                                            </div>
-                                                            <div className="relative z-10 flex flex-col h-full">
-                                                                <div className="flex items-center gap-4 mb-4">
-                                                                    <div className="w-12 h-12 rounded-full bg-gradient-to-br from-primary to-primary/50 flex items-center justify-center text-black font-bold text-lg shadow-lg group-hover:scale-110 transition-transform">
+                                    {/* University Pool Section (if applicable) */}
+                                    {universityPlayers.length > players.length && (
+                                        <div className="pt-8 border-t border-white/5">
+                                            <div className="flex items-center justify-between mb-8">
+                                                <h2 className="text-2xl font-bold flex items-center gap-3">
+                                                    <Shield className="w-6 h-6 text-blue-400" />
+                                                    {team.university} Talent Pool
+                                                    <span className="text-sm font-medium text-white/40 bg-white/5 px-2 py-1 rounded-md">{universityPlayers.length} Total</span>
+                                                </h2>
+                                                <p className="text-xs font-medium text-white/40">Players from across all {team.university} teams</p>
+                                            </div>
+
+                                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                                                {universityPlayers
+                                                    .filter(up => !players.some(p => p.id === up.id))
+                                                    .map((player) => (
+                                                        <Link key={player.id} href={`/players/${player.id}`}>
+                                                            <motion.div
+                                                                variants={itemVariants}
+                                                                whileHover={{ y: -5 }}
+                                                                className="group p-5 rounded-2xl bg-white/5 border border-white/10 hover:border-blue-500/50 transition-all duration-300"
+                                                            >
+                                                                <div className="flex items-center gap-4">
+                                                                    <div className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center text-white/40 font-bold text-sm border border-white/10 group-hover:bg-blue-500/20 group-hover:text-blue-400 transition-colors">
                                                                         {player.number}
                                                                     </div>
                                                                     <div>
-                                                                        <div className="text-xs font-bold uppercase text-white/40 tracking-widest mb-0.5">{player.position}</div>
-                                                                        <div className="font-bold text-lg leading-tight group-hover:text-primary transition-colors">{player.name}</div>
+                                                                        <div className="text-[10px] font-bold uppercase text-white/20 tracking-widest mb-0.5">{player.position}</div>
+                                                                        <div className="font-bold text-base leading-tight group-hover:text-white transition-colors">{player.name}</div>
                                                                     </div>
                                                                 </div>
-
-                                                                {team.sport === 'Basketball' && player.stats && (
-                                                                    <div className="mt-auto grid grid-cols-3 gap-2 py-3 border-t border-white/5">
-                                                                        <div className="text-center">
-                                                                            <div className="text-[10px] uppercase text-white/30 font-bold">PTS</div>
-                                                                            <div className="font-mono font-bold text-blue-500">{(player.stats.pointsPerGame || 0).toFixed(1)}</div>
-                                                                        </div>
-                                                                        <div className="text-center border-l border-white/5">
-                                                                            <div className="text-[10px] uppercase text-white/30 font-bold">REB</div>
-                                                                            <div className="font-mono font-bold">{player.stats.reboundsPerGame || 0}</div>
-                                                                        </div>
-                                                                        <div className="text-center border-l border-white/5">
-                                                                            <div className="text-[10px] uppercase text-white/30 font-bold">AST</div>
-                                                                            <div className="font-mono font-bold">{player.stats.assistsPerGame || 0}</div>
-                                                                        </div>
-                                                                    </div>
-                                                                )}
-                                                            </div>
-                                                        </div>
-                                                    </motion.div>
-                                                </Link>
-                                            ))}
-                                        </div>
-                                    ) : (
-                                        <div className="h-64 flex flex-col items-center justify-center bg-white/5 rounded-3xl border border-dashed border-white/10">
-                                            <Users className="w-12 h-12 text-white/20 mb-4" />
-                                            <p className="text-white/40 font-medium">No players registered yet.</p>
+                                                            </motion.div>
+                                                        </Link>
+                                                    ))}
+                                            </div>
                                         </div>
                                     )}
                                 </motion.div>
