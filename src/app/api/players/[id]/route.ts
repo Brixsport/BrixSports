@@ -271,15 +271,29 @@ export async function PATCH(
         const { id } = await params;
         const body = await request.json();
 
-        // Prevent updating id
-        delete body.id;
+        // Whitelist only valid players table columns to avoid passing unknown fields to Drizzle
+        // (players table has no updatedAt column — only createdAt)
+        const allowedFields: (keyof typeof players.$inferInsert)[] = [
+            'name', 'jerseyName', 'number', 'teamId', 'position',
+            'rating', 'eyePoints', 'age', 'height', 'weight',
+            'nationality', 'college', 'department', 'university',
+            'image', 'marketValue', 'profileId', 'email', 'attributes',
+        ];
+
+        const updateData: Partial<typeof players.$inferInsert> = {};
+        for (const field of allowedFields) {
+            if (field in body && body[field] !== undefined) {
+                (updateData as Record<string, unknown>)[field] = body[field];
+            }
+        }
+
+        if (Object.keys(updateData).length === 0) {
+            return NextResponse.json({ error: 'No valid fields to update' }, { status: 400 });
+        }
 
         const updated = await db
             .update(players)
-            .set({
-                ...body,
-                updatedAt: new Date() // Note: schema says createdAt is defaultFn, but we can add updatedAt manually if needed or just update body
-            })
+            .set(updateData)
             .where(eq(players.id, id))
             .returning();
 
