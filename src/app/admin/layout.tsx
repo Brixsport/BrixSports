@@ -1,8 +1,15 @@
+import { Metadata } from 'next';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { jwtVerify } from 'jose';
 import { PWAProvider } from '@/components/pwa/PWAProvider';
 import { AdminDashboardLayout } from '@/components/admin/AdminDashboardLayout';
+
+export const metadata: Metadata = {
+    title: 'Brix Admin | Statistics & Management',
+    description: 'Admin dashboard for Brixsport',
+    manifest: '/manifest-admin.json',
+};
 
 export default async function AdminLayout({
     children,
@@ -32,7 +39,7 @@ export default async function AdminLayout({
     }
 
     return (
-        <PWAProvider swPath="/sw-admin.js" showInstallPrompt={false}>
+        <PWAProvider swPath="/sw-admin.js" showInstallPrompt={true}>
             <AdminDashboardLayout>
                 {children}
             </AdminDashboardLayout>
