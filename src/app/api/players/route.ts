@@ -97,9 +97,17 @@ export async function POST(request: Request) {
 
         const body = await request.json();
 
-        // Basic validation
-        if (!body.name || !body.teamId) {
-            return NextResponse.json({ error: 'Name and Team ID are required' }, { status: 400 });
+        // Basic validation - only name and position are required
+        // teamId is optional (player can exist without a team but must have institutional data)
+        if (!body.name || !body.position) {
+            return NextResponse.json({ error: 'Name and Position are required' }, { status: 400 });
+        }
+
+        // Validate that player has either a team OR institutional affiliation
+        if (!body.teamId && !body.university && !body.college && !body.department) {
+            return NextResponse.json({
+                error: 'Player must have either a Team ID or institutional affiliation (university, college, or department)',
+            }, { status: 400 });
         }
 
         const playerId = body.id || `player-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;

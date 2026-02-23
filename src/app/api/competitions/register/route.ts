@@ -50,6 +50,7 @@ export async function POST(request: NextRequest) {
                 height: player.height || null,
                 weight: player.weight || null,
                 nationality: player.nationality || 'Nigeria',
+                university: player.university || teamInfo.schoolName || null, // Player's university affiliation
                 college: player.college || null,
                 department: player.department || null,
                 image: player.image || null,

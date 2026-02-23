@@ -171,18 +171,24 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
 
         const init = async () => {
             try {
-                const [teamsRes, playersRes, lineupsRes] = await Promise.all([
+                // Fetch teams, all players, and eligible players for this match
+                const [teamsRes, playersRes, lineupsRes, eligibleRes] = await Promise.all([
                     fetch('/api/teams'),
                     fetch('/api/players'),
-                    fetch(`/api/matches/${match.id}/lineup`)
+                    fetch(`/api/matches/${match.id}/lineup`),
+                    fetch(`/api/matches/${match.id}/eligible-players`)
                 ]);
 
                 const teamsData = await teamsRes.json();
                 const playersData = await playersRes.json();
                 const lineupsData = await lineupsRes.json();
+                const eligibleData = await eligibleRes.json();
 
                 const teams = Array.isArray(teamsData) ? teamsData : (teamsData.teams || teamsData.data || []);
                 const players = Array.isArray(playersData) ? playersData : (playersData.players || playersData.data || []);
+                
+                // Use eligible players filtered by institutional data if available, otherwise fallback to team-based filtering
+                const eligiblePlayers = eligibleData.success ? eligibleData.players : players;
 
                 const home = teams.find((t: Team) => t.id === match.homeTeamId);
                 const away = teams.find((t: Team) => t.id === match.awayTeamId);
@@ -190,8 +196,9 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                 setHomeTeam(home || null);
                 setAwayTeam(away || null);
 
-                const hPlayers = players.filter((p: Player) => p.teamId === match.homeTeamId);
-                const aPlayers = players.filter((p: Player) => p.teamId === match.awayTeamId);
+                // Filter eligible players by team
+                const hPlayers = eligiblePlayers.filter((p: Player) => p.teamId === match.homeTeamId);
+                const aPlayers = eligiblePlayers.filter((p: Player) => p.teamId === match.awayTeamId);
 
                 setHomePlayers(hPlayers);
                 setAwayPlayers(aPlayers);

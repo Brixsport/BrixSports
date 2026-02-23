@@ -221,9 +221,16 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
     useEffect(() => {
         const fetchData = async () => {
             try {
-                // Fetch teams
-                const teamsResponse = await fetch('/api/teams');
+                // Fetch teams and eligible players in parallel
+                const [teamsResponse, playersResponse, eligibleResponse] = await Promise.all([
+                    fetch('/api/teams'),
+                    fetch('/api/players'),
+                    fetch(`/api/matches/${match.id}/eligible-players`)
+                ]);
+
                 const teamsData = await teamsResponse.json();
+                const playersData = await playersResponse.json();
+                const eligibleData = await eligibleResponse.json();
 
                 // Handle different response formats for teams
                 const teamsArray = Array.isArray(teamsData) ? teamsData : (teamsData.teams || teamsData.data || []);
@@ -234,16 +241,14 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                 setHomeTeam(home || null);
                 setAwayTeam(away || null);
 
-                // Fetch players
-                const playersResponse = await fetch('/api/players');
-                const playersData = await playersResponse.json();
+                // Use eligible players filtered by institutional data if available
+                const playersArray = eligibleData.success 
+                    ? eligibleData.players 
+                    : (Array.isArray(playersData)
+                        ? playersData
+                        : (playersData.players || playersData.data || []));
 
-                // Handle different response formats for players
-                const playersArray = Array.isArray(playersData)
-                    ? playersData
-                    : (playersData.players || playersData.data || []);
-
-                console.log('🏀 Players fetched:', playersArray.length);
+                console.log('🏀 Eligible players fetched:', playersArray.length);
                 console.log('🏠 Home team ID:', match.homeTeamId);
                 console.log('✈️ Away team ID:', match.awayTeamId);
 

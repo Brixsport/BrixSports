@@ -38,6 +38,7 @@ interface PlayerInfo {
     height: string;
     weight: string;
     nationality: string;
+    university: string; // University affiliation
     college: string;
     department: string;
     image: string;
@@ -120,6 +121,7 @@ export default function CompetitionRegistration({
             height: '',
             weight: '',
             nationality: 'Nigeria',
+            university: teamInfo.schoolName || '', // Default to competition's university
             college: '',
             department: '',
             image: '',
@@ -583,6 +585,28 @@ export default function CompetitionRegistration({
                                                         className="w-full px-3 py-2 bg-white/5 border border-gray-600 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
                                                         placeholder="Nigeria"
                                                     />
+                                                </div>
+                                                <div>
+                                                    <label className="block text-xs font-medium text-gray-400 mb-1">
+                                                        University *
+                                                    </label>
+                                                    <input
+                                                        type="text"
+                                                        required
+                                                        list="player-universities-list"
+                                                        value={player.university}
+                                                        onChange={(e) => updatePlayer(player.id, 'university', e.target.value)}
+                                                        className="w-full px-3 py-2 bg-white/5 border border-gray-600 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+                                                        placeholder={teamInfo.schoolName || "Player's University"}
+                                                    />
+                                                    <datalist id="player-universities-list">
+                                                        {universities.map((university) => (
+                                                            <option key={university} value={university} />
+                                                        ))}
+                                                    </datalist>
+                                                    <p className="text-xs text-gray-500 mt-1">
+                                                        Player's university (especially important for players not in a club team)
+                                                    </p>
                                                 </div>
                                                 <div>
                                                     <label className="block text-xs font-medium text-gray-400 mb-1">

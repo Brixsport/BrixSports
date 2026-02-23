@@ -26,8 +26,8 @@ export const players = sqliteTable('players', {
     id: text('id').primaryKey(),
     name: text('name').notNull(),
     jerseyName: text('jersey_name'), // Name on jersey for logger identification
-    number: integer('number').notNull(),
-    teamId: text('team_id').notNull().references(() => teams.id),
+    number: integer('number'),
+    teamId: text('team_id').references(() => teams.id), // OPTIONAL: players can exist without a primary team
     position: text('position').notNull(),
     rating: real('rating').default(7.0),
     eyePoints: integer('eye_points').default(0),
@@ -184,6 +184,18 @@ export const matchLoggerAssignments = sqliteTable('match_logger_assignments', {
     assignedAt: integer('assigned_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
     assignedBy: text('assigned_by'), // Admin who made the assignment
     status: text('status').default('active'), // 'active' | 'removed'
+});
+
+// Player Team Affiliations table (many-to-many: a player can belong to multiple teams)
+export const playerTeamAffiliations = sqliteTable('player_team_affiliations', {
+    id: text('id').primaryKey(),
+    playerId: text('player_id').notNull().references(() => players.id, { onDelete: 'cascade' }),
+    teamId: text('team_id').notNull().references(() => teams.id, { onDelete: 'cascade' }),
+    affiliationType: text('affiliation_type').notNull(), // 'club' | 'department' | 'college' | 'university' | 'external'
+    isActive: integer('is_active', { mode: 'boolean' }).default(true),
+    joinedDate: integer('joined_date', { mode: 'timestamp' }).$defaultFn(() => new Date()),
+    leftDate: integer('left_date', { mode: 'timestamp' }),
+    createdAt: integer('created_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
 });
 
 // Match Events table
@@ -460,6 +472,7 @@ export const registeredPlayers = sqliteTable('registered_players', {
     height: text('height'),
     weight: text('weight'),
     nationality: text('nationality').default('Nigeria'),
+    university: text('university'), // Player's university affiliation
     college: text('college'), // For interdepartmental
     department: text('department'),
     image: text('image'), // Player photo URL
@@ -682,6 +695,7 @@ export const passwordResetTokens = sqliteTable('password_reset_tokens', {
 // Relations
 export const teamsRelations = relations(teams, ({ many }) => ({
     players: many(players),
+    playerAffiliations: many(playerTeamAffiliations),
     homeMatches: many(matches, { relationName: 'homeTeam' }),
     awayMatches: many(matches, { relationName: 'awayTeam' }),
     standings: many(standings),
@@ -692,6 +706,7 @@ export const playersRelations = relations(players, ({ one, many }) => ({
         fields: [players.teamId],
         references: [teams.id],
     }),
+    affiliations: many(playerTeamAffiliations),
     events: many(matchEvents),
 }));
 
@@ -721,6 +736,17 @@ export const matchEventsRelations = relations(matchEvents, ({ one }) => ({
     player: one(players, {
         fields: [matchEvents.playerId],
         references: [players.id],
+    }),
+}));
+
+export const playerTeamAffiliationsRelations = relations(playerTeamAffiliations, ({ one }) => ({
+    player: one(players, {
+        fields: [playerTeamAffiliations.playerId],
+        references: [players.id],
+    }),
+    team: one(teams, {
+        fields: [playerTeamAffiliations.teamId],
+        references: [teams.id],
     }),
 }));
 
@@ -813,6 +839,8 @@ export type MatchReminder = typeof matchReminders.$inferSelect;
 export type NewMatchReminder = typeof matchReminders.$inferInsert;
 export type MatchLoggerAssignment = typeof matchLoggerAssignments.$inferSelect;
 export type NewMatchLoggerAssignment = typeof matchLoggerAssignments.$inferInsert;
+export type PlayerTeamAffiliation = typeof playerTeamAffiliations.$inferSelect;
+export type NewPlayerTeamAffiliation = typeof playerTeamAffiliations.$inferInsert;
 export type TeamRegistration = typeof teamRegistrations.$inferSelect;
 export type NewTeamRegistration = typeof teamRegistrations.$inferInsert;
 export type RegisteredPlayer = typeof registeredPlayers.$inferSelect;
