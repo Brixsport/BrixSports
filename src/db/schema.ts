@@ -235,7 +235,7 @@ export const standings = sqliteTable('standings', {
     groupName: text('group_name'), // For group stages
     updatedAt: integer('updated_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
 }, (table) => ({
-    teamCompetitionIdx: uniqueIndex('team_competition_idx').on(table.teamId, table.competitionId),
+    // teamCompetitionIdx: uniqueIndex('team_competition_idx').on(table.teamId, table.competitionId),
 }));
 
 // Bracket/Tournament nodes
