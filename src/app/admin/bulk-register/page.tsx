@@ -241,7 +241,7 @@ export default function BulkRegisterPage() {
             payload.university = newUniversity.trim();
             payload.shortName = newShortName.trim();
             payload.teamColor = newTeamColor;
-            payload.sport = 'Football';
+            payload.sport = selectedSport;
         }
 
         try {
@@ -334,6 +334,23 @@ export default function BulkRegisterPage() {
                     </div>
 
                     <div className="p-5 space-y-4">
+                        {/* Sport selector */}
+                        <div>
+                            <label className="text-xs text-white/40 mb-1 block">Sport</label>
+                            <div className="relative">
+                                <select
+                                    value={selectedSport}
+                                    onChange={(e) => setSelectedSport(e.target.value)}
+                                    className="w-full bg-white/[0.05] border border-white/[0.08] rounded-xl px-4 py-3 text-sm text-white appearance-none focus:outline-none focus:ring-2 focus:ring-indigo-500/40 focus:border-indigo-500/40 transition-all"
+                                >
+                                    {SPORTS.map(s => (
+                                        <option key={s} value={s} className="bg-[#151515]">{s}</option>
+                                    ))}
+                                </select>
+                                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30 pointer-events-none" />
+                            </div>
+                        </div>
+
                         {/* Mode toggle */}
                         <div className="flex gap-2">
                             <button
