@@ -5,6 +5,8 @@ import { Trophy, ChevronRight, LayoutGrid, ListOrdered, Activity, Loader2, Alert
 import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Image from 'next/image';
+import MatchCalendar from '@/components/MatchCalendar';
+import { isSameDay } from 'date-fns';
 
 type SportType = 'Football' | 'Basketball' | 'Track';
 
@@ -78,6 +80,7 @@ function CompetitionsContent() {
   const [brackets, setBrackets] = useState<BracketRound[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [selectedDate, setSelectedDate] = useState<Date | null>(null);
 
   // 1. Fetch all competitions on mount
   useEffect(() => {
@@ -335,11 +338,41 @@ function CompetitionsContent() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -20 }}
-              className="space-y-4"
+              className="space-y-6"
             >
+              {/* Fixtures Calendar / Date Picker */}
+              {matches.length > 0 && (
+                <MatchCalendar
+                  fixtures={matches}
+                  selectedDate={selectedDate || new Date(matches[0].startTime)}
+                  onDateSelect={(date) => setSelectedDate(date)}
+                />
+              )}
+
+              {/* Optional: Info about current filter */}
+              {selectedDate && (
+                <p className="text-xs text-white/50 text-center">
+                  Showing fixtures for{' '}
+                  {selectedDate.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}{' '}
+                  <button
+                    onClick={() => setSelectedDate(null)}
+                    className="underline text-primary ml-1"
+                  >
+                    Clear
+                  </button>
+                </p>
+              )}
+
               {matches.length > 0 ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {matches.sort((a, b) => new Date(b.startTime).getTime() - new Date(a.startTime).getTime()).map((match) => (
+                  {matches
+                    .filter((match) =>
+                      selectedDate
+                        ? isSameDay(new Date(match.startTime), selectedDate)
+                        : true
+                    )
+                    .sort((a, b) => new Date(b.startTime).getTime() - new Date(a.startTime).getTime())
+                    .map((match) => (
                     <div key={match.id} className="bg-white/5 border border-white/10 rounded-2xl p-4 hover:border-primary/30 transition-all">
                       <div className="flex justify-between items-center mb-4">
                         <div className="flex items-center gap-2 text-[10px] text-white/40 font-bold uppercase tracking-widest">
