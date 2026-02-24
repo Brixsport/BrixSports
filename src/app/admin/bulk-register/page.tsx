@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, Suspense } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     Users,
@@ -20,7 +20,7 @@ import {
     X,
     ArrowLeft,
 } from 'lucide-react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 
 // ─── Types ───────────────────────────────────────────────────────
 interface PlayerRow {
@@ -67,10 +67,19 @@ interface SubmitResult {
 }
 
 // ─── Constants ───────────────────────────────────────────────────
-const POSITIONS = ['Goalkeeper', 'Defender', 'Midfielder', 'Forward'];
-const POSITIONS_5ASIDE = ['Goalkeeper', 'Defender', 'Midfielder', 'Forward'];
+const SPORT_POSITIONS: Record<string, string[]> = {
+    'Football': ['Goalkeeper', 'Defender', 'Midfielder', 'Forward'],
+    'Basketball': ['Point Guard', 'Shooting Guard', 'Small Forward', 'Power Forward', 'Center'],
+    'Scrabble': ['Player'],
+    'Chess': ['Player'],
+    'Table Tennis': ['Player'],
+    'Volleyball': ['Setter', 'Outside Hitter', 'Opposite Hitter', 'Middle Blocker', 'Libero'],
+    'Athletics': ['Sprinter', 'Long Jumper', 'High Jumper', 'Javelin Thrower', 'Shot Puter', 'Discus Thrower'],
+    'Tennis': ['Player'],
+    'Badminton': ['Player'],
+};
 
-const SPORTS = ['Football', 'Basketball', 'Scrabble', 'Chess', 'Table Tennis'];
+const SPORTS = Object.keys(SPORT_POSITIONS);
 
 const createEmptyPlayer = (): PlayerRow => ({
     id: crypto.randomUUID(),
@@ -88,7 +97,7 @@ const createEmptyPlayer = (): PlayerRow => ({
 });
 
 // ─── Component ───────────────────────────────────────────────────
-export default function BulkRegisterPage() {
+function BulkRegisterContent() {
     const router = useRouter();
 
     // Data state
@@ -97,9 +106,12 @@ export default function BulkRegisterPage() {
     const [loading, setLoading] = useState(true);
 
     // Form state
+    const searchParams = useSearchParams();
+    const initialSport = searchParams.get('sport');
+
     const [mode, setMode] = useState<'existing' | 'new'>('existing');
     const [selectedTeamId, setSelectedTeamId] = useState('');
-    const [selectedSport, setSelectedSport] = useState('Football');
+    const [selectedSport, setSelectedSport] = useState(initialSport && SPORTS.includes(initialSport) ? initialSport : 'Football');
     const [selectedCompetitionId, setSelectedCompetitionId] = useState('');
     const [newTeamName, setNewTeamName] = useState('');
     const [newUniversity, setNewUniversity] = useState('');
@@ -131,6 +143,12 @@ export default function BulkRegisterPage() {
                     // reset selected team/competition when sport changes
                     setSelectedTeamId('');
                     setSelectedCompetitionId('');
+
+                    // Reset player positions for the new sport
+                    setPlayers(prev => prev.map(p => ({
+                        ...p,
+                        position: ''
+                    })));
                 }
             } catch (e) {
                 console.error('Failed to fetch data:', e);
@@ -275,6 +293,7 @@ export default function BulkRegisterPage() {
     const validPlayersCount = getValidPlayers().length;
     const validationErrors = getValidationErrors();
     const selectedTeam = teams.find(t => t.id === selectedTeamId);
+    const currentPositions = SPORT_POSITIONS[selectedSport] || ['Player'];
 
     if (loading) {
         return (
@@ -616,7 +635,7 @@ export default function BulkRegisterPage() {
                                                         className="w-full bg-transparent border-0 text-sm text-white focus:outline-none focus:bg-white/[0.03] rounded px-2 py-1 transition-colors appearance-none"
                                                     >
                                                         <option value="" className="bg-[#151515] text-white/40">Position</option>
-                                                        {POSITIONS.map(pos => (
+                                                        {currentPositions.map(pos => (
                                                             <option key={pos} value={pos} className="bg-[#151515]">{pos}</option>
                                                         ))}
                                                     </select>
@@ -770,7 +789,7 @@ export default function BulkRegisterPage() {
                                                     className="bg-white/[0.05] border border-white/[0.08] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-indigo-500/40 appearance-none"
                                                 >
                                                     <option value="" className="bg-[#151515]">Position *</option>
-                                                    {POSITIONS.map(pos => (
+                                                    {currentPositions.map(pos => (
                                                         <option key={pos} value={pos} className="bg-[#151515]">{pos}</option>
                                                     ))}
                                                 </select>
@@ -1006,5 +1025,17 @@ export default function BulkRegisterPage() {
                 )}
             </AnimatePresence>
         </div>
+    );
+}
+
+export default function BulkRegisterPage() {
+    return (
+        <Suspense fallback={
+            <div className="min-h-screen bg-[#050505] flex items-center justify-center">
+                <Loader2 className="w-8 h-8 animate-spin text-indigo-400" />
+            </div>
+        }>
+            <BulkRegisterContent />
+        </Suspense>
     );
 }
