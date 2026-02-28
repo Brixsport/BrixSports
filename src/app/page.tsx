@@ -6,7 +6,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import dynamic from 'next/dynamic';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Trophy, Calendar, User, Search, Bell, Menu, X, ChevronRight, ChevronLeft, Play } from 'lucide-react';
+import { Trophy, Calendar, User, Search, Bell, Menu, X, ChevronRight, ChevronLeft, Play, Eye } from 'lucide-react';
 import { format, addDays, isSameDay } from 'date-fns';
 import { Player, Team, Match } from '@/types';
 import GlobalSearch from '@/components/GlobalSearch';
@@ -14,6 +14,8 @@ import { useNotifications } from '@/components/Notifications';
 import { useFavorites } from '@/hooks/useFavorites';
 import { LiveNowSection } from '@/components/livestream';
 import LiveMatchStatus from '@/components/LiveMatchStatus';
+import { PageSEO, StructuredData, FAQSection } from '@/components/seo';
+import { generateHomepageEntityGraph, aiOptimizedFAQs } from '@/lib/utils/aeo';
 
 // Lazy load heavy overlay components
 const MatchOverlay = dynamic(() => import('@/components/MatchOverlay').then(mod => mod.MatchOverlay), { ssr: false });
@@ -423,7 +425,26 @@ export default function Home() {
   }, {});
 
   return (
-    <div className="min-h-screen bg-[#050505] text-white">
+    <>
+      {/* AI-Optimized SEO for Homepage */}
+      <PageSEO
+        title="Brixsport | Nigerian University Sports Live"
+        description="Nigeria's premier platform for university sports. Real-time live scores, match streaming, and comprehensive coverage of NUGA, BUCS, and Nigerian university competitions."
+        keywords={[
+          'Brixsport', 'Nigerian university sports', 'NUGA', 'BUCS', 'live scores',
+          'university football', 'university basketball', 'campus sports Nigeria'
+        ]}
+        ogImage="/assets/Logos/BRIX-SPORT-LOGO.png"
+        ogType="website"
+      />
+      
+      {/* AI Knowledge Graph Structured Data */}
+      <StructuredData 
+        data={generateHomepageEntityGraph()} 
+        id="homepage-entity-graph"
+      />
+
+      <div className="min-h-screen bg-[#050505] text-white">
       {/* Top Navigation */}
       <nav className="fixed top-0 left-0 right-0 z-50 bg-[#0a0a0a] border-b border-white/5">
         <div className="max-w-7xl mx-auto px-4">
@@ -871,11 +892,16 @@ export default function Home() {
                 <span className="bg-primary text-black text-[10px] font-black px-2 py-0.5 rounded">NEW</span>
               </Link>
               <Link href="/news" className="text-white/60 hover:text-white transition-colors" onClick={() => setIsMenuOpen(false)}>News</Link>
-              <Link href="/transfers" className="text-white/60 hover:text-white transition-colors" onClick={() => setIsMenuOpen(false)}>Transfers</Link>
+              <Link href="/scouts" className="text-white/60 hover:text-white transition-colors flex items-center gap-2" onClick={() => setIsMenuOpen(false)}>
+                <Eye className="w-4 h-4" />
+                Scouts
+                <span className="bg-primary text-black text-[10px] font-black px-2 py-0.5 rounded">NEW</span>
+              </Link>
             </div>
           </motion.div>
         )}
       </AnimatePresence>
     </div>
+    </>
   );
 }

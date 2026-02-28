@@ -13,8 +13,68 @@ import { AuthModal } from "@/components/auth/AuthModal";
 import { SocketProvider } from "@/hooks/useWebSocket";
 
 export const metadata: Metadata = {
-  title: "Brixsport | Nigerian University Sports Live",
-  description: "Real-time scoring and sports management for Nigerian universities.",
+  title: {
+    default: "Brixsport | Nigerian University Sports Live",
+    template: "%s | Brixsport"
+  },
+  description: "Real-time scoring, live match updates, and comprehensive sports management for Nigerian universities. Follow NUGA, BUCS, and university sports competitions with Brixsport.",
+  keywords: [
+    "Nigerian university sports",
+    "NUGA",
+    "NPUGA",
+    "university football",
+    "university basketball",
+    "live scores",
+    "sports management",
+    "Nigeria sports",
+    "campus sports",
+    "student athletics",
+    "university competitions",
+    "sports livestream",
+    "match results",
+    "team standings",
+    "player statistics"
+  ],
+  authors: [{ name: "Brixsport Team" }],
+  creator: "Brixsports",
+  publisher: "Brixsports",
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      'max-video-preview': -1,
+      'max-image-preview': 'large',
+      'max-snippet': -1,
+    },
+  },
+  openGraph: {
+    type: "website",
+    locale: "en_NG",
+    url: "https://brixsports.com",
+    siteName: "Brixsport",
+    title: "Brixsport | Nigerian University Sports Live",
+    description: "Real-time scoring and sports management for Nigerian universities. Follow NUGA,NPUGA,BUSA LEAGUE BUCS, and campus sports competitions.",
+    images: [
+      {
+        url: "/assets/Logos/BRIX-SPORT-LOGO.png",
+        width: 1200,
+        height: 630,
+        alt: "Brixsport - Nigerian University Sports",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Brixsport | Nigerian University Sports Live",
+    description: "Real-time scoring and sports management for Nigerian universities.",
+    images: ["/assets/Logos/BRIX-SPORT-LOGO.png"],
+    creator: "@brixsport",
+  },
+  alternates: {
+    canonical: "https://brixsport.com",
+  },
   manifest: "/manifest-user.json",
   icons: {
     icon: [
@@ -27,6 +87,10 @@ export const metadata: Metadata = {
     capable: true,
     statusBarStyle: "black-translucent",
     title: "Brixsport",
+  },
+  other: {
+    'google-site-verification': '',
+    'msvalidate.01': '',
   },
 };
 

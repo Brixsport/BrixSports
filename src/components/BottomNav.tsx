@@ -2,7 +2,7 @@
 
 import { usePathname, useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
-import { Calendar, Trophy, Heart, User } from 'lucide-react';
+import { Calendar, Trophy, Eye, User } from 'lucide-react';
 import { useState, useEffect } from 'react';
 
 interface NavItem {
@@ -39,10 +39,11 @@ export function BottomNav() {
             path: '/competitions',
         },
         {
-            id: 'favourites',
-            label: 'Favourites',
-            icon: Heart,
-            path: '/favourites',
+            id: 'scouts',
+            label: 'Scouts',
+            icon: Eye,
+            path: '/scouts',
+            badge: -1, // Special indicator for NEW
         },
         {
             id: 'profile',
@@ -132,6 +133,16 @@ export function BottomNav() {
                                                 <span className="text-[10px] font-bold text-white">
                                                     {item.badge > 9 ? '9+' : item.badge}
                                                 </span>
+                                            </motion.div>
+                                        )}
+                                        {/* NEW Badge */}
+                                        {item.badge === -1 && (
+                                            <motion.div
+                                                initial={{ scale: 0 }}
+                                                animate={{ scale: 1 }}
+                                                className="absolute -top-2 -right-2 bg-primary text-black text-[8px] font-black px-1.5 py-0.5 rounded-full"
+                                            >
+                                                NEW
                                             </motion.div>
                                         )}
                                     </div>
