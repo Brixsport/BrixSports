@@ -14,10 +14,10 @@ import { SocketProvider } from "@/hooks/useWebSocket";
 
 export const metadata: Metadata = {
   title: {
-    default: "Brixsport | Nigerian University Sports Live",
-    template: "%s | Brixsport"
+    default: "BRIXSPORTS | Nigerian University Sports Live",
+    template: "%s | BRIXSPORTS"
   },
-  description: "Real-time scoring, live match updates, and comprehensive sports management for Nigerian universities. Follow NUGA, BUCS, and university sports competitions with Brixsport.",
+  description: "Real-time scoring, live match updates, and comprehensive sports management for Nigerian universities. Follow NUGA, NPUGA, BUSA LEAGUE, BUCS, and university sports competitions with BRIXSPORTS.",
   keywords: [
     "Nigerian university sports",
     "NUGA",
@@ -35,9 +35,9 @@ export const metadata: Metadata = {
     "team standings",
     "player statistics"
   ],
-  authors: [{ name: "Brixsport Team" }],
-  creator: "Brixsports",
-  publisher: "Brixsports",
+  authors: [{ name: "BRIXSPORTS Team" }],
+  creator: "BRIXSPORTS",
+  publisher: "BRIXSPORTS",
   robots: {
     index: true,
     follow: true,
@@ -53,27 +53,27 @@ export const metadata: Metadata = {
     type: "website",
     locale: "en_NG",
     url: "https://brixsports.com",
-    siteName: "Brixsport",
-    title: "Brixsport | Nigerian University Sports Live",
-    description: "Real-time scoring and sports management for Nigerian universities. Follow NUGA,NPUGA,BUSA LEAGUE BUCS, and campus sports competitions.",
+    siteName: "BRIXSPORTS",
+    title: "BRIXSPORTS | Nigerian University Sports Live",
+    description: "Real-time scoring and sports management for Nigerian universities. Follow NUGA, NPUGA, BUSA LEAGUE, BUCS, and campus sports competitions.",
     images: [
       {
         url: "/assets/Logos/BRIX-SPORT-LOGO.png",
         width: 1200,
         height: 630,
-        alt: "Brixsport - Nigerian University Sports",
+        alt: "BRIXSPORTS - Nigerian University Sports",
       },
     ],
   },
   twitter: {
     card: "summary_large_image",
-    title: "Brixsport | Nigerian University Sports Live",
+    title: "BRIXSPORTS | Nigerian University Sports Live",
     description: "Real-time scoring and sports management for Nigerian universities.",
     images: ["/assets/Logos/BRIX-SPORT-LOGO.png"],
-    creator: "@brixsport",
+    creator: "@brixsports",
   },
   alternates: {
-    canonical: "https://brixsport.com",
+    canonical: "https://brixsports.com",
   },
   manifest: "/manifest-user.json",
   icons: {
@@ -86,7 +86,7 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: "Brixsport",
+    title: "BRIXSPORTS",
   },
   other: {
     'google-site-verification': '',
@@ -115,7 +115,7 @@ export default function RootLayout({
         <link rel="apple-touch-icon" href="/assests/Logos/BRIX-SPORT-LOGO.png" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-        <meta name="apple-mobile-web-app-title" content="Brixsport" />
+        <meta name="apple-mobile-web-app-title" content="BRIXSPORTS" />
       </head>
       <body className="antialiased">
         <Script

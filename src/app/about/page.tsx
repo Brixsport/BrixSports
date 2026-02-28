@@ -9,8 +9,8 @@ import {
 } from '@/lib/utils/aeo';
 
 export const metadata: Metadata = {
-    title: 'About Brixsport - Nigeria\'s Premier University Sports Platform',
-    description: 'Learn about Brixsport, Nigeria\'s leading digital platform for university sports coverage. We provide live scores, streaming, and analytics for NUGA, BUCS, and Nigerian university competitions.',
+    title: 'About BRIXSPORTS - Nigeria\'s Premier University Sports Platform',
+    description: 'Learn about BRIXSPORTS, Nigeria\'s leading digital platform for university sports coverage. We provide live scores, streaming, and analytics for NUGA, NPUGA, BUSA LEAGUE, BUCS, and Nigerian university competitions.',
     keywords: [
         'Brixsport',
         'Brix Sport',
@@ -22,14 +22,16 @@ export const metadata: Metadata = {
         'Brix Sports',
         'Nigerian university sports platform',
         'NUGA coverage',
+        'NPUGA',
+        'BUSA LEAGUE',
         'BUCS Nigeria',
         'university sports live scores',
         'campus sports Nigeria',
         'Nigeria sports technology',
     ],
     openGraph: {
-        title: 'About Brixsport - Nigeria\'s Premier University Sports Platform',
-        description: 'Learn about Brixsport, Nigeria\'s leading digital platform for university sports coverage.',
+        title: 'About BRIXSPORTS - Nigeria\'s Premier University Sports Platform',
+        description: 'Learn about BRIXSPORTS, Nigeria\'s leading digital platform for university sports coverage.',
         type: 'website',
     },
 };
@@ -97,7 +99,7 @@ export default function AboutPage() {
                                 Our platform serves as the digital bridge connecting fans, athletes, coaches, 
                                 scouts, and universities across Nigeria. Whether you&apos;re following the NUGA Games, 
                                 NPUGA competitions, tracking your university&apos;s league performance, or discovering 
-                                the next generation of sporting talent, Brixsport provides the most comprehensive 
+                                the next generation of sporting talent, BRIXSPORTS provides the most comprehensive 
                                 and up-to-date coverage available.
                             </p>
 
@@ -323,8 +325,8 @@ export default function AboutPage() {
                         <div className="mt-12 p-6 bg-primary/10 border border-primary/20 rounded-2xl">
                             <p className="text-white/80 text-center">
                                 <strong>Are you a scout?</strong> Contact us at{' '}
-                                <a href="mailto:scouts@brixsport.com" className="text-primary hover:underline">
-                                    scouts@brixsport.com
+                                <a href="mailto:scouts@brixsports.com" className="text-primary hover:underline">
+                                    scouts@brixsports.com
                                 </a>{' '}
                                 to learn more about our premium scout features.
                             </p>

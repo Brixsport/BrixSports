@@ -428,10 +428,10 @@ export default function Home() {
     <>
       {/* AI-Optimized SEO for Homepage */}
       <PageSEO
-        title="Brixsport | Nigerian University Sports Live"
-        description="Nigeria's premier platform for university sports. Real-time live scores, match streaming, and comprehensive coverage of NUGA, BUCS, and Nigerian university competitions."
+        title="BRIXSPORTS | Nigerian University Sports Live"
+        description="Nigeria's premier platform for university sports. Real-time live scores, match streaming, and comprehensive coverage of NUGA, NPUGA, BUSA LEAGUE, BUCS, and Nigerian university competitions."
         keywords={[
-          'Brixsport', 'Nigerian university sports', 'NUGA', 'BUCS', 'live scores',
+          'BRIXSPORTS', 'Nigerian university sports', 'NUGA', 'NPUGA', 'BUSA LEAGUE', 'live scores',
           'university football', 'university basketball', 'campus sports Nigeria'
         ]}
         ogImage="/assets/Logos/BRIX-SPORT-LOGO.png"

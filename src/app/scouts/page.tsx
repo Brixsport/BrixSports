@@ -212,14 +212,14 @@ export default function ScoutsPage() {
         <>
             <PageSEO
                 title="Talent Scout Hub - Discover Nigeria's Best University Athletes"
-                description="Brixsport's premium scout platform. Discover talented student athletes from Nigerian universities with comprehensive stats, ratings, and video highlights."
-                keywords={['scouts', 'talent scouting', 'university players', 'Nigerian athletes', 'player discovery']}
+                description="BRIXSPORTS' premium scout platform. Discover talented student athletes from Nigerian universities with comprehensive stats, ratings, and video highlights."
+                keywords={['scouts', 'talent scouting', 'university players', 'Nigerian athletes', 'player discovery', 'BRIXSPORTS']}
                 ogImage="/assets/Logos/BRIX-SPORT-LOGO.png"
             />
             
             <StructuredData 
                 data={generateWebPageSchema({
-                    title: 'Talent Scout Hub - Brixsport',
+                    title: 'Talent Scout Hub - BRIXSPORTS',
                     description: 'Discover talented student athletes from Nigerian universities',
                 })}
                 id="scouts-page-schema"
@@ -267,7 +267,7 @@ export default function ScoutsPage() {
                                     </p>
                                 </div>
                                 <a 
-                                    href="mailto:scouts@brixsport.com" 
+                                    href="mailto:scouts@brixsports.com" 
                                     className="flex-shrink-0 bg-primary text-black font-bold py-2 px-6 rounded-xl hover:bg-primary/90 transition-colors text-center"
                                 >
                                     Upgrade to Pro
@@ -646,7 +646,7 @@ export default function ScoutsPage() {
                                             Interested in recruiting {selectedPlayer.name}?
                                         </p>
                                         <a 
-                                            href="mailto:scouts@brixsport.com"
+                                            href="mailto:scouts@brixsports.com"
                                             className="inline-flex items-center gap-2 bg-primary text-black font-bold py-3 px-6 rounded-xl hover:bg-primary/90 transition-colors"
                                         >
                                             <Eye className="w-5 h-5" />

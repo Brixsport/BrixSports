@@ -5,7 +5,7 @@ import type { MetadataRoute } from 'next';
  * Includes all public pages and dynamic routes
  */
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-    const baseUrl = 'https://brixsport.com';
+    const baseUrl = 'https://brixsports.com';
 
     // Static pages with their priorities and change frequencies
     const staticPages: MetadataRoute.Sitemap = [

@@ -1,0 +1,31 @@
+# robots.txt for Brixsport - Nigerian University Sports Platform
+# https://brixsport.com
+
+User-agent: *
+Allow: /
+
+# Disallow admin and private areas
+Disallow: /admin/
+Disallow: /api/
+Disallow: /auth/
+Disallow: /login
+Disallow: /signup
+Disallow: /forgot-password
+Disallow: /reset-password
+Disallow: /profile/
+Disallow: /notifications
+Disallow: /favourites
+Disallow: /dashboard
+
+# Allow specific API endpoints that provide public data
+Allow: /api/matches/
+Allow: /api/competitions/
+Allow: /api/teams/
+Allow: /api/players/
+Allow: /api/news/
+
+# Sitemap location
+Sitemap: https://brixsport.com/sitemap.xml
+
+# Crawl rate suggestion
+Crawl-delay: 1

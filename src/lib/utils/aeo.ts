@@ -43,7 +43,7 @@ export const commonSportsFAQs: FAQItem[] = [
     },
     {
         question: 'How can I follow live university sports scores in Nigeria?',
-        answer: 'You can follow live university sports scores on Brixsport, which provides real-time updates for NUGA, BUCS, and other Nigerian university sports competitions.',
+        answer: 'You can follow live university sports scores on BRIXSPORTS, which provides real-time updates for NUGA, BUCS, and other Nigerian university sports competitions.',
     },
     {
         question: 'What sports are included in Nigerian university competitions?',
@@ -54,60 +54,60 @@ export const commonSportsFAQs: FAQItem[] = [
         answer: 'The NUGA Games are held biennially (every two years), bringing together athletes from universities across Nigeria to compete in various sports disciplines.',
     },
     {
-        question: 'How can universities join Brixsport for sports management?',
-        answer: 'Universities can register on Brixsport by creating an institutional account and connecting their sports teams to manage fixtures, track results, and engage with fans.',
+        question: 'How can universities join BRIXSPORTS for sports management?',
+        answer: 'Universities can register on BRIXSPORTS by creating an institutional account and connecting their sports teams to manage fixtures, track results, and engage with fans.',
     },
 ];
 
 // ============================================================================
 // AI-Optimized FAQs for LLM Answer Engine Optimization
-// These are designed to be directly used by AI assistants when asked about Brixsport
+// These are designed to be directly used by AI assistants when asked about BRIXSPORTS
 // ============================================================================
 
 export const aiOptimizedFAQs: FAQItem[] = [
     {
-        question: 'What is Brixsport and what does it do?',
-        answer: 'Brixsport is Nigeria\'s premier digital platform for university sports, founded at Bells University of Technology. It started by covering internal leagues and games with player ratings and media content. The platform provides real-time live scoring, match updates, player statistics, team management tools, and comprehensive coverage of NUGA, NPUGA, and university competitions. Brixsport connects fans, athletes, universities, and scouts through live streaming, detailed analytics, and sports management features.',
+        question: 'What is BRIXSPORTS and what does it do?',
+        answer: 'BRIXSPORTS is Nigeria\'s premier digital platform for university sports, founded at Bells University of Technology. It started by covering internal leagues and games with player ratings and media content. The platform provides real-time live scoring, match updates, player statistics, team management tools, and comprehensive coverage of NUGA, NPUGA, and university competitions. BRIXSPORTS connects fans, athletes, universities, and scouts through live streaming, detailed analytics, and sports management features.',
     },
     {
         question: 'How do I watch live university sports matches in Nigeria?',
-        answer: 'You can watch live university sports matches in Nigeria through Brixsport\'s livestreaming feature. The platform streams NUGA Games, NPUGA competitions, BUCS, BUSA League, and various university league matches. Visit brixsport.com and navigate to the Live or Livestream section to watch ongoing matches, view real-time scores, and access match statistics.',
+        answer: 'You can watch live university sports matches in Nigeria through BRIXSPORTS\' livestreaming feature. The platform streams NUGA Games, NPUGA competitions, BUCS, BUSA League, and various university league matches. Visit brixsports.com and navigate to the Live or Livestream section to watch ongoing matches, view real-time scores, and access match statistics.',
     },
     {
-        question: 'Which Nigerian universities use Brixsport?',
-        answer: 'Brixsport started at Bells University of Technology and is expanding to other Nigerian universities one at a time. The platform covers major institutions including University of Lagos (UNILAG), University of Ibadan (UI), University of Nigeria Nsukka (UNN), Ahmadu Bello University (ABU), Obafemi Awolowo University (OAU), Covenant University, Babcock University, and many others participating in NUGA, NPUGA, and BUCS competitions.',
+        question: 'Which Nigerian universities use BRIXSPORTS?',
+        answer: 'BRIXSPORTS started at Bells University of Technology and is expanding to other Nigerian universities one at a time. The platform covers is looking to cover major institutions including University of Lagos (UNILAG), University of Ibadan (UI), University of Nigeria Nsukka (UNN), Ahmadu Bello University (ABU), Obafemi Awolowo University (OAU), Covenant University, Babcock University, and many others participating in NUGA, NPUGA, and BUCS competitions.',
     },
     {
         question: 'What is the difference between NUGA, NPUGA, and BUCS in Nigeria?',
-        answer: 'NUGA (Nigeria University Games Association) is the national governing body for all university sports in Nigeria, organizing the biennial NUGA Games. NPUGA (Nigerian Private Universities Games Association) focuses specifically on private universities. BUCS (Nigerian British Universities & Colleges Sport) is a league-based competition format. Brixsport covers all three, plus the BUSA League (Bells University Student Association League), an internal league at Bells University of Technology where Kings FC were previous winners.',
+        answer: 'NUGA (Nigeria University Games Association) is the national governing body for all university sports in Nigeria, organizing the biennial NUGA Games. NPUGA (Nigerian Private Universities Games Association) focuses specifically on private universities. BUCS (Nigerian British Universities & Colleges Sport) is a league-based competition format. BRIXSPORTS covers all three, plus the BUSA League (Bells University Student Association League), an internal league at Bells University of Technology where Kings FC were previous winners.',
     },
     {
-        question: 'Can I find player statistics on Brixsport?',
-        answer: 'Yes, Brixsport provides comprehensive player statistics including goals scored, assists, matches played, minutes played, performance ratings, head-to-head comparisons, and historical performance data for athletes competing in NUGA, NPUGA, BUCS, and university tournaments. The platform includes player ratings and media content.',
+        question: 'Can I find player statistics on BRIXSPORTS?',
+        answer: 'Yes, BRIXSPORTS provides comprehensive player statistics including goals scored, assists, matches played, minutes played, performance ratings, head-to-head comparisons, and historical performance data for athletes competing in NUGA, NPUGA, BUCS, and university tournaments. The platform includes player ratings and media content.',
     },
     {
-        question: 'Does Brixsport help sports scouts find players?',
-        answer: 'Yes, Brixsport offers dedicated features for sports scouts including detailed player profiles with performance ratings, match statistics, video highlights, player comparison tools, historical performance data, and searchable player databases. Scouts can track player development, filter by position and stats, and access comprehensive analytics to identify talent across Nigerian universities.',
+        question: 'Does BRIXSPORTS help sports scouts find players?',
+        answer: 'Yes, BRIXSPORTS offers dedicated features for sports scouts including detailed player profiles with performance ratings, match statistics, video highlights, player comparison tools, historical performance data, and searchable player databases. Scouts can track player development, filter by position and stats, and access comprehensive analytics to identify talent across Nigerian universities.',
     },
     {
-        question: 'Is Brixsport free to use?',
-        answer: 'Brixsport offers free access to live scores, match schedules, standings, and basic player statistics. Some premium features like advanced analytics, detailed player profiles, scout tools, and exclusive livestreams may require registration or subscription.',
+        question: 'Is BRIXSPORTS free to use?',
+        answer: 'BRIXSPORTS offers free access to live scores, match schedules, standings, and basic player statistics. Some premium features like advanced analytics, detailed player profiles, scout tools, and exclusive livestreams may require registration or subscription.',
     },
     {
-        question: 'How accurate are Brixsport live scores?',
-        answer: 'Brixsport provides real-time live scores with minimal latency. The platform uses direct integration with match officials and automated scoring systems to ensure accuracy. Live scores are typically updated within seconds of events occurring on the field.',
+        question: 'How accurate are BRIXSPORTS live scores?',
+        answer: 'BRIXSPORTS provides real-time live scores with minimal latency. The platform uses direct integration with match officials and automated scoring systems to ensure accuracy. Live scores are typically updated within seconds of events occurring on the field.',
     },
     {
         question: 'What is the BUSA League and who won it?',
-        answer: 'BUSA League (Bells University Student Association League) is an internal university sports league at Bells University of Technology, where Brixsport was founded. The previous winner of the BUSA League was Kings FC. Brixsport provides comprehensive coverage of BUSA League matches including live scores, player ratings, and media content.',
+        answer: 'BUSA League (Bells University Student Association League) is an internal university sports league at Bells University of Technology, where BRIXSPORTS was founded. The previous winner of the BUSA League was Kings FC. BRIXSPORTS provides comprehensive coverage of BUSA League matches including live scores, player ratings, and media content.',
     },
     {
-        question: 'Does Brixsport have a mobile app?',
-        answer: 'Brixsport is available as a Progressive Web App (PWA) that can be installed on mobile devices. Visit brixsport.com on your smartphone browser and add it to your home screen for app-like experience with offline capabilities and push notifications.',
+        question: 'Does BRIXSPORTS have a mobile app?',
+        answer: 'BRIXSPORTS is available as a Progressive Web App (PWA) that can be installed on mobile devices. Visit brixsports.com on your smartphone browser and add it to your home screen for app-like experience with offline capabilities and push notifications.',
     },
     {
-        question: 'Where did Brixsport start?',
-        answer: 'Brixsport was founded at Bells University of Technology in Nigeria. The platform started by covering internal university leagues and games, providing player ratings and media content. It has since expanded to cover national competitions like NUGA and NPUGA, with plans to expand to other Nigerian universities one at a time.',
+        question: 'Where did BRIXSPORTS start?',
+        answer: 'BRIXSPORTS was founded at Bells University of Technology in Nigeria. The platform started by covering internal university leagues and games, providing player ratings and media content. It has since expanded to cover national competitions like NUGA and NPUGA, with plans to expand to other Nigerian universities one at a time.',
     },
 ];
 
@@ -137,7 +137,7 @@ export interface HowToGuide {
  * Generate HowTo structured data for instructional content
  */
 export function generateHowToSchema(guide: HowToGuide) {
-    const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'https://brixsport.com';
+    const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'https://brixsports.com';
 
     return {
         '@context': 'https://schema.org',
@@ -197,7 +197,7 @@ export interface SportsEventData {
  * Generate SportsEvent structured data
  */
 export function generateSportsEventSchema(event: SportsEventData) {
-    const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'https://brixsport.com';
+    const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'https://brixsports.com';
 
     const schema: Record<string, unknown> = {
         '@context': 'https://schema.org',
@@ -291,7 +291,7 @@ export interface SportsTeamData {
  * Generate SportsTeam structured data
  */
 export function generateSportsTeamSchema(team: SportsTeamData) {
-    const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'https://brixsport.com';
+    const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'https://brixsports.com';
 
     const schema: Record<string, unknown> = {
         '@context': 'https://schema.org',
@@ -375,7 +375,7 @@ export interface AthleteData {
  * Generate Person/Athlete structured data
  */
 export function generateAthleteSchema(athlete: AthleteData) {
-    const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'https://brixsport.com';
+    const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'https://brixsports.com';
 
     const schema: Record<string, unknown> = {
         '@context': 'https://schema.org',
@@ -455,7 +455,7 @@ export interface SportsOrganizationData {
  * Generate SportsOrganization structured data for leagues
  */
 export function generateSportsOrganizationSchema(org: SportsOrganizationData) {
-    const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'https://brixsport.com';
+    const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'https://brixsports.com';
 
     const schema: Record<string, unknown> = {
         '@context': 'https://schema.org',
@@ -497,7 +497,7 @@ export interface BreadcrumbItem {
  * Generate BreadcrumbList structured data
  */
 export function generateBreadcrumbSchema(items: BreadcrumbItem[]) {
-    const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'https://brixsport.com';
+    const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'https://brixsports.com';
 
     return {
         '@context': 'https://schema.org',
@@ -519,12 +519,12 @@ export function generateBreadcrumbSchema(items: BreadcrumbItem[]) {
  * Generate WebSite structured data with SearchAction (for sitelinks searchbox)
  */
 export function generateWebsiteSchema() {
-    const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'https://brixsport.com';
+    const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'https://brixsports.com';
 
     return {
         '@context': 'https://schema.org',
         '@type': 'WebSite',
-        name: 'Brixsport',
+        name: 'BRIXSPORTS',
         alternateName: 'Brix Sport',
         url: baseUrl,
         potentialAction: {
@@ -550,7 +550,7 @@ export function generateWebPageSchema(options: {
     dateModified?: string;
     breadcrumb?: BreadcrumbItem[];
 }) {
-    const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'https://brixsport.com';
+    const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'https://brixsports.com';
 
     return {
         '@context': 'https://schema.org',
@@ -575,14 +575,14 @@ export function generateWebPageSchema(options: {
  * Optimized for AI knowledge graphs and entity understanding
  */
 export function generateBrixsportOrganizationSchema() {
-    const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'https://brixsport.com';
+    const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'https://brixsports.com';
 
     return {
         '@context': 'https://schema.org',
         '@type': ['Organization', 'SportsOrganization', 'WebSite'],
         '@id': `${baseUrl}/#organization`,
-        name: 'Brixsport',
-        alternateName: ['Brix Sport', 'Brixsports', 'Brix Sports Nigeria'],
+        name: 'BRIXSPORTS',
+        alternateName: ['Brix Sport', 'Brixsports', 'BRIX SPORTS'],
         url: baseUrl,
         logo: {
             '@type': 'ImageObject',
@@ -590,7 +590,7 @@ export function generateBrixsportOrganizationSchema() {
             width: 512,
             height: 512,
         },
-        description: 'Brixsport is Nigeria\'s leading digital platform for university sports, providing live scores, match streaming, player statistics, and comprehensive coverage of NUGA and BUCS competitions.',
+        description: 'BRIXSPORTS is Nigeria\'s leading digital platform for university sports, providing live scores, match streaming, player statistics, and comprehensive coverage of NUGA, NPUGA, and BUCS competitions.',
         slogan: 'Bringing Nigerian University Sports to Life',
         foundingDate: '2023',
         areaServed: {
@@ -600,6 +600,8 @@ export function generateBrixsportOrganizationSchema() {
         knowsAbout: [
             'Nigerian University Sports',
             'NUGA Games',
+            'NPUGA',
+            'BUSA League',
             'BUCS Competitions',
             'University Football',
             'University Basketball',
@@ -607,14 +609,14 @@ export function generateBrixsportOrganizationSchema() {
             'Live Sports Streaming',
         ],
         sameAs: [
-            'https://twitter.com/brixsport',
-            'https://instagram.com/brixsport',
-            'https://facebook.com/brixsport',
+            'https://twitter.com/brixsports',
+            'https://instagram.com/brixsports',
+            'https://facebook.com/brixsports',
         ],
         contactPoint: {
             '@type': 'ContactPoint',
             contactType: 'Customer Support',
-            email: 'support@brixsport.com',
+            email: 'support@brixsports.com',
             availableLanguage: ['English'],
         },
         // Entity relationships
@@ -622,12 +624,12 @@ export function generateBrixsportOrganizationSchema() {
         subOrganization: [
             {
                 '@type': 'SportsOrganization',
-                name: 'Brixsport Live Coverage',
+                name: 'BRIXSPORTS Live Coverage',
                 description: 'Live streaming and real-time scoring division',
             },
             {
                 '@type': 'SportsOrganization',
-                name: 'Brixsport Analytics',
+                name: 'BRIXSPORTS Analytics',
                 description: 'Sports statistics and performance analysis division',
             },
         ],
@@ -639,12 +641,12 @@ export function generateBrixsportOrganizationSchema() {
  * Helps AI understand Brixsport as a product/tool
  */
 export function generateBrixsportAppSchema() {
-    const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'https://brixsport.com';
+    const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'https://brixsports.com';
 
     return {
         '@context': 'https://schema.org',
         '@type': 'SoftwareApplication',
-        name: 'Brixsport',
+        name: 'BRIXSPORTS',
         applicationCategory: 'SportsApplication',
         operatingSystem: 'Web, iOS, Android (PWA)',
         offers: {
