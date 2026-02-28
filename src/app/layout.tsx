@@ -89,7 +89,7 @@ export const metadata: Metadata = {
     title: "BRIXSPORTS",
   },
   other: {
-    'google-site-verification': '',
+    'google-site-verification': 'googlefd0ce86c5ed02ba9.html',
     'msvalidate.01': '',
   },
 };
