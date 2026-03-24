@@ -5,9 +5,10 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
-import { players, teams, matchEvents, matches, playerStats, basketballPlayerStats, footballPlayerStats } from '@/db/schema';
+import { players, teams, matchEvents, matches, playerStats, basketballPlayerStats, footballPlayerStats, playerTeamAffiliations, playerOrganizationAffiliations, organizations } from '@/db/schema';
 import { eq, desc, and, sql, ne } from 'drizzle-orm';
 import { getAuthUser } from '@/lib/auth';
+import { enrichPlayersWithAffiliations, syncPlayerOrganizationAffiliations } from '@/lib/player-data';
 
 interface RouteParams {
     params: {
@@ -35,9 +36,36 @@ export async function GET(
             );
         }
 
-        // Get player's team
+        // Get player's active memberships and primary team
         let team = null;
-        if (player.teamId) {
+        const memberships = await db
+            .select({
+                affiliation: playerTeamAffiliations,
+                team: teams,
+            })
+            .from(playerTeamAffiliations)
+            .innerJoin(teams, eq(playerTeamAffiliations.teamId, teams.id))
+            .where(
+                and(
+                    eq(playerTeamAffiliations.playerId, id),
+                    eq(playerTeamAffiliations.isActive, true)
+                )
+            )
+            .orderBy(desc(playerTeamAffiliations.isPrimary), desc(playerTeamAffiliations.createdAt));
+
+        const organizationAffiliations = await db
+            .select({
+                affiliation: playerOrganizationAffiliations,
+                organization: organizations,
+            })
+            .from(playerOrganizationAffiliations)
+            .innerJoin(organizations, eq(playerOrganizationAffiliations.organizationId, organizations.id))
+            .where(eq(playerOrganizationAffiliations.playerId, id))
+            .orderBy(desc(playerOrganizationAffiliations.isPrimary), desc(playerOrganizationAffiliations.createdAt));
+
+        if (memberships.length > 0) {
+            team = memberships[0].team;
+        } else if (player.teamId) {
             [team] = await db
                 .select()
                 .from(teams)
@@ -63,17 +91,20 @@ export async function GET(
         const redCards = playerEvents.filter(e => e.event.type === 'RED_CARD').length;
 
         // Get matches the player participated in
-        const playerMatches = await db
-            .select()
-            .from(matches)
-            .where(
-                and(
-                    eq(matches.homeTeamId, player.teamId),
-                    eq(matches.status, 'FINISHED')
+        const primaryTeamId = team?.id || player.teamId;
+        const playerMatches = primaryTeamId
+            ? await db
+                .select()
+                .from(matches)
+                .where(
+                    and(
+                        eq(matches.homeTeamId, primaryTeamId),
+                        eq(matches.status, 'FINISHED')
+                    )
                 )
-            )
-            .orderBy(desc(matches.startTime))
-            .limit(10);
+                .orderBy(desc(matches.startTime))
+                .limit(10)
+            : [];
 
         // Get recent form (last 5 matches with events)
         const recentMatchesWithEvents = playerEvents
@@ -238,6 +269,8 @@ export async function GET(
                     ...team,
                     sport: playerSport, // Add sport to team object
                 },
+                memberships,
+                organizationAffiliations,
                 relatedProfiles, // Add related profiles
             },
             stats: seasonStats,
@@ -273,17 +306,30 @@ export async function PATCH(
 
         // Whitelist only valid players table columns to avoid passing unknown fields to Drizzle
         // (players table has no updatedAt column — only createdAt)
-        const allowedFields: (keyof typeof players.$inferInsert)[] = [
+        const allowedFields = [
             'name', 'jerseyName', 'number', 'teamId', 'position',
             'rating', 'eyePoints', 'age', 'height', 'weight',
             'nationality', 'college', 'department', 'university',
             'image', 'marketValue', 'profileId', 'email', 'attributes',
-        ];
+        ] as const;
 
         const updateData: Partial<typeof players.$inferInsert> = {};
+        const requestBody = body as Record<string, unknown>;
         for (const field of allowedFields) {
-            if (field in body && body[field] !== undefined) {
-                (updateData as Record<string, unknown>)[field] = body[field];
+            if (field in requestBody && requestBody[field] !== undefined) {
+                (updateData as Record<string, unknown>)[field] = requestBody[field];
+            }
+        }
+
+        if (body.teamId && !updateData.university) {
+            const selectedTeam = await db
+                .select()
+                .from(teams)
+                .where(eq(teams.id, body.teamId))
+                .get();
+
+            if (selectedTeam?.university) {
+                updateData.university = selectedTeam.university;
             }
         }
 
@@ -301,7 +347,61 @@ export async function PATCH(
             return NextResponse.json({ error: 'Player not found' }, { status: 404 });
         }
 
-        return NextResponse.json(updated[0]);
+        if (body.teamId) {
+            await db
+                .update(playerTeamAffiliations)
+                .set({ isPrimary: false })
+                .where(eq(playerTeamAffiliations.playerId, id));
+
+            const existingAffiliation = await db
+                .select()
+                .from(playerTeamAffiliations)
+                .where(
+                    and(
+                        eq(playerTeamAffiliations.playerId, id),
+                        eq(playerTeamAffiliations.teamId, body.teamId)
+                    )
+                )
+                .get();
+
+            if (existingAffiliation) {
+                await db
+                    .update(playerTeamAffiliations)
+                    .set({
+                        role: 'player',
+                        status: 'active',
+                        isPrimary: true,
+                        isActive: true,
+                        jerseyNumber: updated[0].number,
+                        position: updated[0].position,
+                    })
+                    .where(eq(playerTeamAffiliations.id, existingAffiliation.id));
+            } else {
+                await db.insert(playerTeamAffiliations).values({
+                    id: `aff-${id}-${body.teamId}`,
+                    playerId: id,
+                    teamId: body.teamId,
+                    affiliationType: 'team',
+                    role: 'player',
+                    status: 'active',
+                    isPrimary: true,
+                    isActive: true,
+                    startDate: updated[0].createdAt || new Date(),
+                    jerseyNumber: updated[0].number,
+                    position: updated[0].position,
+                    createdAt: updated[0].createdAt || new Date(),
+                });
+            }
+        }
+
+        await syncPlayerOrganizationAffiliations(id, {
+            university: updated[0].university,
+            college: updated[0].college,
+            department: updated[0].department,
+        });
+
+        const [enrichedPlayer] = await enrichPlayersWithAffiliations(updated);
+        return NextResponse.json(enrichedPlayer);
     } catch (error) {
         console.error('Error updating player:', error);
         return NextResponse.json({ error: 'Failed to update player' }, { status: 500 });

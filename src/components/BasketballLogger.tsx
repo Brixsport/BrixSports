@@ -6,6 +6,7 @@ import { X, Activity, Save, Undo2, Clock, Users, TrendingUp, Target, Play, Setti
 import { useMultiLogger } from '@/hooks/useMultiLogger';
 import { MultiLoggerStatus } from '@/components/MultiLoggerStatus';
 import type { SyncEvent } from '@/lib/multiLogger';
+import { getPrimaryTeam } from '@/lib/player-affiliation-utils';
 
 
 import { MatchEvent } from '@/types';
@@ -37,6 +38,8 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
     const [awayTeam, setAwayTeam] = useState<Team | null>(null);
     const [homePlayers, setHomePlayers] = useState<Player[]>([]);
     const [awayPlayers, setAwayPlayers] = useState<Player[]>([]);
+    const getPlayerTeam = (player?: Player | null) =>
+        player ? (getPrimaryTeam(player as Player & Record<string, unknown>) as Team | null) : null;
     const [isLoading, setIsLoading] = useState(true);
     const [matchStarted, setMatchStarted] = useState(match.status === 'LIVE');
     const [matchEnded, setMatchEnded] = useState(match.status === 'FINISHED');
@@ -252,8 +255,8 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                 console.log('🏠 Home team ID:', match.homeTeamId);
                 console.log('✈️ Away team ID:', match.awayTeamId);
 
-                const homePlayersList = playersArray.filter((p: Player) => p.teamId === match.homeTeamId);
-                const awayPlayersList = playersArray.filter((p: Player) => p.teamId === match.awayTeamId);
+                const homePlayersList = playersArray.filter((player: Player) => getPlayerTeam(player)?.id === match.homeTeamId);
+                const awayPlayersList = playersArray.filter((player: Player) => getPlayerTeam(player)?.id === match.awayTeamId);
 
                 console.log('🏠 Home players:', homePlayersList.length);
                 console.log('✈️ Away players:', awayPlayersList.length);

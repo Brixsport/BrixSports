@@ -14,13 +14,14 @@ import ConfirmDialog from '@/components/admin/ConfirmDialog';
 import SkeletonLoader from '@/components/admin/SkeletonLoader';
 import ErrorBoundary from '@/components/admin/ErrorBoundary';
 import ImageUpload from '@/components/ImageUpload';
+import { getPrimaryTeam, getResolvedInstitutionalData } from '@/lib/player-affiliation-utils';
 
 interface Player {
     id: string;
     name: string;
     jerseyName: string | null;
     number: number;
-    teamId: string;
+    teamId: string | null;
     position: string;
     rating: number | null;
     age: number | null;
@@ -33,6 +34,9 @@ interface Player {
     image: string | null;
     profileId: string | null;
     email: string | null;
+    team?: Team | null;
+    memberships?: PlayerMembership[];
+    organizationAffiliations?: PlayerOrganizationAffiliation[];
 }
 
 interface Team {
@@ -41,6 +45,34 @@ interface Team {
     shortName: string;
     sport: string;
     university: string;
+}
+
+interface PlayerMembership {
+    affiliation: {
+        affiliationType?: string | null;
+        isPrimary?: boolean | null;
+        isActive?: boolean | null;
+        role?: string | null;
+        status?: string | null;
+    };
+    team: Team;
+}
+
+interface PlayerOrganizationAffiliation {
+    affiliation: {
+        affiliationType?: string | null;
+        isPrimary?: boolean | null;
+        role?: string | null;
+        status?: string | null;
+    };
+    organization: {
+        id: string;
+        name: string;
+        shortName: string | null;
+        displayName?: string | null;
+        type: string;
+        parentOrganizationId: string | null;
+    };
 }
 
 function AdminPlayersPageContent() {
@@ -65,6 +97,8 @@ function AdminPlayersPageContent() {
     });
 
     const { toasts, removeToast, success, error } = useToast();
+    const getPlayerTeam = (player: Player) => getPrimaryTeam(player, teams) as Team | null;
+    const getPlayerInstitutionData = (player: Player) => getResolvedInstitutionalData(player, getPlayerTeam(player));
 
     // Form state
     const [formData, setFormData] = useState<Partial<Player>>({
@@ -126,13 +160,19 @@ function AdminPlayersPageContent() {
     const universities = useMemo(() => {
         const seen = new Set<string>();
         teams.forEach(t => { if (t.university) seen.add(t.university); });
-        players.forEach(p => { if (p.university) seen.add(p.university); });
+        players.forEach(p => {
+            const university = getPlayerInstitutionData(p).university;
+            if (university) {
+                seen.add(university);
+            }
+        });
         return Array.from(seen).sort();
     }, [teams, players]);
 
     const filteredPlayers = useMemo(() => {
         return players.filter(p => {
-            const team = teams.find(t => t.id === p.teamId);
+            const team = getPlayerTeam(p);
+            const institutionalData = getPlayerInstitutionData(p);
             const q = searchQuery.toLowerCase();
 
             const matchesSearch = !q ||
@@ -140,9 +180,9 @@ function AdminPlayersPageContent() {
                 p.jerseyName?.toLowerCase().includes(q) ||
                 p.id.toLowerCase().includes(q) ||
                 // Player-level fields
-                p.university?.toLowerCase().includes(q) ||
-                p.college?.toLowerCase().includes(q) ||
-                p.department?.toLowerCase().includes(q) ||
+                institutionalData.university?.toLowerCase().includes(q) ||
+                institutionalData.college?.toLowerCase().includes(q) ||
+                institutionalData.department?.toLowerCase().includes(q) ||
                 // Team-level fields — catches BUSA teams where university is on the team row
                 team?.university?.toLowerCase().includes(q) ||
                 team?.name?.toLowerCase().includes(q) ||
@@ -152,11 +192,11 @@ function AdminPlayersPageContent() {
 
             // University filter: match player.university OR the team's university
             const matchesUniversity = universityFilter === 'all' ||
-                p.university === universityFilter ||
+                institutionalData.university === universityFilter ||
                 team?.university === universityFilter;
 
             // Team filter: only apply if university filter is not narrowing things down
-            const matchesTeam = teamFilter === 'all' || p.teamId === teamFilter;
+            const matchesTeam = teamFilter === 'all' || team?.id === teamFilter;
 
             return matchesSearch && matchesSport && matchesUniversity && matchesTeam;
         });
@@ -186,12 +226,20 @@ function AdminPlayersPageContent() {
     const handleOpenEdit = (player: Player) => {
         setModalMode('edit');
         setSelectedPlayer(player);
-        setFormData({ ...player });
+        const primaryTeam = getPlayerTeam(player);
+        const institutionalData = getPlayerInstitutionData(player);
+        setFormData({
+            ...player,
+            teamId: primaryTeam?.id ?? player.teamId ?? '',
+            university: institutionalData.university ?? '',
+            college: institutionalData.college ?? '',
+            department: institutionalData.department ?? '',
+        });
         setShowModal(true);
     };
 
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
+    const handleSubmit = async (e?: React.FormEvent<HTMLFormElement> | React.MouseEvent<HTMLButtonElement>) => {
+        e?.preventDefault();
         setIsSaving(true);
 
         try {
@@ -205,14 +253,8 @@ function AdminPlayersPageContent() {
             });
 
             if (res.ok) {
-                const savedPlayer = await res.json();
-                if (modalMode === 'create') {
-                    setPlayers([savedPlayer, ...players]);
-                    success('Player created successfully!');
-                } else {
-                    setPlayers(players.map(p => p.id === savedPlayer.id ? savedPlayer : p));
-                    success('Player updated successfully!');
-                }
+                await fetchPlayers();
+                success(modalMode === 'create' ? 'Player created successfully!' : 'Player updated successfully!');
                 setShowModal(false);
             } else {
                 const data = await res.json();
@@ -362,7 +404,7 @@ function AdminPlayersPageContent() {
                                 </thead>
                                 <tbody>
                                     {filteredPlayers.map((player) => {
-                                        const team = teams.find(t => t.id === player.teamId);
+                                        const team = getPlayerTeam(player);
                                         return (
                                             <motion.tr
                                                 layout

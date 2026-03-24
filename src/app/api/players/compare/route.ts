@@ -5,8 +5,9 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
-import { players, playerStats, footballPlayerStats, basketballPlayerStats, teams } from '@/db/schema';
-import { eq, and } from 'drizzle-orm';
+import { players, footballPlayerStats, basketballPlayerStats } from '@/db/schema';
+import { eq } from 'drizzle-orm';
+import { enrichPlayersWithAffiliations } from '@/lib/player-data';
 
 /**
  * GET player comparison
@@ -44,16 +45,10 @@ export async function GET(request: NextRequest) {
             );
         }
 
-        // Get team details
-        const [team1] = await db
-            .select()
-            .from(teams)
-            .where(eq(teams.id, player1.teamId));
-
-        const [team2] = await db
-            .select()
-            .from(teams)
-            .where(eq(teams.id, player2.teamId));
+        const enrichedPlayers = await enrichPlayersWithAffiliations([player1, player2]);
+        const enrichedPlayersById = new Map(enrichedPlayers.map((player) => [player.id, player]));
+        const team1 = enrichedPlayersById.get(player1.id)?.team ?? null;
+        const team2 = enrichedPlayersById.get(player2.id)?.team ?? null;
 
         // Helper to fetch stats based on sport
         const getStats = async (playerId: string, team: any) => {

@@ -23,7 +23,11 @@
     "remove-blacko": "tsx scripts/remove-blacko.ts",
     "remove-blacko-duplicates": "tsx scripts/remove-blacko-duplicates.ts",
     "remove-sk-duplicate": "tsx scripts/remove-sk-duplicate.ts",
-    "migrate:multi-logger": "tsx src/db/migrations/run-migrations.ts"
+    "migrate:multi-logger": "tsx src/db/migrations/add-multi-logger-support.ts",
+    "migrate:organization-ownership": "tsx src/db/migrations/add-organization-ownership.ts",
+    "migrate:player-memberships": "tsx src/db/migrations/backfill-player-team-memberships.ts",
+    "migrate:organization-affiliations": "tsx src/db/migrations/add-organization-affiliations-and-governance.ts",
+    "migrate:all": "tsx src/db/migrations/run-migrations.ts"
   },
   "dependencies": {
     "@babel/parser": "^7.28.5",

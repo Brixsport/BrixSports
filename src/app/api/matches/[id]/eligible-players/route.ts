@@ -9,8 +9,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
 import { matches, competitions, players, teams, playerTeamAffiliations } from '@/db/schema';
-import { eq, and, or } from 'drizzle-orm';
+import { eq, and } from 'drizzle-orm';
 import { normalizeCompetitionLevel, isPlayerEligible } from '@/lib/competition-player-eligibility';
+import { enrichPlayersWithAffiliations } from '@/lib/player-data';
 
 export async function GET(
     request: NextRequest,
@@ -49,7 +50,7 @@ export async function GET(
         }        
         const compLevel = normalizeCompetitionLevel(competition?.level || match.competitionLevel);
 
-        let eligiblePlayers = [];
+        let eligiblePlayers = await enrichPlayersWithAffiliations([]);
 
         if (teamId) {
             // Get eligible players for a specific team
@@ -83,9 +84,8 @@ export async function GET(
                 );
 
             // Filter by institutional eligibility
-            eligiblePlayers = teamAssociatedPlayers
-                .map(row => row.player)
-                .filter(p => isPlayerEligible(p, selectedTeam, compLevel));
+            eligiblePlayers = (await enrichPlayersWithAffiliations(teamAssociatedPlayers.map((row) => row.player)))
+                .filter((player) => isPlayerEligible(player, selectedTeam, compLevel));
         } else {
             // Get all eligible players for both teams via active affiliations
             const homeAffiliations = await db
@@ -120,12 +120,10 @@ export async function GET(
             const [awayTeam] = await db.select().from(teams).where(eq(teams.id, match.awayTeamId));
 
             // Filter eligible players by institutional eligibility
-            const eligibleHome = homeAffiliations
-                .map(row => row.player)
-                .filter(p => isPlayerEligible(p, homeTeam, compLevel));
-            const eligibleAway = awayAffiliations
-                .map(row => row.player)
-                .filter(p => isPlayerEligible(p, awayTeam, compLevel));
+            const eligibleHome = (await enrichPlayersWithAffiliations(homeAffiliations.map((row) => row.player)))
+                .filter((player) => isPlayerEligible(player, homeTeam, compLevel));
+            const eligibleAway = (await enrichPlayersWithAffiliations(awayAffiliations.map((row) => row.player)))
+                .filter((player) => isPlayerEligible(player, awayTeam, compLevel));
 
             eligiblePlayers = [...eligibleHome, ...eligibleAway];
         }

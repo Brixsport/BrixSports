@@ -29,6 +29,7 @@ interface PlayerRating {
         position: string;
         number: number;
         teamId: string;
+        team?: Team | null;
         image?: string;
     };
     suggestion: {
@@ -256,7 +257,7 @@ export default function MatchRatingsAdjustPage() {
     // Derived state
     const currentTeamId = match ? (activeTab === 'home' ? match.homeTeamId : match.awayTeamId) : '';
 
-    const teamRatings = ratings.filter(r => r.player.teamId === currentTeamId);
+    const teamRatings = ratings.filter((rating) => (rating.player.team?.id ?? rating.player.teamId) === currentTeamId);
 
     const filteredRatings = teamRatings.filter(r => {
         if (filter === 'needsReview') return r.needsReview;

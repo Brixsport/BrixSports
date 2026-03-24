@@ -9,6 +9,7 @@ import { useWebSocket } from '@/hooks/useWebSocket';
 import { MultiLoggerStatus } from '@/components/MultiLoggerStatus';
 import { getMatchStateManager, MatchStateManager, MatchState, FootballEventType } from '@/lib/match-state-manager';
 import type { SyncEvent } from '@/lib/multiLogger';
+import { getPrimaryTeam } from '@/lib/player-affiliation-utils';
 
 import { Match, Logger, Player, Team } from '@/db/schema';
 
@@ -32,6 +33,8 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
     const [showSettingsModal, setShowSettingsModal] = useState(false);
+    const getPlayerTeam = (player?: Player | null) =>
+        player ? (getPrimaryTeam(player as Player & Record<string, unknown>) as Team | null) : null;
 
     // Derived State
     const isClockRunning = matchState?.clock.isRunning ?? false;
@@ -197,8 +200,8 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                 setAwayTeam(away || null);
 
                 // Filter eligible players by team
-                const hPlayers = eligiblePlayers.filter((p: Player) => p.teamId === match.homeTeamId);
-                const aPlayers = eligiblePlayers.filter((p: Player) => p.teamId === match.awayTeamId);
+                const hPlayers = eligiblePlayers.filter((player: Player) => getPlayerTeam(player)?.id === match.homeTeamId);
+                const aPlayers = eligiblePlayers.filter((player: Player) => getPlayerTeam(player)?.id === match.awayTeamId);
 
                 setHomePlayers(hPlayers);
                 setAwayPlayers(aPlayers);

@@ -39,6 +39,7 @@ import {
     MapPin, Ruler, ChevronDown, ChevronUp, Settings, History, Search
 } from 'lucide-react';
 import { Match, Team, Player } from '@/db/schema';
+import { getPrimaryTeam } from '@/lib/player-affiliation-utils';
 
 interface TrackLoggerProps {
     match: Match;
@@ -125,18 +126,23 @@ export function TrackLogger({ match, onExit, teams, players }: TrackLoggerProps)
 
     const homeTeam = teams.find(t => t.id === match.homeTeamId);
     const awayTeam = teams.find(t => t.id === match.awayTeamId);
+    const getPlayerTeam = (player?: Player | null) =>
+        player ? (getPrimaryTeam(player as Player & Record<string, unknown>, teams) as Team | null) : null;
 
     // Check if competition is Inter-College or Inter-University
     const isInterCompetition = /inter[\s-]?(college|university)/i.test(match.competition || '');
 
     // If Inter-Competition, restrict to match teams. Otherwise allow all players.
     const eligiblePlayers = isInterCompetition
-        ? players.filter(p => p.teamId === match.homeTeamId || p.teamId === match.awayTeamId)
+        ? players.filter((player) => {
+            const team = getPlayerTeam(player);
+            return team?.id === match.homeTeamId || team?.id === match.awayTeamId;
+        })
         : players;
 
     const filteredPlayers = eligiblePlayers.filter(p =>
         p.name.toLowerCase().includes(athleteSearch.toLowerCase()) ||
-        (isInterCompetition && teams.find(t => t.id === p.teamId)?.shortName?.toLowerCase().includes(athleteSearch.toLowerCase()))
+        (isInterCompetition && getPlayerTeam(p)?.shortName?.toLowerCase().includes(athleteSearch.toLowerCase()))
     );
 
     const [events, setEvents] = useState<any[]>([]);
@@ -654,7 +660,7 @@ export function TrackLogger({ match, onExit, teams, players }: TrackLoggerProps)
                                             </div>
 
                                             {filteredPlayers.slice(0, 8).map((player, idx) => {
-                                                const team = teams.find(t => t.id === player.teamId);
+                                                const team = getPlayerTeam(player);
                                                 const isAdded = athletes.some(a => a.playerId === player.id);
 
                                                 return (
@@ -708,7 +714,7 @@ export function TrackLogger({ match, onExit, teams, players }: TrackLoggerProps)
                                         <div className="space-y-3">
                                             {athletes.map((athlete) => {
                                                 const player = eligiblePlayers.find(p => p.id === athlete.playerId);
-                                                const team = teams.find(t => t.id === player?.teamId);
+                                                const team = getPlayerTeam(player);
 
                                                 return (
                                                     <div
@@ -796,7 +802,7 @@ export function TrackLogger({ match, onExit, teams, players }: TrackLoggerProps)
                                         </div>
                                         <div className="space-y-4">
                                             {filteredPlayers.slice(0, 8).map((player) => {
-                                                const team = teams.find(t => t.id === player.teamId);
+                                                const team = getPlayerTeam(player);
                                                 const attempts = fieldAttempts.filter(a => a.playerId === player.id);
                                                 const best = getBestAttempt(player.id);
 
@@ -884,7 +890,7 @@ export function TrackLogger({ match, onExit, teams, players }: TrackLoggerProps)
                                         .sort((a, b) => (a.finalTime || 0) - (b.finalTime || 0))
                                         .map((athlete, idx) => {
                                             const player = players.find(p => p.id === athlete.playerId);
-                                            const team = teams.find(t => t.id === player?.teamId);
+                                            const team = getPlayerTeam(player);
                                             const position = idx + 1;
 
                                             return (

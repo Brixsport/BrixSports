@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
-import { players, playerStats, teams } from '@/db/schema';
+import { players, playerStats } from '@/db/schema';
 import { eq, and } from 'drizzle-orm';
+import { enrichPlayersWithAffiliations } from '@/lib/player-data';
 
 // GET /api/players/[id]/stats - Get player statistics
 export async function GET(
@@ -15,14 +16,11 @@ export async function GET(
         const competition = searchParams.get('competition');
         const season = searchParams.get('season');
 
-        // Get player info with team
         const player = await db
             .select({
                 player: players,
-                team: teams,
             })
             .from(players)
-            .leftJoin(teams, eq(players.teamId, teams.id))
             .where(eq(players.id, playerId))
             .get();
 
@@ -33,6 +31,9 @@ export async function GET(
             );
         }
 
+        const [enrichedPlayer] = await enrichPlayersWithAffiliations([player.player]);
+        const playerTeam = enrichedPlayer?.team ?? null;
+
         // Build stats query
         let statsQuery = db
             .select()
@@ -42,11 +43,11 @@ export async function GET(
         // Apply filters
         const conditions = [eq(playerStats.playerId, playerId)];
 
-        const { or } = await import('drizzle-orm');
-
         if (competitionId) {
-            conditions.push(or(eq(playerStats.competitionId, competitionId), eq(playerStats.competition, competition || '')));
-        } else if (competition) {
+            conditions.push(eq(playerStats.competitionId, competitionId));
+        }
+
+        if (competition) {
             conditions.push(eq(playerStats.competition, competition));
         }
 
@@ -91,10 +92,10 @@ export async function GET(
                 name: player.player.name,
                 number: player.player.number,
                 position: player.player.position,
-                team: player.team ? {
-                    id: player.team.id,
-                    name: player.team.name,
-                    logo: player.team.logo,
+                team: playerTeam ? {
+                    id: playerTeam.id,
+                    name: playerTeam.name,
+                    logo: playerTeam.logo,
                 } : null,
                 image: player.player.image,
                 rating: player.player.rating,

@@ -4,18 +4,51 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { and, desc, eq, like, or } from 'drizzle-orm';
 import { db } from '@/db';
-import { teams, players, matches, competitions } from '@/db/schema';
-import { like, or, and, desc, sql, eq } from 'drizzle-orm';
+import { competitions, matches, players, teams } from '@/db/schema';
+import { enrichPlayersWithAffiliations } from '@/lib/player-data';
+import { getPrimaryTeam, getResolvedInstitutionalData } from '@/lib/player-affiliation-utils';
+
+function playerMatchesQuery(
+    player: Awaited<ReturnType<typeof enrichPlayersWithAffiliations>>[number],
+    query: string
+) {
+    const normalizedQuery = query.toLowerCase();
+    const primaryTeam = getPrimaryTeam(player);
+    const institutionalData = getResolvedInstitutionalData(player, primaryTeam);
+    const searchTerms = [
+        player.name,
+        player.jerseyName,
+        player.email,
+        institutionalData.university,
+        institutionalData.college,
+        institutionalData.department,
+        primaryTeam?.name,
+        primaryTeam?.shortName,
+        ...(player.memberships ?? []).flatMap((membership) => [
+            membership.team.name,
+            membership.team.shortName,
+            membership.team.university,
+        ]),
+        ...(player.organizationAffiliations ?? []).flatMap((affiliation) => [
+            affiliation.organization.name,
+            affiliation.organization.shortName,
+            affiliation.organization.displayName,
+        ]),
+    ].filter((value): value is string => Boolean(value));
+
+    return searchTerms.some((term) => term.toLowerCase().includes(normalizedQuery));
+}
 
 export async function GET(request: NextRequest) {
     try {
         const { searchParams } = new URL(request.url);
 
         const query = searchParams.get('q') || '';
-        const category = searchParams.get('category'); // 'teams', 'players', 'matches', 'competitions', 'all'
+        const category = searchParams.get('category');
         const sport = searchParams.get('sport');
-        const limit = parseInt(searchParams.get('limit') || '20');
+        const limit = parseInt(searchParams.get('limit') || '20', 10);
 
         if (!query || query.length < 2) {
             return NextResponse.json({
@@ -31,18 +64,18 @@ export async function GET(request: NextRequest) {
         }
 
         const searchPattern = `%${query.toLowerCase()}%`;
-        const results: any = {
+        const results: Record<string, unknown[]> = {
             teams: [],
             players: [],
             matches: [],
             competitions: [],
         };
 
-        // Search Teams
         if (!category || category === 'all' || category === 'teams') {
             const teamFilters = [
                 like(teams.name, searchPattern),
                 like(teams.shortName, searchPattern),
+                like(teams.university, searchPattern),
             ];
 
             const whereClause = sport
@@ -56,32 +89,40 @@ export async function GET(request: NextRequest) {
                 .limit(limit);
         }
 
-        // Search Players
         if (!category || category === 'all' || category === 'players') {
-            let queryBuilder = db
-                .select({
-                    player: players,
-                    team: teams,
-                })
+            const candidatePlayers = await db
+                .select()
                 .from(players)
-                .leftJoin(teams, eq(players.teamId, teams.id));
+                .where(
+                    or(
+                        like(players.name, searchPattern),
+                        like(players.jerseyName, searchPattern),
+                        like(players.university, searchPattern),
+                        like(players.college, searchPattern),
+                        like(players.department, searchPattern),
+                        like(players.email, searchPattern),
+                    )
+                )
+                .orderBy(desc(players.rating))
+                .limit(limit * 4);
 
-            const whereConditions = [like(players.name, searchPattern)];
-            if (sport) {
-                whereConditions.push(eq(teams.sport, sport));
-            }
+            const enrichedPlayers = await enrichPlayersWithAffiliations(candidatePlayers);
+            results.players = enrichedPlayers
+                .filter((player) => {
+                    const primaryTeam = getPrimaryTeam(player);
+                    if (sport && primaryTeam?.sport !== sport) {
+                        return false;
+                    }
 
-            const playerResults = await queryBuilder
-                .where(and(...whereConditions))
-                .limit(limit);
-
-            results.players = playerResults.map(r => ({
-                ...r.player,
-                team: r.team,
-            }));
+                    return playerMatchesQuery(player, query);
+                })
+                .slice(0, limit)
+                .map((player) => ({
+                    ...player,
+                    team: getPrimaryTeam(player),
+                }));
         }
 
-        // Search Matches (by team names or competition)
         if (!category || category === 'all' || category === 'matches') {
             const matchFilters = or(
                 like(teams.name, searchPattern),
@@ -103,8 +144,7 @@ export async function GET(request: NextRequest) {
                 .where(matchWhere)
                 .limit(limit);
 
-            // Get away teams
-            const matchesWithTeams = await Promise.all(
+            results.matches = await Promise.all(
                 matchResults.map(async (row) => {
                     const [awayTeam] = await db
                         .select()
@@ -118,11 +158,8 @@ export async function GET(request: NextRequest) {
                     };
                 })
             );
-
-            results.matches = matchesWithTeams;
         }
 
-        // Search Competitions
         if (!category || category === 'all' || category === 'competitions') {
             const compFilters = [
                 like(competitions.name, searchPattern),
@@ -140,12 +177,7 @@ export async function GET(request: NextRequest) {
                 .limit(limit);
         }
 
-        // Calculate total results
-        const total =
-            results.teams.length +
-            results.players.length +
-            results.matches.length +
-            results.competitions.length;
+        const total = Object.values(results).reduce((sum, entries) => sum + entries.length, 0);
 
         return NextResponse.json({
             results,

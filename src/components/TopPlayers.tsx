@@ -12,7 +12,7 @@ export function TopPlayers() {
       </div>
       <div className="space-y-4">
         {PLAYERS.sort((a, b) => b.eyePoints - a.eyePoints).slice(0, 5).map((player, index) => {
-          const team = TEAMS.find(t => t.id === player.teamId);
+          const team = (player as typeof player & { team?: typeof TEAMS[number] }).team || TEAMS.find(t => t.id === player.teamId);
           return (
             <div key={player.id} className="flex items-center justify-between group">
               <div className="flex items-center gap-3">

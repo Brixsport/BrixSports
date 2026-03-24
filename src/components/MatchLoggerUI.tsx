@@ -6,6 +6,7 @@ import { X, Trophy, Activity, Users, Star, Zap, Save, RefreshCw, Clock, ArrowRig
 import { MatchEvent, SportType } from '@/types';
 import { Match, Logger, Player, Team } from '@/db/schema';
 import { useWebSocket } from '@/hooks/useWebSocket';
+import { getPrimaryTeam } from '@/lib/player-affiliation-utils';
 
 interface MatchLoggerUIProps {
   match: Match;
@@ -199,7 +200,10 @@ export function MatchLoggerUI({ match, onExit, currentLogger, teams, players }: 
   // Computed values
   const homeTeam = useMemo(() => teams.find(t => t.id === match.homeTeamId), [teams, match.homeTeamId]);
   const awayTeam = useMemo(() => teams.find(t => t.id === match.awayTeamId), [teams, match.awayTeamId]);
-  const teamPlayers = useMemo(() => players.filter(p => p.teamId === selectedTeamId), [players, selectedTeamId]);
+  const teamPlayers = useMemo(
+    () => players.filter((player) => getPrimaryTeam(player as Player & Record<string, unknown>, teams)?.id === selectedTeamId),
+    [players, selectedTeamId, teams]
+  );
 
   const addEvent = useCallback(async (type: EventType, detail?: string, relatedPlayerId?: string) => {
     const newEvent: MatchEvent = {

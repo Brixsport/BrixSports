@@ -2,8 +2,13 @@
 
 import { motion } from 'framer-motion';
 import { Heart, Activity, ArrowRight, User } from 'lucide-react';
-import { Match, Player, Team, MATCHES, PLAYERS, TEAMS } from '@/lib/mock-data';
+import { MATCHES, PLAYERS, TEAMS } from '@/lib/mock-data';
 import { useFavorites } from '@/hooks/useFavorites';
+
+type Match = (typeof MATCHES)[number];
+type Player = (typeof PLAYERS)[number] & {
+  team?: (typeof TEAMS)[number];
+};
 
 interface MyFeedProps {
   onSelectMatch: (match: Match) => void;

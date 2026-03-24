@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-    Activity, Shield, Users, Server, Settings,
+    Activity, Shield, Users, Server, Settings, Globe,
     Trophy, Calendar, Video, Newspaper, TrendingUp,
     Timer, Menu, X, ChevronRight, LogOut, UserPlus, Briefcase, User
 } from 'lucide-react';
@@ -15,6 +15,7 @@ const navItems = [
     { icon: <Activity size={18} />, label: "Live Monitor", href: "/admin" },
     { icon: <Briefcase size={18} />, label: "Manager Center", href: "/admin/manager" },
     { icon: <Trophy size={18} />, label: "Competitions", href: "/admin/competitions" },
+    { icon: <Globe size={18} />, label: "Organizations", href: "/admin/organizations", adminOnly: true },
     { icon: <User size={18} />, label: "Player Profiles", href: "/admin/players" },
     { icon: <Calendar size={18} />, label: "Matches", href: "/admin/matches" },
     { icon: <Timer size={18} />, label: "Track Events", href: "/admin/track-events" },

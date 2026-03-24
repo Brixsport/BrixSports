@@ -7,6 +7,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
 import { playerStats, players, teams } from '@/db/schema';
 import { eq, desc, and, or } from 'drizzle-orm';
+import { enrichPlayersWithAffiliations } from '@/lib/player-data';
+import { getPrimaryTeam } from '@/lib/player-affiliation-utils';
 
 /**
  * GET player statistics
@@ -80,13 +82,19 @@ export async function GET(
         }
 
         const results = await query;
+        const enrichedPlayers = await enrichPlayersWithAffiliations(
+            results
+                .map((result) => result.player)
+                .filter((player): player is NonNullable<typeof player> => Boolean(player))
+        );
+        const playerMap = new Map(enrichedPlayers.map((player) => [player.id, player]));
 
         return NextResponse.json({
             type,
             stats: results.map((r) => ({
                 ...r.stat,
                 player: r.player,
-                team: r.team,
+                team: r.player ? getPrimaryTeam(playerMap.get(r.player.id) ?? { teamId: r.player.teamId }) : r.team,
             })),
         });
     } catch (error) {

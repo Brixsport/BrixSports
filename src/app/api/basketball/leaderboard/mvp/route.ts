@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { db } from '@/db';
 import { matches, teams, players } from '@/db/schema';
 import { eq } from 'drizzle-orm';
+import { enrichPlayersWithAffiliations } from '@/lib/player-data';
+import { getPrimaryTeam } from '@/lib/player-affiliation-utils';
 
 export async function GET() {
     try {
@@ -27,20 +29,17 @@ export async function GET() {
 
         // 3. Fetch all basketball players with their teams for mapping
         const allPlayers = await db
-            .select({
-                playerName: players.name,
-                teamName: teams.name,
-                teamLogo: teams.logo,
-            })
+            .select()
             .from(players)
-            .leftJoin(teams, eq(players.teamId, teams.id))
             .all();
+        const enrichedPlayers = await enrichPlayersWithAffiliations(allPlayers);
 
         const playerMap: Record<string, { team: string, logo: string }> = {};
-        allPlayers.forEach(p => {
-            playerMap[p.playerName.toUpperCase()] = {
-                team: p.teamName || 'Unknown',
-                logo: p.teamLogo || '/assests/Logos/BRIX-SPORT-LOGO.png'
+        enrichedPlayers.forEach((player) => {
+            const team = getPrimaryTeam(player);
+            playerMap[player.name.toUpperCase()] = {
+                team: team?.name || 'Unknown',
+                logo: ('logo' in (team || {})) ? (team as any).logo || '/assests/Logos/BRIX-SPORT-LOGO.png' : '/assests/Logos/BRIX-SPORT-LOGO.png'
             };
         });
 

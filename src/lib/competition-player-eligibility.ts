@@ -19,6 +19,7 @@
  */
 
 import { Player, Team } from '@/db/schema';
+import { AffiliationAwarePlayerLike, getResolvedInstitutionalData } from '@/lib/player-affiliation-utils';
 
 export type CompetitionLevel = 'departmental' | 'college' | 'university' | 'busa-league' | 'inter-university' | 'external';
 
@@ -33,15 +34,15 @@ export type CompetitionLevel = 'departmental' | 'college' | 'university' | 'busa
  * - Inter-University: NO filtering needed (accepts all universities)
  *   External players without college/department can compete at this level
  */
-export function isPlayerEligible(
-    player: Player,
+export function isPlayerEligible<TPlayer extends Player & Partial<AffiliationAwarePlayerLike>>(
+    player: TPlayer,
     team: Team | null,
     level: CompetitionLevel
 ): boolean {
-    // Get institutional data from player, fallback to team
-    const playerUniversity = player.university || team?.university;
-    const playerCollege = player.college;
-    const playerDepartment = player.department;
+    const institutionalData = getResolvedInstitutionalData(player, team);
+    const playerUniversity = institutionalData.university;
+    const playerCollege = institutionalData.college;
+    const playerDepartment = institutionalData.department;
 
     switch (level) {
         case 'departmental':
@@ -75,9 +76,9 @@ export function isPlayerEligible(
  * Filters a list of players by institutional eligibility for a competition
  */
 export function filterPlayersByCompetitionLevel(
-    players: (Player & { team?: Team | null })[],
+    players: (Player & Partial<AffiliationAwarePlayerLike> & { team?: Team | null })[],
     level: CompetitionLevel
-): (Player & { team?: Team | null })[] {
+): (Player & Partial<AffiliationAwarePlayerLike> & { team?: Team | null })[] {
     return players.filter(player =>
         isPlayerEligible(player, player.team || null, level)
     );

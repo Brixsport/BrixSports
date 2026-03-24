@@ -7,6 +7,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
 import { teams, players, matches, basketballPlayerStats, playerTeamAffiliations } from '@/db/schema';
 import { eq, or, desc, and, sql, inArray } from 'drizzle-orm';
+import { enrichPlayersWithAffiliations } from '@/lib/player-data';
+import { getResolvedInstitutionalData } from '@/lib/player-affiliation-utils';
 
 interface RouteParams {
     params: Promise<{
@@ -54,26 +56,15 @@ export async function GET(
         // Football analogy: all Spaniards (university affiliation) who can play for Spain (University Team)
         let universityPlayers: typeof teamPlayers = [];
         if (team.university) {
-            const universityRows = await db
-                .select({ player: players })
+            const allPlayers = await db
+                .select()
                 .from(players)
-                .leftJoin(teams, eq(players.teamId, teams.id))
-                .where(
-                    or(
-                        eq(players.university, team.university),
-                        eq(teams.university, team.university)
-                    )
-                )
                 .orderBy(desc(players.rating));
 
-            const deduped: typeof teamPlayers = [];
-            const seen = new Set<string>();
-            for (const row of universityRows) {
-                if (seen.has(row.player.id)) continue;
-                seen.add(row.player.id);
-                deduped.push(row.player);
-            }
-            universityPlayers = deduped;
+            const enrichedPlayers = await enrichPlayersWithAffiliations(allPlayers);
+            universityPlayers = enrichedPlayers
+                .filter((player) => getResolvedInstitutionalData(player, player.team).university === team.university)
+                .map(({ team: _team, memberships: _memberships, organizationAffiliations: _organizationAffiliations, ...player }) => player);
         }
 
         // Get player stats (Basketball)

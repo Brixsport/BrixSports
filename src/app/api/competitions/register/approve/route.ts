@@ -20,6 +20,7 @@ import {
 } from '@/db/schema';
 import { eq } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
+import { ensureOrganizationEntity, syncPlayerOrganizationAffiliations } from '@/lib/player-data';
 
 export async function POST(request: NextRequest) {
     try {
@@ -65,12 +66,14 @@ export async function POST(request: NextRequest) {
         let teamId = reg.createdTeamId;
         if (!teamId) {
             const newTeamId = nanoid();
+            const ownerOrganization = await ensureOrganizationEntity(reg.schoolName, 'university');
             const teamValues = {
                 id: newTeamId,
                 name: reg.teamName,
                 shortName: reg.shortName,
                 logo: (reg.logo || '') as string,
                 university: reg.schoolName, // Team's university
+                ownerOrganizationId: ownerOrganization?.id ?? null,
                 color: (reg.color || '#000000') as string,
                 sport: 'Football' as string, // Default sport; can be made configurable
                 played: 0,
@@ -115,6 +118,7 @@ export async function POST(request: NextRequest) {
                 college: regPlayer.college || null,
                 department: regPlayer.department || null,
                 university: regPlayer.university || reg.schoolName, // Player's institution
+                isExternal: false,
                 image: regPlayer.image || null,
                 marketValue: null,
                 profileId: null,
@@ -123,13 +127,26 @@ export async function POST(request: NextRequest) {
                 createdAt: new Date(),
             });
 
+            await syncPlayerOrganizationAffiliations(playerId, {
+                university: regPlayer.university || reg.schoolName,
+                college: regPlayer.college || null,
+                department: regPlayer.department || null,
+            });
+
             // Create affiliation with club team
             await db.insert(playerTeamAffiliations).values({
                 id: nanoid(),
                 playerId,
                 teamId,
                 affiliationType: 'club', // This is their primary club team
+                role: 'player',
+                status: 'active',
+                isPrimary: true,
                 isActive: true,
+                startDate: new Date(),
+                jerseyNumber: regPlayer.number,
+                position: regPlayer.position,
+                createdAt: new Date(),
             });
 
             createdPlayerIds.push(playerId);

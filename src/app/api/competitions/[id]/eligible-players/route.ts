@@ -1,7 +1,7 @@
 /**
  * Eligible Players for Competition API
  * GET /api/competitions/[id]/eligible-players
- * 
+ *
  * Returns list of players eligible for a specific competition based on:
  * - Competition level (departmental, college, university, inter-university)
  * - Player's institutional data (university, college, department)
@@ -9,10 +9,12 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { and, eq } from 'drizzle-orm';
 import { db } from '@/db';
-import { competitions, players, teams, playerTeamAffiliations } from '@/db/schema';
-import { eq, and, or, inArray } from 'drizzle-orm';
+import { competitions, playerTeamAffiliations, players, teams } from '@/db/schema';
 import { normalizeCompetitionLevel, isPlayerEligible } from '@/lib/competition-player-eligibility';
+import { enrichPlayersWithAffiliations } from '@/lib/player-data';
+import { getPrimaryTeam } from '@/lib/player-affiliation-utils';
 
 export async function GET(
     request: NextRequest,
@@ -21,10 +23,9 @@ export async function GET(
     try {
         const competitionId = params.id;
         const { searchParams } = new URL(request.url);
-        const teamId = searchParams.get('teamId'); // Optional: filter for specific team only
-        const sport = searchParams.get('sport'); // Optional: filter by sport
+        const teamId = searchParams.get('teamId');
+        const sport = searchParams.get('sport');
 
-        // Get competition details
         const [competition] = await db
             .select()
             .from(competitions)
@@ -37,12 +38,10 @@ export async function GET(
             );
         }
 
-        // Determine filtering logic based on competition level
         const compLevel = normalizeCompetitionLevel(competition.level);
-        let eligiblePlayers: typeof players | any[] = [];
+        let eligiblePlayers = await enrichPlayersWithAffiliations([]);
 
         if (teamId) {
-            // If filtering for a specific team, get that team's details first
             const [selectedTeam] = await db
                 .select()
                 .from(teams)
@@ -55,16 +54,10 @@ export async function GET(
                 );
             }
 
-            // Get players affiliated with this team via active affiliations
             const teamPlayers = await db
-                .select({
-                    player: players,
-                    team: teams,
-                    affiliation: playerTeamAffiliations,
-                })
+                .select({ player: players })
                 .from(playerTeamAffiliations)
                 .innerJoin(players, eq(playerTeamAffiliations.playerId, players.id))
-                .innerJoin(teams, eq(playerTeamAffiliations.teamId, teams.id))
                 .where(
                     and(
                         eq(playerTeamAffiliations.teamId, teamId),
@@ -72,35 +65,23 @@ export async function GET(
                     )
                 );
 
-            // Filter by institutional data based on competition level
-            eligiblePlayers = teamPlayers
-                .map(row => row.player)
-                .filter(p => isPlayerEligible(p, selectedTeam, compLevel));
+            eligiblePlayers = (await enrichPlayersWithAffiliations(teamPlayers.map((row) => row.player)))
+                .filter((player) => isPlayerEligible(player, selectedTeam, compLevel));
         } else {
-            // Get all players eligible for this competition
             const allPlayers = await db.select().from(players);
-
-            // For each player, check if eligible based on competition level and institutional data
-            eligiblePlayers = allPlayers.filter(player => isPlayerEligible(player, null, compLevel));
+            eligiblePlayers = (await enrichPlayersWithAffiliations(allPlayers))
+                .filter((player) => isPlayerEligible(player, player.team, compLevel));
         }
 
-        // Filter by sport if provided
         if (sport) {
-            // Get teams with matching sport
-            const sportTeams = await db
-                .select({ id: teams.id })
-                .from(teams)
-                .where(eq(teams.sport, sport));
+            eligiblePlayers = eligiblePlayers.filter((player) => {
+                const primaryTeam = getPrimaryTeam(player);
+                if (primaryTeam?.sport === sport) {
+                    return true;
+                }
 
-            const sportTeamIds = sportTeams.map(t => t.id);
-
-            if (sportTeamIds.length > 0) {
-                eligiblePlayers = eligiblePlayers.filter(p =>
-                    p.teamId && sportTeamIds.includes(p.teamId)
-                );
-            } else {
-                eligiblePlayers = [];
-            }
+                return (player.memberships ?? []).some((membership) => membership.team.sport === sport);
+            });
         }
 
         return NextResponse.json({
@@ -121,8 +102,3 @@ export async function GET(
         );
     }
 }
-
-/**
- * Determines if a player is eligible for a competition based on level and institutional data
- * (Now imported from helper function - kept for reference)
- */

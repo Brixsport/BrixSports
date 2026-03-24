@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
 import { players, playerStats, teams, basketballPlayerStats } from '@/db/schema';
 import { eq, desc, and } from 'drizzle-orm';
+import { enrichPlayersWithAffiliations } from '@/lib/player-data';
+import { getPrimaryTeam } from '@/lib/player-affiliation-utils';
 
 // GET /api/players/stats/leaders - Get top performing players
 export async function GET(request: NextRequest) {
@@ -51,19 +53,28 @@ export async function GET(request: NextRequest) {
             const results = await db
                 .select({
                     player: players,
-                    team: teams,
                     stats: basketballPlayerStats,
                 })
                 .from(basketballPlayerStats)
                 .leftJoin(players, eq(basketballPlayerStats.playerId, players.id))
-                .leftJoin(teams, eq(players.teamId, teams.id))
                 .where(basketballConditions.length > 0 ? and(...basketballConditions) : undefined)
                 .orderBy(desc(orderColumn))
                 .limit(limit);
 
+            const enrichedPlayers = await enrichPlayersWithAffiliations(
+                results
+                    .map((result) => result.player)
+                    .filter((player): player is NonNullable<typeof player> => Boolean(player))
+            );
+            const playerMap = new Map(enrichedPlayers.map((player) => [player.id, player]));
+
             const leaders = results
                 .filter(r => r.player)
-                .map((r, index) => ({
+                .map((r, index) => {
+                    const enrichedPlayer = playerMap.get(r.player!.id);
+                    const primaryTeam = enrichedPlayer ? getPrimaryTeam(enrichedPlayer) : null;
+
+                    return {
                     rank: index + 1,
                     player: {
                         id: r.player!.id,
@@ -73,11 +84,11 @@ export async function GET(request: NextRequest) {
                         image: r.player!.image,
                         rating: r.player!.rating,
                     },
-                    team: r.team ? {
-                        id: r.team.id,
-                        name: r.team.name,
-                        logo: r.team.logo,
-                        color: r.team.color,
+                    team: primaryTeam ? {
+                        id: primaryTeam.id,
+                        name: primaryTeam.name,
+                        logo: 'logo' in primaryTeam ? primaryTeam.logo : '',
+                        color: 'color' in primaryTeam ? primaryTeam.color : '',
                         sport: 'Basketball'
                     } : null,
                     stats: {
@@ -93,7 +104,8 @@ export async function GET(request: NextRequest) {
                         assistsPerGame: r.stats.assistsPerGame,
                     },
                     highlightedStat: getBasketballHighlightedStat(r.stats, type),
-                }));
+                    };
+                });
 
             return NextResponse.json({
                 type,
@@ -146,12 +158,10 @@ export async function GET(request: NextRequest) {
         const baseQuery = db
             .select({
                 player: players,
-                team: teams,
                 stats: playerStats,
             })
             .from(playerStats)
-            .leftJoin(players, eq(playerStats.playerId, players.id))
-            .leftJoin(teams, eq(players.teamId, teams.id));
+            .leftJoin(players, eq(playerStats.playerId, players.id));
 
         const results = conditions.length > 0
             ? await baseQuery
@@ -162,9 +172,20 @@ export async function GET(request: NextRequest) {
                 .orderBy(desc(orderColumn))
                 .limit(limit);
 
+        const enrichedPlayers = await enrichPlayersWithAffiliations(
+            results
+                .map((result) => result.player)
+                .filter((player): player is NonNullable<typeof player> => Boolean(player))
+        );
+        const playerMap = new Map(enrichedPlayers.map((player) => [player.id, player]));
+
         const leaders = results
             .filter(r => r.player)
-            .map((r, index) => ({
+            .map((r, index) => {
+                const enrichedPlayer = playerMap.get(r.player!.id);
+                const primaryTeam = enrichedPlayer ? getPrimaryTeam(enrichedPlayer) : null;
+
+                return {
                 rank: index + 1,
                 player: {
                     id: r.player!.id,
@@ -174,15 +195,16 @@ export async function GET(request: NextRequest) {
                     image: r.player!.image,
                     rating: r.player!.rating,
                 },
-                team: r.team ? {
-                    id: r.team.id,
-                    name: r.team.name,
-                    logo: r.team.logo,
-                    color: r.team.color,
+                team: primaryTeam ? {
+                    id: primaryTeam.id,
+                    name: primaryTeam.name,
+                    logo: 'logo' in primaryTeam ? primaryTeam.logo : '',
+                    color: 'color' in primaryTeam ? primaryTeam.color : '',
                 } : null,
                 stats: r.stats,
                 highlightedStat: getHighlightedStat(r.stats, type),
-            }));
+                };
+            });
 
         return NextResponse.json({
             type,

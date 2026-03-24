@@ -4,12 +4,14 @@ import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Star, TrendingUp, Award, Target, Zap, Users } from 'lucide-react';
 import Link from 'next/link';
+import { getPrimaryTeam } from '@/lib/player-affiliation-utils';
 
 interface Player {
     id: string;
     name: string;
     number: number;
     teamId: string;
+    team?: Team | null;
     position: string;
     rating: number;
     eyePoints: number;
@@ -96,7 +98,7 @@ export default function DraftPage() {
                         </div>
 
                         {topProspects.map((player, idx) => {
-                            const team = teams.find(t => t.id === player.teamId);
+                            const team = getPrimaryTeam(player, teams) as Team | null;
                             const rank = idx + 1;
                             const isTopPick = rank <= 3;
 

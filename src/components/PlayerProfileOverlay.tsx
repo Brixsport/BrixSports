@@ -231,7 +231,7 @@ export function PlayerProfileOverlay({ player: initialPlayer, onClose, sport }: 
                     return (
                       <div key={index} className={`flex items-center justify-between p-4 bg-white/5 rounded-2xl border border-white/5 ${eventCount === 0 ? 'opacity-50' : ''}`}>
                         <span className="text-[10px] font-black tracking-widest uppercase text-white/40">
-                          vs {matchData.match?.homeTeamId === player.teamId ? matchData.match?.awayTeam?.shortName : matchData.match?.homeTeam?.shortName || 'TBD'}
+                          vs {matchData.match?.homeTeamId === team?.id ? matchData.match?.awayTeam?.shortName : matchData.match?.homeTeam?.shortName || 'TBD'}
                         </span>
                         <div className="flex items-center gap-4">
                           <span className="text-xs font-bold italic">{eventCount > 0 ? eventSummary : '-'}</span>

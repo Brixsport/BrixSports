@@ -1,5 +1,30 @@
-import { sqliteTable, text, integer, real, uniqueIndex } from 'drizzle-orm/sqlite-core';
+import { sqliteTable, text, integer, real, uniqueIndex, foreignKey } from 'drizzle-orm/sqlite-core';
 import { relations } from 'drizzle-orm';
+
+// Organizations table
+// Represents owning or governing entities such as universities, colleges, departments, and clubs.
+export const organizations = sqliteTable('organizations', {
+    id: text('id').primaryKey(),
+    name: text('name').notNull(),
+    slug: text('slug').notNull(),
+    type: text('type').notNull().default('organization'),
+    shortName: text('short_name'),
+    displayName: text('display_name'),
+    parentOrganizationId: text('parent_organization_id'),
+    isInternalUnit: integer('is_internal_unit', { mode: 'boolean' }).default(false),
+    status: text('status').default('active'),
+    location: text('location'),
+    metadata: text('metadata'),
+    createdAt: integer('created_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
+    updatedAt: integer('updated_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
+}, (table) => ({
+    slugIdx: uniqueIndex('organizations_slug_unique').on(table.slug),
+    parentOrganizationFk: foreignKey({
+        columns: [table.parentOrganizationId],
+        foreignColumns: [table.id],
+        name: 'organizations_parent_organization_id_fk',
+    }),
+}));
 
 // Teams table
 export const teams = sqliteTable('teams', {
@@ -8,6 +33,7 @@ export const teams = sqliteTable('teams', {
     shortName: text('short_name').notNull(),
     logo: text('logo').notNull(),
     university: text('university').notNull(),
+    ownerOrganizationId: text('owner_organization_id').references(() => organizations.id),
     color: text('color').notNull(),
     sport: text('sport').notNull().default('Football'), // 'Football' | 'Basketball' | 'Scrabble' | 'Chess' | 'Table Tennis'
     gender: text('gender').default('male'), // 'male' | 'female' | 'mixed'
@@ -58,8 +84,31 @@ export const playerTeamAffiliations = sqliteTable('player_team_affiliations', {
     teamId: text('team_id').notNull().references(() => teams.id, { onDelete: 'cascade' }),
     affiliationType: text('affiliation_type').notNull(),
     // 'club' | 'department' | 'college' | 'university' | 'external'
+    role: text('role').default('player'),
+    status: text('status').default('active'),
+    isPrimary: integer('is_primary', { mode: 'boolean' }).default(true),
     isActive: integer('is_active', { mode: 'boolean' }).default(true),
+    startDate: integer('start_date', { mode: 'timestamp' }),
+    endDate: integer('end_date', { mode: 'timestamp' }),
+    jerseyNumber: integer('jersey_number'),
+    position: text('position'),
     // No expiry — university affiliation is permanent
+    createdAt: integer('created_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
+});
+
+// Player Organization Affiliations table
+// Stores institutional relationships such as university, college, department, and governing-body affiliations.
+export const playerOrganizationAffiliations = sqliteTable('player_organization_affiliations', {
+    id: text('id').primaryKey(),
+    playerId: text('player_id').notNull().references(() => players.id, { onDelete: 'cascade' }),
+    organizationId: text('organization_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+    affiliationType: text('affiliation_type').notNull(),
+    role: text('role').default('member'),
+    status: text('status').default('active'),
+    isPrimary: integer('is_primary', { mode: 'boolean' }).default(false),
+    startDate: integer('start_date', { mode: 'timestamp' }),
+    endDate: integer('end_date', { mode: 'timestamp' }),
+    metadata: text('metadata'),
     createdAt: integer('created_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
 });
 
@@ -181,6 +230,8 @@ export const competitions = sqliteTable('competitions', {
     maxTeams: integer('max_teams'),
     entryFee: text('entry_fee'),
     hostOrganization: text('host_organization'),
+    hostOrganizationId: text('host_organization_id').references(() => organizations.id),
+    governingOrganizationId: text('governing_organization_id').references(() => organizations.id),
     followersCount: integer('followers_count').default(0),
     status: text('status').default('upcoming'),
     winnerId: text('winner_id').references(() => teams.id),
@@ -724,7 +775,11 @@ export const passwordResetTokens = sqliteTable('password_reset_tokens', {
 // RELATIONS
 // ─────────────────────────────────────────────
 
-export const teamsRelations = relations(teams, ({ many }) => ({
+export const teamsRelations = relations(teams, ({ one, many }) => ({
+    ownerOrganization: one(organizations, {
+        fields: [teams.ownerOrganizationId],
+        references: [organizations.id],
+    }),
     players: many(players),
     affiliations: many(playerTeamAffiliations),
     homeMatches: many(matches, { relationName: 'homeTeam' }),
@@ -739,6 +794,7 @@ export const playersRelations = relations(players, ({ one, many }) => ({
         references: [teams.id],
     }),
     affiliations: many(playerTeamAffiliations),
+    organizationAffiliations: many(playerOrganizationAffiliations),
     events: many(matchEvents),
     individualStats: many(individualSportStats),
 }));
@@ -754,7 +810,44 @@ export const playerTeamAffiliationsRelations = relations(playerTeamAffiliations,
     }),
 }));
 
+export const playerOrganizationAffiliationsRelations = relations(playerOrganizationAffiliations, ({ one }) => ({
+    player: one(players, {
+        fields: [playerOrganizationAffiliations.playerId],
+        references: [players.id],
+    }),
+    organization: one(organizations, {
+        fields: [playerOrganizationAffiliations.organizationId],
+        references: [organizations.id],
+    }),
+}));
+
+export const organizationsRelations = relations(organizations, ({ one, many }) => ({
+    parentOrganization: one(organizations, {
+        fields: [organizations.parentOrganizationId],
+        references: [organizations.id],
+        relationName: 'organizationHierarchy',
+    }),
+    childOrganizations: many(organizations, {
+        relationName: 'organizationHierarchy',
+    }),
+    ownedTeams: many(teams),
+    hostedCompetitions: many(competitions),
+    governedCompetitions: many(competitions, {
+        relationName: 'governingOrganization',
+    }),
+    playerAffiliations: many(playerOrganizationAffiliations),
+}));
+
 export const competitionsRelations = relations(competitions, ({ one, many }) => ({
+    hostOrganizationRef: one(organizations, {
+        fields: [competitions.hostOrganizationId],
+        references: [organizations.id],
+    }),
+    governingOrganizationRef: one(organizations, {
+        fields: [competitions.governingOrganizationId],
+        references: [organizations.id],
+        relationName: 'governingOrganization',
+    }),
     winner: one(teams, {
         fields: [competitions.winnerId],
         references: [teams.id],
@@ -865,12 +958,16 @@ export const individualSportStatsRelations = relations(individualSportStats, ({ 
 // TYPES
 // ─────────────────────────────────────────────
 
+export type Organization = typeof organizations.$inferSelect;
+export type NewOrganization = typeof organizations.$inferInsert;
 export type Team = typeof teams.$inferSelect;
 export type NewTeam = typeof teams.$inferInsert;
 export type Player = typeof players.$inferSelect;
 export type NewPlayer = typeof players.$inferInsert;
 export type PlayerTeamAffiliation = typeof playerTeamAffiliations.$inferSelect;
 export type NewPlayerTeamAffiliation = typeof playerTeamAffiliations.$inferInsert;
+export type PlayerOrganizationAffiliation = typeof playerOrganizationAffiliations.$inferSelect;
+export type NewPlayerOrganizationAffiliation = typeof playerOrganizationAffiliations.$inferInsert;
 export type Match = typeof matches.$inferSelect;
 export type NewMatch = typeof matches.$inferInsert;
 export type MatchEvent = typeof matchEvents.$inferSelect;
