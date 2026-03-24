@@ -4,13 +4,14 @@ import { users } from '@/db/schema';
 import { eq } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import bcrypt from 'bcryptjs';
-import { generateToken } from '@/lib/auth';
+import { generateToken, normalizeUserRole } from '@/lib/auth';
 
 // POST /api/auth/register - Register new user
 export async function POST(request: NextRequest) {
     try {
         const body = await request.json();
-        const { email, password, name, role = 'user' } = body;
+        const { email, password, name } = body;
+        const role = normalizeUserRole('user');
 
         // Validate input
         if (!email || !password || !name) {

@@ -37,7 +37,7 @@ export async function GET(
                 emailNotifications: true,
                 matchAlerts: true,
                 playerRatings: true,
-                scoutUpdates: true,
+                scoutUpdates: false,
                 milestones: true,
                 matchReminders: true,
                 favoriteTeamUpdates: true,

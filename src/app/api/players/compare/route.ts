@@ -6,7 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
 import { players, footballPlayerStats, basketballPlayerStats } from '@/db/schema';
-import { eq } from 'drizzle-orm';
+import { eq, and } from 'drizzle-orm';
 import { enrichPlayersWithAffiliations } from '@/lib/player-data';
 
 /**
@@ -55,48 +55,108 @@ export async function GET(request: NextRequest) {
             const sport = team?.sport || 'Football';
 
             if (sport === 'Basketball') {
-                let query = db
+                const conditions = [eq(basketballPlayerStats.playerId, playerId)];
+                if (competition) {
+                    conditions.push(eq(basketballPlayerStats.competition, competition));
+                }
+
+                const statsRows = await db
                     .select()
                     .from(basketballPlayerStats)
-                    .where(eq(basketballPlayerStats.playerId, playerId));
+                    .where(and(...conditions));
 
-                const [stats] = await query;
-                if (!stats) return {};
+                if (statsRows.length === 0) return {};
+
+                const totals = statsRows.reduce((acc, stats) => ({
+                    gamesPlayed: acc.gamesPlayed + (stats.gamesPlayed || 0),
+                    minutesPlayed: acc.minutesPlayed + (stats.minutesPlayed || 0),
+                    totalPoints: acc.totalPoints + (stats.totalPoints || 0),
+                    assists: acc.assists + (stats.assists || 0),
+                    totalRebounds: acc.totalRebounds + (stats.totalRebounds || 0),
+                    steals: acc.steals + (stats.steals || 0),
+                    blocks: acc.blocks + (stats.blocks || 0),
+                }), {
+                    gamesPlayed: 0,
+                    minutesPlayed: 0,
+                    totalPoints: 0,
+                    assists: 0,
+                    totalRebounds: 0,
+                    steals: 0,
+                    blocks: 0,
+                });
 
                 // Map to frontend keys
                 return {
-                    appearances: stats.gamesPlayed || 0,
-                    minutesPlayed: stats.minutesPlayed || 0,
-                    totalPoints: stats.totalPoints || 0,
-                    totalAssists: stats.assists || 0, // Map assists to totalAssists
-                    rebounds: stats.totalRebounds || 0, // Map totalRebounds to rebounds
-                    steals: stats.steals || 0,
-                    blocks: stats.blocks || 0,
-                    rating: player1.rating // Pass rating if needed, though usually on player object
+                    appearances: totals.gamesPlayed,
+                    minutesPlayed: totals.minutesPlayed,
+                    totalPoints: totals.totalPoints,
+                    totalAssists: totals.assists,
+                    rebounds: totals.totalRebounds,
+                    steals: totals.steals,
+                    blocks: totals.blocks,
                 };
             } else {
-                // Football (default)
-                let query = db
+                const conditions = [eq(footballPlayerStats.playerId, playerId)];
+                if (competition) {
+                    conditions.push(eq(footballPlayerStats.competition, competition));
+                }
+
+                const statsRows = await db
                     .select()
                     .from(footballPlayerStats)
-                    .where(eq(footballPlayerStats.playerId, playerId));
+                    .where(and(...conditions));
 
-                // If specific competition filtering is needed, it would be added here
-                // Note: current schema for footballPlayerStats doesn't strictly link to competition in the same way generic playerStats did, 
-                // but usually we want total season stats.
+                if (statsRows.length === 0) return {};
 
-                const [stats] = await query;
-                if (!stats) return {};
+                const totals = statsRows.reduce((acc, stats) => ({
+                    appearances: acc.appearances + (stats.appearances || 0),
+                    starts: acc.starts + (stats.starts || 0),
+                    minutesPlayed: acc.minutesPlayed + (stats.minutesPlayed || 0),
+                    goals: acc.goals + (stats.goals || 0),
+                    assists: acc.assists + (stats.assists || 0),
+                    shotsOnTarget: acc.shotsOnTarget + (stats.shotsOnTarget || 0),
+                    shotsOffTarget: acc.shotsOffTarget + (stats.shotsOffTarget || 0),
+                    passesCompleted: acc.passesCompleted + (stats.passesCompleted || 0),
+                    passesAttempted: acc.passesAttempted + (stats.passesAttempted || 0),
+                    keyPasses: acc.keyPasses + (stats.keyPasses || 0),
+                    tackles: acc.tackles + (stats.tackles || 0),
+                    interceptions: acc.interceptions + (stats.interceptions || 0),
+                    clearances: acc.clearances + (stats.clearances || 0),
+                    yellowCards: acc.yellowCards + (stats.yellowCards || 0),
+                    redCards: acc.redCards + (stats.redCards || 0),
+                    foulsCommitted: acc.foulsCommitted + (stats.foulsCommitted || 0),
+                    foulsDrawn: acc.foulsDrawn + (stats.foulsDrawn || 0),
+                    saves: acc.saves + (stats.saves || 0),
+                    cleanSheets: acc.cleanSheets + (stats.cleanSheets || 0),
+                    goalsConceded: acc.goalsConceded + (stats.goalsConceded || 0),
+                }), {
+                    appearances: 0,
+                    starts: 0,
+                    minutesPlayed: 0,
+                    goals: 0,
+                    assists: 0,
+                    shotsOnTarget: 0,
+                    shotsOffTarget: 0,
+                    passesCompleted: 0,
+                    passesAttempted: 0,
+                    keyPasses: 0,
+                    tackles: 0,
+                    interceptions: 0,
+                    clearances: 0,
+                    yellowCards: 0,
+                    redCards: 0,
+                    foulsCommitted: 0,
+                    foulsDrawn: 0,
+                    saves: 0,
+                    cleanSheets: 0,
+                    goalsConceded: 0,
+                });
 
                 return {
-                    ...stats,
-                    // Ensure keys match what FootballComparison expects
-                    goals: stats.goals || 0,
-                    assists: stats.assists || 0,
-                    appearances: stats.appearances || 0,
-                    minutesPlayed: stats.minutesPlayed || 0,
-                    yellowCards: stats.yellowCards || 0,
-                    redCards: stats.redCards || 0,
+                    ...totals,
+                    goalsPerGame: totals.appearances > 0 ? totals.goals / totals.appearances : 0,
+                    assistsPerGame: totals.appearances > 0 ? totals.assists / totals.appearances : 0,
+                    passAccuracy: totals.passesAttempted > 0 ? (totals.passesCompleted / totals.passesAttempted) * 100 : 0,
                 };
             }
         };

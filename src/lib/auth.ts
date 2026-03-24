@@ -23,6 +23,14 @@ export interface AuthenticatedUser {
     updatedAt: Date | null;
 }
 
+export function normalizeUserRole(role: string | null | undefined): string {
+    if (!role || role === 'scout') {
+        return 'user';
+    }
+
+    return role;
+}
+
 /**
  * Extract and verify JWT token from request headers
  * @param request - NextRequest object
@@ -51,7 +59,10 @@ export async function verifyAuth(request: NextRequest): Promise<AuthUser | null>
             process.env.JWT_SECRET || 'your-secret-key-change-in-production'
         ) as AuthUser;
 
-        return decoded;
+        return {
+            ...decoded,
+            role: normalizeUserRole(decoded.role),
+        };
     } catch (error) {
         console.error('Auth verification error:', error);
         return null;
@@ -85,7 +96,7 @@ export async function getAuthUser(request: NextRequest): Promise<AuthenticatedUs
             id: user.id,
             email: user.email,
             name: user.name,
-            role: user.role || 'user',
+            role: normalizeUserRole(user.role),
             avatar: user.avatar,
             coverImage: user.coverImage,
             bio: user.bio,
@@ -119,7 +130,7 @@ export function hasRole(user: AuthenticatedUser | null, allowedRoles: string[]):
  */
 export function generateToken(userId: string, email: string, role: string): string {
     return jwt.sign(
-        { userId, email, role },
+        { userId, email, role: normalizeUserRole(role) },
         process.env.JWT_SECRET || 'your-secret-key-change-in-production',
         { expiresIn: '7d' }
     );

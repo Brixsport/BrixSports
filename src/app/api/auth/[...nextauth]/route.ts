@@ -4,6 +4,7 @@ import { db } from '@/db';
 import { users } from '@/db/schema';
 import { eq } from 'drizzle-orm';
 import { JWT } from 'next-auth/jwt';
+import { normalizeUserRole } from '@/lib/auth';
 
 export const authOptions: NextAuthOptions = {
     providers: [
@@ -64,7 +65,7 @@ export const authOptions: NextAuthOptions = {
                     // @ts-ignore - Adding custom properties to session user
                     session.user.id = dbUser[0].id;
                     // @ts-ignore
-                    session.user.role = dbUser[0].role;
+                    session.user.role = normalizeUserRole(dbUser[0].role);
                 }
             }
             return session;

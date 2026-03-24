@@ -6,7 +6,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import dynamic from 'next/dynamic';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Trophy, Calendar, User, Search, Bell, Menu, X, ChevronRight, ChevronLeft, Play, Eye } from 'lucide-react';
+import { Trophy, Calendar, User, Search, Bell, Menu, X, ChevronRight, ChevronLeft, Play } from 'lucide-react';
 import { format, addDays, isSameDay } from 'date-fns';
 import { Player, Team, Match } from '@/types';
 import GlobalSearch from '@/components/GlobalSearch';
@@ -892,11 +892,6 @@ export default function Home() {
                 <span className="bg-primary text-black text-[10px] font-black px-2 py-0.5 rounded">NEW</span>
               </Link>
               <Link href="/news" className="text-white/60 hover:text-white transition-colors" onClick={() => setIsMenuOpen(false)}>News</Link>
-              <Link href="/scouts" className="text-white/60 hover:text-white transition-colors flex items-center gap-2" onClick={() => setIsMenuOpen(false)}>
-                <Eye className="w-4 h-4" />
-                Scouts
-                <span className="bg-primary text-black text-[10px] font-black px-2 py-0.5 rounded">NEW</span>
-              </Link>
             </div>
           </motion.div>
         )}

@@ -79,7 +79,8 @@ function BasketballContent() {
         rebounds: [],
         assists: [],
         steals: [],
-        blocks: []
+        blocks: [],
+        powerRanking: []
     });
     const [loading, setLoading] = useState(true);
     const [dataLoading, setDataLoading] = useState(false);
@@ -118,24 +119,26 @@ function BasketballContent() {
                 }
 
                 // 2. Fetch Global Data (Teams, Players, Stats)
-                const [teamsRes, playersRes, pointsRes, reboundsRes, assistsRes, stealsRes, blocksRes] = await Promise.all([
+                const [teamsRes, playersRes, pointsRes, reboundsRes, assistsRes, stealsRes, blocksRes, powerRankingRes] = await Promise.all([
                     fetch('/api/basketball/teams'),
                     fetch('/api/basketball/players?sortBy=rating'),
                     fetch('/api/players/stats/leaders?sport=Basketball&type=points&limit=10'),
                     fetch('/api/players/stats/leaders?sport=Basketball&type=rebounds&limit=10'),
                     fetch('/api/players/stats/leaders?sport=Basketball&type=assists&limit=10'),
                     fetch('/api/players/stats/leaders?sport=Basketball&type=steals&limit=10'),
-                    fetch('/api/players/stats/leaders?sport=Basketball&type=blocks&limit=10')
+                    fetch('/api/players/stats/leaders?sport=Basketball&type=blocks&limit=10'),
+                    fetch('/api/players/stats/leaders?sport=Basketball&type=powerRanking&limit=10')
                 ]);
 
-                const [teamsData, playersData, pointsData, reboundsData, assistsData, stealsData, blocksData] = await Promise.all([
+                const [teamsData, playersData, pointsData, reboundsData, assistsData, stealsData, blocksData, powerRankingData] = await Promise.all([
                     teamsRes.json(),
                     playersRes.json(),
                     pointsRes.json(),
                     reboundsRes.json(),
                     assistsRes.json(),
                     stealsRes.json(),
-                    blocksRes.json()
+                    blocksRes.json(),
+                    powerRankingRes.json()
                 ]);
 
                 if (teamsData.success) setTeams(teamsData.teams);
@@ -146,7 +149,8 @@ function BasketballContent() {
                     rebounds: reboundsData.leaders || [],
                     assists: assistsData.leaders || [],
                     steals: stealsData.leaders || [],
-                    blocks: blocksData.leaders || []
+                    blocks: blocksData.leaders || [],
+                    powerRanking: powerRankingData.leaders || []
                 });
 
             } catch (error) {
@@ -209,7 +213,7 @@ function BasketballContent() {
     }, [selectedCompetition]);
 
 
-    const renderLeaderboardCard = (title: string, data: any[], icon: any, statKey: string) => (
+    const renderLeaderboardCard = (title: string, data: any[], icon: any, statKey: string, valueLabel = 'Total') => (
         <div className="bg-white/5 rounded-2xl border border-white/10 p-6">
             <div className="flex items-center gap-2 mb-6">
                 <div className="p-2 bg-primary/10 rounded-lg text-primary">
@@ -245,9 +249,11 @@ function BasketballContent() {
                         </div>
                         <div className="flex flex-col items-end">
                             <span className="text-secondary font-display text-xl leading-none italic font-bold">
-                                {item.highlightedStat}
+                                {typeof item.highlightedStat === 'number' && statKey === 'powerRanking'
+                                    ? item.highlightedStat.toFixed(1)
+                                    : item.highlightedStat}
                             </span>
-                            <span className="text-[10px] text-white/40 uppercase">Total</span>
+                            <span className="text-[10px] text-white/40 uppercase">{valueLabel}</span>
                         </div>
                     </div>
                 ))}
@@ -503,6 +509,7 @@ function BasketballContent() {
                             {/* STATS TAB */}
                             {activeTab === 'STATS' && (
                                 <motion.div key="stats" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                    {renderLeaderboardCard('Power Ranking', statsLeaders.powerRanking, <Star size={20} />, 'powerRanking', 'Per Game')}
                                     {renderLeaderboardCard('Points Leaders', statsLeaders.points, <Zap size={20} />, 'points')}
                                     {renderLeaderboardCard('Rebounds Leaders', statsLeaders.rebounds, <Activity size={20} />, 'rebounds')}
                                     {renderLeaderboardCard('Assists Leaders', statsLeaders.assists, <Users size={20} />, 'assists')}

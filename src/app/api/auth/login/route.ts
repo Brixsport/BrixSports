@@ -3,7 +3,7 @@ import { db } from '@/db';
 import { users } from '@/db/schema';
 import { eq } from 'drizzle-orm';
 import bcrypt from 'bcryptjs';
-import { generateToken } from '@/lib/auth';
+import { generateToken, normalizeUserRole } from '@/lib/auth';
 
 // POST /api/auth/login - Authenticate user
 export async function POST(request: NextRequest) {
@@ -63,7 +63,8 @@ export async function POST(request: NextRequest) {
         }
 
         // Generate JWT token
-        const token = generateToken(user.id, user.email, user.role || 'user');
+        const normalizedRole = normalizeUserRole(user.role);
+        const token = generateToken(user.id, user.email, normalizedRole);
 
         const response = NextResponse.json({
             success: true,
@@ -72,7 +73,7 @@ export async function POST(request: NextRequest) {
                 id: user.id,
                 email: user.email,
                 name: user.name,
-                role: user.role,
+                role: normalizedRole,
                 avatar: user.avatar,
                 bio: user.bio,
                 favoriteTeamId: user.favoriteTeamId,

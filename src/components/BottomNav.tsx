@@ -2,7 +2,7 @@
 
 import { usePathname, useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
-import { Calendar, Trophy, Eye, User } from 'lucide-react';
+import { Calendar, Trophy, User } from 'lucide-react';
 import { useState, useEffect } from 'react';
 
 interface NavItem {
@@ -37,13 +37,6 @@ export function BottomNav() {
             label: 'Competitions',
             icon: Trophy,
             path: '/competitions',
-        },
-        {
-            id: 'scouts',
-            label: 'Scouts',
-            icon: Eye,
-            path: '/scouts',
-            badge: -1, // Special indicator for NEW
         },
         {
             id: 'profile',

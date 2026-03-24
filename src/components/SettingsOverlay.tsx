@@ -1,7 +1,7 @@
 'use client';
 
 import { motion } from 'framer-motion';
-import { X, Bell, Shield, Eye, Smartphone, Zap, Check, BellOff, Loader2 } from 'lucide-react';
+import { X, Bell, Eye, Zap, Loader2 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { getPushService } from '@/lib/notifications/push-service';
 import { toast } from 'sonner';
@@ -10,7 +10,6 @@ export function SettingsOverlay({ onClose }: { onClose: () => void }) {
   const [preferences, setPreferences] = useState({
     matchAlerts: true,
     playerRatings: true,
-    scoutUpdates: false,
     eyePointMilestones: true,
   });
 
@@ -56,11 +55,10 @@ export function SettingsOverlay({ onClose }: { onClose: () => void }) {
       if (response.ok) {
         const data = await response.json();
         if (data.preferences) {
-          const { matchAlerts, playerRatings, scoutUpdates, milestones } = data.preferences;
+          const { matchAlerts, playerRatings, milestones } = data.preferences;
           setPreferences({
             matchAlerts: matchAlerts ?? true,
             playerRatings: playerRatings ?? true,
-            scoutUpdates: scoutUpdates ?? false,
             eyePointMilestones: milestones ?? true,
           });
         }
@@ -151,7 +149,6 @@ export function SettingsOverlay({ onClose }: { onClose: () => void }) {
           body: JSON.stringify({
             matchAlerts: preferences.matchAlerts,
             playerRatings: preferences.playerRatings,
-            scoutUpdates: preferences.scoutUpdates,
             milestones: preferences.eyePointMilestones,
           })
         });
@@ -262,13 +259,6 @@ export function SettingsOverlay({ onClose }: { onClose: () => void }) {
             description="Get notified when players hit significant Eye Point levels"
             active={preferences.eyePointMilestones}
             onToggle={() => setPreferences(p => ({ ...p, eyePointMilestones: !p.eyePointMilestones }))}
-          />
-          <PreferenceToggle
-            icon={<Smartphone size={18} />}
-            title="Recruiter Modes"
-            description="Enable deep scout notifications (Recruiter License required)"
-            active={preferences.scoutUpdates}
-            onToggle={() => setPreferences(p => ({ ...p, scoutUpdates: !p.scoutUpdates }))}
           />
         </div>
 

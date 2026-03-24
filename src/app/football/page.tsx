@@ -66,7 +66,8 @@ function FootballContent() {
         assists: [],
         cleanSheets: [],
         yellowCards: [],
-        rating: []
+        rating: [],
+        powerRanking: []
     });
     const [brackets, setBrackets] = useState<BracketRound[]>([]);
     const [loading, setLoading] = useState(true);
@@ -107,7 +108,7 @@ function FootballContent() {
                 // 2. Fetch Global Sport Data (Teams, Players, Stats)
                 // Note: Teams/Players/Stats are currently fetched for ALL of football.
                 // In a future update, these could also be filtered by competition if the API supports it.
-                const [teamsRes, playersRes, goalsRes, assistsRes, cleanSheetsRes, yellowCardsRes, ratingRes] = await Promise.all([
+                const [teamsRes, playersRes, goalsRes, assistsRes, cleanSheetsRes, yellowCardsRes, ratingRes, powerRankingRes] = await Promise.all([
                     fetch('/api/football/teams'),
                     fetch('/api/football/players?sortBy=rating'),
                     fetch('/api/players/stats/leaders?sport=Football&type=goals&limit=10'),
@@ -115,16 +116,18 @@ function FootballContent() {
                     fetch('/api/players/stats/leaders?sport=Football&type=cleanSheets&limit=10'),
                     fetch('/api/players/stats/leaders?sport=Football&type=yellowCards&limit=10'),
                     fetch('/api/players/stats/leaders?sport=Football&type=rating&limit=10'),
+                    fetch('/api/players/stats/leaders?sport=Football&type=powerRanking&limit=10'),
                 ]);
 
-                const [teamsData, playersData, goalsData, assistsData, cleanSheetsData, yellowCardsData, ratingData] = await Promise.all([
+                const [teamsData, playersData, goalsData, assistsData, cleanSheetsData, yellowCardsData, ratingData, powerRankingData] = await Promise.all([
                     teamsRes.json(),
                     playersRes.json(),
                     goalsRes.json(),
                     assistsRes.json(),
                     cleanSheetsRes.json(),
                     yellowCardsRes.json(),
-                    ratingRes.json()
+                    ratingRes.json(),
+                    powerRankingRes.json()
                 ]);
 
                 if (teamsData.success) setTeams(teamsData.teams);
@@ -135,7 +138,8 @@ function FootballContent() {
                     assists: assistsData.leaders || [],
                     cleanSheets: cleanSheetsData.leaders || [],
                     yellowCards: yellowCardsData.leaders || [],
-                    rating: ratingData.leaders || []
+                    rating: ratingData.leaders || [],
+                    powerRanking: powerRankingData.leaders || []
                 });
 
             } catch (error) {
@@ -221,7 +225,7 @@ function FootballContent() {
         fetchCompData();
     }, [selectedCompetition]);
 
-    const renderLeaderboardCard = (title: string, data: any[], icon: any, statKey: string) => (
+    const renderLeaderboardCard = (title: string, data: any[], icon: any, statKey: string, valueLabel = 'Total') => (
         <div className="bg-white/5 rounded-2xl border border-white/10 p-6">
             <div className="flex items-center gap-2 mb-6">
                 <div className="p-2 bg-primary/10 rounded-lg text-primary">
@@ -257,11 +261,11 @@ function FootballContent() {
                         </div>
                         <div className="flex flex-col items-end">
                             <span className="text-secondary font-display text-xl leading-none italic font-bold">
-                                {typeof item.highlightedStat === 'number' && statKey === 'rating'
+                                {typeof item.highlightedStat === 'number' && (statKey === 'rating' || statKey === 'powerRanking')
                                     ? item.highlightedStat.toFixed(1)
                                     : item.highlightedStat}
                             </span>
-                            <span className="text-[10px] text-white/40 uppercase">Total</span>
+                            <span className="text-[10px] text-white/40 uppercase">{valueLabel}</span>
                         </div>
                     </div>
                 ))}
@@ -587,6 +591,7 @@ function FootballContent() {
                             {/* For now, keeping these Global as they were fetched globally */}
                             {activeTab === 'STATS' && (
                                 <motion.div key="stats" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                    {renderLeaderboardCard('Power Ranking', statsLeaders.powerRanking, <Zap size={20} />, 'powerRanking', 'Per Game')}
                                     {renderLeaderboardCard('Top Scorers', statsLeaders.goals, <Goal size={20} />, 'goals')}
                                     {renderLeaderboardCard('Top Assists', statsLeaders.assists, <Activity size={20} />, 'assists')}
                                     {renderLeaderboardCard('Clean Sheets', statsLeaders.cleanSheets, <Shield size={20} />, 'cleanSheets')}
