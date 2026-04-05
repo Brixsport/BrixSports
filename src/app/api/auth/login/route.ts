@@ -4,12 +4,13 @@ import { users } from '@/db/schema';
 import { eq } from 'drizzle-orm';
 import bcrypt from 'bcryptjs';
 import { generateToken, normalizeUserRole } from '@/lib/auth';
+import { sql } from 'drizzle-orm';
 
 // POST /api/auth/login - Authenticate user
 export async function POST(request: NextRequest) {
     try {
         const body = await request.json();
-        const { email, password } = body;
+        let { email, password } = body;
 
         if (!email || !password) {
             return NextResponse.json(
@@ -21,14 +22,16 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        // Find user by email
+        // Find user by email (case-insensitive)
+        email = email.trim();
         const user = await db
             .select()
             .from(users)
-            .where(eq(users.email, email.toLowerCase()))
+            .where(sql`lower(${users.email}) = ${email.toLowerCase()}`)
             .get();
 
         if (!user) {
+            console.log(`[Login] User not found for email: ${email}`);
             return NextResponse.json(
                 {
                     error: 'Invalid email or password',
@@ -40,6 +43,7 @@ export async function POST(request: NextRequest) {
 
         // Check if user has a password (might be OAuth user)
         if (!user.password) {
+            console.log(`[Login] User ${email} has no password (likely OAuth)`);
             return NextResponse.json(
                 {
                     error: 'Please use social login for this account',
@@ -53,6 +57,7 @@ export async function POST(request: NextRequest) {
         const isValidPassword = await bcrypt.compare(password, user.password);
 
         if (!isValidPassword) {
+            console.log(`[Login] Invalid password for user: ${email}`);
             return NextResponse.json(
                 {
                     error: 'Invalid email or password',
@@ -62,6 +67,7 @@ export async function POST(request: NextRequest) {
             );
         }
 
+        console.log(`[Login] Successful login for: ${email}`);
         // Generate JWT token
         const normalizedRole = normalizeUserRole(user.role);
         const token = generateToken(user.id, user.email, normalizedRole);

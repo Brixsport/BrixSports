@@ -5,13 +5,18 @@ import { eq } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import bcrypt from 'bcryptjs';
 import { generateToken, normalizeUserRole } from '@/lib/auth';
+import { sql } from 'drizzle-orm';
 
 // POST /api/auth/register - Register new user
 export async function POST(request: NextRequest) {
     try {
         const body = await request.json();
-        const { email, password, name } = body;
+        let { email, password, name } = body;
         const role = normalizeUserRole('user');
+        
+        if (email) email = email.trim();
+        if (password) password = password.trim();
+        if (name) name = name.trim();
 
         // Validate input
         if (!email || !password || !name) {
@@ -51,7 +56,7 @@ export async function POST(request: NextRequest) {
         const existingUser = await db
             .select()
             .from(users)
-            .where(eq(users.email, email.toLowerCase()))
+            .where(sql`lower(${users.email}) = ${email.toLowerCase()}`)
             .get();
 
         if (existingUser) {
