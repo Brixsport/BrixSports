@@ -1,5 +1,5 @@
 # robots.txt for Brixsport - Nigerian University Sports Platform
-# https://brixsport.com
+# https://brixsports.com
 
 User-agent: *
 Allow: /
@@ -24,8 +24,86 @@ Allow: /api/teams/
 Allow: /api/players/
 Allow: /api/news/
 
+# AI Crawlers - Point to LLMs.txt for AI model understanding
+# See: https://llmstxt.org
+Allow: /llms.txt
+Allow: /llms-full.txt
+
+# Specific AI crawler directives
+User-agent: GPTBot
+Allow: /
+Allow: /llms.txt
+Allow: /llms-full.txt
+Allow: /about
+Disallow: /admin/
+Disallow: /api/
+Disallow: /auth/
+
+User-agent: ChatGPT-User
+Allow: /
+Allow: /llms.txt
+Allow: /llms-full.txt
+Allow: /about
+Disallow: /admin/
+Disallow: /api/
+Disallow: /auth/
+
+User-agent: Google-Extended
+Allow: /
+Allow: /llms.txt
+Allow: /llms-full.txt
+Allow: /about
+Disallow: /admin/
+Disallow: /api/
+Disallow: /auth/
+
+User-agent: Anthropic-ai
+Allow: /
+Allow: /llms.txt
+Allow: /llms-full.txt
+Allow: /about
+Disallow: /admin/
+Disallow: /api/
+Disallow: /auth/
+
+User-agent: ClaudeBot
+Allow: /
+Allow: /llms.txt
+Allow: /llms-full.txt
+Allow: /about
+Disallow: /admin/
+Disallow: /api/
+Disallow: /auth/
+
+User-agent: PerplexityBot
+Allow: /
+Allow: /llms.txt
+Allow: /llms-full.txt
+Allow: /about
+Disallow: /admin/
+Disallow: /api/
+Disallow: /auth/
+
+User-agent: Cohere-ai
+Allow: /
+Allow: /llms.txt
+Allow: /llms-full.txt
+Allow: /about
+Disallow: /admin/
+Disallow: /api/
+Disallow: /auth/
+
+User-agent: Meta-ExternalAgent
+Allow: /
+Allow: /llms.txt
+Allow: /llms-full.txt
+Allow: /about
+Disallow: /admin/
+Disallow: /api/
+Disallow: /auth/
+
 # Sitemap location
-Sitemap: https://brixsport.com/sitemap.xml
+Sitemap: https://brixsports.com/sitemap.xml
 
 # Crawl rate suggestion
 Crawl-delay: 1

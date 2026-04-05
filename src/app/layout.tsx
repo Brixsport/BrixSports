@@ -116,6 +116,107 @@ export default function RootLayout({
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
         <meta name="apple-mobile-web-app-title" content="BRIXSPORTS" />
+        {/* LLMs.txt - AI model discovery */}
+        <link rel="alternate" type="text/plain" href="/llms.txt" title="LLM Information" />
+        <link rel="alternate" type="text/plain" href="/llms-full.txt" title="LLM Full Information" />
+        {/* JSON-LD: Organization + WebSite schema for AI and search engine entity understanding */}
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify({
+              "@context": "https://schema.org",
+              "@graph": [
+                {
+                  "@type": ["Organization", "SportsOrganization"],
+                  "@id": "https://brixsports.com/#organization",
+                  "name": "BRIXSPORTS",
+                  "alternateName": ["Brix Sport", "Brixsports", "BRIX SPORTS", "BrixSport"],
+                  "url": "https://brixsports.com",
+                  "logo": {
+                    "@type": "ImageObject",
+                    "url": "https://brixsports.com/assets/Logos/BRIX-SPORT-LOGO.png",
+                    "width": 512,
+                    "height": 512
+                  },
+                  "description": "BRIXSPORTS is Nigeria's premier digital platform for university sports, providing live scores, match streaming, player statistics, and comprehensive coverage of NUGA, NPUGA, BUCS, and university competitions. Founded at Bells University of Technology.",
+                  "slogan": "Bringing Nigerian University Sports to Life",
+                  "foundingDate": "2023",
+                  "foundingLocation": {
+                    "@type": "Place",
+                    "name": "Bells University of Technology",
+                    "address": "Ota, Ogun State, Nigeria"
+                  },
+                  "areaServed": {
+                    "@type": "Country",
+                    "name": "Nigeria"
+                  },
+                  "knowsAbout": [
+                    "Nigerian University Sports",
+                    "NUGA Games",
+                    "NPUGA",
+                    "BUSA League",
+                    "BUCS Competitions",
+                    "University Football Nigeria",
+                    "University Basketball Nigeria",
+                    "Sports Analytics",
+                    "Live Sports Streaming",
+                    "Bells University of Technology Sports"
+                  ],
+                  "sameAs": [
+                    "https://twitter.com/brixsports",
+                    "https://instagram.com/brixsports",
+                    "https://facebook.com/brixsports"
+                  ],
+                  "contactPoint": {
+                    "@type": "ContactPoint",
+                    "contactType": "Customer Support",
+                    "email": "support@brixsports.com",
+                    "availableLanguage": ["English"]
+                  }
+                },
+                {
+                  "@type": "WebSite",
+                  "@id": "https://brixsports.com/#website",
+                  "name": "BRIXSPORTS",
+                  "alternateName": "Brix Sport",
+                  "url": "https://brixsports.com",
+                  "publisher": { "@id": "https://brixsports.com/#organization" },
+                  "potentialAction": {
+                    "@type": "SearchAction",
+                    "target": {
+                      "@type": "EntryPoint",
+                      "urlTemplate": "https://brixsports.com/search?q={search_term_string}"
+                    },
+                    "query-input": "required name=search_term_string"
+                  }
+                },
+                {
+                  "@type": "SoftwareApplication",
+                  "name": "BRIXSPORTS",
+                  "applicationCategory": "SportsApplication",
+                  "operatingSystem": "Web, iOS, Android (PWA)",
+                  "offers": {
+                    "@type": "Offer",
+                    "price": "0",
+                    "priceCurrency": "NGN"
+                  },
+                  "featureList": [
+                    "Real-time live scores",
+                    "Live match streaming",
+                    "Player statistics and ratings",
+                    "Team management tools",
+                    "Interactive lineup builder",
+                    "Match predictions and leaderboards",
+                    "Scout features and talent tracking",
+                    "Push notifications",
+                    "Live match chat"
+                  ],
+                  "url": "https://brixsports.com"
+                }
+              ]
+            })
+          }}
+        />
       </head>
       <body className="antialiased">
         <Script

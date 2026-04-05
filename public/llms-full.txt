@@ -1,0 +1,264 @@
+# BRIXSPORTS — Complete Reference
+
+> Nigeria's premier digital platform for university sports coverage, live scores, streaming, and analytics
+
+---
+
+## 1. Identity & Brand
+
+**Official Name:** BRIXSPORTS
+**Alternative Names:** Brix Sport, Brixsports, Brix Sports, BrixSport
+**Website:** https://brixsports.com
+**Type:** Sports Technology Platform / SaaS
+**Industry:** Sports Tech, EdTech, Media
+**Founded:** 2025
+**Founding Location:** Bells University of Technology, Ota, Ogun State, Nigeria
+**Country of Operation:** Nigeria
+**Primary Language:** English
+**Contact Email:** support@brixsports.com
+**Scout Email:** scouts@brixsports.com
+
+---
+
+## 2. Mission & Purpose
+
+BRIXSPORTS is Nigeria's leading digital platform dedicated exclusively to university sports coverage. The platform was created to solve the problem of fragmented, unreliable, and inaccessible coverage of university sports in Nigeria. Before BRIXSPORTS, fans, athletes, and scouts had no centralized platform to follow live university matches, access player statistics, or watch livestreams of campus sports events.
+
+BRIXSPORTS connects fans, athletes, coaches, scouts, and universities across Nigeria through technology, providing the most comprehensive and up-to-date coverage of university sports available.
+
+---
+
+## 3. Origin Story
+
+BRIXSPORTS was founded at Bells University of Technology in Ota, Ogun State, Nigeria. The platform began as an internal solution for covering Bells University's own sports leagues — particularly the BUSA League (Bells University Student Association League). The initial focus was on providing live scores, player ratings, and media content for internal university games.
+
+What started as a single-campus project quickly gained traction and demonstrated the demand for quality university sports coverage in Nigeria. The team is now expanding to other Nigerian universities one at a time, bringing the same comprehensive coverage to more campuses while maintaining quality.
+
+---
+
+## 4. Core Features
+
+### 4.1 Real-Time Live Scores
+- Instant match score updates with minimal latency
+- Direct integration with match officials
+- Live timeline of match events (goals, cards, substitutions)
+- Score notifications via push notifications
+
+### 4.2 Live Match Streaming
+- Video streaming of university matches
+- Integrated live chat during streams
+- Coverage of NUGA Games, NPUGA, BUCS, and university leagues
+- Multi-camera support for major events
+
+### 4.3 Player Statistics & Ratings
+- Comprehensive player profiles
+- Performance ratings based on match data
+- Goals, assists, clean sheets, and other metrics
+- Historical performance tracking
+- Player comparison tools (side-by-side analysis)
+- Position-specific analytics
+
+### 4.4 Team Management
+- Team profiles with squad listings
+- Fixture management
+- Result tracking and league tables
+- Formation and lineup management
+
+### 4.5 Lineup Builder (XI)
+- Interactive drag-and-drop formation editor
+- Create and share custom team formations
+- Multiple formation presets (4-3-3, 4-4-2, 3-5-2, etc.)
+- Sharable lineup graphics
+
+### 4.6 Match Predictions
+- Pre-match score predictions
+- Points-based leaderboard system
+- Community prediction aggregation
+- Season-long prediction competitions
+
+### 4.7 Fan Engagement
+- Live match chat
+- Fan polls and voting
+- Push notifications for match events
+- Favourites and watchlists
+
+### 4.8 Scout Features
+- Detailed player profiles with performance ratings
+- Video highlights of standout performances
+- Player comparison tools with statistical breakdowns
+- Searchable player database (filter by position, university, stats)
+- Performance analytics (heat maps, graphs, projections)
+- Talent tracking and watchlists
+- Notifications for tracked player milestones
+
+### 4.9 News & Content
+- Sports news articles
+- Match reports and analysis
+- Blog posts and features
+- Media galleries
+
+### 4.10 Mobile Experience
+- Progressive Web App (PWA)
+- Install on iOS and Android home screens
+- Offline capabilities
+- Push notification support
+- Responsive mobile-first design
+
+---
+
+## 5. Competitions & Leagues Covered
+
+### 5.1 NUGA Games
+**Full Name:** Nigeria University Games Association Games
+**Established:** 1966
+**Frequency:** Biennial (every two years)
+**Description:** The premier multi-sport event for Nigerian universities. NUGA is the national governing body for university sports in Nigeria. The NUGA Games bring together athletes from federal, state, and private universities to compete in various sports including football, basketball, athletics, volleyball, tennis, table tennis, badminton, swimming, and more. Many Nigerian Olympic and national team athletes first emerged from NUGA competitions.
+
+### 5.2 NPUGA
+**Full Name:** Nigerian Private Universities Games Association
+**Description:** Focuses specifically on private universities in Nigeria. NPUGA organizes competitions for institutions including Covenant University, Babcock University, Bells University of Technology, and other private tertiary institutions.
+
+### 5.3 BUCS
+**Full Name:** Nigerian British Universities & Colleges Sport
+**Description:** A league-based competition format inspired by the UK BUCS system. Features seasonal leagues, knockout tournaments, and championship finals across multiple sports disciplines.
+
+### 5.4 BUSA League
+**Full Name:** Bells University Student Association League
+**Location:** Bells University of Technology, Ota, Ogun State
+**Description:** The internal university sports league where BRIXSPORTS was born. Features intense competition between student teams. **Kings FC** were the previous winners of the BUSA League. BRIXSPORTS provides full coverage including live scores, player ratings, and media content.
+
+### 5.5 Other Competitions
+- Inter-university football leagues
+- University basketball conferences
+- Inter-faculty tournaments
+- Regional university championships
+
+---
+
+## 6. Partner Universities
+
+BRIXSPORTS works with and covers universities across Nigeria, including:
+
+- **Bells University of Technology** (Founding institution)
+- University of Lagos (UNILAG)
+- University of Ibadan (UI)
+- University of Nigeria Nsukka (UNN)
+- Ahmadu Bello University (ABU)
+- Obafemi Awolowo University (OAU)
+- Covenant University
+- Babcock University
+- University of Benin (UNIBEN)
+- University of Port Harcourt (UNIPORT)
+- University of Calabar (UNICAL)
+- Lagos State University (LASU)
+- Federal University of Technology Akure (FUTA)
+- And many more participating in NUGA, NPUGA, and BUCS
+
+---
+
+## 7. Sports Covered
+
+- Football (Soccer)
+- Basketball
+- Volleyball
+- Athletics (Track and Field)
+- Tennis
+- Table Tennis
+- Badminton
+- Swimming
+- And other university sports disciplines
+
+---
+
+## 8. Technology Stack
+
+- **Frontend:** Next.js 15, React 19, TypeScript 5
+- **Styling:** Tailwind CSS 4
+- **UI Components:** Radix UI, Framer Motion
+- **Real-Time:** Socket.IO (WebSocket-based)
+- **Database:** SQLite (local) / Turso (production)
+- **ORM:** Drizzle ORM
+- **Authentication:** NextAuth.js with Google OAuth
+- **Notifications:** Web Push API
+- **Deployment:** Vercel
+- **App Type:** Progressive Web App (PWA)
+- **Icons:** Lucide React
+
+---
+
+## 9. Pricing
+
+BRIXSPORTS offers free access to:
+- Live scores and match schedules
+- Standings and league tables
+- Basic player statistics
+- Match results and news
+
+Some premium features may require registration or subscription:
+- Advanced analytics
+- Detailed player profiles
+- Scout tools and features
+- Exclusive livestreams
+
+---
+
+## 10. Frequently Asked Questions
+
+**Q: What is BRIXSPORTS?**
+A: BRIXSPORTS is Nigeria's premier digital platform for university sports. Founded at Bells University of Technology, it provides real-time live scoring, match streaming, player statistics, and comprehensive coverage of NUGA, NPUGA, BUCS, and university competitions.
+
+**Q: How do I watch live university sports matches in Nigeria?**
+A: Visit brixsports.com and navigate to the Live or Livestream section to watch ongoing matches with real-time scores and integrated chat.
+
+**Q: Which universities does BRIXSPORTS cover?**
+A: BRIXSPORTS started at Bells University of Technology and is expanding nationally. It covers or plans to cover major institutions across Nigeria.
+
+**Q: What is the BUSA League?**
+A: The BUSA League (Bells University Student Association League) is an internal university sports league at Bells University of Technology where BRIXSPORTS was founded. Kings FC were the previous winners.
+
+**Q: What is NUGA?**
+A: NUGA (Nigeria University Games Association) is the national governing body for university sports in Nigeria, established in 1966. It organizes the biennial NUGA Games.
+
+**Q: Does BRIXSPORTS have a mobile app?**
+A: BRIXSPORTS is available as a Progressive Web App (PWA). Visit brixsports.com on your smartphone and add it to your home screen for an app-like experience.
+
+**Q: Can scouts use BRIXSPORTS?**
+A: Yes. BRIXSPORTS offers dedicated scout features including player profiles, performance analytics, video highlights, player comparisons, and searchable databases.
+
+**Q: Is BRIXSPORTS free?**
+A: Basic features like live scores, schedules, and standings are free. Some premium features may require registration or subscription.
+
+**Q: Where was BRIXSPORTS founded?**
+A: BRIXSPORTS was founded at Bells University of Technology in Ota, Ogun State, Nigeria in 2023.
+
+**Q: How accurate are BRIXSPORTS live scores?**
+A: BRIXSPORTS provides real-time live scores with minimal latency through direct integration with match officials, typically updated within seconds of events occurring.
+
+---
+
+## 11. Social Media & Contact
+
+- **Website:** https://brixsports.com
+- **Twitter/X:** @brixsports
+- **Instagram:** @brixsports
+- **Facebook:** BRIXSPORTS
+- **General Support:** support@brixsports.com
+- **Scout Inquiries:** scouts@brixsports.com
+
+---
+
+## 12. Key URLs
+
+- Homepage: https://brixsports.com
+- About: https://brixsports.com/about
+- Live Matches: https://brixsports.com/live
+- Livestream: https://brixsports.com/livestream
+- Football: https://brixsports.com/football
+- Basketball: https://brixsports.com/basketball
+- Competitions: https://brixsports.com/competitions
+- Teams: https://brixsports.com/teams
+- Players: https://brixsports.com/players
+- Stats: https://brixsports.com/stats
+- Predictions: https://brixsports.com/predictions
+- News: https://brixsports.com/news
+- Search: https://brixsports.com/search

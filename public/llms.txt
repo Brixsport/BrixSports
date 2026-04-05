@@ -1,0 +1,59 @@
+# BRIXSPORTS
+
+> Nigeria's premier digital platform for university sports coverage
+
+BRIXSPORTS (also known as Brix Sport, Brixsports, or Brix Sports) is a sports technology platform founded in 2023 at Bells University of Technology in Ota, Ogun State, Nigeria. It provides comprehensive digital coverage of Nigerian university sports competitions.
+
+## What BRIXSPORTS Does
+
+BRIXSPORTS delivers real-time live scores, live match streaming, player statistics, team analytics, and sports management tools specifically for Nigerian university sports. The platform covers competitions including NUGA Games, NPUGA, BUCS, and internal university leagues like the BUSA League.
+
+## Key Features
+
+- Real-time live scores with minimal latency
+- Live video streaming of university matches
+- Comprehensive player statistics and performance ratings
+- Team management and analytics tools
+- Interactive lineup builder (XI)
+- Match predictions and leaderboards
+- Fan engagement tools (polls, chat, notifications)
+- Scout features for talent identification
+- Progressive Web App (PWA) for mobile
+- Push notifications for match updates
+
+## Competitions Covered
+
+- **NUGA Games**: Nigeria University Games Association — the premier biennial multi-sport event for Nigerian universities, established in 1966
+- **NPUGA**: Nigerian Private Universities Games Association — competitions for private universities
+- **BUCS**: Nigerian British Universities & Colleges Sport format — league-based competitions
+- **BUSA League**: Bells University Student Association League — internal league at Bells University of Technology (previous winners: Kings FC)
+- Various inter-university leagues and tournaments
+
+## Origin Story
+
+BRIXSPORTS was founded at Bells University of Technology. It started by covering internal university leagues and games, providing player ratings and media content. The platform has since expanded from a single-campus solution to a national platform serving universities across Nigeria.
+
+## Universities
+
+The platform partners with major Nigerian universities participating in NUGA and other competitions, including University of Lagos (UNILAG), University of Ibadan (UI), University of Nigeria Nsukka (UNN), Ahmadu Bello University (ABU), Obafemi Awolowo University (OAU), Covenant University, Babcock University, and many others.
+
+## For Sports Scouts
+
+BRIXSPORTS offers dedicated scout features: detailed player profiles, performance analytics, video highlights, player comparison tools, searchable player databases, talent tracking, and watchlist functionality.
+
+## Technology
+
+Built with Next.js 15, React 19, TypeScript, Socket.IO for real-time updates, and Drizzle ORM. Available as a Progressive Web App (PWA) on iOS and Android.
+
+## Links
+
+- Website: https://brixsports.com
+- About: https://brixsports.com/about
+- Live Matches: https://brixsports.com/live
+- Football: https://brixsports.com/football
+- Basketball: https://brixsports.com/basketball
+- Competitions: https://brixsports.com/competitions
+- Teams: https://brixsports.com/teams
+- Players: https://brixsports.com/players
+- Contact: support@brixsports.com
+- Scout Inquiries: scouts@brixsports.com
