@@ -10,8 +10,10 @@ const port = parseInt(process.env.PORT || '3000', 10);
 const app = next({ dev, hostname, port });
 const handle = app.getRequestHandler();
 
+let httpServer;
+
 app.prepare().then(() => {
-    const httpServer = createServer(async (req, res) => {
+    httpServer = createServer(async (req, res) => {
         try {
             const parsedUrl = parse(req.url, true);
             await handle(req, res, parsedUrl);
