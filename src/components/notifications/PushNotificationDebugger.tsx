@@ -186,17 +186,34 @@ export default function PushNotificationDebugger() {
   const testNotification = async () => {
     setLoading(true);
     try {
+      console.log('[PushDebugger] Starting push notification test...');
+      
+      const requestBody = {
+        title: 'Test Notification',
+        body: 'Push notifications are working! 🎉',
+        type: 'test',
+      };
+      
+      console.log('[PushDebugger] Request body:', requestBody);
+      
       const response = await fetch('/api/notifications/send', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title: 'Test Notification',
-          body: 'Push notifications are working! 🎉',
-          type: 'test',
-        }),
+        body: JSON.stringify(requestBody),
       });
 
+      console.log('[PushDebugger] Response status:', response.status);
+      console.log('[PushDebugger] Response headers:', response.headers);
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('[PushDebugger] Error response:', errorText);
+        toast.error(`Server error: ${response.status} ${errorText}`);
+        return;
+      }
+
       const result = await response.json();
+      console.log('[PushDebugger] Response body:', result);
       
       if (result.success) {
         toast.success(`Test sent to ${result.sentTo} subscribers`);
@@ -204,6 +221,7 @@ export default function PushNotificationDebugger() {
         toast.error(result.error || 'Failed to send test');
       }
     } catch (error) {
+      console.error('[PushDebugger] Request failed:', error);
       toast.error('Test failed: ' + (error as Error).message);
     } finally {
       setLoading(false);
