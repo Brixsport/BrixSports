@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Plus, Edit, Trash2, Eye, EyeOff, Image as ImageIcon } from 'lucide-react';
+import { Plus, Edit, Trash2, Eye, EyeOff, Image as ImageIcon, X, Upload, DollarSign, Layout, Maximize } from 'lucide-react';
 import { format } from 'date-fns';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -22,6 +22,35 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { toast } from 'sonner';
+import { CldUploadWidget } from 'next-cloudinary';
+
+// Payment tiers with allowed positions and sizes
+const PAYMENT_TIERS = {
+  basic: {
+    name: 'Basic ($50/month)',
+    positions: ['inline'],
+    sizes: ['small'],
+    priority: 1,
+  },
+  standard: {
+    name: 'Standard ($150/month)',
+    positions: ['inline', 'sidebar'],
+    sizes: ['small', 'medium'],
+    priority: 5,
+  },
+  premium: {
+    name: 'Premium ($300/month)',
+    positions: ['inline', 'sidebar', 'bottom'],
+    sizes: ['small', 'medium', 'large'],
+    priority: 10,
+  },
+  platinum: {
+    name: 'Platinum ($500/month)',
+    positions: ['inline', 'sidebar', 'bottom', 'top'],
+    sizes: ['small', 'medium', 'large'],
+    priority: 20,
+  },
+};
 
 interface Advertisement {
   id: string;
@@ -58,6 +87,7 @@ export default function AdvertisementsAdmin() {
     priority: 0,
     startDate: '',
     endDate: '',
+    paymentTier: 'basic' as const,
   });
 
   useEffect(() => {
@@ -167,6 +197,7 @@ export default function AdvertisementsAdmin() {
       priority: 0,
       startDate: '',
       endDate: '',
+      paymentTier: 'basic',
     });
   };
 
@@ -183,8 +214,53 @@ export default function AdvertisementsAdmin() {
       priority: ad.priority,
       startDate: ad.startDate ? format(new Date(ad.startDate), 'yyyy-MM-dd') : '',
       endDate: ad.endDate ? format(new Date(ad.endDate), 'yyyy-MM-dd') : '',
+      paymentTier: getTierFromPriority(ad.priority),
     });
     setIsDialogOpen(true);
+  };
+
+  const getTierFromPriority = (priority: number): keyof typeof PAYMENT_TIERS => {
+    if (priority >= 20) return 'platinum';
+    if (priority >= 10) return 'premium';
+    if (priority >= 5) return 'standard';
+    return 'basic';
+  };
+
+  const getRecommendedAspectRatio = (position: string): number => {
+    switch (position) {
+      case 'top':
+      case 'bottom':
+        return 728 / 90; // Leaderboard banner
+      case 'sidebar':
+        return 300 / 600; // Skyscraper
+      case 'inline':
+      default:
+        return 300 / 250; // Medium rectangle
+    }
+  };
+
+  const getRecommendedDimensions = (position: string): string => {
+    switch (position) {
+      case 'top':
+      case 'bottom':
+        return '728x90 (Leaderboard)';
+      case 'sidebar':
+        return '300x600 (Skyscraper)';
+      case 'inline':
+      default:
+        return '300x250 (Medium Rectangle)';
+    }
+  };
+
+  const handleTierChange = (tier: keyof typeof PAYMENT_TIERS) => {
+    const tierConfig = PAYMENT_TIERS[tier];
+    setFormData({
+      ...formData,
+      paymentTier: tier,
+      position: tierConfig.positions[0],
+      size: tierConfig.sizes[0],
+      priority: tierConfig.priority,
+    });
   };
 
   const positionLabels = {
@@ -241,14 +317,80 @@ export default function AdvertisementsAdmin() {
               </div>
               
               <div>
-                <Label htmlFor="imageUrl">Image URL</Label>
-                <Input
-                  id="imageUrl"
-                  value={formData.imageUrl}
-                  onChange={(e) => setFormData({ ...formData, imageUrl: e.target.value })}
-                  required
-                  placeholder="https://example.com/image.jpg"
-                />
+                <Label htmlFor="paymentTier" className="flex items-center gap-2">
+                  <DollarSign className="w-4 h-4" />
+                  Payment Tier
+                </Label>
+                <Select
+                  value={formData.paymentTier}
+                  onValueChange={(value: keyof typeof PAYMENT_TIERS) => handleTierChange(value)}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Object.entries(PAYMENT_TIERS).map(([key, tier]) => (
+                      <SelectItem key={key} value={key}>
+                        {tier.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Determines available positions, sizes, and priority
+                </p>
+              </div>
+
+              <div>
+                <Label className="flex items-center gap-2">
+                  <Upload className="w-4 h-4" />
+                  Banner Image
+                </Label>
+                {formData.imageUrl ? (
+                  <div className="relative w-full h-48 rounded-md overflow-hidden bg-slate-800 mt-2">
+                    <div className="absolute top-2 right-2 z-10">
+                      <button
+                        type="button"
+                        onClick={() => setFormData({ ...formData, imageUrl: '' })}
+                        className="p-1 bg-red-500 text-white rounded-full hover:bg-red-600 transition"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                    <img
+                      src={formData.imageUrl}
+                      alt="Ad preview"
+                      className="object-cover w-full h-full"
+                    />
+                  </div>
+                ) : (
+                  <CldUploadWidget
+                    onSuccess={(result: any) => {
+                      setFormData({ ...formData, imageUrl: result.info.secure_url });
+                    }}
+                    uploadPreset={process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET || 'brix_uploads'}
+                    options={{
+                      maxFiles: 1,
+                      sources: ['local', 'url', 'camera'],
+                      cropping: true,
+                      croppingAspectRatio: getRecommendedAspectRatio(formData.position),
+                    }}
+                  >
+                    {({ open }) => (
+                      <button
+                        type="button"
+                        onClick={() => open()}
+                        className="w-full h-48 rounded-md border-2 border-dashed border-slate-700 bg-slate-800/50 hover:bg-slate-800 transition flex flex-col items-center justify-center gap-4 text-slate-400 hover:text-white mt-2"
+                      >
+                        <ImageIcon className="w-10 h-10" />
+                        <span className="font-semibold">Upload Banner Image</span>
+                        <span className="text-xs text-slate-500">
+                          Recommended: {getRecommendedDimensions(formData.position)}
+                        </span>
+                      </button>
+                    )}
+                  </CldUploadWidget>
+                )}
               </div>
               
               <div>
@@ -264,7 +406,10 @@ export default function AdvertisementsAdmin() {
               
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <Label htmlFor="position">Position</Label>
+                  <Label htmlFor="position" className="flex items-center gap-2">
+                    <Layout className="w-4 h-4" />
+                    Position
+                  </Label>
                   <Select
                     value={formData.position}
                     onValueChange={(value: any) => setFormData({ ...formData, position: value })}
@@ -273,16 +418,20 @@ export default function AdvertisementsAdmin() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="top">Top Banner</SelectItem>
-                      <SelectItem value="bottom">Bottom Banner</SelectItem>
-                      <SelectItem value="sidebar">Sidebar</SelectItem>
-                      <SelectItem value="inline">Inline</SelectItem>
+                      {PAYMENT_TIERS[formData.paymentTier].positions.map((pos) => (
+                        <SelectItem key={pos} value={pos}>
+                          {positionLabels[pos]}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
                 
                 <div>
-                  <Label htmlFor="size">Size</Label>
+                  <Label htmlFor="size" className="flex items-center gap-2">
+                    <Maximize className="w-4 h-4" />
+                    Size
+                  </Label>
                   <Select
                     value={formData.size}
                     onValueChange={(value: any) => setFormData({ ...formData, size: value })}
@@ -291,9 +440,11 @@ export default function AdvertisementsAdmin() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="small">Small</SelectItem>
-                      <SelectItem value="medium">Medium</SelectItem>
-                      <SelectItem value="large">Large</SelectItem>
+                      {PAYMENT_TIERS[formData.paymentTier].sizes.map((sz) => (
+                        <SelectItem key={sz} value={sz}>
+                          {sizeLabels[sz]}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
