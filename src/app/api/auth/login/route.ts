@@ -70,6 +70,7 @@ export async function POST(request: NextRequest) {
         }
 
         console.log(`[Login] Successful login for: ${email}`);
+        
         // Generate JWT token
         const normalizedRole = normalizeUserRole(user.role);
         const token = generateToken(user.id, user.email, normalizedRole);
@@ -91,9 +92,13 @@ export async function POST(request: NextRequest) {
 
         // Set auth token in cookie
         // For production on brixsports.com, ensure cookie works across the domain
+        const isSecure = request.headers.get('x-forwarded-proto') === 'https' || 
+                         request.url.startsWith('https://') || 
+                         process.env.NODE_ENV === 'production';
+        
         const cookieOptions: any = {
             httpOnly: true,
-            secure: process.env.NODE_ENV === 'production',
+            secure: isSecure,
             sameSite: 'lax',
             maxAge: 60 * 60 * 24 * 7, // 7 days
             path: '/',
@@ -105,6 +110,7 @@ export async function POST(request: NextRequest) {
         }
 
         response.cookies.set('authToken', token, cookieOptions);
+        console.log(`[Login] Cookie set with options:`, { secure: cookieOptions.secure, sameSite: cookieOptions.sameSite, path: cookieOptions.path });
 
         return response;
     } catch (error) {

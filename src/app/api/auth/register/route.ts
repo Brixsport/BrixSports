@@ -104,9 +104,13 @@ export async function POST(request: NextRequest) {
         }, { status: 201 });
 
         // Set auth token in cookie (same as login)
+        const isSecure = request.headers.get('x-forwarded-proto') === 'https' || 
+                         request.url.startsWith('https://') || 
+                         process.env.NODE_ENV === 'production';
+        
         const cookieOptions: any = {
             httpOnly: true,
-            secure: process.env.NODE_ENV === 'production',
+            secure: isSecure,
             sameSite: 'lax',
             maxAge: 60 * 60 * 24 * 7, // 7 days
             path: '/',

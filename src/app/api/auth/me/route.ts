@@ -7,14 +7,20 @@ import { eq } from 'drizzle-orm';
 // GET /api/auth/me - Get current authenticated user
 export async function GET(request: NextRequest) {
     try {
+        const authToken = request.cookies.get('authToken')?.value;
+        console.log(`[Auth/Me] Request received, cookie present: ${!!authToken}`);
+        
         const user = await getAuthUser(request);
 
         if (!user) {
+            console.log(`[Auth/Me] No authenticated user found`);
             return NextResponse.json(
                 { error: 'Unauthorized' },
                 { status: 401 }
             );
         }
+
+        console.log(`[Auth/Me] User authenticated: ${user.email}`);
 
         let favoriteTeam = null;
         if (user.favoriteTeamId) {
