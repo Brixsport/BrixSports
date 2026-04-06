@@ -81,13 +81,13 @@ export default function AdvertisementsAdmin() {
     description: '',
     imageUrl: '',
     linkUrl: '',
-    position: 'inline' as const,
-    size: 'small' as const,
-    status: 'active' as const,
+    position: 'inline' as 'inline' | 'sidebar' | 'bottom' | 'top',
+    size: 'small' as 'small' | 'medium' | 'large',
+    status: 'active' as 'active' | 'inactive',
     priority: 0,
     startDate: '',
     endDate: '',
-    paymentTier: 'basic' as const,
+    paymentTier: 'basic' as 'basic' | 'standard' | 'premium' | 'platinum',
   });
 
   useEffect(() => {
