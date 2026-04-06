@@ -69,10 +69,15 @@ export async function POST(request: NextRequest) {
             success: true,
             message: 'Subscription saved successfully',
         });
-    } catch (error) {
+    } catch (error: any) {
         console.error('[NotificationAPI] Error saving subscription:', error);
+        console.error('[NotificationAPI] Error details:', {
+            message: error.message,
+            code: error.code,
+            stack: error.stack,
+        });
         return NextResponse.json(
-            { error: 'Failed to save subscription' },
+            { error: 'Failed to save subscription', details: error.message },
             { status: 500 }
         );
     }
