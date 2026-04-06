@@ -74,7 +74,7 @@ export function AdminSidebar() {
             <aside className={`
         fixed left-0 top-0 bottom-0 w-72 bg-black border-r border-white/5 z-[55] 
         transition-transform duration-500 ease-out
-        ${isOpen ? 'translate-x-0' : '-translate-x-full'}
+        ${isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
         flex flex-col p-6 space-y-8
       `}>
                 <div className="flex items-center justify-between mb-10">
