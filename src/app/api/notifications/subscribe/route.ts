@@ -15,11 +15,21 @@ import { eq } from 'drizzle-orm';
 export async function POST(request: NextRequest) {
     try {
         const body = await request.json();
+        console.log('[NotificationAPI] Received body:', body);
+        
         const { userId, subscription } = body;
 
+        console.log('[NotificationAPI] Parsed values:', { userId, subscription });
+
         if (!userId || !subscription) {
+            console.log('[NotificationAPI] Missing fields:', { 
+                hasUserId: !!userId, 
+                hasSubscription: !!subscription,
+                userId,
+                subscriptionKeys: subscription ? Object.keys(subscription) : null
+            });
             return NextResponse.json(
-                { error: 'Missing required fields' },
+                { error: 'Missing required fields', details: `userId: ${!!userId}, subscription: ${!!subscription}` },
                 { status: 400 }
             );
         }

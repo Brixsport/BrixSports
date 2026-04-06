@@ -32,9 +32,29 @@ class PushNotificationService {
         }
 
         try {
+            // Check existing registrations
+            const registrations = await navigator.serviceWorker.getRegistrations();
+            console.log('[PushService] Existing SW registrations:', registrations.length);
+            
             // Register service worker
             this.registration = await navigator.serviceWorker.register('/sw-user.js');
-            console.log('[PushService] Service Worker registered');
+            console.log('[PushService] Service Worker registered:', this.registration.scope);
+            
+            // Wait for the service worker to be active
+            if (this.registration.installing) {
+                console.log('[PushService] Service Worker installing...');
+                await new Promise((resolve) => {
+                    this.registration!.addEventListener('controllerchange', resolve, { once: true });
+                });
+            }
+            
+            // Check if service worker is active
+            if (this.registration.active) {
+                console.log('[PushService] Service Worker is active');
+            } else {
+                console.log('[PushService] Service Worker not yet active');
+            }
+            
             return true;
         } catch (error) {
             console.error('[PushService] Service Worker registration failed:', error);
@@ -185,19 +205,27 @@ class PushNotificationService {
      */
     private async saveSubscription(userId: string, subscription: PushSubscriptionData): Promise<void> {
         try {
+            const requestBody = {
+                userId,
+                subscription,
+            };
+            
+            console.log('[PushService] Sending subscription request:', requestBody);
+
             const response = await fetch('/api/notifications/subscribe', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify({
-                    userId,
-                    subscription,
-                }),
+                body: JSON.stringify(requestBody),
             });
 
+            console.log('[PushService] Response status:', response.status);
+
             if (!response.ok) {
-                throw new Error('Failed to save subscription');
+                const errorData = await response.json();
+                console.error('[PushService] Error response:', errorData);
+                throw new Error(errorData.error || 'Failed to save subscription');
             }
 
             console.log('[PushService] Subscription saved to server');

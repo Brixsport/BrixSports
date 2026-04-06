@@ -157,7 +157,8 @@ self.addEventListener('fetch', (event) => {
 
 // Push notification event
 self.addEventListener('push', (event) => {
-    console.log('[SW User] Push received');
+    console.log('[SW User] Push received:', event);
+    console.log('[SW User] Page visibility:', self.clients && self.clients.matchAll ? 'clients available' : 'no clients');
 
     if (!event.data) {
         console.log('[SW User] No data in push event');
@@ -167,6 +168,7 @@ self.addEventListener('push', (event) => {
     let data;
     try {
         data = event.data.json();
+        console.log('[SW User] Push data parsed:', data);
     } catch (error) {
         console.error('[SW User] Error parsing push data:', error);
         return;
@@ -187,7 +189,10 @@ self.addEventListener('push', (event) => {
         requireInteraction: data.requireInteraction || false,
         vibrate: data.vibrate || [200, 100, 200],
         actions: data.actions || [],
+        silent: false, // Ensure notification makes sound on mobile
     };
+
+    console.log('[SW User] Showing notification:', { title, options });
 
     // Customize notification based on type
     if (data.type === 'GOAL') {
@@ -209,6 +214,12 @@ self.addEventListener('push', (event) => {
 
     event.waitUntil(
         self.registration.showNotification(title, options)
+            .then(() => {
+                console.log('[SW User] Notification shown successfully');
+            })
+            .catch((error) => {
+                console.error('[SW User] Error showing notification:', error);
+            })
     );
 });
 
@@ -324,5 +335,27 @@ self.addEventListener('message', (event) => {
 
     if (event.data && event.data.type === 'SKIP_WAITING') {
         self.skipWaiting();
+    }
+    
+    // Handle test push message
+    if (event.data && event.data.type === 'TEST_PUSH') {
+        console.log('[SW User] Test push message received:', event.data.data);
+        
+        // Show a test notification immediately
+        const title = event.data.data.title || 'Test Notification';
+        const options = {
+            body: event.data.data.body || 'This is a test notification',
+            icon: '/icons/icon-192x192.png',
+            badge: '/icons/badge-96x96.png',
+            tag: 'test-notification',
+        };
+        
+        self.registration.showNotification(title, options)
+            .then(() => {
+                console.log('[SW User] Test notification shown successfully');
+            })
+            .catch((error) => {
+                console.error('[SW User] Error showing test notification:', error);
+            });
     }
 });

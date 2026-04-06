@@ -22,6 +22,15 @@ export default function PushNotificationDebugger() {
   });
 
   const [loading, setLoading] = useState(false);
+  const [mobileInfo, setMobileInfo] = useState<{
+    isMobile: boolean;
+    isPWAInstalled: boolean;
+    userAgent: string;
+  }>({
+    isMobile: false,
+    isPWAInstalled: false,
+    userAgent: '',
+  });
 
   useEffect(() => {
     checkStatus();
@@ -45,6 +54,17 @@ export default function PushNotificationDebugger() {
     // Check SW
     const registrations = await navigator.serviceWorker?.getRegistrations();
     const serviceWorkerActive = registrations?.some(r => r.active) || false;
+    
+    // Mobile-specific checks
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches;
+    const isPWAInstalled = !!(navigator as any).standalone || isStandalone;
+
+    setMobileInfo({
+      isMobile,
+      isPWAInstalled,
+      userAgent: navigator.userAgent,
+    });
 
     setStatus({
       supported,
@@ -52,6 +72,15 @@ export default function PushNotificationDebugger() {
       subscribed,
       vapidConfigured,
       serviceWorkerActive,
+    });
+    
+    // Log mobile-specific info
+    console.log('[PushDebugger] Mobile Info:', {
+      isMobile,
+      isPWAInstalled,
+      userAgent: navigator.userAgent,
+      standalone: (navigator as any).standalone,
+      displayMode: isStandalone ? 'standalone' : 'browser'
     });
   };
 
@@ -81,6 +110,7 @@ export default function PushNotificationDebugger() {
       const pushService = getPushService();
       // Use a test user ID or get from auth context
       const userId = 'test-user-' + Date.now();
+      console.log('[PushDebugger] Using userId:', userId);
       const result = await pushService.subscribe(userId);
       
       if (result) {
@@ -92,6 +122,38 @@ export default function PushNotificationDebugger() {
       checkStatus();
     } catch (error) {
       toast.error('Subscription failed: ' + (error as Error).message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const testServiceWorker = async () => {
+    setLoading(true);
+    try {
+      const registration = await navigator.serviceWorker.getRegistration();
+      
+      if (!registration) {
+        toast.error('No service worker registration found');
+        return;
+      }
+      
+      if (!registration.active) {
+        toast.error('Service worker not active');
+        return;
+      }
+      
+      // Send a message to the service worker to test communication
+      registration.active.postMessage({
+        type: 'TEST_PUSH',
+        data: {
+          title: 'Test Message',
+          body: 'This is a test message from the debugger'
+        }
+      });
+      
+      toast.success('Test message sent to service worker');
+    } catch (error) {
+      toast.error('Service worker test failed: ' + (error as Error).message);
     } finally {
       setLoading(false);
     }
@@ -181,6 +243,22 @@ export default function PushNotificationDebugger() {
           status={status.serviceWorkerActive ? 'Active' : 'Inactive'}
           good={status.serviceWorkerActive}
         />
+        
+        {/* Mobile-specific indicators */}
+        {mobileInfo.isMobile && (
+          <>
+            <StatusItem 
+              label="Device Type" 
+              status="Mobile"
+              good={true}
+            />
+            <StatusItem 
+              label="PWA Installed" 
+              status={mobileInfo.isPWAInstalled ? 'Yes' : 'No'}
+              good={mobileInfo.isPWAInstalled}
+            />
+          </>
+        )}
       </div>
 
       <div className="space-y-2">
@@ -207,13 +285,23 @@ export default function PushNotificationDebugger() {
         )}
 
         <Button 
+          onClick={testServiceWorker} 
+          disabled={loading}
+          variant="outline"
+          className="w-full"
+        >
+          <AlertTriangle className="w-4 h-4 mr-2" />
+          Test Service Worker
+        </Button>
+
+        <Button 
           onClick={testNotification} 
           disabled={loading}
           variant="outline"
           className="w-full"
         >
           <AlertTriangle className="w-4 h-4 mr-2" />
-          Send Test Notification
+          Send Push Notification
         </Button>
 
         <Button 
@@ -236,6 +324,28 @@ export default function PushNotificationDebugger() {
             NEXT_PUBLIC_VAPID_PUBLIC_KEY=your_public_key<br/>
             VAPID_PRIVATE_KEY=your_private_key
           </code>
+        </div>
+      )}
+
+      {mobileInfo.isMobile && !mobileInfo.isPWAInstalled && (
+        <div className="mt-4 p-3 bg-blue-900/30 border border-blue-700 rounded-lg">
+          <p className="text-sm text-blue-200">
+            <strong>Mobile Browser Detected!</strong> For reliable push notifications on mobile:
+          </p>
+          <ul className="mt-2 text-xs text-blue-300 list-disc list-inside">
+            <li>Install the app as a PWA (Add to Home Screen)</li>
+            <li>Keep the app open in the background</li>
+            <li>Ensure battery optimization is disabled</li>
+            <li>Check system notification settings</li>
+          </ul>
+        </div>
+      )}
+
+      {mobileInfo.isMobile && mobileInfo.isPWAInstalled && (
+        <div className="mt-4 p-3 bg-green-900/30 border border-green-700 rounded-lg">
+          <p className="text-sm text-green-200">
+            <strong>PWA Installed!</strong> Push notifications should work reliably.
+          </p>
         </div>
       )}
     </div>
