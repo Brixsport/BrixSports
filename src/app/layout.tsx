@@ -11,6 +11,7 @@ import { GlobalNotificationListener } from "@/components/GlobalNotificationListe
 import { AuthProvider } from "@/contexts/AuthContext";
 import { AuthModal } from "@/components/auth/AuthModal";
 import { SocketProvider } from "@/hooks/useWebSocket";
+import AdBanner from "@/components/ads/AdBanner";
 
 export const metadata: Metadata = {
   title: {
@@ -242,7 +243,11 @@ export default function RootLayout({
               <NotificationProvider>
                 <SocketProvider>
                   <GlobalNotificationListener />
-                  {children}
+                  <AdBanner position="top" />
+                  <div className="pt-16 md:pt-20">
+                    {children}
+                  </div>
+                  <AdBanner position="bottom" />
                   <BottomNav />
                   <AuthModal />
                 </SocketProvider>

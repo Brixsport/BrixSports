@@ -7,7 +7,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
     Activity, Shield, Users, Server, Settings, Globe,
     Trophy, Calendar, Video, Newspaper, TrendingUp,
-    Timer, Menu, X, ChevronRight, LogOut, UserPlus, Briefcase, User
+    Timer, Menu, X, ChevronRight, LogOut, UserPlus, Briefcase, User, Megaphone
 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 
@@ -22,6 +22,7 @@ const navItems = [
     { icon: <Video size={18} />, label: "Livestreams", href: "/admin/livestreams", adminOnly: true },
     { icon: <Newspaper size={18} />, label: "News", href: "/admin/news", adminOnly: true },
     { icon: <TrendingUp size={18} />, label: "Transfers", href: "/admin/transfers", adminOnly: true },
+    { icon: <Megaphone size={18} />, label: "Advertisements", href: "/admin/advertisements", adminOnly: true },
     { icon: <UserPlus size={18} />, label: "Bulk Register", href: "/admin/bulk-register" },
     { icon: <Users size={18} />, label: "Loggers", href: "/admin/loggers" },
     { icon: <Server size={18} />, label: "Infrastructure", href: "/admin/infrastructure", adminOnly: true },

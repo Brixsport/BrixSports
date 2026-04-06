@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
-import { Activity, Shield, Users, Server, Globe, Settings, Eye, AlertCircle, CheckCircle2, MoreVertical, Search, Filter, Newspaper, TrendingUp, Trophy, Calendar, Video, Timer } from 'lucide-react';
+import { Activity, Shield, Users, Server, Globe, Settings, Eye, AlertCircle, CheckCircle2, MoreVertical, Search, Filter, Newspaper, TrendingUp, Trophy, Calendar, Video, Timer, Bell } from 'lucide-react';
 
 
 export default function AdminPage() {
@@ -254,6 +254,10 @@ export default function AdminPage() {
               </div>
               <Link href="/admin/settings" className="block w-full py-3 md:py-4 border border-white/10 rounded-xl md:rounded-2xl text-[8px] md:text-[10px] font-black uppercase tracking-widest hover:bg-white/5 transition-colors text-center">
                 System Settings
+              </Link>
+              <Link href="/admin/notifications" className="block w-full py-3 md:py-4 border border-white/10 rounded-xl md:rounded-2xl text-[8px] md:text-[10px] font-black uppercase tracking-widest hover:bg-white/5 transition-colors text-center flex items-center justify-center gap-2">
+                <Bell className="w-4 h-4" />
+                Notification Diagnostics
               </Link>
             </div>
           </div>

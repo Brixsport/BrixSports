@@ -798,6 +798,26 @@ export const passwordResetTokens = sqliteTable('password_reset_tokens', {
     createdAt: integer('created_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
 });
 
+// Advertisements table
+export const advertisements = sqliteTable('advertisements', {
+    id: text('id').primaryKey(),
+    title: text('title').notNull(),
+    description: text('description'),
+    imageUrl: text('image_url').notNull(),
+    linkUrl: text('link_url').notNull(),
+    position: text('position').notNull().default('inline'), // 'top' | 'bottom' | 'sidebar' | 'inline'
+    size: text('size').notNull().default('small'), // 'small' | 'medium' | 'large'
+    status: text('status').notNull().default('active'), // 'active' | 'inactive'
+    priority: integer('priority').default(0), // Higher priority = shown first
+    startDate: integer('start_date', { mode: 'timestamp' }),
+    endDate: integer('end_date', { mode: 'timestamp' }),
+    impressions: integer('impressions').default(0),
+    clicks: integer('clicks').default(0),
+    createdBy: text('created_by').references(() => users.id),
+    createdAt: integer('created_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
+    updatedAt: integer('updated_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
+});
+
 // ─────────────────────────────────────────────
 // RELATIONS
 // ─────────────────────────────────────────────
@@ -1083,6 +1103,8 @@ export type StaffComm = typeof staffComms.$inferSelect;
 export type NewStaffComm = typeof staffComms.$inferInsert;
 export type SquadPlayer = typeof squadPlayers.$inferSelect;
 export type NewSquadPlayer = typeof squadPlayers.$inferInsert;
+export type Advertisement = typeof advertisements.$inferSelect;
+export type NewAdvertisement = typeof advertisements.$inferInsert;
 
 // Export other schemas
 export { matchPredictions, predictionLeaderboard, predictionComments } from './schema-predictions';
