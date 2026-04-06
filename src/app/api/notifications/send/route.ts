@@ -134,6 +134,21 @@ export async function POST(request: NextRequest) {
             }
         }
 
+        console.log('[Notifications API] Sending to all subscriptions completed:', {
+            successCount,
+            failedCount: failedSubscriptions.length,
+            failedIds: failedSubscriptions,
+            totalProcessed: allSubscriptions.length
+        });
+
+        console.log('[Notifications API] Final result:', {
+            success: true,
+            message: 'Push notification sent successfully',
+            sentTo: successCount,
+            totalSubscriptions: allSubscriptions.length,
+            failedSubscriptions: failedSubscriptions.length,
+        });
+
         return NextResponse.json({
             success: true,
             message: 'Push notification sent successfully',

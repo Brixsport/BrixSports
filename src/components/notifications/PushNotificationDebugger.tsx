@@ -142,6 +142,12 @@ export default function PushNotificationDebugger() {
         return;
       }
       
+      console.log('[PushDebugger] Service Worker Info:', {
+        scope: registration.scope,
+        state: registration.active?.state,
+        scriptURL: registration.active?.scriptURL,
+      });
+      
       // Send a message to the service worker to test communication
       registration.active.postMessage({
         type: 'TEST_PUSH',
@@ -154,6 +160,30 @@ export default function PushNotificationDebugger() {
       toast.success('Test message sent to service worker');
     } catch (error) {
       toast.error('Service worker test failed: ' + (error as Error).message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const debugSubscriptions = async () => {
+    setLoading(true);
+    try {
+      const response = await fetch('/api/notifications/debug');
+      const result = await response.json();
+      
+      console.log('[PushDebugger] Subscription Debug Result:', result);
+      
+      if (result.success) {
+        if (result.issues.length > 0) {
+          toast.error(`Found ${result.issues.length} subscription issues`);
+        } else {
+          toast.success('All subscriptions look valid');
+        }
+      } else {
+        toast.error('Failed to debug subscriptions');
+      }
+    } catch (error) {
+      toast.error('Debug failed: ' + (error as Error).message);
     } finally {
       setLoading(false);
     }
@@ -325,6 +355,16 @@ export default function PushNotificationDebugger() {
             Subscribe to Notifications
           </Button>
         )}
+
+        <Button 
+          onClick={debugSubscriptions} 
+          disabled={loading}
+          variant="outline"
+          className="w-full"
+        >
+          <AlertTriangle className="w-4 h-4 mr-2" />
+          Debug Subscriptions
+        </Button>
 
         <Button 
           onClick={testVAPIDConfig} 
