@@ -2,33 +2,45 @@
 
 import { signIn, signOut, useSession } from 'next-auth/react';
 import { User, LogOut } from 'lucide-react';
+import { useAuth } from '@/contexts/AuthContext';
 
 export default function AuthButton() {
-    const { data: session, status } = useSession();
+    const { data: session, status: nextAuthStatus } = useSession();
+    const { user, isAuthenticated, logout } = useAuth();
 
-    if (status === 'loading') {
+    // Check both NextAuth and custom auth
+    const isLoggedIn = session || isAuthenticated;
+    const userData = session?.user || user;
+
+    if (nextAuthStatus === 'loading') {
         return (
             <div className="w-8 h-8 border-2 border-white/20 border-t-white rounded-full animate-spin" />
         );
     }
 
-    if (session) {
+    if (isLoggedIn) {
         return (
             <div className="flex items-center gap-3">
                 <div className="flex items-center gap-2">
-                    {session.user?.image && (
+                    {(userData?.image || userData?.avatar) && (
                         <img
-                            src={session.user.image}
-                            alt={session.user.name || ''}
+                            src={userData?.image || userData?.avatar}
+                            alt={userData?.name || ''}
                             className="w-8 h-8 rounded-full"
                         />
                     )}
                     <span className="text-white font-medium hidden md:block">
-                        {session.user?.name}
+                        {userData?.name}
                     </span>
                 </div>
                 <button
-                    onClick={() => signOut()}
+                    onClick={() => {
+                        if (session) {
+                            signOut();
+                        } else {
+                            logout();
+                        }
+                    }}
                     className="flex items-center gap-2 px-4 py-2 bg-red-500/20 hover:bg-red-500/30 text-red-500 rounded-lg transition-colors"
                 >
                     <LogOut className="w-4 h-4" />
