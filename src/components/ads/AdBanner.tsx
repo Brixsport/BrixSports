@@ -64,8 +64,8 @@ export default function AdBanner({ position, className = '' }: AdBannerProps) {
   }
 
   const positionClasses = {
-    top: 'fixed top-0 left-0 right-0 z-40 bg-background/95 backdrop-blur-sm',
-    bottom: 'fixed bottom-[72px] left-0 right-0 z-40 bg-background/95 backdrop-blur-sm',
+    top: 'fixed top-0 left-0 right-0 z-40 bg-black/95 backdrop-blur-sm',
+    bottom: 'fixed bottom-[72px] left-0 right-0 z-40 bg-black/95 backdrop-blur-sm',
     sidebar: 'sticky top-20 hidden lg:block',
     inline: 'my-4',
   };

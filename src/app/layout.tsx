@@ -244,9 +244,7 @@ export default function RootLayout({
                 <SocketProvider>
                   <GlobalNotificationListener />
                   <AdBanner position="top" />
-                  <div className="pt-16 md:pt-20">
-                    {children}
-                  </div>
+                  {children}
                   <AdBanner position="bottom" />
                   <BottomNav />
                   <AuthModal />
