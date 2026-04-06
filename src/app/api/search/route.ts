@@ -4,7 +4,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { and, desc, eq, like, or } from 'drizzle-orm';
+import { and, desc, eq, like, or, sql } from 'drizzle-orm';
 import { db } from '@/db';
 import { competitions, matches, players, teams } from '@/db/schema';
 import { enrichPlayersWithAffiliations } from '@/lib/player-data';
@@ -73,9 +73,9 @@ export async function GET(request: NextRequest) {
 
         if (!category || category === 'all' || category === 'teams') {
             const teamFilters = [
-                like(teams.name, searchPattern),
-                like(teams.shortName, searchPattern),
-                like(teams.university, searchPattern),
+                sql`LOWER(${teams.name}) LIKE ${searchPattern}`,
+                sql`LOWER(${teams.shortName}) LIKE ${searchPattern}`,
+                sql`LOWER(${teams.university}) LIKE ${searchPattern}`,
             ];
 
             const whereClause = sport
@@ -125,9 +125,9 @@ export async function GET(request: NextRequest) {
 
         if (!category || category === 'all' || category === 'matches') {
             const matchFilters = or(
-                like(teams.name, searchPattern),
-                like(teams.shortName, searchPattern),
-                like(matches.competition, searchPattern)
+                sql`LOWER(${teams.name}) LIKE ${searchPattern}`,
+                sql`LOWER(${teams.shortName}) LIKE ${searchPattern}`,
+                sql`LOWER(${matches.competition}) LIKE ${searchPattern}`
             );
 
             const matchWhere = sport
@@ -162,8 +162,8 @@ export async function GET(request: NextRequest) {
 
         if (!category || category === 'all' || category === 'competitions') {
             const compFilters = [
-                like(competitions.name, searchPattern),
-                like(competitions.season, searchPattern),
+                sql`LOWER(${competitions.name}) LIKE ${searchPattern}`,
+                sql`LOWER(${competitions.season}) LIKE ${searchPattern}`,
             ];
 
             const compWhere = sport
