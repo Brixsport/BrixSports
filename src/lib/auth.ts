@@ -82,11 +82,13 @@ export async function getAuthUser(request: NextRequest): Promise<AuthenticatedUs
             return null;
         }
 
-        const user = await db
+        const userResult = await db
             .select()
             .from(users)
             .where(eq(users.id, authData.userId))
-            .get();
+            .all();
+
+        const user = userResult[0];
 
         if (!user) {
             return null;

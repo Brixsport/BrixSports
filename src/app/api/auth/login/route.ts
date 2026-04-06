@@ -23,12 +23,14 @@ export async function POST(request: NextRequest) {
         }
 
         // Find user by email (case-insensitive)
-        email = email.trim();
-        const user = await db
+        email = email.trim().toLowerCase();
+        const userResult = await db
             .select()
             .from(users)
-            .where(sql`lower(${users.email}) = ${email.toLowerCase()}`)
-            .get();
+            .where(sql`lower(${users.email}) = ${email}`)
+            .all();
+
+        const user = userResult[0];
 
         if (!user) {
             console.log(`[Login] User not found for email: ${email}`);

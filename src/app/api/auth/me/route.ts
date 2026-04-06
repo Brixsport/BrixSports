@@ -18,7 +18,7 @@ export async function GET(request: NextRequest) {
 
         let favoriteTeam = null;
         if (user.favoriteTeamId) {
-            favoriteTeam = await db.select({
+            const favoriteTeamResult = await db.select({
                 id: teams.id,
                 name: teams.name,
                 logo: teams.logo,
@@ -27,7 +27,9 @@ export async function GET(request: NextRequest) {
             })
                 .from(teams)
                 .where(eq(teams.id, user.favoriteTeamId))
-                .get();
+                .all();
+            
+            favoriteTeam = favoriteTeamResult[0] || null;
         }
 
         return NextResponse.json({

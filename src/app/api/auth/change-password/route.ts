@@ -33,11 +33,13 @@ export async function POST(request: NextRequest) {
         }
 
         // 2. Get user with password hash
-        const dbUser = await db
+        const dbUserResult = await db
             .select()
             .from(users)
             .where(eq(users.id, user.id))
-            .get();
+            .all();
+
+        const dbUser = dbUserResult[0];
 
         if (!dbUser) {
             return NextResponse.json(

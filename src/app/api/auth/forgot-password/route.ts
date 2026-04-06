@@ -22,11 +22,13 @@ export async function POST(request: NextRequest) {
         }
 
         // Find user by email
-        const user = await db
+        const userResult = await db
             .select()
             .from(users)
             .where(eq(users.email, email.toLowerCase()))
-            .get();
+            .all();
+
+        const user = userResult[0];
 
         // Always return success to prevent email enumeration
         // Don't reveal if the email exists or not
@@ -95,7 +97,7 @@ export async function GET(request: NextRequest) {
             );
         }
 
-        const tokenData = await db
+        const tokenDataResult = await db
             .select()
             .from(passwordResetTokens)
             .where(
@@ -104,7 +106,9 @@ export async function GET(request: NextRequest) {
                     gte(passwordResetTokens.expiresAt, new Date())
                 )
             )
-            .get();
+            .all();
+
+        const tokenData = tokenDataResult[0];
 
         if (!tokenData) {
             return NextResponse.json(
@@ -147,7 +151,7 @@ export async function PATCH(request: NextRequest) {
             );
         }
 
-        const tokenData = await db
+        const tokenDataResult = await db
             .select()
             .from(passwordResetTokens)
             .where(
@@ -156,7 +160,9 @@ export async function PATCH(request: NextRequest) {
                     gte(passwordResetTokens.expiresAt, new Date())
                 )
             )
-            .get();
+            .all();
+
+        const tokenData = tokenDataResult[0];
 
         if (!tokenData) {
             return NextResponse.json(
