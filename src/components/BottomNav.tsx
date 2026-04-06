@@ -3,7 +3,7 @@
 import { usePathname, useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { Calendar, Trophy, User } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface NavItem {
     id: string;
@@ -16,14 +16,7 @@ interface NavItem {
 export function BottomNav() {
     const pathname = usePathname();
     const router = useRouter();
-    const [user, setUser] = useState<any>(null);
-
-    useEffect(() => {
-        const userData = localStorage.getItem('user');
-        if (userData) {
-            setUser(JSON.parse(userData));
-        }
-    }, []);
+    const { user, isAuthenticated } = useAuth();
 
     const navItems: NavItem[] = [
         {
@@ -40,9 +33,9 @@ export function BottomNav() {
         },
         {
             id: 'profile',
-            label: 'Profile',
+            label: isAuthenticated && user ? 'Profile' : 'Sign In',
             icon: User,
-            path: user ? '/profile' : '/login',
+            path: isAuthenticated && user ? '/profile' : '/login',
         },
     ];
 

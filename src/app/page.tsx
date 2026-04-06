@@ -12,6 +12,7 @@ import { Player, Team, Match } from '@/types';
 import GlobalSearch from '@/components/GlobalSearch';
 import { useNotifications } from '@/components/Notifications';
 import { useFavorites } from '@/hooks/useFavorites';
+import { useAuth } from '@/contexts/AuthContext';
 import { LiveNowSection } from '@/components/livestream';
 import LiveMatchStatus from '@/components/LiveMatchStatus';
 import { PageSEO, StructuredData, FAQSection } from '@/components/seo';
@@ -50,25 +51,9 @@ export default function Home() {
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
-  // Authentication State
-  const [user, setUser] = useState<any>(null);
+  // Authentication State - use AuthContext instead of local state
+  const { user, isAuthenticated } = useAuth();
   const [competitions, setCompetitions] = useState<any[]>([]);
-
-  // Fetch competitions
-  useEffect(() => {
-    const fetchCompetitions = async () => {
-      try {
-        const res = await fetch('/api/competitions');
-        const data = await res.json();
-        if (data.competitions) {
-          setCompetitions(data.competitions);
-        }
-      } catch (err) {
-        console.error('Error fetching competitions:', err);
-      }
-    };
-    fetchCompetitions();
-  }, []);
 
   const { notifications, addNotification } = useNotifications();
   const { favoriteTeams, favoritePlayers } = useFavorites();
@@ -293,36 +278,21 @@ export default function Home() {
     };
   }, [addNotification]);
 
-  // Check for existing auth on mount
+  // Fetch competitions
   useEffect(() => {
-    const token = localStorage.getItem('authToken');
-    const userData = localStorage.getItem('user');
-    if (token && userData) {
-      setUser(JSON.parse(userData));
-    }
+    const fetchCompetitions = async () => {
+      try {
+        const res = await fetch('/api/competitions');
+        const data = await res.json();
+        if (data.competitions) {
+          setCompetitions(data.competitions);
+        }
+      } catch (err) {
+        console.error('Error fetching competitions:', err);
+      }
+    };
+    fetchCompetitions();
   }, []);
-
-  // Handle logout
-  const handleLogout = () => {
-    localStorage.removeItem('authToken');
-    localStorage.removeItem('user');
-    setUser(null);
-    addNotification({
-      title: 'Logged Out',
-      message: 'You have been successfully logged out',
-      type: 'info'
-    });
-  };
-
-  // Handle successful login
-  const handleAuthSuccess = (userData: any) => {
-    setUser(userData);
-    addNotification({
-      title: 'Welcome!',
-      message: `Logged in as ${userData.name}`,
-      type: 'info'
-    });
-  };
 
   // Enhanced filtering logic
   const filteredMatches = matches.filter(m => {
@@ -491,7 +461,7 @@ export default function Home() {
                 )}
               </button>
               <div className="hidden sm:flex items-center gap-2">
-                {user ? (
+                {isAuthenticated && user ? (
                   <button
                     className="flex items-center gap-2 bg-white/5 hover:bg-white/10 px-3 py-1.5 rounded-lg border border-white/10 transition-all text-xs font-bold uppercase tracking-wider"
                     onClick={() => router.push('/profile')}
