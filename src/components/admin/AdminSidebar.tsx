@@ -48,10 +48,10 @@ export function AdminSidebar() {
     return (
         <>
             {/* Mobile Toggle Button */}
-            <div className="fixed top-4 right-4 z-[60]">
+            <div className="fixed top-4 right-4 z-[60] lg:hidden">
                 <button
                     onClick={() => setIsOpen(!isOpen)}
-                    className="p-3 bg-primary text-black rounded-xl shadow-lg border border-black/10 transition-transform active:scale-95"
+                    className="p-3 bg-zinc-800 text-white rounded-xl shadow-lg border border-white/10 transition-transform active:scale-95"
                 >
                     {isOpen ? <X size={24} /> : <Menu size={24} />}
                 </button>
