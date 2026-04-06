@@ -75,14 +75,17 @@ function getOrCreateSocket(): Socket | null {
         path: '/api/socket',
         transports: ['websocket', 'polling'],
         reconnection: true,
-        reconnectionAttempts: Infinity,
-        reconnectionDelay: 1000,
+        reconnectionAttempts: 5,
+        reconnectionDelay: 2000,
         reconnectionDelayMax: 10000,
-        timeout: 20000,
+        timeout: 10000,
     });
+
+    let reconnectAttempts = 0;
 
     sharedSocket.on('connect', () => {
         console.log(`[WS] Connected: ${sharedSocket?.id}`);
+        reconnectAttempts = 0;
     });
 
     sharedSocket.on('disconnect', (reason) => {
@@ -90,7 +93,13 @@ function getOrCreateSocket(): Socket | null {
     });
 
     sharedSocket.on('connect_error', (error) => {
-        console.error('[WS] Connection error:', error.message);
+        reconnectAttempts++;
+        if (reconnectAttempts <= 3) {
+            console.warn(`[WS] Connection error (attempt ${reconnectAttempts}/5):`, error.message);
+        } else if (reconnectAttempts === 5) {
+            console.warn('[WS] Max reconnection attempts reached. Real-time features disabled.');
+            sharedSocket?.disconnect();
+        }
     });
 
     return sharedSocket;

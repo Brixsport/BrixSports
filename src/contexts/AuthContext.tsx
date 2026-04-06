@@ -40,15 +40,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Check authentication status
     const checkAuth = useCallback(async () => {
         try {
-            const response = await fetch('/api/auth/me', {
+            // Try cookie first
+            let response = await fetch('/api/auth/me', {
                 credentials: 'include',
             });
+
+            // If cookie fails, try localStorage token
+            if (!response.ok) {
+                const token = localStorage.getItem('authToken');
+                if (token) {
+                    response = await fetch('/api/auth/me', {
+                        headers: {
+                            'Authorization': `Bearer ${token}`,
+                        },
+                        credentials: 'include',
+                    });
+                }
+            }
 
             if (response.ok) {
                 const data = await response.json();
                 setUser(data.user);
             } else {
                 setUser(null);
+                localStorage.removeItem('authToken');
             }
         } catch (error) {
             console.error('Auth check failed:', error);
@@ -106,6 +121,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             const data = await response.json();
 
             if (response.ok) {
+                // Store token in localStorage as backup
+                if (data.token) {
+                    localStorage.setItem('authToken', data.token);
+                }
                 setUser(data.user);
                 setIsAuthModalOpen(false);
 
@@ -138,6 +157,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             const data = await response.json();
 
             if (response.ok) {
+                // Store token in localStorage as backup
+                if (data.token) {
+                    localStorage.setItem('authToken', data.token);
+                }
                 setUser(data.user);
                 setIsAuthModalOpen(false);
 
@@ -166,6 +189,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             });
 
             setUser(null);
+            localStorage.removeItem('authToken');
             router.push('/');
         } catch (error) {
             console.error('Logout error:', error);
