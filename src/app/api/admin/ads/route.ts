@@ -1,13 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { drizzle } from 'drizzle-orm/better-sqlite3';
-import Database from 'better-sqlite3';
+import { db } from '@/db';
 import { advertisements } from '@/db/schema';
 import { eq, desc } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
-
-// Initialize database
-const sqlite = new Database('local.db');
-const db = drizzle(sqlite);
 
 // GET /api/admin/ads - List all advertisements
 export async function GET() {

@@ -1,12 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { drizzle } from 'drizzle-orm/better-sqlite3';
-import Database from 'better-sqlite3';
+import { db } from '@/db';
 import { advertisements } from '@/db/schema';
 import { eq } from 'drizzle-orm';
-
-// Initialize database
-const sqlite = new Database('local.db');
-const db = drizzle(sqlite);
 
 // PUT /api/admin/ads/[id] - Update advertisement
 export async function PUT(

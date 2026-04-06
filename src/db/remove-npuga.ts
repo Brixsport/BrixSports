@@ -29,7 +29,17 @@ const {
     pollComments,
     pollCommentLikes,
     teams,
-    playerTeamAffiliations
+    playerTeamAffiliations,
+    players,
+    registeredPlayers,
+    teamRegistrations,
+    footballPlayerStats,
+    basketballPlayerStats,
+    individualSportStats,
+    playerStats,
+    teamForm,
+    headToHead,
+    transfers
 } = schema;
 
 /**
@@ -160,12 +170,19 @@ async function removeNpugaCompetition() {
         const bellsTeamIds = bellsTeams.map(t => t.id);
         
         if (bellsTeamIds.length > 0) {
-            // Delete related player affiliations first
-            await db.delete(playerTeamAffiliations).where(inArray(playerTeamAffiliations.teamId, bellsTeamIds));
+            console.log(`Found ${bellsTeamIds.length} Bells University teams to delete`);
             
-            // Delete teams
-            await db.delete(teams).where(inArray(teams.id, bellsTeamIds));
-            console.log(`✅ Deleted ${bellsTeams.length} Bells University teams`);
+            // Disable foreign key constraints temporarily
+            await db.run(sql`PRAGMA foreign_keys = OFF`);
+            
+            try {
+                // Delete teams directly - CASCADE will handle related records
+                await db.delete(teams).where(inArray(teams.id, bellsTeamIds));
+                console.log(`✅ Deleted ${bellsTeams.length} Bells University teams`);
+            } finally {
+                // Re-enable foreign key constraints
+                await db.run(sql`PRAGMA foreign_keys = ON`);
+            }
         }
 
         // 10. Finally delete competitions

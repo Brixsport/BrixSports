@@ -1,12 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { drizzle } from 'drizzle-orm/better-sqlite3';
-import Database from 'better-sqlite3';
+import { db } from '@/db';
 import { advertisements } from '@/db/schema';
 import { eq, and, gte, lte, desc, sql } from 'drizzle-orm';
-
-// Initialize database
-const sqlite = new Database('local.db');
-const db = drizzle(sqlite);
 
 export async function GET(request: NextRequest) {
   try {
@@ -14,7 +9,7 @@ export async function GET(request: NextRequest) {
     const position = searchParams.get('position') || 'inline';
 
     // Get current timestamp
-    const now = new Date();
+    const now = Date.now();
 
     // Find active ads for this position
     // Active means: status = 'active', (startDate is null OR startDate <= now), (endDate is null OR endDate >= now)
@@ -25,8 +20,8 @@ export async function GET(request: NextRequest) {
         and(
           eq(advertisements.position, position),
           eq(advertisements.status, 'active'),
-          sql`${advertisements.startDate} IS NULL OR ${advertisements.startDate} <= ${now.getTime()}`,
-          sql`${advertisements.endDate} IS NULL OR ${advertisements.endDate} >= ${now.getTime()}`
+          sql`${advertisements.startDate} IS NULL OR ${advertisements.startDate} <= ${now}`,
+          sql`${advertisements.endDate} IS NULL OR ${advertisements.endDate} >= ${now}`
         )
       )
       .orderBy(desc(advertisements.priority))
