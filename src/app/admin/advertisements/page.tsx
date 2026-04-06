@@ -23,6 +23,7 @@ import {
 } from '@/components/ui/select';
 import { toast } from 'sonner';
 import { CldUploadWidget } from 'next-cloudinary';
+import { useCallback } from 'react';
 
 // Payment tiers with allowed positions and sizes
 const PAYMENT_TIERS = {
@@ -364,32 +365,58 @@ export default function AdvertisementsAdmin() {
                     />
                   </div>
                 ) : (
-                  <CldUploadWidget
-                    onSuccess={(result: any) => {
-                      setFormData({ ...formData, imageUrl: result.info.secure_url });
-                    }}
-                    uploadPreset={process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET || 'brix_uploads'}
-                    options={{
-                      maxFiles: 1,
-                      sources: ['local', 'url', 'camera'],
-                      cropping: true,
-                      croppingAspectRatio: getRecommendedAspectRatio(formData.position),
-                    }}
-                  >
-                    {({ open }) => (
-                      <button
-                        type="button"
-                        onClick={() => open()}
-                        className="w-full h-48 rounded-md border-2 border-dashed border-slate-700 bg-slate-800/50 hover:bg-slate-800 transition flex flex-col items-center justify-center gap-4 text-slate-400 hover:text-white mt-2"
-                      >
-                        <ImageIcon className="w-10 h-10" />
-                        <span className="font-semibold">Upload Banner Image</span>
-                        <span className="text-xs text-slate-500">
-                          Recommended: {getRecommendedDimensions(formData.position)}
-                        </span>
-                      </button>
-                    )}
-                  </CldUploadWidget>
+                  <>
+                    {/* Cloudinary Upload */}
+                    <CldUploadWidget
+                      onSuccess={(result: any) => {
+                        if (result?.info?.secure_url) {
+                          setFormData({ ...formData, imageUrl: result.info.secure_url });
+                          toast.success('Image uploaded successfully');
+                        }
+                      }}
+                      onError={(error: any) => {
+                        console.error('Upload error:', error);
+                        toast.error('Upload failed. Use URL option below.');
+                      }}
+                      uploadPreset={process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET || 'brix_uploads'}
+                      options={{
+                        maxFiles: 1,
+                        sources: ['local', 'url', 'camera', 'dropbox', 'google_drive'],
+                        cropping: true,
+                        showPoweredBy: false,
+                        multiple: false,
+                        defaultSource: 'local',
+                        croppingAspectRatio: getRecommendedAspectRatio(formData.position),
+                      }}
+                    >
+                      {({ open }) => (
+                        <button
+                          type="button"
+                          onClick={() => open()}
+                          className="w-full h-32 rounded-md border-2 border-dashed border-slate-600 bg-slate-800/50 hover:bg-slate-700 hover:border-slate-500 transition flex flex-col items-center justify-center gap-2 text-slate-400 hover:text-white mt-2"
+                        >
+                          <Upload className="w-8 h-8" />
+                          <span className="font-semibold text-sm">Click to Upload Image</span>
+                          <span className="text-xs text-slate-500">
+                            or drag & drop
+                          </span>
+                        </button>
+                      )}
+                    </CldUploadWidget>
+                    
+                    {/* Manual URL Input */}
+                    <div className="mt-3">
+                      <Label className="text-xs text-slate-400">Or paste image URL:</Label>
+                      <div className="flex gap-2 mt-1">
+                        <Input
+                          type="url"
+                          placeholder="https://example.com/image.jpg"
+                          onChange={(e) => setFormData({ ...formData, imageUrl: e.target.value })}
+                          className="flex-1"
+                        />
+                      </div>
+                    </div>
+                  </>
                 )}
               </div>
               
