@@ -159,6 +159,30 @@ export default function PushNotificationDebugger() {
     }
   };
 
+  const testVAPIDConfig = async () => {
+    setLoading(true);
+    try {
+      const response = await fetch('/api/notifications/test');
+      const result = await response.json();
+      
+      if (result.success) {
+        if (result.config.vapidWorking) {
+          toast.success('✅ VAPID keys are properly configured');
+        } else {
+          toast.error('❌ VAPID keys misconfigured: ' + (result.config.vapidError || 'Unknown error'));
+        }
+      } else {
+        toast.error('❌ Failed to test VAPID: ' + result.error);
+      }
+      
+      console.log('[PushDebugger] VAPID Test Result:', result);
+    } catch (error) {
+      toast.error('VAPID test failed: ' + (error as Error).message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const testNotification = async () => {
     setLoading(true);
     try {
@@ -283,6 +307,16 @@ export default function PushNotificationDebugger() {
             Subscribe to Notifications
           </Button>
         )}
+
+        <Button 
+          onClick={testVAPIDConfig} 
+          disabled={loading}
+          variant="outline"
+          className="w-full"
+        >
+          <AlertTriangle className="w-4 h-4 mr-2" />
+          Test VAPID Config
+        </Button>
 
         <Button 
           onClick={testServiceWorker} 

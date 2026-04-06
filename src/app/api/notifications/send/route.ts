@@ -9,12 +9,22 @@ const vapidPublicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || '';
 const vapidPrivateKey = process.env.VAPID_PRIVATE_KEY || '';
 const vapidSubject = process.env.VAPID_SUBJECT || 'mailto:admin@brixsport.com';
 
+console.log('[Notifications API] VAPID Configuration:', {
+    hasPublicKey: !!vapidPublicKey,
+    hasPrivateKey: !!vapidPrivateKey,
+    publicKeyLength: vapidPublicKey?.length,
+    privateKeyLength: vapidPrivateKey?.length,
+});
+
 if (vapidPublicKey && vapidPrivateKey) {
     webpush.setVapidDetails(
         vapidSubject,
         vapidPublicKey,
         vapidPrivateKey
     );
+    console.log('[Notifications API] VAPID configured successfully');
+} else {
+    console.error('[Notifications API] VAPID keys missing!');
 }
 
 // POST /api/notifications/send - Send push notification to all subscribers
@@ -66,6 +76,18 @@ export async function POST(request: NextRequest) {
 
         // Fetch all push subscriptions from database
         const allSubscriptions = await db.select().from(pushSubscriptions);
+        
+        console.log('[Notifications API] Found subscriptions:', {
+            total: allSubscriptions.length,
+            subscriptions: allSubscriptions.map(sub => ({
+                id: sub.id,
+                userId: sub.userId,
+                endpoint: sub.endpoint?.substring(0, 50) + '...',
+                hasP256dh: !!sub.p256dh,
+                hasAuth: !!sub.auth,
+                createdAt: sub.createdAt,
+            }))
+        });
 
         let successCount = 0;
         const failedSubscriptions: string[] = [];
@@ -81,10 +103,20 @@ export async function POST(request: NextRequest) {
                     },
                 };
 
+                console.log(`[Notifications API] Sending to ${sub.id}:`, {
+                    endpoint: sub.endpoint?.substring(0, 50) + '...',
+                    hasKeys: !!(pushSubscription.keys.p256dh && pushSubscription.keys.auth)
+                });
+
                 await webpush.sendNotification(pushSubscription, payload);
                 successCount++;
+                console.log(`[Notifications API] Success sending to ${sub.id}`);
             } catch (error: any) {
-                console.error('Failed to send to subscription:', error);
+                console.error(`[Notifications API] Failed to send to ${sub.id}:`, {
+                    error: error.message,
+                    statusCode: error.statusCode,
+                    headers: error.headers
+                });
 
                 // If subscription is invalid (410 Gone or 404 Not Found), remove it
                 if (error.statusCode === 410 || error.statusCode === 404) {
