@@ -1,26 +1,53 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getAuthUser } from '@/lib/auth';
+import { cookies } from 'next/headers';
 import { db } from '@/db';
-import { teams } from '@/db/schema';
+import { users, teams } from '@/db/schema';
 import { eq } from 'drizzle-orm';
+import { jwtVerify } from 'jose';
 
 // GET /api/auth/me - Get current authenticated user
 export async function GET(request: NextRequest) {
     try {
-        const authToken = request.cookies.get('authToken')?.value;
+        // Use cookies() from next/headers for server-side cookie access
+        const cookieStore = await cookies();
+        const authToken = cookieStore.get('authToken')?.value;
+        
         console.log(`[Auth/Me] Request received, cookie present: ${!!authToken}`);
         
-        const user = await getAuthUser(request);
-
-        if (!user) {
-            console.log(`[Auth/Me] No authenticated user found`);
+        if (!authToken) {
+            console.log(`[Auth/Me] No authToken cookie found`);
             return NextResponse.json(
                 { error: 'Unauthorized' },
                 { status: 401 }
             );
         }
-
-        console.log(`[Auth/Me] User authenticated: ${user.email}`);
+        
+        // Verify token
+        const secret = new TextEncoder().encode(
+            process.env.JWT_SECRET || 'your-secret-key-change-in-production'
+        );
+        const { payload } = await jwtVerify(authToken, secret);
+        
+        console.log(`[Auth/Me] Token verified for userId: ${payload.userId}`);
+        
+        // Get user from database directly
+        const userResult = await db
+            .select()
+            .from(users)
+            .where(eq(users.id, payload.userId as string))
+            .all();
+        
+        const user = userResult[0];
+        
+        if (!user) {
+            console.log(`[Auth/Me] User not found in database`);
+            return NextResponse.json(
+                { error: 'Unauthorized' },
+                { status: 401 }
+            );
+        }
+        
+        console.log(`[Auth/Me] User found: ${user.email}`);
 
         let favoriteTeam = null;
         if (user.favoriteTeamId) {
@@ -40,12 +67,21 @@ export async function GET(request: NextRequest) {
 
         return NextResponse.json({
             user: {
-                ...user,
-                favoriteTeam
+                id: user.id,
+                email: user.email,
+                name: user.name,
+                role: user.role,
+                avatar: user.avatar,
+                coverImage: user.coverImage,
+                bio: user.bio,
+                favoriteTeamId: user.favoriteTeamId,
+                favoriteTeam,
+                createdAt: user.createdAt,
+                updatedAt: user.updatedAt,
             }
         });
     } catch (error) {
-        console.error('Auth verification error:', error);
+        console.error('[Auth/Me] Auth verification error:', error);
         return NextResponse.json(
             { error: 'Authentication failed' },
             { status: 401 }
