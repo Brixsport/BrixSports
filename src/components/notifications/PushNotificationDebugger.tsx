@@ -133,15 +133,15 @@ export default function PushNotificationDebugger() {
     status: string; 
     good: boolean 
   }) => (
-    <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-      <span className="text-sm font-medium">{label}</span>
+    <div className="flex items-center justify-between p-3 bg-slate-800 rounded-lg border border-slate-700">
+      <span className="text-sm font-medium text-white">{label}</span>
       <div className="flex items-center gap-2">
         {good ? (
-          <CheckCircle className="w-5 h-5 text-green-500" />
+          <CheckCircle className="w-5 h-5 text-green-400" />
         ) : (
-          <XCircle className="w-5 h-5 text-red-500" />
+          <XCircle className="w-5 h-5 text-red-400" />
         )}
-        <span className={`text-sm ${good ? 'text-green-600' : 'text-red-600'}`}>
+        <span className={`text-sm font-semibold ${good ? 'text-green-400' : 'text-red-400'}`}>
           {status}
         </span>
       </div>
@@ -149,10 +149,10 @@ export default function PushNotificationDebugger() {
   );
 
   return (
-    <div className="p-6 max-w-md mx-auto bg-white rounded-xl shadow-lg">
+    <div className="p-6 max-w-md mx-auto bg-slate-900 rounded-xl shadow-lg border border-slate-800">
       <div className="flex items-center gap-3 mb-6">
-        <Bell className="w-6 h-6 text-primary" />
-        <h2 className="text-xl font-bold">Push Notification Diagnostics</h2>
+        <Bell className="w-6 h-6 text-blue-400" />
+        <h2 className="text-xl font-bold text-white">Push Notification Diagnostics</h2>
       </div>
 
       <div className="space-y-3 mb-6">
@@ -228,11 +228,11 @@ export default function PushNotificationDebugger() {
       </div>
 
       {!status.vapidConfigured && (
-        <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-          <p className="text-sm text-yellow-800">
+        <div className="mt-4 p-3 bg-yellow-900/30 border border-yellow-700 rounded-lg">
+          <p className="text-sm text-yellow-200">
             <strong>Missing VAPID Keys!</strong> Add these to your .env.local:
           </p>
-          <code className="block mt-2 p-2 bg-gray-100 rounded text-xs">
+          <code className="block mt-2 p-2 bg-slate-950 rounded text-xs text-slate-300">
             NEXT_PUBLIC_VAPID_PUBLIC_KEY=your_public_key<br/>
             VAPID_PRIVATE_KEY=your_private_key
           </code>
