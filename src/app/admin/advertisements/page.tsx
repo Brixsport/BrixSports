@@ -191,13 +191,13 @@ export default function AdvertisementsAdmin() {
       description: '',
       imageUrl: '',
       linkUrl: '',
-      position: 'inline',
-      size: 'small',
-      status: 'active',
+      position: 'inline' as 'inline' | 'sidebar' | 'bottom' | 'top',
+      size: 'small' as 'small' | 'medium' | 'large',
+      status: 'active' as 'active' | 'inactive',
       priority: 0,
       startDate: '',
       endDate: '',
-      paymentTier: 'basic',
+      paymentTier: 'basic' as 'basic' | 'standard' | 'premium' | 'platinum',
     });
   };
 
@@ -256,21 +256,21 @@ export default function AdvertisementsAdmin() {
     const tierConfig = PAYMENT_TIERS[tier];
     setFormData({
       ...formData,
-      paymentTier: tier,
-      position: tierConfig.positions[0],
-      size: tierConfig.sizes[0],
+      paymentTier: tier as 'basic' | 'standard' | 'premium' | 'platinum',
+      position: tierConfig.positions[0] as 'inline' | 'sidebar' | 'bottom' | 'top',
+      size: tierConfig.sizes[0] as 'small' | 'medium' | 'large',
       priority: tierConfig.priority,
     });
   };
 
-  const positionLabels = {
+  const positionLabels: Record<string, string> = {
     top: 'Top Banner',
     bottom: 'Bottom Banner',
     sidebar: 'Sidebar',
     inline: 'Inline',
   };
 
-  const sizeLabels = {
+  const sizeLabels: Record<string, string> = {
     small: 'Small',
     medium: 'Medium',
     large: 'Large',
