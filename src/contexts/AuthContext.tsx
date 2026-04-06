@@ -39,15 +39,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     // Check authentication status
     const checkAuth = useCallback(async () => {
+        console.log('[AuthContext] checkAuth STARTING...');
         try {
             // Try cookie first
+            console.log('[AuthContext] Trying cookie auth...');
             let response = await fetch('/api/auth/me', {
                 credentials: 'include',
             });
+            console.log('[AuthContext] Cookie auth response status:', response.status);
 
             // If cookie fails, try localStorage token
             if (!response.ok) {
+                console.log('[AuthContext] Cookie auth failed, trying localStorage...');
                 const token = localStorage.getItem('authToken');
+                console.log('[AuthContext] localStorage token exists:', !!token);
                 if (token) {
                     response = await fetch('/api/auth/me', {
                         headers: {
@@ -55,20 +60,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                         },
                         credentials: 'include',
                     });
+                    console.log('[AuthContext] localStorage auth response status:', response.status);
                 }
             }
 
             if (response.ok) {
                 const data = await response.json();
+                console.log('[AuthContext] Auth SUCCESS, user:', data.user?.email);
                 setUser(data.user);
             } else {
+                console.log('[AuthContext] Auth FAILED, setting user to null');
                 setUser(null);
                 localStorage.removeItem('authToken');
             }
         } catch (error) {
-            console.error('Auth check failed:', error);
+            console.error('[AuthContext] checkAuth ERROR:', error);
             setUser(null);
         } finally {
+            console.log('[AuthContext] checkAuth FINISHED, loading set to false');
             setLoading(false);
         }
     }, []);
