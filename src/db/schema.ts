@@ -245,6 +245,10 @@ export const competitions = sqliteTable('competitions', {
     displayOrder: integer('display_order').default(0),
     // Group draw status — for competitions where groups haven't been assigned yet
     groupDrawComplete: integer('group_draw_complete', { mode: 'boolean' }).default(false),
+    // Squad/draft settings
+    requireSquad: integer('require_squad', { mode: 'boolean' }).default(false), // If true, only squad players can play
+    maxSquadSize: integer('max_squad_size').default(25), // Max players in squad (like 25 for World Cup)
+    squadDeadline: integer('squad_deadline', { mode: 'timestamp' }), // Deadline to submit squad
     createdAt: integer('created_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
     updatedAt: integer('updated_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
 });
@@ -568,6 +572,29 @@ export const registeredPlayers = sqliteTable('registered_players', {
     createdAt: integer('created_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
     updatedAt: integer('updated_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
 });
+
+// Squad Players table - Selected players for specific competition (like World Cup squad)
+export const squadPlayers = sqliteTable('squad_players', {
+    id: text('id').primaryKey(),
+    teamId: text('team_id').notNull().references(() => teams.id, { onDelete: 'cascade' }),
+    competitionId: text('competition_id').notNull().references(() => competitions.id, { onDelete: 'cascade' }),
+    playerId: text('player_id').notNull().references(() => players.id, { onDelete: 'cascade' }),
+    // Squad-specific jersey number for this competition
+    squadNumber: integer('squad_number'),
+    // Role in squad
+    role: text('role').default('player'), // 'player' | 'captain' | 'vice_captain' | 'goalkeeper' | etc
+    // Selection metadata
+    selectedBy: text('selected_by').references(() => users.id),
+    selectedAt: integer('selected_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
+    // Status
+    status: text('status').default('active'), // 'active' | 'injured' | 'suspended' | 'withdrawn'
+    notes: text('notes'),
+    createdAt: integer('created_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
+    updatedAt: integer('updated_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
+}, (table) => ({
+    // Unique constraint: one player per team per competition
+    uniqueSquadPlayer: unique().on(table.teamId, table.competitionId, table.playerId),
+}));
 
 // Polls table
 export const polls = sqliteTable('polls', {
@@ -954,6 +981,22 @@ export const individualSportStatsRelations = relations(individualSportStats, ({ 
     }),
 }));
 
+// Squad Players relations
+export const squadPlayersRelations = relations(squadPlayers, ({ one }) => ({
+    team: one(teams, {
+        fields: [squadPlayers.teamId],
+        references: [teams.id],
+    }),
+    competition: one(competitions, {
+        fields: [squadPlayers.competitionId],
+        references: [competitions.id],
+    }),
+    player: one(players, {
+        fields: [squadPlayers.playerId],
+        references: [players.id],
+    }),
+}));
+
 // ─────────────────────────────────────────────
 // TYPES
 // ─────────────────────────────────────────────
@@ -1038,6 +1081,8 @@ export type RegisteredPlayer = typeof registeredPlayers.$inferSelect;
 export type NewRegisteredPlayer = typeof registeredPlayers.$inferInsert;
 export type StaffComm = typeof staffComms.$inferSelect;
 export type NewStaffComm = typeof staffComms.$inferInsert;
+export type SquadPlayer = typeof squadPlayers.$inferSelect;
+export type NewSquadPlayer = typeof squadPlayers.$inferInsert;
 
 // Export other schemas
 export { matchPredictions, predictionLeaderboard, predictionComments } from './schema-predictions';

@@ -5,7 +5,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
-import { teams, players, matches, basketballPlayerStats, playerTeamAffiliations } from '@/db/schema';
+import { teams, players, matches, basketballPlayerStats, playerTeamAffiliations, squadPlayers } from '@/db/schema';
 import { eq, or, desc, and, sql, inArray } from 'drizzle-orm';
 import { enrichPlayersWithAffiliations } from '@/lib/player-data';
 import { getResolvedInstitutionalData } from '@/lib/player-affiliation-utils';
@@ -23,6 +23,8 @@ export async function GET(
     try {
         const params = await props.params;
         const { id } = params;
+        const { searchParams } = new URL(request.url);
+        const competitionId = searchParams.get('competitionId');
 
         // Get team details
         const [team] = await db
@@ -37,25 +39,69 @@ export async function GET(
             );
         }
 
-        // Get team players via active affiliations
-        const teamPlayerRows = await db
-            .select({ player: players })
-            .from(playerTeamAffiliations)
-            .innerJoin(players, eq(playerTeamAffiliations.playerId, players.id))
-            .where(
-                and(
-                    eq(playerTeamAffiliations.teamId, id),
-                    eq(playerTeamAffiliations.isActive, true)
-                )
-            )
-            .orderBy(desc(players.rating));
+        let teamPlayers: any[] = [];
+        let squadInfo = null;
 
-        const teamPlayers = teamPlayerRows.map(row => row.player);
+        // If competitionId provided, show squad players
+        if (competitionId) {
+            const squad = await db
+                .select({
+                    squadPlayer: squadPlayers,
+                    player: {
+                        id: players.id,
+                        name: players.name,
+                        number: players.number,
+                        position: players.position,
+                        avatar: players.image,
+                        nationality: players.nationality,
+                        rating: players.rating,
+                    }
+                })
+                .from(squadPlayers)
+                .where(
+                    and(
+                        eq(squadPlayers.teamId, id),
+                        eq(squadPlayers.competitionId, competitionId),
+                        eq(squadPlayers.status, 'active')
+                    )
+                )
+                .leftJoin(players, eq(squadPlayers.playerId, players.id))
+                .orderBy(desc(players.rating))
+                .all();
+
+            teamPlayers = squad
+                .filter(s => s.player !== null)
+                .map(s => ({
+                    ...s.player,
+                    squadRole: s.squadPlayer.role,
+                    squadNumber: s.squadPlayer.squadNumber,
+                }));
+
+            squadInfo = {
+                competitionId,
+                totalSquadPlayers: teamPlayers.length,
+            };
+        } else {
+            // Get team players via active affiliations (default behavior)
+            const teamPlayerRows = await db
+                .select({ player: players })
+                .from(playerTeamAffiliations)
+                .innerJoin(players, eq(playerTeamAffiliations.playerId, players.id))
+                .where(
+                    and(
+                        eq(playerTeamAffiliations.teamId, id),
+                        eq(playerTeamAffiliations.isActive, true)
+                    )
+                )
+                .orderBy(desc(players.rating));
+
+            teamPlayers = teamPlayerRows.map(row => row.player);
+        }
 
         // UNIVERSITY POOL — all students eligible to represent this university
         // Football analogy: all Spaniards (university affiliation) who can play for Spain (University Team)
         let universityPlayers: typeof teamPlayers = [];
-        if (team.university) {
+        if (team.university && !competitionId) {
             const allPlayers = await db
                 .select()
                 .from(players)
@@ -68,16 +114,16 @@ export async function GET(
         }
 
         // Get player stats (Basketball)
-        let playersWithStats = teamPlayers;
+        let playersWithStats: typeof teamPlayers = teamPlayers;
         if (team.sport === 'Basketball' && teamPlayers.length > 0) {
-            const playerIds = teamPlayers.map(p => p.id);
+            const playerIds = teamPlayers.map((p: any) => p.id);
             const statsData = await db
                 .select()
                 .from(basketballPlayerStats)
                 .where(inArray(basketballPlayerStats.playerId, playerIds));
 
-            playersWithStats = teamPlayers.map(p => {
-                const s = statsData.find(sd => sd.playerId === p.id);
+            playersWithStats = teamPlayers.map((p: any) => {
+                const s = statsData.find((sd: any) => sd.playerId === p.id);
                 return { ...p, stats: s || null };
             });
         }

@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthUser } from '@/lib/auth';
 import { db } from '@/db';
-import { matches, competitions } from '@/db/schema';
-import { eq } from 'drizzle-orm';
+import { matches, competitions, squadPlayers } from '@/db/schema';
+import { eq, and, inArray } from 'drizzle-orm';
 
 // POST /api/admin/match-lineups/[id] - Publish official lineup
 export async function POST(
@@ -94,6 +94,55 @@ export async function POST(
             } catch (e) {
                 console.error('Error parsing match lineups JSON:', e);
                 // Fallback to empty object
+            }
+        }
+
+        // Squad validation for external competitions
+        const matchData = match[0];
+        if (matchData.competitionId) {
+            const competition = await db
+                .select({
+                    requireSquad: competitions.requireSquad,
+                    maxSquadSize: competitions.maxSquadSize,
+                })
+                .from(competitions)
+                .where(eq(competitions.id, matchData.competitionId))
+                .all();
+
+            if (competition.length > 0 && competition[0].requireSquad) {
+                // Get all player IDs from the lineup
+                const lineupPlayerIds = [
+                    ...(lineup.startingXI || []),
+                    ...(lineup.substitutes || []),
+                ].map((p: any) => p.playerId).filter(Boolean);
+
+                if (lineupPlayerIds.length > 0) {
+                    // Check if all players are in the squad
+                    const squadMembers = await db
+                        .select({ playerId: squadPlayers.playerId })
+                        .from(squadPlayers)
+                        .where(
+                            and(
+                                eq(squadPlayers.teamId, teamId),
+                                eq(squadPlayers.competitionId, matchData.competitionId),
+                                eq(squadPlayers.status, 'active'),
+                                inArray(squadPlayers.playerId, lineupPlayerIds)
+                            )
+                        )
+                        .all();
+
+                    const squadPlayerIds = new Set(squadMembers.map(s => s.playerId));
+                    const invalidPlayers = lineupPlayerIds.filter((id: string) => !squadPlayerIds.has(id));
+
+                    if (invalidPlayers.length > 0) {
+                        return NextResponse.json({
+                            error: 'Squad validation failed',
+                            message: 'Some players are not in the squad for this competition',
+                            invalidPlayers,
+                            code: 'SQUAD_VALIDATION_FAILED'
+                        }, { status: 400 });
+                    }
+                }
             }
         }
 
