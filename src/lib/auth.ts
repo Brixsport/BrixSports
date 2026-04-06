@@ -39,19 +39,21 @@ export function normalizeUserRole(role: string | null | undefined): string {
 export async function verifyAuth(request: NextRequest): Promise<AuthUser | null> {
     try {
         const authHeader = request.headers.get('authorization');
+        const cookieToken = request.cookies.get('authToken')?.value;
+        
+        console.log(`[verifyAuth] Header present: ${!!authHeader}, Cookie present: ${!!cookieToken}`);
 
         let token = '';
 
         if (authHeader && authHeader.startsWith('Bearer ')) {
             token = authHeader.substring(7);
+            console.log(`[verifyAuth] Using header token`);
+        } else if (cookieToken) {
+            token = cookieToken;
+            console.log(`[verifyAuth] Using cookie token`);
         } else {
-            // Check cookie
-            const cookieToken = request.cookies.get('authToken')?.value;
-            if (cookieToken) {
-                token = cookieToken;
-            } else {
-                return null;
-            }
+            console.log(`[verifyAuth] No token found`);
+            return null;
         }
 
         const decoded = jwt.verify(
@@ -59,12 +61,13 @@ export async function verifyAuth(request: NextRequest): Promise<AuthUser | null>
             process.env.JWT_SECRET || 'your-secret-key-change-in-production'
         ) as AuthUser;
 
+        console.log(`[verifyAuth] Token verified for user: ${decoded.email}`);
         return {
             ...decoded,
             role: normalizeUserRole(decoded.role),
         };
     } catch (error) {
-        console.error('Auth verification error:', error);
+        console.error('[verifyAuth] Auth verification error:', error);
         return null;
     }
 }
