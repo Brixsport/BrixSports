@@ -5,7 +5,7 @@ import { pushSubscriptions } from '@/db/schema';
 import { eq } from 'drizzle-orm';
 
 // Configure web-push with VAPID keys for each request (serverless-safe)
-function configureVAPID(): boolean {
+function configureVAPID(): { success: boolean; error?: string } {
     const vapidPublicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || '';
     const vapidPrivateKey = process.env.VAPID_PRIVATE_KEY || '';
     const vapidSubject = process.env.VAPID_SUBJECT || 'mailto:admin@brixsport.com';
@@ -15,19 +15,47 @@ function configureVAPID(): boolean {
         hasPrivateKey: !!vapidPrivateKey,
         publicKeyLength: vapidPublicKey?.length,
         privateKeyLength: vapidPrivateKey?.length,
+        publicKeyPreview: vapidPublicKey?.substring(0, 20) + '...',
+        privateKeyPreview: vapidPrivateKey?.substring(0, 20) + '...',
     });
 
-    if (vapidPublicKey && vapidPrivateKey) {
+    if (!vapidPublicKey || !vapidPrivateKey) {
+        console.error('[Notifications API] VAPID keys missing!');
+        return { success: false, error: 'VAPID keys not set in environment' };
+    }
+
+    // Validate key format (base64url)
+    const base64urlPattern = /^[A-Za-z0-9_-]+$/;
+    if (!base64urlPattern.test(vapidPublicKey)) {
+        console.error('[Notifications API] VAPID public key has invalid characters');
+        return { success: false, error: 'VAPID public key contains invalid characters (should be base64url)' };
+    }
+    if (!base64urlPattern.test(vapidPrivateKey)) {
+        console.error('[Notifications API] VAPID private key has invalid characters');
+        return { success: false, error: 'VAPID private key contains invalid characters (should be base64url)' };
+    }
+
+    // Check key lengths (typical lengths for ECDSA P-256 keys)
+    if (vapidPublicKey.length < 80) {
+        console.error('[Notifications API] VAPID public key too short:', vapidPublicKey.length);
+        return { success: false, error: `VAPID public key too short (${vapidPublicKey.length} chars, expected ~87)` };
+    }
+    if (vapidPrivateKey.length < 40) {
+        console.error('[Notifications API] VAPID private key too short:', vapidPrivateKey.length);
+        return { success: false, error: `VAPID private key too short (${vapidPrivateKey.length} chars, expected ~43)` };
+    }
+
+    try {
         webpush.setVapidDetails(
             vapidSubject,
             vapidPublicKey,
             vapidPrivateKey
         );
         console.log('[Notifications API] VAPID configured successfully');
-        return true;
-    } else {
-        console.error('[Notifications API] VAPID keys missing!');
-        return false;
+        return { success: true };
+    } catch (error: any) {
+        console.error('[Notifications API] VAPID configuration failed:', error);
+        return { success: false, error: `VAPID configuration error: ${error.message}` };
     }
 }
 
@@ -35,10 +63,10 @@ function configureVAPID(): boolean {
 export async function POST(request: NextRequest) {
     try {
         // Configure VAPID fresh for each request (serverless-safe)
-        const vapidConfigured = configureVAPID();
-        if (!vapidConfigured) {
+        const vapidResult = configureVAPID();
+        if (!vapidResult.success) {
             return NextResponse.json(
-                { error: 'VAPID keys not configured. Check server environment variables.' },
+                { error: vapidResult.error || 'VAPID configuration failed' },
                 { status: 500 }
             );
         }

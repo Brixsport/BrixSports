@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
-import { pushSubscriptions } from '@/db/schema';
+import { pushSubscriptions, users } from '@/db/schema';
+import { eq } from 'drizzle-orm';
 
 export async function GET() {
     try {
@@ -26,29 +27,10 @@ export async function GET() {
 
         // Check for potential issues
         const issues: string[] = [];
-        allSubscriptions.forEach(sub => {
-            // Check if endpoint is FCM
-            if (!sub.endpoint.includes('fcm.googleapis.com')) {
-                issues.push(`Subscription ${sub.id}: Not FCM endpoint`);
-            }
-            
-            // Check if keys are present
-            if (!sub.p256dh || !sub.auth) {
-                issues.push(`Subscription ${sub.id}: Missing encryption keys`);
-            }
-            
-            // Check if subscription is old (more than 30 days)
-            const thirtyDaysAgo = new Date(Date.now() - (30 * 24 * 60 * 60 * 1000));
-            const updatedAt = new Date(sub.updatedAt as number);
-            if (updatedAt.getTime() && updatedAt.getTime() < thirtyDaysAgo.getTime()) {
-                issues.push(`Subscription ${sub.id}: Older than 30 days`);
-            }
-        });
-
-        return NextResponse.json({
-            success: true,
-            totalSubscriptions: allSubscriptions.length,
-            subscriptions: allSubscriptions.map(sub => ({
+        const detailedSubscriptions = [];
+        
+        for (const sub of allSubscriptions) {
+            const details: any = {
                 id: sub.id,
                 userId: sub.userId,
                 endpoint: sub.endpoint.substring(0, 100) + '...',
@@ -56,8 +38,47 @@ export async function GET() {
                 hasKeys: !!(sub.p256dh && sub.auth),
                 createdAt: sub.createdAt,
                 updatedAt: sub.updatedAt,
-            })),
+                issues: [],
+            };
+
+            // Check if endpoint is FCM
+            if (!sub.endpoint.includes('fcm.googleapis.com') && !sub.endpoint.includes('mozilla')) {
+                details.issues.push('Not FCM endpoint');
+                issues.push(`Subscription ${sub.id}: Not FCM/Mozilla endpoint (${details.domain})`);
+            }
+            
+            // Check if keys are present
+            if (!sub.p256dh || !sub.auth) {
+                details.issues.push('Missing encryption keys');
+                issues.push(`Subscription ${sub.id}: Missing encryption keys`);
+            }
+            
+            // Check if user exists
+            const userExists = await db.select({ id: users.id }).from(users).where(eq(users.id, sub.userId)).limit(1);
+            if (userExists.length === 0) {
+                details.issues.push('User does not exist');
+                issues.push(`Subscription ${sub.id}: User ${sub.userId} does not exist in database`);
+            } else {
+                details.userValid = true;
+            }
+            
+            // Check if subscription is old (more than 30 days)
+            const thirtyDaysAgo = new Date(Date.now() - (30 * 24 * 60 * 60 * 1000));
+            const updatedAt = new Date(sub.updatedAt as number);
+            if (updatedAt.getTime() && updatedAt.getTime() < thirtyDaysAgo.getTime()) {
+                details.issues.push('Older than 30 days');
+                issues.push(`Subscription ${sub.id}: Older than 30 days`);
+            }
+
+            detailedSubscriptions.push(details);
+        }
+
+        return NextResponse.json({
+            success: true,
+            totalSubscriptions: allSubscriptions.length,
+            subscriptions: detailedSubscriptions,
             issues,
+            issueCount: issues.length,
             message: issues.length > 0 ? `Found ${issues.length} potential issues` : 'All subscriptions look valid'
         });
     } catch (error) {
