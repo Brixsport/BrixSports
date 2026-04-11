@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
-import { newsComments } from '@/db/schema';
+import { newsComments, news } from '@/db/schema';
 import { eq, desc, sql } from 'drizzle-orm';
 
 // GET /api/news/[id]/comments - Get all comments for a news article
@@ -9,16 +9,32 @@ export async function GET(
     { params }: { params: Promise<{ id: string }> }
 ) {
     try {
-        const { id } = await params;
+        const { id: slug } = await params;
         const { searchParams } = new URL(request.url);
         const limit = parseInt(searchParams.get('limit') || '50');
         const offset = parseInt(searchParams.get('offset') || '0');
+
+        // Look up the news article by slug to get the actual ID
+        const article = await db
+            .select({ id: news.id })
+            .from(news)
+            .where(eq(news.slug, slug))
+            .limit(1);
+
+        if (article.length === 0) {
+            return NextResponse.json(
+                { error: 'Article not found' },
+                { status: 404 }
+            );
+        }
+
+        const newsId = article[0].id;
 
         // Get comments with pagination
         const comments = await db
             .select()
             .from(newsComments)
-            .where(eq(newsComments.newsId, id))
+            .where(eq(newsComments.newsId, newsId))
             .orderBy(desc(newsComments.createdAt))
             .limit(limit)
             .offset(offset);
@@ -27,7 +43,7 @@ export async function GET(
         const totalCount = await db
             .select({ count: sql<number>`count(*)` })
             .from(newsComments)
-            .where(eq(newsComments.newsId, id));
+            .where(eq(newsComments.newsId, newsId));
 
         return NextResponse.json({
             comments,
@@ -50,7 +66,7 @@ export async function POST(
     { params }: { params: Promise<{ id: string }> }
 ) {
     try {
-        const { id } = await params;
+        const { id: slug } = await params;
         const body = await request.json();
         const { userId, userName, content } = body;
 
@@ -75,16 +91,31 @@ export async function POST(
             );
         }
 
+        // Look up the news article by slug to get the actual ID
+        const article = await db
+            .select({ id: news.id })
+            .from(news)
+            .where(eq(news.slug, slug))
+            .limit(1);
+
+        if (article.length === 0) {
+            return NextResponse.json(
+                { error: 'Article not found' },
+                { status: 404 }
+            );
+        }
+
+        const newsId = article[0].id;
+
         // Create comment
         const newComment = await db
             .insert(newsComments)
             .values({
                 id: `comment-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-                newsId: id,
+                newsId,
                 userId,
                 userName,
                 content: content.trim(),
-                createdAt: new Date(),
             })
             .returning();
 

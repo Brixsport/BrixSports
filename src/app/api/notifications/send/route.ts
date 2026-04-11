@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import webpush from 'web-push';
 import { db } from '@/db';
-import { pushSubscriptions } from '@/db/schema';
-import { eq } from 'drizzle-orm';
+import { pushSubscriptions, userFollows, userFavorites, users } from '@/db/schema';
+import { eq, inArray, and, or } from 'drizzle-orm';
 
 // Configure web-push with VAPID keys for each request (serverless-safe)
 function configureVAPID(): { success: boolean; error?: string } {
@@ -59,7 +59,66 @@ function configureVAPID(): { success: boolean; error?: string } {
     }
 }
 
-// POST /api/notifications/send - Send push notification to all subscribers
+// Helper function to get target user IDs based on audience selection
+async function getTargetUserIds(
+  targetAudience: string,
+  selectedTeams?: string[],
+  selectedMatch?: string
+): Promise<string[]> {
+  switch (targetAudience) {
+    case 'team_followers': {
+      if (!selectedTeams || selectedTeams.length === 0) {
+        return [];
+      }
+      
+      // Get users who follow any of the selected teams
+      const teamFollowers = await db
+        .select({ userId: userFollows.userId })
+        .from(userFollows)
+        .where(
+          and(
+            eq(userFollows.followType, 'team'),
+            inArray(userFollows.followId, selectedTeams)
+          )
+        );
+      
+      const teamFavorites = await db
+        .select({ userId: userFavorites.userId })
+        .from(userFavorites)
+        .where(
+          and(
+            eq(userFavorites.favoriteType, 'team'),
+            inArray(userFavorites.favoriteId, selectedTeams)
+          )
+        );
+      
+      const primaryTeamFans = await db
+        .select({ userId: users.id })
+        .from(users)
+        .where(inArray(users.favoriteTeamId, selectedTeams));
+      
+      const allUserIds = new Set([
+        ...teamFollowers.map(f => f.userId),
+        ...teamFavorites.map(f => f.userId),
+        ...primaryTeamFans.map(f => f.userId),
+      ]);
+      
+      return Array.from(allUserIds);
+    }
+    
+    case 'match_specific': {
+      // For match-specific, we'd need match data to get team IDs
+      // For now, return all users (fallback)
+      return [];
+    }
+    
+    case 'all':
+    default:
+      return []; // Empty means all subscribers
+  }
+}
+
+// POST /api/notifications/send - Send push notification to subscribers
 export async function POST(request: NextRequest) {
     try {
         // Configure VAPID fresh for each request (serverless-safe)
@@ -71,14 +130,33 @@ export async function POST(request: NextRequest) {
             );
         }
         const body = await request.json();
-        const { type, title, body: notificationBody, icon, url, newsId, transferId } = body;
+        const { 
+            type, 
+            title, 
+            body: notificationBody, 
+            icon, 
+            url, 
+            image,
+            actions,
+            vibrate,
+            requireInteraction,
+            newsId, 
+            transferId,
+            targetAudience,
+            selectedTeams,
+            selectedMatch,
+            matchId
+        } = body;
 
         console.log('[Notifications API] Received request:', {
             type,
             title,
             body: notificationBody?.substring(0, 50),
             icon,
+            image,
             url,
+            targetAudience,
+            selectedTeams,
             newsId,
             transferId,
         });
@@ -91,8 +169,11 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        // Notification payload
-        const payload = JSON.stringify({
+        // Get target user IDs if filtering by audience
+        const targetUserIds = await getTargetUserIds(targetAudience, selectedTeams, selectedMatch);
+        
+        // Build notification payload with all options
+        const payloadObj: any = {
             title,
             body: notificationBody,
             icon: icon || '/icons/icon-192x192.png',
@@ -102,32 +183,33 @@ export async function POST(request: NextRequest) {
                 type,
                 newsId,
                 transferId,
+                matchId,
             },
-            actions: [
-                {
-                    action: 'view',
-                    title: 'View',
-                },
-                {
-                    action: 'close',
-                    title: 'Close',
-                },
+            actions: actions || [
+                { action: 'view', title: 'View' },
+                { action: 'close', title: 'Close' },
             ],
-        });
+        };
+        
+        // Add optional fields
+        if (image) payloadObj.image = image;
+        if (vibrate) payloadObj.vibrate = vibrate;
+        if (requireInteraction) payloadObj.requireInteraction = requireInteraction;
 
-        // Fetch all push subscriptions from database
-        const allSubscriptions = await db.select().from(pushSubscriptions);
+        const payload = JSON.stringify(payloadObj);
+
+        // Fetch subscriptions based on target audience
+        const allSubscriptions = await (targetUserIds.length > 0
+            ? db.select().from(pushSubscriptions).where(
+                inArray(pushSubscriptions.userId, targetUserIds)
+            )
+            : db.select().from(pushSubscriptions)
+        );
         
         console.log('[Notifications API] Found subscriptions:', {
             total: allSubscriptions.length,
-            subscriptions: allSubscriptions.map(sub => ({
-                id: sub.id,
-                userId: sub.userId,
-                endpoint: sub.endpoint?.substring(0, 50) + '...',
-                hasP256dh: !!sub.p256dh,
-                hasAuth: !!sub.auth,
-                createdAt: sub.createdAt,
-            }))
+            targetAudience,
+            targetUserCount: targetUserIds.length,
         });
 
         let successCount = 0;
@@ -144,27 +226,13 @@ export async function POST(request: NextRequest) {
                     },
                 };
 
-                console.log(`[Notifications API] Sending to ${sub.id}:`, {
-                    endpoint: sub.endpoint?.substring(0, 50) + '...',
-                    hasKeys: !!(pushSubscription.keys.p256dh && pushSubscription.keys.auth)
-                });
-
                 await webpush.sendNotification(pushSubscription, payload);
                 successCount++;
-                console.log(`[Notifications API] Success sending to ${sub.id}`);
             } catch (error: any) {
-                console.error(`[Notifications API] Failed to send to ${sub.id}:`, {
-                    error: error.message,
-                    statusCode: error.statusCode,
-                    headers: error.headers,
-                    body: error.body,
-                    stack: error.stack,
-                    endpoint: sub.endpoint.substring(0, 100)
-                });
+                console.error(`[Notifications API] Failed to send to ${sub.id}:`, error.message);
 
                 // If subscription is invalid (410 Gone or 404 Not Found), remove it
                 if (error.statusCode === 410 || error.statusCode === 404) {
-                    console.log(`[Notifications API] Removing expired subscription ${sub.id}`);
                     failedSubscriptions.push(sub.id);
                 }
             }
@@ -179,16 +247,30 @@ export async function POST(request: NextRequest) {
             }
         }
 
-        console.log('[Notifications API] Sending to all subscriptions completed:', {
-            successCount,
-            failedCount: failedSubscriptions.length,
-            failedIds: failedSubscriptions,
-            totalProcessed: allSubscriptions.length
-        });
+        // Save to history
+        const historyEntry = {
+            title,
+            body: notificationBody,
+            targetAudience,
+            sentTo: successCount,
+            totalSubscriptions: allSubscriptions.length,
+            failedSubscriptions: failedSubscriptions.length,
+            sentAt: new Date().toISOString(),
+        };
+        
+        // Save to history API (fire and forget)
+        try {
+            await fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/notifications/history`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(historyEntry),
+            });
+        } catch (e) {
+            console.log('[Notifications API] Failed to save history:', e);
+        }
 
         console.log('[Notifications API] Final result:', {
             success: true,
-            message: 'Push notification sent successfully',
             sentTo: successCount,
             totalSubscriptions: allSubscriptions.length,
             failedSubscriptions: failedSubscriptions.length,
