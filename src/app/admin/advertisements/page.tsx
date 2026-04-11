@@ -368,8 +368,6 @@ export default function AdvertisementsAdmin() {
                   <>
                     {/* Cloudinary Upload */}
                     <CldUploadWidget
-                      signatureEndpoint="/api/cloudinary/sign"
-                      apiKey={process.env.NEXT_PUBLIC_CLOUDINARY_API_KEY}
                       onSuccess={(result: any) => {
                         if (result?.info?.secure_url) {
                           setFormData({ ...formData, imageUrl: result.info.secure_url });
@@ -380,9 +378,6 @@ export default function AdvertisementsAdmin() {
                         console.error('Upload error:', error);
                         toast.error('Cloudinary upload failed. Please paste image URL below instead.');
                       }}
-                      onOpen={(widget) => {
-                        console.log('[Cloudinary] Widget opening:', widget);
-                      }}
                       uploadPreset={process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET || 'brix_uploads'}
                       options={{
                         cloudName: process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME,
@@ -391,25 +386,7 @@ export default function AdvertisementsAdmin() {
                         cropping: true,
                         showPoweredBy: false,
                         multiple: false,
-                        defaultSource: 'local',
                         croppingAspectRatio: getRecommendedAspectRatio(formData.position),
-                        styles: {
-                          palette: {
-                            window: '#0a0a0a',
-                            windowBorder: '#3b82f6',
-                            tabIcon: '#3b82f6',
-                            menuIcons: '#ffffff',
-                            textDark: '#ffffff',
-                            textLight: '#ffffff',
-                            link: '#3b82f6',
-                            action: '#3b82f6',
-                            inactiveTabIcon: '#666666',
-                            error: '#f44336',
-                            inProgress: '#3b82f6',
-                            complete: '#4caf50',
-                            sourceBg: '#0a0a0a',
-                          },
-                        },
                       }}
                     >
                       {({ open }) => (
