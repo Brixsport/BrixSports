@@ -341,25 +341,25 @@ function AdminNewsPageContent() {
     }, [news, searchQuery]);
 
     return (
-        <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
+        <div className="min-h-screen bg-[#050505]">
             {/* Toast Container */}
             <ToastContainer toasts={toasts} onClose={removeToast} />
             {/* Header */}
-            <div className="border-b border-slate-800 bg-slate-900/50 backdrop-blur-xl sticky top-0 z-40">
+            <div className="border-b border-white/5 bg-[#0a0a0a]/80 backdrop-blur-xl sticky top-0 z-40">
                 <div className="max-w-7xl mx-auto px-6 py-4">
                     <div className="flex items-center justify-between">
                         <div className="flex items-center gap-4">
-                            <Link href="/admin" className="text-slate-400 hover:text-white transition-colors">
+                            <Link href="/admin" className="text-white/40 hover:text-white transition-colors">
                                 ← Back to Admin
                             </Link>
-                            <div className="h-6 w-px bg-slate-700" />
-                            <h1 className="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-400">
+                            <div className="h-6 w-px bg-white/10" />
+                            <h1 className="text-2xl font-black text-white">
                                 News Management
                             </h1>
                         </div>
                         <button
                             onClick={handleCreate}
-                            className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-cyan-500 to-blue-500 text-white rounded-xl font-semibold hover:shadow-lg hover:shadow-cyan-500/50 transition-all"
+                            className="flex items-center gap-2 px-6 py-3 bg-primary text-black rounded-xl font-semibold hover:bg-primary/80 transition-all"
                         >
                             <Plus className="w-5 h-5" />
                             Create Article
@@ -375,13 +375,13 @@ function AdminNewsPageContent() {
                     <div className="flex flex-col md:flex-row gap-4">
                         {/* Search */}
                         <div className="relative flex-1">
-                            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+                            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-white/40" />
                             <input
                                 type="text"
                                 placeholder="Search articles..."
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
-                                className="w-full pl-12 pr-4 py-3 bg-slate-800/50 border border-slate-700/50 rounded-xl text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
+                                className="w-full pl-12 pr-4 py-3 bg-[#0a0a0a] border border-white/10 rounded-xl text-white placeholder-white/30 focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/50"
                             />
                         </div>
 
@@ -392,8 +392,8 @@ function AdminNewsPageContent() {
                                     key={status}
                                     onClick={() => setFilterStatus(status)}
                                     className={`px-4 py-3 rounded-xl font-semibold capitalize transition-all ${filterStatus === status
-                                        ? 'bg-gradient-to-r from-cyan-500 to-blue-500 text-white shadow-lg shadow-cyan-500/50'
-                                        : 'bg-slate-800/50 text-slate-300 hover:bg-slate-700/50 border border-slate-700/50'
+                                        ? 'bg-primary text-black'
+                                        : 'bg-[#0a0a0a] text-white/60 hover:bg-white/10 border border-white/10'
                                         }`}
                                 >
                                     {status}
@@ -409,15 +409,15 @@ function AdminNewsPageContent() {
                                 initial={{ opacity: 0, y: -20 }}
                                 animate={{ opacity: 1, y: 0 }}
                                 exit={{ opacity: 0, y: -20 }}
-                                className="flex items-center justify-between p-4 bg-cyan-500/10 border border-cyan-500/20 rounded-xl"
+                                className="flex items-center justify-between p-4 bg-primary/10 border border-primary/20 rounded-xl"
                             >
                                 <div className="flex items-center gap-4">
-                                    <span className="text-cyan-400 font-semibold">
+                                    <span className="text-primary font-semibold">
                                         {selectedCount} selected
                                     </span>
                                     <button
                                         onClick={clearSelection}
-                                        className="text-sm text-slate-400 hover:text-white transition-colors"
+                                        className="text-sm text-white/40 hover:text-white transition-colors"
                                     >
                                         Clear
                                     </button>
@@ -425,7 +425,7 @@ function AdminNewsPageContent() {
                                 <div className="flex items-center gap-2">
                                     <button
                                         onClick={handleBulkPublish}
-                                        className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg font-semibold hover:bg-blue-600 transition-colors"
+                                        className="flex items-center gap-2 px-4 py-2 bg-primary text-black rounded-lg font-semibold hover:bg-primary/80 transition-colors"
                                     >
                                         <Send className="w-4 h-4" />
                                         Publish
@@ -453,12 +453,12 @@ function AdminNewsPageContent() {
                     {filteredNews.length > 0 && (
                         <button
                             onClick={toggleAll}
-                            className="flex items-center gap-2 text-sm text-slate-400 hover:text-white transition-colors"
+                            className="flex items-center gap-2 text-sm text-white/40 hover:text-white transition-colors"
                         >
                             {isAllSelected ? (
-                                <CheckSquare className="w-4 h-4 text-cyan-400" />
+                                <CheckSquare className="w-4 h-4 text-primary" />
                             ) : isSomeSelected ? (
-                                <CheckSquare className="w-4 h-4 text-cyan-400/50" />
+                                <CheckSquare className="w-4 h-4 text-primary/50" />
                             ) : (
                                 <Square className="w-4 h-4" />
                             )}
@@ -472,9 +472,9 @@ function AdminNewsPageContent() {
                     <SkeletonLoader type="card" count={5} />
                 ) : filteredNews.length === 0 ? (
                     <div className="text-center py-20">
-                        <Newspaper className="w-16 h-16 text-slate-600 mx-auto mb-4" />
-                        <h3 className="text-2xl font-bold text-slate-400 mb-2">No articles found</h3>
-                        <p className="text-slate-500">Create your first article to get started</p>
+                        <Newspaper className="w-16 h-16 text-white/20 mx-auto mb-4" />
+                        <h3 className="text-2xl font-bold text-white/60 mb-2">No articles found</h3>
+                        <p className="text-white/40">Create your first article to get started</p>
                     </div>
                 ) : (
                     <div className="space-y-4">
@@ -545,8 +545,8 @@ function NewsCard({ article, isSelected, onToggleSelect, onEdit, onDelete }: {
     const getStatusColor = (status: string) => {
         const colors: Record<string, string> = {
             draft: 'text-yellow-400 bg-yellow-400/10 border-yellow-400/20',
-            published: 'text-blue-400 bg-blue-400/10 border-blue-400/20',
-            archived: 'text-slate-400 bg-slate-400/10 border-slate-400/20',
+            published: 'text-primary bg-primary/10 border-primary/20',
+            archived: 'text-white/40 bg-white/10 border-white/10',
         };
         return colors[status] || colors.draft;
     };
@@ -557,7 +557,7 @@ function NewsCard({ article, isSelected, onToggleSelect, onEdit, onDelete }: {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -20 }}
-            className={`bg-slate-800/50 backdrop-blur-sm border rounded-2xl p-6 hover:border-cyan-500/50 transition-all ${isSelected ? 'border-cyan-500 bg-cyan-500/5' : 'border-slate-700/50'
+            className={`bg-[#0a0a0a] backdrop-blur-sm border rounded-2xl p-6 hover:border-primary/50 transition-all ${isSelected ? 'border-primary bg-primary/5' : 'border-white/10'
                 }`}
         >
             <div className="flex items-start gap-6">
@@ -567,9 +567,9 @@ function NewsCard({ article, isSelected, onToggleSelect, onEdit, onDelete }: {
                     className="mt-2 flex-shrink-0"
                 >
                     {isSelected ? (
-                        <CheckSquare className="w-5 h-5 text-cyan-400" />
+                        <CheckSquare className="w-5 h-5 text-primary" />
                     ) : (
-                        <Square className="w-5 h-5 text-slate-500 hover:text-slate-300" />
+                        <Square className="w-5 h-5 text-white/30 hover:text-white/60" />
                     )}
                 </button>
 
@@ -581,8 +581,8 @@ function NewsCard({ article, isSelected, onToggleSelect, onEdit, onDelete }: {
                         className="w-32 h-32 rounded-xl object-cover flex-shrink-0"
                     />
                 ) : (
-                    <div className="w-32 h-32 rounded-xl bg-slate-700 flex items-center justify-center flex-shrink-0">
-                        <Newspaper className="w-12 h-12 text-slate-500" />
+                    <div className="w-32 h-32 rounded-xl bg-[#0a0a0a] flex items-center justify-center flex-shrink-0">
+                        <Newspaper className="w-12 h-12 text-white/20" />
                     </div>
                 )}
 
@@ -605,25 +605,25 @@ function NewsCard({ article, isSelected, onToggleSelect, onEdit, onDelete }: {
                                     </span>
                                 )}
                             </div>
-                            <p className="text-slate-400 text-sm line-clamp-2">{article.excerpt}</p>
+                            <p className="text-white/40 text-sm line-clamp-2">{article.excerpt}</p>
                         </div>
                         <div className="flex items-center gap-2 flex-shrink-0 ml-4">
                             <button
                                 onClick={onEdit}
-                                className="p-2 hover:bg-slate-700 rounded-lg transition-colors"
+                                className="p-2 hover:bg-white/10 rounded-lg transition-colors"
                             >
-                                <Edit className="w-5 h-5 text-cyan-400" />
+                                <Edit className="w-5 h-5 text-primary" />
                             </button>
                             <button
                                 onClick={onDelete}
-                                className="p-2 hover:bg-slate-700 rounded-lg transition-colors"
+                                className="p-2 hover:bg-white/10 rounded-lg transition-colors"
                             >
                                 <Trash2 className="w-5 h-5 text-red-400" />
                             </button>
                         </div>
                     </div>
 
-                    <div className="flex items-center gap-6 text-sm text-slate-400 flex-wrap">
+                    <div className="flex items-center gap-6 text-sm text-white/40 flex-wrap">
                         <span className={`px-3 py-1 rounded-full border font-semibold capitalize ${getStatusColor(article.status)}`}>
                             {article.status}
                         </span>
@@ -675,34 +675,34 @@ function EnhancedNewsEditor({ formData, setFormData, onSubmit, onClose, isEditin
                 animate={{ scale: 1, opacity: 1 }}
                 exit={{ scale: 0.9, opacity: 0 }}
                 onClick={(e) => e.stopPropagation()}
-                className="bg-slate-900 rounded-2xl border border-slate-700 max-w-5xl w-full max-h-[90vh] overflow-y-auto"
+                className="bg-[#0a0a0a] rounded-2xl border border-white/10 max-w-5xl w-full max-h-[90vh] overflow-y-auto"
             >
                 <form onSubmit={onSubmit}>
                     {/* Header */}
-                    <div className="sticky top-0 bg-slate-900 border-b border-slate-700 p-6 flex items-center justify-between z-10">
+                    <div className="sticky top-0 bg-[#0a0a0a] border-b border-white/10 p-6 flex items-center justify-between z-10">
                         <div>
                             <h2 className="text-2xl font-bold text-white">
                                 {isEditing ? 'Edit Article' : 'Create New Article'}
                             </h2>
                             {isEditing && formData.status === 'draft' && (
                                 <div className="flex items-center gap-4 mt-2">
-                                    <label className="flex items-center gap-2 text-sm text-slate-400 cursor-pointer">
+                                    <label className="flex items-center gap-2 text-sm text-white/40 cursor-pointer">
                                         <input
                                             type="checkbox"
                                             checked={autoSaveEnabled}
                                             onChange={onToggleAutoSave}
-                                            className="w-4 h-4 rounded border-slate-700 bg-slate-800 text-cyan-500"
+                                            className="w-4 h-4 rounded border-white/10 bg-[#0a0a0a] text-primary"
                                         />
                                         Auto-save
                                     </label>
                                     {isSaving && (
-                                        <span className="flex items-center gap-2 text-sm text-cyan-400">
+                                        <span className="flex items-center gap-2 text-sm text-primary">
                                             <Clock className="w-4 h-4 animate-spin" />
                                             Saving...
                                         </span>
                                     )}
                                     {lastSaved && !isSaving && (
-                                        <span className="flex items-center gap-2 text-sm text-blue-400">
+                                        <span className="flex items-center gap-2 text-sm text-primary">
                                             <CheckCircle className="w-4 h-4" />
                                             Saved {lastSaved.toLocaleTimeString()}
                                         </span>
@@ -713,9 +713,9 @@ function EnhancedNewsEditor({ formData, setFormData, onSubmit, onClose, isEditin
                         <button
                             type="button"
                             onClick={onClose}
-                            className="p-2 hover:bg-slate-800 rounded-lg transition-colors"
+                            className="p-2 hover:bg-white/10 rounded-lg transition-colors"
                         >
-                            <X className="w-6 h-6 text-slate-400" />
+                            <X className="w-6 h-6 text-white/40" />
                         </button>
                     </div>
 
@@ -723,7 +723,7 @@ function EnhancedNewsEditor({ formData, setFormData, onSubmit, onClose, isEditin
                     <div className="p-6 space-y-6">
                         {/* Title */}
                         <div>
-                            <label className="block text-sm font-semibold text-slate-300 mb-2">
+                            <label className="block text-sm font-semibold text-white/80 mb-2">
                                 Title *
                             </label>
                             <input
@@ -731,28 +731,28 @@ function EnhancedNewsEditor({ formData, setFormData, onSubmit, onClose, isEditin
                                 required
                                 value={formData.title}
                                 onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                                className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                                className="w-full px-4 py-3 bg-[#0a0a0a] border border-white/10 rounded-xl text-white focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/50"
                                 placeholder="Enter article title..."
                             />
                         </div>
 
                         {/* Excerpt */}
                         <div>
-                            <label className="block text-sm font-semibold text-slate-300 mb-2">
+                            <label className="block text-sm font-semibold text-white/80 mb-2">
                                 Excerpt
                             </label>
                             <textarea
                                 value={formData.excerpt}
                                 onChange={(e) => setFormData(prev => ({ ...prev, excerpt: e.target.value }))}
                                 rows={2}
-                                className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                                className="w-full px-4 py-3 bg-[#0a0a0a] border border-white/10 rounded-xl text-white focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/50"
                                 placeholder="Brief summary..."
                             />
                         </div>
 
                         {/* Rich Text Content */}
                         <div>
-                            <label className="block text-sm font-semibold text-slate-300 mb-2">
+                            <label className="block text-sm font-semibold text-white/80 mb-2">
                                 Content *
                             </label>
                             <RichTextEditor
@@ -764,7 +764,7 @@ function EnhancedNewsEditor({ formData, setFormData, onSubmit, onClose, isEditin
 
                         {/* Image Upload */}
                         <div>
-                            <label className="block text-sm font-semibold text-slate-300 mb-2">
+                            <label className="block text-sm font-semibold text-white/80 mb-2">
                                 Featured Image
                             </label>
                             <ImageUpload
@@ -777,14 +777,14 @@ function EnhancedNewsEditor({ formData, setFormData, onSubmit, onClose, isEditin
                         {/* Category and Tags */}
                         <div className="grid grid-cols-2 gap-4">
                             <div>
-                                <label className="block text-sm font-semibold text-slate-300 mb-2">
+                                <label className="block text-sm font-semibold text-white/80 mb-2">
                                     Category *
                                 </label>
                                 <select
                                     required
                                     value={formData.category}
                                     onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                                    className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                                    className="w-full px-4 py-3 bg-[#0a0a0a] border border-white/10 rounded-xl text-white focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/50"
                                 >
                                     {CATEGORIES.map((cat) => (
                                         <option key={cat} value={cat} className="capitalize">
@@ -794,14 +794,14 @@ function EnhancedNewsEditor({ formData, setFormData, onSubmit, onClose, isEditin
                                 </select>
                             </div>
                             <div>
-                                <label className="block text-sm font-semibold text-slate-300 mb-2">
+                                <label className="block text-sm font-semibold text-white/80 mb-2">
                                     Tags (comma-separated)
                                 </label>
                                 <input
                                     type="text"
                                     value={formData.tags}
                                     onChange={(e) => setFormData({ ...formData, tags: e.target.value })}
-                                    className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                                    className="w-full px-4 py-3 bg-[#0a0a0a] border border-white/10 rounded-xl text-white focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/50"
                                     placeholder="NUGA, Football, Championship"
                                 />
                             </div>
@@ -814,40 +814,40 @@ function EnhancedNewsEditor({ formData, setFormData, onSubmit, onClose, isEditin
                                     type="checkbox"
                                     checked={formData.isBreaking}
                                     onChange={(e) => setFormData({ ...formData, isBreaking: e.target.checked })}
-                                    className="w-5 h-5 rounded border-slate-700 bg-slate-800 text-cyan-500 focus:ring-2 focus:ring-cyan-500"
+                                    className="w-5 h-5 rounded border-white/10 bg-[#0a0a0a] text-primary focus:ring-1 focus:ring-primary/50"
                                 />
-                                <span className="text-slate-300 font-semibold">Breaking News</span>
+                                <span className="text-white/80 font-semibold">Breaking News</span>
                             </label>
                             <label className="flex items-center gap-3 cursor-pointer">
                                 <input
                                     type="checkbox"
                                     checked={formData.isFeatured}
                                     onChange={(e) => setFormData({ ...formData, isFeatured: e.target.checked })}
-                                    className="w-5 h-5 rounded border-slate-700 bg-slate-800 text-cyan-500 focus:ring-2 focus:ring-cyan-500"
+                                    className="w-5 h-5 rounded border-white/10 bg-[#0a0a0a] text-primary focus:ring-1 focus:ring-primary/50"
                                 />
-                                <span className="text-slate-300 font-semibold">Featured Article</span>
+                                <span className="text-white/80 font-semibold">Featured Article</span>
                             </label>
                             <label className="flex items-center gap-3 cursor-pointer">
                                 <input
                                     type="checkbox"
                                     checked={formData.sendPushNotification}
                                     onChange={(e) => setFormData({ ...formData, sendPushNotification: e.target.checked })}
-                                    className="w-5 h-5 rounded border-slate-700 bg-slate-800 text-cyan-500 focus:ring-2 focus:ring-cyan-500"
+                                    className="w-5 h-5 rounded border-white/10 bg-[#0a0a0a] text-primary focus:ring-1 focus:ring-primary/50"
                                 />
-                                <span className="text-slate-300 font-semibold">Send Push Notification</span>
+                                <span className="text-white/80 font-semibold">Send Push Notification</span>
                             </label>
                         </div>
 
                         {/* Status */}
                         <div>
-                            <label className="block text-sm font-semibold text-slate-300 mb-2">
+                            <label className="block text-sm font-semibold text-white/80 mb-2">
                                 Status *
                             </label>
                             <select
                                 required
                                 value={formData.status}
                                 onChange={(e) => setFormData({ ...formData, status: e.target.value })}
-                                className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                                className="w-full px-4 py-3 bg-[#0a0a0a] border border-white/10 rounded-xl text-white focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/50"
                             >
                                 <option value="draft">Draft</option>
                                 <option value="published">Published</option>
@@ -857,17 +857,17 @@ function EnhancedNewsEditor({ formData, setFormData, onSubmit, onClose, isEditin
                     </div>
 
                     {/* Footer */}
-                    <div className="sticky bottom-0 bg-slate-900 border-t border-slate-700 p-6 flex items-center justify-end gap-4">
+                    <div className="sticky bottom-0 bg-[#0a0a0a] border-t border-white/10 p-6 flex items-center justify-end gap-4">
                         <button
                             type="button"
                             onClick={onClose}
-                            className="px-6 py-3 bg-slate-800 text-white rounded-xl font-semibold hover:bg-slate-700 transition-colors"
+                            className="px-6 py-3 bg-[#0a0a0a] text-white rounded-xl font-semibold hover:bg-white/10 transition-colors border border-white/10"
                         >
                             Cancel
                         </button>
                         <button
                             type="submit"
-                            className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-cyan-500 to-blue-500 text-white rounded-xl font-semibold hover:shadow-lg hover:shadow-cyan-500/50 transition-all"
+                            className="flex items-center gap-2 px-6 py-3 bg-primary text-black rounded-xl font-semibold hover:bg-primary/80 transition-all"
                         >
                             <Save className="w-5 h-5" />
                             {isEditing ? 'Update Article' : 'Create Article'}
