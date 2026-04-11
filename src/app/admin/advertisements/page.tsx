@@ -22,7 +22,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { toast } from 'sonner';
-import Script from 'next/script';
+import MobileImageUpload from '@/components/ui/mobile-image-upload';
 
 // Payment tiers with allowed positions and sizes
 const PAYMENT_TIERS = {
@@ -365,59 +365,21 @@ export default function AdvertisementsAdmin() {
                   </div>
                 ) : (
                   <>
-                    {/* Cloudinary Upload Widget */}
-                    <Script
-                      src="https://upload-widget.cloudinary.com/global/all.js"
-                      strategy="lazyOnload"
+                    {/* Cloudinary Upload - Same as News */}
+                    <MobileImageUpload
+                      value={formData.imageUrl}
+                      onChange={(url) => setFormData({ ...formData, imageUrl: url })}
+                      aspectRatio="video"
+                      maxSize={5}
+                      className="w-full h-48"
+                      showPreview={true}
                     />
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const cloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME || 'drlwegsiz';
-                        const uploadPreset = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET || 'brix_uploads';
-                        
-                        if (!cloudName) {
-                          toast.error('Cloudinary not configured');
-                          return;
-                        }
-                        
-                        if ((window as any).cloudinary) {
-                          const widget = (window as any).cloudinary.createUploadWidget(
-                            {
-                              cloudName,
-                              uploadPreset,
-                              maxFiles: 1,
-                              cropping: true,
-                              croppingAspectRatio: getRecommendedAspectRatio(formData.position),
-                            },
-                            (error: any, result: any) => {
-                              if (error) {
-                                console.error('Upload error:', error);
-                                toast.error('Upload failed');
-                              }
-                              if (result?.event === 'success') {
-                                setFormData({ ...formData, imageUrl: result.info.secure_url });
-                                toast.success('Image uploaded!');
-                              }
-                            }
-                          );
-                          widget.open();
-                        } else {
-                          toast.error('Upload widget loading... Please try again.');
-                        }
-                      }}
-                      className="w-full h-32 rounded-md border-2 border-dashed border-slate-600 bg-slate-800/50 hover:bg-slate-700 hover:border-slate-500 transition flex flex-col items-center justify-center gap-2 text-slate-400 hover:text-white mt-2"
-                    >
-                      <Upload className="w-8 h-8" />
-                      <span className="font-semibold text-sm">Click to Upload Image</span>
-                      <span className="text-xs text-slate-500">Cloudinary Upload</span>
-                    </button>
 
-                    {/* Image URL Input */}
+                    {/* Manual URL Input */}
                     <div className="mt-4 p-3 bg-slate-800/50 rounded-lg border border-slate-700">
                       <Label className="text-xs text-slate-400 flex items-center gap-2">
                         <ImageIcon className="w-3 h-3" />
-                        Or paste image URL:
+                        Or paste image URL directly:
                       </Label>
                       <div className="flex gap-2 mt-2">
                         <Input
@@ -428,6 +390,9 @@ export default function AdvertisementsAdmin() {
                           className="flex-1 bg-slate-900 border-slate-600"
                         />
                       </div>
+                      <p className="text-xs text-slate-500 mt-2">
+                        Tip: Upload to Cloudinary dashboard first, then paste the URL here
+                      </p>
                     </div>
                   </>
                 )}

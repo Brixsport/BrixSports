@@ -15,6 +15,7 @@ import { useFavorites } from '@/hooks/useFavorites';
 import { useAuth } from '@/contexts/AuthContext';
 import { LiveNowSection } from '@/components/livestream';
 import LiveMatchStatus from '@/components/LiveMatchStatus';
+import AdBanner from '@/components/ads/AdBanner';
 import { PageSEO, StructuredData, FAQSection } from '@/components/seo';
 import { generateHomepageEntityGraph, aiOptimizedFAQs } from '@/lib/utils/aeo';
 
@@ -653,8 +654,9 @@ export default function Home() {
                           {/* Matches List */}
                           <div>
                             {compMatches.map((match: Match, idx: number) => (
+                              <React.Fragment key={match.id}>
+                              {idx === 1 && <AdBanner position="inline" />}
                               <motion.div
-                                key={match.id}
                                 initial={{ opacity: 0 }}
                                 animate={{ opacity: 1 }}
                                 onClick={() => router.push(`/match/${match.id}`)}
@@ -737,6 +739,7 @@ export default function Home() {
                                   </div>
                                 </div>
                               </motion.div>
+                              </React.Fragment>
                             ))}
                           </div>
                         </div>
