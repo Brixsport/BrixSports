@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
 import { news, newsRelations, newsLikes, teams, players, competitions } from '@/db/schema';
+// Note: newsRelations is the news_relations table, not a Drizzle relations object
 import { eq, and, sql, or } from 'drizzle-orm';
 
 

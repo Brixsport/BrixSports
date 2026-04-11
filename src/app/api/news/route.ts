@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
-import { news, newsRelations, newsLikes } from '@/db/schema';
+import { news, newsLikes } from '@/db/schema';
 import { eq, desc, and, like, or, sql } from 'drizzle-orm';
 
 // GET /api/news - Get all news articles with filters
@@ -49,7 +49,7 @@ export async function GET(request: NextRequest) {
             .select()
             .from(news)
             .where(and(...conditions))
-            .orderBy(desc(news.publishedAt), desc(news.createdAt))
+            .orderBy(desc(sql`published_at`), desc(sql`created_at`))
             .limit(limit)
             .offset(offset);
 
