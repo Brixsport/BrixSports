@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
     Server,
     Database,
@@ -13,8 +13,14 @@ import {
     AlertCircle,
     TrendingUp,
     Clock,
-    RefreshCw
+    RefreshCw,
+    Wifi,
+    WifiOff,
+    ChevronDown,
+    ChevronUp,
+    Layers
 } from 'lucide-react';
+import { useWebSocket } from '@/hooks/useWebSocket';
 
 interface InfrastructureData {
     status: string;
@@ -96,10 +102,24 @@ interface InfrastructureData {
     };
 }
 
+// Category display config with initial visible count
+const CATEGORY_CONFIG = {
+    core: { label: 'Core APIs', icon: Layers, initialVisible: 3 },
+    content: { label: 'Content APIs', icon: Layers, initialVisible: 3 },
+    admin: { label: 'Admin APIs', icon: Layers, initialVisible: 3 },
+    features: { label: 'Feature APIs', icon: Layers, initialVisible: 2 },
+    auth: { label: 'Auth APIs', icon: Layers, initialVisible: 1 },
+    basketball: { label: 'Basketball APIs', icon: Layers, initialVisible: 2 },
+};
+
 export default function InfrastructurePage() {
     const [data, setData] = useState<InfrastructureData | null>(null);
     const [loading, setLoading] = useState(true);
     const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
+    const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({});
+    const [wsStatus, setWsStatus] = useState<'connected' | 'disconnected'>('disconnected');
+    
+    const { socket, isConnected } = useWebSocket({ autoConnect: true });
 
     const fetchData = async () => {
         try {
@@ -115,12 +135,80 @@ export default function InfrastructurePage() {
         }
     };
 
+    // WebSocket real-time updates
+    useEffect(() => {
+        setWsStatus(isConnected ? 'connected' : 'disconnected');
+        
+        if (!socket || !isConnected) return;
+
+        // Subscribe to infrastructure updates
+        socket.emit('admin:infrastructure:subscribe');
+
+        // Handle real-time infrastructure updates
+        const handleInfrastructureUpdate = (update: Partial<InfrastructureData>) => {
+            setData(prev => prev ? { ...prev, ...update, timestamp: new Date().toISOString() } : null);
+            setLastUpdated(new Date());
+        };
+
+        // Handle endpoint status changes
+        const handleEndpointUpdate = (endpointUpdate: { path: string; status: string; responseTime: number }) => {
+            setData(prev => {
+                if (!prev) return null;
+                
+                const updatedEndpoints = prev.api.endpoints.map(e => 
+                    e.path === endpointUpdate.path 
+                        ? { ...e, status: endpointUpdate.status, avgResponseTime: endpointUpdate.responseTime }
+                        : e
+                );
+                
+                // Recalculate category endpoints
+                const updatedCategories = { ...prev.api.categories };
+                Object.keys(updatedCategories).forEach(cat => {
+                    updatedCategories[cat as keyof typeof updatedCategories] = updatedEndpoints.filter(e => {
+                        const catName = CATEGORY_CONFIG[cat as keyof typeof CATEGORY_CONFIG]?.label || '';
+                        return catName.includes('Core') && ['Matches', 'Teams', 'Players', 'Competitions', 'Fixtures'].some(t => e.name.includes(t)) ||
+                               catName.includes('Content') && ['News', 'Transfers', 'Polls', 'Events', 'Brackets'].some(t => e.name.includes(t)) ||
+                               catName.includes('Admin') && e.name.includes('Admin') ||
+                               catName.includes('Feature') && ['Ads', 'Analytics', 'Notifications'].some(t => e.name.includes(t)) ||
+                               catName.includes('Auth') && e.name.includes('Auth') ||
+                               catName.includes('Basketball') && e.name.includes('Basketball');
+                    });
+                });
+                
+                return {
+                    ...prev,
+                    api: {
+                        ...prev.api,
+                        endpoints: updatedEndpoints,
+                        categories: updatedCategories,
+                        operationalCount: updatedEndpoints.filter(e => e.status === 'operational').length,
+                        degradedCount: updatedEndpoints.filter(e => e.status === 'degraded').length,
+                        downCount: updatedEndpoints.filter(e => e.status === 'down').length,
+                    }
+                };
+            });
+            setLastUpdated(new Date());
+        };
+
+        socket.on('infrastructure:update', handleInfrastructureUpdate);
+        socket.on('infrastructure:endpoint', handleEndpointUpdate);
+
+        return () => {
+            socket.off('infrastructure:update', handleInfrastructureUpdate);
+            socket.off('infrastructure:endpoint', handleEndpointUpdate);
+            socket.emit('admin:infrastructure:unsubscribe');
+        };
+    }, [socket, isConnected]);
+
+    // Initial data fetch
     useEffect(() => {
         fetchData();
-        // Auto-refresh every 30 seconds
-        const interval = setInterval(fetchData, 30000);
+        // Fallback polling every 30 seconds if WebSocket is not connected
+        const interval = setInterval(() => {
+            if (!isConnected) fetchData();
+        }, 30000);
         return () => clearInterval(interval);
-    }, []);
+    }, [isConnected]);
 
     const formatUptime = (seconds: number) => {
         const days = Math.floor(seconds / 86400);
@@ -182,14 +270,27 @@ export default function InfrastructurePage() {
                             System health & performance monitoring
                         </p>
                     </div>
-                    <button
-                        onClick={fetchData}
-                        disabled={loading}
-                        className="flex items-center gap-2 px-4 py-2 bg-white/5 border border-white/10 rounded-xl hover:bg-white/10 transition-colors disabled:opacity-50"
-                    >
-                        <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
-                        <span className="text-xs font-bold uppercase">Refresh</span>
-                    </button>
+                    <div className="flex items-center gap-3">
+                        {/* WebSocket Status */}
+                        <div className={`flex items-center gap-2 px-3 py-2 rounded-xl border ${
+                            wsStatus === 'connected' 
+                                ? 'bg-green-500/10 border-green-500/20 text-green-500' 
+                                : 'bg-red-500/10 border-red-500/20 text-red-500'
+                        }`}>
+                            {wsStatus === 'connected' ? <Wifi size={14} /> : <WifiOff size={14} />}
+                            <span className="text-[10px] font-black uppercase">
+                                {wsStatus === 'connected' ? 'Live' : 'Polling'}
+                            </span>
+                        </div>
+                        <button
+                            onClick={fetchData}
+                            disabled={loading}
+                            className="flex items-center gap-2 px-4 py-2 bg-white/5 border border-white/10 rounded-xl hover:bg-white/10 transition-colors disabled:opacity-50"
+                        >
+                            <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
+                            <span className="text-xs font-bold uppercase">Refresh</span>
+                        </button>
+                    </div>
                 </div>
 
                 {loading && !data ? (
@@ -304,55 +405,60 @@ export default function InfrastructurePage() {
                                 </div>
                             </div>
                             
-                            {/* Category: Core */}
-                            {data.api.categories?.core && data.api.categories.core.length > 0 && (
-                                <div className="mb-6">
-                                    <h3 className="text-xs font-black uppercase tracking-widest text-white/40 mb-3">Core APIs</h3>
-                                    <div className="space-y-2">
-                                        {data.api.categories.core.map(renderEndpoint)}
+                            {/* Collapsible Category Sections */}
+                            {Object.entries(CATEGORY_CONFIG).map(([key, config]) => {
+                                const endpoints = data.api.categories?.[key as keyof typeof data.api.categories] || [];
+                                if (endpoints.length === 0) return null;
+                                
+                                const isExpanded = expandedCategories[key];
+                                const visibleCount = isExpanded ? endpoints.length : config.initialVisible;
+                                const visibleEndpoints = endpoints.slice(0, visibleCount);
+                                const hasMore = endpoints.length > config.initialVisible;
+                                
+                                return (
+                                    <div key={key} className="mb-6 last:mb-0">
+                                        <div className="flex items-center justify-between mb-3">
+                                            <h3 className="text-xs font-black uppercase tracking-widest text-white/40">
+                                                {config.label}
+                                                <span className="ml-2 text-white/20">({endpoints.length})</span>
+                                            </h3>
+                                            {hasMore && (
+                                                <button
+                                                    onClick={() => setExpandedCategories(prev => ({ ...prev, [key]: !prev[key] }))}
+                                                    className="flex items-center gap-1 px-3 py-1.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg transition-colors text-[10px] font-bold uppercase"
+                                                >
+                                                    {isExpanded ? (
+                                                        <>
+                                                            <ChevronUp size={14} />
+                                                            Show Less
+                                                        </>
+                                                    ) : (
+                                                        <>
+                                                            <ChevronDown size={14} />
+                                                            Show {endpoints.length - config.initialVisible} More
+                                                        </>
+                                                    )}
+                                                </button>
+                                            )}
+                                        </div>
+                                        <div className="space-y-2">
+                                            {visibleEndpoints.map(renderEndpoint)}
+                                        </div>
+                                        <AnimatePresence>
+                                            {isExpanded && visibleEndpoints.length < endpoints.length && (
+                                                <motion.div
+                                                    initial={{ opacity: 0, height: 0 }}
+                                                    animate={{ opacity: 1, height: 'auto' }}
+                                                    exit={{ opacity: 0, height: 0 }}
+                                                    className="space-y-2 mt-2"
+                                                >
+                                                    {endpoints.slice(visibleCount).map(renderEndpoint)}
+                                                </motion.div>
+                                            )}
+                                        </AnimatePresence>
                                     </div>
-                                </div>
-                            )}
-                            
-                            {/* Category: Content */}
-                            {data.api.categories?.content && data.api.categories.content.length > 0 && (
-                                <div className="mb-6">
-                                    <h3 className="text-xs font-black uppercase tracking-widest text-white/40 mb-3">Content APIs</h3>
-                                    <div className="space-y-2">
-                                        {data.api.categories.content.map(renderEndpoint)}
-                                    </div>
-                                </div>
-                            )}
-                            
-                            {/* Category: Admin */}
-                            {data.api.categories?.admin && data.api.categories.admin.length > 0 && (
-                                <div className="mb-6">
-                                    <h3 className="text-xs font-black uppercase tracking-widest text-white/40 mb-3">Admin APIs</h3>
-                                    <div className="space-y-2">
-                                        {data.api.categories.admin.map(renderEndpoint)}
-                                    </div>
-                                </div>
-                            )}
-                            
-                            {/* Category: Features */}
-                            {data.api.categories?.features && data.api.categories.features.length > 0 && (
-                                <div className="mb-6">
-                                    <h3 className="text-xs font-black uppercase tracking-widest text-white/40 mb-3">Feature APIs</h3>
-                                    <div className="space-y-2">
-                                        {data.api.categories.features.map(renderEndpoint)}
-                                    </div>
-                                </div>
-                            )}
-                            
-                            {/* Category: Basketball */}
-                            {data.api.categories?.basketball && data.api.categories.basketball.length > 0 && (
-                                <div>
-                                    <h3 className="text-xs font-black uppercase tracking-widest text-white/40 mb-3">Basketball APIs</h3>
-                                    <div className="space-y-2">
-                                        {data.api.categories.basketball.map(renderEndpoint)}
-                                    </div>
-                                </div>
-                            )}
+                                );
+                            })}
                         </div>
 
                         {/* System Info */}
