@@ -24,8 +24,8 @@ export async function PUT(
     if (body.size !== undefined) updateData.size = body.size;
     if (body.status !== undefined) updateData.status = body.status;
     if (body.priority !== undefined) updateData.priority = body.priority;
-    if (body.startDate !== undefined) updateData.startDate = body.startDate;
-    if (body.endDate !== undefined) updateData.endDate = body.endDate;
+    if (body.startDate !== undefined) updateData.startDate = body.startDate ? new Date(body.startDate) : null;
+    if (body.endDate !== undefined) updateData.endDate = body.endDate ? new Date(body.endDate) : null;
 
     await db
       .update(advertisements)

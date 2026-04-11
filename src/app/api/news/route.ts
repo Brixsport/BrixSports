@@ -132,8 +132,9 @@ export async function POST(request: NextRequest) {
         }).returning();
 
         // If sendPushNotification is true and status is published, trigger notification
+        // Send push notification if requested and status is published
         if (sendPushNotification && status === 'published') {
-            // Send push notification asynchronously
+            // Send push notification asynchronously (don't await)
             fetch(`${request.nextUrl.origin}/api/notifications/send`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -162,6 +163,10 @@ export async function POST(request: NextRequest) {
         }, { status: 201 });
     } catch (error) {
         console.error('[News API] Error creating news:', error);
+        // Log more details for debugging
+        if (error instanceof Error) {
+            console.error('[News API] Error stack:', error.stack);
+        }
         return NextResponse.json(
             { error: 'Failed to create news article', details: error instanceof Error ? error.message : String(error) },
             { status: 500 }

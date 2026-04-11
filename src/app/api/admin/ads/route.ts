@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
 import { advertisements } from '@/db/schema';
 import { eq, desc } from 'drizzle-orm';
-import { v4 as uuidv4 } from 'uuid';
+import { nanoid } from 'nanoid';
 
 // GET /api/admin/ads - List all advertisements
 export async function GET() {
@@ -28,7 +28,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     
     const newAd = {
-      id: uuidv4(),
+      id: nanoid(),
       title: body.title,
       description: body.description || null,
       imageUrl: body.imageUrl,
@@ -37,8 +37,8 @@ export async function POST(request: NextRequest) {
       size: body.size || 'small',
       status: body.status || 'active',
       priority: body.priority || 0,
-      startDate: body.startDate || null,
-      endDate: body.endDate || null,
+      startDate: body.startDate ? new Date(body.startDate) : null,
+      endDate: body.endDate ? new Date(body.endDate) : null,
       impressions: 0,
       clicks: 0,
       createdBy: null, // Can be set from session

@@ -301,97 +301,178 @@ export async function sendWelcomeEmail(to: string, userName: string, baseUrl?: s
         <html>
         <head>
             <meta charset="utf-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
             <title>Welcome to Brixsport</title>
+            <style type="text/css">
+                @media only screen and (max-width: 600px) {
+                    .container { width: 100% !important; padding: 10px !important; }
+                    .card { padding: 24px 16px !important; border-radius: 12px !important; }
+                    .logo-img { height: 60px !important; }
+                    .heading { font-size: 24px !important; letter-spacing: 1px !important; }
+                    .subheading { font-size: 16px !important; }
+                    .section-title { font-size: 18px !important; }
+                    .feature-box { padding: 12px !important; }
+                    .feature-icon { width: 36px !important; height: 36px !important; }
+                    .feature-icon span { font-size: 18px !important; }
+                    .feature-title { font-size: 15px !important; }
+                    .feature-desc { font-size: 13px !important; }
+                    .cta-btn { padding: 16px 32px !important; font-size: 14px !important; display: block !important; text-align: center !important; }
+                    .footer-text { font-size: 12px !important; }
+                    .copyright { font-size: 11px !important; }
+                }
+            </style>
         </head>
         <body style="margin: 0; padding: 0; font-family: 'Space Grotesk', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #050505;">
-            <div style="max-width: 600px; margin: 0 auto; padding: 40px 20px;">
-                <div style="background: linear-gradient(135deg, #0a0a0a 0%, #111111 100%); border: 1px solid rgba(59, 130, 246, 0.2); border-radius: 16px; padding: 40px; color: #ffffff;">
-                    <!-- Logo -->
-                    <div style="text-align: center; margin-bottom: 32px;">
-                        <img src="${logoUrl}" alt="Brixsport" style="height: 80px; width: auto;" />
-                    </div>
+            <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
+                <tr>
+                    <td class="container" style="padding: 20px 10px;">
+                        <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="600" style="max-width: 600px; margin: 0 auto;" class="container">
+                            <tr>
+                                <td class="card" style="background: linear-gradient(135deg, #0a0a0a 0%, #111111 100%); border: 1px solid rgba(59, 130, 246, 0.2); border-radius: 16px; padding: 40px 32px; color: #ffffff;">
+                                    <!-- Logo -->
+                                    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
+                                        <tr>
+                                            <td align="center" style="padding-bottom: 24px;">
+                                                <img src="${logoUrl}" alt="Brixsport" class="logo-img" style="height: 80px; width: auto; display: block;" />
+                                            </td>
+                                        </tr>
+                                    </table>
 
-                    <!-- Welcome Header -->
-                    <h2 style="font-size: 32px; font-weight: 700; margin-bottom: 8px; color: #ffffff; text-align: center; font-family: 'Bebas Neue', sans-serif; letter-spacing: 2px; text-transform: uppercase;">Welcome to the Game</h2>
-                    <p style="color: #3b82f6; font-size: 18px; text-align: center; margin-bottom: 32px; font-weight: 600;">Hey ${userName}, your sports journey starts now!</p>
+                                    <!-- Welcome Header -->
+                                    <h2 class="heading" style="font-size: 32px; font-weight: 700; margin: 0 0 8px 0; color: #ffffff; text-align: center; font-family: 'Bebas Neue', Impact, 'Arial Black', sans-serif; letter-spacing: 2px; text-transform: uppercase; line-height: 1.2;">Welcome to the Game</h2>
+                                    <p class="subheading" style="color: #3b82f6; font-size: 18px; text-align: center; margin: 0 0 32px 0; font-weight: 600; line-height: 1.4;">Hey ${userName}, your sports journey starts now!</p>
 
-                    <!-- What is Brixsports -->
-                    <div style="margin-bottom: 32px;">
-                        <h3 style="font-size: 20px; font-weight: 700; margin-bottom: 16px; color: #ffffff; text-transform: uppercase; letter-spacing: 1px;">What is Brixsports?</h3>
-                        <p style="color: #a1a1aa; line-height: 1.8; margin-bottom: 16px; font-size: 15px;">
-                            Brixsports is your ultimate sports platform for <strong style="color: #ffffff;">university competitions</strong>. We bring together athletes, teams, and fans in one powerful ecosystem designed for the love of the game.
-                        </p>
-                    </div>
+                                    <!-- What is Brixsports -->
+                                    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
+                                        <tr>
+                                            <td style="padding-bottom: 32px;">
+                                                <h3 class="section-title" style="font-size: 20px; font-weight: 700; margin: 0 0 16px 0; color: #ffffff; text-transform: uppercase; letter-spacing: 1px; line-height: 1.3;">What is Brixsports?</h3>
+                                                <p style="color: #a1a1aa; line-height: 1.8; margin: 0; font-size: 15px;">
+                                                    Brixsports is your ultimate sports platform for <strong style="color: #ffffff;">university competitions</strong>. We bring together athletes, teams, and fans in one powerful ecosystem designed for the love of the game.
+                                                </p>
+                                            </td>
+                                        </tr>
+                                    </table>
 
-                    <!-- Features Grid -->
-                    <div style="margin-bottom: 32px;">
-                        <h3 style="font-size: 20px; font-weight: 700; margin-bottom: 24px; color: #ffffff; text-transform: uppercase; letter-spacing: 1px;">What You Can Do</h3>
+                                    <!-- Features -->
+                                    <h3 class="section-title" style="font-size: 20px; font-weight: 700; margin: 0 0 24px 0; color: #ffffff; text-transform: uppercase; letter-spacing: 1px; line-height: 1.3;">What You Can Do</h3>
 
-                        <!-- Feature 1 -->
-                        <div style="display: flex; align-items: flex-start; margin-bottom: 20px; padding: 16px; background: rgba(59, 130, 246, 0.1); border-radius: 12px; border: 1px solid rgba(59, 130, 246, 0.2);">
-                            <div style="width: 40px; height: 40px; background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); border-radius: 10px; display: flex; align-items: center; justify-content: center; margin-right: 16px; flex-shrink: 0;">
-                                <span style="color: #ffffff; font-size: 20px;">🏆</span>
-                            </div>
-                            <div>
-                                <h4 style="font-size: 16px; font-weight: 700; margin-bottom: 4px; color: #ffffff;">Track Live Competitions</h4>
-                                <p style="color: #a1a1aa; font-size: 14px; margin: 0;">Follow BUSA, NESA, NPUGA and other tournaments with real-time scores and standings.</p>
-                            </div>
-                        </div>
+                                    <!-- Feature 1 -->
+                                    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" class="feature-box" style="margin-bottom: 16px; background: rgba(59, 130, 246, 0.1); border-radius: 12px; border: 1px solid rgba(59, 130, 246, 0.2);">
+                                        <tr>
+                                            <td class="feature-box" style="padding: 16px;">
+                                                <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
+                                                    <tr>
+                                                        <td valign="top" style="width: 48px; padding-right: 12px;">
+                                                            <div class="feature-icon" style="width: 40px; height: 40px; background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); border-radius: 10px; text-align: center; line-height: 40px;">
+                                                                <span style="color: #ffffff; font-size: 20px;">🏆</span>
+                                                            </div>
+                                                        </td>
+                                                        <td valign="top">
+                                                            <h4 class="feature-title" style="font-size: 16px; font-weight: 700; margin: 0 0 4px 0; color: #ffffff; line-height: 1.3;">Track Live Competitions</h4>
+                                                            <p class="feature-desc" style="color: #a1a1aa; font-size: 14px; margin: 0; line-height: 1.5;">Follow BUSA, NESA, NPUGA and other tournaments with real-time scores and standings.</p>
+                                                        </td>
+                                                    </tr>
+                                                </table>
+                                            </td>
+                                        </tr>
+                                    </table>
 
-                        <!-- Feature 2 -->
-                        <div style="display: flex; align-items: flex-start; margin-bottom: 20px; padding: 16px; background: rgba(59, 130, 246, 0.1); border-radius: 12px; border: 1px solid rgba(59, 130, 246, 0.2);">
-                            <div style="width: 40px; height: 40px; background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); border-radius: 10px; display: flex; align-items: center; justify-content: center; margin-right: 16px; flex-shrink: 0;">
-                                <span style="color: #ffffff; font-size: 20px;">📊</span>
-                            </div>
-                            <div>
-                                <h4 style="font-size: 16px; font-weight: 700; margin-bottom: 4px; color: #ffffff;">Player Stats & Analytics</h4>
-                                <p style="color: #a1a1aa; font-size: 14px; margin: 0;">Track performance metrics, ratings, and achievements for every player and team.</p>
-                            </div>
-                        </div>
+                                    <!-- Feature 2 -->
+                                    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" class="feature-box" style="margin-bottom: 16px; background: rgba(59, 130, 246, 0.1); border-radius: 12px; border: 1px solid rgba(59, 130, 246, 0.2);">
+                                        <tr>
+                                            <td class="feature-box" style="padding: 16px;">
+                                                <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
+                                                    <tr>
+                                                        <td valign="top" style="width: 48px; padding-right: 12px;">
+                                                            <div class="feature-icon" style="width: 40px; height: 40px; background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); border-radius: 10px; text-align: center; line-height: 40px;">
+                                                                <span style="color: #ffffff; font-size: 20px;">📊</span>
+                                                            </div>
+                                                        </td>
+                                                        <td valign="top">
+                                                            <h4 class="feature-title" style="font-size: 16px; font-weight: 700; margin: 0 0 4px 0; color: #ffffff; line-height: 1.3;">Player Stats & Analytics</h4>
+                                                            <p class="feature-desc" style="color: #a1a1aa; font-size: 14px; margin: 0; line-height: 1.5;">Track performance metrics, ratings, and achievements for every player and team.</p>
+                                                        </td>
+                                                    </tr>
+                                                </table>
+                                            </td>
+                                        </tr>
+                                    </table>
 
-                        <!-- Feature 3 -->
-                        <div style="display: flex; align-items: flex-start; margin-bottom: 20px; padding: 16px; background: rgba(59, 130, 246, 0.1); border-radius: 12px; border: 1px solid rgba(59, 130, 246, 0.2);">
-                            <div style="width: 40px; height: 40px; background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); border-radius: 10px; display: flex; align-items: center; justify-content: center; margin-right: 16px; flex-shrink: 0;">
-                                <span style="color: #ffffff; font-size: 20px;">⚽</span>
-                            </div>
-                            <div>
-                                <h4 style="font-size: 16px; font-weight: 700; margin-bottom: 4px; color: #ffffff;">Multiple Sports</h4>
-                                <p style="color: #a1a1aa; font-size: 14px; margin: 0;">Football, Basketball, Scrabble, Chess, Table Tennis - we've got them all covered.</p>
-                            </div>
-                        </div>
+                                    <!-- Feature 3 -->
+                                    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" class="feature-box" style="margin-bottom: 16px; background: rgba(59, 130, 246, 0.1); border-radius: 12px; border: 1px solid rgba(59, 130, 246, 0.2);">
+                                        <tr>
+                                            <td class="feature-box" style="padding: 16px;">
+                                                <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
+                                                    <tr>
+                                                        <td valign="top" style="width: 48px; padding-right: 12px;">
+                                                            <div class="feature-icon" style="width: 40px; height: 40px; background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); border-radius: 10px; text-align: center; line-height: 40px;">
+                                                                <span style="color: #ffffff; font-size: 20px;">⚽</span>
+                                                            </div>
+                                                        </td>
+                                                        <td valign="top">
+                                                            <h4 class="feature-title" style="font-size: 16px; font-weight: 700; margin: 0 0 4px 0; color: #ffffff; line-height: 1.3;">Multiple Sports</h4>
+                                                            <p class="feature-desc" style="color: #a1a1aa; font-size: 14px; margin: 0; line-height: 1.5;">Football, Basketball, Scrabble, Chess, Table Tennis - we've got them all covered.</p>
+                                                        </td>
+                                                    </tr>
+                                                </table>
+                                            </td>
+                                        </tr>
+                                    </table>
 
-                        <!-- Feature 4 -->
-                        <div style="display: flex; align-items: flex-start; margin-bottom: 20px; padding: 16px; background: rgba(59, 130, 246, 0.1); border-radius: 12px; border: 1px solid rgba(59, 130, 246, 0.2);">
-                            <div style="width: 40px; height: 40px; background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); border-radius: 10px; display: flex; align-items: center; justify-content: center; margin-right: 16px; flex-shrink: 0;">
-                                <span style="color: #ffffff; font-size: 20px;">🎯</span>
-                            </div>
-                            <div>
-                                <h4 style="font-size: 16px; font-weight: 700; margin-bottom: 4px; color: #ffffff;">Make Predictions</h4>
-                                <p style="color: #a1a1aa; font-size: 14px; margin: 0;">Predict match outcomes, earn points, and compete on the prediction leaderboard.</p>
-                            </div>
-                        </div>
-                    </div>
+                                    <!-- Feature 4 -->
+                                    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" class="feature-box" style="margin-bottom: 32px; background: rgba(59, 130, 246, 0.1); border-radius: 12px; border: 1px solid rgba(59, 130, 246, 0.2);">
+                                        <tr>
+                                            <td class="feature-box" style="padding: 16px;">
+                                                <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
+                                                    <tr>
+                                                        <td valign="top" style="width: 48px; padding-right: 12px;">
+                                                            <div class="feature-icon" style="width: 40px; height: 40px; background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); border-radius: 10px; text-align: center; line-height: 40px;">
+                                                                <span style="color: #ffffff; font-size: 20px;">🎯</span>
+                                                            </div>
+                                                        </td>
+                                                        <td valign="top">
+                                                            <h4 class="feature-title" style="font-size: 16px; font-weight: 700; margin: 0 0 4px 0; color: #ffffff; line-height: 1.3;">Make Predictions</h4>
+                                                            <p class="feature-desc" style="color: #a1a1aa; font-size: 14px; margin: 0; line-height: 1.5;">Predict match outcomes, earn points, and compete on the prediction leaderboard.</p>
+                                                        </td>
+                                                    </tr>
+                                                </table>
+                                            </td>
+                                        </tr>
+                                    </table>
 
-                    <!-- CTA Button -->
-                    <div style="text-align: center; margin: 40px 0;">
-                        <a href="${appUrl}/competitions"
-                           style="background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); color: #ffffff; padding: 18px 48px; text-decoration: none; border-radius: 12px; font-weight: 700; font-size: 16px; display: inline-block; text-transform: uppercase; letter-spacing: 1px; box-shadow: 0 4px 20px rgba(59, 130, 246, 0.3);">
-                            Explore Competitions
-                        </a>
-                    </div>
+                                    <!-- CTA Button -->
+                                    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
+                                        <tr>
+                                            <td align="center" style="padding: 24px 0 40px 0;">
+                                                <a href="${appUrl}/competitions" class="cta-btn"
+                                                   style="background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); color: #ffffff; padding: 18px 48px; text-decoration: none; border-radius: 12px; font-weight: 700; font-size: 16px; display: inline-block; text-transform: uppercase; letter-spacing: 1px; box-shadow: 0 4px 20px rgba(59, 130, 246, 0.3);">
+                                                    Explore Competitions
+                                                </a>
+                                            </td>
+                                        </tr>
+                                    </table>
 
-                    <!-- Footer -->
-                    <div style="margin-top: 40px; padding-top: 24px; border-top: 1px solid #1f2937;">
-                        <p style="color: #6b7280; font-size: 14px; margin-bottom: 8px; text-align: center;">
-                            Need help? Contact us at support@brixsports.com
-                        </p>
-                        <p style="color: #4b5563; font-size: 12px; margin: 0; text-align: center;">
-                            © 2025 Brixsports. All rights reserved.
-                        </p>
-                    </div>
-                </div>
-            </div>
+                                    <!-- Footer -->
+                                    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
+                                        <tr>
+                                            <td style="border-top: 1px solid #1f2937; padding-top: 24px;">
+                                                <p class="footer-text" style="color: #6b7280; font-size: 14px; margin: 0 0 8px 0; text-align: center;">
+                                                    Need help? Contact us at <a href="mailto:support@brixsports.com" style="color: #3b82f6; text-decoration: none;">support@brixsports.com</a>
+                                                </p>
+                                                <p class="copyright" style="color: #4b5563; font-size: 12px; margin: 0; text-align: center;">
+                                                    This is an automated message. Please do not reply to this email.<br>
+                                                    © 2025 Brixsports. All rights reserved.
+                                                </p>
+                                            </td>
+                                        </tr>
+                                    </table>
+                                </td>
+                            </tr>
+                        </table>
+                    </td>
+                </tr>
+            </table>
         </body>
         </html>
     `;
@@ -413,14 +494,18 @@ What You Can Do:
 Get Started: ${appUrl}/competitions
 
 Need help? Contact us at support@brixsports.com
+
+This is an automated message. Please do not reply to this email.
 © 2025 Brixsports. All rights reserved.
     `;
 
     return await sendEmail({
         to,
+        from: '"Brixsports" <noreply@brixsports.com>',
         subject: 'Welcome to Brixsports - Your Sports Journey Starts Now!',
         html,
         text,
+        replyTo: 'noreply@brixsports.com',
     });
 }
 

@@ -182,8 +182,12 @@ export async function PATCH(
         });
     } catch (error) {
         console.error('[News API] Error updating news:', error);
+        // Log more details for debugging
+        if (error instanceof Error) {
+            console.error('[News API] Error stack:', error.stack);
+        }
         return NextResponse.json(
-            { error: 'Failed to update news article' },
+            { error: 'Failed to update news article', details: error instanceof Error ? error.message : String(error) },
             { status: 500 }
         );
     }
