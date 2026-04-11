@@ -369,6 +369,7 @@ export default function AdvertisementsAdmin() {
                     {/* Cloudinary Upload */}
                     <CldUploadWidget
                       signatureEndpoint="/api/cloudinary/sign"
+                      apiKey={process.env.NEXT_PUBLIC_CLOUDINARY_API_KEY}
                       onSuccess={(result: any) => {
                         if (result?.info?.secure_url) {
                           setFormData({ ...formData, imageUrl: result.info.secure_url });

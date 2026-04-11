@@ -14,14 +14,15 @@ function SoccerBall({ errorCode }: { errorCode?: string }) {
   const ballRef = useRef<THREE.Mesh>(null);
   const [hitPost, setHitPost] = useState(false);
   
-  // Professional ball physics
-  const velocity = useRef(new THREE.Vector3(0.18, 0.1, 0.03));
-  const position = useRef(new THREE.Vector3(-9, 2.5, 0));
-  const rotationSpeed = useRef(new THREE.Vector3(0.15, 0.12, 0.08));
+  // Professional ball physics - aimed to hit the post
+  const velocity = useRef(new THREE.Vector3(0.2, 0.06, 0.02));
+  const position = useRef(new THREE.Vector3(-10, 1.8, 3.2)); // Aimed at right post
+  const rotationSpeed = useRef(new THREE.Vector3(0.1, 0.15, 0.05));
   
   useEffect(() => {
-    velocity.current.set(0.16, 0.09, (Math.random() - 0.5) * 0.05);
-    rotationSpeed.current.set(0.12, 0.1, 0.06);
+    // Kick toward the right post for dramatic hit
+    velocity.current.set(0.18, 0.05, 0.02);
+    rotationSpeed.current.set(0.08, 0.12, 0.04);
   }, []);
 
   useFrame(() => {
@@ -212,18 +213,18 @@ function SoccerBall({ errorCode }: { errorCode?: string }) {
   );
 }
 
-// Professional FIFA Regulation Goal
+// Professional FIFA Regulation Goal - Clean broadcast view
 function GoalPost() {
   const postMat = useMemo(() => new THREE.MeshStandardMaterial({
     color: 0xffffff,
-    roughness: 0.25,
-    metalness: 0.15,
+    roughness: 0.3,
+    metalness: 0.1,
   }), []);
 
   const netMat = useMemo(() => new THREE.MeshStandardMaterial({
-    color: 0xe8e8e8,
+    color: 0xdddddd,
     transparent: true,
-    opacity: 0.35,
+    opacity: 0.25,
     wireframe: true,
     side: THREE.DoubleSide,
   }), []);
@@ -231,12 +232,14 @@ function GoalPost() {
   // FIFA regulation: 7.32m x 2.44m
   const goalWidth = 7.32;
   const goalHeight = 2.44;
-  const goalDepth = 2.0;
+  const goalDepth = 1.5; // Reduced depth for cleaner look
   const postRadius = 0.12;
 
   return (
     <group>
-      {/* Left Post */}
+      {/* === FRONT FRAME - The main goal === */}
+      
+      {/* Left Post - round tubing */}
       <mesh position={[0, goalHeight / 2, goalWidth / 2]} castShadow>
         <cylinderGeometry args={[postRadius, postRadius, goalHeight, 24]} />
         <primitive object={postMat} />
@@ -254,19 +257,21 @@ function GoalPost() {
         <primitive object={postMat} />
       </mesh>
 
-      {/* Ground support bar */}
-      <mesh position={[-goalDepth, postRadius * 0.6, 0]} rotation={[0, 0, Math.PI / 2]} castShadow>
-        <cylinderGeometry args={[postRadius * 0.8, postRadius * 0.8, goalWidth, 16]} />
+      {/* === BACK SUPPORT FRAME (less visible from front) === */}
+      
+      {/* Back bottom bar */}
+      <mesh position={[-goalDepth, postRadius, 0]} rotation={[0, 0, Math.PI / 2]} castShadow>
+        <cylinderGeometry args={[postRadius * 0.6, postRadius * 0.6, goalWidth, 16]} />
         <primitive object={postMat} />
       </mesh>
 
-      {/* Diagonal side supports */}
+      {/* Side diagonal struts - from post base to back top */}
       <mesh 
         position={[-goalDepth / 2, goalHeight / 2, goalWidth / 2]} 
         rotation={[0, 0, Math.atan2(goalHeight, goalDepth)]}
         castShadow
       >
-        <cylinderGeometry args={[postRadius * 0.5, postRadius * 0.5, Math.sqrt(goalDepth ** 2 + goalHeight ** 2), 12]} />
+        <cylinderGeometry args={[postRadius * 0.4, postRadius * 0.4, Math.sqrt(goalDepth ** 2 + goalHeight ** 2), 12]} />
         <primitive object={postMat} />
       </mesh>
       <mesh 
@@ -274,62 +279,52 @@ function GoalPost() {
         rotation={[0, 0, Math.atan2(goalHeight, goalDepth)]}
         castShadow
       >
-        <cylinderGeometry args={[postRadius * 0.5, postRadius * 0.5, Math.sqrt(goalDepth ** 2 + goalHeight ** 2), 12]} />
-        <primitive object={postMat} />
-      </mesh>
-      
-      {/* Back supports (bottom) */}
-      <mesh position={[-goalDepth, postRadius, goalWidth / 2]} rotation={[0, Math.PI / 2, 0]} castShadow>
-        <cylinderGeometry args={[postRadius * 0.5, postRadius * 0.5, goalDepth, 12]} />
-        <primitive object={postMat} />
-      </mesh>
-      <mesh position={[-goalDepth, postRadius, -goalWidth / 2]} rotation={[0, Math.PI / 2, 0]} castShadow>
-        <cylinderGeometry args={[postRadius * 0.5, postRadius * 0.5, goalDepth, 12]} />
+        <cylinderGeometry args={[postRadius * 0.4, postRadius * 0.4, Math.sqrt(goalDepth ** 2 + goalHeight ** 2), 12]} />
         <primitive object={postMat} />
       </mesh>
 
-      {/* Back supports (top) */}
-      <mesh position={[-goalDepth, goalHeight, goalWidth / 2]} rotation={[0, Math.PI / 2, 0]} castShadow>
-        <cylinderGeometry args={[postRadius * 0.4, postRadius * 0.4, goalDepth, 12]} />
+      {/* Back uprights (short) */}
+      <mesh position={[-goalDepth, goalHeight / 2, goalWidth / 2]} castShadow>
+        <cylinderGeometry args={[postRadius * 0.4, postRadius * 0.4, goalHeight, 12]} />
         <primitive object={postMat} />
       </mesh>
-      <mesh position={[-goalDepth, goalHeight, -goalWidth / 2]} rotation={[0, Math.PI / 2, 0]} castShadow>
-        <cylinderGeometry args={[postRadius * 0.4, postRadius * 0.4, goalDepth, 12]} />
+      <mesh position={[-goalDepth, goalHeight / 2, -goalWidth / 2]} castShadow>
+        <cylinderGeometry args={[postRadius * 0.4, postRadius * 0.4, goalHeight, 12]} />
         <primitive object={postMat} />
       </mesh>
 
       {/* Back crossbar */}
       <mesh position={[-goalDepth, goalHeight, 0]} rotation={[0, 0, Math.PI / 2]} castShadow>
-        <cylinderGeometry args={[postRadius * 0.4, postRadius * 0.4, goalWidth, 12]} />
+        <cylinderGeometry args={[postRadius * 0.35, postRadius * 0.35, goalWidth, 12]} />
         <primitive object={postMat} />
       </mesh>
       
-      {/* Professional Net with proper diamond pattern */}
-      {/* Back wall net */}
+      {/* === NET === */}
+      {/* Back wall */}
       <mesh position={[-goalDepth, goalHeight / 2, 0]} material={netMat}>
-        <planeGeometry args={[goalWidth, goalHeight, 20, 16]} />
+        <planeGeometry args={[goalWidth, goalHeight, 16, 12]} />
       </mesh>
       
-      {/* Top sloped net */}
+      {/* Roof - angled from crossbar to back */}
       <mesh 
         position={[-goalDepth / 2, goalHeight, 0]} 
         rotation={[Math.PI / 2 - Math.atan2(goalHeight, goalDepth), 0, 0]}
         material={netMat}
       >
-        <planeGeometry args={[goalWidth, Math.sqrt(goalDepth ** 2 + goalHeight ** 2), 20, 10]} />
+        <planeGeometry args={[goalWidth, Math.sqrt(goalDepth ** 2 + goalHeight ** 2), 16, 8]} />
       </mesh>
       
-      {/* Side nets */}
+      {/* Side panels */}
       <mesh position={[-goalDepth / 2, goalHeight / 2, goalWidth / 2]} rotation={[0, Math.PI / 2, 0]} material={netMat}>
-        <planeGeometry args={[goalDepth, goalHeight, 10, 16]} />
+        <planeGeometry args={[goalDepth, goalHeight, 8, 12]} />
       </mesh>
       <mesh position={[-goalDepth / 2, goalHeight / 2, -goalWidth / 2]} rotation={[0, Math.PI / 2, 0]} material={netMat}>
-        <planeGeometry args={[goalDepth, goalHeight, 10, 16]} />
+        <planeGeometry args={[goalDepth, goalHeight, 8, 12]} />
       </mesh>
 
-      {/* Bottom net */}
+      {/* Floor */}
       <mesh position={[-goalDepth / 2, postRadius, 0]} rotation={[Math.PI / 2, 0, 0]} material={netMat}>
-        <planeGeometry args={[goalWidth, goalDepth, 20, 10]} />
+        <planeGeometry args={[goalWidth, goalDepth, 16, 8]} />
       </mesh>
     </group>
   );
@@ -515,8 +510,8 @@ function GrassField() {
   }, []);
 
   return (
-    <mesh rotation={[-Math.PI / 2, 0, 0]} position={[5, 0, 0]} receiveShadow>
-      <planeGeometry args={[50, 40]} />
+    <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]} receiveShadow>
+      <planeGeometry args={[60, 50]} />
       <meshStandardMaterial 
         map={pitchTexture}
         roughness={0.7}
@@ -531,9 +526,9 @@ function CameraController() {
   const { camera } = useThree();
   
   useEffect(() => {
-    // Position like a broadcast camera behind the goal
-    camera.position.set(-7, 3.5, 10);
-    camera.lookAt(0, 2, 0);
+    // Position like TV camera - slightly to side for dramatic angle
+    camera.position.set(-8, 2.5, 12);
+    camera.lookAt(0, 1.5, 0);
   }, [camera]);
   
   return null;
