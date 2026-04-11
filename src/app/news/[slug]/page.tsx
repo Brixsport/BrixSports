@@ -499,7 +499,7 @@ export default function NewsDetailPage() {
                             <button
                                 type="submit"
                                 disabled={!commentText.trim()}
-                                className="absolute right-3 bottom-3 p-1.5 rounded-lg bg-white/10 text-white/60 hover:bg-primary hover:text-black transition-colors disabled:opacity-0 disabled:pointer-events-none"
+                                className="absolute right-3 bottom-3 p-2 rounded-lg bg-primary text-black hover:bg-primary/80 transition-all disabled:opacity-30 disabled:cursor-not-allowed shadow-lg"
                             >
                                 <Send className="w-4 h-4" />
                             </button>
