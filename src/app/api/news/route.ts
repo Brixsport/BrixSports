@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
-import { news, newsLikes } from '@/db/schema';
+import { news, newsLikes, users } from '@/db/schema';
 import { eq, desc, and, like, or, sql } from 'drizzle-orm';
 
 // GET /api/news - Get all news articles with filters
@@ -113,6 +113,16 @@ export async function POST(request: NextRequest) {
         // Create news article
         const newsId = `news-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
+        // Check if author exists in users table (foreign key constraint)
+        let validAuthorId = authorId;
+        if (authorId) {
+            const existingUser = await db.select({ id: users.id }).from(users).where(eq(users.id, authorId)).limit(1);
+            if (existingUser.length === 0) {
+                // User doesn't exist, set to null to avoid FK constraint violation
+                validAuthorId = null;
+            }
+        }
+
         const newNews = await db.insert(news).values({
             id: newsId,
             title,
@@ -124,7 +134,7 @@ export async function POST(request: NextRequest) {
             tags: tags ? JSON.stringify(tags) : null,
             isBreaking: isBreaking || false,
             isFeatured: isFeatured || false,
-            authorId,
+            authorId: validAuthorId,
             authorName: authorName || 'Admin',
             sendPushNotification: sendPushNotification || false,
             status: status || 'draft',
@@ -166,6 +176,9 @@ export async function POST(request: NextRequest) {
         // Log more details for debugging
         if (error instanceof Error) {
             console.error('[News API] Error stack:', error.stack);
+            console.error('[News API] Error name:', error.name);
+            // Log the full error object for inspection
+            console.error('[News API] Full error:', JSON.stringify(error, Object.getOwnPropertyNames(error)));
         }
         return NextResponse.json(
             { error: 'Failed to create news article', details: error instanceof Error ? error.message : String(error) },
