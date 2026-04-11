@@ -10,6 +10,8 @@ import { MultiLoggerStatus } from '@/components/MultiLoggerStatus';
 import { getMatchStateManager, MatchStateManager, MatchState, FootballEventType } from '@/lib/match-state-manager';
 import type { SyncEvent } from '@/lib/multiLogger';
 import { getPrimaryTeam } from '@/lib/player-affiliation-utils';
+// Import to initialize match event notification listener
+import '@/lib/notifications/event-driven-notifier';
 
 import { Match, Logger, Player, Team } from '@/db/schema';
 

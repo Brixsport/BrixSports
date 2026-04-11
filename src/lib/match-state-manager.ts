@@ -957,8 +957,10 @@ export class MatchStateManager {
 
     private triggerNotification(event: MatchEvent): void {
         const notifiableEvents: FootballEventType[] = ['Goal', 'Penalty', 'Red Card'];
+        console.log('[MatchStateManager] triggerNotification called for:', event.type, 'Notifiable:', notifiableEvents.includes(event.type));
         if (!notifiableEvents.includes(event.type)) return;
 
+        console.log('[MatchStateManager] Dispatching MATCH_NOTIFICATION_TRIGGER:', { matchId: this.state.matchId, eventType: event.type });
         window.dispatchEvent(new CustomEvent('MATCH_NOTIFICATION_TRIGGER', {
             detail: {
                 matchId: this.state.matchId,

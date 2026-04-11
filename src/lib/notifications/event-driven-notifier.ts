@@ -85,7 +85,10 @@ export class EventDrivenNotifier {
     private listenForEvents(): void {
         if (typeof window === 'undefined') return;
 
+        console.log('[EventDrivenNotifier] Starting event listener...');
+
         window.addEventListener('MATCH_NOTIFICATION_TRIGGER', (event: any) => {
+            console.log('[EventDrivenNotifier] MATCH_NOTIFICATION_TRIGGER received:', event.detail);
             this.handleEvent(event.detail);
         });
 
@@ -188,28 +191,36 @@ export class EventDrivenNotifier {
         item.attempts++;
         item.lastAttempt = Date.now();
 
+        console.log(`[EventDrivenNotifier] Sending notification (attempt ${item.attempts}):`, { matchId, eventType: event.type, player: event.playerSnapshot?.name });
+
         try {
             const notificationType = this.getNotificationType(event.type);
-            if (!notificationType) return;
+            if (!notificationType) {
+                console.log('[EventDrivenNotifier] Not a notifiable event type:', event.type);
+                return;
+            }
+
+            const payload = {
+                matchId,
+                homeTeamId: event.teamId,
+                awayTeamId: event.teamId,
+                eventType: notificationType,
+                playerName: event.playerSnapshot?.name,
+                teamName: event.playerSnapshot?.teamId,
+                minute: event.displayMinute,
+                homeScore: score.home,
+                awayScore: score.away,
+            };
+            console.log('[EventDrivenNotifier] POST /api/notifications/match-event:', payload);
 
             const response = await fetch('/api/notifications/match-event', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    matchId,
-                    homeTeamId: event.teamId, // Will be corrected by API
-                    awayTeamId: event.teamId,
-                    eventType: notificationType,
-                    playerName: event.playerSnapshot?.name,
-                    teamName: event.playerSnapshot?.teamId,
-                    minute: event.displayMinute,
-                    homeScore: score.home,
-                    awayScore: score.away,
-                }),
+                body: JSON.stringify(payload),
             });
 
             if (response.ok) {
-                console.log(`✅ Notification sent for ${event.type} by ${event.playerSnapshot?.name}`);
+                console.log(`[EventDrivenNotifier] ✅ Notification sent for ${event.type} by ${event.playerSnapshot?.name}`);
 
                 // Remove from queue
                 const index = this.queue.indexOf(item);
