@@ -1,4 +1,5 @@
-// Rating Calculator - Auto-calculate player ratings based on match events
+// Rating Calculator - Auto-calculate player ratings based on ALL match events
+// Every event type affects the final rating
 
 interface PlayerStats {
     playerId: string;
@@ -13,6 +14,26 @@ interface PlayerStats {
     fouls: number;
     isSubstituted: boolean;
     minutesPlayed: number;
+    // Additional event types that affect ratings
+    saves?: number;              // GK saves
+    passesCompleted?: number;   // Successful passes
+    passesFailed?: number;      // Failed/incomplete passes
+    tackles?: number;           // Successful tackles
+    tacklesMissed?: number;     // Failed tackle attempts
+    interceptions?: number;     // Interceptions
+    clearances?: number;        // Defensive clearances
+    blocks?: number;            // Shot/goal blocks
+    dribblesCompleted?: number; // Successful dribbles
+    dribblesFailed?: number;    // Failed dribbles
+    cornersWon?: number;        // Corners won
+    cornersConceded?: number;   // Corners conceded
+    freeKicksWon?: number;      // Free kicks won (fouled)
+    freeKicksConceded?: number; // Free kicks conceded (fouling)
+    offsides?: number;          // Offside calls
+    ownGoals?: number;          // Own goals
+    penaltiesScored?: number;    // Penalty goals
+    penaltiesMissed?: number;    // Penalty misses
+    penaltiesSaved?: number;    // Penalties saved (GK)
 }
 
 interface RatingBreakdown {
@@ -147,11 +168,142 @@ export class RatingCalculator {
             rating += redPenalty;
         }
 
+        // ========== SAVES (Goalkeepers) ==========
+        if (stats.saves && stats.saves > 0) {
+            const saveValue = Math.min(stats.saves * 0.25, 2.0);
+            breakdown.goals += saveValue; // Reuse goals field for saves tracking
+            rating += saveValue;
+        }
+
+        // ========== PASSES ==========
+        // Completed passes are good, failed passes are bad
+        if (stats.passesCompleted && stats.passesCompleted > 0) {
+            // More passes = better, but with diminishing returns
+            const passValue = Math.min(stats.passesCompleted * 0.02, 0.5);
+            breakdown.assists += passValue; // Track in assists field
+            rating += passValue;
+        }
+        if (stats.passesFailed && stats.passesFailed > 5) {
+            // Penalty for excessive failed passes
+            const passPenalty = -Math.min((stats.passesFailed - 5) * 0.03, 0.4);
+            breakdown.assists += passPenalty;
+            rating += passPenalty;
+        }
+
+        // ========== DEFENSIVE ACTIONS ==========
+        // Tackles
+        if (stats.tackles && stats.tackles > 0) {
+            const tackleValue = Math.min(stats.tackles * 0.15, 0.8);
+            breakdown.fouls += tackleValue; // Reuse fouls field
+            rating += tackleValue;
+        }
+        if (stats.tacklesMissed && stats.tacklesMissed > 3) {
+            const missedPenalty = -Math.min((stats.tacklesMissed - 3) * 0.05, 0.3);
+            breakdown.fouls += missedPenalty;
+            rating += missedPenalty;
+        }
+
+        // Interceptions
+        if (stats.interceptions && stats.interceptions > 0) {
+            const intValue = Math.min(stats.interceptions * 0.12, 0.6);
+            breakdown.fouls += intValue;
+            rating += intValue;
+        }
+
+        // Clearances
+        if (stats.clearances && stats.clearances > 0) {
+            const clearValue = Math.min(stats.clearances * 0.08, 0.4);
+            breakdown.fouls += clearValue;
+            rating += clearValue;
+        }
+
+        // Blocks
+        if (stats.blocks && stats.blocks > 0) {
+            const blockValue = Math.min(stats.blocks * 0.15, 0.6);
+            breakdown.shots += blockValue; // Track in shots field
+            rating += blockValue;
+        }
+
+        // ========== DRIBBLING ==========
+        if (stats.dribblesCompleted && stats.dribblesCompleted > 0) {
+            const dribbleValue = Math.min(stats.dribblesCompleted * 0.08, 0.5);
+            breakdown.positionBonus += dribbleValue;
+            rating += dribbleValue;
+        }
+        if (stats.dribblesFailed && stats.dribblesFailed > 3) {
+            const dribblePenalty = -Math.min((stats.dribblesFailed - 3) * 0.04, 0.3);
+            breakdown.positionBonus += dribblePenalty;
+            rating += dribblePenalty;
+        }
+
+        // ========== SET PIECES ==========
+        // Corners won (attacking pressure)
+        if (stats.cornersWon && stats.cornersWon > 0) {
+            const cornerValue = Math.min(stats.cornersWon * 0.05, 0.3);
+            breakdown.positionBonus += cornerValue;
+            rating += cornerValue;
+        }
+        // Corners conceded (defensive pressure allowed)
+        if (stats.cornersConceded && stats.cornersConceded > 3) {
+            const cornerPenalty = -Math.min((stats.cornersConceded - 3) * 0.04, 0.3);
+            breakdown.positionBonus += cornerPenalty;
+            rating += cornerPenalty;
+        }
+
+        // Free kicks won (drawn fouls - positive)
+        if (stats.freeKicksWon && stats.freeKicksWon > 0) {
+            const fkwValue = Math.min(stats.freeKicksWon * 0.06, 0.4);
+            breakdown.positionBonus += fkwValue;
+            rating += fkwValue;
+        }
+        // Free kicks conceded (committed fouls - negative, but already counted in fouls)
+        // This is additional for set-piece fouls
+        if (stats.freeKicksConceded && stats.freeKicksConceded > 2) {
+            const fkcPenalty = -Math.min((stats.freeKicksConceded - 2) * 0.05, 0.3);
+            breakdown.fouls += fkcPenalty;
+            rating += fkcPenalty;
+        }
+
+        // ========== DISCIPLINE & ERRORS ==========
+        // Offsides
+        if (stats.offsides && stats.offsides > 2) {
+            const offsidePenalty = -Math.min((stats.offsides - 2) * 0.08, 0.4);
+            breakdown.positionBonus += offsidePenalty;
+            rating += offsidePenalty;
+        }
+
+        // Own goals (severe penalty)
+        if (stats.ownGoals && stats.ownGoals > 0) {
+            const ogPenalty = -stats.ownGoals * 2.0;
+            breakdown.cards += ogPenalty;
+            rating += ogPenalty;
+        }
+
+        // Penalties scored (bonus)
+        if (stats.penaltiesScored && stats.penaltiesScored > 0) {
+            // Penalties are already counted as goals, but add slight bonus for composure
+            const penBonus = stats.penaltiesScored * 0.1;
+            breakdown.positionBonus += penBonus;
+            rating += penBonus;
+        }
+        // Penalties missed (penalty)
+        if (stats.penaltiesMissed && stats.penaltiesMissed > 0) {
+            const penPenalty = -stats.penaltiesMissed * 0.8;
+            breakdown.positionBonus += penPenalty;
+            rating += penPenalty;
+        }
+        // Penalties saved (GK bonus)
+        if (stats.penaltiesSaved && stats.penaltiesSaved > 0) {
+            const penSaveBonus = stats.penaltiesSaved * 1.0;
+            breakdown.goals += penSaveBonus;
+            rating += penSaveBonus;
+        }
+
         // ========== FOULS ==========
         // Excessive fouls are penalized
         if (stats.fouls > 2) {
             const foulPenalty = -Math.min((stats.fouls - 2) * 0.1, 0.4);
-            breakdown.fouls = foulPenalty;
+            breakdown.fouls += foulPenalty;
             rating += foulPenalty;
         }
 

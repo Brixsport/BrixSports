@@ -48,6 +48,29 @@ export const ratingHistory = sqliteTable('rating_history', {
     timestamp: integer('timestamp', { mode: 'timestamp' }).default(sql`CURRENT_TIMESTAMP`)
 });
 
+// Team Ratings Table - Calculated from player averages
+export const teamRatings = sqliteTable('team_ratings', {
+    id: text('id').primaryKey(),
+    matchId: text('match_id').notNull().references(() => matches.id, { onDelete: 'cascade' }),
+    teamId: text('team_id').notNull().references(() => teams.id, { onDelete: 'cascade' }),
+    
+    // Team rating (average of all player ratings)
+    rating: real('rating').notNull(),
+    
+    // Breakdown of contributions
+    playerCount: integer('player_count').default(0), // Number of players rated
+    totalPlayerRating: real('total_player_rating').default(0), // Sum of all ratings
+    
+    // Additional team metrics
+    goals: integer('goals').default(0),
+    possession: real('possession'), // Nullable - if tracked
+    shotsOnTarget: integer('shots_on_target').default(0),
+    
+    // Timestamps
+    createdAt: integer('created_at', { mode: 'timestamp' }).default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: integer('updated_at', { mode: 'timestamp' }).default(sql`CURRENT_TIMESTAMP`)
+});
+
 // Import matches and players tables
 import { matches } from './schema';
 import { players } from './schema';

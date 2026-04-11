@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
-import { playerRatings, ratingHistory } from '@/db/schema-ratings';
+import { playerRatings, ratingHistory, teamRatings } from '@/db/schema-ratings';
 import { matches, players, matchEvents } from '@/db/schema';
 import { eq, and, sql } from 'drizzle-orm';
 import { getAuthUser } from '@/lib/auth';
@@ -198,21 +198,58 @@ export async function POST(
             const player = playersMap.get(playerId);
             if (!player) continue;
 
-            // Count events for this player
+            // Count ALL events for this player - EVERY event affects ratings
             const playerEvents = events.filter(e => e.playerId === playerId);
+            
+            // Helper to count events by type
+            const countByType = (type: string) => playerEvents.filter(e => e.type === type).length;
+            const countByDetail = (detailKeyword: string) => playerEvents.filter(e => e.detail?.toLowerCase().includes(detailKeyword.toLowerCase())).length;
 
             const stats = {
                 playerId,
                 teamId: lineupEntry.team === 'home' ? match[0].homeTeamId : match[0].awayTeamId,
-                position: lineupEntry.position || player.position || 'CM', // Fallback to CM if unknown
-                goals: playerEvents.filter(e => e.type === 'Goal').length,
-                assists: playerEvents.filter(e => e.detail?.includes('assist')).length,
+                position: lineupEntry.position || player.position || 'CM',
+                
+                // Core attacking events
+                goals: countByType('Goal'),
+                assists: countByDetail('assist'),
+                shotsOnTarget: countByType('Shot') + countByDetail('on target'),
+                shotsOffTarget: countByDetail('off target') + countByDetail('missed'),
+                
+                // Defensive events
+                saves: countByType('Save'),
+                tackles: countByType('Tackle'),
+                tacklesMissed: countByDetail('missed tackle'),
+                interceptions: countByType('Interception'),
+                clearances: countByType('Clearance'),
+                blocks: countByType('Block'),
+                
+                // Possession events
+                passesCompleted: countByDetail('completed') + countByDetail('successful pass'),
+                passesFailed: countByDetail('failed pass') + countByDetail('incomplete'),
+                dribblesCompleted: countByDetail('successful dribble') + countByDetail('beat'),
+                dribblesFailed: countByDetail('failed dribble') + countByDetail('tackled'),
+                
+                // Set pieces
+                cornersWon: countByType('Corner') + countByDetail('won'),
+                cornersConceded: countByDetail('conceded corner'),
+                freeKicksWon: countByType('Free Kick') + countByDetail('fouled') + countByDetail('won free kick'),
+                freeKicksConceded: countByDetail('conceded free kick') + countByDetail('foul'),
+                
+                // Discipline
+                yellowCards: countByType('Yellow Card'),
+                redCards: countByType('Red Card'),
+                fouls: countByType('Foul'),
+                offsides: countByType('Offside'),
+                
+                // Errors
+                ownGoals: countByType('Own Goal'),
+                penaltiesScored: countByDetail('penalty scored'),
+                penaltiesMissed: countByDetail('penalty missed'),
+                penaltiesSaved: countByDetail('penalty saved'),
+                
+                // Special
                 eyePoints: playerEvents.filter(e => e.isEyePoint).length,
-                yellowCards: playerEvents.filter(e => e.type === 'Yellow Card').length,
-                redCards: playerEvents.filter(e => e.type === 'Red Card').length,
-                shotsOnTarget: 0,
-                shotsOffTarget: 0,
-                fouls: playerEvents.filter(e => e.type === 'Foul').length,
                 isSubstituted: playerEvents.some(e => e.type === 'Substitution' && e.detail?.includes('out')),
                 minutesPlayed: 90
             };
@@ -222,9 +259,19 @@ export async function POST(
 
         // Calculate ratings and update database
         const updatedRatings = [];
+        const teamPlayerRatings = new Map<string, { total: number; count: number; goals: number }>(); // teamId -> stats
 
         for (const [playerId, stats] of playerStats.entries()) {
             const { rating, breakdown } = RatingCalculator.calculateAutoRating(stats);
+
+            // Track for team rating calculation
+            if (!teamPlayerRatings.has(stats.teamId)) {
+                teamPlayerRatings.set(stats.teamId, { total: 0, count: 0, goals: 0 });
+            }
+            const teamStats = teamPlayerRatings.get(stats.teamId)!;
+            teamStats.total += rating;
+            teamStats.count += 1;
+            teamStats.goals += stats.goals;
 
             // Check if rating already exists
             const existingRating = await db
@@ -251,6 +298,7 @@ export async function POST(
 
                 updatedRatings.push({
                     playerId,
+                    teamId: stats.teamId,
                     rating,
                     breakdown
                 });
@@ -269,16 +317,68 @@ export async function POST(
 
                 updatedRatings.push({
                     playerId,
+                    teamId: stats.teamId,
                     rating,
                     breakdown
                 });
             }
         }
 
+        // Calculate and save team ratings (average of player ratings)
+        const updatedTeamRatings = [];
+        for (const [teamId, stats] of teamPlayerRatings.entries()) {
+            const teamRating = stats.count > 0 ? stats.total / stats.count : 6.0;
+            
+            // Check if team rating exists
+            const existingTeamRating = await db
+                .select()
+                .from(teamRatings)
+                .where(
+                    and(
+                        eq(teamRatings.matchId, matchId),
+                        eq(teamRatings.teamId, teamId)
+                    )
+                )
+                .limit(1);
+
+            if (existingTeamRating.length > 0) {
+                await db
+                    .update(teamRatings)
+                    .set({
+                        rating: Math.round(teamRating * 10) / 10,
+                        playerCount: stats.count,
+                        totalPlayerRating: stats.total,
+                        goals: stats.goals,
+                        updatedAt: new Date()
+                    })
+                    .where(eq(teamRatings.id, existingTeamRating[0].id));
+            } else {
+                const teamRatingId = `team-rating-${matchId}-${teamId}-${Date.now()}`;
+                await db.insert(teamRatings).values({
+                    id: teamRatingId,
+                    matchId,
+                    teamId,
+                    rating: Math.round(teamRating * 10) / 10,
+                    playerCount: stats.count,
+                    totalPlayerRating: stats.total,
+                    goals: stats.goals
+                });
+            }
+
+            updatedTeamRatings.push({
+                teamId,
+                rating: Math.round(teamRating * 10) / 10,
+                playerCount: stats.count,
+                goals: stats.goals
+            });
+        }
+
         return NextResponse.json({
             message: 'Ratings calculated successfully',
             ratingsUpdated: updatedRatings.length,
-            ratings: updatedRatings
+            teamRatingsUpdated: updatedTeamRatings.length,
+            ratings: updatedRatings,
+            teamRatings: updatedTeamRatings
         });
 
     } catch (error) {

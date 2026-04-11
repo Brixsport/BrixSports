@@ -36,10 +36,60 @@ interface InfrastructureData {
     api: {
         endpoints: Array<{
             name: string;
+            path: string;
             avgResponseTime: number;
             status: string;
+            error: string | null;
         }>;
+        categories: {
+            core: Array<{
+                name: string;
+                path: string;
+                avgResponseTime: number;
+                status: string;
+                error: string | null;
+            }>;
+            content: Array<{
+                name: string;
+                path: string;
+                avgResponseTime: number;
+                status: string;
+                error: string | null;
+            }>;
+            admin: Array<{
+                name: string;
+                path: string;
+                avgResponseTime: number;
+                status: string;
+                error: string | null;
+            }>;
+            features: Array<{
+                name: string;
+                path: string;
+                avgResponseTime: number;
+                status: string;
+                error: string | null;
+            }>;
+            auth: Array<{
+                name: string;
+                path: string;
+                avgResponseTime: number;
+                status: string;
+                error: string | null;
+            }>;
+            basketball: Array<{
+                name: string;
+                path: string;
+                avgResponseTime: number;
+                status: string;
+                error: string | null;
+            }>;
+        };
+        totalCount: number;
         avgResponseTime: number;
+        operationalCount: number;
+        degradedCount: number;
+        downCount: number;
     };
     performance: {
         requestLatency: number;
@@ -78,6 +128,46 @@ export default function InfrastructurePage() {
         const minutes = Math.floor((seconds % 3600) / 60);
         return `${days}d ${hours}h ${minutes}m`;
     };
+
+    // Helper to render an endpoint row
+    const renderEndpoint = (endpoint: {
+        name: string;
+        path: string;
+        avgResponseTime: number;
+        status: string;
+        error: string | null;
+    }) => (
+        <div
+            key={endpoint.path}
+            className="flex items-center justify-between p-3 bg-white/5 rounded-xl"
+        >
+            <div className="flex items-center gap-3 min-w-0">
+                <div className={`w-2 h-2 rounded-full flex-shrink-0 ${
+                    endpoint.status === 'operational' ? 'bg-green-500' :
+                    endpoint.status === 'degraded' ? 'bg-yellow-500' : 'bg-red-500'
+                }`} />
+                <div className="min-w-0">
+                    <span className="text-sm font-bold block truncate">{endpoint.name}</span>
+                    <span className="text-xs text-white/40 font-mono truncate block">{endpoint.path}</span>
+                    {endpoint.error && (
+                        <span className="text-xs text-red-400 truncate block">{endpoint.error}</span>
+                    )}
+                </div>
+            </div>
+            <div className="flex items-center gap-4 flex-shrink-0">
+                <span className="text-xs text-white/40">
+                    {Math.round(endpoint.avgResponseTime)}ms
+                </span>
+                <span className={`text-[10px] font-black uppercase px-2 py-1 rounded ${
+                    endpoint.status === 'operational' ? 'bg-green-500/10 text-green-500' :
+                    endpoint.status === 'degraded' ? 'bg-yellow-500/10 text-yellow-500' :
+                    'bg-red-500/10 text-red-500'
+                }`}>
+                    {endpoint.status}
+                </span>
+            </div>
+        </div>
+    );
 
     return (
         <div className="min-h-screen bg-[#050505] text-white p-6 lg:p-12">
@@ -191,35 +281,78 @@ export default function InfrastructurePage() {
 
                         {/* API Endpoints */}
                         <div className="bg-white/5 border border-white/10 rounded-[32px] p-8">
-                            <div className="flex items-center gap-3 mb-6">
-                                <Zap className="text-primary" size={24} />
-                                <h2 className="font-display text-2xl italic uppercase">API Endpoints</h2>
+                            <div className="flex items-center justify-between mb-6">
+                                <div className="flex items-center gap-3">
+                                    <Zap className="text-primary" size={24} />
+                                    <h2 className="font-display text-2xl italic uppercase">API Endpoints</h2>
+                                    <span className="text-xs text-white/40">({data.api.totalCount} total)</span>
+                                </div>
+                                <div className="flex items-center gap-2 text-xs">
+                                    <span className="px-2 py-1 bg-green-500/10 text-green-500 rounded">
+                                        {data.api.operationalCount} OK
+                                    </span>
+                                    {data.api.degradedCount > 0 && (
+                                        <span className="px-2 py-1 bg-yellow-500/10 text-yellow-500 rounded">
+                                            {data.api.degradedCount} Slow
+                                        </span>
+                                    )}
+                                    {data.api.downCount > 0 && (
+                                        <span className="px-2 py-1 bg-red-500/10 text-red-500 rounded">
+                                            {data.api.downCount} Down
+                                        </span>
+                                    )}
+                                </div>
                             </div>
-                            <div className="space-y-3">
-                                {data.api.endpoints.map((endpoint) => (
-                                    <div
-                                        key={endpoint.name}
-                                        className="flex items-center justify-between p-4 bg-white/5 rounded-xl"
-                                    >
-                                        <div className="flex items-center gap-3">
-                                            <div className={`w-2 h-2 rounded-full ${endpoint.status === 'operational' ? 'bg-green-500' : 'bg-red-500'
-                                                }`} />
-                                            <span className="text-sm font-bold">{endpoint.name}</span>
-                                        </div>
-                                        <div className="flex items-center gap-4">
-                                            <span className="text-xs text-white/40">
-                                                {Math.round(endpoint.avgResponseTime)}ms avg
-                                            </span>
-                                            <span className={`text-[10px] font-black uppercase px-2 py-1 rounded ${endpoint.status === 'operational'
-                                                    ? 'bg-green-500/10 text-green-500'
-                                                    : 'bg-red-500/10 text-red-500'
-                                                }`}>
-                                                {endpoint.status}
-                                            </span>
-                                        </div>
+                            
+                            {/* Category: Core */}
+                            {data.api.categories?.core && data.api.categories.core.length > 0 && (
+                                <div className="mb-6">
+                                    <h3 className="text-xs font-black uppercase tracking-widest text-white/40 mb-3">Core APIs</h3>
+                                    <div className="space-y-2">
+                                        {data.api.categories.core.map(renderEndpoint)}
                                     </div>
-                                ))}
-                            </div>
+                                </div>
+                            )}
+                            
+                            {/* Category: Content */}
+                            {data.api.categories?.content && data.api.categories.content.length > 0 && (
+                                <div className="mb-6">
+                                    <h3 className="text-xs font-black uppercase tracking-widest text-white/40 mb-3">Content APIs</h3>
+                                    <div className="space-y-2">
+                                        {data.api.categories.content.map(renderEndpoint)}
+                                    </div>
+                                </div>
+                            )}
+                            
+                            {/* Category: Admin */}
+                            {data.api.categories?.admin && data.api.categories.admin.length > 0 && (
+                                <div className="mb-6">
+                                    <h3 className="text-xs font-black uppercase tracking-widest text-white/40 mb-3">Admin APIs</h3>
+                                    <div className="space-y-2">
+                                        {data.api.categories.admin.map(renderEndpoint)}
+                                    </div>
+                                </div>
+                            )}
+                            
+                            {/* Category: Features */}
+                            {data.api.categories?.features && data.api.categories.features.length > 0 && (
+                                <div className="mb-6">
+                                    <h3 className="text-xs font-black uppercase tracking-widest text-white/40 mb-3">Feature APIs</h3>
+                                    <div className="space-y-2">
+                                        {data.api.categories.features.map(renderEndpoint)}
+                                    </div>
+                                </div>
+                            )}
+                            
+                            {/* Category: Basketball */}
+                            {data.api.categories?.basketball && data.api.categories.basketball.length > 0 && (
+                                <div>
+                                    <h3 className="text-xs font-black uppercase tracking-widest text-white/40 mb-3">Basketball APIs</h3>
+                                    <div className="space-y-2">
+                                        {data.api.categories.basketball.map(renderEndpoint)}
+                                    </div>
+                                </div>
+                            )}
                         </div>
 
                         {/* System Info */}

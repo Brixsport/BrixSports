@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
 import { playerRatings } from '@/db/schema-ratings';
-import { matches, players } from '@/db/schema';
-import { eq, and } from 'drizzle-orm';
+import { matches, players, matchEvents } from '@/db/schema';
+import { eq, and, or } from 'drizzle-orm';
 import { getAuthUser } from '@/lib/auth';
 import { RatingCalculator } from '@/lib/ratingCalculator';
 
@@ -173,32 +173,95 @@ export async function GET(
         // Get lineups for team context
         const lineups = match.lineups ? JSON.parse(match.lineups) : null;
 
-        // Add suggestions for each player
+        // Get match events to find which substitutes actually played
+        const events = await db
+            .select()
+            .from(matchEvents)
+            .where(eq(matchEvents.matchId, matchId));
+
+        // Find all players who were subbed ON (entered the game)
+        const subbedOnPlayerIds = new Set<string>();
+        events.forEach(event => {
+            if (event.type === 'SUBSTITUTION' && event.relatedPlayerId) {
+                // relatedPlayerId is the player who came ON in a substitution
+                subbedOnPlayerIds.add(event.relatedPlayerId);
+            }
+        });
+
+        console.log('[Ratings Adjust] Players who were subbed on:', Array.from(subbedOnPlayerIds));
+
+        // Helper function to check if player is a starter or substitute based on lineup
+        const getPlayerLineupStatus = (playerId: string, teamId: string): 'starter' | 'substitute' | 'unknown' => {
+            if (!lineups) return 'unknown';
+            
+            const teamKey = match.homeTeamId === teamId ? 'home' : 'away';
+            const teamLineup = lineups[teamKey];
+            
+            if (!teamLineup) return 'unknown';
+            
+            const startingXI = teamLineup.startingXI || [];
+            const substitutes = teamLineup.substitutes || [];
+            
+            const isStarter = startingXI.some((p: any) => p.playerId === playerId);
+            const isSubstitute = substitutes.some((p: any) => p.playerId === playerId);
+            
+            if (isStarter) return 'starter';
+            if (isSubstitute) return 'substitute';
+            return 'unknown';
+        };
+
+        // Add suggestions for each player and determine if they should be rated
         const ratingsWithSuggestions = ratings.map(r => {
             const position = r.player?.position || '';
             const homeScore = match.homeScore ?? 0;
             const awayScore = match.awayScore ?? 0;
             const teamCleanSheet = homeScore === 0 || awayScore === 0;
             const teamWon = homeScore > awayScore || awayScore > homeScore;
+            const playerTeamId = r.player?.teamId || '';
 
             const suggestion = RatingCalculator.getSuggestedRange(position, teamCleanSheet, teamWon);
             const description = RatingCalculator.getRatingDescription(r.rating.autoRating);
+            const lineupStatus = getPlayerLineupStatus(r.playerId, playerTeamId);
+            const wasSubbedOn = subbedOnPlayerIds.has(r.playerId);
+
+            // A player should be rated if:
+            // 1. They were in the starting XI, OR
+            // 2. They were a substitute who was subbed ON (played)
+            // UNUSED substitutes (never entered) should be excluded
+            const shouldBeRated = lineupStatus === 'starter' || wasSubbedOn;
 
             return {
                 ...r.rating,
                 player: r.player,
                 suggestion,
                 description,
+                lineupStatus, // 'starter', 'substitute', or 'unknown'
+                isStarter: lineupStatus === 'starter',
+                isSubstitute: lineupStatus === 'substitute',
+                wasSubbedOn,
+                shouldBeRated,
                 needsReview: r.rating.autoRating < 6.5 && (position.includes('CDM') || position.includes('CM') || position.includes('DEF'))
             };
         });
 
-        console.log('[Ratings Adjust] Returning', ratingsWithSuggestions.length, 'ratings with suggestions');
+        // Filter to only include players who should be rated
+        // (starters + substitutes who played, exclude unused substitutes)
+        const playableRatings = ratingsWithSuggestions.filter(r => r.shouldBeRated);
+
+        const unusedSubstitutes = ratingsWithSuggestions.filter(r => r.isSubstitute && !r.wasSubbedOn);
+
+        console.log('[Ratings Adjust] Returning', playableRatings.length, 'ratings (', unusedSubstitutes.length, 'unused substitutes excluded)');
 
         return NextResponse.json({
             matchId,
             match: match,
-            ratings: ratingsWithSuggestions,
+            ratings: playableRatings,
+            unusedSubstitutes: unusedSubstitutes.map(r => ({
+                playerId: r.playerId,
+                playerName: r.player?.name,
+                reason: 'Did not enter the match'
+            })),
+            allPlayers: ratingsWithSuggestions, // Include all for reference
             lineups
         });
 
