@@ -59,6 +59,19 @@ interface NewsArticle {
 
 const CATEGORIES = ['match', 'transfer', 'injury', 'general', 'breaking'];
 
+interface FormData {
+    title: string;
+    content: string;
+    excerpt: string;
+    imageUrl: string;
+    category: string;
+    tags: string;
+    isBreaking: boolean;
+    isFeatured: boolean;
+    sendPushNotification: boolean;
+    status: string;
+}
+
 function AdminNewsPageContent() {
     const [news, setNews] = useState<NewsArticle[]>([]);
     const [loading, setLoading] = useState(true);
@@ -90,7 +103,7 @@ function AdminNewsPageContent() {
     } = useBulkSelection(news);
 
     // Form state
-    const [formData, setFormData] = useState({
+    const [formData, setFormData] = useState<FormData>({
         title: '',
         content: '',
         excerpt: '',
@@ -185,6 +198,20 @@ function AdminNewsPageContent() {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+
+        // Validate required fields
+        if (!formData.title.trim()) {
+            error('Title is required');
+            return;
+        }
+        if (!formData.content.trim() || formData.content === '<p></p>') {
+            error('Content is required. Please add content to the article.');
+            return;
+        }
+        if (!formData.category) {
+            error('Category is required');
+            return;
+        }
 
         try {
             const payload = {
@@ -716,7 +743,7 @@ function EnhancedNewsEditor({ formData, setFormData, onSubmit, onClose, isEditin
                             </label>
                             <textarea
                                 value={formData.excerpt}
-                                onChange={(e) => setFormData({ ...formData, excerpt: e.target.value })}
+                                onChange={(e) => setFormData(prev => ({ ...prev, excerpt: e.target.value }))}
                                 rows={2}
                                 className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
                                 placeholder="Brief summary..."
@@ -730,7 +757,7 @@ function EnhancedNewsEditor({ formData, setFormData, onSubmit, onClose, isEditin
                             </label>
                             <RichTextEditor
                                 content={formData.content}
-                                onChange={(content) => setFormData({ ...formData, content })}
+                                onChange={(content) => setFormData(prev => ({ ...prev, content }))}
                                 placeholder="Write your article content here..."
                             />
                         </div>

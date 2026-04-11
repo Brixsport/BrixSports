@@ -19,7 +19,7 @@ import {
     Heading2,
     Code,
 } from 'lucide-react';
-import { useCallback } from 'react';
+import { useCallback, useEffect } from 'react';
 
 interface RichTextEditorProps {
     content: string;
@@ -56,6 +56,13 @@ export default function RichTextEditor({ content, onChange, placeholder = 'Start
             },
         },
     });
+
+    // Sync content when prop changes (for external updates)
+    useEffect(() => {
+        if (editor && content !== editor.getHTML()) {
+            editor.commands.setContent(content);
+        }
+    }, [editor, content]);
 
     const addImage = useCallback(() => {
         const url = window.prompt('Enter image URL:');
