@@ -368,6 +368,7 @@ export default function AdvertisementsAdmin() {
                   <>
                     {/* Cloudinary Upload */}
                     <CldUploadWidget
+                      signatureEndpoint="/api/cloudinary/sign"
                       onSuccess={(result: any) => {
                         if (result?.info?.secure_url) {
                           setFormData({ ...formData, imageUrl: result.info.secure_url });
@@ -376,45 +377,79 @@ export default function AdvertisementsAdmin() {
                       }}
                       onError={(error: any) => {
                         console.error('Upload error:', error);
-                        toast.error('Upload failed. Use URL option below.');
+                        toast.error('Cloudinary upload failed. Please paste image URL below instead.');
+                      }}
+                      onOpen={(widget) => {
+                        console.log('[Cloudinary] Widget opening:', widget);
                       }}
                       uploadPreset={process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET || 'brix_uploads'}
                       options={{
+                        cloudName: process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME,
                         maxFiles: 1,
-                        sources: ['local', 'url', 'camera', 'dropbox', 'google_drive'],
+                        sources: ['local', 'url'],
                         cropping: true,
                         showPoweredBy: false,
                         multiple: false,
                         defaultSource: 'local',
                         croppingAspectRatio: getRecommendedAspectRatio(formData.position),
+                        styles: {
+                          palette: {
+                            window: '#0a0a0a',
+                            windowBorder: '#3b82f6',
+                            tabIcon: '#3b82f6',
+                            menuIcons: '#ffffff',
+                            textDark: '#ffffff',
+                            textLight: '#ffffff',
+                            link: '#3b82f6',
+                            action: '#3b82f6',
+                            inactiveTabIcon: '#666666',
+                            error: '#f44336',
+                            inProgress: '#3b82f6',
+                            complete: '#4caf50',
+                            sourceBg: '#0a0a0a',
+                          },
+                        },
                       }}
                     >
                       {({ open }) => (
                         <button
                           type="button"
-                          onClick={() => open()}
+                          onClick={() => {
+                            if (!process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME) {
+                              toast.error('Cloudinary not configured. Please paste image URL below.');
+                              return;
+                            }
+                            open();
+                          }}
                           className="w-full h-32 rounded-md border-2 border-dashed border-slate-600 bg-slate-800/50 hover:bg-slate-700 hover:border-slate-500 transition flex flex-col items-center justify-center gap-2 text-slate-400 hover:text-white mt-2"
                         >
                           <Upload className="w-8 h-8" />
                           <span className="font-semibold text-sm">Click to Upload Image</span>
                           <span className="text-xs text-slate-500">
-                            or drag & drop
+                            Cloudinary upload
                           </span>
                         </button>
                       )}
                     </CldUploadWidget>
                     
                     {/* Manual URL Input */}
-                    <div className="mt-3">
-                      <Label className="text-xs text-slate-400">Or paste image URL:</Label>
-                      <div className="flex gap-2 mt-1">
+                    <div className="mt-4 p-3 bg-slate-800/50 rounded-lg border border-slate-700">
+                      <Label className="text-xs text-slate-400 flex items-center gap-2">
+                        <ImageIcon className="w-3 h-3" />
+                        Or paste image URL directly:
+                      </Label>
+                      <div className="flex gap-2 mt-2">
                         <Input
                           type="url"
                           placeholder="https://example.com/image.jpg"
+                          value={formData.imageUrl}
                           onChange={(e) => setFormData({ ...formData, imageUrl: e.target.value })}
-                          className="flex-1"
+                          className="flex-1 bg-slate-900 border-slate-600"
                         />
                       </div>
+                      <p className="text-xs text-slate-500 mt-2">
+                        Tip: Upload to Cloudinary dashboard first, then paste the URL here
+                      </p>
                     </div>
                   </>
                 )}

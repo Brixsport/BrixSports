@@ -30,6 +30,8 @@
     "migrate:all": "tsx src/db/migrations/run-migrations.ts"
   },
   "dependencies": {
+    "@aws-sdk/client-ses": "3.1029.0",
+    "@aws-sdk/credential-provider-env": "^3.972.25",
     "@babel/parser": "^7.28.5",
     "@headlessui/react": "^2.2.9",
     "@heroicons/react": "^2.2.0",
@@ -114,6 +116,7 @@
     "react-syntax-highlighter": "^15.6.1",
     "react-wrap-balancer": "^1.1.1",
     "recharts": "^3.0.2",
+    "resend": "^6.10.0",
     "simplex-noise": "^4.0.3",
     "socket.io": "^4.8.1",
     "socket.io-client": "^4.8.3",

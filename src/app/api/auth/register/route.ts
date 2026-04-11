@@ -6,6 +6,7 @@ import { nanoid } from 'nanoid';
 import bcrypt from 'bcryptjs';
 import { generateToken, normalizeUserRole } from '@/lib/auth';
 import { sql } from 'drizzle-orm';
+import { sendWelcomeEmail } from '@/lib/email';
 
 // POST /api/auth/register - Register new user
 export async function POST(request: NextRequest) {
@@ -87,6 +88,19 @@ export async function POST(request: NextRequest) {
         };
 
         await db.insert(users).values(newUser);
+
+        // Send welcome email (non-blocking - don't fail registration if email fails)
+        const baseUrl = process.env.NEXT_PUBLIC_APP_URL || (request.headers.get('origin') || 'http://localhost:3000');
+        try {
+            const emailResult = await sendWelcomeEmail(email.toLowerCase(), name, baseUrl);
+            if (emailResult.success) {
+                console.log(`[Register] Welcome email sent to: ${email}`);
+            } else {
+                console.error(`[Register] Welcome email failed for ${email}:`, emailResult.error);
+            }
+        } catch (emailError) {
+            console.error(`[Register] Exception sending welcome email to ${email}:`, emailError);
+        }
 
         // Generate JWT token
         const token = generateToken(userId, email.toLowerCase(), role);

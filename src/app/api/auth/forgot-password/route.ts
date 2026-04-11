@@ -59,11 +59,22 @@ export async function POST(request: NextRequest) {
         const resetLink = `${baseUrl}/reset-password?token=${resetToken}`;
 
         // Send email
+        let emailSent = false;
         try {
-            await sendPasswordResetEmail(user.email, resetLink, baseUrl);
+            const emailResult = await sendPasswordResetEmail(user.email, resetLink, baseUrl);
+            if (emailResult.success) {
+                emailSent = true;
+                console.log(`[ForgotPassword] Reset email sent to: ${user.email}, messageId: ${emailResult.messageId}`);
+            } else {
+                console.error(`[ForgotPassword] Email failed to send to ${user.email}:`, emailResult.error);
+            }
         } catch (emailError) {
-            console.error('Failed to send reset email:', emailError);
-            // Even if email fails, we continue if in development so the link appears in terminal
+            console.error(`[ForgotPassword] Exception sending email to ${user.email}:`, emailError);
+        }
+
+        // Log warning if email failed but we're in production
+        if (!emailSent && process.env.NODE_ENV === 'production') {
+            console.warn(`[ForgotPassword] Email failed in production for user: ${user.email}`);
         }
 
         return NextResponse.json({
