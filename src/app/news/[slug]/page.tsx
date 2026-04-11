@@ -20,6 +20,7 @@ import {
 import Link from 'next/link';
 import { getReadingTime } from '@/lib/utils/reading-time';
 import { formatNewsContent } from '@/lib/utils/format-content';
+import { toast } from 'sonner';
 
 interface NewsArticle {
     id: string;
@@ -250,9 +251,14 @@ export default function NewsDetailPage() {
             if (response.ok) {
                 setCommentText('');
                 fetchComments();
+                toast.success('Comment posted successfully');
+            } else {
+                const data = await response.json();
+                toast.error(data.error || 'Failed to post comment');
             }
         } catch (error) {
             console.error('Error adding comment:', error);
+            toast.error('Network error. Please try again.');
         }
     };
 
@@ -275,9 +281,14 @@ export default function NewsDetailPage() {
                 setReplyText('');
                 setReplyingTo(null);
                 fetchComments();
+                toast.success('Reply posted successfully');
+            } else {
+                const data = await response.json();
+                toast.error(data.error || 'Failed to post reply');
             }
         } catch (error) {
             console.error('Error adding reply:', error);
+            toast.error('Network error. Please try again.');
         }
     };
 
