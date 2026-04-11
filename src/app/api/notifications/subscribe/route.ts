@@ -73,7 +73,6 @@ export async function POST(request: NextRequest) {
                     p256dh: subscription.keys.p256dh,
                     auth: subscription.keys.auth,
                     userAgent: request.headers.get('user-agent') || undefined,
-                    updatedAt: new Date(),
                 })
                 .where(eq(pushSubscriptions.endpoint, subscription.endpoint));
         } else {
@@ -87,6 +86,13 @@ export async function POST(request: NextRequest) {
                 userAgent: request.headers.get('user-agent') || undefined,
             });
         }
+
+        console.log('[NotificationAPI] Subscription saved successfully:', {
+            userId,
+            isUpdate: existing.length > 0,
+            endpoint: subscription.endpoint.substring(0, 50),
+            userAgent: request.headers.get('user-agent')?.substring(0, 100),
+        });
 
         return NextResponse.json({
             success: true,

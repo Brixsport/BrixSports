@@ -33,7 +33,6 @@ export const authOptions: NextAuthOptions = {
                         name: user.name || '',
                         avatar: user.image || null,
                         role: 'user',
-                        createdAt: new Date(),
                     });
                 } else {
                     // Update user info (name, avatar)

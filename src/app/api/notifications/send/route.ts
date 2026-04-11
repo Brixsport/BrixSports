@@ -206,10 +206,14 @@ export async function POST(request: NextRequest) {
             : db.select().from(pushSubscriptions)
         );
         
+        // Log unique user IDs with subscriptions for debugging
+        const uniqueUserIds = [...new Set(allSubscriptions.map(s => s.userId))];
         console.log('[Notifications API] Found subscriptions:', {
             total: allSubscriptions.length,
             targetAudience,
             targetUserCount: targetUserIds.length,
+            uniqueUsersWithSubscriptions: uniqueUserIds.length,
+            userIds: uniqueUserIds, // List all user IDs that have subscriptions
         });
 
         let successCount = 0;
