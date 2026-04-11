@@ -20,8 +20,8 @@ export async function GET(request: NextRequest) {
         and(
           eq(advertisements.position, position),
           eq(advertisements.status, 'active'),
-          sql`${advertisements.startDate} IS NULL OR ${advertisements.startDate} <= ${now}`,
-          sql`${advertisements.endDate} IS NULL OR ${advertisements.endDate} >= ${now}`
+          sql`start_date IS NULL OR start_date <= ${now}`,
+          sql`end_date IS NULL OR end_date >= ${now}`
         )
       )
       .orderBy(desc(advertisements.priority))
