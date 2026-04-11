@@ -6,7 +6,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
-import { pushSubscriptions } from '@/db/schema';
+import { pushSubscriptions, users } from '@/db/schema';
 import { eq } from 'drizzle-orm';
 
 /**
@@ -38,6 +38,21 @@ export async function POST(request: NextRequest) {
         if (!subscription.endpoint || !subscription.keys) {
             return NextResponse.json(
                 { error: 'Invalid subscription format' },
+                { status: 400 }
+            );
+        }
+
+        // Verify user exists in database
+        const userExists = await db
+            .select({ id: users.id })
+            .from(users)
+            .where(eq(users.id, userId))
+            .limit(1);
+
+        if (userExists.length === 0) {
+            console.error('[NotificationAPI] User not found:', userId);
+            return NextResponse.json(
+                { error: 'User not found. Please log in first.' },
                 { status: 400 }
             );
         }

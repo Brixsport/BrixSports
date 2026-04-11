@@ -4,51 +4,64 @@ import { db } from '@/db';
 import { pushSubscriptions } from '@/db/schema';
 import { eq } from 'drizzle-orm';
 
-// Configure web-push with VAPID keys
-const vapidPublicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || '';
-const vapidPrivateKey = process.env.VAPID_PRIVATE_KEY || '';
-const vapidSubject = process.env.VAPID_SUBJECT || 'mailto:admin@brixsport.com';
+// Configure web-push with VAPID keys for each request (serverless-safe)
+function configureVAPID(): boolean {
+    const vapidPublicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || '';
+    const vapidPrivateKey = process.env.VAPID_PRIVATE_KEY || '';
+    const vapidSubject = process.env.VAPID_SUBJECT || 'mailto:admin@brixsport.com';
 
-console.log('[Notifications API] VAPID Configuration:', {
-    hasPublicKey: !!vapidPublicKey,
-    hasPrivateKey: !!vapidPrivateKey,
-    publicKeyLength: vapidPublicKey?.length,
-    privateKeyLength: vapidPrivateKey?.length,
-});
+    console.log('[Notifications API] VAPID Configuration:', {
+        hasPublicKey: !!vapidPublicKey,
+        hasPrivateKey: !!vapidPrivateKey,
+        publicKeyLength: vapidPublicKey?.length,
+        privateKeyLength: vapidPrivateKey?.length,
+    });
 
-if (vapidPublicKey && vapidPrivateKey) {
-    webpush.setVapidDetails(
-        vapidSubject,
-        vapidPublicKey,
-        vapidPrivateKey
-    );
-    console.log('[Notifications API] VAPID configured successfully');
-} else {
-    console.error('[Notifications API] VAPID keys missing!');
+    if (vapidPublicKey && vapidPrivateKey) {
+        webpush.setVapidDetails(
+            vapidSubject,
+            vapidPublicKey,
+            vapidPrivateKey
+        );
+        console.log('[Notifications API] VAPID configured successfully');
+        return true;
+    } else {
+        console.error('[Notifications API] VAPID keys missing!');
+        return false;
+    }
 }
 
 // POST /api/notifications/send - Send push notification to all subscribers
 export async function POST(request: NextRequest) {
     try {
+        // Configure VAPID fresh for each request (serverless-safe)
+        const vapidConfigured = configureVAPID();
+        if (!vapidConfigured) {
+            return NextResponse.json(
+                { error: 'VAPID keys not configured. Check server environment variables.' },
+                { status: 500 }
+            );
+        }
         const body = await request.json();
         const { type, title, body: notificationBody, icon, url, newsId, transferId } = body;
 
+        console.log('[Notifications API] Received request:', {
+            type,
+            title,
+            body: notificationBody?.substring(0, 50),
+            icon,
+            url,
+            newsId,
+            transferId,
+        });
+
         if (!title || !notificationBody) {
+            console.error('[Notifications API] Missing required fields:', { title: !!title, body: !!notificationBody });
             return NextResponse.json(
                 { error: 'Missing required fields: title, body' },
                 { status: 400 }
             );
         }
-
-        // TODO: Fetch all push subscriptions from database
-        // For now, we'll return success and log the notification
-        console.log('[Notifications] Sending push notification:', {
-            type,
-            title,
-            body: notificationBody,
-            icon,
-            url,
-        });
 
         // Notification payload
         const payload = JSON.stringify({
@@ -115,11 +128,15 @@ export async function POST(request: NextRequest) {
                 console.error(`[Notifications API] Failed to send to ${sub.id}:`, {
                     error: error.message,
                     statusCode: error.statusCode,
-                    headers: error.headers
+                    headers: error.headers,
+                    body: error.body,
+                    stack: error.stack,
+                    endpoint: sub.endpoint.substring(0, 100)
                 });
 
                 // If subscription is invalid (410 Gone or 404 Not Found), remove it
                 if (error.statusCode === 410 || error.statusCode === 404) {
+                    console.log(`[Notifications API] Removing expired subscription ${sub.id}`);
                     failedSubscriptions.push(sub.id);
                 }
             }

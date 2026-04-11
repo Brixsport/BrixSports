@@ -132,39 +132,56 @@ export async function PATCH(
 
         // Send push notification if requested and status is confirmed/completed
         if (sendPushNotification && (status === 'confirmed' || status === 'completed')) {
-            const transfer = updated[0];
+            try {
+                const transfer = updated[0];
 
-            // Fetch player and teams for notification
-            const player = await db.select().from(players).where(eq(players.id, transfer.playerId)).limit(1);
-            const fromTeam = transfer.fromTeamId ? await db.select().from(teams).where(eq(teams.id, transfer.fromTeamId)).limit(1) : null;
-            const toTeam = transfer.toTeamId ? await db.select().from(teams).where(eq(teams.id, transfer.toTeamId)).limit(1) : null;
+                // Fetch player and teams for notification
+                const player = await db.select().from(players).where(eq(players.id, transfer.playerId)).limit(1);
+                const fromTeam = transfer.fromTeamId ? await db.select().from(teams).where(eq(teams.id, transfer.fromTeamId)).limit(1) : null;
+                const toTeam = transfer.toTeamId ? await db.select().from(teams).where(eq(teams.id, transfer.toTeamId)).limit(1) : null;
 
-            const notificationTitle = status === 'completed'
-                ? `✅ TRANSFER COMPLETE: ${player[0]?.name}`
-                : `🔄 TRANSFER: ${player[0]?.name}`;
+                const notificationTitle = status === 'completed'
+                    ? `✅ TRANSFER COMPLETE: ${player[0]?.name}`
+                    : `🔄 TRANSFER: ${player[0]?.name}`;
 
-            const notificationBody = `${player[0]?.name} ${fromTeam?.[0] ? `from ${fromTeam[0].name}` : ''} ${toTeam?.[0] ? `to ${toTeam[0].name}` : ''}`;
+                const notificationBody = `${player[0]?.name} ${fromTeam?.[0] ? `from ${fromTeam[0].name}` : ''} ${toTeam?.[0] ? `to ${toTeam[0].name}` : ''}`;
 
-            fetch(`${request.nextUrl.origin}/api/notifications/send`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    type: 'transfer',
-                    transferId: transfer.id,
-                    title: notificationTitle,
-                    body: notificationBody,
-                    icon: transfer.imageUrl || player[0]?.image,
-                    url: `/transfers/${transfer.id}`,
-                }),
-            }).catch(err => console.error('Failed to send push notification:', err));
+                console.log('[Transfers API] Sending push notification...');
+                const notificationResponse = await fetch(`${request.nextUrl.origin}/api/notifications/send`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        type: 'transfer',
+                        transferId: transfer.id,
+                        title: notificationTitle,
+                        body: notificationBody,
+                        icon: transfer.imageUrl || player[0]?.image,
+                        url: `/transfers/${transfer.id}`,
+                    }),
+                });
 
-            // Update notification sent status
-            await db.update(transfers)
-                .set({
-                    pushNotificationSent: true,
-                    pushNotificationSentAt: new Date(),
-                })
-                .where(eq(transfers.id, id));
+                if (!notificationResponse.ok) {
+                    const errorData = await notificationResponse.json().catch(() => ({}));
+                    console.error('[Transfers API] Push notification failed:', {
+                        status: notificationResponse.status,
+                        error: errorData.error || 'Unknown error'
+                    });
+                } else {
+                    const result = await notificationResponse.json();
+                    console.log('[Transfers API] Push notification sent successfully:', result);
+                }
+
+                // Update notification sent status
+                await db.update(transfers)
+                    .set({
+                        pushNotificationSent: true,
+                        pushNotificationSentAt: new Date(),
+                    })
+                    .where(eq(transfers.id, id));
+            } catch (err) {
+                console.error('[Transfers API] Failed to send push notification:', err);
+                // Don't fail the transfer update if notification fails
+            }
         }
 
         return NextResponse.json({

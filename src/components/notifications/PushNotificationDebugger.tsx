@@ -2,11 +2,13 @@
 
 import { useState, useEffect } from 'react';
 import { getPushService } from '@/lib/notifications/push-service';
+import { useAuth } from '@/contexts/AuthContext';
 import { Bell, CheckCircle, XCircle, AlertTriangle, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 
 export default function PushNotificationDebugger() {
+  const { user, isAuthenticated } = useAuth();
   const [status, setStatus] = useState<{
     supported: boolean;
     permission: NotificationPermission | 'unknown';
@@ -108,20 +110,30 @@ export default function PushNotificationDebugger() {
     setLoading(true);
     try {
       const pushService = getPushService();
-      // Use a test user ID or get from auth context
-      const userId = 'test-user-' + Date.now();
-      console.log('[PushDebugger] Using userId:', userId);
+      
+      // Get user ID from AuthContext
+      if (!isAuthenticated || !user?.id) {
+        toast.error('You must be logged in to subscribe to push notifications');
+        console.error('[PushDebugger] No user logged in - subscription requires a valid user ID');
+        setLoading(false);
+        return;
+      }
+      
+      const userId = user.id;
+      console.log('[PushDebugger] Using authenticated userId:', userId);
+      
       const result = await pushService.subscribe(userId);
       
       if (result) {
         toast.success('Successfully subscribed to push notifications!');
       } else {
-        toast.error('Failed to subscribe');
+        toast.error('Failed to subscribe - check console for details');
       }
       
       checkStatus();
     } catch (error) {
       toast.error('Subscription failed: ' + (error as Error).message);
+      console.error('[PushDebugger] Subscribe error:', error);
     } finally {
       setLoading(false);
     }
@@ -315,6 +327,11 @@ export default function PushNotificationDebugger() {
           status={status.serviceWorkerActive ? 'Active' : 'Inactive'}
           good={status.serviceWorkerActive}
         />
+        <StatusItem 
+          label="Logged In" 
+          status={isAuthenticated ? `Yes (${user?.email})` : 'No - Login Required'}
+          good={isAuthenticated}
+        />
         
         {/* Mobile-specific indicators */}
         {mobileInfo.isMobile && (
@@ -348,11 +365,11 @@ export default function PushNotificationDebugger() {
         {status.permission === 'granted' && !status.subscribed && (
           <Button 
             onClick={subscribe} 
-            disabled={loading}
+            disabled={loading || !isAuthenticated}
             className="w-full"
           >
             <Bell className="w-4 h-4 mr-2" />
-            Subscribe to Notifications
+            {isAuthenticated ? 'Subscribe to Notifications' : 'Login Required to Subscribe'}
           </Button>
         )}
 

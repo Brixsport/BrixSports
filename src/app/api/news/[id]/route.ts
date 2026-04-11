@@ -153,28 +153,45 @@ export async function PATCH(
 
         // Send push notification if requested and status is published
         if (sendPushNotification && status === 'published') {
-            const article = updated[0];
+            try {
+                const article = updated[0];
 
-            fetch(`${request.nextUrl.origin}/api/notifications/send`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    type: 'news',
-                    newsId: article.id,
-                    title: article.isBreaking ? `🚨 BREAKING: ${article.title}` : article.title,
-                    body: article.excerpt || article.content.substring(0, 100),
-                    icon: article.imageUrl,
-                    url: `/news/${article.slug}`,
-                }),
-            }).catch(err => console.error('Failed to send push notification:', err));
+                console.log('[News API] Sending push notification...');
+                const notificationResponse = await fetch(`${request.nextUrl.origin}/api/notifications/send`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        type: 'news',
+                        newsId: article.id,
+                        title: article.isBreaking ? `🚨 BREAKING: ${article.title}` : article.title,
+                        body: article.excerpt || article.content.substring(0, 100),
+                        icon: article.imageUrl,
+                        url: `/news/${article.slug}`,
+                    }),
+                });
 
-            // Update notification sent status
-            await db.update(news)
-                .set({
-                    pushNotificationSent: true,
-                    pushNotificationSentAt: new Date(),
-                })
-                .where(eq(news.id, id));
+                if (!notificationResponse.ok) {
+                    const errorData = await notificationResponse.json().catch(() => ({}));
+                    console.error('[News API] Push notification failed:', {
+                        status: notificationResponse.status,
+                        error: errorData.error || 'Unknown error'
+                    });
+                } else {
+                    const result = await notificationResponse.json();
+                    console.log('[News API] Push notification sent successfully:', result);
+                }
+
+                // Update notification sent status
+                await db.update(news)
+                    .set({
+                        pushNotificationSent: true,
+                        pushNotificationSentAt: new Date(),
+                    })
+                    .where(eq(news.id, id));
+            } catch (err) {
+                console.error('[News API] Failed to send push notification:', err);
+                // Don't fail the news update if notification fails
+            }
         }
 
         return NextResponse.json({
