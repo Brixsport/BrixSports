@@ -191,7 +191,7 @@ class PushNotificationService {
 
         try {
             await this.registration.showNotification(title, {
-                badge: '/icons/badge-96x96.png',
+                badge: '/icons/icon-192x192.png',
                 icon: '/icons/icon-192x192.png',
                 ...options,
             });

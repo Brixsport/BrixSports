@@ -159,9 +159,19 @@ self.addEventListener('fetch', (event) => {
 self.addEventListener('push', (event) => {
     console.log('[SW User] Push received:', event);
     console.log('[SW User] Page visibility:', self.clients && self.clients.matchAll ? 'clients available' : 'no clients');
+    console.log('[SW User] Push data raw:', event.data ? event.data.text() : 'no data');
 
     if (!event.data) {
         console.log('[SW User] No data in push event');
+        // Show default notification
+        event.waitUntil(
+            self.registration.showNotification('Brixsport', {
+                body: 'New update available',
+                icon: '/icons/icon-192x192.png',
+                badge: '/icons/icon-192x192.png',
+                tag: 'brixsport-default',
+            })
+        );
         return;
     }
 
@@ -178,12 +188,13 @@ self.addEventListener('push', (event) => {
     const options = {
         body: data.body || '',
         icon: data.icon || '/icons/icon-192x192.png',
-        badge: data.badge || '/icons/badge-96x96.png',
+        badge: data.badge || '/icons/icon-192x192.png',
         image: data.image,
         data: {
-            url: data.url || '/',
-            matchId: data.matchId,
-            type: data.type,
+            url: data.data?.url || data.url || '/',
+            matchId: data.data?.matchId || data.matchId,
+            type: data.data?.type || data.type,
+            eventType: data.data?.eventType || data.eventType,
         },
         tag: data.tag || 'brixsport-notification',
         requireInteraction: data.requireInteraction || false,
@@ -194,20 +205,21 @@ self.addEventListener('push', (event) => {
 
     console.log('[SW User] Showing notification:', { title, options });
 
-    // Customize notification based on type
-    if (data.type === 'GOAL') {
+    // Customize notification based on event type (check both type and eventType)
+    const eventType = data.eventType || data.type;
+    if (eventType === 'GOAL') {
         options.vibrate = [300, 100, 300, 100, 300];
         options.requireInteraction = true;
         options.actions = [
             { action: 'view', title: 'View Match' },
             { action: 'close', title: 'Close' },
         ];
-    } else if (data.type === 'MATCH_START') {
+    } else if (eventType === 'MATCH_START') {
         options.actions = [
             { action: 'view', title: 'Watch Live' },
             { action: 'close', title: 'Dismiss' },
         ];
-    } else if (data.type === 'RED_CARD') {
+    } else if (eventType === 'RED_CARD') {
         options.vibrate = [500, 200, 500];
         options.requireInteraction = true;
     }
@@ -346,7 +358,7 @@ self.addEventListener('message', (event) => {
         const options = {
             body: event.data.data.body || 'This is a test notification',
             icon: '/icons/icon-192x192.png',
-            badge: '/icons/badge-96x96.png',
+            badge: '/icons/icon-192x192.png',
             tag: 'test-notification',
         };
         

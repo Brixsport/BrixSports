@@ -30,6 +30,7 @@ export class EventDrivenNotifier {
     constructor() {
         this.loadSentNotifications();
         this.listenForEvents();
+        this.handleVisibilityChange();
         this.startQueueProcessor();
     }
 

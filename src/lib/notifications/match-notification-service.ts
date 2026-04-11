@@ -223,7 +223,7 @@ function createNotificationPayload(event: MatchEventNotification): NotificationP
                 title: '🔴 Match Started!',
                 body: `${event.teamName} match is now LIVE!`,
                 icon: '/icons/icon-192x192.png',
-                badge: '/icons/badge-96x96.png',
+                badge: '/icons/icon-192x192.png',
                 data: baseData,
                 actions: baseActions,
             };
@@ -233,7 +233,7 @@ function createNotificationPayload(event: MatchEventNotification): NotificationP
                 title: '📋 Lineup Available!',
                 body: `Starting lineup for ${event.teamName} is now available`,
                 icon: '/icons/icon-192x192.png',
-                badge: '/icons/badge-96x96.png',
+                badge: '/icons/icon-192x192.png',
                 data: baseData,
                 actions: baseActions,
             };
@@ -243,7 +243,7 @@ function createNotificationPayload(event: MatchEventNotification): NotificationP
                 title: '⚽ GOAL!',
                 body: `${event.playerName} scores! ${event.homeScore}-${event.awayScore} (${event.minute}')`,
                 icon: '/icons/icon-192x192.png',
-                badge: '/icons/badge-96x96.png',
+                badge: '/icons/icon-192x192.png',
                 data: { ...baseData, playerName: event.playerName, minute: event.minute },
                 actions: baseActions,
             };
@@ -253,7 +253,7 @@ function createNotificationPayload(event: MatchEventNotification): NotificationP
                 title: '🟥 Red Card!',
                 body: `${event.playerName} has been sent off! (${event.minute}')`,
                 icon: '/icons/icon-192x192.png',
-                badge: '/icons/badge-96x96.png',
+                badge: '/icons/icon-192x192.png',
                 data: { ...baseData, playerName: event.playerName, minute: event.minute },
                 actions: baseActions,
             };
@@ -263,7 +263,7 @@ function createNotificationPayload(event: MatchEventNotification): NotificationP
                 title: '🟨 Yellow Card',
                 body: `${event.playerName} has been booked (${event.minute}')`,
                 icon: '/icons/icon-192x192.png',
-                badge: '/icons/badge-96x96.png',
+                badge: '/icons/icon-192x192.png',
                 data: { ...baseData, playerName: event.playerName, minute: event.minute },
                 actions: baseActions,
             };
@@ -273,7 +273,7 @@ function createNotificationPayload(event: MatchEventNotification): NotificationP
                 title: '⏸️ Half Time',
                 body: `Half time: ${event.homeScore}-${event.awayScore}`,
                 icon: '/icons/icon-192x192.png',
-                badge: '/icons/badge-96x96.png',
+                badge: '/icons/icon-192x192.png',
                 data: baseData,
                 actions: baseActions,
             };
@@ -283,7 +283,7 @@ function createNotificationPayload(event: MatchEventNotification): NotificationP
                 title: '⏹️ Full Time!',
                 body: `Match finished: ${event.homeScore}-${event.awayScore}`,
                 icon: '/icons/icon-192x192.png',
-                badge: '/icons/badge-96x96.png',
+                badge: '/icons/icon-192x192.png',
                 data: baseData,
                 actions: baseActions,
             };
@@ -293,7 +293,7 @@ function createNotificationPayload(event: MatchEventNotification): NotificationP
                 title: '⚽ Match Update',
                 body: `New event in ${event.teamName} match`,
                 icon: '/icons/icon-192x192.png',
-                badge: '/icons/badge-96x96.png',
+                badge: '/icons/icon-192x192.png',
                 data: baseData,
                 actions: baseActions,
             };
@@ -331,7 +331,7 @@ export async function sendMatchReminderNotification(
             title: '⏰ Match Starting Soon!',
             body: `${homeTeamName} vs ${awayTeamName} starts in ${minutesBefore} minutes`,
             icon: '/icons/icon-192x192.png',
-            badge: '/icons/badge-96x96.png',
+            badge: '/icons/icon-192x192.png',
             data: {
                 url: `/matches/${matchId}`,
                 type: 'match_reminder',

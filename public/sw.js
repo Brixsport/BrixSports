@@ -20,16 +20,27 @@ self.addEventListener('activate', (event) => {
 
 // Push event - receive push notification
 self.addEventListener('push', (event) => {
-    console.log('[SW] Push received');
+    console.log('[SW] Push received:', event);
+    console.log('[SW] Push data raw:', event.data ? event.data.text() : 'no data');
 
     if (!event.data) {
         console.log('[SW] No data in push event');
+        // Show default notification
+        event.waitUntil(
+            self.registration.showNotification('Brixsport', {
+                body: 'New update available',
+                icon: '/icons/icon-192x192.png',
+                badge: '/icons/icon-192x192.png',
+                tag: 'brixsport-default',
+            })
+        );
         return;
     }
 
     let data;
     try {
         data = event.data.json();
+        console.log('[SW] Push data parsed:', data);
     } catch (error) {
         console.error('[SW] Error parsing push data:', error);
         return;
@@ -39,12 +50,13 @@ self.addEventListener('push', (event) => {
     const options = {
         body: data.body || '',
         icon: data.icon || '/icons/icon-192x192.png',
-        badge: data.badge || '/icons/badge-96x96.png',
+        badge: data.badge || '/icons/icon-192x192.png',
         image: data.image,
         data: {
-            url: data.url || '/',
-            matchId: data.matchId,
-            type: data.type,
+            url: data.data?.url || data.url || '/',
+            matchId: data.data?.matchId || data.matchId,
+            type: data.data?.type || data.type,
+            eventType: data.data?.eventType || data.eventType,
         },
         tag: data.tag || 'brixsport-notification',
         requireInteraction: data.requireInteraction || false,
@@ -52,26 +64,29 @@ self.addEventListener('push', (event) => {
         actions: data.actions || [],
     };
 
-    // Customize notification based on type
-    if (data.type === 'GOAL') {
+    // Customize notification based on event type (check both type and eventType)
+    const eventType = data.eventType || data.type;
+    if (eventType === 'GOAL') {
         options.vibrate = [300, 100, 300, 100, 300];
         options.requireInteraction = true;
         options.actions = [
             { action: 'view', title: 'View Match' },
             { action: 'close', title: 'Close' },
         ];
-    } else if (data.type === 'MATCH_START') {
+    } else if (eventType === 'MATCH_START') {
         options.actions = [
             { action: 'view', title: 'Watch Live' },
             { action: 'close', title: 'Dismiss' },
         ];
-    } else if (data.type === 'RED_CARD') {
+    } else if (eventType === 'RED_CARD') {
         options.vibrate = [500, 200, 500];
         options.requireInteraction = true;
     }
 
     event.waitUntil(
         self.registration.showNotification(title, options)
+            .then(() => console.log('[SW] Notification shown successfully'))
+            .catch((error) => console.error('[SW] Error showing notification:', error))
     );
 });
 

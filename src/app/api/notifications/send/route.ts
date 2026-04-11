@@ -96,7 +96,7 @@ export async function POST(request: NextRequest) {
             title,
             body: notificationBody,
             icon: icon || '/icons/icon-192x192.png',
-            badge: '/icons/badge-96x96.png',
+            badge: '/icons/icon-192x192.png',
             data: {
                 url: url || '/',
                 type,
