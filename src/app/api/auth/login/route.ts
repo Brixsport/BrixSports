@@ -36,8 +36,8 @@ export async function POST(request: NextRequest) {
             console.log(`[Login] User not found for email: ${email}`);
             return NextResponse.json(
                 {
-                    error: 'Invalid email or password',
-                    code: 'AUTH_INVALID_CREDENTIALS'
+                    error: 'Email not found. Please check your email or sign up.',
+                    code: 'AUTH_USER_NOT_FOUND'
                 },
                 { status: 401 }
             );
@@ -62,8 +62,8 @@ export async function POST(request: NextRequest) {
             console.log(`[Login] Invalid password for user: ${email}`);
             return NextResponse.json(
                 {
-                    error: 'Invalid email or password',
-                    code: 'AUTH_INVALID_CREDENTIALS'
+                    error: 'Incorrect password. Please try again.',
+                    code: 'AUTH_WRONG_PASSWORD'
                 },
                 { status: 401 }
             );

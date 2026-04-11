@@ -60,7 +60,7 @@ export async function POST(request: NextRequest) {
 
         // Send email
         try {
-            await sendPasswordResetEmail(user.email, resetLink);
+            await sendPasswordResetEmail(user.email, resetLink, baseUrl);
         } catch (emailError) {
             console.error('Failed to send reset email:', emailError);
             // Even if email fails, we continue if in development so the link appears in terminal

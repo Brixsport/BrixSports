@@ -25,6 +25,7 @@ function LoginPageContent() {
     const [isLoading, setIsLoading] = useState(false);
     const [showPassword, setShowPassword] = useState(false);
     const [success, setSuccess] = useState(false);
+    const [serverError, setServerError] = useState<string | null>(null);
 
     useEffect(() => {
         const error = searchParams.get("error");
@@ -60,6 +61,7 @@ function LoginPageContent() {
 
     async function onSubmit(values: z.infer<typeof formSchema>) {
         setIsLoading(true);
+        setServerError(null);
         try {
             const response = await fetch("/api/auth/login", {
                 method: "POST",
@@ -92,17 +94,8 @@ function LoginPageContent() {
             }, 1000);
 
         } catch (error) {
-            console.error("Login error:", error);
-            toast.error("Login failed", {
-                description: (
-                    <div className="flex flex-col gap-1">
-                        <p>{error instanceof Error ? error.message : "Please check your credentials and try again."}</p>
-                        {(error as any).code && (
-                            <p className="text-[10px] font-mono uppercase opacity-50">Code: {(error as any).code}</p>
-                        )}
-                    </div>
-                ),
-            });
+            const errorMessage = error instanceof Error ? error.message : "Invalid email or password";
+            setServerError(errorMessage);
         } finally {
             if (!success) setIsLoading(false);
         }
@@ -154,6 +147,22 @@ function LoginPageContent() {
                                 <CheckCircle2 size={20} className="text-primary" />
                                 <p className="text-sm text-primary font-medium">
                                     Login successful! Redirecting...
+                                </p>
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
+
+                    {/* Server Error Display */}
+                    <AnimatePresence>
+                        {serverError && (
+                            <motion.div
+                                initial={{ opacity: 0, y: -10 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                exit={{ opacity: 0 }}
+                                className="mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-xl"
+                            >
+                                <p className="text-sm text-red-400 text-center font-medium">
+                                    {serverError}
                                 </p>
                             </motion.div>
                         )}

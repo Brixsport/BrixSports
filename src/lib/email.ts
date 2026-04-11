@@ -109,7 +109,10 @@ export async function sendEmail(config: EmailConfig): Promise<{ success: boolean
 }
 
 // Password reset email template
-export async function sendPasswordResetEmail(to: string, resetLink: string): Promise<{ success: boolean; messageId?: string; error?: string }> {
+export async function sendPasswordResetEmail(to: string, resetLink: string, baseUrl?: string): Promise<{ success: boolean; messageId?: string; error?: string }> {
+    const appUrl = baseUrl || process.env.NEXT_PUBLIC_APP_URL || 'https://brixsports.com';
+    const logoUrl = `${appUrl}/assests/Logos/BRIX-SPORT-LOGO.png`;
+
     const html = `
         <!DOCTYPE html>
         <html>
@@ -118,42 +121,42 @@ export async function sendPasswordResetEmail(to: string, resetLink: string): Pro
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
             <title>Reset Your Password</title>
         </head>
-        <body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #0a0a0a;">
+        <body style="margin: 0; padding: 0; font-family: 'Space Grotesk', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #050505;">
             <div style="max-width: 600px; margin: 0 auto; padding: 40px 20px;">
-                <div style="background-color: #050505; border: 1px solid #1a1a1a; border-radius: 12px; padding: 40px; color: #ffffff;">
+                <div style="background: linear-gradient(135deg, #0a0a0a 0%, #111111 100%); border: 1px solid rgba(59, 130, 246, 0.2); border-radius: 16px; padding: 40px; color: #ffffff;">
                     <div style="text-align: center; margin-bottom: 32px;">
-                        <h1 style="color: #8b5cf6; margin: 0; font-size: 32px; font-weight: 700; letter-spacing: -0.5px;">BRIXSPORT</h1>
+                        <img src="${logoUrl}" alt="Brixsport" style="height: 64px; width: auto;" />
                     </div>
-                    
-                    <h2 style="font-size: 24px; font-weight: 600; margin-bottom: 16px; color: #ffffff;">Password Reset Request</h2>
-                    
-                    <p style="color: #a1a1aa; line-height: 1.6; margin-bottom: 24px; font-size: 16px;">
-                        We received a request to reset your password for your Brixsport account. 
+
+                    <h2 style="font-size: 28px; font-weight: 700; margin-bottom: 16px; color: #ffffff; text-align: center; font-family: 'Bebas Neue', sans-serif; letter-spacing: 1px; text-transform: uppercase;">Password Reset Request</h2>
+
+                    <p style="color: #a1a1aa; line-height: 1.6; margin-bottom: 24px; font-size: 16px; text-align: center;">
+                        We received a request to reset your password for your Brixsport account.
                         If you didn't make this request, you can safely ignore this email.
                     </p>
-                    
+
                     <div style="text-align: center; margin: 32px 0;">
-                        <a href="${resetLink}" 
-                           style="background-color: #8b5cf6; color: #ffffff; padding: 16px 32px; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 16px; display: inline-block; transition: background-color 0.2s;">
+                        <a href="${resetLink}"
+                           style="background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); color: #ffffff; padding: 16px 48px; text-decoration: none; border-radius: 12px; font-weight: 700; font-size: 16px; display: inline-block; text-transform: uppercase; letter-spacing: 1px; box-shadow: 0 4px 20px rgba(59, 130, 246, 0.3);">
                             Reset Password
                         </a>
                     </div>
-                    
-                    <p style="color: #71717a; font-size: 14px; margin-bottom: 16px; text-align: center;">
+
+                    <p style="color: #6b7280; font-size: 14px; margin-bottom: 16px; text-align: center;">
                         This link will expire in 1 hour.
                     </p>
-                    
-                    <div style="border-top: 1px solid #1a1a1a; padding-top: 24px; margin-top: 32px;">
-                        <p style="color: #71717a; font-size: 12px; margin-bottom: 8px;">
-                            If the button above doesn't work, copy and paste this link into your browser:
+
+                    <div style="border-top: 1px solid #1f2937; padding-top: 24px; margin-top: 32px;">
+                        <p style="color: #6b7280; font-size: 12px; margin-bottom: 8px; text-align: center;">
+                            If the button doesn't work, copy and paste this link:
                         </p>
-                        <p style="color: #8b5cf6; word-break: break-all; font-size: 12px; margin: 0; font-family: monospace;">
+                        <p style="color: #3b82f6; word-break: break-all; font-size: 12px; margin: 0; font-family: monospace; text-align: center;">
                             ${resetLink}
                         </p>
                     </div>
-                    
-                    <div style="margin-top: 32px; padding-top: 24px; border-top: 1px solid #1a1a1a;">
-                        <p style="color: #52525b; font-size: 12px; margin: 0; text-align: center;">
+
+                    <div style="margin-top: 32px; padding-top: 24px; border-top: 1px solid #1f2937;">
+                        <p style="color: #4b5563; font-size: 12px; margin: 0; text-align: center;">
                             This is an automated message. Please do not reply to this email.
                         </p>
                     </div>
