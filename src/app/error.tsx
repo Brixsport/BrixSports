@@ -89,7 +89,7 @@ export default function ErrorPage({ error, reset }: ErrorPageProps) {
           initial={{ opacity: 0, y: 50 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.8, ease: "easeOut" }}
-          className="relative w-full h-[400px] mb-8 rounded-2xl overflow-hidden shadow-2xl"
+          className="relative w-full h-[250px] sm:h-[300px] md:h-[400px] mb-6 md:mb-8 rounded-xl md:rounded-2xl overflow-hidden shadow-2xl"
         >
           <SoccerGoalScene errorCode={errorCode} />
           

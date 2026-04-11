@@ -15,6 +15,17 @@ const PORT = parseInt(process.env.PORT || '3001', 10);
 // ─── HTTP Server ────────────────────────────────────────────────
 // Also provides a simple REST API so Vercel API routes can trigger broadcasts
 const httpServer = http.createServer((req, res) => {
+    // Enable CORS
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, x-api-key');
+    
+    if (req.method === 'OPTIONS') {
+        res.writeHead(200);
+        res.end();
+        return;
+    }
+
     // Health check
     if (req.method === 'GET' && req.url === '/') {
         res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -31,6 +42,13 @@ const httpServer = http.createServer((req, res) => {
     if (req.method === 'GET' && req.url === '/health') {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ status: 'healthy' }));
+        return;
+    }
+
+    // ─── REST API: Infrastructure endpoint updates ─────────────
+    // POST /infrastructure/endpoint - Broadcast endpoint status to admin clients
+    if (req.method === 'POST' && req.url === '/infrastructure/endpoint') {
+        handleInfrastructureEndpointUpdate(req, res);
         return;
     }
 
@@ -261,6 +279,25 @@ io.on('connection', (socket) => {
         socket.join('admin:livestreams');
     });
 
+    // ── Infrastructure Monitoring ───────────────────────────────
+    socket.on('admin:infrastructure:subscribe', () => {
+        socket.join('admin:infrastructure');
+        console.log(`[WS] ${socket.id} subscribed to infrastructure updates`);
+        
+        // Send current system status immediately
+        socket.emit('infrastructure:update', {
+            status: 'operational',
+            timestamp: new Date().toISOString(),
+            uptime: process.uptime(),
+            connections: io.engine?.clientsCount || 0,
+        });
+    });
+
+    socket.on('admin:infrastructure:unsubscribe', () => {
+        socket.leave('admin:infrastructure');
+        console.log(`[WS] ${socket.id} unsubscribed from infrastructure updates`);
+    });
+
     socket.on('logger:status:update', (data) => {
         io.to('admin:loggers').emit('logger:updated', data);
     });
@@ -341,18 +378,40 @@ io.on('connection', (socket) => {
     });
 });
 
+// ─── Infrastructure Monitoring ────────────────────────────────
+// Periodic health broadcasts to admin:infrastructure room
+const INFRASTRUCTURE_INTERVAL = 30000; // 30 seconds
+
+function broadcastInfrastructureUpdate() {
+    const update = {
+        status: 'operational',
+        timestamp: new Date().toISOString(),
+        uptime: process.uptime(),
+        connections: io.engine?.clientsCount || 0,
+        memory: process.memoryUsage(),
+    };
+    
+    io.to('admin:infrastructure').emit('infrastructure:update', update);
+}
+
+// Start periodic broadcasts
+const infrastructureInterval = setInterval(broadcastInfrastructureUpdate, INFRASTRUCTURE_INTERVAL);
+
 // ─── Start Server ───────────────────────────────────────────────
 httpServer.listen(PORT, () => {
     console.log(`\n🚀 BrixSports WebSocket Server`);
     console.log(`   Port: ${PORT}`);
     console.log(`   Socket.IO path: /api/socket`);
     console.log(`   Health: http://localhost:${PORT}/health`);
+    console.log(`   Infrastructure API: POST http://localhost:${PORT}/infrastructure/endpoint`);
+    console.log(`   Broadcast API: POST http://localhost:${PORT}/broadcast`);
     console.log(`   Allowed origins: ${ALLOWED_ORIGINS.join(', ')}\n`);
 });
 
 // ─── Graceful Shutdown ──────────────────────────────────────────
 const shutdown = (signal) => {
     console.log(`\n[WS] ${signal} received, shutting down...`);
+    clearInterval(infrastructureInterval);
     io.close(() => {
         httpServer.close(() => {
             console.log('[WS] Server closed.');
@@ -365,3 +424,56 @@ const shutdown = (signal) => {
 
 process.on('SIGTERM', () => shutdown('SIGTERM'));
 process.on('SIGINT', () => shutdown('SIGINT'));
+
+// ─── HTTP API: Infrastructure Endpoint Updates ────────────────
+// This allows Vercel API routes to broadcast endpoint status changes
+// POST /infrastructure/endpoint - Broadcast endpoint update to admin clients
+function handleInfrastructureEndpointUpdate(req, res) {
+    if (req.method !== 'POST') {
+        res.writeHead(405, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Method not allowed' }));
+        return;
+    }
+
+    // Verify API key
+    const apiKey = req.headers['x-api-key'];
+    if (apiKey !== process.env.WS_API_KEY) {
+        res.writeHead(401, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Unauthorized' }));
+        return;
+    }
+
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', () => {
+        try {
+            const { path, status, responseTime, error } = JSON.parse(body);
+            
+            if (!path || !status) {
+                res.writeHead(400, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: 'Missing required fields: path, status' }));
+                return;
+            }
+
+            // Broadcast to all admin:infrastructure subscribers
+            io.to('admin:infrastructure').emit('infrastructure:endpoint', {
+                path,
+                status,
+                responseTime: responseTime || 0,
+                error: error || null,
+                timestamp: Date.now(),
+            });
+
+            console.log(`[Infrastructure API] Endpoint update: ${path} → ${status}`);
+            
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: true, broadcast: true }));
+        } catch (err) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Invalid JSON body' }));
+        }
+    });
+}
+
+// Add to HTTP server route handling (requires modifying the http.createServer callback)
+// This is handled by adding a check at the top of the existing request handler
