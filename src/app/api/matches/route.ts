@@ -133,8 +133,16 @@ export async function POST(request: Request) {
         const body = await request.json();
         const { stats, lineups, ...matchData } = body;
 
+        // Ensure competition is never null/empty (database requires NOT NULL)
+        // For friendly matches, use friendlyDescription or default to 'Friendly'
+        const competition = matchData.competition?.trim() ||
+            (matchData.matchType === 'friendly'
+                ? (matchData.friendlyDescription?.trim() || 'Friendly')
+                : 'Unknown');
+
         const newMatch = await db.insert(matches).values({
             ...matchData,
+            competition,
             stats: stats ? JSON.stringify(stats) : null,
             lineups: lineups ? JSON.stringify(lineups) : null,
         }).returning();

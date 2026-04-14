@@ -4,9 +4,12 @@ import { motion } from 'framer-motion';
 import { X, Bell, Eye, Zap, Loader2 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { getPushService } from '@/lib/notifications/push-service';
+import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 
 export function SettingsOverlay({ onClose }: { onClose: () => void }) {
+  const { user, isAuthenticated } = useAuth();
+
   const [preferences, setPreferences] = useState({
     matchAlerts: true,
     playerRatings: true,
@@ -16,7 +19,6 @@ export function SettingsOverlay({ onClose }: { onClose: () => void }) {
   const [pushStatus, setPushStatus] = useState<NotificationPermission>('default');
   const [isSubscribed, setIsSubscribed] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [user, setUser] = useState<any>(null);
 
   const pushService = getPushService();
 
@@ -28,15 +30,9 @@ export function SettingsOverlay({ onClose }: { onClose: () => void }) {
         setPreferences(JSON.parse(savedPrefs));
       }
 
-      // Get user info
-      const userData = localStorage.getItem('user');
-      if (userData) {
-        const parsedUser = JSON.parse(userData);
-        if (parsedUser && parsedUser.id) {
-          setUser(parsedUser);
-          // Fetch from API
-          fetchPreferences(parsedUser.id);
-        }
+      // Fetch user preferences from API if logged in
+      if (user?.id) {
+        fetchPreferences(user.id);
       }
     } catch (error) {
       console.error('Error initializing settings:', error);
@@ -44,7 +40,7 @@ export function SettingsOverlay({ onClose }: { onClose: () => void }) {
 
     // Check notification status
     checkPushStatus();
-  }, []);
+  }, [user]);
 
   const fetchPreferences = async (userId: string) => {
     try {

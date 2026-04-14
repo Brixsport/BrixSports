@@ -2,11 +2,12 @@
 
 import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Search, CheckCircle2, Heart, Shield, ArrowRight, Loader2, Trophy, Camera, User as UserIcon, X } from "lucide-react";
+import { Search, CheckCircle2, Heart, Shield, ArrowRight, Loader2, Trophy, Camera, User as UserIcon, X, Bell, BellRing, Smartphone } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
+import { getPushService } from "@/lib/notifications/push-service";
 
 interface Team {
     id: string;
@@ -40,13 +41,34 @@ export function OnboardingModal({ isOpen, userId, userName, onComplete, token }:
     const [avatar, setAvatar] = useState<string | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
+    // Step 4: Push Notifications
+    const [pushPermission, setPushPermission] = useState<NotificationPermission>('default');
+    const [isSubscribed, setIsSubscribed] = useState(false);
+    const [isSubscribing, setIsSubscribing] = useState(false);
+    const pushService = getPushService();
+
     const [isSubmitting, setIsSubmitting] = useState(false);
 
     useEffect(() => {
         if (isOpen) {
             fetchTeams();
+            checkPushStatus();
         }
     }, [isOpen]);
+
+    const checkPushStatus = async () => {
+        try {
+            await pushService.init();
+            const permission = pushService.getPermission();
+            setPushPermission(permission);
+            if (permission === 'granted') {
+                const subscribed = await pushService.isSubscribed();
+                setIsSubscribed(subscribed);
+            }
+        } catch (error) {
+            console.error('Error checking push status:', error);
+        }
+    };
 
     const fetchTeams = async () => {
         try {
@@ -171,13 +193,57 @@ export function OnboardingModal({ isOpen, userId, userName, onComplete, token }:
                     body: JSON.stringify({ avatar })
                 });
             }
-            toast.success("All set! Transitioning to your dashboard.");
-            onComplete();
+            setStep(4);
         } catch (error) {
             toast.error("Failed to save profile picture");
         } finally {
             setIsSubmitting(false);
         }
+    };
+
+    const handleEnableNotifications = async () => {
+        setIsSubscribing(true);
+        try {
+            const permission = await pushService.requestPermission();
+            setPushPermission(permission);
+
+            if (permission === 'granted') {
+                const subscription = await pushService.subscribe(userId);
+                if (subscription) {
+                    setIsSubscribed(true);
+                    toast.success('Notifications enabled! You\'ll get alerts for goals, match starts, and more.');
+                    // Show a test notification
+                    await pushService.showNotification('Welcome to BrixSports! 🎉', {
+                        body: 'You\'ll receive live updates for your favorite teams.',
+                        icon: '/icons/icon-192x192.png',
+                    });
+                    setTimeout(() => {
+                        toast.success("All set! Transitioning to your dashboard.");
+                        onComplete();
+                    }, 2000);
+                } else {
+                    toast.error('Failed to subscribe. Please try again.');
+                }
+            } else if (permission === 'denied') {
+                toast.error('Notifications are blocked. You can enable them later in your browser settings.');
+                setTimeout(() => {
+                    onComplete();
+                }, 1500);
+            }
+        } catch (error) {
+            console.error('Error enabling notifications:', error);
+            toast.error('Something went wrong. You can enable notifications later in Settings.');
+            setTimeout(() => {
+                onComplete();
+            }, 1500);
+        } finally {
+            setIsSubscribing(false);
+        }
+    };
+
+    const handleSkipNotifications = () => {
+        toast.info('You can enable notifications anytime in Settings.');
+        onComplete();
     };
 
     if (!isOpen) return null;
@@ -197,22 +263,115 @@ export function OnboardingModal({ isOpen, userId, userName, onComplete, token }:
                 <div className="p-8 border-b border-white/5 flex items-center justify-between relative z-10">
                     <div>
                         <h2 className="text-2xl font-display uppercase italic text-white mb-1">
-                            {step === 1 ? `Welcome, ${userName}!` : step === 2 ? "Stay Updated" : "Final Touch"}
+                            {step === 1 ? `Welcome, ${userName}!` : step === 2 ? "Stay Updated" : step === 3 ? "Final Touch" : "Never Miss a Moment"}
                         </h2>
                         <p className="text-white/40 text-sm">
-                            {step === 1 ? "Which team do you support?" : step === 2 ? "Follow other teams for notifications" : "Upload a profile picture"}
+                            {step === 1 ? "Which team do you support?" : step === 2 ? "Follow other teams for notifications" : step === 3 ? "Upload a profile picture" : "Get live match updates"}
                         </p>
                     </div>
                     <div className="flex gap-2">
                         <div className={`h-2 w-8 rounded-full transition-colors ${step >= 1 ? 'bg-primary' : 'bg-white/10'}`} />
                         <div className={`h-2 w-8 rounded-full transition-colors ${step >= 2 ? 'bg-primary' : 'bg-white/10'}`} />
                         <div className={`h-2 w-8 rounded-full transition-colors ${step >= 3 ? 'bg-primary' : 'bg-white/10'}`} />
+                        <div className={`h-2 w-8 rounded-full transition-colors ${step >= 4 ? 'bg-primary' : 'bg-white/10'}`} />
                     </div>
                 </div>
 
                 {/* Content */}
                 <div className="flex-1 overflow-y-auto p-8 relative z-10">
-                    {step < 3 ? (
+                    {step === 4 ? (
+                        // Step 4: Push Notifications
+                        <div className="flex flex-col items-center justify-center h-full py-12">
+                            <motion.div
+                                initial={{ scale: 0.9, opacity: 0 }}
+                                animate={{ scale: 1, opacity: 1 }}
+                                className="text-center max-w-md"
+                            >
+                                <div className="w-32 h-32 mx-auto mb-8 relative">
+                                    <div className="absolute inset-0 bg-primary/20 rounded-full animate-ping" />
+                                    <div className="relative w-32 h-32 bg-primary/10 rounded-full flex items-center justify-center">
+                                        {isSubscribed ? (
+                                            <CheckCircle2 size={64} className="text-primary" />
+                                        ) : pushPermission === 'denied' ? (
+                                            <Bell size={64} className="text-white/40" />
+                                        ) : (
+                                            <BellRing size={64} className="text-primary animate-pulse" />
+                                        )}
+                                    </div>
+                                </div>
+
+                                <h3 className="text-2xl font-display uppercase italic mb-4">
+                                    {isSubscribed ? 'You\'re All Set!' : 'Get Match Alerts'}
+                                </h3>
+
+                                <p className="text-white/60 leading-relaxed mb-8">
+                                    {isSubscribed
+                                        ? 'You\'ll now receive instant notifications for goals, match starts, and final scores.'
+                                        : 'Enable push notifications to get instant alerts when your teams score, matches start, or big moments happen.'}
+                                </p>
+
+                                <div className="space-y-3 mb-8">
+                                    <div className="flex items-center gap-3 text-sm text-white/60 bg-white/5 p-3 rounded-xl">
+                                        <Smartphone size={18} className="text-primary" />
+                                        <span>Works even when the app is closed</span>
+                                    </div>
+                                    <div className="flex items-center gap-3 text-sm text-white/60 bg-white/5 p-3 rounded-xl">
+                                        <Trophy size={18} className="text-primary" />
+                                        <span>Goal alerts for teams you follow</span>
+                                    </div>
+                                    <div className="flex items-center gap-3 text-sm text-white/60 bg-white/5 p-3 rounded-xl">
+                                        <CheckCircle2 size={18} className="text-primary" />
+                                        <span>Match start and final score updates</span>
+                                    </div>
+                                </div>
+
+                                {isSubscribed ? (
+                                    <Button
+                                        size="lg"
+                                        onClick={onComplete}
+                                        className="px-8 font-black uppercase tracking-widest"
+                                    >
+                                        Go to Dashboard <ArrowRight className="ml-2 w-4 h-4" />
+                                    </Button>
+                                ) : pushPermission === 'denied' ? (
+                                    <div className="space-y-3">
+                                        <p className="text-sm text-white/40">
+                                            Notifications are blocked in your browser settings.
+                                        </p>
+                                        <Button
+                                            size="lg"
+                                            variant="outline"
+                                            onClick={handleSkipNotifications}
+                                            className="px-8 font-black uppercase tracking-widest"
+                                        >
+                                            Continue to Dashboard
+                                        </Button>
+                                    </div>
+                                ) : (
+                                    <div className="flex flex-col gap-3">
+                                        <Button
+                                            size="lg"
+                                            disabled={isSubscribing}
+                                            onClick={handleEnableNotifications}
+                                            className="px-8 font-black uppercase tracking-widest bg-primary hover:bg-primary/90"
+                                        >
+                                            {isSubscribing ? (
+                                                <><Loader2 className="w-4 h-4 animate-spin mr-2" /> Enabling...</>
+                                            ) : (
+                                                <><Bell className="mr-2 w-4 h-4" /> Enable Notifications</>
+                                            )}
+                                        </Button>
+                                        <button
+                                            onClick={handleSkipNotifications}
+                                            className="text-white/40 hover:text-white text-xs font-bold uppercase tracking-widest transition-colors py-2"
+                                        >
+                                            Maybe Later
+                                        </button>
+                                    </div>
+                                )}
+                            </motion.div>
+                        </div>
+                    ) : step < 3 ? (
                         <>
                             <div className="relative mb-6">
                                 <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-white/40" size={20} />
@@ -336,32 +495,39 @@ export function OnboardingModal({ isOpen, userId, userName, onComplete, token }:
 
                 {/* Footer */}
                 <div className="p-8 border-t border-white/5 flex justify-between items-center bg-[#0A0A0A] relative z-20">
-                    <button
-                        onClick={() => {
-                            if (step === 1) setStep(2);
-                            else if (step === 2) setStep(3);
-                            else onComplete();
-                        }}
-                        className="text-white/40 hover:text-white text-xs font-bold uppercase tracking-widest transition-colors"
-                    >
-                        {step === 1 ? "Skip selection" : step === 2 ? "Skip following" : "Skip for now"}
-                    </button>
+                    {step === 4 ? (
+                        // Step 4 has its own buttons in content area
+                        <div className="w-full" />
+                    ) : (
+                        <>
+                            <button
+                                onClick={() => {
+                                    if (step === 1) setStep(2);
+                                    else if (step === 2) setStep(3);
+                                    else setStep(4);
+                                }}
+                                className="text-white/40 hover:text-white text-xs font-bold uppercase tracking-widest transition-colors"
+                            >
+                                {step === 1 ? "Skip selection" : step === 2 ? "Skip following" : "Skip photo"}
+                            </button>
 
-                    <Button
-                        size="lg"
-                        disabled={isSubmitting || (step === 1 && !selectedTeamId)}
-                        onClick={step === 1 ? handleNextStep : step === 2 ? handleFinishFollows : handleSaveProfile}
-                        className="px-8 font-black uppercase tracking-widest"
-                    >
-                        {isSubmitting ? (
-                            <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                        ) : null}
-                        {step < 3 ? (
-                            <>Next Step <ArrowRight className="ml-2 w-4 h-4" /></>
-                        ) : (
-                            <>{avatar ? "Save & Finish" : "Finish"} <CheckCircle2 className="ml-2 w-4 h-4" /></>
-                        )}
-                    </Button>
+                            <Button
+                                size="lg"
+                                disabled={isSubmitting || (step === 1 && !selectedTeamId)}
+                                onClick={step === 1 ? handleNextStep : step === 2 ? handleFinishFollows : handleSaveProfile}
+                                className="px-8 font-black uppercase tracking-widest"
+                            >
+                                {isSubmitting ? (
+                                    <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                                ) : null}
+                                {step < 3 ? (
+                                    <>Next Step <ArrowRight className="ml-2 w-4 h-4" /></>
+                                ) : (
+                                    <>{avatar ? "Save & Continue" : "Continue"} <ArrowRight className="ml-2 w-4 h-4" /></>
+                                )}
+                            </Button>
+                        </>
+                    )}
                 </div>
             </motion.div>
         </div>
