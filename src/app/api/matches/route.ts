@@ -30,7 +30,7 @@ export async function GET(request: Request) {
             query = query.where(and(...conditions)) as typeof query;
         }
 
-        const allMatches = await query;
+        const allMatches = await query.limit(50);
 
         // Collect all unique team IDs
         const teamIds = new Set<string>();
@@ -139,6 +139,8 @@ export async function POST(request: Request) {
             (matchData.matchType === 'friendly'
                 ? (matchData.friendlyDescription?.trim() || 'Friendly')
                 : 'Unknown');
+
+        matchData.competitionId = matchData.competitionId || null;
 
         const newMatch = await db.insert(matches).values({
             ...matchData,
