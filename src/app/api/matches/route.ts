@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/db';
 import { matches, matchEvents, teams } from '@/db/schema';
-import { eq, and, inArray, or } from 'drizzle-orm';
+import { eq, and, inArray, or, desc } from 'drizzle-orm';
 
 export async function GET(request: Request) {
     try {
@@ -30,7 +30,7 @@ export async function GET(request: Request) {
             query = query.where(and(...conditions)) as typeof query;
         }
 
-        const allMatches = await query.limit(50);
+        const allMatches = await query.orderBy(desc(matches.createdAt)).limit(50);
 
         // Collect all unique team IDs
         const teamIds = new Set<string>();
