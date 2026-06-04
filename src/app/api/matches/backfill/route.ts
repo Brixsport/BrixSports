@@ -221,7 +221,7 @@ export async function POST(request: NextRequest) {
                     await tx
                         .update(playerStats)
                         .set({
-                            goals: (existingStats.goals || 0) + (playerRow.goals || 0),
+                            goals: (existingStats.goals || 0) + ((playerRow.goals || 0) + (playerRow.penalties || 0)),
                             assists: (existingStats.assists || 0) + (playerRow.assists || 0),
                             yellowCards: (existingStats.yellowCards || 0) + (playerRow.yellowCards || 0),
                             redCards: (existingStats.redCards || 0) + (playerRow.redCards || 0),
@@ -239,7 +239,7 @@ export async function POST(request: NextRequest) {
                         competition: match.competition,
                         competitionId: match.competitionId || null,
                         sport: match.sport,
-                        goals: playerRow.goals || 0,
+                        goals: (playerRow.goals || 0) + (playerRow.penalties || 0),
                         assists: playerRow.assists || 0,
                         yellowCards: playerRow.yellowCards || 0,
                         redCards: playerRow.redCards || 0,

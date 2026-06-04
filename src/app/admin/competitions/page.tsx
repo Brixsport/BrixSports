@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Plus, Trophy, Calendar, Users, Settings, Edit, Trash2, Eye } from 'lucide-react';
+import { ArrowLeft, Plus, Trophy, Calendar, Users, Settings, Edit, Trash2, Eye, X } from 'lucide-react';
 import { useToast } from '@/hooks/useToast';
 import { ToastContainer } from '@/components/admin/Toast';
 import ConfirmDialog from '@/components/admin/ConfirmDialog';
@@ -23,6 +23,7 @@ interface Competition {
     numberOfGroups?: number;
     teamsPerGroup?: number;
     isMultiSport?: boolean;
+    description?: string;
 }
 
 function AdminCompetitionsPageContent() {
@@ -38,6 +39,10 @@ function AdminCompetitionsPageContent() {
         itemName: '',
         isDeleting: false,
     });
+
+    const [editingCompetition, setEditingCompetition] = useState<Competition | null>(null);
+    const [editForm, setEditForm] = useState<any>(null);
+    const [isEditSubmitting, setIsEditSubmitting] = useState(false);
 
     const [formData, setFormData] = useState({
         name: '',
@@ -156,6 +161,52 @@ function AdminCompetitionsPageContent() {
             error('Network error. Please try again.');
             console.error('Error deleting competition:', err);
             setDeleteDialog(prev => ({ ...prev, isDeleting: false }));
+        }
+    };
+
+    const handleEditClick = (comp: Competition) => {
+        setEditingCompetition(comp);
+        setEditForm({
+            name: comp.name,
+            sport: comp.sport || 'Football',
+            format: comp.format,
+            season: comp.season,
+            status: comp.status || 'upcoming',
+            level: comp.level || 'busa-league',
+            scope: comp.scope || 'internal',
+            numberOfTeams: comp.numberOfTeams || 0,
+            numberOfGroups: comp.numberOfGroups || 0,
+            teamsPerGroup: comp.teamsPerGroup || 0,
+            isMultiSport: comp.isMultiSport || false,
+            description: comp.description || '',
+        });
+    };
+
+    const handleEditSubmit = async () => {
+        if (!editingCompetition || !editForm) return;
+        setIsEditSubmitting(true);
+        try {
+            const res = await fetch(
+                `/api/competitions/${editingCompetition.id}`,
+                {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(editForm),
+                }
+            );
+            if (res.ok) {
+                success('Competition updated successfully.');
+                setEditingCompetition(null);
+                setEditForm(null);
+                fetchCompetitions();
+            } else {
+                const data = await res.json();
+                error(data.error || 'Failed to update competition.');
+            }
+        } catch {
+            error('Network error. Try again.');
+        } finally {
+            setIsEditSubmitting(false);
         }
     };
 
@@ -291,7 +342,10 @@ function AdminCompetitionsPageContent() {
                                             Manage Teams
                                         </Link>
                                         <div className="flex items-center gap-1">
-                                            <button className="p-2 hover:bg-white/10 rounded-lg transition-colors group">
+                                            <button
+                                                onClick={() => handleEditClick(competition)}
+                                                className="p-2 hover:bg-white/10 rounded-lg transition-colors group"
+                                            >
                                                 <Edit size={18} className="text-white/40 group-hover:text-white" />
                                             </button>
                                             <button
@@ -494,6 +548,143 @@ function AdminCompetitionsPageContent() {
                     </div >
                 )
             }
+
+            {/* Edit Competition Modal */}
+            {editingCompetition && editForm && (
+                <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                    <div className="bg-[#0a0a0a] border border-white/10 rounded-[32px] p-8 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+
+                        <div className="flex items-center justify-between mb-8">
+                            <h2 className="text-2xl font-display italic uppercase">Edit Competition</h2>
+                            <button
+                                onClick={() => setEditingCompetition(null)}
+                                className="p-2 hover:bg-white/10 rounded-xl transition-colors"
+                            >
+                                <X size={20} />
+                            </button>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+                            <div className="md:col-span-2">
+                                <label className="block text-[10px] font-black uppercase tracking-widest text-white/40 mb-2">Competition Name</label>
+                                <input
+                                    type="text"
+                                    value={editForm.name}
+                                    onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                                    className="w-full bg-[#121212] border border-white/10 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-primary text-white"
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-[10px] font-black uppercase tracking-widest text-white/40 mb-2">Sport</label>
+                                <select
+                                    value={editForm.sport}
+                                    onChange={(e) => setEditForm({ ...editForm, sport: e.target.value })}
+                                    className="w-full bg-[#121212] border border-white/10 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-primary text-white"
+                                >
+                                    <option value="Football">Football</option>
+                                    <option value="Basketball">Basketball</option>
+                                    <option value="Volleyball">Volleyball</option>
+                                    <option value="Track">Track &amp; Field</option>
+                                </select>
+                            </div>
+
+                            <div>
+                                <label className="block text-[10px] font-black uppercase tracking-widest text-white/40 mb-2">Format</label>
+                                <select
+                                    value={editForm.format}
+                                    onChange={(e) => setEditForm({ ...editForm, format: e.target.value })}
+                                    className="w-full bg-[#121212] border border-white/10 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-primary text-white"
+                                >
+                                    <option value="league">League</option>
+                                    <option value="knockout">Knockout</option>
+                                    <option value="league-knockout">League + Knockout</option>
+                                    <option value="group-knockout">Group + Knockout</option>
+                                </select>
+                            </div>
+
+                            <div>
+                                <label className="block text-[10px] font-black uppercase tracking-widest text-white/40 mb-2">Season</label>
+                                <input
+                                    type="text"
+                                    value={editForm.season}
+                                    onChange={(e) => setEditForm({ ...editForm, season: e.target.value })}
+                                    className="w-full bg-[#121212] border border-white/10 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-primary text-white"
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-[10px] font-black uppercase tracking-widest text-white/40 mb-2">Status</label>
+                                <select
+                                    value={editForm.status}
+                                    onChange={(e) => setEditForm({ ...editForm, status: e.target.value })}
+                                    className="w-full bg-[#121212] border border-white/10 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-primary text-white"
+                                >
+                                    <option value="upcoming">Upcoming</option>
+                                    <option value="ongoing">Ongoing</option>
+                                    <option value="completed">Completed</option>
+                                </select>
+                            </div>
+
+                            <div>
+                                <label className="block text-[10px] font-black uppercase tracking-widest text-white/40 mb-2">Level</label>
+                                <select
+                                    value={editForm.level}
+                                    onChange={(e) => setEditForm({ ...editForm, level: e.target.value })}
+                                    className="w-full bg-[#121212] border border-white/10 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-primary text-white"
+                                >
+                                    <option value="busa-league">BUSA League</option>
+                                    <option value="college">College (INTERCOLLEGE)</option>
+                                    <option value="department">Department</option>
+                                    <option value="year-level">Year Level</option>
+                                    <option value="inter-university">Inter-University</option>
+                                </select>
+                            </div>
+
+                            <div>
+                                <label className="block text-[10px] font-black uppercase tracking-widest text-white/40 mb-2">Number of Teams</label>
+                                <input
+                                    type="number" min="0"
+                                    value={editForm.numberOfTeams}
+                                    onChange={(e) => setEditForm({ ...editForm, numberOfTeams: parseInt(e.target.value) || 0 })}
+                                    className="w-full bg-[#121212] border border-white/10 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-primary text-white"
+                                />
+                            </div>
+
+                            <div className="flex items-center gap-3 mt-2">
+                                <input
+                                    type="checkbox"
+                                    id="editMultiSport"
+                                    checked={editForm.isMultiSport}
+                                    onChange={(e) => setEditForm({ ...editForm, isMultiSport: e.target.checked })}
+                                    className="w-4 h-4"
+                                />
+                                <label htmlFor="editMultiSport" className="text-sm font-bold text-white/60">
+                                    Multi-Sport Competition
+                                </label>
+                            </div>
+
+                        </div>
+
+                        <div className="flex justify-end gap-3 mt-8">
+                            <button
+                                onClick={() => setEditingCompetition(null)}
+                                className="px-6 py-3 rounded-xl border border-white/10 text-sm font-black uppercase tracking-widest text-white/60 hover:text-white transition-colors"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={handleEditSubmit}
+                                disabled={isEditSubmitting}
+                                className="flex items-center gap-2 bg-primary text-black px-8 py-3 rounded-xl font-black text-sm uppercase italic hover:scale-105 transition-transform disabled:opacity-50"
+                            >
+                                {isEditSubmitting ? 'Saving...' : 'Save Changes'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Confirmation Dialog */}
             <ConfirmDialog

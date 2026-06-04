@@ -73,7 +73,8 @@ export default function CompetitionTeamsPage() {
             }
 
             if (teamsRes.ok) {
-                setAllTeams(await teamsRes.json());
+                const teamsData = await teamsRes.json();
+                setAllTeams(Array.isArray(teamsData) ? teamsData : teamsData.teams || []);
             }
 
             if (standingsRes.ok) {
