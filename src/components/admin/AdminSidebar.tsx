@@ -18,6 +18,7 @@ const navItems = [
     { icon: <Globe size={18} />, label: "Organizations", href: "/admin/organizations", adminOnly: true },
     { icon: <User size={18} />, label: "Player Profiles", href: "/admin/players" },
     { icon: <Calendar size={18} />, label: "Matches", href: "/admin/matches" },
+    { icon: <Calendar size={18} />, label: "Import Matches", href: "/admin/past-matches/import", adminOnly: true },
     { icon: <Timer size={18} />, label: "Track Events", href: "/admin/track-events" },
     { icon: <Video size={18} />, label: "Livestreams", href: "/admin/livestreams", adminOnly: true },
     { icon: <Newspaper size={18} />, label: "News", href: "/admin/news", adminOnly: true },

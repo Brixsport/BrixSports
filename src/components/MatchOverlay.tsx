@@ -50,6 +50,27 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
   const viewerCount = useMatchViewers(match.id);
   const liveTime = useMatchTimer(match.id);
   const liveLineups = useLineupUpdates(match.id);
+  
+  // Re-fetch match data on WebSocket reconnection to ensure state consistency
+  useEffect(() => {
+    if (!isConnected) return;
+
+    fetch(`/api/matches/${match.id}`)
+      .then(res => res.json())
+      .then(data => {
+        if (data.match) {
+          setMatch(prev => ({
+            ...prev,
+            homeScore: data.match.homeScore,
+            awayScore: data.match.awayScore,
+            status: data.match.status,
+          }));
+        }
+      })
+      .catch(err => {
+        console.error('[MatchOverlay] Re-fetch error:', err);
+      });
+  }, [isConnected, match.id]);
 
   // Ratings state (merge initial API fetch with live updates)
   const [ratings, setRatings] = useState<Record<string, { autoRating: number; finalRating: number | null; isMotM: boolean; notes: string | null }>>({});
