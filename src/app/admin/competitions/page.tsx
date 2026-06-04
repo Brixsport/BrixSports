@@ -26,6 +26,241 @@ interface Competition {
     description?: string;
 }
 
+interface CompetitionModalProps {
+    mode: 'create' | 'edit';
+    initialData: {
+        name: string;
+        sport: string;
+        scope: string;
+        level: string;
+        format: string;
+        season: string;
+        status: string;
+        numberOfTeams: number;
+        numberOfGroups: number;
+        teamsPerGroup: number;
+        isMultiSport: boolean;
+        description: string;
+    };
+    onSubmit: (data: typeof initialData) => Promise<void>;
+    onClose: () => void;
+    isSubmitting: boolean;
+}
+
+const defaultFormData = {
+    name: '',
+    sport: 'Football',
+    scope: 'internal',
+    level: 'busa-league',
+    format: 'league',
+    season: '2024/2025',
+    status: 'upcoming',
+    numberOfTeams: 0,
+    numberOfGroups: 0,
+    teamsPerGroup: 0,
+    isMultiSport: false,
+    description: ''
+};
+
+function CompetitionModal({ mode, initialData, onSubmit, onClose, isSubmitting }: CompetitionModalProps) {
+    const [form, setForm] = useState(initialData);
+
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        await onSubmit(form);
+    };
+
+    return (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <motion.div
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className="bg-[#0a0a0a] rounded-[32px] border border-white/10 max-w-2xl w-full max-h-[90vh] overflow-y-auto"
+            >
+                <div className="flex items-center justify-between p-8 pb-4">
+                    <h2 className="text-2xl font-display italic uppercase">
+                        {mode === 'create' ? 'Create Competition' : 'Edit Competition'}
+                    </h2>
+                    <button type="button" onClick={onClose} className="p-2 hover:bg-white/10 rounded-xl transition-colors">
+                        <X size={20} />
+                    </button>
+                </div>
+                <form onSubmit={handleSubmit} className="p-8 pt-4 space-y-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div className="md:col-span-2">
+                            <label className="block text-[10px] font-black uppercase tracking-widest text-white/40 mb-2">Competition Name</label>
+                            <input
+                                type="text"
+                                value={form.name}
+                                onChange={(e) => setForm({ ...form, name: e.target.value })}
+                                className="w-full bg-[#121212] border border-white/10 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-primary text-white"
+                                placeholder="e.g., BUSA LEAGUE (FOOTBALL)"
+                                required
+                            />
+                        </div>
+
+                        <div>
+                            <label className="block text-[10px] font-black uppercase tracking-widest text-white/40 mb-2">Sport</label>
+                            <select
+                                value={form.sport}
+                                onChange={(e) => setForm({ ...form, sport: e.target.value })}
+                                className="w-full bg-[#121212] border border-white/10 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-primary text-white disabled:opacity-50"
+                                disabled={form.isMultiSport}
+                            >
+                                {form.isMultiSport ? (
+                                    <option value="Multiple Sports">Multiple Sports</option>
+                                ) : (
+                                    <>
+                                        <option value="Football">Football</option>
+                                        <option value="Basketball">Basketball</option>
+                                        <option value="Volleyball">Volleyball</option>
+                                        <option value="Track & Field">Track & Field</option>
+                                    </>
+                                )}
+                            </select>
+                        </div>
+
+                        <div>
+                            <label className="block text-[10px] font-black uppercase tracking-widest text-white/40 mb-2">Scope</label>
+                            <select
+                                value={form.scope}
+                                onChange={(e) => setForm({ ...form, scope: e.target.value })}
+                                className="w-full bg-[#121212] border border-white/10 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-primary text-white"
+                            >
+                                <option value="internal">Internal</option>
+                                <option value="external">External</option>
+                            </select>
+                        </div>
+
+                        <div>
+                            <label className="block text-[10px] font-black uppercase tracking-widest text-white/40 mb-2">Level</label>
+                            <select
+                                value={form.level}
+                                onChange={(e) => setForm({ ...form, level: e.target.value })}
+                                className="w-full bg-[#121212] border border-white/10 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-primary text-white"
+                            >
+                                <option value="busa-league">BUSA League</option>
+                                <option value="college">College (INTERCOLLEGE)</option>
+                                <option value="department">Department</option>
+                                <option value="year-level">Year Level</option>
+                                <option value="inter-university">Inter-University</option>
+                            </select>
+                        </div>
+
+                        <div>
+                            <label className="block text-[10px] font-black uppercase tracking-widest text-white/40 mb-2">Format</label>
+                            <select
+                                value={form.format}
+                                onChange={(e) => setForm({ ...form, format: e.target.value })}
+                                className="w-full bg-[#121212] border border-white/10 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-primary text-white"
+                            >
+                                <option value="league">League</option>
+                                <option value="knockout">Knockout</option>
+                                <option value="league-knockout">League + Knockout</option>
+                                <option value="group-knockout">Group + Knockout</option>
+                            </select>
+                        </div>
+
+                        <div>
+                            <label className="block text-[10px] font-black uppercase tracking-widest text-white/40 mb-2">Season</label>
+                            <input
+                                type="text"
+                                value={form.season}
+                                onChange={(e) => setForm({ ...form, season: e.target.value })}
+                                className="w-full bg-[#121212] border border-white/10 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-primary text-white"
+                                placeholder="2024/2025"
+                            />
+                        </div>
+
+                        <div>
+                            <label className="block text-[10px] font-black uppercase tracking-widest text-white/40 mb-2">Status</label>
+                            <select
+                                value={form.status}
+                                onChange={(e) => setForm({ ...form, status: e.target.value })}
+                                className="w-full bg-[#121212] border border-white/10 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-primary text-white"
+                            >
+                                <option value="upcoming">Upcoming</option>
+                                <option value="ongoing">Ongoing</option>
+                                <option value="completed">Completed</option>
+                            </select>
+                        </div>
+
+                        <div>
+                            <label className="block text-[10px] font-black uppercase tracking-widest text-white/40 mb-2">Number of Teams</label>
+                            <input
+                                type="number" min="0"
+                                value={form.numberOfTeams}
+                                onChange={(e) => setForm({ ...form, numberOfTeams: parseInt(e.target.value) || 0 })}
+                                className="w-full bg-[#121212] border border-white/10 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-primary text-white"
+                            />
+                        </div>
+
+                        <div>
+                            <label className="block text-[10px] font-black uppercase tracking-widest text-white/40 mb-2">Number of Groups</label>
+                            <input
+                                type="number" min="0"
+                                value={form.numberOfGroups}
+                                onChange={(e) => setForm({ ...form, numberOfGroups: parseInt(e.target.value) || 0 })}
+                                className="w-full bg-[#121212] border border-white/10 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-primary text-white"
+                            />
+                        </div>
+
+                        <div>
+                            <label className="block text-[10px] font-black uppercase tracking-widest text-white/40 mb-2">Teams per Group</label>
+                            <input
+                                type="number" min="0"
+                                value={form.teamsPerGroup}
+                                onChange={(e) => setForm({ ...form, teamsPerGroup: parseInt(e.target.value) || 0 })}
+                                className="w-full bg-[#121212] border border-white/10 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-primary text-white"
+                            />
+                        </div>
+
+                        <div className="md:col-span-2">
+                            <label className="block text-[10px] font-black uppercase tracking-widest text-white/40 mb-2">Description</label>
+                            <textarea
+                                value={form.description}
+                                onChange={(e) => setForm({ ...form, description: e.target.value })}
+                                className="w-full bg-[#121212] border border-white/10 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-primary text-white h-24 resize-none"
+                                placeholder="Optional description..."
+                            />
+                        </div>
+
+                        <div className="md:col-span-2 flex items-center gap-3">
+                            <input
+                                type="checkbox"
+                                id={`isMultiSport-${mode}`}
+                                checked={form.isMultiSport}
+                                onChange={(e) => setForm({ ...form, isMultiSport: e.target.checked })}
+                                className="w-4 h-4 rounded border-white/10 bg-[#121212] text-primary focus:ring-primary"
+                            />
+                            <label htmlFor={`isMultiSport-${mode}`} className="text-sm font-bold text-white/60">
+                                Multi-Sport Competition
+                            </label>
+                        </div>
+                    </div>
+
+                    <div className="flex justify-end gap-3 mt-8">
+                        <button
+                            type="button"
+                            onClick={onClose}
+                            className="px-6 py-3 rounded-xl border border-white/10 text-sm font-black uppercase tracking-widest text-white/60 hover:text-white transition-colors"
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            type="submit"
+                            disabled={isSubmitting}
+                            className="flex items-center gap-2 bg-primary text-black px-8 py-3 rounded-xl font-black text-sm uppercase italic hover:scale-105 transition-transform disabled:opacity-50"
+                        >
+                            {isSubmitting ? 'Saving...' : mode === 'create' ? 'Create Competition' : 'Save Changes'}
+                        </button>
+                    </div>
+                </form>
+            </motion.div>
+        </div>
+    );
+}
+
 function AdminCompetitionsPageContent() {
     const [isLoading, setIsLoading] = useState(true);
     const [showCreateModal, setShowCreateModal] = useState(false);
@@ -41,22 +276,7 @@ function AdminCompetitionsPageContent() {
     });
 
     const [editingCompetition, setEditingCompetition] = useState<Competition | null>(null);
-    const [editForm, setEditForm] = useState<any>(null);
     const [isEditSubmitting, setIsEditSubmitting] = useState(false);
-
-    const [formData, setFormData] = useState({
-        name: '',
-        sport: 'Football',
-        scope: 'internal',
-        level: 'busa-league',
-        format: 'league',
-        season: '2024/2025',
-        status: 'upcoming',
-        numberOfTeams: 0,
-        numberOfGroups: 0,
-        teamsPerGroup: 0,
-        isMultiSport: false
-    });
 
     useEffect(() => {
         fetchCompetitions();
@@ -85,15 +305,14 @@ function AdminCompetitionsPageContent() {
         }
     };
 
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
+    const handleSubmit = async (data: typeof defaultFormData) => {
         setIsCreating(true);
 
         try {
             const response = await fetch('/api/competitions', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(formData),
+                body: JSON.stringify(data),
             });
 
             if (response.ok) {
@@ -103,23 +322,10 @@ function AdminCompetitionsPageContent() {
                     scope: newComp.level === 'inter-university' ? 'external' : 'internal'
                 }]);
                 setShowCreateModal(false);
-                setFormData({
-                    name: '',
-                    sport: 'Football',
-                    scope: 'internal',
-                    level: 'busa-league',
-                    format: 'league',
-                    season: '2024/2025',
-                    status: 'upcoming',
-                    numberOfTeams: 0,
-                    numberOfGroups: 0,
-                    teamsPerGroup: 0,
-                    isMultiSport: false
-                });
                 success('Competition created successfully!');
             } else {
-                const data = await response.json();
-                error(data.error || 'Failed to create competition');
+                const responseData = await response.json();
+                error(responseData.error || 'Failed to create competition');
             }
         } catch (err) {
             error('Network error. Please check your connection.');
@@ -166,24 +372,10 @@ function AdminCompetitionsPageContent() {
 
     const handleEditClick = (comp: Competition) => {
         setEditingCompetition(comp);
-        setEditForm({
-            name: comp.name,
-            sport: comp.sport || 'Football',
-            format: comp.format,
-            season: comp.season,
-            status: comp.status || 'upcoming',
-            level: comp.level || 'busa-league',
-            scope: comp.scope || 'internal',
-            numberOfTeams: comp.numberOfTeams || 0,
-            numberOfGroups: comp.numberOfGroups || 0,
-            teamsPerGroup: comp.teamsPerGroup || 0,
-            isMultiSport: comp.isMultiSport || false,
-            description: comp.description || '',
-        });
     };
 
-    const handleEditSubmit = async () => {
-        if (!editingCompetition || !editForm) return;
+    const handleEditSubmit = async (data: typeof defaultFormData) => {
+        if (!editingCompetition) return;
         setIsEditSubmitting(true);
         try {
             const res = await fetch(
@@ -191,17 +383,16 @@ function AdminCompetitionsPageContent() {
                 {
                     method: 'PATCH',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(editForm),
+                    body: JSON.stringify(data),
                 }
             );
             if (res.ok) {
                 success('Competition updated successfully.');
                 setEditingCompetition(null);
-                setEditForm(null);
                 fetchCompetitions();
             } else {
-                const data = await res.json();
-                error(data.error || 'Failed to update competition.');
+                const responseData = await res.json();
+                error(responseData.error || 'Failed to update competition.');
             }
         } catch {
             error('Network error. Try again.');
@@ -369,321 +560,41 @@ function AdminCompetitionsPageContent() {
                 </div>
             </div>
 
-            {/* Create Competition Modal */}
-            {
-                showCreateModal && (
-                    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-                        <motion.div
-                            initial={{ opacity: 0, scale: 0.95 }}
-                            animate={{ opacity: 1, scale: 1 }}
-                            className="bg-[#0a0a0a] rounded-2xl border border-white/10 max-w-2xl w-full max-h-[90vh] overflow-y-auto"
-                        >
-                            <div className="p-6 border-b border-white/10">
-                                <h2 className="text-2xl font-bold">Create New Competition</h2>
-                            </div>
-                            <form onSubmit={handleSubmit} className="p-6 space-y-6">
-                                <div>
-                                    <label className="block text-sm font-semibold mb-2">Competition Name</label>
-                                    <input
-                                        type="text"
-                                        value={formData.name}
-                                        onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                                        className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 focus:outline-none focus:border-primary"
-                                        placeholder="e.g., BUSA LEAGUE (FOOTBALL)"
-                                        required
-                                    />
-                                </div>
+            {showCreateModal && (
+                <CompetitionModal
+                    mode="create"
+                    initialData={defaultFormData}
+                    onSubmit={async (data) => {
+                        await handleSubmit(data);
+                    }}
+                    onClose={() => setShowCreateModal(false)}
+                    isSubmitting={isCreating}
+                />
+            )}
 
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div>
-                                        <label className="block text-sm font-semibold mb-2">Sport</label>
-                                        <select
-                                            value={formData.sport}
-                                            onChange={(e) => setFormData({ ...formData, sport: e.target.value })}
-                                            className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 focus:outline-none focus:border-primary disabled:opacity-50"
-                                            disabled={formData.isMultiSport}
-                                        >
-                                            <option value="Football">Football</option>
-                                            <option value="Basketball">Basketball</option>
-                                            <option value="Volleyball">Volleyball</option>
-                                            <option value="Track">Track & Field</option>
-                                        </select>
-                                    </div>
-                                    <div>
-                                        <label className="block text-sm font-semibold mb-2">Scope</label>
-                                        <select
-                                            value={formData.scope}
-                                            onChange={(e) => setFormData({ ...formData, scope: e.target.value as any })}
-                                            className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 focus:outline-none focus:border-primary"
-                                        >
-                                            <option value="internal">Internal</option>
-                                            <option value="external">External</option>
-                                        </select>
-                                    </div>
-                                </div>
-                                <div className="flex items-center gap-2 mb-6">
-                                    <input
-                                        type="checkbox"
-                                        id="isMultiSport"
-                                        checked={formData.isMultiSport}
-                                        onChange={(e) => setFormData({ ...formData, isMultiSport: e.target.checked })}
-                                        className="w-4 h-4 rounded border-white/10 bg-white/5 text-primary focus:ring-primary"
-                                    />
-                                    <label htmlFor="isMultiSport" className="text-sm font-semibold">Multi-Sport Competition</label>
-                                </div>
-
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div>
-                                        <label className="block text-sm font-semibold mb-2">Level</label>
-                                        <select
-                                            value={formData.level}
-                                            onChange={(e) => setFormData({ ...formData, level: e.target.value as any })}
-                                            className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 focus:outline-none focus:border-primary"
-                                        >
-                                            <option value="busa-league">BUSA League</option>
-                                            <option value="college">College (INTERCOLLEGE)</option>
-                                            <option value="department">Department</option>
-                                            <option value="year-level">Year Level</option>
-                                            <option value="inter-university">Inter-University</option>
-                                        </select>
-                                    </div>
-                                    <div>
-                                        <label className="block text-sm font-semibold mb-2">Format</label>
-                                        <select
-                                            value={formData.format}
-                                            onChange={(e) => setFormData({ ...formData, format: e.target.value as any })}
-                                            className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 focus:outline-none focus:border-primary"
-                                        >
-                                            <option value="league">League</option>
-                                            <option value="knockout">Knockout</option>
-                                            <option value="group-knockout">Group + Knockout</option>
-                                        </select>
-                                    </div>
-                                </div>
-
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div>
-                                        <label className="block text-sm font-semibold mb-2">Season</label>
-                                        <input
-                                            type="text"
-                                            value={formData.season}
-                                            onChange={(e) => setFormData({ ...formData, season: e.target.value })}
-                                            className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 focus:outline-none focus:border-primary"
-                                            placeholder="2024/2025"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-sm font-semibold mb-2">Status</label>
-                                        <select
-                                            value={formData.status}
-                                            onChange={(e) => setFormData({ ...formData, status: e.target.value as any })}
-                                            className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 focus:outline-none focus:border-primary"
-                                        >
-                                            <option value="upcoming">Upcoming</option>
-                                            <option value="ongoing">Ongoing</option>
-                                            <option value="completed">Completed</option>
-                                        </select>
-                                    </div>
-                                </div>
-
-                                <div className="grid grid-cols-3 gap-4">
-                                    <div>
-                                        <label className="block text-sm font-semibold mb-2">Number of Teams</label>
-                                        <input
-                                            type="number"
-                                            value={formData.numberOfTeams}
-                                            onChange={(e) => setFormData({ ...formData, numberOfTeams: parseInt(e.target.value) })}
-                                            className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 focus:outline-none focus:border-primary"
-                                            min="0"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-sm font-semibold mb-2">Number of Groups</label>
-                                        <input
-                                            type="number"
-                                            value={formData.numberOfGroups}
-                                            onChange={(e) => setFormData({ ...formData, numberOfGroups: parseInt(e.target.value) })}
-                                            className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 focus:outline-none focus:border-primary"
-                                            min="0"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-sm font-semibold mb-2">Teams per Group</label>
-                                        <input
-                                            type="number"
-                                            value={formData.teamsPerGroup}
-                                            onChange={(e) => setFormData({ ...formData, teamsPerGroup: parseInt(e.target.value) })}
-                                            className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 focus:outline-none focus:border-primary"
-                                            min="0"
-                                        />
-                                    </div>
-                                </div>
-
-                                <div className="flex gap-3 pt-4">
-                                    <button
-                                        type="button"
-                                        onClick={() => setShowCreateModal(false)}
-                                        disabled={isCreating}
-                                        className="flex-1 bg-white/5 hover:bg-white/10 px-6 py-3 rounded-lg font-bold transition-colors disabled:opacity-50"
-                                    >
-                                        Cancel
-                                    </button>
-                                    <button
-                                        type="submit"
-                                        disabled={isCreating}
-                                        className="flex-1 bg-primary text-black px-6 py-3 rounded-lg font-bold hover:bg-primary/90 transition-colors disabled:opacity-50"
-                                    >
-                                        {isCreating ? (
-                                            <span className="flex items-center justify-center gap-2">
-                                                <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                                                Creating...
-                                            </span>
-                                        ) : (
-                                            'Create Competition'
-                                        )}
-                                    </button>
-                                </div>
-                            </form >
-                        </motion.div >
-                    </div >
-                )
-            }
-
-            {/* Edit Competition Modal */}
-            {editingCompetition && editForm && (
-                <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-                    <div className="bg-[#0a0a0a] border border-white/10 rounded-[32px] p-8 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-
-                        <div className="flex items-center justify-between mb-8">
-                            <h2 className="text-2xl font-display italic uppercase">Edit Competition</h2>
-                            <button
-                                onClick={() => setEditingCompetition(null)}
-                                className="p-2 hover:bg-white/10 rounded-xl transition-colors"
-                            >
-                                <X size={20} />
-                            </button>
-                        </div>
-
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-
-                            <div className="md:col-span-2">
-                                <label className="block text-[10px] font-black uppercase tracking-widest text-white/40 mb-2">Competition Name</label>
-                                <input
-                                    type="text"
-                                    value={editForm.name}
-                                    onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
-                                    className="w-full bg-[#121212] border border-white/10 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-primary text-white"
-                                />
-                            </div>
-
-                            <div>
-                                <label className="block text-[10px] font-black uppercase tracking-widest text-white/40 mb-2">Sport</label>
-                                <select
-                                    value={editForm.sport}
-                                    onChange={(e) => setEditForm({ ...editForm, sport: e.target.value })}
-                                    className="w-full bg-[#121212] border border-white/10 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-primary text-white"
-                                >
-                                    <option value="Football">Football</option>
-                                    <option value="Basketball">Basketball</option>
-                                    <option value="Volleyball">Volleyball</option>
-                                    <option value="Track">Track &amp; Field</option>
-                                </select>
-                            </div>
-
-                            <div>
-                                <label className="block text-[10px] font-black uppercase tracking-widest text-white/40 mb-2">Format</label>
-                                <select
-                                    value={editForm.format}
-                                    onChange={(e) => setEditForm({ ...editForm, format: e.target.value })}
-                                    className="w-full bg-[#121212] border border-white/10 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-primary text-white"
-                                >
-                                    <option value="league">League</option>
-                                    <option value="knockout">Knockout</option>
-                                    <option value="league-knockout">League + Knockout</option>
-                                    <option value="group-knockout">Group + Knockout</option>
-                                </select>
-                            </div>
-
-                            <div>
-                                <label className="block text-[10px] font-black uppercase tracking-widest text-white/40 mb-2">Season</label>
-                                <input
-                                    type="text"
-                                    value={editForm.season}
-                                    onChange={(e) => setEditForm({ ...editForm, season: e.target.value })}
-                                    className="w-full bg-[#121212] border border-white/10 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-primary text-white"
-                                />
-                            </div>
-
-                            <div>
-                                <label className="block text-[10px] font-black uppercase tracking-widest text-white/40 mb-2">Status</label>
-                                <select
-                                    value={editForm.status}
-                                    onChange={(e) => setEditForm({ ...editForm, status: e.target.value })}
-                                    className="w-full bg-[#121212] border border-white/10 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-primary text-white"
-                                >
-                                    <option value="upcoming">Upcoming</option>
-                                    <option value="ongoing">Ongoing</option>
-                                    <option value="completed">Completed</option>
-                                </select>
-                            </div>
-
-                            <div>
-                                <label className="block text-[10px] font-black uppercase tracking-widest text-white/40 mb-2">Level</label>
-                                <select
-                                    value={editForm.level}
-                                    onChange={(e) => setEditForm({ ...editForm, level: e.target.value })}
-                                    className="w-full bg-[#121212] border border-white/10 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-primary text-white"
-                                >
-                                    <option value="busa-league">BUSA League</option>
-                                    <option value="college">College (INTERCOLLEGE)</option>
-                                    <option value="department">Department</option>
-                                    <option value="year-level">Year Level</option>
-                                    <option value="inter-university">Inter-University</option>
-                                </select>
-                            </div>
-
-                            <div>
-                                <label className="block text-[10px] font-black uppercase tracking-widest text-white/40 mb-2">Number of Teams</label>
-                                <input
-                                    type="number" min="0"
-                                    value={editForm.numberOfTeams}
-                                    onChange={(e) => setEditForm({ ...editForm, numberOfTeams: parseInt(e.target.value) || 0 })}
-                                    className="w-full bg-[#121212] border border-white/10 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-primary text-white"
-                                />
-                            </div>
-
-                            <div className="flex items-center gap-3 mt-2">
-                                <input
-                                    type="checkbox"
-                                    id="editMultiSport"
-                                    checked={editForm.isMultiSport}
-                                    onChange={(e) => setEditForm({ ...editForm, isMultiSport: e.target.checked })}
-                                    className="w-4 h-4"
-                                />
-                                <label htmlFor="editMultiSport" className="text-sm font-bold text-white/60">
-                                    Multi-Sport Competition
-                                </label>
-                            </div>
-
-                        </div>
-
-                        <div className="flex justify-end gap-3 mt-8">
-                            <button
-                                onClick={() => setEditingCompetition(null)}
-                                className="px-6 py-3 rounded-xl border border-white/10 text-sm font-black uppercase tracking-widest text-white/60 hover:text-white transition-colors"
-                            >
-                                Cancel
-                            </button>
-                            <button
-                                onClick={handleEditSubmit}
-                                disabled={isEditSubmitting}
-                                className="flex items-center gap-2 bg-primary text-black px-8 py-3 rounded-xl font-black text-sm uppercase italic hover:scale-105 transition-transform disabled:opacity-50"
-                            >
-                                {isEditSubmitting ? 'Saving...' : 'Save Changes'}
-                            </button>
-                        </div>
-                    </div>
-                </div>
+            {editingCompetition && (
+                <CompetitionModal
+                    mode="edit"
+                    initialData={{
+                        name: editingCompetition.name,
+                        sport: editingCompetition.sport || 'Football',
+                        scope: editingCompetition.scope || 'internal',
+                        level: editingCompetition.level || 'busa-league',
+                        format: editingCompetition.format || 'league',
+                        season: editingCompetition.season || '2024/2025',
+                        status: editingCompetition.status || 'upcoming',
+                        numberOfTeams: editingCompetition.numberOfTeams || 0,
+                        numberOfGroups: editingCompetition.numberOfGroups || 0,
+                        teamsPerGroup: editingCompetition.teamsPerGroup || 0,
+                        isMultiSport: editingCompetition.isMultiSport || false,
+                        description: editingCompetition.description || ''
+                    }}
+                    onSubmit={async (data) => {
+                        await handleEditSubmit(data);
+                    }}
+                    onClose={() => setEditingCompetition(null)}
+                    isSubmitting={isEditSubmitting}
+                />
             )}
 
             {/* Confirmation Dialog */}
