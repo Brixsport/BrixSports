@@ -44,7 +44,8 @@ next-env.d.ts
 
 notes/*
 dev/*
-.agents/*
+# .agents/*
 local.db
 local.db-*
 data/*
+# BUILD_JOURNAL.md

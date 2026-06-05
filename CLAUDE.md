@@ -74,6 +74,11 @@ Any implementation touching these flows requires explicit manual testing before 
 - API responses must return shaped DTOs, never raw Drizzle/DB rows
 - Public endpoints (/api/matches, /api/players) must never return internal fields
 
+### MCP Access
+- brixsports-db MCP is READ-ONLY — token is physically incapable of writes
+- Never use MCP query results to infer write patterns or schema mutations
+- Use MCP for: schema inspection, query planning, data verification only
+
 ### Database
 - All DB operations must be wrapped in try/catch/finally
 - No raw SQL strings — use Drizzle query builder only

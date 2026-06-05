@@ -26,27 +26,6 @@ interface Competition {
     description?: string;
 }
 
-interface CompetitionModalProps {
-    mode: 'create' | 'edit';
-    initialData: {
-        name: string;
-        sport: string;
-        scope: string;
-        level: string;
-        format: string;
-        season: string;
-        status: string;
-        numberOfTeams: number;
-        numberOfGroups: number;
-        teamsPerGroup: number;
-        isMultiSport: boolean;
-        description: string;
-    };
-    onSubmit: (data: typeof initialData) => Promise<void>;
-    onClose: () => void;
-    isSubmitting: boolean;
-}
-
 const defaultFormData = {
     name: '',
     sport: 'Football',
@@ -61,6 +40,14 @@ const defaultFormData = {
     isMultiSport: false,
     description: ''
 };
+
+interface CompetitionModalProps {
+    mode: 'create' | 'edit';
+    initialData: typeof defaultFormData;
+    onSubmit: (data: typeof defaultFormData) => Promise<void>;
+    onClose: () => void;
+    isSubmitting: boolean;
+}
 
 function CompetitionModal({ mode, initialData, onSubmit, onClose, isSubmitting }: CompetitionModalProps) {
     const [form, setForm] = useState(initialData);
@@ -104,19 +91,12 @@ function CompetitionModal({ mode, initialData, onSubmit, onClose, isSubmitting }
                             <select
                                 value={form.sport}
                                 onChange={(e) => setForm({ ...form, sport: e.target.value })}
-                                className="w-full bg-[#121212] border border-white/10 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-primary text-white disabled:opacity-50"
-                                disabled={form.isMultiSport}
+                                className="w-full bg-[#121212] border border-white/10 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-primary text-white"
                             >
-                                {form.isMultiSport ? (
-                                    <option value="Multiple Sports">Multiple Sports</option>
-                                ) : (
-                                    <>
-                                        <option value="Football">Football</option>
-                                        <option value="Basketball">Basketball</option>
-                                        <option value="Volleyball">Volleyball</option>
-                                        <option value="Track & Field">Track & Field</option>
-                                    </>
-                                )}
+                                <option value="Football">Football</option>
+                                <option value="Basketball">Basketball</option>
+                                <option value="Volleyball">Volleyball</option>
+                                <option value="Track & Field">Track & Field</option>
                             </select>
                         </div>
 
