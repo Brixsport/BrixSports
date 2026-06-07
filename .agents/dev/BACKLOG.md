@@ -326,6 +326,132 @@ nothing else happens structurally.
 
 ---
 
+### BACKLOG-019 — Post-Match Lifecycle Audit + Automation
+**Status:** OPEN
+**Priority:** High
+**Filed:** 2026-06-07
+**Blocked by:** Phase 1 (staging environment) — do not touch on prod
+
+#### Problem
+The full post-match event chain is unaudited. It is unknown which
+steps are automated vs manual vs broken. The chain is:
+
+```
+goal scored
+  → matchEvents row inserted
+    → match homeScore / awayScore updated
+      → competition standings recalculated
+        → playerStats incremented
+          → playerRatings recalculated
+```
+
+Currently, backfill and standings updates are triggered manually
+via admin endpoints or scripts. There are no automated hooks that
+fire when a match transitions to FINISHED. This means standings and
+player stats can be stale or inconsistent after a match ends.
+
+#### Required Changes
+
+1. **Audit phase** — map every step of the chain:
+   - Which steps fire automatically (in the event POST handler)?
+   - Which require a manual admin trigger?
+   - Which have no trigger at all?
+   - Are there any steps that silently fail (no error, wrong result)?
+   - Cross-reference the architecture assessment in
+     `.agents/dev/PROJECT_HISTORY.md` before starting.
+
+2. **Automation hook** — when a match `status` transitions to
+   `FINISHED` (via PATCH `/api/matches/[id]`):
+   - Trigger standings recalculation for the match's `competitionId`
+   - Trigger `playerStats` derivation from all `matchEvents` rows
+     for that `matchId` (goal tally, assists, cards, minutes played)
+   - Trigger `playerRatings` recalculation for all involved players
+   - All three must be atomic-safe: partial failure should not
+     leave standings and stats in a split state
+
+3. **Idempotency** — the hook must be safe to re-trigger:
+   - Re-processing a FINISHED match must produce the same result
+   - Dedup logic required to prevent double-counting events
+
+4. **Observability** — log each hook execution to Sentry (once
+   BACKLOG-011 is resolved) with match ID, trigger time, and result
+   counts (standings rows updated, players updated, ratings updated)
+
+#### Notes
+- Do NOT implement on prod without a staging environment in place
+  (Phase 1 / BACKLOG-005). The automation touches standings and
+  playerStats — corruption here is difficult to reverse
+- BUG-011 (718 goals anomaly) is evidence of what happens when
+  backfill runs without dedup — this feature must not repeat that
+- playerStats BACKLOG-001 (penaltyGoals / ownGoals columns) should
+  be resolved before this hook is built — otherwise the hook will
+  not capture the full stat breakdown
+- Related: BACKLOG-001, BACKLOG-011 (BUG-011), BACKLOG-005 Phase 1
+
+---
+
+### BACKLOG-018 — Game Event Logsheets (BUSALYMPICS match events)
+**Status:** OPEN
+**Priority:** Medium
+**Filed:** 2026-06-07
+**Blocked by:** BACKLOG-016 (Roster Builder — player name mapping UI needed first)
+
+#### Problem
+All BUSALYMPICS match fixtures will exist in the DB but the
+`matchEvents` table has no rows for these games. Without events,
+player stats (goals, assists, cards, ratings) cannot be derived.
+Physical logsheets from each match need to be transcribed.
+
+#### Required Changes
+Once BACKLOG-016 (Roster Builder + CSV import with player mapping)
+is in place:
+1. Collect physical logsheets for all BUSALYMPICS matches.
+2. For each match — enter events via the match event logger or
+   the CSV import flow: goals (minute, player, team), yellow/red
+   cards, substitutions.
+3. After all events are entered, trigger backfill to recalculate
+   `playerStats` from `matchEvents` for affected players.
+4. Verify standings and leaderboards update correctly.
+
+#### Notes
+- Do not attempt manual SQL entry for events — the player name
+  mapping UI (BACKLOG-016) is required to avoid duplicate profiles
+- Relates to BUG-011 (playerStats anomaly) — run dedup audit
+  before backfill to ensure clean baseline
+
+---
+
+### BACKLOG-017 — Missing BUSALYMPICS Match Scores (Blocking)
+**Status:** OPEN
+**Priority:** HIGH — blocking standings
+**Filed:** 2026-06-07
+
+#### Problem
+Three BUSALYMPICS fixtures have no confirmed scores yet. Fixtures
+cannot be inserted until scores are known. This blocks standings
+calculation for the full competition.
+
+#### Missing fixtures (scores needed)
+
+| Matchday | Home | Away | Date | Time |
+|----------|------|------|------|------|
+| MD2 | COLNAS | COLENG | 2026-04-22 | 16:30 |
+| MD3 | COLNAS | COLENVS | 2026-04-26 | 16:00 |
+| MD3 | COLMANS | COLENG | 2026-04-29 | 16:00 |
+
+#### Required Changes
+Once scores are confirmed:
+1. Insert fixture rows using the same pattern as the MD1/MD2/Final
+   insert script (`dev/fix-match-fixtures.ts`).
+2. Set `status: FINISHED`, `approvalStatus: PENDING`.
+3. Run standings recalculation for BUSALYMPICS.
+
+#### Notes
+- Scores to be confirmed from physical records / match organisers
+- Do not estimate or backfill with placeholder scores
+
+---
+
 ### BACKLOG-016 — Roster Builder (Replace / Supplement Bulk Register)
 **Status:** OPEN
 **Priority:** High
