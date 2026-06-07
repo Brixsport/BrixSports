@@ -1,15 +1,18 @@
 # BrixSports — Build Journal
 
 ## Architecture Decisions
+
 - **Database**: Turso (LibSQL) via Drizzle ORM
 - **Auth**: Custom JWT (jose / jsonwebtoken). Validation is strictly server-side.
 - **Real-time**: Custom WebSockets broadcasting events and score updates.
 - **Client**: Next.js App Router with TailwindCSS. PWA implementation required for offline event queueing for loggers.
 
 ---
+
 ## Sessions
 
 ### Session 1 - May 3, 2026
+
 - Executed the "May 9th Event Stability" Dry-Run Audit on critical paths.
 - Uncovered severe zero-auth vulnerability in `/api/events` (anyone can write events).
 - Uncovered critical performance threat: `/api/matches` has an unbounded polling query fetching all matches every 30s.
@@ -20,28 +23,32 @@
 - Discovered WS server on Railway is down — `bun.lock` out of sync with `package.json` causing frozen lockfile build failure.
 
 ### Session 2 — May 4, 2026
+
 **Focus:** Infrastructure audit and high-priority bug remediation.
-**Built:** 
+**Built:**
+
 - `src/app/api/matches/route.ts`: Coerced `competitionId` to `null` if empty string to fix 500 error on match creation.
-**Bugs encountered:**
+  **Bugs encountered:**
 - **Match Creation 500**: Root cause was `competitionId: ""` triggering a Foreign Key violation in LibSQL (empty string != null).
 - **NDPR/GDPR Leak**: `assignedLoggers` emails and internal fields exposed in public `/api/matches` response.
 - **Race Condition (BUG-008)**: Match logger assignment lacks atomic uniqueness checks.
-**Resolved:**
+  **Resolved:**
 - Fixed the 500 error in match creation by sanitizing `competitionId` before insert.
 - Audited `ws-server/index.js` for environment variables; identified `PORT`, `WS_API_KEY`, `VERCEL_URL`, and `NEXT_PUBLIC_APP_URL` as critical for Railway deployment.
-**Deferred:**
+  **Deferred:**
 - Resolving the privacy leak in `/api/matches` (requires role-based branching).
 - Atomic refactor for logger assignment.
-**Next session:**
+  **Next session:**
 - Complete Railway deployment fix: `git add bun.lock`, `git commit -m "fix: update bun lockfile"`, `git push`.
 - Verify WebSocket connectivity once Railway build passes.
 - Implement response sanitization for `/api/matches` to prevent email leaks.
 
 ### Session 5 — 2026-06-07
+
 **Focus:** Phase 4 — Bells Intercollege data setup: org links, competition enrolment, player affiliations, match fixtures.
 
 **Built / Changed:**
+
 - `dev/fix-backlog007.ts` — UPDATE 4 college teams to set `ownerOrganizationId`. COLNAS/COLENG/COLMANS/COLENVS now linked to their respective org records. Gitignored.
 - `dev/fix-backlog008.ts` — INSERT 4 rows into `competition_team_entries` for BUSALYMPICS. Gitignored.
 - `dev/fix-college-affiliations.ts` — INSERT 68 `playerTeamAffiliations` rows (college type, isPrimary: false). Dedup-checked per row. Players sourced from `playerOrganizationAffiliations` — no new player profiles created. Gitignored.
@@ -52,11 +59,13 @@
 - `UNIFIED_EVENT_PANEL.tsx`, `UNIFIED_EVENT_PANEL_COMPLETE.tsx` — Deleted from project root (orphaned fragments causing 150+ tsc errors). Confirmed `tsc --noEmit` exits 0 after deletion.
 
 **Bugs encountered:**
+
 - Turso `ConnectTimeoutError` mid-COLENG on college affiliations insert (68 sequential round trips). Script died at `busa-joga-player-8`. Resolved by re-run — dedup check correctly identified all already-inserted rows, inserted the 1 missing row, completed cleanly.
 
 **Resolved:** Turso timeout handled by dedup-safe re-run pattern. No data loss.
 
 **Deferred:**
+
 - BACKLOG-017: 3 missing BUSALYMPICS scores (MD2 COLNAS/COLENG, MD3 COLNAS/COLENVS, MD3 COLMANS/COLENG). Blocking standings.
 - BUG-013: `POST /api/players/bulk-register` still has no auth gate.
 - BUG-011: playerStats 718 goals anomaly — investigation only, no writes.
@@ -68,9 +77,11 @@
 ---
 
 ### Session 4 — 2026-06-05
+
 **Focus:** Phase 2 Bug Sprint — full security and stability sweep across all open BUG-001 through BUG-012 items.
 
 **Built / Changed:**
+
 - `src/middleware.ts` — Fixed `pathname.startsWith('/admin')` to also cover `/api/admin`. API routes now return 401/403 JSON instead of a browser redirect. All debug `console.log` statements removed.
 - `src/app/api/auth/test/route.ts` — **Deleted.** Debug endpoint was live in production with no auth gate.
 - `src/app/api/admin/users/route.ts` — `getAuthUser` + `role === 'admin'` added to GET and PATCH.
@@ -94,6 +105,7 @@
 - `scripts/db-audit-query.ts` — Created by audit agent to run live DB queries.
 
 **Bugs encountered:**
+
 - `POST /api/events` score update was silently broken for live matches: the `normalizeEventType` fix revealed the score trigger (`['GOAL', ...].includes(type)`) was checking UPPERCASE against PascalCase logger output — scores never updated for live goals. Fixed in same pass.
 - `format-content.ts` had two distinct XSS vectors: raw HTML injection through unescaped template strings, and `javascript:` URL injection via the link regex replacement.
 - `assign-logger` route had no auth check at all — any unauthenticated caller could assign loggers to matches.
@@ -101,6 +113,7 @@
 **Resolved:** All 11 bugs above. See BACKLOG.md Resolved section for per-bug detail.
 
 **Deferred:**
+
 - BUG-011: playerStats 718 goals / 133 appearances anomaly. Root cause identified (duplicate backfill runs with differing `startTime` formats bypass the duplicate match check). Investigation only — no writes. Requires audit of all matchEvents before any data correction.
 - BACKLOG-007 → BACKLOG-008: Intercollege team org links and competition enrollment.
 
@@ -109,9 +122,10 @@
 ---
 
 ### Session 3 — 2026-06-04
+
 **Focus:** Refactor Competition admin forms and setup backlog architecture.
 **Built:** Consolidated create/edit forms into reusable CompetitionModal. Fixed UI disabling logic. Populated backlog with multi-sport architectural roadmap.
 **Bugs encountered:** TypeScript 'Cannot find name initialData' error caused by self-referencing inside an interface.
 **Resolved:** Hoisted defaultFormData and mapped types using typeof to resolve circular reference.
 **Deferred:** All newly added backlog items (001, 002, 003, 004).
-**Next session:** Execute BACKLOG-001 — Goal Type Breakdown schema migration.
+**Next session:** Execute BACKLOG-001 — Goal Type Breakdown schema migration
