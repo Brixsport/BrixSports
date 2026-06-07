@@ -20,6 +20,8 @@
 
 ## Bugs (Open)
 
+- **BUG-013**: `src/app/api/players/bulk-register/route.ts` — `POST /api/players/bulk-register` has no `getAuthUser` check and no admin role verification. Any unauthenticated request can create player rows. Fix: add standard auth gate identical to the pattern used in BUG-001/002 fixes — `getAuthUser(request)` + `user.role === 'admin'` check at the top of the POST handler, returning 401/403 before any body is read.
+
 - **BUG-001**: `src/middleware.ts` — `matcher` includes `/api/admin/*` but internal `if` check only matches `/admin`. All admin API routes are currently bypassed by middleware.
 - **BUG-002**: `/api/admin/*` — Handlers (e.g., `users`, `ads`, `settings`) missing internal `getAuthUser` and `hasRole` checks.
 - **BUG-003**: `src/app/api/auth/test/route.ts` — Debug endpoint live in production (leaks auth cookie state).
@@ -321,6 +323,126 @@ nothing else happens structurally.
 - All existing single-sport competitions are 
   unaffected — parentCompetitionId will be null 
   for all of them.
+
+---
+
+### BACKLOG-016 — Roster Builder (Replace / Supplement Bulk Register)
+**Status:** OPEN
+**Priority:** High
+**Filed:** 2026-06-07
+
+#### Problem
+`/admin/bulk-register` always creates new player rows in non-NPUGA
+paths. There is no way to roster an existing player onto a new team
+without duplicating their profile. The intercollege roster (68
+players across COLNAS/COLENG/COLMANS/COLENVS) was fixed via a
+manual one-off script — this needs to be a repeatable UI flow.
+
+Current gaps:
+- No search-by-name / search-by-org to find existing players
+- No way to add a `playerTeamAffiliations` row without creating a
+  new `players` row
+- No DB-level uniqueness enforcement on `(playerId, teamId)` in
+  `playerTeamAffiliations` — dedup is only checked in application
+  code (non-atomic, race-prone — same pattern as BUG-008)
+- Endpoint has no auth gate (BUG-013)
+
+#### Required Changes
+
+1. **DB constraint** — add unique index on `(player_id, team_id)` to
+   `player_team_affiliations`. This is the foundational fix; all
+   other changes build on it. Run `db:push` after schema change.
+
+2. **API** — `POST /api/admin/players/roster` (new endpoint):
+   - Auth-gated: `getAuthUser` + `role === 'admin'`
+   - Accepts: `{ teamId, players: Array<RosterEntry> }`
+   - `RosterEntry` is a discriminated union:
+     - `{ mode: 'existing', playerId, jerseyNumber?, position? }`
+       → inserts `playerTeamAffiliations` row only
+     - `{ mode: 'new', name, jerseyName, number, position, ... }`
+       → creates `players` row + `playerTeamAffiliations` row
+   - Returns per-entry result: inserted | skipped (duplicate) | error
+
+3. **UI** — `/admin/roster-builder` or integrated into team detail
+   page. Per-row toggle: "Existing Player" | "New Player".
+   - "Existing Player" mode: live search against `/api/players`
+     filtered by name or org. Selecting pre-fills name + position.
+     Submit creates only the affiliation row.
+   - "New Player" mode: same fields as current bulk-register.
+   - Batch submit — all rows sent in one request.
+   - Clear success/skip/error feedback per row.
+
+4. **Placement** — should live inside the team detail page
+   (`/admin/teams/[id]`) as a "Manage Roster" tab, not as a
+   standalone route. Resolves TD-007 (bulk-register placement review).
+
+5. **CSV Import with preview + manual player mapping** — upload a
+   CSV of match or roster data → preview screen renders each row →
+   shorthand / nickname names are matched to real player profiles
+   via a dropdown sourced from the target team's roster →
+   unmatched rows are flagged for manual resolution → confirm →
+   import runs only on confirmed rows.
+   - CSV columns (minimum): name/nickname, jersey number, position
+   - Preview table: one row per CSV line, match status
+     (auto-matched | needs review | no match found)
+   - Auto-match logic: fuzzy name match against `jerseyName` and
+     `name` fields on players affiliated to the target team
+   - Manual override: dropdown per unmatched row, searchable,
+     shows jersey number + position to disambiguate
+   - Confirm step before any DB writes
+   - Similar pattern to the current backfill import UI but for
+     roster data with existing players rather than match events
+
+#### Notes
+- Blocked by: BUG-013 (auth gate) must be fixed first
+- DB constraint (step 1) is a breaking migration if duplicate rows
+  already exist — run a dedup query before applying
+- Existing bulk-register can remain for NPUGA/multi-university use
+  cases where teams are always new; this is additive, not a rewrite
+- Related: BACKLOG-006 (select existing players in bulk-register),
+  TD-007 (bulk-register placement), BUG-013 (missing auth gate)
+
+---
+
+### BACKLOG-015 — Organizations Detail / Drill-Down Page
+**Status:** OPEN
+**Priority:** Medium
+**Filed:** 2026-06-07
+
+#### Problem
+`/admin/organizations` is a list-only view. There is no detail page
+for a single organization. Clicking an org card leads nowhere.
+All org management (editing, seeing what it owns, seeing its
+members) is inaccessible from the UI.
+
+#### Required Changes
+1. Create route `/admin/organizations/[id]/page.tsx`.
+
+2. Page sections:
+   - Org info header — name, type, status, parent, location.
+     Edit controls inline or via modal (PATCH `/api/admin/organizations/[id]`).
+   - Child organizations — list of direct children with links.
+   - Owned teams — list of teams where `ownerOrganizationId = org.id`,
+     each linking to the team roster.
+   - Affiliated players — players from `playerOrganizationAffiliations`
+     where `organizationId = org.id`, count + paginated list.
+   - Hosted competitions — competitions where `hostOrganizationId = org.id`.
+   - Governed competitions — competitions where `governingOrganizationId = org.id`.
+
+3. API: `/api/admin/organizations/[id]` GET — return all of the above
+   in a single shaped response. Auth-gated (admin only).
+
+4. Navigation: org cards on the list page should link to `[id]` detail.
+
+#### Notes
+- Blocked by nothing — can be built independently
+- The `organizationsRelations` in schema.ts already defines all the
+  joins needed: `ownedTeams`, `hostedCompetitions`,
+  `governedCompetitions`, `playerAffiliations`, `childOrganizations`
+- PATCH `/api/admin/organizations/[id]` does not exist yet — needs
+  building alongside the detail page
+- Relates to BACKLOG-004 (multi-sport competitions) — once parent
+  competitions exist, this page is where you'd see them grouped
 
 ---
 
