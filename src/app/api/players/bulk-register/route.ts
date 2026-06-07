@@ -13,6 +13,7 @@ import { db } from '@/db';
 import { playerTeamAffiliations, players, teams } from '@/db/schema';
 import { getPlayerProfileId } from '@/db/utils/player-profile';
 import { ensureOrganizationEntity, syncPlayerOrganizationAffiliations } from '@/lib/player-data';
+import { getAuthUser } from '@/lib/auth';
 
 interface PlayerInput {
     name: string;
@@ -51,6 +52,11 @@ const isBellsUniversity = (name?: string | null) =>
 
 export async function POST(request: NextRequest) {
     try {
+        const authUser = await getAuthUser(request);
+        if (!authUser || authUser.role !== 'admin') {
+            return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+        }
+
         const body: BulkRegisterInput = await request.json();
         const {
             players: playerList,

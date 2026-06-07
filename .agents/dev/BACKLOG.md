@@ -20,7 +20,7 @@
 
 ## Bugs (Open)
 
-- **BUG-013**: `src/app/api/players/bulk-register/route.ts` — `POST /api/players/bulk-register` has no `getAuthUser` check and no admin role verification. Any unauthenticated request can create player rows. Fix: add standard auth gate identical to the pattern used in BUG-001/002 fixes — `getAuthUser(request)` + `user.role === 'admin'` check at the top of the POST handler, returning 401/403 before any body is read.
+- ~~**BUG-013**: `src/app/api/players/bulk-register/route.ts` — `POST /api/players/bulk-register` has no `getAuthUser` check and no admin role verification. Fixed: `getAuthUser(request)` + `authUser.role !== 'admin'` check added at top of POST handler, before body is read. Returns 401. Matches BUG-001/002 pattern exactly.~~
 
 - **BUG-001**: `src/middleware.ts` — `matcher` includes `/api/admin/*` but internal `if` check only matches `/admin`. All admin API routes are currently bypassed by middleware.
 - **BUG-002**: `/api/admin/*` — Handlers (e.g., `users`, `ads`, `settings`) missing internal `getAuthUser` and `hasRole` checks.
