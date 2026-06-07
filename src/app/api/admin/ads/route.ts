@@ -3,10 +3,16 @@ import { db } from '@/db';
 import { advertisements } from '@/db/schema';
 import { eq, desc } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
+import { getAuthUser } from '@/lib/auth';
 
 // GET /api/admin/ads - List all advertisements
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
+    const authUser = await getAuthUser(request);
+    if (!authUser || authUser.role !== 'admin') {
+      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+    }
+
     const ads = await db
       .select()
       .from(advertisements)
@@ -25,8 +31,13 @@ export async function GET() {
 // POST /api/admin/ads - Create new advertisement
 export async function POST(request: NextRequest) {
   try {
+    const authUser = await getAuthUser(request);
+    if (!authUser || authUser.role !== 'admin') {
+      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+    }
+
     const body = await request.json();
-    
+
     const newAd = {
       id: nanoid(),
       title: body.title,
@@ -41,7 +52,7 @@ export async function POST(request: NextRequest) {
       endDate: body.endDate ? new Date(body.endDate) : null,
       impressions: 0,
       clicks: 0,
-      createdBy: null, // Can be set from session
+      createdBy: authUser.id,
       createdAt: new Date(),
       updatedAt: new Date(),
     };

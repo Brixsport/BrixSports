@@ -95,7 +95,8 @@ export async function GET(request: Request) {
             });
         }
 
-        const allPlayers = await db.select().from(players);
+        // Safety cap — prevents unbounded full-table scan. Raise if player count genuinely exceeds 500.
+        const allPlayers = await db.select().from(players).limit(500);
         let enrichedPlayers = await enrichPlayersWithAffiliations(allPlayers);
 
         if (department || college || university) {

@@ -1,9 +1,10 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
 import { matches, matchEvents, teams } from '@/db/schema';
 import { eq, and, inArray, or, desc } from 'drizzle-orm';
+import { getAuthUser } from '@/lib/auth';
 
-export async function GET(request: Request) {
+export async function GET(request: NextRequest) {
     try {
         const { searchParams } = new URL(request.url);
         const sport = searchParams.get('sport');
@@ -61,7 +62,6 @@ export async function GET(request: Request) {
                 matchId: matchLoggerAssignments.matchId,
                 loggerId: loggers.id,
                 name: loggers.name,
-                email: loggers.email,
                 role: matchLoggerAssignments.role,
                 status: matchLoggerAssignments.status
             })
@@ -85,7 +85,6 @@ export async function GET(request: Request) {
                 assignmentsMap.get(a.matchId)?.push({
                     id: a.loggerId,
                     name: a.name,
-                    email: a.email,
                     role: a.role
                 });
             }
@@ -128,8 +127,13 @@ export async function GET(request: Request) {
     }
 }
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
     try {
+        const authUser = await getAuthUser(request);
+        if (!authUser || authUser.role !== 'admin') {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+
         const body = await request.json();
         const { stats, lineups, ...matchData } = body;
 

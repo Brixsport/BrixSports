@@ -4,7 +4,7 @@ import { teams } from '@/db/schema';
 
 export async function GET() {
     try {
-        const allTeams = await db.select().from(teams);
+        const allTeams = await db.select().from(teams).limit(200);
         return NextResponse.json(allTeams);
     } catch (error) {
         console.error('Error fetching teams:', error);

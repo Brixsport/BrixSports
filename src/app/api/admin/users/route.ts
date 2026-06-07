@@ -7,9 +7,15 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
 import { users } from '@/db/schema';
 import { eq } from 'drizzle-orm';
+import { getAuthUser } from '@/lib/auth';
 
 export async function GET(request: NextRequest) {
     try {
+        const authUser = await getAuthUser(request);
+        if (!authUser || authUser.role !== 'admin') {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+
         const allUsers = await db.select({
             id: users.id,
             name: users.name,
@@ -36,6 +42,11 @@ export async function GET(request: NextRequest) {
 
 export async function PATCH(request: NextRequest) {
     try {
+        const authUser = await getAuthUser(request);
+        if (!authUser || authUser.role !== 'admin') {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+
         const body = await request.json();
         const { userId, role } = body;
 

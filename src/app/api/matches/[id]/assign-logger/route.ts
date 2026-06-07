@@ -3,18 +3,24 @@ import { db } from '@/db';
 import { matchLoggerAssignments } from '@/db/schema';
 import { nanoid } from 'nanoid';
 import { and, eq } from 'drizzle-orm';
+import { getAuthUser } from '@/lib/auth';
 
 /**
  * POST /api/matches/[id]/assign-logger
- * Assign a logger to a match
+ * Assign a logger to a match (admin only)
  */
 export async function POST(
     request: NextRequest,
     { params }: { params: Promise<{ id: string }> }
 ) {
     try {
+        const authUser = await getAuthUser(request);
+        if (!authUser || authUser.role !== 'admin') {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+
         const { id: matchId } = await params;
-        const { loggerId, role = 'primary', assignedBy } = await request.json();
+        const { loggerId, role = 'primary' } = await request.json();
 
         if (!loggerId) {
             return NextResponse.json(
@@ -23,39 +29,48 @@ export async function POST(
             );
         }
 
-        // Check if logger is already assigned to this match
-        const existing = await db
-            .select()
-            .from(matchLoggerAssignments)
-            .where(
-                and(
-                    eq(matchLoggerAssignments.matchId, matchId),
-                    eq(matchLoggerAssignments.loggerId, loggerId),
-                    eq(matchLoggerAssignments.status, 'active')
+        // Atomic: check and insert inside a transaction to prevent duplicate
+        // assignments from concurrent requests (race condition guard).
+        const assignment = await db.transaction(async (tx) => {
+            const existing = await tx
+                .select({ id: matchLoggerAssignments.id })
+                .from(matchLoggerAssignments)
+                .where(
+                    and(
+                        eq(matchLoggerAssignments.matchId, matchId),
+                        eq(matchLoggerAssignments.loggerId, loggerId),
+                        eq(matchLoggerAssignments.status, 'active')
+                    )
                 )
-            )
-            .limit(1);
+                .limit(1)
+                .get();
 
-        if (existing.length > 0) {
+            if (existing) {
+                return null; // signal duplicate to caller
+            }
+
+            const [row] = await tx.insert(matchLoggerAssignments).values({
+                id: nanoid(),
+                matchId,
+                loggerId,
+                role,
+                assignedBy: authUser.id,
+                status: 'active',
+            }).returning();
+
+            return row;
+        });
+
+        if (!assignment) {
             return NextResponse.json(
                 { error: 'This logger is already assigned to this match' },
-                { status: 400 }
+                { status: 409 }
             );
         }
 
-        // Create new assignment
-        const assignment = await db.insert(matchLoggerAssignments).values({
-            id: nanoid(),
-            matchId,
-            loggerId,
-            role,
-            assignedBy,
-            status: 'active',
-        }).returning();
-
         return NextResponse.json({
             success: true,
-            assignment: assignment[0]
+            assignment,
         });
     } catch (error) {
         console.error('Error assigning logger:', error);

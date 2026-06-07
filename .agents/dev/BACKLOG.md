@@ -6,6 +6,17 @@
 - ~~**AUDIT-001**: `/api/events` POST — Added `getAuthUser()` + logger assignment check. Now returns 401/403 correctly.~~
   _> (stashed)_
 - ~~**AUDIT-002 (partial)**: `/api/matches` (POST) — Coerced `competitionId` to `null` if empty string, fixing 500 error on match creation. Generic server validation still missing.~~
+- ~~**BUG-001**: `src/middleware.ts` — Fixed `pathname.startsWith('/admin')` to also cover `/api/admin`. API routes now return 401/403 JSON instead of browser redirect. All debug console.logs removed.~~
+- ~~**BUG-003**: `src/app/api/auth/test/route.ts` — File deleted. Debug endpoint no longer live.~~
+- ~~**BUG-002**: `/api/admin/users`, `/api/admin/ads`, `/api/admin/settings` — `getAuthUser` + `role === 'admin'` check added to all handlers (GET, PATCH, POST where applicable). `/api/admin/organizations` already had auth — no change needed. `createdBy`/`updatedBy` audit fields now sourced from verified session user, not client-supplied body.~~
+- ~~**BUG-007 (NDPR/GDPR Leak)**: `/api/matches` public GET — `email` field removed from `assignedLoggers` select query and response map. Logger emails no longer exposed to public viewers.~~
+- ~~**BUG-009**: `POST /api/matches` — `getAuthUser` + admin role check added at top of handler. Handler signature upgraded from `Request` to `NextRequest`.~~
+- ~~**BUG-010**: `POST /api/events` — `getAuthUser` added. Admins pass through; loggers verified against `matchLoggerAssignments` (active status) for the specific matchId. `DELETE /api/events` gated to admin or logger role. `GET /api/events` remains public.~~
+- ~~**BUG-012**: Event type casing mismatch — added `normalizeType()` helper to `RatingCalculator` (`s.toLowerCase().replace(/[\s_-]+/g, '')`). All event type comparisons in `calculateStatsFromEvents` updated to use it. Score trigger and score tally loop in `POST /api/events` also updated with the same normalization. Handles `Goal`/`GOAL`/`Yellow Card`/`YELLOW_CARD` and all variants consistently.~~
+- ~~**BUG-004**: `src/app/admin/transfers/page.tsx` L189 — `createdBy: 'admin-1'` replaced with `user?.id ?? null` sourced from `useAuth()` hook.~~
+- ~~**BUG-005 (remaining)**: `/api/teams` — `.limit(200)` added. `/api/loggers` — `.limit(200)` added. `/api/players` — `.limit(500)` added with comment (higher cap because route feeds in-memory search/filter across all players).~~
+- ~~**BUG-006**: `src/lib/utils/format-content.ts` — Added `escapeHtml()` helper. Applied to all user-supplied text before template string injection (headings, list items, blockquotes, paragraphs). Link handler in `formatInlineText` now validates URLs — only `http://` and `https://` permitted; all other schemes (`javascript:`, `data:` etc.) replaced with `#`. Closes stored XSS via `dangerouslySetInnerHTML` in news pages.~~
+- ~~**BUG-008**: `src/app/api/matches/[id]/assign-logger/route.ts` — Race condition fixed by moving check-then-insert into a Drizzle transaction. `assignedBy` now sourced from verified `authUser.id` (not client body). Missing auth gate added — endpoint now requires `role === 'admin'`.~~
 
 ## Bugs (Open)
 
@@ -21,6 +32,10 @@
   - **Root Cause**: Non-atomic "Check-then-Insert" pattern. The handler `awaits` a SELECT (L27) and then `awaits` an INSERT (L47). Concurrent requests pass the check simultaneously before either has finished inserting.
   - **Fix Needed**: Implement a unique constraint in `matchLoggerAssignments` schema or use a transaction with `upsert` logic.
 - **AUDIT-002 (remaining)**: `/api/matches` (POST) — Missing comprehensive Zod validation for match creation payload.
+- **BUG-009**: `src/app/api/matches/route.ts` — `POST /api/matches` has no `getAuthUser` check. Unauthenticated match creation is possible. Fix: add `getAuthUser` + `role === 'admin'` check at top of POST handler.
+- **BUG-010**: `src/app/api/events/route.ts` — Verify and add auth check to `POST /api/events`. Currently unconfirmed whether handler enforces logger identity server-side.
+- **BUG-011**: `playerStats` data corruption — 718 goals vs 133 appearances (~5.4 goals/appearance). Likely caused by duplicate backfill runs without deduplication. Needs investigation before any further backfill runs.
+- **BUG-012**: Event type casing mismatch — rating calculator uses `'GOAL'`, `'SAVE'`, `'BLOCK'` (uppercase) but `FootballLogger` dispatches `'Goal'`, `'Save'`, `'Block'` (PascalCase). Breaks all rating calculations for live-logged matches.
 
 ## Tech Debt
 
@@ -468,3 +483,102 @@ existing profile.
 - Related: TD-007 (bulk register placement review) — 
   resolve placement question before adding more features 
   to this page
+
+---
+
+### BACKLOG-007 — Fix Orphaned Intercollege Teams
+**Status:** OPEN  
+**Priority:** High  
+**Filed:** 2026-06-05  
+
+#### Problem
+4 intercollege teams (CNAS, CENG, CMANS, CENVS) were created with `ownerOrganizationId = null`. They are orphaned from the org hierarchy. The corresponding org records (COLNAS, COLENG, COLMANS, COLENVS) exist in the `organizations` table but are not linked.
+
+#### Required Changes
+UPDATE each of the 4 teams to set the correct `ownerOrganizationId` from the `organizations` table. Run as a targeted script — do not use the bulk backfill.
+
+#### Notes
+- Must be done before BACKLOG-008 (competition_team_entries)
+- Confirm org IDs from live DB before running UPDATE
+
+---
+
+### BACKLOG-008 — Enrol Intercollege Teams in Competitions
+**Status:** OPEN  
+**Priority:** High  
+**Filed:** 2026-06-05  
+
+#### Problem
+`competition_team_entries` table has 0 rows. All 236 teams and all 3 competitions exist but no team is formally enrolled in any competition via the join table. The 4 intercollege teams need entries created once their org links (BACKLOG-007) are fixed.
+
+#### Required Changes
+After BACKLOG-007 is resolved, insert rows into `competition_team_entries` for each intercollege team → competition pairing.
+
+#### Notes
+- Blocked by BACKLOG-007
+- Verify correct competition IDs from live DB before inserting
+
+---
+
+### BACKLOG-009 — Remove Vestigial next-auth Package
+**Status:** OPEN  
+**Priority:** Low  
+**Filed:** 2026-06-05  
+
+#### Problem
+Two auth systems coexist: custom JWT (active) and `next-auth@4.24.13` (vestigial, unused). The `next-auth` package is dead weight and increases attack surface.
+
+#### Required Changes
+Audit all imports of `next-auth` across the codebase. If confirmed unused, remove the package and any associated config files (`[...nextauth]` route if it exists).
+
+---
+
+### BACKLOG-010 — Audit and Remove Unused Email Providers
+**Status:** OPEN  
+**Priority:** Low  
+**Filed:** 2026-06-05  
+
+#### Problem
+Three email providers are installed: `@aws-sdk/client-ses`, `resend`, `nodemailer`. It is unclear which is the active provider. Unused packages should be removed.
+
+#### Required Changes
+Trace all email-sending code paths. Identify the active provider. Remove unused packages from `package.json`.
+
+---
+
+### BACKLOG-011 — Install and Configure Sentry
+**Status:** OPEN  
+**Priority:** High  
+**Filed:** 2026-06-05  
+
+#### Problem
+Sentry is referenced in `CLAUDE.md` and the project rules as if it is installed and active. It is not — `package.json` has no `@sentry/*` package. Error monitoring is non-functional. This is a production blocker.
+
+#### Required Changes
+Install `@sentry/nextjs`. Configure with DSN from Sentry project. Instrument both server-side API routes and client-side pages. Verify errors appear in Sentry dashboard before launch.
+
+---
+
+### BACKLOG-012 — Pin All Production Dependencies
+**Status:** OPEN  
+**Priority:** Medium  
+**Filed:** 2026-06-05  
+
+#### Problem
+30+ production dependencies are unpinned (using `^` prefix), violating the global project rule of exact version pinning for production deps.
+
+#### Required Changes
+Run a dep audit. Pin all `^` and `~` prefixed production deps in `package.json` to exact versions. Lock file should already reflect what is installed — use it as the source of truth.
+
+---
+
+### BACKLOG-013 — Audit Stripe Installation
+**Status:** OPEN  
+**Priority:** Low  
+**Filed:** 2026-06-05  
+
+#### Problem
+`stripe` is installed in `package.json` but payments are explicitly out of scope. The package may be dead weight or wired to unreachable code paths.
+
+#### Required Changes
+Audit all `stripe` imports. If unused, remove the package. If wired up partially, document what exists and leave dormant until Phase 7 (Revenue & Monetisation).

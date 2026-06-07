@@ -7,7 +7,7 @@ import bcrypt from 'bcryptjs';
 // GET /api/loggers - Get all loggers
 export async function GET(request: NextRequest) {
     try {
-        const allLoggers = await db.select().from(loggers);
+        const allLoggers = await db.select().from(loggers).limit(200);
 
         // Fetch all active assignments
         // Dynamically import to avoid circular dependency issues if any, though schema is already imported

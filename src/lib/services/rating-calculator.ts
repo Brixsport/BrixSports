@@ -57,6 +57,14 @@ export class RatingCalculator {
     private static readonly BASE_RATING = 7.0;
     private static readonly EYE_POINT_BONUS = 0.5;
 
+    /** Normalise event type strings for comparison regardless of casing or separator.
+     *  'Goal', 'GOAL', 'goal' → 'goal'
+     *  'Yellow Card', 'YELLOW_CARD' → 'yellowcard'
+     */
+    private static normalizeType(type: string): string {
+        return type.toLowerCase().replace(/[\s_-]+/g, '');
+    }
+
     /**
      * Calculate player rating based on sport and statistics
      */
@@ -248,44 +256,44 @@ export class RatingCalculator {
 
         switch (sport.toLowerCase()) {
             case 'football':
-                stats.goals = playerEvents.filter(e => e.type === 'GOAL').length;
-                stats.assists = playerEvents.filter(e => e.type === 'ASSIST').length;
-                stats.saves = playerEvents.filter(e => e.type === 'SAVE').length;
-                stats.yellowCards = playerEvents.filter(e => e.type === 'YELLOW_CARD').length;
-                stats.redCards = playerEvents.filter(e => e.type === 'RED_CARD').length;
-                stats.shotsOnTarget = playerEvents.filter(e => e.type === 'SHOT_ON_TARGET').length;
-                stats.shotsOffTarget = playerEvents.filter(e => e.type === 'SHOT_OFF_TARGET').length;
-                stats.tackles = playerEvents.filter(e => e.type === 'TACKLE').length;
-                stats.interceptions = playerEvents.filter(e => e.type === 'INTERCEPTION').length;
+                stats.goals = playerEvents.filter(e => this.normalizeType(e.type) === 'goal').length;
+                stats.assists = playerEvents.filter(e => this.normalizeType(e.type) === 'assist').length;
+                stats.saves = playerEvents.filter(e => this.normalizeType(e.type) === 'save').length;
+                stats.yellowCards = playerEvents.filter(e => this.normalizeType(e.type) === 'yellowcard').length;
+                stats.redCards = playerEvents.filter(e => this.normalizeType(e.type) === 'redcard').length;
+                stats.shotsOnTarget = playerEvents.filter(e => this.normalizeType(e.type) === 'shotontarget').length;
+                stats.shotsOffTarget = playerEvents.filter(e => this.normalizeType(e.type) === 'shotofftarget').length;
+                stats.tackles = playerEvents.filter(e => this.normalizeType(e.type) === 'tackle').length;
+                stats.interceptions = playerEvents.filter(e => this.normalizeType(e.type) === 'interception').length;
                 break;
 
             case 'basketball':
-                const fieldGoals = playerEvents.filter(e => e.type === 'FIELD_GOAL');
-                const threePointers = playerEvents.filter(e => e.type === 'THREE_POINTER');
-                const freeThrows = playerEvents.filter(e => e.type === 'FREE_THROW');
+                const fieldGoals = playerEvents.filter(e => this.normalizeType(e.type) === 'fieldgoal');
+                const threePointers = playerEvents.filter(e => this.normalizeType(e.type) === 'threepointer');
+                const freeThrows = playerEvents.filter(e => this.normalizeType(e.type) === 'freethrow');
 
                 stats.points =
                     fieldGoals.length * 2 +
                     threePointers.length * 3 +
                     freeThrows.length * 1;
 
-                stats.rebounds = playerEvents.filter(e => e.type === 'REBOUND').length;
-                stats.assists_basketball = playerEvents.filter(e => e.type === 'ASSIST').length;
-                stats.steals = playerEvents.filter(e => e.type === 'STEAL').length;
-                stats.blocks = playerEvents.filter(e => e.type === 'BLOCK').length;
-                stats.turnovers = playerEvents.filter(e => e.type === 'TURNOVER').length;
-                stats.fouls = playerEvents.filter(e => e.type === 'FOUL').length;
+                stats.rebounds = playerEvents.filter(e => this.normalizeType(e.type) === 'rebound').length;
+                stats.assists_basketball = playerEvents.filter(e => this.normalizeType(e.type) === 'assist').length;
+                stats.steals = playerEvents.filter(e => this.normalizeType(e.type) === 'steal').length;
+                stats.blocks = playerEvents.filter(e => this.normalizeType(e.type) === 'block').length;
+                stats.turnovers = playerEvents.filter(e => this.normalizeType(e.type) === 'turnover').length;
+                stats.fouls = playerEvents.filter(e => this.normalizeType(e.type) === 'foul').length;
                 break;
 
             case 'track':
             case 'track & field':
-                const finishEvent = playerEvents.find(e => e.type === 'FINISH');
+                const finishEvent = playerEvents.find(e => this.normalizeType(e.type) === 'finish');
                 if (finishEvent && finishEvent.value) {
                     const value = JSON.parse(finishEvent.value);
                     stats.position = value.position;
                     stats.time = value.time;
                 }
-                stats.recordBroken = playerEvents.some(e => e.type === 'RECORD_BROKEN');
+                stats.recordBroken = playerEvents.some(e => this.normalizeType(e.type) === 'recordbroken');
                 break;
         }
 

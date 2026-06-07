@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
 import { systemSettings, systemSettingsHistory } from '@/db/schema';
+import { getAuthUser } from '@/lib/auth';
 import { eq } from 'drizzle-orm';
 
 // Default settings to initialize if not in database
@@ -53,6 +54,11 @@ async function initializeDefaultSettings() {
 
 export async function GET(request: NextRequest) {
     try {
+        const authUser = await getAuthUser(request);
+        if (!authUser || authUser.role !== 'admin') {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+
         // Initialize defaults if needed
         await initializeDefaultSettings();
 
@@ -81,8 +87,13 @@ export async function GET(request: NextRequest) {
 
 export async function PATCH(request: NextRequest) {
     try {
+        const authUser = await getAuthUser(request);
+        if (!authUser || authUser.role !== 'admin') {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+
         const body = await request.json();
-        const { key, value, userId, reason } = body;
+        const { key, value, reason } = body;
 
         if (!key || value === undefined) {
             return NextResponse.json(
@@ -126,7 +137,7 @@ export async function PATCH(request: NextRequest) {
             settingKey: key,
             oldValue: currentSetting.value,
             newValue: value,
-            updatedBy: userId || null,
+            updatedBy: authUser.id,
             reason: reason || null,
         });
 
@@ -135,7 +146,7 @@ export async function PATCH(request: NextRequest) {
             .update(systemSettings)
             .set({
                 value,
-                updatedBy: userId || null,
+                updatedBy: authUser.id,
                 updatedAt: new Date(),
             })
             .where(eq(systemSettings.key, key));
@@ -159,6 +170,11 @@ export async function PATCH(request: NextRequest) {
 // Get setting history
 export async function POST(request: NextRequest) {
     try {
+        const authUser = await getAuthUser(request);
+        if (!authUser || authUser.role !== 'admin') {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+
         const body = await request.json();
         const { key } = body;
 

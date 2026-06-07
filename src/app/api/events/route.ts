@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
 import { matchEvents, matches, players } from '@/db/schema';
 import { eq, and, desc } from 'drizzle-orm';
+import { getAuthUser } from '@/lib/auth';
 import { RatingCalculator } from '@/lib/services/rating-calculator';
 import { TeamStatsCalculator } from '@/lib/services/team-stats-calculator';
 import {
@@ -78,6 +79,12 @@ export async function POST(request: NextRequest) {
             );
         }
 
+        // Auth: must be authenticated admin or assigned logger for this match
+        const authUser = await getAuthUser(request);
+        if (!authUser) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+
         // Fetch match details
         const [match] = await db
             .select()
@@ -89,6 +96,29 @@ export async function POST(request: NextRequest) {
                 { error: 'Match not found' },
                 { status: 404 }
             );
+        }
+
+        // Loggers must be actively assigned to this match
+        if (authUser.role !== 'admin') {
+            const { matchLoggerAssignments } = await import('@/db/schema');
+            const [assignment] = await db
+                .select({ id: matchLoggerAssignments.id })
+                .from(matchLoggerAssignments)
+                .where(
+                    and(
+                        eq(matchLoggerAssignments.matchId, matchId),
+                        eq(matchLoggerAssignments.loggerId, authUser.id),
+                        eq(matchLoggerAssignments.status, 'active')
+                    )
+                )
+                .limit(1);
+
+            if (!assignment) {
+                return NextResponse.json(
+                    { error: 'Forbidden — not assigned to this match' },
+                    { status: 403 }
+                );
+            }
         }
 
         // Validate substitution if applicable
@@ -263,7 +293,10 @@ export async function POST(request: NextRequest) {
         let finalHomeScore = match.homeScore || 0;
         let finalAwayScore = match.awayScore || 0;
 
-        if (['GOAL', 'FIELD_GOAL', 'THREE_POINTER', 'FREE_THROW'].includes(type) || type === 'UNDO_GOAL') {
+        const normalizeEventType = (s: string) => s.toLowerCase().replace(/[\s_-]+/g, '');
+        const normalizedType = normalizeEventType(type);
+
+        if (['goal', 'fieldgoal', 'threepointer', 'freethrow'].includes(normalizedType) || normalizedType === 'undogoal') {
             const allEvents = await db
                 .select()
                 .from(matchEvents)
@@ -273,16 +306,17 @@ export async function POST(request: NextRequest) {
             let calculatedAwayScore = 0;
 
             allEvents.forEach(event => {
+                const nt = normalizeEventType(event.type);
                 if (event.teamId === match.homeTeamId) {
-                    if (event.type === 'GOAL') calculatedHomeScore++;
-                    if (event.type === 'FIELD_GOAL') calculatedHomeScore += 2;
-                    if (event.type === 'THREE_POINTER') calculatedHomeScore += 3;
-                    if (event.type === 'FREE_THROW') calculatedHomeScore += 1;
+                    if (nt === 'goal') calculatedHomeScore++;
+                    if (nt === 'fieldgoal') calculatedHomeScore += 2;
+                    if (nt === 'threepointer') calculatedHomeScore += 3;
+                    if (nt === 'freethrow') calculatedHomeScore += 1;
                 } else if (event.teamId === match.awayTeamId) {
-                    if (event.type === 'GOAL') calculatedAwayScore++;
-                    if (event.type === 'FIELD_GOAL') calculatedAwayScore += 2;
-                    if (event.type === 'THREE_POINTER') calculatedAwayScore += 3;
-                    if (event.type === 'FREE_THROW') calculatedAwayScore += 1;
+                    if (nt === 'goal') calculatedAwayScore++;
+                    if (nt === 'fieldgoal') calculatedAwayScore += 2;
+                    if (nt === 'threepointer') calculatedAwayScore += 3;
+                    if (nt === 'freethrow') calculatedAwayScore += 1;
                 }
             });
 
@@ -338,6 +372,11 @@ export async function POST(request: NextRequest) {
  */
 export async function DELETE(request: NextRequest) {
     try {
+        const authUser = await getAuthUser(request);
+        if (!authUser || (authUser.role !== 'admin' && authUser.role !== 'logger')) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+
         const { searchParams } = new URL(request.url);
         const eventId = searchParams.get('eventId');
 

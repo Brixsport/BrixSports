@@ -5,17 +5,14 @@ import { jwtVerify } from 'jose';
 export async function middleware(request: NextRequest) {
     const { pathname } = request.nextUrl;
 
-    // Protect /admin routes
-    if (pathname.startsWith('/admin')) {
+    // Protect /admin UI routes and /api/admin/* API routes
+    if (pathname.startsWith('/admin') || pathname.startsWith('/api/admin')) {
         const token = request.cookies.get('authToken')?.value;
 
-        // Log for debugging (remove in production)
-        console.log('[Middleware] Admin route accessed:', pathname);
-        console.log('[Middleware] Token present:', !!token);
-        console.log('[Middleware] JWT_SECRET configured:', !!process.env.JWT_SECRET);
-
         if (!token) {
-            console.log('[Middleware] No token found, redirecting to login');
+            if (pathname.startsWith('/api/')) {
+                return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+            }
             const url = new URL('/login', request.url);
             url.searchParams.set('callbackUrl', pathname);
             return NextResponse.redirect(url);
@@ -28,17 +25,18 @@ export async function middleware(request: NextRequest) {
             );
 
             const { payload } = await jwtVerify(token, secret);
-            console.log('[Middleware] Token verified, role:', payload.role);
 
             if (payload.role !== 'admin' && payload.role !== 'logger_manager') {
-                console.log('[Middleware] User is not authorized for admin area, redirecting to home');
+                if (pathname.startsWith('/api/')) {
+                    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+                }
                 return NextResponse.redirect(new URL('/', request.url));
             }
-
-            console.log('[Middleware] Admin access granted');
-        } catch (error) {
+        } catch {
             // Token invalid or expired
-            console.error('[Middleware] Token verification failed:', error);
+            if (pathname.startsWith('/api/')) {
+                return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+            }
             const url = new URL('/login', request.url);
             url.searchParams.set('callbackUrl', pathname);
             return NextResponse.redirect(url);

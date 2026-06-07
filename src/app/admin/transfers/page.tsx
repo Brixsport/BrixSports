@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useAuth } from '@/hooks/useAuth';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     TrendingUp,
@@ -61,6 +62,7 @@ const TRANSFER_TYPES = ['permanent', 'loan', 'free', 'draft'];
 const TRANSFER_STATUS = ['rumor', 'confirmed', 'completed', 'failed'];
 
 function AdminTransfersPageContent() {
+    const { user } = useAuth();
     const [transfers, setTransfers] = useState<Transfer[]>([]);
     const [players, setPlayers] = useState<any[]>([]);
     const [teams, setTeams] = useState<any[]>([]);
@@ -186,7 +188,7 @@ function AdminTransfersPageContent() {
         try {
             const payload = {
                 ...formData,
-                createdBy: 'admin-1', // TODO: Get from auth
+                createdBy: user?.id ?? null,
             };
 
             const url = editingTransfer ? `/api/transfers/${editingTransfer.id}` : '/api/transfers';
