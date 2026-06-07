@@ -38,6 +38,35 @@
 - Verify WebSocket connectivity once Railway build passes.
 - Implement response sanitization for `/api/matches` to prevent email leaks.
 
+### Session 5 — 2026-06-07
+**Focus:** Phase 4 — Bells Intercollege data setup: org links, competition enrolment, player affiliations, match fixtures.
+
+**Built / Changed:**
+- `dev/fix-backlog007.ts` — UPDATE 4 college teams to set `ownerOrganizationId`. COLNAS/COLENG/COLMANS/COLENVS now linked to their respective org records. Gitignored.
+- `dev/fix-backlog008.ts` — INSERT 4 rows into `competition_team_entries` for BUSALYMPICS. Gitignored.
+- `dev/fix-college-affiliations.ts` — INSERT 68 `playerTeamAffiliations` rows (college type, isPrimary: false). Dedup-checked per row. Players sourced from `playerOrganizationAffiliations` — no new player profiles created. Gitignored.
+- `dev/fix-match-fixtures.ts` — INSERT 4 BUSALYMPICS match fixtures (FINISHED): MD1 G1, MD1 G2, MD2 G2, Final. All confirmed via SELECT after insert. Gitignored.
+- `.agents/dev/BACKLOG.md` — BUG-013, BACKLOG-015 through BACKLOG-019 added.
+- `.agents/dev/PROJECT_HISTORY.md` — Session 4 entry appended.
+- `.agents/dev/CONTEXT_TRANSFER_SESSION_3.md` — Full context transfer doc written.
+- `UNIFIED_EVENT_PANEL.tsx`, `UNIFIED_EVENT_PANEL_COMPLETE.tsx` — Deleted from project root (orphaned fragments causing 150+ tsc errors). Confirmed `tsc --noEmit` exits 0 after deletion.
+
+**Bugs encountered:**
+- Turso `ConnectTimeoutError` mid-COLENG on college affiliations insert (68 sequential round trips). Script died at `busa-joga-player-8`. Resolved by re-run — dedup check correctly identified all already-inserted rows, inserted the 1 missing row, completed cleanly.
+
+**Resolved:** Turso timeout handled by dedup-safe re-run pattern. No data loss.
+
+**Deferred:**
+- BACKLOG-017: 3 missing BUSALYMPICS scores (MD2 COLNAS/COLENG, MD3 COLNAS/COLENVS, MD3 COLMANS/COLENG). Blocking standings.
+- BUG-013: `POST /api/players/bulk-register` still has no auth gate.
+- BUG-011: playerStats 718 goals anomaly — investigation only, no writes.
+- BACKLOG-018: game event logsheets — blocked by BACKLOG-016.
+- BACKLOG-019: post-match lifecycle automation — blocked by staging environment.
+
+**Next session:** Confirm 3 missing BUSALYMPICS scores → insert remaining fixtures using `dev/fix-match-fixtures.ts` as template → run standings calculation for BUSALYMPICS.
+
+---
+
 ### Session 4 — 2026-06-05
 **Focus:** Phase 2 Bug Sprint — full security and stability sweep across all open BUG-001 through BUG-012 items.
 
