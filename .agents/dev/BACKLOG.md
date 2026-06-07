@@ -794,16 +794,18 @@ Trace all email-sending code paths. Identify the active provider. Remove unused 
 
 ---
 
-### BACKLOG-011 — Install and Configure Sentry
-**Status:** OPEN  
-**Priority:** High  
-**Filed:** 2026-06-05  
+### ~~BACKLOG-011 — Install and Configure Sentry~~
+**Status:** RESOLVED — 2026-06-07  
 
-#### Problem
-Sentry is referenced in `CLAUDE.md` and the project rules as if it is installed and active. It is not — `package.json` has no `@sentry/*` package. Error monitoring is non-functional. This is a production blocker.
+`@sentry/nextjs@10.56.0` installed (exact pin). Configured via:
+- `sentry.client.config.ts` — browser instrumentation + session replay
+- `sentry.server.config.ts` — server-side instrumentation  
+- `sentry.edge.config.ts` — edge runtime instrumentation
+- `next.config.ts` — wrapped with `withSentryConfig` (source maps, tunnel route `/monitoring`, logger tree-shake)
+- `src/app/global-error.tsx` — captures unhandled errors via `Sentry.captureException`
+- `.env.example` — `SENTRY_DSN`, `NEXT_PUBLIC_SENTRY_DSN`, `SENTRY_AUTH_TOKEN`, `SENTRY_ORG`, `SENTRY_PROJECT` added
 
-#### Required Changes
-Install `@sentry/nextjs`. Configure with DSN from Sentry project. Instrument both server-side API routes and client-side pages. Verify errors appear in Sentry dashboard before launch.
+**To activate:** add real DSN values to `.env.local` and Vercel project env vars.
 
 ---
 

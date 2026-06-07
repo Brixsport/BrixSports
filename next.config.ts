@@ -1,5 +1,6 @@
 import type { NextConfig } from "next";
 import path from "node:path";
+import { withSentryConfig } from '@sentry/nextjs';
 
 const LOADER = path.resolve(__dirname, 'src/visual-edits/component-tagger-loader.js');
 
@@ -65,4 +66,23 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+export default withSentryConfig(nextConfig, {
+  // Sentry organisation / project — set in CI env or Vercel project settings
+  org: process.env.SENTRY_ORG,
+  project: process.env.SENTRY_PROJECT,
+
+  // Auth token for source map upload (set as SENTRY_AUTH_TOKEN in CI/Vercel)
+  authToken: process.env.SENTRY_AUTH_TOKEN,
+
+  // Suppresses source map upload logs during local builds
+  silent: !process.env.CI,
+
+  // Upload source maps to Sentry for readable stack traces in production
+  widenClientFileUpload: true,
+
+  // Automatically tree-shake Sentry logger in production builds
+  disableLogger: true,
+
+  // Tunnel Sentry requests through the app to avoid ad-blocker interference
+  tunnelRoute: '/monitoring',
+});
