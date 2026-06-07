@@ -94,10 +94,40 @@ No database scripts run. All work was source code edits (BUG-001 through BUG-012
 
 ## Session 5 — 2026-06-07 (continuation)
 
-No database scripts run. Work was:
+Source code changes only — no database scripts run:
 - BUG-013: Auth gate added to `POST /api/players/bulk-register`
 - BACKLOG-011: `@sentry/nextjs` installed and configured
 - BUG-014: Admin matches page fixed to use embedded `shortName` from API response
+
+---
+
+## Session 6 — 2026-06-07
+
+### dev/fix-busalympics-remaining-fixtures.ts
+- **Purpose:** Audit existing BUSALYMPICS match metadata, then insert 3 remaining fixtures as UPCOMING
+- **Target:** Live production DB (Turso)
+- **Step 1 — Read:** Found 4 existing BUSALYMPICS matches. All had correct matchday/round. 0 rows updated.
+- **Step 2 — Insert:** 3 new UPCOMING fixtures inserted:
+
+  | ID | Label | Status | Date |
+  |----|-------|--------|------|
+  | `a9CtLwotaXyfsfMf2odAM` | MD2 G1: COLNAS vs COLENG | UPCOMING | 2026-04-22 |
+  | `_9nntLoOZZOZGzja8EQE9` | MD3 G1: COLNAS vs COLENVS | UPCOMING | 2026-04-26 |
+  | `y3KcCGtHA7N7MybKTHX5K` | MD3 G2: COLMANS vs COLENG | UPCOMING | 2026-04-29 |
+
+- **Step 3 — Verify:** SELECT all 7 BUSALYMPICS matches confirmed. All matchday/round values consistent.
+- **Verified:** 7/7 rows present. No null-round/matchday anomalies.
+- **Partially resolves:** BACKLOG-017 (fixtures in DB; scores still needed to PATCH to FINISHED)
+
+---
+
+## Outstanding / Pending Scripts
+
+| Script (not yet run) | Purpose | Blocked by |
+|----------------------|---------|------------|
+| PATCH 3 UPCOMING matches | Set scores + status: FINISHED for BACKLOG-017 fixtures | Scores not yet confirmed from physical records |
+| Standings recalculation | Calculate BUSALYMPICS group standings | All 7 fixtures must be FINISHED first |
+| playerStats dedup audit | Investigate BUG-011 (718 goals anomaly) | Requires staging environment first (BACKLOG-005 Phase 1) |
 
 ---
 

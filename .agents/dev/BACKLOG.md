@@ -423,34 +423,34 @@ is in place:
 
 ---
 
-### BACKLOG-017 — Missing BUSALYMPICS Match Scores (Blocking)
-**Status:** OPEN
-**Priority:** HIGH — blocking standings
+### BACKLOG-017 — Missing BUSALYMPICS Match Scores (Partially Resolved)
+**Status:** PARTIAL — fixtures in DB as UPCOMING, scores still needed
+**Priority:** HIGH — standings still blocked until scores confirmed
 **Filed:** 2026-06-07
+**Updated:** 2026-06-07
 
-#### Problem
-Three BUSALYMPICS fixtures have no confirmed scores yet. Fixtures
-cannot be inserted until scores are known. This blocks standings
-calculation for the full competition.
+#### Status
+All 3 fixtures inserted as `status: UPCOMING` on 2026-06-07 via
+`dev/fix-busalympics-remaining-fixtures.ts`. All 7 BUSALYMPICS
+fixtures now exist in the DB. Standings unblocked once scores are
+confirmed and rows PATCHed to FINISHED.
 
-#### Missing fixtures (scores needed)
+#### Inserted fixture IDs
 
-| Matchday | Home | Away | Date | Time |
-|----------|------|------|------|------|
-| MD2 | COLNAS | COLENG | 2026-04-22 | 16:30 |
-| MD3 | COLNAS | COLENVS | 2026-04-26 | 16:00 |
-| MD3 | COLMANS | COLENG | 2026-04-29 | 16:00 |
+| ID | Matchday | Home | Away | Date |
+|----|----------|------|------|------|
+| `a9CtLwotaXyfsfMf2odAM` | MD2 | COLNAS | COLENG | 2026-04-22 |
+| `_9nntLoOZZOZGzja8EQE9` | MD3 | COLNAS | COLENVS | 2026-04-26 |
+| `y3KcCGtHA7N7MybKTHX5K` | MD3 | COLMANS | COLENG | 2026-04-29 |
 
-#### Required Changes
-Once scores are confirmed:
-1. Insert fixture rows using the same pattern as the MD1/MD2/Final
-   insert script (`dev/fix-match-fixtures.ts`).
-2. Set `status: FINISHED`, `approvalStatus: PENDING`.
-3. Run standings recalculation for BUSALYMPICS.
+#### Remaining action
+Once scores confirmed from physical records:
+1. PATCH each match: `{ status: "FINISHED", homeScore: X, awayScore: Y }`
+2. Run standings recalculation for BUSALYMPICS (`9q8LMVqW8KAtF4BJBlyk_`).
 
 #### Notes
-- Scores to be confirmed from physical records / match organisers
 - Do not estimate or backfill with placeholder scores
+- Existing 4 FINISHED fixtures verified: all matchday/round values correct
 
 ---
 
