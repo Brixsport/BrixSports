@@ -11,11 +11,19 @@ import ConfirmDialog from '@/components/admin/ConfirmDialog';
 import SkeletonLoader from '@/components/admin/SkeletonLoader';
 import ErrorBoundary from '@/components/admin/ErrorBoundary';
 
+interface MatchTeam {
+    name: string;
+    shortName: string;
+    logo: string;
+}
+
 interface Match {
     id: string;
     sport: string;
     homeTeamId: string;
     awayTeamId: string;
+    homeTeam?: MatchTeam | null;
+    awayTeam?: MatchTeam | null;
     homeScore: number;
     awayScore: number;
     status: 'LIVE' | 'FINISHED' | 'UPCOMING' | 'HALF_TIME';
@@ -319,9 +327,14 @@ function AdminMatchesPageContent() {
         }
     };
 
-    const getTeamName = (teamId: string) => {
-        const team = teams.find(t => t.id === teamId);
-        return team ? team.name : teamId;
+    // Prefer shortName from the embedded team object returned by /api/matches.
+    // Fall back to the separately-fetched teams list, then raw ID as last resort.
+    const getTeamDisplay = (match: Match, side: 'home' | 'away') => {
+        const embedded = side === 'home' ? match.homeTeam : match.awayTeam;
+        if (embedded?.shortName) return embedded.shortName;
+        const teamId = side === 'home' ? match.homeTeamId : match.awayTeamId;
+        const fallback = teams.find(t => t.id === teamId);
+        return fallback?.shortName ?? fallback?.name ?? teamId;
     };
 
     const filteredMatches = matches.filter(match => {
@@ -400,7 +413,7 @@ function AdminMatchesPageContent() {
 
                                             <div className="flex items-center gap-12 mb-6">
                                                 <div className="flex-1 text-right">
-                                                    <p className="text-2xl font-display italic uppercase truncate">{getTeamName(match.homeTeamId)}</p>
+                                                    <p className="text-2xl font-display italic uppercase truncate">{getTeamDisplay(match, 'home')}</p>
                                                 </div>
                                                 <div className="px-6 py-2 bg-white/5 rounded-2xl border border-white/10 min-w-[120px] flex items-center justify-center">
                                                     {match.status === 'UPCOMING' ? (
@@ -414,7 +427,7 @@ function AdminMatchesPageContent() {
                                                     )}
                                                 </div>
                                                 <div className="flex-1">
-                                                    <p className="text-2xl font-display italic uppercase truncate">{getTeamName(match.awayTeamId)}</p>
+                                                    <p className="text-2xl font-display italic uppercase truncate">{getTeamDisplay(match, 'away')}</p>
                                                 </div>
                                             </div>
 
@@ -458,7 +471,7 @@ function AdminMatchesPageContent() {
                                                     <Edit size={20} />
                                                 </button>
                                                 <button
-                                                    onClick={() => confirmDelete(match.id, `${getTeamName(match.homeTeamId)} vs ${getTeamName(match.awayTeamId)}`)}
+                                                    onClick={() => confirmDelete(match.id, `${getTeamDisplay(match, 'home')} vs ${getTeamDisplay(match, 'away')}`)}
                                                     className="p-3 bg-white/5 border border-white/10 rounded-xl hover:bg-red-500/20 text-red-500 transition-colors"
                                                 >
                                                     <Trash2 size={20} />

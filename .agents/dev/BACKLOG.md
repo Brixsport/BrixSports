@@ -22,6 +22,8 @@
 
 - ~~**BUG-013**: `src/app/api/players/bulk-register/route.ts` — `POST /api/players/bulk-register` has no `getAuthUser` check and no admin role verification. Fixed: `getAuthUser(request)` + `authUser.role !== 'admin'` check added at top of POST handler, before body is read. Returns 401. Matches BUG-001/002 pattern exactly.~~
 
+- ~~**BUG-014**: `src/app/admin/matches/page.tsx` — Match cards displayed raw team IDs for teams beyond the `/api/teams` `.limit(200)` cap (236 teams in DB). Fixed: added `homeTeam`/`awayTeam` to `Match` interface (API already returns them). Replaced `getTeamName(id)` with `getTeamDisplay(match, side)` which reads `shortName` from the embedded API response first, falls back to the local teams-list lookup, then raw ID. All four call sites updated. Resolved 2026-06-07.~~
+
 - **BUG-001**: `src/middleware.ts` — `matcher` includes `/api/admin/*` but internal `if` check only matches `/admin`. All admin API routes are currently bypassed by middleware.
 - **BUG-002**: `/api/admin/*` — Handlers (e.g., `users`, `ads`, `settings`) missing internal `getAuthUser` and `hasRole` checks.
 - **BUG-003**: `src/app/api/auth/test/route.ts` — Debug endpoint live in production (leaks auth cookie state).
