@@ -11,6 +11,46 @@
 
 ## Sessions
 
+### Session 8 — 2026-06-08
+
+**Focus:** BACKLOG-032 — Round label display on match cards. Data investigation, normalisation, display fix across all render paths.
+
+**Built:**
+
+- **Data investigation:** Discovered two-tier data problem — BUSALYMPICS matches used `round` column correctly; legacy BUSA League Football/Basketball matches had round baked into the denormalized `competition` string with no `competitionId` FK and no `round` column value.
+
+- **`dev/normalise-legacy-match-rounds.ts` (run + deleted):** Backfilled `competitionId` and `round` on 59 legacy matches. First apply failed — competition IDs in directive were placeholder strings, not real DB IDs. Real IDs confirmed via diagnostic query (`xm1OcBFeugKxLDHH6Xi6p` for football, `m-4qhMBvnUP2a-GcU-Rsv` for basketball), map corrected, re-run successful. 59/59 rows written.
+
+- **`dev/strip-competition-suffix.ts` (run + deleted):** Stripped now-redundant suffix from `competition` strings on the same 59 rows (`"BUSA League Football - Final"` → `"BUSA League Football"`). 59/59 rows written. Verified: 0 matches remaining with ` - ` in competition where round is set.
+
+- **BACKLOG-032 display fix — all render paths:**
+  - `src/types/index.ts` — added `round?: string | null` to global `Match` interface
+  - `src/app/page.tsx` — added `round: match.round ?? null` to all 4 transform maps (both fetch paths: initial + status-change refetch); added round label to individual match rows in homepage list
+  - `src/components/ui/MatchCard.tsx` — added `round` to prop interface; updated all 3 variants (compact, live, detailed)
+  - `src/components/matches/UpcomingMatchView.tsx` — added `round` to local `Match` interface; updated 2 renders (hero heading + match info panel)
+  - `src/components/MatchComponents.tsx` — updated 2 renders with `(match as any).round` cast (file uses deprecated mock-data `Match` type which has no `round` field — tracked in BACKLOG-030)
+  - `src/app/live/page.tsx` — updated in previous session (Session 7)
+  - `src/app/admin/matches/page.tsx` — updated in previous session (Session 7)
+
+- **BUG-026 filed:** PWA/cache issue — CSS fails to render on direct URL visits (hard nav). Service worker or precache manifest not including CSS bundle correctly. Filed: 2026-06-08, found by manual staging QA.
+
+**Bugs encountered:**
+
+- BACKLOG-032 initial commit (Session 7) only fixed `/live` and admin matches page. BUSALYMPICS matches are FINISHED/UPCOMING — never appear on `/live`. Real render paths were homepage (`page.tsx`) and shared components (`MatchCard.tsx`, etc.) — found via grep.
+- First normalisation apply failed with FK constraint — directive used placeholder IDs. Diagnosed and corrected in-session.
+
+**Resolved:** BACKLOG-032 (full — data + display)
+
+**Deferred:**
+- BACKLOG-033 (BUSALYMPICS standings) — blocked on MD3 G1 and MD3 G2 physical scores still unconfirmed
+- BACKLOG-028 (backscope dead nav items) — not started
+- BACKLOG-017 (2 missing BUSALYMPICS match scores) — awaiting physical records
+- BUG-026 (PWA/cache CSS issue) — filed, not investigated
+
+**Next session:** BACKLOG-028 (backscope dead nav items — low risk, self-contained) or BUG-026 investigation (PWA cache config).
+
+---
+
 ### Session 7 — 2026-06-08
 
 **Focus:** Session recovery after context-window cutoff. Commit all uncommitted session 6 changes. Run security/code-review/flow-checker agents before committing. Complete BUG-021 through BUG-025 sprint.

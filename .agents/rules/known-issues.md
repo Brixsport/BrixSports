@@ -43,6 +43,12 @@ activation: always_on
 
 2026-06-08 — Inline secret in node -e eval command — Turso auth token hardcoded directly in a node -e eval to run a DB query (turso CLI unavailable). Violates security rules — Never inline credentials in CLI commands or scripts. Always: import 'dotenv/config' + process.env. See .agents/rules/security.md.
 
+2026-06-08 — Round label not rendering after first BACKLOG-032 commit — `/live` page only renders `status === 'LIVE'` matches; BUSALYMPICS/BUSA League matches are FINISHED/UPCOMING so they never appear there. Fix targeted the wrong page. Real render paths were `src/app/page.tsx` (homepage) and shared components (`MatchCard.tsx`, `MatchComponents.tsx`, `UpcomingMatchView.tsx`) — Always grep `match.competition` across the entire codebase before assuming a single page fix is complete.
+
+2026-06-08 — round field not passed through page.tsx transform maps — `src/app/page.tsx` fetches from `/api/basketball/matches` and `/api/football/matches` (not `/api/matches`) and explicitly reconstructs match objects in 4 separate transform maps. `round` was not in any of them so it was silently dropped before reaching the component — When a page manually constructs match objects from API data, every field used downstream must be explicitly included. A spread (`...match`) would have avoided this; explicit maps are error-prone under field additions.
+
+2026-06-08 — FK constraint failure on data migration with placeholder IDs — Directive specified competition IDs as human-readable slugs (`busa-league-football-2025`) that did not exist in the DB. Script applied cleanly in dry-run but failed at first UPDATE with `SQLITE_CONSTRAINT: FOREIGN KEY constraint failed` — Always verify FK target IDs exist in the DB before writing any migration script. Run a `SELECT id FROM [table] WHERE name LIKE '%...'` diagnostic first, not after the apply fails.
+
 ## Anti-Patterns for This Codebase
 - Middleware matcher and internal logic check do not match.
 - try/catch without finally in any DB operation.
