@@ -121,13 +121,30 @@ Source code changes only — no database scripts run:
 
 ---
 
-## Outstanding / Pending Scripts
+## Session 7/8 — 2026-06-08 (BACKLOG-032 Data Normalisation)
 
-| Script (not yet run) | Purpose | Blocked by |
-|----------------------|---------|------------|
-| PATCH 3 UPCOMING matches | Set scores + status: FINISHED for BACKLOG-017 fixtures | Scores not yet confirmed from physical records |
-| Standings recalculation | Calculate BUSALYMPICS group standings | All 7 fixtures must be FINISHED first |
-| playerStats dedup audit | Investigate BUG-011 (718 goals anomaly) | Requires staging environment first (BACKLOG-005 Phase 1) |
+### dev/normalise-legacy-match-rounds.ts
+- **Purpose:** Backfill `competitionId` FK and `round` column on 59 legacy matches that had both set to NULL, with round baked into the denormalized `competition` string instead.
+- **Target:** Live production DB (Turso)
+- **Dry-run:** Confirmed 59 rows, 0 unresolvable prefixes. All extractions correct.
+- **Apply:** 59/59 rows updated.
+- **Changes per row:**
+  - `round`: extracted from `competition` string suffix after ` - `
+  - `competitionId`: resolved from prefix → `xm1OcBFeugKxLDHH6Xi6p` (BUSA LEAGUE FOOTBALL) or `m-4qhMBvnUP2a-GcU-Rsv` (BUSA LEAGUE BASKETBALL)
+  - `competition` string: left intact (not modified in this script)
+- **Note:** First apply attempt failed — competition IDs in the directive were placeholders (`busa-league-football-2025`), not real IDs. Real IDs confirmed via `query-competition-ids.ts` and map corrected before re-run.
+- **Verified:** Post-apply query confirmed 66 matches joined via `competitionId`, 0 NULL `competitionId` remaining, 0 matches with ` - ` in `competition` and NULL `round`.
+- **Resolves:** BACKLOG-032 data prerequisite (Part 1 of 2)
+
+---
+
+### dev/strip-competition-suffix.ts
+- **Purpose:** Strip the now-redundant round suffix from the denormalized `competition` strings on the same 59 legacy matches (e.g. `"BUSA League Football - Final"` → `"BUSA League Football"`). `round` column was already correctly set by the previous script.
+- **Target:** Live production DB (Turso)
+- **Dry-run:** 59 rows confirmed. All stripping correct — left of first ` - ` only.
+- **Apply:** 59/59 rows updated.
+- **Verified:** `SELECT COUNT(*) WHERE round IS NOT NULL AND competition LIKE '% - %'` = 0.
+- **Resolves:** BACKLOG-032 data prerequisite (Part 2 of 2). Display code can now use `competition · round` pattern without double-rendering.
 
 ---
 
@@ -135,6 +152,6 @@ Source code changes only — no database scripts run:
 
 | Script (not yet run) | Purpose | Blocked by |
 |----------------------|---------|------------|
-| `dev/fix-match-fixtures.ts` (extension) | Insert 3 missing BUSALYMPICS fixtures (BACKLOG-017) | Scores not yet confirmed from physical records |
-| Standings recalculation | Calculate BUSALYMPICS group standings | BACKLOG-017 (missing fixtures) |
+| PATCH MD3 G1 + MD3 G2 | Set scores + status: FINISHED for BACKLOG-017 remaining fixtures | Scores not yet confirmed from physical records |
+| Standings recalculation | Calculate BUSALYMPICS group standings | All 7 fixtures must be FINISHED first (BACKLOG-033) |
 | playerStats dedup audit | Investigate BUG-011 (718 goals anomaly) | Requires staging environment first (BACKLOG-005 Phase 1) |
