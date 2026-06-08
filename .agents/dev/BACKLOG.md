@@ -43,7 +43,7 @@
 
 ## Tech Debt
 
-- **TD-001**: Create `src/lib/env.ts` — Centralize all `process.env` reads into a single validated config. Currently 29 env vars are scattered across 30+ files with inconsistent fallbacks and no startup validation. Should use Zod to parse and fail fast on missing required keys.
+- **TD-001** *(IN PROGRESS)*: `src/lib/env.ts` created — typed `env` object and `validateEnv()` startup check in place. `middleware.ts` migrated to use `env.jwtSecret` and `env.isStaging`. Remaining work: migrate all other `process.env` reads across 30+ files, add Zod validation. Full migration deferred — do not scatter `process.env` reads in new code from this point forward.
 - **TD-002**: Deduplication for event logging submissions on slow connections to prevent double-tap glitches.
 - **TD-003**: Match status transitions need a proper state machine (PENDING → LIVE → FINISHED) with automated triggers.
 - **TD-004**: Update `.env.example` to match the actual 29 keys discovered in the codebase (currently only lists 16).
@@ -973,3 +973,417 @@ a false impression of the platform's capability.
 - Priority: backscope before Phase 7 revenue work — no point monetising
   a platform with visible broken pages
 - Candidates marked 🔴 are already flagged High Volatility in CLAUDE.md
+
+---
+
+#### Block 4 — Per-PR Turso DB Branching (CI Automation)
+
+##### Problem
+Every PR that touches DB logic currently shares the staging database.
+Concurrent PRs can corrupt each other's test state and there is no
+isolation between branches at the data layer.
+
+##### Solution
+When a PR is opened against `dev`, a GitHub Action automatically
+creates a Turso DB branch from the production DB snapshot. The Vercel
+preview deployment for that PR is configured to use the branched DB.
+When the PR is merged or closed, the branch is automatically deleted.
+Zero manual setup. Full isolation per PR.
+
+##### Implementation
+
+**Workflow 1 — Branch creation:**
+`.github/workflows/turso-branch-create.yml`
+- Trigger: `pull_request` events `opened`, `reopened`
+- Steps:
+  1. Call Turso Platform API to create a branch from the parent DB
+     named `pr-{PR_NUMBER}` (e.g. `pr-42`)
+  2. Retrieve the branched DB URL and generate an auth token
+  3. Call Vercel API to set env vars on the PR's preview deployment:
+     `TURSO_CONNECTION_URL` → branched DB URL
+     `TURSO_AUTH_TOKEN` → branched DB token
+
+**Workflow 2 — Branch deletion:**
+`.github/workflows/turso-branch-delete.yml`
+- Trigger: `pull_request` event `closed` (covers both merge and close)
+- Steps:
+  1. Call Turso Platform API to delete the `pr-{PR_NUMBER}` branch
+  2. No Vercel cleanup needed — preview deployments expire automatically
+
+##### Required GitHub Secrets
+
+| Secret | Purpose |
+|--------|---------|
+| `TURSO_API_TOKEN` | Turso Platform API auth (create/delete branches) |
+| `TURSO_ORG_NAME` | Turso organisation slug |
+| `TURSO_DB_NAME` | Parent DB name to branch from |
+| `VERCEL_TOKEN` | Vercel API auth (set preview env vars) |
+| `VERCEL_PROJECT_ID` | Target Vercel project |
+| `VERCEL_TEAM_ID` | Vercel team (if applicable) |
+
+##### Constraints
+- Branch lifecycle is tied strictly to the PR — no permanent DB changes
+- Branch is a snapshot from prod at creation time — not a live replica
+- Schema migrations against a PR branch must be run explicitly in CI
+  if the PR includes a `db:push` step
+- The parent DB used for branching should be the staging DB, not prod,
+  once staging is established — avoids exposing prod data in preview envs
+
+##### Blocked by
+- Staging environment must be stable and verified (BACKLOG-005 Phase 1)
+- GitHub Actions must be enabled on the new org repo
+  (`github.com/Brixsport/BrixSports`)
+- `TURSO_API_TOKEN` requires Turso Pro plan (branching is not on free tier)
+
+---
+
+#### Block 5 — Modular Monolith Structure (Refined)
+
+##### Problem
+The codebase has no enforced module boundaries. All routes, DB access,
+and business logic live in a flat `src/app/` and `src/lib/` structure
+with no ownership model. As the codebase grows this becomes a source
+of coupling, unintended side-effects, and slow onboarding.
+
+##### Proposed Modules
+
+| Module | Owns |
+|--------|------|
+| `match-engine` | matches, matchEvents, scoring, standings, live logging, WebSocket |
+| `identity` | auth, users, loggers, players, teams, orgs, affiliations |
+| `competition` | competitions, competition_team_entries, brackets, draws |
+| `media` | news/articles, highlights, livestream, ads |
+| `admin` | all `/api/admin/*` and `/admin/*` routes — internal-only module |
+
+##### Rules per Module
+- Owns its DB tables — no other module queries them directly via Drizzle
+- Exposes a clean internal API: named service functions, not raw queries
+  (e.g. `matchEngine.getMatchWithTeams(id)` not
+  `db.select().from(matches).where(eq(matches.id, id))` called from
+  another module)
+- No barrel imports across module boundaries — each module has an
+  explicit public surface (`index.ts` or `api.ts`)
+- No circular dependencies between modules
+
+##### Folder Structure (target)
+```
+src/
+  modules/
+    match-engine/
+      api/          ← API route handlers
+      services/     ← business logic
+      db/           ← queries scoped to this module's tables
+      index.ts      ← public surface
+    identity/
+    competition/
+    media/
+    admin/
+  shared/
+    lib/            ← utilities with no module ownership
+    components/     ← UI components used across modules
+    db/             ← schema definitions (read-only from modules)
+```
+
+##### Enforcement
+- `eslint-plugin-boundaries` configured with module import rules
+- Or: path alias restrictions in `tsconfig.json` — each module only
+  imports from `@/shared` and its own subtree
+- CI lint step fails on boundary violations
+
+##### Implementation Order
+1. Phase 5 audit completes — all features mapped
+2. Draw module boundary map (which files belong where)
+3. Create folder structure, move files incrementally
+4. Add lint rule, fix all violations
+5. Document ownership in `MODULES.md` at project root
+
+##### Notes
+- This is NOT a rewrite — it is a folder restructure and import
+  discipline pass. Existing logic does not change.
+- Start with `match-engine` — highest coupling risk, most critical flows
+- `identity` second — auth and player data are referenced everywhere
+- `media` and `admin` are the most self-contained — easiest to move last
+- Blocked by: Block 6 (full feature audit) must complete first
+
+---
+
+#### Block 6 — Full Feature Audit (Phase 5 Entry Point)
+
+##### Problem
+No complete inventory exists of what the system actually does. Every
+architectural decision, refactor plan, and production sign-off requires
+knowing exactly what is WORKING, PARTIAL, BROKEN, or NOT BUILT. Without
+this map, Phase 5 work is blind.
+
+##### Scope
+
+**High-Level Design sweep:**
+- Every public route — what it renders, what data it fetches, who can
+  access it
+- Every admin route — what it manages, what auth it requires
+- Every API endpoint — HTTP method, auth gate, input validation, query
+  safety (bounded? parameterised?), response shape (DTO or raw row?)
+- Every WebSocket event — emitter, listeners, payload shape
+- Every DB table — is it read anywhere? written anywhere? orphaned?
+- Every installed package — is it actively used? by what? safe to remove?
+
+**Low-Level Design sweep:**
+- Every component with client state — is it correct? does it handle
+  error and loading states?
+- Every form — validation present? error surfaced to user? submission
+  confirmed server-side before success state shown?
+- Every DB query — bounded with `.limit()`? correctly typed? uses index?
+- Every auth check — present at handler level (not just middleware)?
+  correct role verified? server-side only?
+
+##### Output
+A `SYSTEM_AUDIT.md` in `.agents/dev/` containing:
+
+| Section | Contents |
+|---------|---------|
+| Feature matrix | Every feature tagged WORKING / PARTIAL / BROKEN / NOT BUILT |
+| Backscoping candidates | PARTIAL/BROKEN features to pull from live UI until fixed |
+| Security gaps | Auth, validation, or exposure issues not already in bug backlog |
+| Dead code | Orphaned DB tables, unused packages, unreachable routes |
+| Priority fix list | Top 10 items to address before production sign-off |
+
+##### Prerequisites for This Audit
+- Staging environment live and verified (BACKLOG-005 Phase 1)
+- Run against `dev` branch + staging deployment — never against prod directly
+- The auditor must have admin access to the staging app to manually
+  exercise every route
+
+##### This Audit Unblocks
+- Block 5 (modular monolith boundary drawing)
+- BACKLOG-005 Phase 6 (tier validation — MVP vs production readiness)
+- BACKLOG-005 Phase 8 (E2E testing — can't write tests for unknown flows)
+- Production launch sign-off
+- Backscoping execution (Block 3)
+
+---
+
+### BACKLOG-021 — GitHub Rulesets (Branch Protection)
+**Status:** OPEN — implement after PR guard is tested  
+**Priority:** High  
+**Filed:** 2026-06-08  
+**Blocked by:** PR guard workflow (`pr-guard.yml`) must be live and verified first
+
+#### Required Changes
+Configure GitHub Rulesets on the `Brixsport/BrixSports` repo:
+
+**`main` ruleset:**
+- Require PR before merging (no direct pushes)
+- Require at least 1 approving review
+- Require status checks to pass: `check-branch-target` (pr-guard)
+- Dismiss stale reviews on new push
+- Block force pushes
+
+**`dev` ruleset:**
+- Require PR before merging (no direct pushes)
+- Require status checks to pass: `check-branch-target` (pr-guard)
+- Block force pushes
+- Allow admins to bypass for hotfix emergency merges
+
+#### Notes
+- Rulesets are configured in GitHub repo Settings → Rules → Rulesets
+- Do not enable required reviews on `dev` until the team is larger —
+  solo developer workflow still needs merge ability without a second reviewer
+- Test `pr-guard.yml` manually on a dummy PR before locking down with rulesets
+
+---
+
+### BACKLOG-022 — Hotfix Auto-Sync (main → dev)
+**Status:** OPEN — implement carefully with conflict detection  
+**Priority:** Medium  
+**Filed:** 2026-06-08
+
+#### Problem
+When a hotfix is merged to `main`, `dev` can drift and cause conflicts
+on the next feature PR. Currently there is no automated sync.
+
+#### Required Changes
+GitHub Action: `.github/workflows/hotfix-sync.yml`
+- Trigger: `push` to `main`
+- Attempts `git merge main` into `dev`
+- If clean merge: pushes to `dev` automatically
+- If conflict: opens a GitHub Issue titled
+  "⚠️ Auto-sync failed: main → dev conflict — manual merge required"
+  and posts the conflicting files. Does NOT force-push or silently fail.
+
+#### Notes
+- Conflict detection is non-negotiable — silent failure here would
+  cause divergence that is painful to resolve later
+- The auto-sync commit message should be:
+  `chore: sync main → dev after hotfix [hotfix branch name]`
+- Blocked by: BACKLOG-021 (rulesets) — auto-sync should only run
+  after branch protection is in place so it cannot accidentally
+  push broken code to `dev`
+
+---
+
+### BACKLOG-023 — CONTRIBUTING.md — Branch Workflow Documentation
+**Status:** OPEN  
+**Priority:** Medium  
+**Filed:** 2026-06-08
+
+#### Required Changes
+Rewrite `CONTRIBUTING.md` to accurately document the current branching
+model and remove all placeholder text (`YOUR_USERNAME`, `ORIGINAL_OWNER`).
+
+Sections to include:
+1. **Branch model** — diagram of `main` / `dev` / `feature/*` / `hotfix/*`
+2. **Naming conventions** — `feature/short-description`, `fix/bug-name`,
+   `hotfix/critical-fix-name`
+3. **PR rules** — feature/* → dev, hotfix/* → main, what the PR guard
+   checks, what happens on violation
+4. **Merge strategy** — squash merge preferred for features,
+   merge commit for hotfixes (to preserve history)
+5. **Commit format** — `type(scope): description` as per CLAUDE.md
+6. **What to do after a hotfix** — remind contributor that main → dev
+   sync is automated but to watch for the conflict issue notification
+
+#### Notes
+- The current `CONTRIBUTING.md` has generic placeholder text from
+  project scaffolding — it does not reflect the actual workflow
+- Cross-reference CLAUDE.md Git Branching Rules section
+
+---
+
+### BACKLOG-024 — DNS CNAME: staging.brixsports.com
+**Status:** OPEN — pending DNS access confirmation  
+**Priority:** Low (can use Vercel auto-subdomain in the interim)  
+**Filed:** 2026-06-08
+
+#### Required Changes
+1. In the DNS provider for `brixsports.com`:
+   - Add CNAME record: `staging` → `cname.vercel-dns.com`
+   - Or use Vercel's A record approach if CNAME at root is required
+2. In the Vercel staging project dashboard:
+   - Add custom domain: `staging.brixsports.com`
+   - Vercel will issue an SSL certificate automatically (Let's Encrypt)
+3. Update `STAGING_PLAN.md` and `NEXT_PUBLIC_APP_URL` staging env var
+   to `https://staging.brixsports.com` once verified
+
+#### Notes
+- Until DNS is set up, the Vercel auto-generated subdomain
+  (e.g. `brixsports-staging.vercel.app`) is sufficient for internal use
+- Confirm: does `brixsports.com` DNS live in Vercel, Cloudflare,
+  or another provider? This determines the exact steps
+- SSL is handled by Vercel automatically — no manual cert work needed
+
+---
+
+### BACKLOG-025 — Google OAuth Staging Config
+**Status:** OPEN  
+**Priority:** Medium  
+**Filed:** 2026-06-08  
+**Scope:** Staging only (until resolved)  
+**Blocked by:** Google Console access not yet available
+
+#### Problem
+The staging deployment will fail Google OAuth login until the staging
+URL is added as an authorized redirect URI in the Google OAuth app.
+Google rejects any redirect URI not explicitly whitelisted — the staging
+Vercel URL will not match the prod OAuth config.
+
+#### Fix Options
+1. **Preferred** — Add staging URL to existing OAuth app:
+   Google Console → APIs & Services → Credentials → OAuth 2.0 Client →
+   Authorized redirect URIs → add `https://staging.brixsports.com/api/auth/callback/google`
+   (and the Vercel preview URL if using auto-subdomain in the interim)
+
+2. **Alternative** — Create a separate OAuth client for staging with its
+   own `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`, set in Vercel
+   staging env vars only.
+
+#### Workaround (until fixed)
+Disable Google login on staging via feature flag or env var:
+- Add `ENABLE_GOOGLE_LOGIN=false` to staging Vercel env vars
+- Gate the Google sign-in button in the UI on this flag
+- Staging users log in with email/password only
+
+#### Notes
+- This does not affect production — prod OAuth config is unchanged
+- Must be resolved before staging is opened to any external testers
+  who rely on Google login
+
+---
+
+### BACKLOG-026 — Broken AWS SES Config (Non-functional Email)
+**Status:** OPEN  
+**Priority:** High — affects production  
+**Filed:** 2026-06-08  
+**Scope:** Production + staging
+
+#### Problem
+`AWS_SES_FROM_EMAIL` is set to the literal string `"AWS_SES_FROM_EMAIL"`
+in the production Vercel environment — this is not a valid email address.
+All email sending via SES is currently broken. Any feature that sends
+email (password reset, notifications) silently fails or errors.
+
+#### Fix
+1. In AWS SES console, verify the intended sender address
+   (e.g. `noreply@brixsports.com`) if not already verified.
+   SES in sandbox mode requires both sender AND recipient to be verified.
+2. Set the correct value in **both** Vercel projects:
+   - Prod: `AWS_SES_FROM_EMAIL=noreply@brixsports.com`
+   - Staging: `AWS_SES_FROM_EMAIL=noreply@brixsports.com`
+   (or a staging-specific address if you want separate sender identity)
+3. Verify email sending works end-to-end after the fix.
+
+#### Related
+- **BACKLOG-010** — audit which of the three installed email providers
+  (SES, Resend, Nodemailer) is actually the active code path before
+  fixing the config. No point fixing SES env vars if Resend is the
+  active sender.
+- BACKLOG-010 should be resolved first or concurrently — identify the
+  live provider, remove the dead ones, then fix the config for the
+  surviving provider only.
+
+#### Notes
+- This is a production bug, not staging-only — fix in prod Vercel env
+  vars as soon as the correct sender address is confirmed
+- Do not commit any real email addresses to source code or `.env.example`
+
+---
+
+### BACKLOG-027 — Railway Staging WebSocket Service Not Created
+**Status:** OPEN  
+**Priority:** Low (staging only — prod unaffected)  
+**Filed:** 2026-06-08  
+**Scope:** Staging
+
+#### Problem
+No separate Railway WebSocket service exists for staging. The staging
+Vercel deployment currently points to the production WS server
+(`NEXT_PUBLIC_WS_URL` in staging env vars references the prod Railway
+service). This means:
+- Live event logging on staging affects prod WS connections
+- Staging load or bugs can destabilise the prod WS server
+- True end-to-end staging isolation is not possible until resolved
+
+#### Fix
+1. In Railway dashboard, create a new service from the `dev` branch of
+   `ws-server/` directory (or deploy the same `ws-server/` code).
+   Name it `brixsports-ws-staging`.
+2. Set environment variables on the staging WS service:
+   - `PORT` (Railway sets this automatically)
+   - `WS_API_KEY` — a different key from prod (generate separately)
+   - `VERCEL_URL` → `https://staging.brixsports.com`
+     (or the Vercel auto-subdomain until DNS is set up)
+3. Copy the deployed Railway URL into the Vercel staging project:
+   - `NEXT_PUBLIC_WS_URL=https://brixsports-ws-staging.railway.app`
+   - `WS_SERVER_URL=https://brixsports-ws-staging.railway.app`
+     (if the app uses a server-side WS URL separately)
+
+#### Impact of not fixing
+- Live event logging is untestable in isolation on staging
+- BACKLOG-019 (post-match automation) cannot be safely tested on staging
+  until the WS server is isolated
+
+#### Notes
+- Both prod and staging WS services must be independently restartable
+  without affecting each other
+- Blocked by nothing — can be set up any time Railway access is available
+- Low priority only because staging itself is not yet fully live;
+  elevate to High once staging deployment is in use
