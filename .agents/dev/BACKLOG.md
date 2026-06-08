@@ -82,6 +82,26 @@
 
 - **BUG-025** *(MEDIUM — NDPR)*: `GET /api/matches` public list response exposes `assignedLoggers` full object and `loggerId` field to unauthenticated viewers. Both are banned internal fields per CLAUDE.md. File: `src/app/api/matches/route.ts` GET handler response map. Fix: strip `loggerId` and `assignedLoggers` from the public DTO. If an admin caller needs assignment data, return it conditionally based on `authUser.role`. Filed: 2026-06-08. Found by: flow-checker during `b1a6ec9` review.
 
+### BACKLOG-034 — Pre-Prod Clearance Script (Tier 1 → CI Gate)
+**Status:** TIER 1 COMPLETE — script live at `dev/pre-prod-check.ts`
+**Priority:** High
+**Filed:** 2026-06-08
+
+#### What was built
+`dev/pre-prod-check.ts` — automated pre-merge clearance script. Run manually before every PR to `main`. Checks:
+- Block 1: Auth gates (5 protected endpoints → 401 unauthenticated)
+- Block 2: `/api/matches` response shape — banned NDPR fields absent, `round` present
+- Block 3: DB integrity (null competitionId, dirty strings, entry counts)
+- Block 4: Round distribution (normalisation complete)
+- Block 5: Expected competitions present
+
+Exit 0 = `[CLEAR TO MERGE]`. Exit 1 = `[BLOCKED]`. Ready for CI integration with zero changes.
+
+#### Tier 2 — When BACKLOG-021 (GitHub Actions) is live
+Convert to `.github/workflows/pre-prod-check.yml`. Trigger on PR to `main`. Pass staging env vars from GitHub Secrets. No script changes needed.
+
+---
+
 ## Tech Debt
 
 - **TD-001** *(IN PROGRESS)*: `src/lib/env.ts` created — typed `env` object and `validateEnv()` startup check in place. `middleware.ts` migrated to use `env.jwtSecret` and `env.isStaging`. Remaining work: migrate all other `process.env` reads across 30+ files, add Zod validation. Full migration deferred — do not scatter `process.env` reads in new code from this point forward.
@@ -778,37 +798,31 @@ existing profile.
 
 ---
 
-### BACKLOG-007 — Fix Orphaned Intercollege Teams
-**Status:** OPEN  
+### ~~BACKLOG-007 — Fix Orphaned Intercollege Teams~~
+**Status:** RESOLVED — 2026-06-07 (Session 4)  
 **Priority:** High  
 **Filed:** 2026-06-05  
 
-#### Problem
-4 intercollege teams (CNAS, CENG, CMANS, CENVS) were created with `ownerOrganizationId = null`. They are orphaned from the org hierarchy. The corresponding org records (COLNAS, COLENG, COLMANS, COLENVS) exist in the `organizations` table but are not linked.
-
-#### Required Changes
-UPDATE each of the 4 teams to set the correct `ownerOrganizationId` from the `organizations` table. Run as a targeted script — do not use the bulk backfill.
-
-#### Notes
-- Must be done before BACKLOG-008 (competition_team_entries)
-- Confirm org IDs from live DB before running UPDATE
+All 4 teams linked to their org via `dev/fix-backlog007.ts`. Verified live 2026-06-08:
+- `mhXc8I0hBxe5W6eCw3do9` (College of Natural & Applied Sciences / CNAS) → `org_org_bells-university-colnas`
+- `k6BgZFG_mtatQ11NZNQb9` (College of Engineering / CENG) → `org_org_bells-university-coleng`
+- `ISzKeGGXuvW2h5QGmnWcp` (College of Management Sciences / CMANS) → `org_org_bells-university-colmans`
+- `U6R7aZSXNvA0iMsdVi3XV` (College of Environmental Sciences / CENVS) → `org_org_bells-university-colenvs`
 
 ---
 
-### BACKLOG-008 — Enrol Intercollege Teams in Competitions
-**Status:** OPEN  
+### ~~BACKLOG-008 — Enrol Intercollege Teams in Competitions~~
+**Status:** RESOLVED — 2026-06-07 (Session 4)  
 **Priority:** High  
 **Filed:** 2026-06-05  
 
-#### Problem
-`competition_team_entries` table has 0 rows. All 236 teams and all 3 competitions exist but no team is formally enrolled in any competition via the join table. The 4 intercollege teams need entries created once their org links (BACKLOG-007) are fixed.
+4 rows inserted into `competition_team_entries` via `dev/fix-backlog008.ts`. Verified live 2026-06-08:
+- College of Engineering → BUSALYMPICS (FOOTBALL) (`9q8LMVqW8KAtF4BJBlyk_`)
+- College of Environmental Sciences → BUSALYMPICS (FOOTBALL)
+- College of Management Sciences → BUSALYMPICS (FOOTBALL)
+- College of Natural & Applied Sciences → BUSALYMPICS (FOOTBALL)
 
-#### Required Changes
-After BACKLOG-007 is resolved, insert rows into `competition_team_entries` for each intercollege team → competition pairing.
-
-#### Notes
-- Blocked by BACKLOG-007
-- Verify correct competition IDs from live DB before inserting
+All entries: `sport: Football`, `gender: male`, `status: registered`
 
 ---
 
