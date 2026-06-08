@@ -41,6 +41,39 @@
 - **BUG-011**: `playerStats` data corruption — 718 goals vs 133 appearances (~5.4 goals/appearance). Likely caused by duplicate backfill runs without deduplication. Needs investigation before any further backfill runs.
 - **BUG-012**: Event type casing mismatch — rating calculator uses `'GOAL'`, `'SAVE'`, `'BLOCK'` (uppercase) but `FootballLogger` dispatches `'Goal'`, `'Save'`, `'Block'` (PascalCase). Breaks all rating calculations for live-logged matches.
 
+- **BUG-015** *(CRITICAL)*: `src/app/api/matches/[id]/route.ts` PATCH handler — no `getAuthUser` check. Any unauthenticated caller can update match scores, status, `approvedBy`, `managerNotes`. Fix: add `getAuthUser(request)` + admin-or-logger check before reading body. Filed: 2026-06-08.
+
+- **BUG-016** *(HIGH)*: `src/app/api/competitions/route.ts` POST handler — no `getAuthUser` check. Any unauthenticated caller can create a competition. Fix: add `getAuthUser(request)` + `role === 'admin'` at top of POST handler. Filed: 2026-06-08.
+
+- **BUG-017** *(HIGH)*: Three debug/test routes exposed with no auth gate:
+  - `GET /api/notifications/debug` — dumps all push subscriptions (endpoints + user IDs)
+  - `GET /api/notifications/test` — exposes VAPID key config
+  - `GET /api/email/test` — triggers real email sends, exposes email config
+  Files: `src/app/api/notifications/debug/route.ts`, `src/app/api/notifications/test/route.ts`, `src/app/api/email/test/route.ts`
+  Fix: add `getAuthUser` + admin check to all three, or delete the debug/test routes. Filed: 2026-06-08.
+
+- **BUG-018** *(MEDIUM — NDPR)*: `GET /api/matches/[id]` returns `approvalStatus`, `managerNotes`, and `loggerId` in the public response. These are internal fields banned from public responses per CLAUDE.md. Fix: strip these fields from the response DTO in `src/app/api/matches/[id]/route.ts`. Filed: 2026-06-08.
+
+- **BUG-019** *(MEDIUM)*: Two admin-purpose API routes have no handler-level auth — they rely on middleware alone:
+  - `GET /api/admin/infrastructure` (`src/app/api/admin/infrastructure/route.ts`) — returns DB row counts and system health
+  - `GET /api/analytics/system` (`src/app/api/analytics/system/route.ts`) — returns full system metrics
+  Both are callable cross-origin. Fix: add `getAuthUser` + admin check to each handler. Filed: 2026-06-08.
+
+- **BUG-020** *(MEDIUM — Critical Flow C)*: `/live` page (`src/app/live/page.tsx`) fetches `/api/matches` once on mount with no polling interval and no WebSocket subscription. Public viewers must manually refresh to see score updates. Fix: add a `setInterval` polling every 10–15s, or connect to the Socket.IO room for live match events. Filed: 2026-06-08.
+
+- **BUG-021** *(MEDIUM)*: `src/app/api/notifications/subscribe/route.ts` — `POST /api/notifications/subscribe` has no auth gate. Any unauthenticated caller can register a push subscription endpoint. Fix: add `getAuthUser(request)` before processing subscription. Filed: 2026-06-08. Source: SYSTEM_AUDIT.md §9 #8.
+
+- **BUG-022** *(MEDIUM — Performance)*: Unbounded queries missing `.limit()` clause:
+  - `GET /api/competitions` — `src/app/api/competitions/route.ts`
+  - `GET /api/events` GET handler — `src/app/api/events/route.ts`
+  - `GET /api/matches/[id]/events` — `src/app/api/matches/[id]/events/route.ts`
+  - Various competition sub-queries using `Promise.all`
+  Same pattern as BUG-005. Fix: add `.limit()` to each. Filed: 2026-06-08. Source: SYSTEM_AUDIT.md §10.
+
+- **BUG-023** *(LOW)*: `src/db/schema-nesa-registrations.ts` references `players` and `organizations` tables without importing them. Will crash if the table is ever migrated or queried. Fix: add missing imports or delete the schema file if NESA registration is backscoped. Filed: 2026-06-08. Source: SYSTEM_AUDIT.md §9 #11.
+
+- **BUG-024** *(LOW)*: Duplicate match detail routes — `/match/[id]` (`src/app/match/[id]/page.tsx`) and `/matches/[id]` (`src/app/matches/[id]/page.tsx`) both exist. One is likely legacy. Audit to confirm which is canonical (check all internal links and nav references), delete the other. Filed: 2026-06-08. Source: SYSTEM_AUDIT.md §2.
+
 ## Tech Debt
 
 - **TD-001** *(IN PROGRESS)*: `src/lib/env.ts` created — typed `env` object and `validateEnv()` startup check in place. `middleware.ts` migrated to use `env.jwtSecret` and `env.isStaging`. Remaining work: migrate all other `process.env` reads across 30+ files, add Zod validation. Full migration deferred — do not scatter `process.env` reads in new code from this point forward.
@@ -1387,3 +1420,144 @@ service). This means:
 - Blocked by nothing — can be set up any time Railway access is available
 - Low priority only because staging itself is not yet fully live;
   elevate to High once staging deployment is in use
+
+---
+
+### BACKLOG-028 — Backscope Dead/Partial Features from Public Nav
+**Status:** OPEN
+**Priority:** High
+**Filed:** 2026-06-08
+**Source:** SYSTEM_AUDIT.md §11
+
+#### Problem
+Several features are reachable via URL but are either NOT BUILT, DEAD, or
+conflict with the canonical auth system. Users landing on them get broken
+experiences or empty pages.
+
+#### Required Changes
+Remove from navigation and return 404 or redirect to `/` for:
+- `/fpl/*` (Fantasy Premier League) — NOT BUILT, schema + API routes only,
+  no data, not in scope
+- `/predictions` — NOT BUILT, schema + API routes only, not in scope
+- `/scouts` — DEAD, already redirects to `/`, clean up route file entirely
+- `/nesa-registration` — NOT BUILT, no API handler, schema has broken FKs
+- `/auth/signin` — DEAD, vestigial next-auth route, conflicts with `/login`
+- Polls UI (`MatchPoll`, `MatchPollEnhanced`, `CreatePoll`) — DEAD tables,
+  remove from match detail page if surfaced anywhere
+
+#### Rules
+- Code is NOT deleted — only hidden from users
+- Use `notFound()` in page components or remove nav links
+- No feature-flag infrastructure needed at this stage
+- Every backscoped feature logged here with reinstatement blocker
+
+#### Reinstatement Blockers
+| Feature | Blocker |
+|---------|---------|
+| `/fpl/*` | Phase 7 (out of scope) |
+| `/predictions` | Phase 7 (out of scope) |
+| `/scouts` | Delete route — no future use planned |
+| `/nesa-registration` | Full build required (schema + API + admin) |
+| `/auth/signin` | BACKLOG-009 (next-auth removal) |
+| Polls UI | Phase 7 (out of scope) |
+
+---
+
+### BACKLOG-029 — Auth Audit Sweep (Unknown Endpoints)
+**Status:** OPEN
+**Priority:** High
+**Filed:** 2026-06-08
+**Source:** SYSTEM_AUDIT.md §5
+
+#### Problem
+The system audit flagged these endpoints as "auth unknown" — each needs
+`getAuthUser` + correct role check confirmed or added. Until verified,
+these may be open mutation surfaces.
+
+#### Endpoints to Audit
+- `DELETE /api/matches/[id]/remove-logger` — `src/app/api/matches/[id]/remove-logger/route.ts`
+- `GET /api/matches/[id]/loggers` — `src/app/api/matches/[id]/loggers/route.ts`
+- `GET /api/matches/[id]/assigned-loggers` — `src/app/api/matches/[id]/assigned-loggers/route.ts`
+- `POST /api/matches/bulk` — `src/app/api/matches/bulk/route.ts`
+- `PATCH /api/matches/bulk-update` — `src/app/api/matches/bulk-update/route.ts`
+- `POST /api/players/bulk` — `src/app/api/players/bulk/route.ts`
+- `POST /api/players/create-individual` — `src/app/api/players/create-individual/route.ts`
+- `POST /api/brackets` — `src/app/api/brackets/route.ts`
+- `POST /api/transfers` — `src/app/api/transfers/route.ts`
+- `PATCH /api/competitions/[id]` — `src/app/api/competitions/[id]/route.ts`
+- `POST /api/competitions/register` — `src/app/api/competitions/register/route.ts`
+- `POST /api/competitions/register/approve` — `src/app/api/competitions/register/approve/route.ts`
+- `POST /api/competitions/bulk` — `src/app/api/competitions/bulk/route.ts`
+- `POST /api/cloudinary/sign` — `src/app/api/cloudinary/sign/route.ts`
+- `PATCH/DELETE /api/admin/ads/[id]` — `src/app/api/admin/ads/[id]/route.ts`
+- `GET /api/notifications/history` — `src/app/api/notifications/history/route.ts`
+- `GET /api/analytics/loggers` — `src/app/api/analytics/loggers/route.ts`
+
+#### Per-Endpoint Action
+Open each file. Check if `getAuthUser(request)` is called before any DB
+write or sensitive read. Check if the correct role is verified. If missing,
+add auth gate matching the BUG-001/002 pattern. Log result per endpoint
+(auth present / missing / added).
+
+---
+
+### BACKLOG-030 — Clean Up Deprecated mock-data.ts Imports
+**Status:** OPEN
+**Priority:** Low
+**Filed:** 2026-06-08
+**Source:** SYSTEM_AUDIT.md §7
+
+#### Problem
+`src/lib/mock-data.ts` is marked DEPRECATED (migrated 2025-12-30). Three
+components still import from it:
+- `src/components/TopPlayers.tsx`
+- `src/components/MyFeed.tsx`
+- `src/components/MatchComponents.tsx`
+
+The file now exports only types (no actual data), so no runtime breakage
+occurs today — but imports from a deprecated file are misleading and will
+cause confusion when the file is eventually deleted.
+
+#### Required Changes
+For each component:
+1. Check what is imported from mock-data (likely type-only imports)
+2. If type-only, move the type definition inline or to a shared types file
+3. If data-dependent, replace with proper API fetch
+4. Remove the mock-data import
+
+#### Notes
+- If any of these components are part of backscoped features (BACKLOG-028),
+  defer cleanup until reinstatement — no point cleaning up dead code
+- Do not delete `src/lib/mock-data.ts` itself until all imports are removed
+
+---
+
+### BACKLOG-031 — Dead/Heavyweight Package Audit
+**Status:** OPEN
+**Priority:** Low
+**Filed:** 2026-06-08
+**Source:** SYSTEM_AUDIT.md §8
+
+#### Problem
+Several packages in `package.json` are either unused or disproportionately
+heavy for their actual use in the codebase.
+
+#### Packages to Evaluate
+
+**Remove if unused:**
+- `@babel/parser` — not an obvious dependency for this stack. Grep for
+  imports; remove if zero usage outside node_modules.
+- `downloadjs` — trace usage across all files; remove if unused.
+- `dotted-map` — map visualisation package; trace usage, remove if unused.
+
+**Evaluate for lighter alternatives:**
+- `three` + `@react-three/fiber` + `@react-three/drei` — used ONLY in two
+  error page components (`src/components/error/BasketballRimScene.tsx`,
+  `src/components/error/SoccerGoalScene.tsx`). Estimated 500KB+ bundle
+  weight for 404/error pages only. Evaluate replacing with lightweight
+  SVG or CSS animations.
+
+#### Process
+For each package: grep for imports across `src/**`. If zero non-trivial
+imports, remove from `package.json` and run `npm install` to update
+lock file. Test build. Document result.

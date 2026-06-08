@@ -11,6 +11,53 @@
 
 ## Sessions
 
+### Session 5 — 2026-06-08
+
+**Focus:** BACKLOG-020 Block 6 — Full system audit. Sweep all routes, API endpoints, DB schema, components, and services. Produce SYSTEM_AUDIT.md.
+
+**Built:**
+- `.agents/dev/SYSTEM_AUDIT.md` — 14-section audit: feature state matrix (WORKING/PARTIAL/BROKEN/NOT BUILT), full API security inventory, DB table usage map, component catalogue, backscoping candidates, dead packages, priority fix list of 10 items before production.
+
+**Bugs encountered:** None during audit itself — this was a read-only sweep.
+
+**Resolved:** None — audit-only session. No code changed.
+
+**New bugs filed from audit findings:**
+- BUG-015 *(CRITICAL)* — `PATCH /api/matches/[id]` has no auth. Any caller can update match scores, status, `approvedBy`. File: `src/app/api/matches/[id]/route.ts`.
+- BUG-016 *(HIGH)* — `POST /api/competitions` has no auth. Any caller can create a competition. File: `src/app/api/competitions/route.ts`.
+- BUG-017 *(HIGH)* — Three debug/test routes live with no auth: `/api/notifications/debug`, `/api/notifications/test`, `/api/email/test`. Expose push subscriptions, VAPID keys, and trigger real email sends.
+- BUG-018 *(MEDIUM — NDPR)* — `GET /api/matches/[id]` returns `approvalStatus`, `managerNotes`, `loggerId` in public response — banned internal fields.
+- BUG-019 *(MEDIUM)* — `GET /api/admin/infrastructure` and `GET /api/analytics/system` have no handler-level auth — middleware-only, callable cross-origin.
+- BUG-020 *(MEDIUM — Flow C)* — `/live` page fetches matches once on mount. No polling interval, no WS subscription. Public viewer must manually refresh to see score changes.
+- BUG-021 — `POST /api/notifications/subscribe` no auth gate.
+- BUG-022 — Unbounded queries on `GET /api/competitions`, `GET /api/events`, `GET /api/matches/[id]/events`.
+- BUG-023 — `schema-nesa-registrations.ts` broken imports (will crash on use).
+- BUG-024 — Duplicate `/match/[id]` and `/matches/[id]` routes.
+
+**New backlog items filed:**
+- BACKLOG-028 — Backscope dead/partial features from public nav (fpl, predictions, scouts, nesa-registration, auth/signin, polls)
+- BACKLOG-029 — Auth audit sweep: 17 endpoints flagged "auth unknown"
+- BACKLOG-030 — Clean up deprecated mock-data.ts imports in 3 components
+- BACKLOG-031 — Dead/heavyweight package audit (three.js, babel/parser, downloadjs, dotted-map)
+
+**Key audit findings:**
+- Flow A (Match Creation) — WORKING ✓
+- Flow B (Live Event Logging) — WORKING ✓
+- Flow C (Public Livescore) — PARTIAL — `/live` page has no real-time update mechanism (BUG-020)
+- Two conflicting auth systems coexist: custom JWT (active) + next-auth (vestigial, BACKLOG-009)
+- 6 dead DB tables: `individualSportStats`, `competitionSportSettings`, `teamForm`, `userActivity`, `systemSettingsHistory`, `newsRelations`
+- 3 dead packages: `resend`, `stripe`, `next-auth` (vestigial)
+- `next-auth` Google OAuth still active via `[...nextauth]` route — two Google sign-in paths exist simultaneously
+
+**Deferred:**
+- BACKLOG-026 (AWS SES fix) — skipped per Richard's instruction, stays in backlog
+- Manual staging setup (Turso DB, Vercel project, Railway WS) — still pending
+- Fixing any of the newly filed bugs — audit only this session
+
+**Next session:** Fix BUG-015 first (`PATCH /api/matches/[id]` auth) — CRITICAL, directly compromises match integrity. Then BUG-016 (competitions POST), BUG-017 (delete/gate debug routes), BUG-018 (strip internal fields from public match response). All four are small targeted fixes in known files.
+
+---
+
 ### Session 1 - May 3, 2026
 
 - Executed the "May 9th Event Stability" Dry-Run Audit on critical paths.
@@ -42,6 +89,46 @@
 - Complete Railway deployment fix: `git add bun.lock`, `git commit -m "fix: update bun lockfile"`, `git push`.
 - Verify WebSocket connectivity once Railway build passes.
 - Implement response sanitization for `/api/matches` to prevent email leaks.
+
+### Session 6 — 2026-06-08
+
+**Focus:** Phase 1 staging scaffold — infrastructure, governance, security hardening, env management.
+
+**Built / Changed:**
+
+- `src/middleware.ts` — Staging-wide JWT auth gate added (`env.isStaging`). All routes require valid session on staging except `/api/auth/*` and `/login`. All redirects unified to `/login` (was split between `/login` and `/sign-in` — inconsistency fixed). `JWT_SECRET` constant now reads from `env.jwtSecret`. `process.env.NEXT_PUBLIC_ENV` reads replaced with `env.isStaging` from `src/lib/env.ts`. Matcher expanded to cover all non-static routes.
+- `src/lib/env.ts` — **New file.** Centralised typed `env` object (13 vars) + `validateEnv()` startup function that throws on 4 required missing vars. Partial TD-001 implementation — full migration of 30+ `process.env` reads across codebase deferred.
+- `.github/workflows/pr-guard.yml` — **New file.** GitHub Action: fails PRs where `feature/*`/`fix/*` don't target `dev`, or `hotfix/*` doesn't target `main`. Posts explanatory markdown comment with branch table on violation. Uses `GITHUB_TOKEN` (no additional secrets needed).
+- `CLAUDE.md` — Git Governance section added: full branch model, merge rules, environment table, feature + hotfix workflow scripts. Session Conventions section added: env var rules, pre-commit checks, schema migration protocol, DB script logging rules.
+- `.env.example` — `NEXT_PUBLIC_ENV` added with values `development | staging | production` and per-environment instructions.
+- `sentry.client.config.ts` / `sentry.server.config.ts` / `sentry.edge.config.ts` — `environment` field added reading `SENTRY_ENVIRONMENT` / `NEXT_PUBLIC_SENTRY_ENVIRONMENT`.
+- `src/app/api/players/bulk-register/route.ts` — `getAuthUser` + admin role check added at top of POST handler (BUG-013).
+- `src/app/admin/matches/page.tsx` — `Match` interface extended with `homeTeam?`/`awayTeam?`. `getTeamName(id)` replaced with `getTeamDisplay(match, side)` that reads embedded `shortName` first, falls back to local teams list, then raw ID (BUG-014).
+- `dev/fix-busalympics-remaining-fixtures.ts` — Inserted 3 BUSALYMPICS fixtures as UPCOMING: MD2 G1, MD3 G1, MD3 G2. All 7 BUSALYMPICS fixtures now in DB.
+- `.agents/dev/BACKLOG.md` — TD-001 marked IN PROGRESS. BACKLOG-020 (Blocks 1–6) filed. BACKLOG-021 through BACKLOG-027 filed.
+- `.agents/dev/RUNLOG.md` — Created. Full audit trail of all DB scripts run across sessions 1–6.
+- `.agents/dev/STAGING_PLAN.md` — Created. Full staging environment plan (Vercel, Turso, Railway, parity checklist, implementation order).
+- `.agents/dev/CONTEXT_TRANSFER_SESSION_4.md` — Full session handoff doc written.
+- Multiple public-facing docs (`CONTRIBUTING.md`, `README.md`, `VERCEL_DEPLOYMENT.md`, `DEVELOPER_ONBOARDING.md`, `src/app/docs/page.tsx`) — old placeholder repo URLs replaced with `github.com/Brixsport/BrixSports`.
+
+**Bugs encountered:**
+
+- **PR guard COMMENT indentation** — bash heredoc with indented body lines caused leading whitespace in all comment lines, breaking markdown table rendering. Root cause: heredoc content was indented to match script indent level. Fix: `cat <<EOF` with content at column 0.
+- **Middleware redirect inconsistency** — staging gate redirected to `/sign-in`; admin gate redirected to `/login`. These are two different URLs — one would produce a 404. Root cause: written independently without cross-checking. Fix: unified to `/login` (confirmed canonical URL).
+- **Dead pathname check** — `pathname.startsWith('/sign-in?')` in middleware exemption. Root cause: misunderstanding that Next.js middleware `pathname` never contains query string. Fix: removed dead check.
+
+**Resolved:** All three issues above before commit.
+
+**Deferred:**
+
+- TD-001 full migration: 30+ files still read `process.env` directly. `env.ts` file created, `middleware.ts` migrated, remaining files deferred.
+- BACKLOG-021 (GitHub Rulesets): PR guard must be tested on a real PR first.
+- BACKLOG-026 (broken `AWS_SES_FROM_EMAIL` in prod): confirmed broken, fix deferred — needs Google Console + AWS SES access.
+- Manual staging infrastructure: Turso staging DB, Vercel staging project, Railway staging WS — all deferred to manual setup steps.
+
+**Next session:** BACKLOG-026 first (live prod bug — email broken). Then manual staging setup following `STAGING_PLAN.md` section 5 checklist. Then BACKLOG-020 Block 6 (full system audit) once staging is live.
+
+---
 
 ### Session 5 — 2026-06-07
 

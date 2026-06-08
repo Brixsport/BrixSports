@@ -17,6 +17,24 @@ activation: always_on
 2026-05-04 — /api/events Unauthorized Access — Missing auth check in POST handler — Always call getAuthUser(request) in mutation handlers.
 2026-05-04 — Unbounded List Queries — All list endpoints lacked limits, risking performance collapse — Always use .limit(50) on list queries.
 
+2026-06-08 — Unauthenticated bulk player registration (BUG-013) — `POST /api/players/bulk-register` had no `getAuthUser` check — any unauthenticated caller could create player rows and teams — Always add `getAuthUser` + role check at the very top of every mutation handler, before reading the body.
+2026-06-08 — Admin match cards showing raw team IDs (BUG-014) — Page fetched `/api/teams` with `.limit(200)` but 236 teams exist; teams beyond index 200 were missing, causing the `teamId → name` lookup to fall back to the raw ID string — The `/api/matches` response already embeds `homeTeam`/`awayTeam` objects — always use embedded response data before doing a secondary client-side lookup against a separately-fetched list.
+2026-06-08 — Middleware login URL inconsistency — staging gate redirected to `/sign-in`, admin gate redirected to `/login`; these are different URLs, one produces a 404 — When writing auth redirects in different blocks of the same file, always use a single named constant for the login URL, not repeated string literals.
+2026-06-08 — bash heredoc indentation breaks markdown in GitHub PR comments — heredoc body lines indented to match script indent level produce literal leading whitespace, breaking markdown tables — Always start heredoc content at column 0 when the content will be rendered as markdown.
+2026-06-08 — Next.js middleware `pathname` never contains query string — `pathname.startsWith('/sign-in?')` never matches because `pathname` strips query params — Use `request.nextUrl.search` or `request.nextUrl.searchParams` for query string checks in middleware; `pathname` is path only.
+
+2026-06-08 — PATCH /api/matches/[id] has no auth gate (BUG-015) — Any caller can update match scores, status, and internal audit fields with no authentication — Add getAuthUser + admin/logger check before body read in every PATCH/DELETE handler, not just POST.
+
+2026-06-08 — POST /api/competitions has no auth gate (BUG-016) — Any unauthenticated user can create competitions — Every POST mutation in /api/* must have getAuthUser at the top, before reading the body.
+
+2026-06-08 — Debug/test routes live in production (BUG-017) — /api/notifications/debug, /api/notifications/test, /api/email/test have no auth and expose internal config + subscription data — Never ship debug routes without auth. Delete or gate before any deploy. Pattern repeats BUG-003.
+
+2026-06-08 — GET /api/matches/[id] leaks internal fields (BUG-018) — approvalStatus, managerNotes, loggerId returned in public response — Always shape a DTO for public responses; never spread the raw DB row.
+
+2026-06-08 — Admin-purpose APIs callable without auth from any origin (BUG-019) — /api/admin/infrastructure and /api/analytics/system rely on middleware only — Middleware protects browser navigation; direct HTTP calls bypass it. Always add handler-level auth.
+
+2026-06-08 — /live page has no real-time update mechanism (BUG-020) — Fetch on mount only; viewer must manually refresh to see score changes — Critical Flow C: public livescore must auto-update. Add polling interval or WS subscription.
+
 ## Anti-Patterns for This Codebase
 - Middleware matcher and internal logic check do not match.
 - try/catch without finally in any DB operation.
