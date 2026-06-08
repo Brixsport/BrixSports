@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getMatchLoggers } from '@/lib/match-logger-helpers';
+import { getAuthUser } from '@/lib/auth';
 
 /**
  * GET /api/matches/[id]/assigned-loggers
@@ -10,6 +11,14 @@ export async function GET(
     { params }: { params: Promise<{ id: string }> }
 ) {
     try {
+        const authUser = await getAuthUser(request);
+        if (!authUser) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+        if (authUser.role !== 'admin' && authUser.role !== 'logger') {
+            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+        }
+
         const { id } = await params;
         const loggers = await getMatchLoggers(id);
 

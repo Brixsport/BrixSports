@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
 import { matchEvents, matches, loggers } from '@/db/schema';
 import { eq, and, sql, desc } from 'drizzle-orm';
+import { getAuthUser } from '@/lib/auth';
 
 /**
  * GET /api/analytics/loggers
@@ -14,6 +15,14 @@ import { eq, and, sql, desc } from 'drizzle-orm';
  */
 export async function GET(request: NextRequest) {
     try {
+        const authUser = await getAuthUser(request);
+        if (!authUser) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+        if (authUser.role !== 'admin') {
+            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+        }
+
         const { searchParams } = new URL(request.url);
         const loggerId = searchParams.get('loggerId');
         const timeframe = searchParams.get('timeframe') || '30'; // days
@@ -206,6 +215,14 @@ async function getLoggerAnalytics(loggerId: string, thresholdDate: Date) {
  */
 export async function POST(request: NextRequest) {
     try {
+        const authUser = await getAuthUser(request);
+        if (!authUser) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+        if (authUser.role !== 'admin') {
+            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+        }
+
         const body = await request.json();
         const { metric = 'totalEvents', limit = 10, timeframe = 30 } = body;
 

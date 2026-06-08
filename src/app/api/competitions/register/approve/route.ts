@@ -21,9 +21,18 @@ import {
 import { eq } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { ensureOrganizationEntity, syncPlayerOrganizationAffiliations } from '@/lib/player-data';
+import { getAuthUser } from '@/lib/auth';
 
 export async function POST(request: NextRequest) {
     try {
+        const authUser = await getAuthUser(request);
+        if (!authUser) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+        if (authUser.role !== 'admin') {
+            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+        }
+
         const body = await request.json();
         const { registrationId } = body;
 

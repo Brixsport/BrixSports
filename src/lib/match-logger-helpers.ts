@@ -23,8 +23,8 @@ export async function getMatchLoggers(matchId: string) {
     return assignments
         .filter(a => a.logger !== null)
         .map(a => ({
-            ...a.logger!,
-            password: undefined, // Don't expose password
+            id: a.logger!.id,
+            name: a.logger!.name,
             role: a.assignment.role,
             assignedAt: a.assignment.assignedAt,
         }));
@@ -118,8 +118,8 @@ export async function getPrimaryLogger(matchId: string) {
     }
 
     return {
-        ...assignments[0].logger,
-        password: undefined,
+        id: assignments[0].logger.id,
+        name: assignments[0].logger.name,
         role: assignments[0].assignment.role,
         assignedAt: assignments[0].assignment.assignedAt,
     };

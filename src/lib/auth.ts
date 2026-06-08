@@ -3,6 +3,7 @@ import jwt from 'jsonwebtoken';
 import { db } from '@/db';
 import { users } from '@/db/schema';
 import { eq } from 'drizzle-orm';
+import { env } from '@/lib/env';
 
 export interface AuthUser {
     userId: string;
@@ -40,28 +41,19 @@ export async function verifyAuth(request: NextRequest): Promise<AuthUser | null>
     try {
         const authHeader = request.headers.get('authorization');
         const cookieToken = request.cookies.get('authToken')?.value;
-        
-        console.log(`[verifyAuth] Header present: ${!!authHeader}, Cookie present: ${!!cookieToken}`);
 
         let token = '';
 
         if (authHeader && authHeader.startsWith('Bearer ')) {
             token = authHeader.substring(7);
-            console.log(`[verifyAuth] Using header token`);
         } else if (cookieToken) {
             token = cookieToken;
-            console.log(`[verifyAuth] Using cookie token`);
         } else {
-            console.log(`[verifyAuth] No token found`);
             return null;
         }
 
-        const decoded = jwt.verify(
-            token,
-            process.env.JWT_SECRET || 'your-secret-key-change-in-production'
-        ) as AuthUser;
+        const decoded = jwt.verify(token, env.jwtSecret) as AuthUser;
 
-        console.log(`[verifyAuth] Token verified for user: ${decoded.email}`);
         return {
             ...decoded,
             role: normalizeUserRole(decoded.role),
@@ -136,7 +128,7 @@ export function hasRole(user: AuthenticatedUser | null, allowedRoles: string[]):
 export function generateToken(userId: string, email: string, role: string): string {
     return jwt.sign(
         { userId, email, role: normalizeUserRole(role) },
-        process.env.JWT_SECRET || 'your-secret-key-change-in-production',
+        env.jwtSecret,
         { expiresIn: '7d' }
     );
 }

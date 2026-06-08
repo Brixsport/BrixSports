@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
 import { transfers, players, teams } from '@/db/schema';
 import { eq, desc, and, or, sql } from 'drizzle-orm';
+import { getAuthUser } from '@/lib/auth';
 
 // GET /api/transfers - Get all transfers with filters
 export async function GET(request: NextRequest) {
@@ -86,7 +87,6 @@ export async function GET(request: NextRequest) {
 
                 return {
                     id: t.id,
-                    playerId: t.playerId,
                     fromTeamId: t.fromTeamId,
                     toTeamId: t.toTeamId,
                     transferType: t.transferType,
@@ -100,8 +100,14 @@ export async function GET(request: NextRequest) {
                     announcedAt: t.announcedAt,
                     completedAt: t.completedAt,
                     createdAt: t.createdAt,
-                    createdBy: t.createdBy,
-                    player: t.player,
+                    player: t.player ? {
+                        id: t.player.id,
+                        name: t.player.name,
+                        jerseyName: t.player.jerseyName,
+                        number: t.player.number,
+                        position: t.player.position,
+                        image: t.player.image,
+                    } : null,
                     fromTeam: fromTeam?.[0] || null,
                     toTeam: toTeam?.[0] || null,
                 };
@@ -135,6 +141,14 @@ export async function GET(request: NextRequest) {
 // POST /api/transfers - Create new transfer (Admin only)
 export async function POST(request: NextRequest) {
     try {
+        const authUser = await getAuthUser(request);
+        if (!authUser) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+        if (authUser.role !== 'admin') {
+            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+        }
+
         const body = await request.json();
         const {
             playerId,
@@ -148,17 +162,18 @@ export async function POST(request: NextRequest) {
             description,
             imageUrl,
             sendPushNotification,
-            createdBy,
             season,
         } = body;
 
         // Validate required fields
-        if (!playerId || !transferType || !createdBy) {
+        if (!playerId || !transferType) {
             return NextResponse.json(
-                { error: 'Missing required fields: playerId, transferType, createdBy' },
+                { error: 'Missing required fields: playerId, transferType' },
                 { status: 400 }
             );
         }
+
+        const createdBy = authUser.id;
 
         // Verify player exists
         const player = await db
