@@ -177,54 +177,6 @@ export default function PushNotificationDebugger() {
     }
   };
 
-  const debugSubscriptions = async () => {
-    setLoading(true);
-    try {
-      const response = await fetch('/api/notifications/debug');
-      const result = await response.json();
-      
-      console.log('[PushDebugger] Subscription Debug Result:', result);
-      
-      if (result.success) {
-        if (result.issues.length > 0) {
-          toast.error(`Found ${result.issues.length} subscription issues`);
-        } else {
-          toast.success('All subscriptions look valid');
-        }
-      } else {
-        toast.error('Failed to debug subscriptions');
-      }
-    } catch (error) {
-      toast.error('Debug failed: ' + (error as Error).message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const testVAPIDConfig = async () => {
-    setLoading(true);
-    try {
-      const response = await fetch('/api/notifications/test');
-      const result = await response.json();
-      
-      if (result.success) {
-        if (result.config.vapidWorking) {
-          toast.success('✅ VAPID keys are properly configured');
-        } else {
-          toast.error('❌ VAPID keys misconfigured: ' + (result.config.vapidError || 'Unknown error'));
-        }
-      } else {
-        toast.error('❌ Failed to test VAPID: ' + result.error);
-      }
-      
-      console.log('[PushDebugger] VAPID Test Result:', result);
-    } catch (error) {
-      toast.error('VAPID test failed: ' + (error as Error).message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const testNotification = async () => {
     setLoading(true);
     try {
@@ -329,7 +281,7 @@ export default function PushNotificationDebugger() {
         />
         <StatusItem 
           label="Logged In" 
-          status={isAuthenticated ? `Yes (${user?.email})` : 'No - Login Required'}
+          status={isAuthenticated ? `Yes (${user?.role ?? 'authenticated'})` : 'No - Login Required'}
           good={isAuthenticated}
         />
         
@@ -373,27 +325,7 @@ export default function PushNotificationDebugger() {
           </Button>
         )}
 
-        <Button 
-          onClick={debugSubscriptions} 
-          disabled={loading}
-          variant="outline"
-          className="w-full"
-        >
-          <AlertTriangle className="w-4 h-4 mr-2" />
-          Debug Subscriptions
-        </Button>
-
-        <Button 
-          onClick={testVAPIDConfig} 
-          disabled={loading}
-          variant="outline"
-          className="w-full"
-        >
-          <AlertTriangle className="w-4 h-4 mr-2" />
-          Test VAPID Config
-        </Button>
-
-        <Button 
+        <Button
           onClick={testServiceWorker} 
           disabled={loading}
           variant="outline"

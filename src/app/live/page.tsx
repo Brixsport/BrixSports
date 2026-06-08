@@ -42,8 +42,8 @@ export default function LiveCenter() {
 
         fetchLiveMatches();
 
-        // Refresh every 30 seconds
-        const interval = setInterval(fetchLiveMatches, 30000);
+        // Poll every 15s — stopgap until WebSocket subscription is wired to the public viewer (BUG-020)
+        const interval = setInterval(fetchLiveMatches, 15000);
         return () => clearInterval(interval);
     }, []);
 

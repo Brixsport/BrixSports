@@ -41,25 +41,21 @@
 - **BUG-011**: `playerStats` data corruption — 718 goals vs 133 appearances (~5.4 goals/appearance). Likely caused by duplicate backfill runs without deduplication. Needs investigation before any further backfill runs.
 - **BUG-012**: Event type casing mismatch — rating calculator uses `'GOAL'`, `'SAVE'`, `'BLOCK'` (uppercase) but `FootballLogger` dispatches `'Goal'`, `'Save'`, `'Block'` (PascalCase). Breaks all rating calculations for live-logged matches.
 
-- **BUG-015** *(CRITICAL)*: `src/app/api/matches/[id]/route.ts` PATCH handler — no `getAuthUser` check. Any unauthenticated caller can update match scores, status, `approvedBy`, `managerNotes`. Fix: add `getAuthUser(request)` + admin-or-logger check before reading body. Filed: 2026-06-08.
+- ~~**BUG-015** *(CRITICAL)*: `src/app/api/matches/[id]/route.ts` PATCH handler — no `getAuthUser` check. Fixed: `getAuthUser(request)` added before body read. Admin passes through; logger role verified against `isLoggerAssigned(matchId, authUser.id)`. Returns 401/403. Resolved: 2026-06-08.~~
 
-- **BUG-016** *(HIGH)*: `src/app/api/competitions/route.ts` POST handler — no `getAuthUser` check. Any unauthenticated caller can create a competition. Fix: add `getAuthUser(request)` + `role === 'admin'` at top of POST handler. Filed: 2026-06-08.
+- ~~**BUG-016** *(HIGH)*: `src/app/api/competitions/route.ts` POST handler — no `getAuthUser` check. Fixed: `getAuthUser(request)` + `role === 'admin'` added before body read. Resolved: 2026-06-08.~~
 
-- **BUG-017** *(HIGH)*: Three debug/test routes exposed with no auth gate:
-  - `GET /api/notifications/debug` — dumps all push subscriptions (endpoints + user IDs)
-  - `GET /api/notifications/test` — exposes VAPID key config
-  - `GET /api/email/test` — triggers real email sends, exposes email config
-  Files: `src/app/api/notifications/debug/route.ts`, `src/app/api/notifications/test/route.ts`, `src/app/api/email/test/route.ts`
-  Fix: add `getAuthUser` + admin check to all three, or delete the debug/test routes. Filed: 2026-06-08.
+- ~~**BUG-017** *(HIGH)*: Three debug/test routes with no auth gate deleted:
+  - `src/app/api/notifications/debug/route.ts` — DELETED
+  - `src/app/api/notifications/test/route.ts` — DELETED
+  - `src/app/api/email/test/route.ts` — DELETED
+  Note: `PushNotificationDebugger.tsx` still calls `/api/notifications/debug` and `/api/notifications/test` — will 404. Track as follow-up: remove those fetch calls from the component. Resolved: 2026-06-08.~~
 
-- **BUG-018** *(MEDIUM — NDPR)*: `GET /api/matches/[id]` returns `approvalStatus`, `managerNotes`, and `loggerId` in the public response. These are internal fields banned from public responses per CLAUDE.md. Fix: strip these fields from the response DTO in `src/app/api/matches/[id]/route.ts`. Filed: 2026-06-08.
+- ~~**BUG-018** *(MEDIUM — NDPR)*: `GET /api/matches/[id]` leaking `approvalStatus`, `managerNotes`, `loggerId`, `approvedBy`, `approvedAt` in public response. Fixed: explicit destructure excludes all banned fields before response is returned. Resolved: 2026-06-08.~~
 
-- **BUG-019** *(MEDIUM)*: Two admin-purpose API routes have no handler-level auth — they rely on middleware alone:
-  - `GET /api/admin/infrastructure` (`src/app/api/admin/infrastructure/route.ts`) — returns DB row counts and system health
-  - `GET /api/analytics/system` (`src/app/api/analytics/system/route.ts`) — returns full system metrics
-  Both are callable cross-origin. Fix: add `getAuthUser` + admin check to each handler. Filed: 2026-06-08.
+- ~~**BUG-019** *(MEDIUM)*: `GET /api/admin/infrastructure` and `GET /api/analytics/system` — middleware-only auth. Fixed: `getAuthUser(request)` + `role === 'admin'` added to both handlers. Resolved: 2026-06-08.~~
 
-- **BUG-020** *(MEDIUM — Critical Flow C)*: `/live` page (`src/app/live/page.tsx`) fetches `/api/matches` once on mount with no polling interval and no WebSocket subscription. Public viewers must manually refresh to see score updates. Fix: add a `setInterval` polling every 10–15s, or connect to the Socket.IO room for live match events. Filed: 2026-06-08.
+- ~~**BUG-020** *(MEDIUM — Critical Flow C)*: `/live` page fetched `/api/matches` once on mount only. Fixed: polling interval already existed at 30s — changed to 15s. Interval is cleared on unmount. Stopgap until WebSocket subscription lands on the public viewer. Resolved: 2026-06-08.~~
 
 - **BUG-021** *(MEDIUM)*: `src/app/api/notifications/subscribe/route.ts` — `POST /api/notifications/subscribe` has no auth gate. Any unauthenticated caller can register a push subscription endpoint. Fix: add `getAuthUser(request)` before processing subscription. Filed: 2026-06-08. Source: SYSTEM_AUDIT.md §9 #8.
 
@@ -457,33 +453,34 @@ is in place:
 ---
 
 ### BACKLOG-017 — Missing BUSALYMPICS Match Scores (Partially Resolved)
-**Status:** PARTIAL — fixtures in DB as UPCOMING, scores still needed
-**Priority:** HIGH — standings still blocked until scores confirmed
+**Status:** PARTIAL — 1 of 3 confirmed, 2 remain (both MD3)
+**Priority:** HIGH — standings still blocked until all scores confirmed
 **Filed:** 2026-06-07
-**Updated:** 2026-06-07
+**Updated:** 2026-06-08
 
 #### Status
-All 3 fixtures inserted as `status: UPCOMING` on 2026-06-07 via
+All 3 fixtures were inserted as `status: UPCOMING` on 2026-06-07 via
 `dev/fix-busalympics-remaining-fixtures.ts`. All 7 BUSALYMPICS
-fixtures now exist in the DB. Standings unblocked once scores are
-confirmed and rows PATCHed to FINISHED.
+fixtures now exist in the DB.
 
-#### Inserted fixture IDs
+**MD2 G1 CONFIRMED — 2026-06-08:**
+`a9CtLwotaXyfsfMf2odAM` PATCHed to FINISHED. COLNAS 1–2 COLENG.
 
-| ID | Matchday | Home | Away | Date |
-|----|----------|------|------|------|
-| `a9CtLwotaXyfsfMf2odAM` | MD2 | COLNAS | COLENG | 2026-04-22 |
-| `_9nntLoOZZOZGzja8EQE9` | MD3 | COLNAS | COLENVS | 2026-04-26 |
-| `y3KcCGtHA7N7MybKTHX5K` | MD3 | COLMANS | COLENG | 2026-04-29 |
+#### Fixture IDs — remaining
+
+| ID | Matchday | Home | Away | Date | Status |
+|----|----------|------|------|------|--------|
+| `_9nntLoOZZOZGzja8EQE9` | MD3 G1 | COLNAS | COLENVS | 2026-04-26 | **UPCOMING — score needed** |
+| `y3KcCGtHA7N7MybKTHX5K` | MD3 G2 | COLMANS | COLENG | 2026-04-29 | **UPCOMING — score needed** |
 
 #### Remaining action
 Once scores confirmed from physical records:
 1. PATCH each match: `{ status: "FINISHED", homeScore: X, awayScore: Y }`
-2. Run standings recalculation for BUSALYMPICS (`9q8LMVqW8KAtF4BJBlyk_`).
+2. Then run BACKLOG-033 (standings recalculation for `9q8LMVqW8KAtF4BJBlyk_`).
 
 #### Notes
 - Do not estimate or backfill with placeholder scores
-- Existing 4 FINISHED fixtures verified: all matchday/round values correct
+- Do not run standings until BOTH MD3 fixtures are FINISHED (see BACKLOG-033)
 
 ---
 
@@ -1463,8 +1460,8 @@ Remove from navigation and return 404 or redirect to `/` for:
 
 ---
 
-### BACKLOG-029 — Auth Audit Sweep (Unknown Endpoints)
-**Status:** OPEN
+### ~~BACKLOG-029 — Auth Audit Sweep (Unknown Endpoints)~~
+**Status:** RESOLVED — 2026-06-08
 **Priority:** High
 **Filed:** 2026-06-08
 **Source:** SYSTEM_AUDIT.md §5
@@ -1561,3 +1558,73 @@ heavy for their actual use in the codebase.
 For each package: grep for imports across `src/**`. If zero non-trivial
 imports, remove from `package.json` and run `npm install` to update
 lock file. Test build. Document result.
+
+---
+
+### BACKLOG-032 — Display Round/Matchday Label on Match Cards
+**Status:** OPEN
+**Priority:** Medium
+**Filed:** 2026-06-08
+
+#### Problem
+The `round` field is populated on all matches (e.g. `"Match Day 1"`, `"Match Day 2"`,
+`"Final"`) but is not rendered on the public match card (`/live` page) or the admin
+match list. Viewers and admins have no way to tell which round a match belongs to
+without opening the match detail.
+
+#### Required Changes
+
+1. **Public match card** (`src/app/live/page.tsx`) — add `round` string next to the
+   competition name in the card header.
+   Format: `"BUSALYMPICS · Match Day 2"` or `"BUSALYMPICS · Final"`
+   Only render if `round` is non-null.
+
+2. **Admin match list card** (`src/app/admin/matches/page.tsx`, line ~410) — same
+   treatment in the card header line. `round` is already present in form state —
+   just add it to the display.
+
+3. `matchday` integer is **not** needed in the display — `round` string is sufficient.
+   `matchday` remains useful as a sort key only.
+
+#### Notes
+- `round` column: string (`"Match Day 1"`, `"Final"`, etc.) — render as-is
+- `matchday` column: integer (1, 2, 3) or null (for Final) — sort key only, do not display
+- The `/api/matches` GET response already returns `round` — no API change needed
+- The Final fixture (`_lkHo5y1m6ArqvLsi1ixe`) has `matchday: null` and `round: "Final"` —
+  both cases handled correctly if round is rendered when non-null
+
+---
+
+### BACKLOG-033 — BUSALYMPICS Standings Recalculation
+**Status:** OPEN — blocked on BACKLOG-017 (2 of 3 missing scores still unconfirmed)
+**Priority:** High
+**Filed:** 2026-06-08
+
+#### Problem
+BUSALYMPICS standings cannot be correctly calculated until all fixtures are FINISHED.
+Two MD3 fixtures remain UPCOMING with unconfirmed scores:
+
+| Match ID | Fixture | Round |
+|----------|---------|-------|
+| `_9nntLoOZZOZGzja8EQE9` | COLNAS vs COLENVS | Match Day 3 |
+| `y3KcCGtHA7N7MybKTHX5K` | COLMANS vs COLENG | Match Day 3 |
+
+**Do not run standings recalculation until both MD3 fixtures are FINISHED.**
+Partial standings with 2 UPCOMING games will produce wrong table positions.
+
+#### Required Changes
+
+1. Once MD3 G1 (COLNAS vs COLENVS) score is confirmed:
+   PATCH `_9nntLoOZZOZGzja8EQE9` → `{ status: "FINISHED", homeScore: X, awayScore: Y }`
+
+2. Once MD3 G2 (COLMANS vs COLENG) score is confirmed:
+   PATCH `y3KcCGtHA7N7MybKTHX5K` → `{ status: "FINISHED", homeScore: X, awayScore: Y }`
+
+3. After both are FINISHED, trigger standings recalculation for BUSALYMPICS:
+   `competitionId: 9q8LMVqW8KAtF4BJBlyk_`
+
+#### Notes
+- Do not estimate or backfill with placeholder scores — physical records required
+- BACKLOG-017 must be fully resolved (all 3 missing scores confirmed) before this runs
+- Related: BACKLOG-019 (post-match automation) — once that hook exists, standings
+  recalculation will fire automatically on PATCH to FINISHED. Until then, manual trigger.

@@ -2,6 +2,8 @@
 trigger: always_on
 ---
 
+> **ENFORCE: All rules in this file are blocking. Violations must be surfaced and resolved before any implementation proceeds.**
+
 # BrixSports — Workspace Rules
 
 ## Project Tier

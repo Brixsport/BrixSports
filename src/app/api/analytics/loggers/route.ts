@@ -82,7 +82,8 @@ async function getLoggerAnalytics(loggerId: string, thresholdDate: Date) {
     const events = await db
         .select()
         .from(matchEvents)
-        .where(eq(matchEvents.loggerId, loggerId));
+        .where(eq(matchEvents.loggerId, loggerId))
+        .limit(10000);
 
     // Get recent events (within timeframe)
     const recentEvents = events.filter(e =>
@@ -169,7 +170,6 @@ async function getLoggerAnalytics(loggerId: string, thresholdDate: Date) {
         logger: {
             id: logger.id,
             name: logger.name,
-            email: logger.email,
             role: logger.role,
         },
         metrics: {

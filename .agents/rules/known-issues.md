@@ -23,17 +23,25 @@ activation: always_on
 2026-06-08 — bash heredoc indentation breaks markdown in GitHub PR comments — heredoc body lines indented to match script indent level produce literal leading whitespace, breaking markdown tables — Always start heredoc content at column 0 when the content will be rendered as markdown.
 2026-06-08 — Next.js middleware `pathname` never contains query string — `pathname.startsWith('/sign-in?')` never matches because `pathname` strips query params — Use `request.nextUrl.search` or `request.nextUrl.searchParams` for query string checks in middleware; `pathname` is path only.
 
-2026-06-08 — PATCH /api/matches/[id] has no auth gate (BUG-015) — Any caller can update match scores, status, and internal audit fields with no authentication — Add getAuthUser + admin/logger check before body read in every PATCH/DELETE handler, not just POST.
+2026-06-08 — PATCH /api/matches/[id] has no auth gate (BUG-015) — Any caller can update match scores, status, and internal audit fields with no authentication — Add getAuthUser + admin/logger check before body read in every PATCH/DELETE handler, not just POST. RESOLVED 2026-06-08.
 
-2026-06-08 — POST /api/competitions has no auth gate (BUG-016) — Any unauthenticated user can create competitions — Every POST mutation in /api/* must have getAuthUser at the top, before reading the body.
+2026-06-08 — POST /api/competitions has no auth gate (BUG-016) — Any unauthenticated user can create competitions — Every POST mutation in /api/* must have getAuthUser at the top, before reading the body. RESOLVED 2026-06-08.
 
-2026-06-08 — Debug/test routes live in production (BUG-017) — /api/notifications/debug, /api/notifications/test, /api/email/test have no auth and expose internal config + subscription data — Never ship debug routes without auth. Delete or gate before any deploy. Pattern repeats BUG-003.
+2026-06-08 — Debug/test routes live in production (BUG-017) — /api/notifications/debug, /api/notifications/test, /api/email/test have no auth and expose internal config + subscription data — Never ship debug routes without auth. Delete or gate before any deploy. Pattern repeats BUG-003. RESOLVED 2026-06-08 — all three files deleted.
 
-2026-06-08 — GET /api/matches/[id] leaks internal fields (BUG-018) — approvalStatus, managerNotes, loggerId returned in public response — Always shape a DTO for public responses; never spread the raw DB row.
+2026-06-08 — GET /api/matches/[id] leaks internal fields (BUG-018) — approvalStatus, managerNotes, loggerId returned in public response — Always shape a DTO for public responses; never spread the raw DB row. RESOLVED 2026-06-08 — explicit destructure excludes all banned fields.
 
-2026-06-08 — Admin-purpose APIs callable without auth from any origin (BUG-019) — /api/admin/infrastructure and /api/analytics/system rely on middleware only — Middleware protects browser navigation; direct HTTP calls bypass it. Always add handler-level auth.
+2026-06-08 — Admin-purpose APIs callable without auth from any origin (BUG-019) — /api/admin/infrastructure and /api/analytics/system rely on middleware only — Middleware protects browser navigation; direct HTTP calls bypass it. Always add handler-level auth. RESOLVED 2026-06-08.
 
-2026-06-08 — /live page has no real-time update mechanism (BUG-020) — Fetch on mount only; viewer must manually refresh to see score changes — Critical Flow C: public livescore must auto-update. Add polling interval or WS subscription.
+2026-06-08 — /live page has no real-time update mechanism (BUG-020) — Fetch on mount only; viewer must manually refresh to see score changes — Critical Flow C: public livescore must auto-update. Add polling interval or WS subscription. RESOLVED 2026-06-08 — polling interval changed 30s → 15s (stopgap; WS subscription still needed).
+
+2026-06-08 — Hardcoded JWT fallback secret in auth.ts — Both verifyAuth() and generateToken() had process.env.JWT_SECRET || 'your-secret-key-change-in-production'. If JWT_SECRET is absent from env, all tokens are signed and verified with a publicly known string — any attacker can forge admin tokens — Remove the fallback entirely; import from env.ts which validates at startup. Never use || with a fallback on a secret value.
+
+2026-06-08 — logger email leak via spread in match-logger-helpers.ts — ...a.logger! spread included email field of every assigned logger in responses accessible to the logger role — Never spread a DB row that contains PII (email, password, profileId) into an API response. Always use an explicit field shape. The password: undefined trick does NOT reliably remove a field — set it to undefined still appears on the object in some serializers.
+
+2026-06-08 — Second handler in same file missed during auth sweep — analytics/loggers/route.ts had GET fixed but POST (leaderboard endpoint) was a separate export and was not caught in the sweep. Any caller could enumerate all logger emails via POST — When fixing auth on a file, always scan ALL exported function handlers, not just the first one visible. Two-handler files are common in Next.js route files.
+
+2026-06-08 — Inline secret in node -e eval command — Turso auth token hardcoded directly in a node -e eval to run a DB query (turso CLI unavailable). Violates security rules — Never inline credentials in CLI commands or scripts. Always: import 'dotenv/config' + process.env. See .agents/rules/security.md.
 
 ## Anti-Patterns for This Codebase
 - Middleware matcher and internal logic check do not match.

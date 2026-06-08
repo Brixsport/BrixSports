@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
 import { users, matches, news, teams, players, loggers, competitions, advertisements, transfers, polls } from '@/db/schema';
 import { count, sql } from 'drizzle-orm';
+import { getAuthUser } from '@/lib/auth';
 
 // Core API endpoints to monitor (includes all major feature endpoints)
 const ENDPOINTS_TO_CHECK = [
@@ -90,6 +91,14 @@ async function checkEndpointHealth(baseUrl: string, endpoint: { path: string; na
 
 export async function GET(request: NextRequest) {
     try {
+        const authUser = await getAuthUser(request);
+        if (!authUser) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+        if (authUser.role !== 'admin') {
+            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+        }
+
         const startTime = Date.now();
         const baseUrl = request.nextUrl.origin;
 
