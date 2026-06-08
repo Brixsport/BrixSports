@@ -148,6 +148,54 @@ Source code changes only — no database scripts run:
 
 ---
 
+## Session 9 — 2026-06-08
+
+### dev/create-missing-competitions.ts
+- **Purpose:** Create 2 missing competition rows on prod: NPUGA (FOOTBALL) and BUSALYMPICS (BASKETBALL)
+- **Target:** Live production DB (Turso — `brixsportv2-brixsports`)
+- **Pre-check:** SELECT confirmed neither name existed before insert.
+- **Changes:** Inserted 2 rows into `competitions`:
+
+  | ID | Name | Sport | Format | Season | Status |
+  |----|------|-------|--------|--------|--------|
+  | `WDQGpJ8016mdu8t-udDYq` | NPUGA (FOOTBALL) | Football | league | 2024/2025 | active |
+  | `t3INEhRnQnvXGRTXTlidP` | BUSALYMPICS (BASKETBALL) | Basketball | league | 2024/2025 | active |
+
+- **Verified:** Post-insert SELECT confirmed both rows present with correct fields.
+- **Script deleted after run.**
+
+### Pre-prod diagnostic audit (Step 2) — run same session
+- `total_matches`: 66, `with_round`: 66, `with_comp_id`: 66 — round normalisation complete ✓
+- `dirty_competition_strings`: 0 — no ` - ` suffixes remaining ✓
+- Intercollege team org links: 4/4 set (CENG, CENVS, CMANS, CNAS) ✓
+- `competition_team_entries` count: 4 ✓
+- All 5 competitions now present on prod ✓
+
+---
+
+### dev/fix-staging-data.ts — Staging DB sync
+- **Purpose:** Bring staging DB to parity with prod data state
+- **Target:** Staging DB (`brixsportsv2-staging`)
+- **Dry run:** Confirmed 59 rows, all competition resolutions correct
+- **Step 1 — Round normalisation:** 59/59 matches updated with `round` + `competition_id`
+  - Basketball matches: `6LoBXd7UYUGms0AyjCixO` (BUSA LEAGUE BASKETBALL)
+  - Football matches: `xm1OcBFeugKxLDHH6Xi6p` (BUSA LEAGUE FOOTBALL)
+- **Step 2 — Strip suffixes:** 59/59 `competition` strings cleaned (` - Round X` etc. removed)
+- **Step 3 — Rename competitions to use parens:**
+  - `BUSALYMPICS FOOTBALL` → `BUSALYMPICS (FOOTBALL)`
+  - `BUSALYMPICS BASKETBALL` → `BUSALYMPICS (BASKETBALL)`
+  - `NPUGA FOOTBALL` → `NPUGA (FOOTBALL)`
+- **Step 4 — New competitions:** `NPUGA (FOOTBALL)` and `BUSALYMPICS (BASKETBALL)` already existed (created earlier this session) — skipped
+- **Verified:** null competitionId=0, dirty strings=0, null rounds=0, all 5 competitions present ✓
+- **Script deleted after run.**
+
+### dev/pre-prod-check.ts — Final clearance run
+- **Target:** Staging app (`brixsports-staging.vercel.app`) + staging DB
+- **Result:** 20/20 checks passed — `[CLEAR TO MERGE]`
+- Blocks 1 (auth gates), 2 (response shape), 3 (DB integrity), 4 (round distribution), 5 (competitions) all green
+
+---
+
 ## Outstanding / Pending Scripts
 
 | Script (not yet run) | Purpose | Blocked by |
