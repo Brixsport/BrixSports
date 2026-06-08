@@ -15,6 +15,7 @@ interface Match {
     startTime: string;
     venue: string;
     competition: string;
+    round?: string;
     sport: string;
     homeTeam?: any;
     awayTeam?: any;
@@ -108,7 +109,7 @@ export default function LiveCenter() {
                                         className="p-6 rounded-xl cursor-pointer transition-all bg-white/5 border border-white/10 hover:border-primary/50 hover:bg-white/10 group"
                                     >
                                         <div className="flex items-center justify-between mb-4">
-                                            <span className="text-xs text-white/60">{match.competition}</span>
+                                            <span className="text-xs text-white/60">{match.round ? `${match.competition} · ${match.round}` : match.competition}</span>
                                             <div className="flex items-center gap-1.5 text-red-500 text-xs font-bold">
                                                 <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse"></span>
                                                 LIVE

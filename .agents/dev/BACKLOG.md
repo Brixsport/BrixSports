@@ -1563,8 +1563,8 @@ lock file. Test build. Document result.
 
 ---
 
-### BACKLOG-032 — Display Round/Matchday Label on Match Cards
-**Status:** OPEN
+### ~~BACKLOG-032 — Display Round/Matchday Label on Match Cards~~
+**Status:** RESOLVED — 2026-06-08
 **Priority:** Medium
 **Filed:** 2026-06-08
 

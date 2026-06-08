@@ -408,7 +408,7 @@ function AdminMatchesPageContent() {
                                                 </span>
                                                 <span className="text-white/40 text-[10px] font-black uppercase tracking-widest">{match.sport}</span>
                                                 <div className="w-1 h-1 rounded-full bg-white/10" />
-                                                <span className="text-white/40 text-[10px] font-black uppercase tracking-widest">{match.competition}</span>
+                                                <span className="text-white/40 text-[10px] font-black uppercase tracking-widest">{match.round ? `${match.competition} · ${match.round}` : match.competition}</span>
                                             </div>
 
                                             <div className="flex items-center gap-12 mb-6">
