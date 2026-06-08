@@ -1,11 +1,51 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { jwtVerify } from 'jose';
+import { env } from '@/lib/env';
+
+const JWT_SECRET = new TextEncoder().encode(
+    env.jwtSecret || 'your-secret-key-change-in-production'
+);
+
+async function verifyToken(token: string) {
+    try {
+        const { payload } = await jwtVerify(token, JWT_SECRET);
+        return payload;
+    } catch {
+        return null;
+    }
+}
 
 export async function middleware(request: NextRequest) {
     const { pathname } = request.nextUrl;
 
-    // Protect /admin UI routes and /api/admin/* API routes
+    // ── Staging-wide auth gate ─────────────────────────────────────────────
+    // When NEXT_PUBLIC_ENV === 'staging', every route requires a valid JWT
+    // session. This keeps the staging deployment private from the public
+    // while still being fully functional for internal testing.
+    //
+    // Exceptions:
+    //   /api/auth/*  — login endpoints must remain accessible
+    //   /login       — the login page itself (avoids redirect loop)
+    //   /_next/*     — Next.js internals (handled by matcher exclusion)
+    if (env.isStaging) {
+        const isStagingExempt =
+            pathname.startsWith('/api/auth/') ||
+            pathname === '/login';
+
+        if (!isStagingExempt) {
+            const token = request.cookies.get('authToken')?.value;
+            if (!token) {
+                return NextResponse.redirect(new URL('/login', request.url));
+            }
+            const payload = await verifyToken(token);
+            if (!payload) {
+                return NextResponse.redirect(new URL('/login', request.url));
+            }
+        }
+    }
+
+    // ── Admin route protection (all environments) ──────────────────────────
     if (pathname.startsWith('/admin') || pathname.startsWith('/api/admin')) {
         const token = request.cookies.get('authToken')?.value;
 
@@ -19,12 +59,7 @@ export async function middleware(request: NextRequest) {
         }
 
         try {
-            // Verify JWT signature using jose (Edge-compatible)
-            const secret = new TextEncoder().encode(
-                process.env.JWT_SECRET || 'your-secret-key-change-in-production'
-            );
-
-            const { payload } = await jwtVerify(token, secret);
+            const { payload } = await jwtVerify(token, JWT_SECRET);
 
             if (payload.role !== 'admin' && payload.role !== 'logger_manager') {
                 if (pathname.startsWith('/api/')) {
@@ -47,5 +82,12 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-    matcher: ['/admin/:path*', '/api/admin/:path*'],
+    matcher: [
+        // Admin routes — always protected regardless of environment
+        '/admin/:path*',
+        '/api/admin/:path*',
+        // All other routes — staging gate applies when NEXT_PUBLIC_ENV === 'staging'
+        // Excludes Next.js static internals to avoid intercepting asset requests
+        '/((?!_next/static|_next/image|favicon\\.ico).*)',
+    ],
 };

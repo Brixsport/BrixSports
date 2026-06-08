@@ -1,3 +1,8 @@
+// DEAD — no API routes or UI reference this schema.
+// Candidate for deletion in BACKLOG-028 backscoping pass.
+// Missing imports (players, organizations) cause tsc errors — intentionally not fixed here;
+// this file should be deleted, not repaired.
+
 // NESA-specific registration tables
 import { sqliteTable, text, integer, unique } from 'drizzle-orm/sqlite-core';
 import { relations } from 'drizzle-orm';

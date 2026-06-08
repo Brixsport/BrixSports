@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
 import { matches, matchEvents, teams } from '@/db/schema';
-import { eq, and, inArray, or, desc } from 'drizzle-orm';
+import { eq, and, inArray, or, desc } from 'drizzle-orm'; // inArray kept for teams fetch
 import { getAuthUser } from '@/lib/auth';
 
 export async function GET(request: NextRequest) {
@@ -49,63 +49,30 @@ export async function GET(request: NextRequest) {
         // Create a map for quick access
         const teamsMap = new Map(teamsList.map(t => [t.id, t]));
 
-        // Fetch assigned loggers for these matches
-        const matchIds = allMatches.map(m => m.id);
-        let assignmentsList: any[] = [];
-
-        if (matchIds.length > 0) {
-            // Import matchLoggerAssignments and loggers if not imported
-            // Assuming they are available via '@/db/schema'
-            const { matchLoggerAssignments, loggers } = await import('@/db/schema');
-
-            assignmentsList = await db.select({
-                matchId: matchLoggerAssignments.matchId,
-                loggerId: loggers.id,
-                name: loggers.name,
-                role: matchLoggerAssignments.role,
-                status: matchLoggerAssignments.status
-            })
-                .from(matchLoggerAssignments)
-                .leftJoin(loggers, eq(matchLoggerAssignments.loggerId, loggers.id))
-                .where(
-                    and(
-                        inArray(matchLoggerAssignments.matchId, matchIds),
-                        eq(matchLoggerAssignments.status, 'active')
-                    )
-                );
-        }
-
-        // Group assignments by matchId
-        const assignmentsMap = new Map<string, any[]>();
-        assignmentsList.forEach(a => {
-            if (!assignmentsMap.has(a.matchId)) {
-                assignmentsMap.set(a.matchId, []);
-            }
-            if (a.loggerId) { // Ensure logger exists
-                assignmentsMap.get(a.matchId)?.push({
-                    id: a.loggerId,
-                    name: a.name,
-                    role: a.role
-                });
-            }
-        });
-
-        // Fetch events for each match (optional, keeping existing logic)
-        // But optimizing to just attach teams first
+        // Fetch events for each match
         const matchesWithDetails = await Promise.all(
             allMatches.map(async (match) => {
-                const events = await db.select().from(matchEvents).where(eq(matchEvents.matchId, match.id));
+                const events = await db.select().from(matchEvents).where(eq(matchEvents.matchId, match.id)).limit(200);
                 const homeTeam = teamsMap.get(match.homeTeamId);
                 const awayTeam = teamsMap.get(match.awayTeamId);
-                const assignedLoggers = assignmentsMap.get(match.id) || [];
+
+                // BUG-025: strip all banned internal fields before returning public response.
+                // loggerId, assignedLoggers, approvalStatus, managerNotes, approvedBy, approvedAt
+                // are internal assignment/audit fields — never exposed to public viewers.
+                const {
+                    loggerId: _lid,
+                    approvalStatus: _as,
+                    managerNotes: _mn,
+                    approvedBy: _ab,
+                    approvedAt: _aa,
+                    ...publicMatch
+                } = match;
 
                 return {
-                    ...match,
+                    ...publicMatch,
                     events,
                     stats: match.stats ? JSON.parse(match.stats) : {},
                     lineups: match.lineups ? JSON.parse(match.lineups) : null,
-                    assignedLoggers, // Add this field
-                    loggerId: assignedLoggers.length > 0 ? assignedLoggers[0].id : match.loggerId, // Fallback for backward compat
                     homeTeam: homeTeam ? {
                         name: homeTeam.name,
                         shortName: homeTeam.shortName,
@@ -115,7 +82,7 @@ export async function GET(request: NextRequest) {
                         name: awayTeam.name,
                         shortName: awayTeam.shortName,
                         logo: awayTeam.logo
-                    } : null
+                    } : null,
                 };
             })
         );

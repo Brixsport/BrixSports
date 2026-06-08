@@ -22,7 +22,7 @@ Right now those concepts are partially mixed together.
 
 ## What We Have Today
 
-Observed from the live Turso database and [src/db/schema.ts](/c:/Users/LENOVO/OneDrive/Desktop/Brix%20V2/-BrixsV2/src/db/schema.ts):
+Observed from the live Turso database and [src/db/schema.ts](/c:/Users/LENOVO/OneDrive/Desktop/brixsports-v2/src/db/schema.ts):
 
 - `teams`: 232 rows
 - `players`: 179 rows
@@ -519,12 +519,12 @@ Key dependency areas include:
 
 Examples:
 
-- [src/app/admin/players/page.tsx](/c:/Users/LENOVO/OneDrive/Desktop/Brix%20V2/-BrixsV2/src/app/admin/players/page.tsx)
-- [src/app/api/players/route.ts](/c:/Users/LENOVO/OneDrive/Desktop/Brix%20V2/-BrixsV2/src/app/api/players/route.ts)
-- [src/app/api/teams/[id]/route.ts](/c:/Users/LENOVO/OneDrive/Desktop/Brix%20V2/-BrixsV2/src/app/api/teams/[id]/route.ts)
-- [src/app/api/matches/[id]/eligible-players/route.ts](/c:/Users/LENOVO/OneDrive/Desktop/Brix%20V2/-BrixsV2/src/app/api/matches/[id]/eligible-players/route.ts)
-- [src/app/api/competitions/[id]/eligible-players/route.ts](/c:/Users/LENOVO/OneDrive/Desktop/Brix%20V2/-BrixsV2/src/app/api/competitions/[id]/eligible-players/route.ts)
-- [src/lib/competition-player-eligibility.ts](/c:/Users/LENOVO/OneDrive/Desktop/Brix%20V2/-BrixsV2/src/lib/competition-player-eligibility.ts)
+- [src/app/admin/players/page.tsx](/c:/Users/LENOVO/OneDrive/Desktop/brixsports-v2/src/app/admin/players/page.tsx)
+- [src/app/api/players/route.ts](/c:/Users/LENOVO/OneDrive/Desktop/brixsports-v2/src/app/api/players/route.ts)
+- [src/app/api/teams/[id]/route.ts](/c:/Users/LENOVO/OneDrive/Desktop/brixsports-v2/src/app/api/teams/[id]/route.ts)
+- [src/app/api/matches/[id]/eligible-players/route.ts](/c:/Users/LENOVO/OneDrive/Desktop/brixsports-v2/src/app/api/matches/[id]/eligible-players/route.ts)
+- [src/app/api/competitions/[id]/eligible-players/route.ts](/c:/Users/LENOVO/OneDrive/Desktop/brixsports-v2/src/app/api/competitions/[id]/eligible-players/route.ts)
+- [src/lib/competition-player-eligibility.ts](/c:/Users/LENOVO/OneDrive/Desktop/brixsports-v2/src/lib/competition-player-eligibility.ts)
 
 This is manageable, but it confirms that migration should be phased and API-led.
 

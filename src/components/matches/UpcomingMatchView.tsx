@@ -25,6 +25,7 @@ interface Match {
     startTime: string;
     venue: string;
     competition: string;
+    round?: string | null;
 }
 
 interface UpcomingMatchViewProps {
@@ -66,7 +67,7 @@ export function UpcomingMatchView({ match }: UpcomingMatchViewProps) {
                         </div>
 
                         <h1 className="text-2xl md:text-3xl font-bold text-gray-400 mb-2">
-                            {match.competition}
+                            {match.round ? `${match.competition} · ${match.round}` : match.competition}
                         </h1>
 
                         <div className="flex items-center justify-center gap-4 text-sm text-gray-500">
@@ -193,7 +194,7 @@ export function UpcomingMatchView({ match }: UpcomingMatchViewProps) {
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
                                     <p className="text-sm text-gray-400 mb-1">Competition</p>
-                                    <p className="text-white font-semibold">{match.competition}</p>
+                                    <p className="text-white font-semibold">{match.round ? `${match.competition} · ${match.round}` : match.competition}</p>
                                 </div>
                                 <div>
                                     <p className="text-sm text-gray-400 mb-1">Venue</p>

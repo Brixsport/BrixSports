@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
 import { matchLoggerAssignments } from '@/db/schema';
 import { and, eq } from 'drizzle-orm';
+import { getAuthUser } from '@/lib/auth';
 
 /**
  * POST /api/matches/[id]/remove-logger
@@ -12,6 +13,14 @@ export async function POST(
     { params }: { params: Promise<{ id: string }> }
 ) {
     try {
+        const authUser = await getAuthUser(request);
+        if (!authUser) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+        if (authUser.role !== 'admin') {
+            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+        }
+
         const { id: matchId } = await params;
         const { loggerId } = await request.json();
 

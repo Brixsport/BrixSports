@@ -31,7 +31,8 @@ export async function GET(
             .select()
             .from(matchEvents)
             .where(eq(matchEvents.matchId, matchId))
-            .orderBy(asc(matchEvents.minute), asc(matchEvents.second));
+            .orderBy(asc(matchEvents.minute), asc(matchEvents.second))
+            .limit(200);
 
         return NextResponse.json({
             matchId,

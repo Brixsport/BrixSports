@@ -7,9 +7,18 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
 import { users, matches, news, teams, players, matchEvents, transfers } from '@/db/schema';
 import { sql, eq, count } from 'drizzle-orm';
+import { getAuthUser } from '@/lib/auth';
 
 export async function GET(request: NextRequest) {
     try {
+        const authUser = await getAuthUser(request);
+        if (!authUser) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+        if (authUser.role !== 'admin') {
+            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+        }
+
         // 1. User Stats
         const [totalUsers] = await db.select({ count: count() }).from(users);
 

@@ -9,6 +9,7 @@ import { db } from '@/db';
 import { competitions, matches, standings } from '@/db/schema';
 import { sql, eq, or } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
+import { getAuthUser } from '@/lib/auth';
 
 export async function GET(request: NextRequest) {
     try {
@@ -21,7 +22,7 @@ export async function GET(request: NextRequest) {
         // Get competitions from database
         let query = db.select().from(competitions);
 
-        const allCompetitions = await query;
+        const allCompetitions = await query.limit(500);
 
         // Filter by sport if provided
         let filteredCompetitions = allCompetitions;
@@ -106,6 +107,14 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
     try {
+        const authUser = await getAuthUser(request);
+        if (!authUser) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+        if (authUser.role !== 'admin') {
+            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+        }
+
         const body = await request.json();
         const {
             name, sport, format, season, status,

@@ -263,6 +263,96 @@ Summarize briefly:
 
 ---
 
+## Git Governance
+
+### Branch Model
+```
+main        ← production (Vercel prod, prod Turso DB)
+dev         ← staging/integration (Vercel staging, staging Turso DB)
+feature/*   ← new features — branch off dev, PR back to dev
+fix/*       ← bug fixes — branch off dev, PR back to dev
+hotfix/*    ← urgent prod fixes — branch off main, PR to main,
+              auto-syncs back to dev after merge
+```
+
+### Rules
+- All new work branches off `dev`, not `main`
+- PRs to `main` require 2 reviews (1 currently — raise when team grows)
+- PRs to `dev` require 1 review
+- Squash merge for `feature/*` and `fix/*`
+- Merge commit for `hotfix/*` (preserve audit trail)
+- Schema migrations run against staging first, then prod — no exceptions
+- No direct commits to `main` or `dev`
+- `dev` must always be deployable — do not merge broken code
+
+### Environments
+- `main` deploys to brixsports.com (prod Vercel project)
+- `dev` deploys to staging.brixsports.com (staging Vercel project)
+- Each PR gets a Vercel preview deployment automatically
+- `JWT_SECRET` and `CRON_SECRET` are different per environment
+- `NEXT_PUBLIC_ENV` = `production` | `staging` | `development`
+
+### Workflow — Feature Work
+```bash
+git checkout dev && git pull
+git checkout -b feature/your-feature-name
+# work, commit incrementally
+git push origin feature/your-feature-name
+# open PR → target dev
+# PR guard checks target, Vercel builds preview
+# 1 review required, merge with squash
+```
+
+### Workflow — Hotfix
+```bash
+git checkout main && git pull
+git checkout -b hotfix/description
+# fix, commit
+git push origin hotfix/description
+# open PR → target main
+# PR guard checks target, 2 reviews required
+# merge commit (not squash)
+# auto-sync action merges main back into dev automatically
+```
+
+---
+
+## Session Conventions
+
+### Before Every Session
+- Read `.agents/rules/backlog.md` (if it exists) and `.agents/dev/PROJECT_HISTORY.md`
+- Check current branch — all work on `feature/*` or `fix/*` off `dev`, never directly on `dev` or `main`
+- Run `tsc --noEmit` before touching any file to establish a baseline error count
+
+### Environment Variables
+- Never read `process.env` directly in application code
+- Always import from `src/lib/env.ts` instead
+- Add new vars to `env.ts` first, then document in `.env.example`
+- `validateEnv()` in `env.ts` fails fast at startup if required vars are absent
+
+### Before Every Commit
+- Run `tsc --noEmit` — zero new errors only (pre-existing errors in `src/db/` scripts are known and acceptable)
+- Confirm you are on the correct branch
+- Write descriptive commit messages using these types:
+  - `feat:` — new feature
+  - `fix:` — bug fix
+  - `chore:` — config, tooling, docs
+  - `refactor:` — code restructure with no behaviour change
+  - `test:` — test additions
+- Never commit `.env` files, `dev/` scripts, or `node_modules`
+
+### Schema Migrations
+- Always run `db:push` against staging first
+- Verify on staging before running against prod
+- Log every migration in `.agents/dev/RUNLOG.md`
+
+### DB Scripts
+- All scripts go in `dev/` (gitignored)
+- Every run logged in `.agents/dev/RUNLOG.md`
+- Include: date, script name, what it did, row counts affected
+
+---
+
 ## Cross-Project Knowledge
 Read at session start: ~/.claude/knowledge/global-patterns/patterns.md
 Apply all anti-patterns, settled decisions, and stack gotchas recorded there.

@@ -98,6 +98,7 @@ export default function Home() {
               startTime: match.startTime,
               venue: match.venue,
               competition: match.competition,
+              round: match.round ?? null,
               sport: 'Basketball',
               matchType: 'competition',
               homeTeam: match.homeTeam,
@@ -138,6 +139,7 @@ export default function Home() {
               startTime: match.startTime,
               venue: match.venue,
               competition: match.competition,
+              round: match.round ?? null,
               sport: 'Football',
               matchType: 'competition',
               homeTeam: match.homeTeam,
@@ -205,6 +207,7 @@ export default function Home() {
                 startTime: match.startTime,
                 venue: match.venue,
                 competition: match.competition,
+                round: match.round ?? null,
                 sport: 'Basketball',
                 matchType: 'competition',
                 homeTeam: match.homeTeam,
@@ -244,6 +247,7 @@ export default function Home() {
                 startTime: match.startTime,
                 venue: match.venue,
                 competition: match.competition,
+                round: match.round ?? null,
                 sport: 'Football',
                 matchType: 'competition',
                 homeTeam: match.homeTeam,
@@ -659,7 +663,7 @@ export default function Home() {
                               <motion.div
                                 initial={{ opacity: 0 }}
                                 animate={{ opacity: 1 }}
-                                onClick={() => router.push(`/match/${match.id}`)}
+                                onClick={() => router.push(`/matches/${match.id}`)}
                                 className={`p-4 cursor-pointer hover:bg-white/5 transition-colors group ${idx !== compMatches.length - 1 ? 'border-b border-white/5' : ''
                                   }`}
                               >
@@ -720,7 +724,7 @@ export default function Home() {
                                   </div>
 
                                   {/* Status/Time (Right Side) */}
-                                  <div className="ml-6 w-20 flex flex-col items-end justify-center">
+                                  <div className="ml-6 w-20 flex flex-col items-end justify-center gap-1">
                                     {match.isStreaming && (
                                       <div className="mb-1 text-red-500 animate-pulse">
                                         <Play size={12} fill="currentColor" />
@@ -735,6 +739,9 @@ export default function Home() {
                                       <span className="text-xs text-white/60">
                                         {new Date(match.startTime).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
                                       </span>
+                                    )}
+                                    {match.round && (
+                                      <span className="text-[9px] text-white/30 font-bold uppercase tracking-wider text-right leading-tight">{match.round}</span>
                                     )}
                                   </div>
                                 </div>

@@ -8,12 +8,18 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
 import { pushSubscriptions, users } from '@/db/schema';
 import { eq } from 'drizzle-orm';
+import { getAuthUser } from '@/lib/auth';
 
 /**
  * Subscribe to push notifications
  */
 export async function POST(request: NextRequest) {
     try {
+        const authUser = await getAuthUser(request);
+        if (!authUser) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+
         const body = await request.json();
         console.log('[NotificationAPI] Received body:', body);
         

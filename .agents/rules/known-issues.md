@@ -17,6 +17,38 @@ activation: always_on
 2026-05-04 — /api/events Unauthorized Access — Missing auth check in POST handler — Always call getAuthUser(request) in mutation handlers.
 2026-05-04 — Unbounded List Queries — All list endpoints lacked limits, risking performance collapse — Always use .limit(50) on list queries.
 
+2026-06-08 — Unauthenticated bulk player registration (BUG-013) — `POST /api/players/bulk-register` had no `getAuthUser` check — any unauthenticated caller could create player rows and teams — Always add `getAuthUser` + role check at the very top of every mutation handler, before reading the body.
+2026-06-08 — Admin match cards showing raw team IDs (BUG-014) — Page fetched `/api/teams` with `.limit(200)` but 236 teams exist; teams beyond index 200 were missing, causing the `teamId → name` lookup to fall back to the raw ID string — The `/api/matches` response already embeds `homeTeam`/`awayTeam` objects — always use embedded response data before doing a secondary client-side lookup against a separately-fetched list.
+2026-06-08 — Middleware login URL inconsistency — staging gate redirected to `/sign-in`, admin gate redirected to `/login`; these are different URLs, one produces a 404 — When writing auth redirects in different blocks of the same file, always use a single named constant for the login URL, not repeated string literals.
+2026-06-08 — bash heredoc indentation breaks markdown in GitHub PR comments — heredoc body lines indented to match script indent level produce literal leading whitespace, breaking markdown tables — Always start heredoc content at column 0 when the content will be rendered as markdown.
+2026-06-08 — Next.js middleware `pathname` never contains query string — `pathname.startsWith('/sign-in?')` never matches because `pathname` strips query params — Use `request.nextUrl.search` or `request.nextUrl.searchParams` for query string checks in middleware; `pathname` is path only.
+
+2026-06-08 — PATCH /api/matches/[id] has no auth gate (BUG-015) — Any caller can update match scores, status, and internal audit fields with no authentication — Add getAuthUser + admin/logger check before body read in every PATCH/DELETE handler, not just POST. RESOLVED 2026-06-08.
+
+2026-06-08 — POST /api/competitions has no auth gate (BUG-016) — Any unauthenticated user can create competitions — Every POST mutation in /api/* must have getAuthUser at the top, before reading the body. RESOLVED 2026-06-08.
+
+2026-06-08 — Debug/test routes live in production (BUG-017) — /api/notifications/debug, /api/notifications/test, /api/email/test have no auth and expose internal config + subscription data — Never ship debug routes without auth. Delete or gate before any deploy. Pattern repeats BUG-003. RESOLVED 2026-06-08 — all three files deleted.
+
+2026-06-08 — GET /api/matches/[id] leaks internal fields (BUG-018) — approvalStatus, managerNotes, loggerId returned in public response — Always shape a DTO for public responses; never spread the raw DB row. RESOLVED 2026-06-08 — explicit destructure excludes all banned fields.
+
+2026-06-08 — Admin-purpose APIs callable without auth from any origin (BUG-019) — /api/admin/infrastructure and /api/analytics/system rely on middleware only — Middleware protects browser navigation; direct HTTP calls bypass it. Always add handler-level auth. RESOLVED 2026-06-08.
+
+2026-06-08 — /live page has no real-time update mechanism (BUG-020) — Fetch on mount only; viewer must manually refresh to see score changes — Critical Flow C: public livescore must auto-update. Add polling interval or WS subscription. RESOLVED 2026-06-08 — polling interval changed 30s → 15s (stopgap; WS subscription still needed).
+
+2026-06-08 — Hardcoded JWT fallback secret in auth.ts — Both verifyAuth() and generateToken() had process.env.JWT_SECRET || 'your-secret-key-change-in-production'. If JWT_SECRET is absent from env, all tokens are signed and verified with a publicly known string — any attacker can forge admin tokens — Remove the fallback entirely; import from env.ts which validates at startup. Never use || with a fallback on a secret value.
+
+2026-06-08 — logger email leak via spread in match-logger-helpers.ts — ...a.logger! spread included email field of every assigned logger in responses accessible to the logger role — Never spread a DB row that contains PII (email, password, profileId) into an API response. Always use an explicit field shape. The password: undefined trick does NOT reliably remove a field — set it to undefined still appears on the object in some serializers.
+
+2026-06-08 — Second handler in same file missed during auth sweep — analytics/loggers/route.ts had GET fixed but POST (leaderboard endpoint) was a separate export and was not caught in the sweep. Any caller could enumerate all logger emails via POST — When fixing auth on a file, always scan ALL exported function handlers, not just the first one visible. Two-handler files are common in Next.js route files.
+
+2026-06-08 — Inline secret in node -e eval command — Turso auth token hardcoded directly in a node -e eval to run a DB query (turso CLI unavailable). Violates security rules — Never inline credentials in CLI commands or scripts. Always: import 'dotenv/config' + process.env. See .agents/rules/security.md.
+
+2026-06-08 — Round label not rendering after first BACKLOG-032 commit — `/live` page only renders `status === 'LIVE'` matches; BUSALYMPICS/BUSA League matches are FINISHED/UPCOMING so they never appear there. Fix targeted the wrong page. Real render paths were `src/app/page.tsx` (homepage) and shared components (`MatchCard.tsx`, `MatchComponents.tsx`, `UpcomingMatchView.tsx`) — Always grep `match.competition` across the entire codebase before assuming a single page fix is complete.
+
+2026-06-08 — round field not passed through page.tsx transform maps — `src/app/page.tsx` fetches from `/api/basketball/matches` and `/api/football/matches` (not `/api/matches`) and explicitly reconstructs match objects in 4 separate transform maps. `round` was not in any of them so it was silently dropped before reaching the component — When a page manually constructs match objects from API data, every field used downstream must be explicitly included. A spread (`...match`) would have avoided this; explicit maps are error-prone under field additions.
+
+2026-06-08 — FK constraint failure on data migration with placeholder IDs — Directive specified competition IDs as human-readable slugs (`busa-league-football-2025`) that did not exist in the DB. Script applied cleanly in dry-run but failed at first UPDATE with `SQLITE_CONSTRAINT: FOREIGN KEY constraint failed` — Always verify FK target IDs exist in the DB before writing any migration script. Run a `SELECT id FROM [table] WHERE name LIKE '%...'` diagnostic first, not after the apply fails.
+
 ## Anti-Patterns for This Codebase
 - Middleware matcher and internal logic check do not match.
 - try/catch without finally in any DB operation.

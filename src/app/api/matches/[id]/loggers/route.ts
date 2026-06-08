@@ -9,6 +9,7 @@ import { db } from '@/db';
 import { loggers } from '@/db/schema';
 import { eq } from 'drizzle-orm';
 import { getSessionStore } from '@/lib/sessionStore';
+import { getAuthUser } from '@/lib/auth';
 
 /**
  * GET /api/matches/[id]/loggers
@@ -19,6 +20,14 @@ export async function GET(
     { params }: { params: Promise<{ id: string }> }
 ) {
     try {
+        const authUser = await getAuthUser(request);
+        if (!authUser) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+        if (authUser.role !== 'admin' && authUser.role !== 'logger') {
+            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+        }
+
         const { id: matchId } = await params;
         const sessionStore = getSessionStore();
 
@@ -47,8 +56,20 @@ export async function POST(
     { params }: { params: Promise<{ id: string }> }
 ) {
     try {
+        const authUser = await getAuthUser(request);
+        if (!authUser) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+        if (authUser.role !== 'admin' && authUser.role !== 'logger') {
+            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+        }
+
         const { id: matchId } = await params;
         const { loggerId } = await request.json();
+
+        if (authUser.role === 'logger' && authUser.id !== loggerId) {
+            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+        }
         const sessionStore = getSessionStore();
 
         // Verify logger exists
@@ -102,8 +123,20 @@ export async function PATCH(
     { params }: { params: Promise<{ id: string }> }
 ) {
     try {
+        const authUser = await getAuthUser(request);
+        if (!authUser) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+        if (authUser.role !== 'admin' && authUser.role !== 'logger') {
+            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+        }
+
         const { id: matchId } = await params;
         const { loggerId } = await request.json();
+
+        if (authUser.role === 'logger' && authUser.id !== loggerId) {
+            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+        }
         const sessionStore = getSessionStore();
 
         const sessionKey = `${loggerId}-${matchId}`;
@@ -139,10 +172,17 @@ export async function DELETE(
     { params }: { params: Promise<{ id: string }> }
 ) {
     try {
+        const authUser = await getAuthUser(request);
+        if (!authUser) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+        if (authUser.role !== 'admin' && authUser.role !== 'logger') {
+            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+        }
+
         const { id: matchId } = await params;
         const { searchParams } = new URL(request.url);
         const loggerId = searchParams.get('loggerId');
-        const sessionStore = getSessionStore();
 
         if (!loggerId) {
             return NextResponse.json(
@@ -150,6 +190,12 @@ export async function DELETE(
                 { status: 400 }
             );
         }
+
+        if (authUser.role === 'logger' && authUser.id !== loggerId) {
+            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+        }
+
+        const sessionStore = getSessionStore();
 
         const sessionKey = `${loggerId}-${matchId}`;
         await sessionStore.delete(sessionKey);

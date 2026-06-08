@@ -10,6 +10,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
 import { teams, matches, standings, bracketNodes, competitions } from '@/db/schema';
 import { eq, sql, or } from 'drizzle-orm';
+import { getAuthUser } from '@/lib/auth';
 
 interface RouteParams {
     params: {
@@ -96,7 +97,21 @@ export async function GET(
                 teamCount: teamIds.size,
             },
             teams: teamsData,
-            matches: competitionMatches,
+            matches: competitionMatches.map(m => ({
+                id: m.id,
+                sport: m.sport,
+                homeTeamId: m.homeTeamId,
+                awayTeamId: m.awayTeamId,
+                homeScore: m.homeScore,
+                awayScore: m.awayScore,
+                status: m.status,
+                startTime: m.startTime,
+                venue: m.venue,
+                competition: m.competition,
+                competitionId: m.competitionId,
+                matchType: m.matchType,
+                competitionLevel: m.competitionLevel,
+            })),
             standings: competitionStandings.map(s => ({
                 ...s.standing,
                 team: s.team,
@@ -121,6 +136,14 @@ export async function PATCH(
     { params }: RouteParams
 ) {
     try {
+        const authUser = await getAuthUser(request);
+        if (!authUser) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+        if (authUser.role !== 'admin') {
+            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+        }
+
         const competitionId = params.id;
         const body = await request.json();
 
@@ -210,6 +233,14 @@ export async function DELETE(
     { params }: RouteParams
 ) {
     try {
+        const authUser = await getAuthUser(request);
+        if (!authUser) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+        if (authUser.role !== 'admin') {
+            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+        }
+
         const competitionId = params.id;
 
         // Check if competition exists

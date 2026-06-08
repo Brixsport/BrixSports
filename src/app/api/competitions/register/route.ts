@@ -3,6 +3,7 @@ import { db } from '@/db';
 import { teamRegistrations, registeredPlayers } from '@/db/schema';
 import { nanoid } from 'nanoid';
 
+// PUBLIC: intentional — teams self-register for competitions without an account. Rate limiting needed (BACKLOG).
 export async function POST(request: NextRequest) {
     try {
         const body = await request.json();
@@ -103,8 +104,21 @@ export async function GET(request: NextRequest) {
             where: (registeredPlayers, { eq }) => eq(registeredPlayers.registrationId, registrationId),
         });
 
+        // PUBLIC: intentional — teams check their own submission status via registrationId (nanoid entropy).
+        // Contact fields are stripped; they must not be returned to unauthenticated callers.
         return NextResponse.json({
-            registration,
+            registration: {
+                id: registration.id,
+                competitionId: registration.competitionId,
+                teamName: registration.teamName,
+                schoolName: registration.schoolName,
+                shortName: registration.shortName,
+                status: registration.status,
+                numberOfPlayers: registration.numberOfPlayers,
+                playersSubmitted: registration.playersSubmitted,
+                createdAt: registration.createdAt,
+                updatedAt: registration.updatedAt,
+            },
             players,
         });
     } catch (error) {
