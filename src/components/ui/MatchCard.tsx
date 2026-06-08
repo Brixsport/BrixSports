@@ -29,6 +29,7 @@ interface MatchCardProps {
         startTime: string;
         venue: string;
         competition: string;
+        round?: string | null;
         sport: string;
     };
     variant?: 'compact' | 'detailed' | 'live';
@@ -84,7 +85,7 @@ export default function MatchCard({ match, variant = 'compact', showCompetition 
                     {showCompetition && (
                         <div className="flex items-center gap-2 mb-3">
                             <Trophy className="w-4 h-4 text-gray-400" />
-                            <span className="text-xs text-gray-400 font-medium">{match.competition}</span>
+                            <span className="text-xs text-gray-400 font-medium">{match.round ? `${match.competition} · ${match.round}` : match.competition}</span>
                         </div>
                     )}
 
@@ -170,7 +171,7 @@ export default function MatchCard({ match, variant = 'compact', showCompetition 
                     {showCompetition && (
                         <div className="flex items-center gap-2 mb-4">
                             <Trophy className="w-4 h-4 text-purple-400" />
-                            <span className="text-sm text-purple-300 font-semibold">{match.competition}</span>
+                            <span className="text-sm text-purple-300 font-semibold">{match.round ? `${match.competition} · ${match.round}` : match.competition}</span>
                         </div>
                     )}
 
@@ -249,7 +250,7 @@ export default function MatchCard({ match, variant = 'compact', showCompetition 
                     {showCompetition && (
                         <div className="flex items-center gap-2">
                             <Trophy className="w-5 h-5 text-purple-400" />
-                            <span className="text-sm text-purple-300 font-semibold">{match.competition}</span>
+                            <span className="text-sm text-purple-300 font-semibold">{match.round ? `${match.competition} · ${match.round}` : match.competition}</span>
                         </div>
                     )}
                     <div className={`px-3 py-1 ${getStatusColor()} rounded-full`}>

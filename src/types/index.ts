@@ -57,6 +57,7 @@ export interface Match {
     startTime: string;
     venue: string;
     competition: string;
+    round?: string | null;
     sport: SportType;
     matchType?: string;
     homeTeam?: Team;

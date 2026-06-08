@@ -70,6 +70,16 @@
 
 - **BUG-024** *(LOW)*: Duplicate match detail routes — `/match/[id]` (`src/app/match/[id]/page.tsx`) and `/matches/[id]` (`src/app/matches/[id]/page.tsx`) both exist. One is likely legacy. Audit to confirm which is canonical (check all internal links and nav references), delete the other. Filed: 2026-06-08. Source: SYSTEM_AUDIT.md §2.
 
+- **BUG-026** *(MEDIUM — PWA/Cache)*: On direct page URL visits, CSS fails to render — page loads as unstyled raw HTML. Likely cause: service worker or PWA cache is not caching the CSS bundle correctly, or the cache manifest is stale. Symptom only appears on direct URL visit (hard nav), not on client-side route transitions.
+
+  Investigate:
+  - Service worker registration and cache strategy (is CSS included in the precache manifest?)
+  - `next.config.ts` PWA config (if `next-pwa` is installed)
+  - Whether the issue reproduces on staging or prod only, or both
+  - Whether a hard refresh (Ctrl+Shift+R) resolves it temporarily (confirms cache root cause)
+
+  Filed: 2026-06-08. Found by: manual staging QA.
+
 - **BUG-025** *(MEDIUM — NDPR)*: `GET /api/matches` public list response exposes `assignedLoggers` full object and `loggerId` field to unauthenticated viewers. Both are banned internal fields per CLAUDE.md. File: `src/app/api/matches/route.ts` GET handler response map. Fix: strip `loggerId` and `assignedLoggers` from the public DTO. If an admin caller needs assignment data, return it conditionally based on `authUser.role`. Filed: 2026-06-08. Found by: flow-checker during `b1a6ec9` review.
 
 ## Tech Debt

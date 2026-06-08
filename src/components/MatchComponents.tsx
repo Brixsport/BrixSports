@@ -40,7 +40,7 @@ export function MatchCard({ match }: { match: Match }) {
       <div className="relative z-10 w-full transition-all group-hover:-translate-y-2">
         <div className="flex items-center justify-between mb-4">
           <span className="text-[10px] font-bold tracking-[0.2em] text-white/40 uppercase bg-white/5 px-3 py-1 rounded-full border border-white/5">
-            {match.competition}
+            {(match as any).round ? `${match.competition} · ${(match as any).round}` : match.competition}
           </span>
           <div className="flex items-center gap-1.5 text-xs text-primary font-bold">
             <span className="relative flex h-2 w-2">
@@ -142,7 +142,7 @@ export function MatchRow({ match }: { match: Match }) {
 
       <div className="flex items-center gap-4">
         <div className="hidden lg:block text-right">
-          <p className="text-[10px] font-bold text-white/30 uppercase tracking-wider">{match.competition}</p>
+          <p className="text-[10px] font-bold text-white/30 uppercase tracking-wider">{(match as any).round ? `${match.competition} · ${(match as any).round}` : match.competition}</p>
           <p className="text-[11px] text-white/50">{match.venue}</p>
         </div>
         <div className="h-8 w-[1px] bg-white/5 hidden lg:block"></div>
