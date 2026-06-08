@@ -263,6 +263,23 @@ Summarize briefly:
 
 ---
 
+## Git Branching Rules
+
+```
+main        ← production (Vercel prod, prod Turso DB)
+dev         ← staging (Vercel staging, staging Turso DB)
+feature/*   ← branch off dev, merge back to dev via PR
+hotfix/*    ← branch off main, merge to main first, then merge to dev
+```
+
+- **All new work branches off `dev`** — never branch feature work off `main`
+- **No direct commits to `main`** — PRs only, merged from `dev` or `hotfix/*`
+- **Schema migrations: staging first** — run `db:push` against staging DB and verify before running against prod
+- **Hotfixes** — branch off `main`, fix, merge to `main`, then immediately merge or cherry-pick to `dev` to keep branches in sync
+- `dev` must always be deployable — do not merge broken code to `dev`
+
+---
+
 ## Cross-Project Knowledge
 Read at session start: ~/.claude/knowledge/global-patterns/patterns.md
 Apply all anti-patterns, settled decisions, and stack gotchas recorded there.
