@@ -3,6 +3,7 @@ import { db } from '@/db';
 import { bracketNodes, teams, matches } from '@/db/schema';
 import { eq, and, sql } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
+import { getAuthUser } from '@/lib/auth';
 
 // GET /api/brackets - Get bracket structure for a competition
 export async function GET(request: NextRequest) {
@@ -139,6 +140,14 @@ export async function GET(request: NextRequest) {
 // POST /api/brackets - Create bracket structure
 export async function POST(request: NextRequest) {
     try {
+        const authUser = await getAuthUser(request);
+        if (!authUser) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+        if (authUser.role !== 'admin') {
+            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+        }
+
         const body = await request.json();
         const { competition, competitionId, sport, rounds } = body;
 

@@ -1,5 +1,6 @@
 # BrixSports — Staging Environment Plan
-**Status:** PROPOSED — not implemented
+**Status:** IN PROGRESS — branch created, Sentry env tagging done
+**Repo:** github.com/Brixsport/BrixSports
 **Filed:** 2026-06-07
 **Relates to:** BACKLOG-005 Phase 1
 

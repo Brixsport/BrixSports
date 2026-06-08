@@ -7,9 +7,18 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
 import { matches } from '@/db/schema';
 import { eq, inArray, sql } from 'drizzle-orm';
+import { getAuthUser } from '@/lib/auth';
 
 export async function PATCH(request: NextRequest) {
     try {
+        const authUser = await getAuthUser(request);
+        if (!authUser) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+        if (authUser.role !== 'admin') {
+            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+        }
+
         const body = await request.json();
         const { ids, updates } = body;
 
@@ -28,7 +37,7 @@ export async function PATCH(request: NextRequest) {
         if (updates.status) updateData.status = updates.status;
         if (updates.venue) updateData.venue = updates.venue;
         if (updates.competition) updateData.competition = updates.competition;
-        if (updates.loggerId !== undefined) updateData.loggerId = updates.loggerId;
+        // loggerId intentionally excluded — logger assignment must go through the dedicated assign/remove-logger endpoints
 
         // Perform bulk update
         const result = await db

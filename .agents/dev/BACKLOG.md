@@ -41,9 +41,70 @@
 - **BUG-011**: `playerStats` data corruption — 718 goals vs 133 appearances (~5.4 goals/appearance). Likely caused by duplicate backfill runs without deduplication. Needs investigation before any further backfill runs.
 - **BUG-012**: Event type casing mismatch — rating calculator uses `'GOAL'`, `'SAVE'`, `'BLOCK'` (uppercase) but `FootballLogger` dispatches `'Goal'`, `'Save'`, `'Block'` (PascalCase). Breaks all rating calculations for live-logged matches.
 
+- ~~**BUG-015** *(CRITICAL)*: `src/app/api/matches/[id]/route.ts` PATCH handler — no `getAuthUser` check. Fixed: `getAuthUser(request)` added before body read. Admin passes through; logger role verified against `isLoggerAssigned(matchId, authUser.id)`. Returns 401/403. Resolved: 2026-06-08.~~
+
+- ~~**BUG-016** *(HIGH)*: `src/app/api/competitions/route.ts` POST handler — no `getAuthUser` check. Fixed: `getAuthUser(request)` + `role === 'admin'` added before body read. Resolved: 2026-06-08.~~
+
+- ~~**BUG-017** *(HIGH)*: Three debug/test routes with no auth gate deleted:
+  - `src/app/api/notifications/debug/route.ts` — DELETED
+  - `src/app/api/notifications/test/route.ts` — DELETED
+  - `src/app/api/email/test/route.ts` — DELETED
+  Note: `PushNotificationDebugger.tsx` still calls `/api/notifications/debug` and `/api/notifications/test` — will 404. Track as follow-up: remove those fetch calls from the component. Resolved: 2026-06-08.~~
+
+- ~~**BUG-018** *(MEDIUM — NDPR)*: `GET /api/matches/[id]` leaking `approvalStatus`, `managerNotes`, `loggerId`, `approvedBy`, `approvedAt` in public response. Fixed: explicit destructure excludes all banned fields before response is returned. Resolved: 2026-06-08.~~
+
+- ~~**BUG-019** *(MEDIUM)*: `GET /api/admin/infrastructure` and `GET /api/analytics/system` — middleware-only auth. Fixed: `getAuthUser(request)` + `role === 'admin'` added to both handlers. Resolved: 2026-06-08.~~
+
+- ~~**BUG-020** *(MEDIUM — Critical Flow C)*: `/live` page fetched `/api/matches` once on mount only. Fixed: polling interval already existed at 30s — changed to 15s. Interval is cleared on unmount. Stopgap until WebSocket subscription lands on the public viewer. Resolved: 2026-06-08.~~
+
+- **BUG-021** *(MEDIUM)*: `src/app/api/notifications/subscribe/route.ts` — `POST /api/notifications/subscribe` has no auth gate. Any unauthenticated caller can register a push subscription endpoint. Fix: add `getAuthUser(request)` before processing subscription. Filed: 2026-06-08. Source: SYSTEM_AUDIT.md §9 #8.
+
+- **BUG-022** *(MEDIUM — Performance)*: Unbounded queries missing `.limit()` clause:
+  - `GET /api/competitions` — `src/app/api/competitions/route.ts`
+  - `GET /api/events` GET handler — `src/app/api/events/route.ts`
+  - `GET /api/matches/[id]/events` — `src/app/api/matches/[id]/events/route.ts`
+  - Various competition sub-queries using `Promise.all`
+  Same pattern as BUG-005. Fix: add `.limit()` to each. Filed: 2026-06-08. Source: SYSTEM_AUDIT.md §10.
+
+- **BUG-023** *(LOW)*: `src/db/schema-nesa-registrations.ts` references `players` and `organizations` tables without importing them. Will crash if the table is ever migrated or queried. Fix: add missing imports or delete the schema file if NESA registration is backscoped. Filed: 2026-06-08. Source: SYSTEM_AUDIT.md §9 #11.
+
+- **BUG-024** *(LOW)*: Duplicate match detail routes — `/match/[id]` (`src/app/match/[id]/page.tsx`) and `/matches/[id]` (`src/app/matches/[id]/page.tsx`) both exist. One is likely legacy. Audit to confirm which is canonical (check all internal links and nav references), delete the other. Filed: 2026-06-08. Source: SYSTEM_AUDIT.md §2.
+
+- **BUG-026** *(MEDIUM — PWA/Cache)*: On direct page URL visits, CSS fails to render — page loads as unstyled raw HTML. Likely cause: service worker or PWA cache is not caching the CSS bundle correctly, or the cache manifest is stale. Symptom only appears on direct URL visit (hard nav), not on client-side route transitions.
+
+  Investigate:
+  - Service worker registration and cache strategy (is CSS included in the precache manifest?)
+  - `next.config.ts` PWA config (if `next-pwa` is installed)
+  - Whether the issue reproduces on staging or prod only, or both
+  - Whether a hard refresh (Ctrl+Shift+R) resolves it temporarily (confirms cache root cause)
+
+  Filed: 2026-06-08. Found by: manual staging QA.
+
+- **BUG-025** *(MEDIUM — NDPR)*: `GET /api/matches` public list response exposes `assignedLoggers` full object and `loggerId` field to unauthenticated viewers. Both are banned internal fields per CLAUDE.md. File: `src/app/api/matches/route.ts` GET handler response map. Fix: strip `loggerId` and `assignedLoggers` from the public DTO. If an admin caller needs assignment data, return it conditionally based on `authUser.role`. Filed: 2026-06-08. Found by: flow-checker during `b1a6ec9` review.
+
+### BACKLOG-034 — Pre-Prod Clearance Script (Tier 1 → CI Gate)
+**Status:** TIER 1 COMPLETE — script live at `dev/pre-prod-check.ts`
+**Priority:** High
+**Filed:** 2026-06-08
+
+#### What was built
+`dev/pre-prod-check.ts` — automated pre-merge clearance script. Run manually before every PR to `main`. Checks:
+- Block 1: Auth gates (5 protected endpoints → 401 unauthenticated)
+- Block 2: `/api/matches` response shape — banned NDPR fields absent, `round` present
+- Block 3: DB integrity (null competitionId, dirty strings, entry counts)
+- Block 4: Round distribution (normalisation complete)
+- Block 5: Expected competitions present
+
+Exit 0 = `[CLEAR TO MERGE]`. Exit 1 = `[BLOCKED]`. Ready for CI integration with zero changes.
+
+#### Tier 2 — When BACKLOG-021 (GitHub Actions) is live
+Convert to `.github/workflows/pre-prod-check.yml`. Trigger on PR to `main`. Pass staging env vars from GitHub Secrets. No script changes needed.
+
+---
+
 ## Tech Debt
 
-- **TD-001**: Create `src/lib/env.ts` — Centralize all `process.env` reads into a single validated config. Currently 29 env vars are scattered across 30+ files with inconsistent fallbacks and no startup validation. Should use Zod to parse and fail fast on missing required keys.
+- **TD-001** *(IN PROGRESS)*: `src/lib/env.ts` created — typed `env` object and `validateEnv()` startup check in place. `middleware.ts` migrated to use `env.jwtSecret` and `env.isStaging`. Remaining work: migrate all other `process.env` reads across 30+ files, add Zod validation. Full migration deferred — do not scatter `process.env` reads in new code from this point forward.
 - **TD-002**: Deduplication for event logging submissions on slow connections to prevent double-tap glitches.
 - **TD-003**: Match status transitions need a proper state machine (PENDING → LIVE → FINISHED) with automated triggers.
 - **TD-004**: Update `.env.example` to match the actual 29 keys discovered in the codebase (currently only lists 16).
@@ -424,33 +485,34 @@ is in place:
 ---
 
 ### BACKLOG-017 — Missing BUSALYMPICS Match Scores (Partially Resolved)
-**Status:** PARTIAL — fixtures in DB as UPCOMING, scores still needed
-**Priority:** HIGH — standings still blocked until scores confirmed
+**Status:** PARTIAL — 1 of 3 confirmed, 2 remain (both MD3)
+**Priority:** HIGH — standings still blocked until all scores confirmed
 **Filed:** 2026-06-07
-**Updated:** 2026-06-07
+**Updated:** 2026-06-08
 
 #### Status
-All 3 fixtures inserted as `status: UPCOMING` on 2026-06-07 via
+All 3 fixtures were inserted as `status: UPCOMING` on 2026-06-07 via
 `dev/fix-busalympics-remaining-fixtures.ts`. All 7 BUSALYMPICS
-fixtures now exist in the DB. Standings unblocked once scores are
-confirmed and rows PATCHed to FINISHED.
+fixtures now exist in the DB.
 
-#### Inserted fixture IDs
+**MD2 G1 CONFIRMED — 2026-06-08:**
+`a9CtLwotaXyfsfMf2odAM` PATCHed to FINISHED. COLNAS 1–2 COLENG.
 
-| ID | Matchday | Home | Away | Date |
-|----|----------|------|------|------|
-| `a9CtLwotaXyfsfMf2odAM` | MD2 | COLNAS | COLENG | 2026-04-22 |
-| `_9nntLoOZZOZGzja8EQE9` | MD3 | COLNAS | COLENVS | 2026-04-26 |
-| `y3KcCGtHA7N7MybKTHX5K` | MD3 | COLMANS | COLENG | 2026-04-29 |
+#### Fixture IDs — remaining
+
+| ID | Matchday | Home | Away | Date | Status |
+|----|----------|------|------|------|--------|
+| `_9nntLoOZZOZGzja8EQE9` | MD3 G1 | COLNAS | COLENVS | 2026-04-26 | **UPCOMING — score needed** |
+| `y3KcCGtHA7N7MybKTHX5K` | MD3 G2 | COLMANS | COLENG | 2026-04-29 | **UPCOMING — score needed** |
 
 #### Remaining action
 Once scores confirmed from physical records:
 1. PATCH each match: `{ status: "FINISHED", homeScore: X, awayScore: Y }`
-2. Run standings recalculation for BUSALYMPICS (`9q8LMVqW8KAtF4BJBlyk_`).
+2. Then run BACKLOG-033 (standings recalculation for `9q8LMVqW8KAtF4BJBlyk_`).
 
 #### Notes
 - Do not estimate or backfill with placeholder scores
-- Existing 4 FINISHED fixtures verified: all matchday/round values correct
+- Do not run standings until BOTH MD3 fixtures are FINISHED (see BACKLOG-033)
 
 ---
 
@@ -736,37 +798,31 @@ existing profile.
 
 ---
 
-### BACKLOG-007 — Fix Orphaned Intercollege Teams
-**Status:** OPEN  
+### ~~BACKLOG-007 — Fix Orphaned Intercollege Teams~~
+**Status:** RESOLVED — 2026-06-07 (Session 4)  
 **Priority:** High  
 **Filed:** 2026-06-05  
 
-#### Problem
-4 intercollege teams (CNAS, CENG, CMANS, CENVS) were created with `ownerOrganizationId = null`. They are orphaned from the org hierarchy. The corresponding org records (COLNAS, COLENG, COLMANS, COLENVS) exist in the `organizations` table but are not linked.
-
-#### Required Changes
-UPDATE each of the 4 teams to set the correct `ownerOrganizationId` from the `organizations` table. Run as a targeted script — do not use the bulk backfill.
-
-#### Notes
-- Must be done before BACKLOG-008 (competition_team_entries)
-- Confirm org IDs from live DB before running UPDATE
+All 4 teams linked to their org via `dev/fix-backlog007.ts`. Verified live 2026-06-08:
+- `mhXc8I0hBxe5W6eCw3do9` (College of Natural & Applied Sciences / CNAS) → `org_org_bells-university-colnas`
+- `k6BgZFG_mtatQ11NZNQb9` (College of Engineering / CENG) → `org_org_bells-university-coleng`
+- `ISzKeGGXuvW2h5QGmnWcp` (College of Management Sciences / CMANS) → `org_org_bells-university-colmans`
+- `U6R7aZSXNvA0iMsdVi3XV` (College of Environmental Sciences / CENVS) → `org_org_bells-university-colenvs`
 
 ---
 
-### BACKLOG-008 — Enrol Intercollege Teams in Competitions
-**Status:** OPEN  
+### ~~BACKLOG-008 — Enrol Intercollege Teams in Competitions~~
+**Status:** RESOLVED — 2026-06-07 (Session 4)  
 **Priority:** High  
 **Filed:** 2026-06-05  
 
-#### Problem
-`competition_team_entries` table has 0 rows. All 236 teams and all 3 competitions exist but no team is formally enrolled in any competition via the join table. The 4 intercollege teams need entries created once their org links (BACKLOG-007) are fixed.
+4 rows inserted into `competition_team_entries` via `dev/fix-backlog008.ts`. Verified live 2026-06-08:
+- College of Engineering → BUSALYMPICS (FOOTBALL) (`9q8LMVqW8KAtF4BJBlyk_`)
+- College of Environmental Sciences → BUSALYMPICS (FOOTBALL)
+- College of Management Sciences → BUSALYMPICS (FOOTBALL)
+- College of Natural & Applied Sciences → BUSALYMPICS (FOOTBALL)
 
-#### Required Changes
-After BACKLOG-007 is resolved, insert rows into `competition_team_entries` for each intercollege team → competition pairing.
-
-#### Notes
-- Blocked by BACKLOG-007
-- Verify correct competition IDs from live DB before inserting
+All entries: `sport: Football`, `gender: male`, `status: registered`
 
 ---
 
@@ -834,3 +890,767 @@ Run a dep audit. Pin all `^` and `~` prefixed production deps in `package.json` 
 
 #### Required Changes
 Audit all `stripe` imports. If unused, remove the package. If wired up partially, document what exists and leave dormant until Phase 7 (Revenue & Monetisation).
+
+---
+
+### BACKLOG-020 — Phase 6: Architecture, Audit & Backscoping
+**Status:** OPEN  
+**Priority:** High  
+**Filed:** 2026-06-08  
+**Depends on:** Phase 5 system audit (BACKLOG-005 Phase 5)
+
+---
+
+#### Block 1 — Modular Monolith Enforcement
+
+##### Problem
+The codebase has no enforced module boundaries. API routes, DB queries,
+and business logic are intermixed across folders with no ownership model.
+As the codebase grows, cross-module coupling will make changes
+increasingly risky and refactoring expensive.
+
+##### Proposed Module Boundaries
+
+| Module | Owns |
+|--------|------|
+| `match-engine` | matches, matchEvents, scoring, standings, matchLoggerAssignments |
+| `identity` | auth, users, loggers, players, teams, organizations |
+| `competition` | competitions, competition_team_entries, brackets, eligibility |
+| `media` | news/articles, highlights, livestream, ads |
+| `admin` | all `/api/admin/*` and `/admin/*` routes — internal module only |
+
+##### Rules per module
+- Each module owns its DB tables — no other module queries them directly
+- Cross-module data access goes through an explicit internal API
+  (e.g. `match-engine` calls `identity.getPlayer(id)`, not
+  `db.select().from(players)` directly)
+- No circular dependencies between modules
+
+##### Implementation
+1. Map current code to proposed modules (output of Phase 5 audit)
+2. Establish folder structure: `src/modules/match-engine/`, etc.
+3. Migrate routes and logic into module folders incrementally
+4. Enforce boundaries with `eslint-plugin-boundaries` or path alias
+   restrictions in `tsconfig.json`
+5. Document ownership in a `MODULES.md` at project root
+
+##### Notes
+- This is a large, multi-session refactor — do not attempt in one go
+- Prepares codebase for potential future microservice extraction if
+  scale demands it, but does NOT commit to that path
+- Blocked by: Phase 5 full feature audit must complete first so we
+  know what we're actually reorganising
+- Start with `match-engine` and `identity` — highest coupling risk
+
+---
+
+#### Block 2 — Full Feature Audit (4-State Matrix)
+
+##### Problem
+No complete inventory exists of what is actually working vs broken vs
+partially built vs not built. Decisions about what to fix, backscope,
+or deprecate are being made without a full picture.
+
+##### Audit Method
+For every feature visible in the codebase and live UI, assign one of:
+
+| State | Meaning |
+|-------|---------|
+| **WORKING** | Tested end-to-end, complete, no known bugs |
+| **PARTIAL** | Core flow works, but meaningful pieces are missing or stubbed |
+| **BROKEN** | Exists in nav/code but produces errors or wrong output in normal use |
+| **NOT BUILT** | Schema or scaffold exists, no functioning implementation |
+
+##### Scope
+- All public-facing pages (`/`, `/livescore`, `/matches`, `/players`, `/standings`, etc.)
+- All admin pages (`/admin/*`)
+- All API routes (`/api/*`)
+- All DB tables (does a corresponding UI/API use them?)
+- All components marked NEW, WIP, or known to be stubs
+
+##### Decision per PARTIAL/BROKEN feature
+For each feature in that state, evaluate and decide:
+- **Fix now** — if it's in a critical user flow and the fix is scoped
+- **Backscope** — if it's a non-critical feature not ready for users
+  (see Block 3)
+- **Deprecate** — if it will never be built or has been superseded
+
+##### Output
+A `FEATURE_AUDIT.md` in `.agents/dev/` with the full matrix, decision
+column, and owner/blocker notes. This becomes the master reference for
+Phase 6 and Phase 7 planning.
+
+##### Notes
+- Run this audit on the `dev` branch against the staging deployment
+  once staging is live — not against prod
+- Every BROKEN feature visible to users is a live reputation risk
+- Relates to: BACKLOG-005 Phase 5, Block 1 (module boundaries)
+
+---
+
+#### Block 3 — Backscoping
+
+##### Problem
+Features that are PARTIAL or BROKEN but not worth fixing immediately
+are currently live in the UI, creating a degraded user experience and
+a false impression of the platform's capability.
+
+##### Backscoping Rules
+1. Feature is removed from navigation and routing (returns 404 or
+   redirects to a `/coming-soon` stub)
+2. The underlying code is NOT deleted — only disabled/hidden
+3. Every backscoped feature is logged in this backlog with:
+   - Status: `BACKSCOPED`
+   - What's needed to reinstate it
+   - Who/what blocks reinstatement
+
+##### Implementation
+- Audit nav links and remove PARTIAL/BROKEN destinations
+- Add a simple `ComingSoon` page component for 404 fallbacks
+- Use Next.js `notFound()` or a redirect in the page component —
+  no complex feature-flag infrastructure needed at this stage
+
+##### Known Backscoping Candidates
+
+| Feature | Current state | Blocker to reinstate |
+|---------|--------------|---------------------|
+| Manager page | Confirmed stub — no real content | Full manager center feature (Phase 7) |
+| `next-auth` remnants | Vestigial package, dead routes | BACKLOG-009 (audit + remove) |
+| Stripe integration | Installed, unused, out of scope | Phase 7 (Revenue & Monetisation) |
+| Any admin page missing auth gate | Security risk if any remain | Audit needed — check after Phase 5 |
+| Lineup Builder | Marked NEW, unknown stability 🔴 | Stability audit + test on staging |
+| Ads feature | Recently added, untested under load 🔴 | Load test on staging |
+| Transfers page | Intersects BUG-004 🔴 | BUG-004 full resolution |
+| News / articles | Intersects BUG-006 XSS 🔴 | BUG-006 complete + XSS audit |
+
+##### Notes
+- Backscoping is NOT the same as deleting — the code stays, users just
+  can't reach broken features
+- Priority: backscope before Phase 7 revenue work — no point monetising
+  a platform with visible broken pages
+- Candidates marked 🔴 are already flagged High Volatility in CLAUDE.md
+
+---
+
+#### Block 4 — Per-PR Turso DB Branching (CI Automation)
+
+##### Problem
+Every PR that touches DB logic currently shares the staging database.
+Concurrent PRs can corrupt each other's test state and there is no
+isolation between branches at the data layer.
+
+##### Solution
+When a PR is opened against `dev`, a GitHub Action automatically
+creates a Turso DB branch from the production DB snapshot. The Vercel
+preview deployment for that PR is configured to use the branched DB.
+When the PR is merged or closed, the branch is automatically deleted.
+Zero manual setup. Full isolation per PR.
+
+##### Implementation
+
+**Workflow 1 — Branch creation:**
+`.github/workflows/turso-branch-create.yml`
+- Trigger: `pull_request` events `opened`, `reopened`
+- Steps:
+  1. Call Turso Platform API to create a branch from the parent DB
+     named `pr-{PR_NUMBER}` (e.g. `pr-42`)
+  2. Retrieve the branched DB URL and generate an auth token
+  3. Call Vercel API to set env vars on the PR's preview deployment:
+     `TURSO_CONNECTION_URL` → branched DB URL
+     `TURSO_AUTH_TOKEN` → branched DB token
+
+**Workflow 2 — Branch deletion:**
+`.github/workflows/turso-branch-delete.yml`
+- Trigger: `pull_request` event `closed` (covers both merge and close)
+- Steps:
+  1. Call Turso Platform API to delete the `pr-{PR_NUMBER}` branch
+  2. No Vercel cleanup needed — preview deployments expire automatically
+
+##### Required GitHub Secrets
+
+| Secret | Purpose |
+|--------|---------|
+| `TURSO_API_TOKEN` | Turso Platform API auth (create/delete branches) |
+| `TURSO_ORG_NAME` | Turso organisation slug |
+| `TURSO_DB_NAME` | Parent DB name to branch from |
+| `VERCEL_TOKEN` | Vercel API auth (set preview env vars) |
+| `VERCEL_PROJECT_ID` | Target Vercel project |
+| `VERCEL_TEAM_ID` | Vercel team (if applicable) |
+
+##### Constraints
+- Branch lifecycle is tied strictly to the PR — no permanent DB changes
+- Branch is a snapshot from prod at creation time — not a live replica
+- Schema migrations against a PR branch must be run explicitly in CI
+  if the PR includes a `db:push` step
+- The parent DB used for branching should be the staging DB, not prod,
+  once staging is established — avoids exposing prod data in preview envs
+
+##### Blocked by
+- Staging environment must be stable and verified (BACKLOG-005 Phase 1)
+- GitHub Actions must be enabled on the new org repo
+  (`github.com/Brixsport/BrixSports`)
+- `TURSO_API_TOKEN` requires Turso Pro plan (branching is not on free tier)
+
+---
+
+#### Block 5 — Modular Monolith Structure (Refined)
+
+##### Problem
+The codebase has no enforced module boundaries. All routes, DB access,
+and business logic live in a flat `src/app/` and `src/lib/` structure
+with no ownership model. As the codebase grows this becomes a source
+of coupling, unintended side-effects, and slow onboarding.
+
+##### Proposed Modules
+
+| Module | Owns |
+|--------|------|
+| `match-engine` | matches, matchEvents, scoring, standings, live logging, WebSocket |
+| `identity` | auth, users, loggers, players, teams, orgs, affiliations |
+| `competition` | competitions, competition_team_entries, brackets, draws |
+| `media` | news/articles, highlights, livestream, ads |
+| `admin` | all `/api/admin/*` and `/admin/*` routes — internal-only module |
+
+##### Rules per Module
+- Owns its DB tables — no other module queries them directly via Drizzle
+- Exposes a clean internal API: named service functions, not raw queries
+  (e.g. `matchEngine.getMatchWithTeams(id)` not
+  `db.select().from(matches).where(eq(matches.id, id))` called from
+  another module)
+- No barrel imports across module boundaries — each module has an
+  explicit public surface (`index.ts` or `api.ts`)
+- No circular dependencies between modules
+
+##### Folder Structure (target)
+```
+src/
+  modules/
+    match-engine/
+      api/          ← API route handlers
+      services/     ← business logic
+      db/           ← queries scoped to this module's tables
+      index.ts      ← public surface
+    identity/
+    competition/
+    media/
+    admin/
+  shared/
+    lib/            ← utilities with no module ownership
+    components/     ← UI components used across modules
+    db/             ← schema definitions (read-only from modules)
+```
+
+##### Enforcement
+- `eslint-plugin-boundaries` configured with module import rules
+- Or: path alias restrictions in `tsconfig.json` — each module only
+  imports from `@/shared` and its own subtree
+- CI lint step fails on boundary violations
+
+##### Implementation Order
+1. Phase 5 audit completes — all features mapped
+2. Draw module boundary map (which files belong where)
+3. Create folder structure, move files incrementally
+4. Add lint rule, fix all violations
+5. Document ownership in `MODULES.md` at project root
+
+##### Notes
+- This is NOT a rewrite — it is a folder restructure and import
+  discipline pass. Existing logic does not change.
+- Start with `match-engine` — highest coupling risk, most critical flows
+- `identity` second — auth and player data are referenced everywhere
+- `media` and `admin` are the most self-contained — easiest to move last
+- Blocked by: Block 6 (full feature audit) must complete first
+
+---
+
+#### Block 6 — Full Feature Audit (Phase 5 Entry Point)
+
+##### Problem
+No complete inventory exists of what the system actually does. Every
+architectural decision, refactor plan, and production sign-off requires
+knowing exactly what is WORKING, PARTIAL, BROKEN, or NOT BUILT. Without
+this map, Phase 5 work is blind.
+
+##### Scope
+
+**High-Level Design sweep:**
+- Every public route — what it renders, what data it fetches, who can
+  access it
+- Every admin route — what it manages, what auth it requires
+- Every API endpoint — HTTP method, auth gate, input validation, query
+  safety (bounded? parameterised?), response shape (DTO or raw row?)
+- Every WebSocket event — emitter, listeners, payload shape
+- Every DB table — is it read anywhere? written anywhere? orphaned?
+- Every installed package — is it actively used? by what? safe to remove?
+
+**Low-Level Design sweep:**
+- Every component with client state — is it correct? does it handle
+  error and loading states?
+- Every form — validation present? error surfaced to user? submission
+  confirmed server-side before success state shown?
+- Every DB query — bounded with `.limit()`? correctly typed? uses index?
+- Every auth check — present at handler level (not just middleware)?
+  correct role verified? server-side only?
+
+##### Output
+A `SYSTEM_AUDIT.md` in `.agents/dev/` containing:
+
+| Section | Contents |
+|---------|---------|
+| Feature matrix | Every feature tagged WORKING / PARTIAL / BROKEN / NOT BUILT |
+| Backscoping candidates | PARTIAL/BROKEN features to pull from live UI until fixed |
+| Security gaps | Auth, validation, or exposure issues not already in bug backlog |
+| Dead code | Orphaned DB tables, unused packages, unreachable routes |
+| Priority fix list | Top 10 items to address before production sign-off |
+
+##### Prerequisites for This Audit
+- Staging environment live and verified (BACKLOG-005 Phase 1)
+- Run against `dev` branch + staging deployment — never against prod directly
+- The auditor must have admin access to the staging app to manually
+  exercise every route
+
+##### This Audit Unblocks
+- Block 5 (modular monolith boundary drawing)
+- BACKLOG-005 Phase 6 (tier validation — MVP vs production readiness)
+- BACKLOG-005 Phase 8 (E2E testing — can't write tests for unknown flows)
+- Production launch sign-off
+- Backscoping execution (Block 3)
+
+---
+
+### BACKLOG-021 — GitHub Rulesets (Branch Protection)
+**Status:** OPEN — implement after PR guard is tested  
+**Priority:** High  
+**Filed:** 2026-06-08  
+**Blocked by:** PR guard workflow (`pr-guard.yml`) must be live and verified first
+
+#### Required Changes
+Configure GitHub Rulesets on the `Brixsport/BrixSports` repo:
+
+**`main` ruleset:**
+- Require PR before merging (no direct pushes)
+- Require at least 1 approving review
+- Require status checks to pass: `check-branch-target` (pr-guard)
+- Dismiss stale reviews on new push
+- Block force pushes
+
+**`dev` ruleset:**
+- Require PR before merging (no direct pushes)
+- Require status checks to pass: `check-branch-target` (pr-guard)
+- Block force pushes
+- Allow admins to bypass for hotfix emergency merges
+
+#### Notes
+- Rulesets are configured in GitHub repo Settings → Rules → Rulesets
+- Do not enable required reviews on `dev` until the team is larger —
+  solo developer workflow still needs merge ability without a second reviewer
+- Test `pr-guard.yml` manually on a dummy PR before locking down with rulesets
+
+---
+
+### BACKLOG-022 — Hotfix Auto-Sync (main → dev)
+**Status:** OPEN — implement carefully with conflict detection  
+**Priority:** Medium  
+**Filed:** 2026-06-08
+
+#### Problem
+When a hotfix is merged to `main`, `dev` can drift and cause conflicts
+on the next feature PR. Currently there is no automated sync.
+
+#### Required Changes
+GitHub Action: `.github/workflows/hotfix-sync.yml`
+- Trigger: `push` to `main`
+- Attempts `git merge main` into `dev`
+- If clean merge: pushes to `dev` automatically
+- If conflict: opens a GitHub Issue titled
+  "⚠️ Auto-sync failed: main → dev conflict — manual merge required"
+  and posts the conflicting files. Does NOT force-push or silently fail.
+
+#### Notes
+- Conflict detection is non-negotiable — silent failure here would
+  cause divergence that is painful to resolve later
+- The auto-sync commit message should be:
+  `chore: sync main → dev after hotfix [hotfix branch name]`
+- Blocked by: BACKLOG-021 (rulesets) — auto-sync should only run
+  after branch protection is in place so it cannot accidentally
+  push broken code to `dev`
+
+---
+
+### BACKLOG-023 — CONTRIBUTING.md — Branch Workflow Documentation
+**Status:** OPEN  
+**Priority:** Medium  
+**Filed:** 2026-06-08
+
+#### Required Changes
+Rewrite `CONTRIBUTING.md` to accurately document the current branching
+model and remove all placeholder text (`YOUR_USERNAME`, `ORIGINAL_OWNER`).
+
+Sections to include:
+1. **Branch model** — diagram of `main` / `dev` / `feature/*` / `hotfix/*`
+2. **Naming conventions** — `feature/short-description`, `fix/bug-name`,
+   `hotfix/critical-fix-name`
+3. **PR rules** — feature/* → dev, hotfix/* → main, what the PR guard
+   checks, what happens on violation
+4. **Merge strategy** — squash merge preferred for features,
+   merge commit for hotfixes (to preserve history)
+5. **Commit format** — `type(scope): description` as per CLAUDE.md
+6. **What to do after a hotfix** — remind contributor that main → dev
+   sync is automated but to watch for the conflict issue notification
+
+#### Notes
+- The current `CONTRIBUTING.md` has generic placeholder text from
+  project scaffolding — it does not reflect the actual workflow
+- Cross-reference CLAUDE.md Git Branching Rules section
+
+---
+
+### BACKLOG-024 — DNS CNAME: staging.brixsports.com
+**Status:** OPEN — pending DNS access confirmation  
+**Priority:** Low (can use Vercel auto-subdomain in the interim)  
+**Filed:** 2026-06-08
+
+#### Required Changes
+1. In the DNS provider for `brixsports.com`:
+   - Add CNAME record: `staging` → `cname.vercel-dns.com`
+   - Or use Vercel's A record approach if CNAME at root is required
+2. In the Vercel staging project dashboard:
+   - Add custom domain: `staging.brixsports.com`
+   - Vercel will issue an SSL certificate automatically (Let's Encrypt)
+3. Update `STAGING_PLAN.md` and `NEXT_PUBLIC_APP_URL` staging env var
+   to `https://staging.brixsports.com` once verified
+
+#### Notes
+- Until DNS is set up, the Vercel auto-generated subdomain
+  (e.g. `brixsports-staging.vercel.app`) is sufficient for internal use
+- Confirm: does `brixsports.com` DNS live in Vercel, Cloudflare,
+  or another provider? This determines the exact steps
+- SSL is handled by Vercel automatically — no manual cert work needed
+
+---
+
+### BACKLOG-025 — Google OAuth Staging Config
+**Status:** OPEN  
+**Priority:** Medium  
+**Filed:** 2026-06-08  
+**Scope:** Staging only (until resolved)  
+**Blocked by:** Google Console access not yet available
+
+#### Problem
+The staging deployment will fail Google OAuth login until the staging
+URL is added as an authorized redirect URI in the Google OAuth app.
+Google rejects any redirect URI not explicitly whitelisted — the staging
+Vercel URL will not match the prod OAuth config.
+
+#### Fix Options
+1. **Preferred** — Add staging URL to existing OAuth app:
+   Google Console → APIs & Services → Credentials → OAuth 2.0 Client →
+   Authorized redirect URIs → add `https://staging.brixsports.com/api/auth/callback/google`
+   (and the Vercel preview URL if using auto-subdomain in the interim)
+
+2. **Alternative** — Create a separate OAuth client for staging with its
+   own `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`, set in Vercel
+   staging env vars only.
+
+#### Workaround (until fixed)
+Disable Google login on staging via feature flag or env var:
+- Add `ENABLE_GOOGLE_LOGIN=false` to staging Vercel env vars
+- Gate the Google sign-in button in the UI on this flag
+- Staging users log in with email/password only
+
+#### Notes
+- This does not affect production — prod OAuth config is unchanged
+- Must be resolved before staging is opened to any external testers
+  who rely on Google login
+
+---
+
+### BACKLOG-026 — Broken AWS SES Config (Non-functional Email)
+**Status:** OPEN  
+**Priority:** High — affects production  
+**Filed:** 2026-06-08  
+**Scope:** Production + staging
+
+#### Problem
+`AWS_SES_FROM_EMAIL` is set to the literal string `"AWS_SES_FROM_EMAIL"`
+in the production Vercel environment — this is not a valid email address.
+All email sending via SES is currently broken. Any feature that sends
+email (password reset, notifications) silently fails or errors.
+
+#### Fix
+1. In AWS SES console, verify the intended sender address
+   (e.g. `noreply@brixsports.com`) if not already verified.
+   SES in sandbox mode requires both sender AND recipient to be verified.
+2. Set the correct value in **both** Vercel projects:
+   - Prod: `AWS_SES_FROM_EMAIL=noreply@brixsports.com`
+   - Staging: `AWS_SES_FROM_EMAIL=noreply@brixsports.com`
+   (or a staging-specific address if you want separate sender identity)
+3. Verify email sending works end-to-end after the fix.
+
+#### Related
+- **BACKLOG-010** — audit which of the three installed email providers
+  (SES, Resend, Nodemailer) is actually the active code path before
+  fixing the config. No point fixing SES env vars if Resend is the
+  active sender.
+- BACKLOG-010 should be resolved first or concurrently — identify the
+  live provider, remove the dead ones, then fix the config for the
+  surviving provider only.
+
+#### Notes
+- This is a production bug, not staging-only — fix in prod Vercel env
+  vars as soon as the correct sender address is confirmed
+- Do not commit any real email addresses to source code or `.env.example`
+
+---
+
+### BACKLOG-027 — Railway Staging WebSocket Service Not Created
+**Status:** OPEN  
+**Priority:** Low (staging only — prod unaffected)  
+**Filed:** 2026-06-08  
+**Scope:** Staging
+
+#### Problem
+No separate Railway WebSocket service exists for staging. The staging
+Vercel deployment currently points to the production WS server
+(`NEXT_PUBLIC_WS_URL` in staging env vars references the prod Railway
+service). This means:
+- Live event logging on staging affects prod WS connections
+- Staging load or bugs can destabilise the prod WS server
+- True end-to-end staging isolation is not possible until resolved
+
+#### Fix
+1. In Railway dashboard, create a new service from the `dev` branch of
+   `ws-server/` directory (or deploy the same `ws-server/` code).
+   Name it `brixsports-ws-staging`.
+2. Set environment variables on the staging WS service:
+   - `PORT` (Railway sets this automatically)
+   - `WS_API_KEY` — a different key from prod (generate separately)
+   - `VERCEL_URL` → `https://staging.brixsports.com`
+     (or the Vercel auto-subdomain until DNS is set up)
+3. Copy the deployed Railway URL into the Vercel staging project:
+   - `NEXT_PUBLIC_WS_URL=https://brixsports-ws-staging.railway.app`
+   - `WS_SERVER_URL=https://brixsports-ws-staging.railway.app`
+     (if the app uses a server-side WS URL separately)
+
+#### Impact of not fixing
+- Live event logging is untestable in isolation on staging
+- BACKLOG-019 (post-match automation) cannot be safely tested on staging
+  until the WS server is isolated
+
+#### Notes
+- Both prod and staging WS services must be independently restartable
+  without affecting each other
+- Blocked by nothing — can be set up any time Railway access is available
+- Low priority only because staging itself is not yet fully live;
+  elevate to High once staging deployment is in use
+
+---
+
+### BACKLOG-028 — Backscope Dead/Partial Features from Public Nav
+**Status:** OPEN
+**Priority:** High
+**Filed:** 2026-06-08
+**Source:** SYSTEM_AUDIT.md §11
+
+#### Problem
+Several features are reachable via URL but are either NOT BUILT, DEAD, or
+conflict with the canonical auth system. Users landing on them get broken
+experiences or empty pages.
+
+#### Required Changes
+Remove from navigation and return 404 or redirect to `/` for:
+- `/fpl/*` (Fantasy Premier League) — NOT BUILT, schema + API routes only,
+  no data, not in scope
+- `/predictions` — NOT BUILT, schema + API routes only, not in scope
+- `/scouts` — DEAD, already redirects to `/`, clean up route file entirely
+- `/nesa-registration` — NOT BUILT, no API handler, schema has broken FKs
+- `/auth/signin` — DEAD, vestigial next-auth route, conflicts with `/login`
+- Polls UI (`MatchPoll`, `MatchPollEnhanced`, `CreatePoll`) — DEAD tables,
+  remove from match detail page if surfaced anywhere
+
+#### Rules
+- Code is NOT deleted — only hidden from users
+- Use `notFound()` in page components or remove nav links
+- No feature-flag infrastructure needed at this stage
+- Every backscoped feature logged here with reinstatement blocker
+
+#### Reinstatement Blockers
+| Feature | Blocker |
+|---------|---------|
+| `/fpl/*` | Phase 7 (out of scope) |
+| `/predictions` | Phase 7 (out of scope) |
+| `/scouts` | Delete route — no future use planned |
+| `/nesa-registration` | Full build required (schema + API + admin) |
+| `/auth/signin` | BACKLOG-009 (next-auth removal) |
+| Polls UI | Phase 7 (out of scope) |
+
+---
+
+### ~~BACKLOG-029 — Auth Audit Sweep (Unknown Endpoints)~~
+**Status:** RESOLVED — 2026-06-08
+**Priority:** High
+**Filed:** 2026-06-08
+**Source:** SYSTEM_AUDIT.md §5
+
+#### Problem
+The system audit flagged these endpoints as "auth unknown" — each needs
+`getAuthUser` + correct role check confirmed or added. Until verified,
+these may be open mutation surfaces.
+
+#### Endpoints to Audit
+- `DELETE /api/matches/[id]/remove-logger` — `src/app/api/matches/[id]/remove-logger/route.ts`
+- `GET /api/matches/[id]/loggers` — `src/app/api/matches/[id]/loggers/route.ts`
+- `GET /api/matches/[id]/assigned-loggers` — `src/app/api/matches/[id]/assigned-loggers/route.ts`
+- `POST /api/matches/bulk` — `src/app/api/matches/bulk/route.ts`
+- `PATCH /api/matches/bulk-update` — `src/app/api/matches/bulk-update/route.ts`
+- `POST /api/players/bulk` — `src/app/api/players/bulk/route.ts`
+- `POST /api/players/create-individual` — `src/app/api/players/create-individual/route.ts`
+- `POST /api/brackets` — `src/app/api/brackets/route.ts`
+- `POST /api/transfers` — `src/app/api/transfers/route.ts`
+- `PATCH /api/competitions/[id]` — `src/app/api/competitions/[id]/route.ts`
+- `POST /api/competitions/register` — `src/app/api/competitions/register/route.ts`
+- `POST /api/competitions/register/approve` — `src/app/api/competitions/register/approve/route.ts`
+- `POST /api/competitions/bulk` — `src/app/api/competitions/bulk/route.ts`
+- `POST /api/cloudinary/sign` — `src/app/api/cloudinary/sign/route.ts`
+- `PATCH/DELETE /api/admin/ads/[id]` — `src/app/api/admin/ads/[id]/route.ts`
+- `GET /api/notifications/history` — `src/app/api/notifications/history/route.ts`
+- `GET /api/analytics/loggers` — `src/app/api/analytics/loggers/route.ts`
+
+#### Per-Endpoint Action
+Open each file. Check if `getAuthUser(request)` is called before any DB
+write or sensitive read. Check if the correct role is verified. If missing,
+add auth gate matching the BUG-001/002 pattern. Log result per endpoint
+(auth present / missing / added).
+
+---
+
+### BACKLOG-030 — Clean Up Deprecated mock-data.ts Imports
+**Status:** OPEN
+**Priority:** Low
+**Filed:** 2026-06-08
+**Source:** SYSTEM_AUDIT.md §7
+
+#### Problem
+`src/lib/mock-data.ts` is marked DEPRECATED (migrated 2025-12-30). Three
+components still import from it:
+- `src/components/TopPlayers.tsx`
+- `src/components/MyFeed.tsx`
+- `src/components/MatchComponents.tsx`
+
+The file now exports only types (no actual data), so no runtime breakage
+occurs today — but imports from a deprecated file are misleading and will
+cause confusion when the file is eventually deleted.
+
+#### Required Changes
+For each component:
+1. Check what is imported from mock-data (likely type-only imports)
+2. If type-only, move the type definition inline or to a shared types file
+3. If data-dependent, replace with proper API fetch
+4. Remove the mock-data import
+
+#### Notes
+- If any of these components are part of backscoped features (BACKLOG-028),
+  defer cleanup until reinstatement — no point cleaning up dead code
+- Do not delete `src/lib/mock-data.ts` itself until all imports are removed
+
+---
+
+### BACKLOG-031 — Dead/Heavyweight Package Audit
+**Status:** OPEN
+**Priority:** Low
+**Filed:** 2026-06-08
+**Source:** SYSTEM_AUDIT.md §8
+
+#### Problem
+Several packages in `package.json` are either unused or disproportionately
+heavy for their actual use in the codebase.
+
+#### Packages to Evaluate
+
+**Remove if unused:**
+- `@babel/parser` — not an obvious dependency for this stack. Grep for
+  imports; remove if zero usage outside node_modules.
+- `downloadjs` — trace usage across all files; remove if unused.
+- `dotted-map` — map visualisation package; trace usage, remove if unused.
+
+**Evaluate for lighter alternatives:**
+- `three` + `@react-three/fiber` + `@react-three/drei` — used ONLY in two
+  error page components (`src/components/error/BasketballRimScene.tsx`,
+  `src/components/error/SoccerGoalScene.tsx`). Estimated 500KB+ bundle
+  weight for 404/error pages only. Evaluate replacing with lightweight
+  SVG or CSS animations.
+
+#### Process
+For each package: grep for imports across `src/**`. If zero non-trivial
+imports, remove from `package.json` and run `npm install` to update
+lock file. Test build. Document result.
+
+---
+
+### ~~BACKLOG-032 — Display Round/Matchday Label on Match Cards~~
+**Status:** RESOLVED — 2026-06-08
+**Priority:** Medium
+**Filed:** 2026-06-08
+
+#### Problem
+The `round` field is populated on all matches (e.g. `"Match Day 1"`, `"Match Day 2"`,
+`"Final"`) but is not rendered on the public match card (`/live` page) or the admin
+match list. Viewers and admins have no way to tell which round a match belongs to
+without opening the match detail.
+
+#### Required Changes
+
+1. **Public match card** (`src/app/live/page.tsx`) — add `round` string next to the
+   competition name in the card header.
+   Format: `"BUSALYMPICS · Match Day 2"` or `"BUSALYMPICS · Final"`
+   Only render if `round` is non-null.
+
+2. **Admin match list card** (`src/app/admin/matches/page.tsx`, line ~410) — same
+   treatment in the card header line. `round` is already present in form state —
+   just add it to the display.
+
+3. `matchday` integer is **not** needed in the display — `round` string is sufficient.
+   `matchday` remains useful as a sort key only.
+
+#### Notes
+- `round` column: string (`"Match Day 1"`, `"Final"`, etc.) — render as-is
+- `matchday` column: integer (1, 2, 3) or null (for Final) — sort key only, do not display
+- The `/api/matches` GET response already returns `round` — no API change needed
+- The Final fixture (`_lkHo5y1m6ArqvLsi1ixe`) has `matchday: null` and `round: "Final"` —
+  both cases handled correctly if round is rendered when non-null
+
+---
+
+### BACKLOG-033 — BUSALYMPICS Standings Recalculation
+**Status:** OPEN — blocked on BACKLOG-017 (2 of 3 missing scores still unconfirmed)
+**Priority:** High
+**Filed:** 2026-06-08
+
+#### Problem
+BUSALYMPICS standings cannot be correctly calculated until all fixtures are FINISHED.
+Two MD3 fixtures remain UPCOMING with unconfirmed scores:
+
+| Match ID | Fixture | Round |
+|----------|---------|-------|
+| `_9nntLoOZZOZGzja8EQE9` | COLNAS vs COLENVS | Match Day 3 |
+| `y3KcCGtHA7N7MybKTHX5K` | COLMANS vs COLENG | Match Day 3 |
+
+**Do not run standings recalculation until both MD3 fixtures are FINISHED.**
+Partial standings with 2 UPCOMING games will produce wrong table positions.
+
+#### Required Changes
+
+1. Once MD3 G1 (COLNAS vs COLENVS) score is confirmed:
+   PATCH `_9nntLoOZZOZGzja8EQE9` → `{ status: "FINISHED", homeScore: X, awayScore: Y }`
+
+2. Once MD3 G2 (COLMANS vs COLENG) score is confirmed:
+   PATCH `y3KcCGtHA7N7MybKTHX5K` → `{ status: "FINISHED", homeScore: X, awayScore: Y }`
+
+3. After both are FINISHED, trigger standings recalculation for BUSALYMPICS:
+   `competitionId: 9q8LMVqW8KAtF4BJBlyk_`
+
+#### Notes
+- Do not estimate or backfill with placeholder scores — physical records required
+- BACKLOG-017 must be fully resolved (all 3 missing scores confirmed) before this runs
+- Related: BACKLOG-019 (post-match automation) — once that hook exists, standings
+  recalculation will fire automatically on PATCH to FINISHED. Until then, manual trigger.

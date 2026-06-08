@@ -2,6 +2,7 @@ import * as Sentry from '@sentry/nextjs';
 
 Sentry.init({
   dsn: process.env.NEXT_PUBLIC_SENTRY_DSN,
+  environment: process.env.NEXT_PUBLIC_SENTRY_ENVIRONMENT ?? 'production',
 
   // Replay 10% of sessions, 100% of sessions with an error
   replaysSessionSampleRate: 0.1,

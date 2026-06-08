@@ -1,0 +1,68 @@
+name: PR Branch Target Guard
+
+on:
+  pull_request:
+    types: [opened, reopened, edited]
+
+jobs:
+  check-branch-target:
+    name: Enforce branch target rules
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write  # needed to post comments
+
+    steps:
+      - name: Validate PR target branch
+        id: guard
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+          BASE_REF: ${{ github.base_ref }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          echo "Head branch : $HEAD_REF"
+          echo "Target branch: $BASE_REF"
+
+          VIOLATION=""
+
+          # feature/* and fix/* must target dev only
+          if echo "$HEAD_REF" | grep -qE '^(feature|fix)/'; then
+            if [ "$BASE_REF" != "dev" ]; then
+              VIOLATION="Branch \`$HEAD_REF\` is a \`feature/*\` or \`fix/*\` branch and must target \`dev\`, not \`$BASE_REF\`."
+            fi
+          fi
+
+          # hotfix/* must target main only
+          if echo "$HEAD_REF" | grep -qE '^hotfix/'; then
+            if [ "$BASE_REF" != "main" ]; then
+              VIOLATION="Branch \`$HEAD_REF\` is a \`hotfix/*\` branch and must target \`main\`, not \`$BASE_REF\`."
+            fi
+          fi
+
+          if [ -n "$VIOLATION" ]; then
+            # Post a comment explaining the violation
+            COMMENT=$(cat <<EOF
+## ❌ PR Target Branch Violation
+
+$VIOLATION
+
+**Branching rules for this repo:**
+
+| Branch type | Must target |
+|-------------|-------------|
+| \`feature/*\` | \`dev\` |
+| \`fix/*\` | \`dev\` |
+| \`hotfix/*\` | \`main\` |
+
+Please update the base branch of this PR or open a new PR against the correct target.
+See \`CLAUDE.md\` → Git Governance for the full workflow.
+EOF
+)
+            gh pr comment "$PR_NUMBER" --repo "$REPO" --body "$COMMENT"
+
+            echo "VIOLATION detected — failing job."
+            exit 1
+          else
+            echo "Branch target is correct. No violation."
+          fi

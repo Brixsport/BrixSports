@@ -8,6 +8,8 @@ import { db } from '@/db';
 import { matches, teams, matchEvents, players, bracketNodes, teamForm, headToHead } from '@/db/schema';
 import { eq, desc, sql } from 'drizzle-orm';
 import { playerRatings } from '@/db/schema-ratings';
+import { getAuthUser } from '@/lib/auth';
+import { isLoggerAssigned } from '@/lib/match-logger-helpers';
 
 export async function GET(
     request: NextRequest,
@@ -80,15 +82,32 @@ export async function GET(
             eventsData.map(async (row) => {
                 let relatedPlayer = null;
                 if (row.event.relatedPlayerId) {
-                    [relatedPlayer] = await db
-                        .select()
+                    const [rp] = await db
+                        .select({
+                            id: players.id,
+                            name: players.name,
+                            jerseyName: players.jerseyName,
+                            number: players.number,
+                            position: players.position,
+                        })
                         .from(players)
                         .where(eq(players.id, row.event.relatedPlayerId));
+                    relatedPlayer = rp ?? null;
                 }
 
+                // BUG-018: explicit DTO — loggerId is a banned public field
+                const { loggerId: _l, ...publicEvent } = row.event;
                 return {
-                    ...row.event,
-                    player: row.player,
+                    ...publicEvent,
+                    player: row.player
+                        ? {
+                            id: row.player.id,
+                            name: row.player.name,
+                            jerseyName: (row.player as any).jerseyName ?? null,
+                            number: row.player.number,
+                            position: row.player.position,
+                        }
+                        : null,
                     relatedPlayer,
                     team: row.team,
                     value: row.event.value ? JSON.parse(row.event.value) : null,
@@ -382,9 +401,13 @@ export async function GET(
             }
         }
 
+        // BUG-018: shape a public DTO — banned fields (loggerId, approvalStatus,
+        // managerNotes, approvedBy, approvedAt) are intentionally excluded.
+        const { loggerId, approvalStatus, managerNotes, approvedBy, approvedAt, ...publicMatch } = match.match;
+
         return NextResponse.json({
             match: {
-                ...match.match,
+                ...publicMatch,
                 homeTeam: match.homeTeam,
                 awayTeam,
                 competition,
@@ -410,7 +433,22 @@ export async function PATCH(
     { params }: { params: Promise<{ id: string }> }
 ) {
     try {
+        const authUser = await getAuthUser(request);
+        if (!authUser) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+
         const { id: matchId } = await params;
+
+        if (authUser.role === 'logger') {
+            const assigned = await isLoggerAssigned(matchId, authUser.id);
+            if (!assigned) {
+                return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+            }
+        } else if (authUser.role !== 'admin') {
+            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+        }
+
         const body = await request.json();
 
         // If assigning a logger, validate that the match isn't already assigned to another logger
@@ -433,9 +471,8 @@ export async function PATCH(
                     {
                         error: 'Match is already assigned to another logger',
                         code: 'MATCH_ALREADY_ASSIGNED',
-                        currentLoggerId: existingMatch.loggerId
                     },
-                    { status: 409 } // 409 Conflict
+                    { status: 409 }
                 );
             }
         }
@@ -464,10 +501,13 @@ export async function PATCH(
         if (body.matchType) updateData.matchType = body.matchType;
         if (body.friendlyType) updateData.friendlyType = body.friendlyType;
         if (body.friendlyDescription !== undefined) updateData.friendlyDescription = body.friendlyDescription;
-        if (body.approvalStatus) updateData.approvalStatus = body.approvalStatus;
-        if (body.managerNotes !== undefined) updateData.managerNotes = body.managerNotes;
-        if (body.approvedBy) updateData.approvedBy = body.approvedBy;
-        if (body.approvedAt) updateData.approvedAt = new Date(body.approvedAt);
+        // Approval fields are admin-only — loggers must not write these
+        if (authUser.role === 'admin') {
+            if (body.approvalStatus) updateData.approvalStatus = body.approvalStatus;
+            if (body.managerNotes !== undefined) updateData.managerNotes = body.managerNotes;
+            if (body.approvedBy) updateData.approvedBy = body.approvedBy;
+            if (body.approvedAt) updateData.approvedAt = new Date(body.approvedAt);
+        }
 
         await db
             .update(matches)
@@ -503,6 +543,14 @@ export async function DELETE(
     { params }: { params: Promise<{ id: string }> }
 ) {
     try {
+        const authUser = await getAuthUser(request);
+        if (!authUser) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+        if (authUser.role !== 'admin') {
+            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+        }
+
         const { id: matchId } = await params;
 
         // Check if match exists
