@@ -81,7 +81,7 @@ Brix V2 is a modern, feature-rich sports management platform designed specifical
 ```bash
 # Clone the repository
 git clone <repository-url>
-cd -BrixsV2
+cd BrixSports
 
 # Install dependencies
 npm install
@@ -167,7 +167,7 @@ Visit `/docs` in your browser for interactive documentation with:
 ## 📁 Project Structure
 
 ```
--BrixsV2/
+BrixSports/
 ├── public/              # Static assets
 ├── src/
 │   ├── app/            # Next.js pages and API routes
@@ -327,8 +327,8 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## 📞 Support
 
 - **Documentation**: Visit `/docs` or check the docs folder
-- **Issues**: [GitHub Issues](https://github.com/your-repo/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/your-repo/discussions)
+- **Issues**: [GitHub Issues](https://github.com/Brixsport/BrixSports/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/Brixsport/BrixSports/discussions)
 
 ---
 

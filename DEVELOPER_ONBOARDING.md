@@ -76,7 +76,7 @@ Before you begin, ensure you have the following installed:
 
 ```bash
 git clone <repository-url>
-cd -BrixsV2
+cd BrixSports
 ```
 
 ### 2. Install Dependencies
@@ -160,7 +160,7 @@ Visit `http://localhost:3000` to see your application!
 ## 📁 Project Structure
 
 ```
--BrixsV2/
+BrixSports/
 ├── public/                      # Static assets
 │   ├── icons/                  # App icons
 │   ├── images/                 # Images

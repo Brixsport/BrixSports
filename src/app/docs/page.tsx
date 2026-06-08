@@ -102,7 +102,7 @@ export default function DocsPage() {
                         <h3 className="text-xl font-semibold text-white mb-3">Installation</h3>
                         <CodeBlock code={`# Clone the repository
 git clone <repository-url>
-cd -BrixsV2
+cd BrixSports
 
 # Install dependencies
 npm install
@@ -649,7 +649,7 @@ turso db tokens create brix-v2`} />
                     <div className="bg-gradient-to-br from-teal-500/10 to-cyan-500/10 border border-teal-500/20 rounded-xl p-6">
                         <h3 className="text-xl font-semibold text-teal-400 mb-3">Development Workflow</h3>
                         <CodeBlock code={`# 1. Fork and clone the repository
-git clone https://github.com/your-username/brix-v2.git
+git clone https://github.com/Brixsport/BrixSports.git
 
 # 2. Create a feature branch
 git checkout -b feature/your-feature-name

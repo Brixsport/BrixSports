@@ -167,7 +167,7 @@ git commit -m "Initial commit - Ready for Vercel deployment"
 ```bash
 # Create a new repository on GitHub first
 # Then:
-git remote add origin https://github.com/yourusername/brix-v2.git
+git remote add origin https://github.com/Brixsport/BrixSports.git
 git branch -M main
 git push -u origin main
 ```

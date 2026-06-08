@@ -6,7 +6,7 @@
 
 ```bash
 # Navigate to your project directory
-cd "c:/Users/LENOVO/OneDrive/Desktop/Brix V2/-BrixsV2"
+cd "c:/Users/LENOVO/OneDrive/Desktop/Brix V2/BrixSports"
 
 # Run the migration (adjust path to your database)
 sqlite3 ./brix.db < migrations/blog-enhancements.sql

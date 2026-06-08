@@ -78,14 +78,14 @@ Click the "Fork" button on GitHub to create your own copy of the repository.
 ### 2. Clone Your Fork
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/brix-v2.git
-cd brix-v2
+git clone https://github.com/Brixsport/BrixSports.git
+cd BrixSports
 ```
 
 ### 3. Add Upstream Remote
 
 ```bash
-git remote add upstream https://github.com/ORIGINAL_OWNER/brix-v2.git
+git remote add upstream https://github.com/Brixsport/BrixSports.git
 ```
 
 ### 4. Install Dependencies

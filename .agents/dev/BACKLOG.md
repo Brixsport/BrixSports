@@ -834,3 +834,142 @@ Run a dep audit. Pin all `^` and `~` prefixed production deps in `package.json` 
 
 #### Required Changes
 Audit all `stripe` imports. If unused, remove the package. If wired up partially, document what exists and leave dormant until Phase 7 (Revenue & Monetisation).
+
+---
+
+### BACKLOG-020 — Phase 6: Architecture, Audit & Backscoping
+**Status:** OPEN  
+**Priority:** High  
+**Filed:** 2026-06-08  
+**Depends on:** Phase 5 system audit (BACKLOG-005 Phase 5)
+
+---
+
+#### Block 1 — Modular Monolith Enforcement
+
+##### Problem
+The codebase has no enforced module boundaries. API routes, DB queries,
+and business logic are intermixed across folders with no ownership model.
+As the codebase grows, cross-module coupling will make changes
+increasingly risky and refactoring expensive.
+
+##### Proposed Module Boundaries
+
+| Module | Owns |
+|--------|------|
+| `match-engine` | matches, matchEvents, scoring, standings, matchLoggerAssignments |
+| `identity` | auth, users, loggers, players, teams, organizations |
+| `competition` | competitions, competition_team_entries, brackets, eligibility |
+| `media` | news/articles, highlights, livestream, ads |
+| `admin` | all `/api/admin/*` and `/admin/*` routes — internal module only |
+
+##### Rules per module
+- Each module owns its DB tables — no other module queries them directly
+- Cross-module data access goes through an explicit internal API
+  (e.g. `match-engine` calls `identity.getPlayer(id)`, not
+  `db.select().from(players)` directly)
+- No circular dependencies between modules
+
+##### Implementation
+1. Map current code to proposed modules (output of Phase 5 audit)
+2. Establish folder structure: `src/modules/match-engine/`, etc.
+3. Migrate routes and logic into module folders incrementally
+4. Enforce boundaries with `eslint-plugin-boundaries` or path alias
+   restrictions in `tsconfig.json`
+5. Document ownership in a `MODULES.md` at project root
+
+##### Notes
+- This is a large, multi-session refactor — do not attempt in one go
+- Prepares codebase for potential future microservice extraction if
+  scale demands it, but does NOT commit to that path
+- Blocked by: Phase 5 full feature audit must complete first so we
+  know what we're actually reorganising
+- Start with `match-engine` and `identity` — highest coupling risk
+
+---
+
+#### Block 2 — Full Feature Audit (4-State Matrix)
+
+##### Problem
+No complete inventory exists of what is actually working vs broken vs
+partially built vs not built. Decisions about what to fix, backscope,
+or deprecate are being made without a full picture.
+
+##### Audit Method
+For every feature visible in the codebase and live UI, assign one of:
+
+| State | Meaning |
+|-------|---------|
+| **WORKING** | Tested end-to-end, complete, no known bugs |
+| **PARTIAL** | Core flow works, but meaningful pieces are missing or stubbed |
+| **BROKEN** | Exists in nav/code but produces errors or wrong output in normal use |
+| **NOT BUILT** | Schema or scaffold exists, no functioning implementation |
+
+##### Scope
+- All public-facing pages (`/`, `/livescore`, `/matches`, `/players`, `/standings`, etc.)
+- All admin pages (`/admin/*`)
+- All API routes (`/api/*`)
+- All DB tables (does a corresponding UI/API use them?)
+- All components marked NEW, WIP, or known to be stubs
+
+##### Decision per PARTIAL/BROKEN feature
+For each feature in that state, evaluate and decide:
+- **Fix now** — if it's in a critical user flow and the fix is scoped
+- **Backscope** — if it's a non-critical feature not ready for users
+  (see Block 3)
+- **Deprecate** — if it will never be built or has been superseded
+
+##### Output
+A `FEATURE_AUDIT.md` in `.agents/dev/` with the full matrix, decision
+column, and owner/blocker notes. This becomes the master reference for
+Phase 6 and Phase 7 planning.
+
+##### Notes
+- Run this audit on the `dev` branch against the staging deployment
+  once staging is live — not against prod
+- Every BROKEN feature visible to users is a live reputation risk
+- Relates to: BACKLOG-005 Phase 5, Block 1 (module boundaries)
+
+---
+
+#### Block 3 — Backscoping
+
+##### Problem
+Features that are PARTIAL or BROKEN but not worth fixing immediately
+are currently live in the UI, creating a degraded user experience and
+a false impression of the platform's capability.
+
+##### Backscoping Rules
+1. Feature is removed from navigation and routing (returns 404 or
+   redirects to a `/coming-soon` stub)
+2. The underlying code is NOT deleted — only disabled/hidden
+3. Every backscoped feature is logged in this backlog with:
+   - Status: `BACKSCOPED`
+   - What's needed to reinstate it
+   - Who/what blocks reinstatement
+
+##### Implementation
+- Audit nav links and remove PARTIAL/BROKEN destinations
+- Add a simple `ComingSoon` page component for 404 fallbacks
+- Use Next.js `notFound()` or a redirect in the page component —
+  no complex feature-flag infrastructure needed at this stage
+
+##### Known Backscoping Candidates
+
+| Feature | Current state | Blocker to reinstate |
+|---------|--------------|---------------------|
+| Manager page | Confirmed stub — no real content | Full manager center feature (Phase 7) |
+| `next-auth` remnants | Vestigial package, dead routes | BACKLOG-009 (audit + remove) |
+| Stripe integration | Installed, unused, out of scope | Phase 7 (Revenue & Monetisation) |
+| Any admin page missing auth gate | Security risk if any remain | Audit needed — check after Phase 5 |
+| Lineup Builder | Marked NEW, unknown stability 🔴 | Stability audit + test on staging |
+| Ads feature | Recently added, untested under load 🔴 | Load test on staging |
+| Transfers page | Intersects BUG-004 🔴 | BUG-004 full resolution |
+| News / articles | Intersects BUG-006 XSS 🔴 | BUG-006 complete + XSS audit |
+
+##### Notes
+- Backscoping is NOT the same as deleting — the code stays, users just
+  can't reach broken features
+- Priority: backscope before Phase 7 revenue work — no point monetising
+  a platform with visible broken pages
+- Candidates marked 🔴 are already flagged High Volatility in CLAUDE.md
