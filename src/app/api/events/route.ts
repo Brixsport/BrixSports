@@ -39,7 +39,8 @@ export async function GET(request: NextRequest) {
             .select()
             .from(matchEvents)
             .where(eq(matchEvents.matchId, matchId))
-            .orderBy(matchEvents.minute, matchEvents.second);
+            .orderBy(matchEvents.minute, matchEvents.second)
+            .limit(100);
 
         return NextResponse.json({ events });
     } catch (error) {

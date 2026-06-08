@@ -659,7 +659,7 @@ export default function Home() {
                               <motion.div
                                 initial={{ opacity: 0 }}
                                 animate={{ opacity: 1 }}
-                                onClick={() => router.push(`/match/${match.id}`)}
+                                onClick={() => router.push(`/matches/${match.id}`)}
                                 className={`p-4 cursor-pointer hover:bg-white/5 transition-colors group ${idx !== compMatches.length - 1 ? 'border-b border-white/5' : ''
                                   }`}
                               >

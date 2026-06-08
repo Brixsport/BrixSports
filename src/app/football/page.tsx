@@ -460,7 +460,7 @@ function FootballContent() {
                                     {matches.length > 0 ? matches.map((match) => (
                                         <div
                                             key={match.id}
-                                            onClick={() => router.push(`/match/${match.id}`)}
+                                            onClick={() => router.push(`/matches/${match.id}`)}
                                             className="bg-white/5 rounded-2xl border border-white/10 p-6 hover:border-primary/50 transition-all cursor-pointer"
                                         >
                                             <div className="flex flex-col md:flex-row items-center justify-between gap-6 md:gap-0">

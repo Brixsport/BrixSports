@@ -70,6 +70,8 @@
 
 - **BUG-024** *(LOW)*: Duplicate match detail routes — `/match/[id]` (`src/app/match/[id]/page.tsx`) and `/matches/[id]` (`src/app/matches/[id]/page.tsx`) both exist. One is likely legacy. Audit to confirm which is canonical (check all internal links and nav references), delete the other. Filed: 2026-06-08. Source: SYSTEM_AUDIT.md §2.
 
+- **BUG-025** *(MEDIUM — NDPR)*: `GET /api/matches` public list response exposes `assignedLoggers` full object and `loggerId` field to unauthenticated viewers. Both are banned internal fields per CLAUDE.md. File: `src/app/api/matches/route.ts` GET handler response map. Fix: strip `loggerId` and `assignedLoggers` from the public DTO. If an admin caller needs assignment data, return it conditionally based on `authUser.role`. Filed: 2026-06-08. Found by: flow-checker during `b1a6ec9` review.
+
 ## Tech Debt
 
 - **TD-001** *(IN PROGRESS)*: `src/lib/env.ts` created — typed `env` object and `validateEnv()` startup check in place. `middleware.ts` migrated to use `env.jwtSecret` and `env.isStaging`. Remaining work: migrate all other `process.env` reads across 30+ files, add Zod validation. Full migration deferred — do not scatter `process.env` reads in new code from this point forward.

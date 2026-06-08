@@ -74,7 +74,7 @@ export default function MatchCard({ match, variant = 'compact', showCompetition 
 
     if (variant === 'compact') {
         return (
-            <Link href={`/match/${match.id}`}>
+            <Link href={`/matches/${match.id}`}>
                 <motion.div
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}
@@ -152,7 +152,7 @@ export default function MatchCard({ match, variant = 'compact', showCompetition 
 
     if (variant === 'live') {
         return (
-            <Link href={`/match/${match.id}`}>
+            <Link href={`/matches/${match.id}`}>
                 <motion.div
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
@@ -239,7 +239,7 @@ export default function MatchCard({ match, variant = 'compact', showCompetition 
 
     // Detailed variant
     return (
-        <Link href={`/match/${match.id}`}>
+        <Link href={`/matches/${match.id}`}>
             <motion.div
                 whileHover={{ scale: 1.02 }}
                 className="group bg-white/5 hover:bg-white/10 backdrop-blur-sm border border-gray-700 hover:border-purple-500/50 rounded-2xl p-6 transition-all cursor-pointer"
