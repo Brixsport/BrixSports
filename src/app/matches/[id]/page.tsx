@@ -13,8 +13,9 @@ import LiveMatchTimeline from '@/components/LiveMatchTimeline';
 import LiveStats from '@/components/LiveStats';
 import MatchLineups from '@/components/MatchLineups';
 import { HeadToHeadComparison } from '@/components/HeadToHead';
-import MatchPoll from '@/components/MatchPoll';
-import { MatchPredictionCard, MatchVotePoll } from '@/components/predictions';
+// BACKSCOPED: 2026-06-08 — BACKLOG-028. Reinstate when: Polls + Predictions built (Phase 7)
+// import MatchPoll from '@/components/MatchPoll';
+// import { MatchPredictionCard, MatchVotePoll } from '@/components/predictions';
 import { LivestreamView } from '@/components/livestream/LivestreamView';
 import { useNotifications } from '@/components/Notifications';
 
@@ -32,7 +33,7 @@ export default function MatchDetailPage() {
 
     const [matchData, setMatchData] = useState<MatchData | null>(null);
     const [loading, setLoading] = useState(true);
-    const [activeTab, setActiveTab] = useState<'overview' | 'timeline' | 'stats' | 'lineups' | 'h2h' | 'polls' | 'predictions'>('overview');
+    const [activeTab, setActiveTab] = useState<'overview' | 'timeline' | 'stats' | 'lineups' | 'h2h'>('overview');
     const [isFavorited, setIsFavorited] = useState(false);
     const [h2hData, setH2hData] = useState<any>(null);
     const [scrollY, setScrollY] = useState(0);
@@ -228,7 +229,7 @@ export default function MatchDetailPage() {
 
     useEffect(() => {
         if (isUpcoming && activeTab === 'timeline') {
-            setActiveTab('predictions');
+            setActiveTab('overview');
         }
     }, [isUpcoming]);
 
@@ -344,8 +345,8 @@ export default function MatchDetailPage() {
                             )}
                         </button>
 
-                        {/* Predictions Tab - First for upcoming matches */}
-                        {isUpcoming && (
+                        {/* BACKSCOPED: 2026-06-08 — BACKLOG-028. Reinstate when: Predictions built (Phase 7) */}
+                        {/* {isUpcoming && (
                             <button
                                 onClick={() => setActiveTab('predictions')}
                                 className={`px-6 py-3 font-medium transition-all relative whitespace-nowrap ${activeTab === 'predictions'
@@ -362,7 +363,7 @@ export default function MatchDetailPage() {
                                     />
                                 )}
                             </button>
-                        )}
+                        )} */}
 
                         {/* Timeline - Only for live/finished matches */}
                         {!isUpcoming && (
@@ -435,7 +436,8 @@ export default function MatchDetailPage() {
                                 />
                             )}
                         </button>
-                        <button
+                        {/* BACKSCOPED: 2026-06-08 — BACKLOG-028. Reinstate when: Polls built (Phase 7) */}
+                        {/* <button
                             onClick={() => setActiveTab('polls')}
                             className={`px-6 py-3 font-medium transition-all relative whitespace-nowrap ${activeTab === 'polls'
                                 ? 'text-primary'
@@ -450,7 +452,7 @@ export default function MatchDetailPage() {
                                     className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary"
                                 />
                             )}
-                        </button>
+                        </button> */}
                     </div>
                 </div>
             </div>
@@ -597,45 +599,19 @@ export default function MatchDetailPage() {
                         </motion.div>
                     )}
 
-                    {activeTab === 'polls' && (
-                        <motion.div
-                            key="polls"
-                            initial={{ opacity: 0, y: 20 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            exit={{ opacity: 0, y: -20 }}
-                        >
+                    {/* BACKSCOPED: 2026-06-08 — BACKLOG-028. Reinstate when: Polls + Predictions built (Phase 7) */}
+                    {/* {activeTab === 'polls' && (
+                        <motion.div key="polls" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}>
                             <MatchPoll matchId={matchId} />
                         </motion.div>
                     )}
-
                     {activeTab === 'predictions' && match.status === 'UPCOMING' && (
-                        <motion.div
-                            key="predictions"
-                            initial={{ opacity: 0, y: 20 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            exit={{ opacity: 0, y: -20 }}
-                            className="grid grid-cols-1 lg:grid-cols-2 gap-6"
-                        >
-                            <MatchPredictionCard
-                                match={{
-                                    id: match.id,
-                                    homeTeam: match.homeTeam,
-                                    awayTeam: match.awayTeam,
-                                    startTime: match.startTime,
-                                    competition: match.competition,
-                                    sport: match.sport,
-                                }}
-                            />
-                            <MatchVotePoll
-                                match={{
-                                    id: match.id,
-                                    homeTeam: match.homeTeam,
-                                    awayTeam: match.awayTeam,
-                                    startTime: match.startTime,
-                                }}
-                            />
+                        <motion.div key="predictions" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                            <MatchPredictionCard match={{ id: match.id, homeTeam: match.homeTeam, awayTeam: match.awayTeam, startTime: match.startTime, competition: match.competition, sport: match.sport }} />
+                            <MatchVotePoll match={{ id: match.id, homeTeam: match.homeTeam, awayTeam: match.awayTeam, startTime: match.startTime }} />
                         </motion.div>
-                    )}
+                    )} */}
+
                 </AnimatePresence>
             </div>
         </div>

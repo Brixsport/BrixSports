@@ -7,8 +7,9 @@ import { Play, X, Trophy, Users, BarChart3, Clock, Star, MapPin, Calendar, Share
 import { Team, Player, Match, MatchEvent } from '@/types';
 import { useFavorites } from '@/hooks/useFavorites';
 import { useNotifications } from './Notifications';
-import { MatchPredictionCard } from '@/components/predictions/MatchPredictionCard';
-import { MatchVotePoll } from '@/components/predictions/MatchVotePoll';
+// BACKSCOPED: 2026-06-08 — BACKLOG-028. Reinstate when: Predictions + Polls built (Phase 7)
+// import { MatchPredictionCard } from '@/components/predictions/MatchPredictionCard';
+// import { MatchVotePoll } from '@/components/predictions/MatchVotePoll';
 import { LivestreamChat } from '@/components/livestream/LivestreamChat';
 import { LivestreamPlayer } from '@/components/livestream/LivestreamPlayer';
 import { FootballPitch } from '@/components/FootballPitch';
@@ -551,10 +552,11 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
     { id: 'stats', label: 'Stats', icon: BarChart3 },
     { id: 'timeline', label: 'Timeline', icon: Clock },
     { id: 'standings', label: 'Table', icon: Table },
-    ...(match.status === 'UPCOMING' ? [
-      { id: 'predict', label: 'Predict', icon: Target },
-      { id: 'poll', label: 'Poll', icon: BarChart3 },
-    ] : []),
+    // BACKSCOPED: 2026-06-08 — BACKLOG-028. Reinstate when: Predictions + Polls built (Phase 7)
+    // ...(match.status === 'UPCOMING' ? [
+    //   { id: 'predict', label: 'Predict', icon: Target },
+    //   { id: 'poll', label: 'Poll', icon: BarChart3 },
+    // ] : []),
     ...(['UPCOMING', 'LIVE'].includes(match.status) ? [
       { id: 'chat', label: 'Chat', icon: MessageSquare },
     ] : []),
@@ -1329,58 +1331,21 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
               </motion.div>
             )}
 
-            {/* Predict Tab */}
-            {activeTab === 'predict' && match.status === 'UPCOMING' && (
-              <motion.div
-                key="predict"
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -20 }}
-              >
+            {/* BACKSCOPED: 2026-06-08 — BACKLOG-028. Reinstate when: Predictions + Polls built (Phase 7) */}
+            {/* {activeTab === 'predict' && match.status === 'UPCOMING' && (
+              <motion.div key="predict" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}>
                 {match.homeTeam && match.awayTeam ? (
-                  <MatchPredictionCard
-                    match={{
-                      id: match.id,
-                      homeTeam: match.homeTeam,
-                      awayTeam: match.awayTeam,
-                      startTime: match.startTime,
-                      competition: match.competition,
-                      sport: match.sport,
-                    }}
-                  />
-                ) : (
-                  <div className="py-12 text-center">
-                    <p className="text-white/40 text-sm">Team data not available</p>
-                  </div>
-                )}
+                  <MatchPredictionCard match={{ id: match.id, homeTeam: match.homeTeam, awayTeam: match.awayTeam, startTime: match.startTime, competition: match.competition, sport: match.sport }} />
+                ) : ( <div className="py-12 text-center"><p className="text-white/40 text-sm">Team data not available</p></div> )}
               </motion.div>
             )}
-
-            {/* Fan Poll Tab */}
             {activeTab === 'poll' && match.status === 'UPCOMING' && (
-              <motion.div
-                key="poll"
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -20 }}
-              >
+              <motion.div key="poll" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}>
                 {match.homeTeam && match.awayTeam ? (
-                  <MatchVotePoll
-                    match={{
-                      id: match.id,
-                      homeTeam: match.homeTeam,
-                      awayTeam: match.awayTeam,
-                      startTime: match.startTime,
-                      sport: match.sport,
-                    }}
-                  />
-                ) : (
-                  <div className="py-12 text-center">
-                    <p className="text-white/40 text-sm">Team data not available</p>
-                  </div>
-                )}
+                  <MatchVotePoll match={{ id: match.id, homeTeam: match.homeTeam, awayTeam: match.awayTeam, startTime: match.startTime, sport: match.sport }} />
+                ) : ( <div className="py-12 text-center"><p className="text-white/40 text-sm">Team data not available</p></div> )}
               </motion.div>
-            )}
+            )} */}
 
             {/* Chat Tab */}
             {activeTab === 'chat' && ['UPCOMING', 'LIVE'].includes(match.status) && (

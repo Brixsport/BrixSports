@@ -3,19 +3,27 @@
  * ─────────────────────────────────────────────────────────────────
  * BrixSports — Automated Pre-Prod Clearance Script
  *
- * Run before EVERY PR merge to main:
+ * Run against staging (default — always run this before opening PR):
  *   npx tsx dev/pre-prod-check.ts
+ *   npx tsx dev/pre-prod-check.ts --staging
  *
- * Reads TURSO_CONNECTION_URL and NEXT_PUBLIC_APP_URL from .env.local.
+ * Run against prod (post-merge verification):
+ *   npx tsx dev/pre-prod-check.ts --production
+ *
  * No hardcoded URLs, tokens, or secrets — see security.md.
  *
- * Exit 0 → CLEAR TO MERGE
+ * Exit 0 → CLEAR TO MERGE / PROD OK
  * Exit 1 → BLOCKED — fix failures before merging
  * ─────────────────────────────────────────────────────────────────
  */
 import dotenv from 'dotenv';
 import path from 'path';
-dotenv.config({ path: path.resolve(process.cwd(), '.env.local') });
+
+const isProd = process.argv.includes('--production');
+const envFile = isProd ? '.env.production' : '.env.local';
+const envLabel = isProd ? 'PRODUCTION' : 'STAGING';
+
+dotenv.config({ path: path.resolve(process.cwd(), envFile) });
 
 import { createClient } from '@libsql/client';
 
@@ -258,7 +266,7 @@ async function block5() {
 // ── Main ──────────────────────────────────────────────────────────
 
 async function main() {
-  console.log('=== PRE-PROD CLEARANCE CHECK ===');
+  console.log(`=== PRE-PROD CLEARANCE CHECK [${envLabel}] ===`);
   console.log(`DB:  ${dbHost}`);
   console.log(`App: ${APP_URL}`);
 

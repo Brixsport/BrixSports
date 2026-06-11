@@ -49,6 +49,10 @@ activation: always_on
 
 2026-06-08 — FK constraint failure on data migration with placeholder IDs — Directive specified competition IDs as human-readable slugs (`busa-league-football-2025`) that did not exist in the DB. Script applied cleanly in dry-run but failed at first UPDATE with `SQLITE_CONSTRAINT: FOREIGN KEY constraint failed` — Always verify FK target IDs exist in the DB before writing any migration script. Run a `SELECT id FROM [table] WHERE name LIKE '%...'` diagnostic first, not after the apply fails.
 
+2026-06-08 — `.env.local` DB target assumed to be prod but was staging — No error, no warning; scripts ran against the wrong DB and produced the wrong audit output. Root cause: `.env.local` content changed between sessions with no visible indicator — Always run `identify-db.ts` (or print `TURSO_CONNECTION_URL` hostname) at the top of any script that writes to the DB. Never assume `.env.local` target from session memory.
+
+2026-06-08 — Pre-prod check run against prod app instead of staging — Reported 10 failures that were expected (unfixed prod code). The check must run against the staging app (dev branch code) not prod. Root cause: `NEXT_PUBLIC_APP_URL` in `.env.production` pointed at `brixsports.com` — The clearance check validates that the dev branch's fixes work. Always run it against `brixsports-staging.vercel.app` using `.env.local`.
+
 ## Anti-Patterns for This Codebase
 - Middleware matcher and internal logic check do not match.
 - try/catch without finally in any DB operation.

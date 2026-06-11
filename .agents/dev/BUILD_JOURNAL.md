@@ -11,6 +11,44 @@
 
 ## Sessions
 
+### Session 9 — 2026-06-08
+
+**Focus:** Pre-prod data clearance, automated pre-merge tooling, and staging/prod DB parity.
+
+**Built:**
+
+- **`dev/pre-prod-check.ts`** — permanent reusable pre-merge clearance script. 5 blocks: auth gates (Block 1), response shape/NDPR checks (Block 2), DB integrity counts (Block 3), round distribution (Block 4), competition presence (Block 5). Exit 0 = CLEAR TO MERGE, exit 1 = BLOCKED. Committed to repo via `.gitignore` negation (`!dev/pre-prod-check.ts`). Ready for Tier 2 CI integration with zero changes (already exits 0/1).
+
+- **`.agents/dev/WORKFLOW.md`** (new) — documents environment map (`.env.local` = staging always, `.env.production` = prod), three DB change categories (schema / code / data) with their paths to prod, pre-merge checklist, and Tier 2 CI upgrade path.
+
+- **`.gitignore` updates** — added `.env.prod` / `.env*.production` coverage; `!dev/pre-prod-check.ts` negation to allow the one reusable script to be committed while keeping all one-off scripts gitignored.
+
+- **BACKLOG-034 filed** — pre-prod clearance script Tier 1 complete, Tier 2 path documented.
+
+- **BACKLOG-007 + BACKLOG-008 marked RESOLVED** — verified live on prod DB. The earlier confusion (zero rows returned when querying by abbreviated name) was because `teams.name` stores full college names (`"College of Engineering"`) not shorthand (`"COLENG"`). Queried by ID from RUNLOG confirmed all 4 teams linked and enrolled.
+
+- **Staging DB brought to parity with prod** — `dev/fix-staging-data.ts` applied: 59/59 legacy matches backfilled with `round` + `competition_id`; 59/59 `competition` strings stripped of ` - suffix`; 3 competition names renamed to use parens (`BUSALYMPICS (FOOTBALL)` etc.); new competitions already existed, skipped.
+
+- **Pre-prod check: 20/20 CLEAR TO MERGE** — all blocks green on staging app + staging DB.
+
+**Bugs encountered:**
+
+- `.env.local` was pointing at **staging** not prod, contradicting the session-start assumption. Caught when `identify-db.ts` printed hostname `brixsportsv2-staging`. Root cause: `.env.local` was updated between sessions. Fix: wrote `.env.production` pattern to gitignore, documented `.env.local = staging always` rule in WORKFLOW.md.
+- Running pre-prod check against **prod app** (`brixsports.com`) showed 10 failures — 500s and NDPR leaks. These are expected: prod is running the old unpatched code. The `dev` branch fixes are what the PR delivers. Check is correct; it needs to run against staging (dev code), not prod.
+- Top-level `await` in `.ts` scripts compiled as CJS by tsx — caused `TransformError`. Fix: always wrap in `async function main()`.
+- `dotenv.config()` without explicit path loads `.env` not `.env.local`. Fix: `dotenv.config({ path: path.resolve(process.cwd(), '.env.local') })` explicitly.
+
+**Resolved:** BACKLOG-007, BACKLOG-008 (verified); staging DB parity complete.
+
+**Deferred:**
+- Commit + PR `dev → main` (staged, awaiting user go-ahead)
+- BACKLOG-017 (2 MD3 BUSALYMPICS scores) — awaiting physical records
+- BACKLOG-033 (standings recalculation) — blocked on BACKLOG-017
+
+**Next session:** Open PR `dev → main`. 5 files staged. Then address BUG-025 (NDPR leak on `/api/matches` public list — `loggerId` + `assignedLoggers` still exposed on prod).
+
+---
+
 ### Session 8 — 2026-06-08
 
 **Focus:** BACKLOG-032 — Round label display on match cards. Data investigation, normalisation, display fix across all render paths.

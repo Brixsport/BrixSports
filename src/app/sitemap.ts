@@ -63,18 +63,18 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
             changeFrequency: 'daily',
             priority: 0.7,
         },
-        {
-            url: `${baseUrl}/predictions`,
-            lastModified: new Date(),
-            changeFrequency: 'daily',
-            priority: 0.7,
-        },
-        {
-            url: `${baseUrl}/fpl`,
-            lastModified: new Date(),
-            changeFrequency: 'weekly',
-            priority: 0.7,
-        },
+        // {
+        //     url: `${baseUrl}/predictions`,
+        //     lastModified: new Date(),
+        //     changeFrequency: 'daily',
+        //     priority: 0.7,
+        // },
+        // {
+        //     url: `${baseUrl}/fpl`,
+        //     lastModified: new Date(),
+        //     changeFrequency: 'weekly',
+        //     priority: 0.7,
+        // },
         {
             url: `${baseUrl}/football`,
             lastModified: new Date(),

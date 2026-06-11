@@ -476,7 +476,8 @@ export default function ProfilePage() {
                             <div className="space-y-2">
                                 <QuickActionButton icon={<Settings size={16} />} label="System Settings" href="/profile/settings" />
                                 <QuickActionButton icon={<Heart size={16} />} label="Manage Favorites" href="/profile/favorites" />
-                                <QuickActionButton icon={<Trophy size={16} />} label="My Predictions" href="/predictions" />
+                                {/* BACKSCOPED: 2026-06-08 — BACKLOG-028. Reinstate when: Predictions feature built (Phase 7) */}
+                                {/* <QuickActionButton icon={<Trophy size={16} />} label="My Predictions" href="/predictions" /> */}
                                 <QuickActionButton icon={<Shield size={16} />} label="Privacy & Security" href="/profile/settings#privacy" />
                             </div>
                         </div>
