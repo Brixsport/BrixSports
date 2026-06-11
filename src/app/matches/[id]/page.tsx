@@ -232,7 +232,6 @@ export default function MatchDetailPage() {
 
     const { match, events, timeTracking, eyePoints } = matchData;
     const isLive = match.status === 'LIVE' || match.status === 'HALF_TIME';
-    const isUpcoming = match.status === 'UPCOMING';
 
     return (
         <div className="min-h-screen bg-[#050505] text-white">
