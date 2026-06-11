@@ -11,6 +11,45 @@
 
 ## Sessions
 
+### Session 10 — 2026-06-11
+
+**Focus:** Post-merge prod verification (dev → main landed), BACKLOG-028 backscoping, WORKFLOW.md full documentation, pre-prod-check tooling upgrade.
+
+**Built:**
+
+- **`dev/pre-prod-check.ts` — `--staging` / `--production` flag** — script now reads `process.argv`. `--production` loads `.env.production`; default (or `--staging`) loads `.env.local`. Header output shows `[STAGING]` or `[PRODUCTION]` label. WORKFLOW.md updated with both command forms.
+
+- **`.agents/dev/BACKSCOPE.md`** — new permanent journal. One entry per backscoped feature: current state, what exists in code, what's missing to reinstate, reinstate-when condition, risk if reinstated early. Covers /fpl/*, /predictions, /scouts, /nesa-registration, /auth/signin, Polls UI.
+
+- **`WORKFLOW.md` — fully documented** — added: Hotfix flow (branch/merge/audit procedure, when NOT to use), Partial Feature / Backscope flow (Option A comment-out pattern with exact format, Option B feature-flag path for future), pre-merge checklist updated with `--staging`/`--production` variants, `.env.local` vs `.env.production` rule made explicit.
+
+- **BACKLOG-028 RESOLVED — backscoping execution:**
+  - Page gates (`notFound()`): `src/app/fpl/page.tsx` + 4 sub-pages, `src/app/predictions/page.tsx`, `src/app/nesa-registration/page.tsx`, `src/app/auth/signin/page.tsx`, `src/app/scouts/page.tsx` (was redirect to `/`, now 404)
+  - UI surfaces commented out (format: `// BACKSCOPED: 2026-06-08 — BACKLOG-028. Reinstate when: ...`):
+    - `src/app/profile/page.tsx` — "My Predictions" QuickActionButton
+    - `src/app/matches/[id]/page.tsx` — Predictions tab button + Polls tab button + both content panels + MatchPoll/MatchPredictionCard/MatchVotePoll imports
+    - `src/components/MatchOverlay.tsx` — Predict + Poll tab entries + content blocks + imports
+    - `src/components/BasketballMatchOverlay.tsx` — Predict + Fan Poll tab entries + content blocks + imports + unused `Target` icon
+    - `src/components/matches/UpcomingMatchView.tsx` — Prediction/Poll tab block + Quick Vote sidebar + activeTab state + unused imports
+    - `src/app/sitemap.ts` — `/fpl` + `/predictions` entries commented out (was already done correctly)
+
+**Bugs encountered:**
+
+- First pass of backscoping used hard deletes instead of comment-outs in component files — caught during git diff review. Root cause: session started before the comment-out convention was established. Fixed by re-adding all deleted content as commented blocks with BACKSCOPED markers before committing.
+- Profile page Privacy & Security button lost its indentation when the "My Predictions" line above it was deleted (empty string replacement collapsed the line). Fixed when converting to comment-out format.
+
+**Resolved:** BACKLOG-028 (backscope dead nav items)
+
+**Deferred:**
+- BACKLOG-017 — 2 missing MD3 BUSALYMPICS scores, awaiting physical records
+- BACKLOG-033 — standings recalculation, blocked on BACKLOG-017
+- BUG-026 — PWA/cache CSS rendering failure on direct URL visits
+- BACKLOG-034 — competition config business logic audit (not started this session)
+
+**Next session:** BACKLOG-034 — competition config business logic audit. Start by reading `src/app/api/competitions/route.ts` and all sub-routes. Key known issues: N+1 query in `includeStats` path, dual FK-or-name lookup pattern that's now stale (all matches have `competitionId`), no `try/catch/finally` on DB reads.
+
+---
+
 ### Session 9 — 2026-06-08
 
 **Focus:** Pre-prod data clearance, automated pre-merge tooling, and staging/prod DB parity.

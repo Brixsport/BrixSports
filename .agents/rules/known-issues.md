@@ -53,6 +53,8 @@ activation: always_on
 
 2026-06-08 — Pre-prod check run against prod app instead of staging — Reported 10 failures that were expected (unfixed prod code). The check must run against the staging app (dev branch code) not prod. Root cause: `NEXT_PUBLIC_APP_URL` in `.env.production` pointed at `brixsports.com` — The clearance check validates that the dev branch's fixes work. Always run it against `brixsports-staging.vercel.app` using `.env.local`.
 
+2026-06-11 — Backscoping via hard-delete instead of comment-out — First pass of BACKLOG-028 removed nav links and UI blocks with empty-string replacements (deletes). Convention is comment-out with BACKSCOPED marker. Root cause: convention was established mid-session after edits were already made. Fix: caught in git diff review and restored all deleted content as commented blocks before commit. Prevention: confirm preservation convention before first backscope edit, not after.
+
 ## Anti-Patterns for This Codebase
 - Middleware matcher and internal logic check do not match.
 - try/catch without finally in any DB operation.
