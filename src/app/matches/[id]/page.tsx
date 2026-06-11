@@ -44,6 +44,14 @@ export default function MatchDetailPage() {
     const matchTime = useMatchTimer(matchId);
     const { addNotification } = useNotifications();
 
+    const isUpcoming = matchData?.match?.status === 'UPCOMING';
+
+    useEffect(() => {
+        if (isUpcoming && activeTab === 'timeline') {
+            setActiveTab('predictions');
+        }
+    }, [isUpcoming]);
+
     const handleShare = async () => {
         const shareData = {
             title: `${matchData?.match?.homeTeam?.name} vs ${matchData?.match?.awayTeam?.name} - Brix Sports`,
@@ -225,12 +233,6 @@ export default function MatchDetailPage() {
     const { match, events, timeTracking, eyePoints } = matchData;
     const isLive = match.status === 'LIVE' || match.status === 'HALF_TIME';
     const isUpcoming = match.status === 'UPCOMING';
-
-    useEffect(() => {
-        if (isUpcoming && activeTab === 'timeline') {
-            setActiveTab('predictions');
-        }
-    }, [isUpcoming]);
 
     return (
         <div className="min-h-screen bg-[#050505] text-white">
