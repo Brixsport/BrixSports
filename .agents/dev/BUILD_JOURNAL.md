@@ -11,6 +11,36 @@
 
 ## Sessions
 
+### Session 11 — 2026-06-11
+
+**Focus:** Rules of Hooks violation fix in match detail page, Three.js error scene backscope, platform model documentation.
+
+**Built:**
+
+- **`src/app/matches/[id]/page.tsx` — hook move:** `const isUpcoming` (derived from `matchData?.match?.status`) and `useEffect([isUpcoming])` moved from after the two early-return guards (`loading` and `!matchData`) to immediately after the last hook declaration block (line 48). Removed the now-redundant `const isUpcoming = match.status === 'UPCOMING'` that remained after the early returns. Fix applied on both `dev` (commit `1215ce2`) and `hotfix/fix-matches-hooks-violation` branches.
+
+- **`src/app/error.tsx` + `src/app/not-found.tsx` — Three.js backscope:** Commented out `dynamic` import, Scene dynamic loader, and JSX usage in both files. BACKSCOPED markers reference BACKLOG-031. Component files (`SoccerGoalScene.tsx`, `BasketballRimScene.tsx`) untouched and not deleted.
+
+- **`.agents/dev/PLATFORM_MODEL.md`** — created. Documents the Google Drive mental model, what the schema already handles (~80%), the three missing pieces before University 2 onboards (users.universityId FK, admin permission scoping, affiliation-aware feed ordering), cross-university competition options A/B, and the implementation order.
+
+**Bugs encountered:**
+
+- `cherry-pick 1215ce2` onto `hotfix/fix-matches-hooks-violation` produced a 3-file conflict. Root cause: the hotfix branch has Predictions/Polls reinstated (imports active, `activeTab` type includes `'polls' | 'predictions'`) while the dev branch has them BACKSCOPED. The diff for `page.tsx` diverged at the `setActiveTab('predictions')` vs `setActiveTab('overview')` call inside the moved useEffect. Resolved by aborting the cherry-pick and applying the fix directly on the hotfix branch.
+- After the hook move, duplicate `const isUpcoming` existed in the same function scope (new one at line 48, old one at line 235). TypeScript TS2451 — fixed by removing the old declaration. The JSX below the early returns continued using `isUpcoming` from the moved const, which now correctly derives from `matchData?.match?.status`.
+
+**Resolved:** Rules of Hooks violation — `useEffect` after conditional return (matches detail page)
+
+**Deferred:**
+- Commit + PR for `hotfix/fix-matches-hooks-violation` → `main` (fix applied, not yet committed)
+- BACKLOG-017 — 2 missing MD3 BUSALYMPICS scores (physical records)
+- BACKLOG-033 — standings recalculation (blocked on BACKLOG-017)
+- BUG-026 — PWA/cache CSS rendering failure on direct URL visits
+- BACKLOG-034 — competition config business logic audit
+
+**Next session:** Commit the hotfix branch (`git add src/app/matches/[id]/page.tsx && git commit`) then open PR to `main`. After merge, address BACKLOG-034 — competition config audit.
+
+---
+
 ### Session 10 — 2026-06-11
 
 **Focus:** Post-merge prod verification (dev → main landed), BACKLOG-028 backscoping, WORKFLOW.md full documentation, pre-prod-check tooling upgrade.

@@ -4,16 +4,18 @@ import { useEffect, useState, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { Home, RefreshCcw, AlertTriangle } from 'lucide-react';
 import Link from 'next/link';
-import dynamic from 'next/dynamic';
+// BACKSCOPED: 2026-06-11 — Three.js removed. Reinstate when: lightweight replacement built (see BACKLOG-031)
+// import dynamic from 'next/dynamic';
 
-// Dynamically import the 3D scene to avoid SSR issues
-const SoccerGoalScene = dynamic(
-  () => import('@/components/error/SoccerGoalScene'),
-  { 
-    ssr: false,
-    loading: () => <div className="w-full h-[400px] bg-gradient-to-b from-sky-900 to-green-900 animate-pulse rounded-2xl" />
-  }
-);
+// BACKSCOPED: 2026-06-11 — Three.js removed for perf/deprecation.
+// Reinstate when: lightweight replacement built (see BACKLOG-031)
+// const SoccerGoalScene = dynamic(
+//   () => import('@/components/error/SoccerGoalScene'),
+//   {
+//     ssr: false,
+//     loading: () => <div className="w-full h-[400px] bg-gradient-to-b from-sky-900 to-green-900 animate-pulse rounded-2xl" />
+//   }
+// );
 
 interface ErrorPageProps {
   error: Error & { digest?: string };
@@ -91,7 +93,8 @@ export default function ErrorPage({ error, reset }: ErrorPageProps) {
           transition={{ duration: 0.8, ease: "easeOut" }}
           className="relative w-full h-[250px] sm:h-[300px] md:h-[400px] mb-6 md:mb-8 rounded-xl md:rounded-2xl overflow-hidden shadow-2xl"
         >
-          <SoccerGoalScene errorCode={errorCode} />
+          {/* BACKSCOPED: 2026-06-11 — Three.js removed. Reinstate when: lightweight replacement built (see BACKLOG-031) */}
+          {/* <SoccerGoalScene errorCode={errorCode} /> */}
           
           {/* Overlay gradient */}
           <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-transparent to-transparent pointer-events-none" />

@@ -55,6 +55,12 @@ activation: always_on
 
 2026-06-11 — Backscoping via hard-delete instead of comment-out — First pass of BACKLOG-028 removed nav links and UI blocks with empty-string replacements (deletes). Convention is comment-out with BACKSCOPED marker. Root cause: convention was established mid-session after edits were already made. Fix: caught in git diff review and restored all deleted content as commented blocks before commit. Prevention: confirm preservation convention before first backscope edit, not after.
 
+2026-06-11 — Rules of Hooks violation — `useEffect` placed after conditional `return` statements in `src/app/matches/[id]/page.tsx` — React requires hook call order to be identical on every render. If a hook appears after a `if (loading) return` guard, the hook is skipped on early renders, causing hook count mismatch between renders. Prevention: all hooks and derived consts they depend on must be declared above the first conditional return, using safe nullable access (`matchData?.match?.status`) rather than assuming the data is available.
+
+2026-06-11 — Duplicate const declaration after hook move — Moving a `const` that appears after early returns to above them, without removing the original declaration, causes TS2451 (block-scoped variable redeclared). Same function scope, two declarations. Prevention: when moving a const up, always remove the original in the same edit pass. Run tsc immediately after.
+
+2026-06-11 — Cherry-pick conflict when hotfix branch has features reinstated that dev has backscoped — `git cherry-pick` of a dev commit failed with 3-way conflict because the hotfix branch had Predictions/Polls imports and tab types active while dev had them commented out. The diff contained `setActiveTab('predictions')` on one side and `setActiveTab('overview')` on the other. Prevention: if a hotfix branch diverges from dev by having features reinstated, cherry-pick will always conflict on those files. Apply the fix manually instead.
+
 ## Anti-Patterns for This Codebase
 - Middleware matcher and internal logic check do not match.
 - try/catch without finally in any DB operation.
