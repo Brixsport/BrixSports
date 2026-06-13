@@ -4,15 +4,18 @@ import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Home, Search, ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
-import dynamic from 'next/dynamic';
+// BACKSCOPED: 2026-06-11 — Three.js removed. Reinstate when: lightweight replacement built (see BACKLOG-031)
+// import dynamic from 'next/dynamic';
 
-const BasketballRimScene = dynamic(
-  () => import('@/components/error/BasketballRimScene'),
-  { 
-    ssr: false,
-    loading: () => <div className="w-full h-[400px] bg-gradient-to-b from-orange-900 to-red-900 animate-pulse rounded-2xl" />
-  }
-);
+// BACKSCOPED: 2026-06-11 — Three.js removed for perf/deprecation.
+// Reinstate when: lightweight replacement built (see BACKLOG-031)
+// const BasketballRimScene = dynamic(
+//   () => import('@/components/error/BasketballRimScene'),
+//   {
+//     ssr: false,
+//     loading: () => <div className="w-full h-[400px] bg-gradient-to-b from-orange-900 to-red-900 animate-pulse rounded-2xl" />
+//   }
+// );
 
 export default function NotFoundPage() {
   const [isClient, setIsClient] = useState(false);
@@ -71,7 +74,8 @@ export default function NotFoundPage() {
           transition={{ duration: 0.8 }}
           className="relative w-full h-[250px] sm:h-[300px] md:h-[400px] mb-6 md:mb-8 rounded-xl md:rounded-2xl overflow-hidden shadow-2xl"
         >
-          <BasketballRimScene />
+          {/* BACKSCOPED: 2026-06-11 — Three.js removed. Reinstate when: lightweight replacement built (see BACKLOG-031) */}
+          {/* <BasketballRimScene /> */}
           <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-transparent to-transparent pointer-events-none" />
         </motion.div>
 
