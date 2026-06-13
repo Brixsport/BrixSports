@@ -196,6 +196,83 @@ Source code changes only — no database scripts run:
 
 ---
 
+## Session 10 — 2026-06-13
+
+### dev/patch-busalympics-scores.ts — BUSALYMPICS MD2/MD3 Score Entry
+- **Purpose:** Patch 3 BUSALYMPICS matches from UPCOMING (0–0) to FINISHED with correct scores
+- **Staging target:** `brixsportsv2-staging` (`.env.local`)
+- **Prod target:** `brixsportv2-brixsports` (`.env.production`)
+
+**Staging — 3 matches patched:**
+
+| Match ID | Label | Result | Status |
+|----------|-------|--------|--------|
+| `_9nntLoOZZOZGzja8EQE9` | MD3 G1: COLNAS vs COLENVS | 3–1 | FINISHED |
+| `y3KcCGtHA7N7MybKTHX5K` | MD3 G2: COLMANS vs COLENG | 0–1 | FINISHED |
+| `a9CtLwotaXyfsfMf2odAM` | MD2 G1: COLNAS vs COLENG | 1–2 | FINISHED |
+
+- **Staging verified:** Post-apply SELECT confirmed all 3 rows match expected values ✓
+
+**Prod — 2 matches patched (MD3 only; MD2 G1 is staging-only fixture):**
+
+| Match ID | Label | Result | Status |
+|----------|-------|--------|--------|
+| `_9nntLoOZZOZGzja8EQE9` | MD3 G1: COLNAS vs COLENVS | 3–1 | FINISHED |
+| `y3KcCGtHA7N7MybKTHX5K` | MD3 G2: COLMANS vs COLENG | 0–1 | FINISHED |
+
+- **Prod verified:** Post-apply SELECT confirmed both rows match expected values ✓
+- **Script deleted after both DBs confirmed.**
+- **BACKLOG-033 (standings recalculation) is now unblocked** — all BUSALYMPICS match results are in.
+
+---
+
+### dev/recalculate-busalympics-standings.ts — BUSALYMPICS Standings Recalculation
+- **Purpose:** Calculate and write group-stage standings for BUSALYMPICS (competition `9q8LMVqW8KAtF4BJBlyk_`)
+- **Staging target:** `brixsportsv2-staging` (`.env.local`)
+- **Prod target:** `brixsportv2-brixsports` (`.env.production`)
+- **Logic:** 6 FINISHED matches counted (Final excluded via `round != 'Final'`). Win=3, Draw=1, Loss=0. Sort: points DESC, GD DESC, GF DESC.
+
+**Final standings written (group stage only):**
+
+| Pos | Team | P | W | D | L | GF | GA | GD | Pts |
+|-----|------|---|---|---|---|----|----|----|-----|
+| 1 | COLNAS | 3 | 2 | 0 | 1 | 6 | 4 | +2 | 6 |
+| 2 | COLENG | 3 | 2 | 0 | 1 | 5 | 4 | +1 | 6 |
+| 3 | COLMANS | 3 | 1 | 0 | 2 | 3 | 4 | -1 | 3 |
+| 4 | COLENVS | 3 | 1 | 0 | 2 | 5 | 7 | -2 | 3 |
+
+- **Staging:** 4 rows INSERTed, post-apply SELECT verified ✓
+- **Prod:** 4 rows INSERTed, post-apply SELECT verified ✓
+- **Script deleted after both DBs confirmed.**
+- **Resolves:** BACKLOG-033
+
+---
+
+## Session 11 — 2026-06-13
+
+### Schema migration — player_team_affiliations (BACKLOG-037 Step 1)
+
+Applied directly via SQL (not drizzle-kit push — blocked by pre-existing `organizations_slug_unique` drift, see BACKLOG-040).
+
+**Changes applied to STAGING (brixsportsv2-staging) and PROD (brixsportv2-brixsports):**
+
+1. `ALTER TABLE player_team_affiliations ADD COLUMN nicknames TEXT DEFAULT '[]'`
+2. `CREATE UNIQUE INDEX pta_player_team_unique ON player_team_affiliations (player_id, team_id)`
+
+**Staging verification:**
+- `pragma_table_info` → `nicknames` column present ✓
+- `sqlite_master` → `pta_player_team_unique` index present ✓
+
+**Prod verification:**
+- `pragma_table_info` → `nicknames` column present ✓
+- `sqlite_master` → `pta_player_team_unique` index present ✓
+
+**schema.ts updated:** `nicknames` column at line 95, `playerTeamAffiliationsUnique` export at lines 101–102.
+**No script file created** — changes applied inline via node -e with dotenv/config pattern.
+**Resolves:** BACKLOG-037 Step 1 (both DBs). Unblocks BACKLOG-038, BACKLOG-039, BACKLOG-041.
+
+---
+
 ## Outstanding / Pending Scripts
 
 | Script (not yet run) | Purpose | Blocked by |

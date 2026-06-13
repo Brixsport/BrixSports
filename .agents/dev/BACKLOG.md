@@ -82,6 +82,16 @@
 
 - **BUG-025** _(MEDIUM — NDPR)_: `GET /api/matches` public list response exposes `assignedLoggers` full object and `loggerId` field to unauthenticated viewers. Both are banned internal fields per CLAUDE.md. File: `src/app/api/matches/route.ts` GET handler response map. Fix: strip `loggerId` and `assignedLoggers` from the public DTO. If an admin caller needs assignment data, return it conditionally based on `authUser.role`. Filed: 2026-06-08. Found by: flow-checker during `b1a6ec9` review.
 
+- **BUG-027** _(MEDIUM)_: `/competitions` list page not showing all competitions. Filed: 2026-06-13.
+
+- **BUG-028** _(MEDIUM)_: React hydration error #418 on competition detail page. Filed: 2026-06-13.
+
+### BACKLOG-036 — Missing team logos for intercollege college teams
+**Status:** OPEN
+**Priority:** Low
+**Filed:** 2026-06-13
+College teams (COLNAS, COLENG, COLMANS, COLENVS) have no logo images set. `logo: ''` in the DB. Needs Cloudinary upload + DB patch.
+
 ### BACKLOG-034 — Pre-Prod Clearance Script (Tier 1 → CI Gate)
 
 **Status:** TIER 1 COMPLETE — script live at `dev/pre-prod-check.ts`
@@ -129,6 +139,172 @@ Convert to `.github/workflows/pre-prod-check.yml`. Trigger on PR to `main`. Pass
 ---
 
 ## Feature Backlog
+
+### BACKLOG-041 — Nickname Search Integration in Logger Platform
+
+**Status:** OPEN
+**Priority:** Medium
+**Filed:** 2026-06-13
+**Blocked by:** BACKLOG-037 Step 1 (nicknames column — added to staging 2026-06-13, prod pending)
+
+#### Problem
+When a logger searches for a player during live logging, search matches only against `players.name` and `players.jerseyName`. Physical logsheets use field aliases ("Blacko", "No.7 LW") that don't match DB records, forcing loggers to search by full name mid-match.
+
+#### Required Changes
+Update player search in the logger interface to also query the `nicknames` JSON array on `player_team_affiliations`.
+Match order: exact name → jerseyName → any nickname entry.
+Flag nickname matches as lower confidence if needed — but return them.
+
+---
+
+### BACKLOG-040 — Schema Drift: organizations_slug_unique
+
+**Status:** OPEN
+**Priority:** Low
+**Filed:** 2026-06-13
+
+#### Problem
+`src/db/schema.ts` defines a unique index `organizations_slug_unique` on the `organizations` table, but this index does not exist in the live staging or prod DBs. Drizzle-kit `push` fails with `no such index: organizations_slug_unique` when it tries to reconcile the schema, blocking any future `db:push` runs.
+
+#### Required Changes
+Two options:
+1. **Create the index in both DBs** — `CREATE UNIQUE INDEX organizations_slug_unique ON organizations (slug)` — run against staging, verify, then prod. Pre-check for duplicate slugs before applying.
+2. **Remove the index from schema.ts** — if the slug uniqueness is not actually enforced anywhere.
+
+Audit duplicate slugs first before deciding. Do not run db:push until this is resolved.
+
+---
+
+### BACKLOG-037 — Roster Builder
+
+**Status:** OPEN
+**Priority:** High
+**Filed:** 2026-06-13
+**Blocked by:** Step 1 (unique constraint dedup) must run first
+
+#### Problem
+No UI or API exists to link existing players to teams without creating duplicate profiles. Bulk register always creates new player rows. The 68 intercollege players were fixed via a one-off script — this must be a repeatable, permanent flow.
+
+#### Implementation Order
+
+**Step 1 — Schema: unique constraint + nicknames column**
+- Run dedup query on playerTeamAffiliations first
+- Add unique index on (player_id, team_id)
+- Add nicknames TEXT column (JSON array) to playerTeamAffiliations for field aliases ("Blacko", "No.7", "Small")
+- Run db:push against staging then prod
+
+**Step 2 — API: POST /api/admin/teams/[teamId]/roster**
+- Auth: getAuthUser + role === 'admin'
+- Discriminated union input:
+  `{ mode: 'existing', playerId, jerseyNumber?, position? }`
+  `{ mode: 'new', name, jerseyName, number, position, college?, university?, email?, nicknames? }`
+- existing mode: verify player exists, check for existing affiliation row, INSERT if not found, skip if duplicate
+- new mode: INSERT players row (no legacy teamId), INSERT affiliation row, call syncPlayerOrganizationAffiliations
+- Per-entry response: inserted | skipped | error
+
+**Step 3 — API: GET /api/players/search**
+- Query params: q (name/nickname search), excludeTeamId
+- Returns: id, name, jerseyName, position, current teams, college, university
+- Nickname-aware: matches against nicknames JSON array in playerTeamAffiliations
+- Auth: admin only
+
+**Step 4 — UI: Roster Builder tab on team detail page**
+- Route: /admin/teams/[id] — new "Manage Roster" tab
+- Two modes per row: Add Existing | Create New
+- Add Existing: search bar → results dropdown → jersey number + position override → confirm
+- Create New: inline form same fields as bulk-register per-player row + nicknames field
+- Batch submit all rows in one POST request
+- Per-row feedback: inserted / skipped / error
+
+**Step 5 — Bulk register pre-flight dedup**
+- Before inserting new player row in bulk-register route: search by name + college + position
+- If strong match found: flag as potential duplicate, return in skippedPlayers with reason 'possible_duplicate'
+- Include matched player id and name in response — do not silently create duplicate profile
+- Admin can then use Roster Builder to link the existing player instead
+
+**Step 6 — CSV import tab on Roster Builder**
+- Upload CSV: name/nickname, jersey number, position
+- Preview table: auto-match against team's affiliated players (name + nickname aware)
+- Manual dropdown for unmatched rows
+- Confirm → runs same POST /api/admin/teams/[teamId]/roster
+
+**Step 7 (future) — Squad Selector**
+- Revive squadPlayers table (already has correct unique constraint: teamId + competitionId + playerId)
+- UI: competition → per-team squad selection from roster
+- Enables: match event logging validates player is in squad
+
+#### Notes
+- jerseyNumber on playerTeamAffiliations is per-team, separate from players.number — allow null (college football is loose with numbers)
+- nicknames field solves the reconciliation problem: "Blacko" matches because the affiliation row stores it
+- squadPlayers is Step 7 not Step 1 — get roster working first
+- Related: BACKLOG-016 (original roster builder filing), BACKLOG-006 (bulk register existing player select), BACKLOG-018 (match event logsheets)
+
+---
+
+### BACKLOG-038 — Bulk Register Dedup Refinement
+
+**Status:** OPEN
+**Priority:** Medium
+**Filed:** 2026-06-13
+**Blocked by:** BACKLOG-037 Step 5
+
+#### Problem
+Bulk register's dedup check queries players.teamId (legacy column) for jersey number collision. A player registered via playerTeamAffiliations only (no legacy teamId) would not be caught — creating a duplicate profile.
+
+#### Required Changes
+Add pre-flight dedup to POST /api/players/bulk-register:
+Before INSERT, search players WHERE name LIKE '%input.name%' AND college = input.college.
+If match found with similarity > threshold:
+- Add to skippedPlayers with reason: 'possible_duplicate'
+- Include matched player id and name in response
+- Do not insert
+
+Admin can then use Roster Builder to link the existing player instead.
+
+---
+
+### BACKLOG-039 — Match Import CSV Nickname-Aware Reconciliation
+
+**Status:** OPEN
+**Priority:** Medium
+**Filed:** 2026-06-13
+**Blocked by:** BACKLOG-037 Step 1 (nicknames column must exist first)
+
+#### Problem
+The existing backfill CSV reconciliation preview matches player names against name and jerseyName fields only. Physical logsheets use nicknames and field names ("Blacko", "No.7 LW") that don't match DB records.
+
+#### Required Changes
+Update the CSV reconciliation preview auto-match logic in /admin/past-matches/import to also search against the nicknames JSON array in playerTeamAffiliations.
+Match order: exact name → jerseyName → any nickname.
+Flag as 'needs_review' if only nickname match found (lower confidence).
+
+---
+
+### BACKLOG-035 — Sentry Configuration Cleanup
+
+**Status:** OPEN
+**Priority:** Low
+**Filed:** 2026-06-13
+
+#### Problem
+Four Sentry configuration warnings on every build:
+1. disableLogger deprecated — use webpack.treeshake.removeDebugLogging
+2. No instrumentation.ts file — server-side init incomplete
+3. sentry.client.config.ts should be renamed to instrumentation-client.ts for Turbopack compatibility
+4. No SENTRY_AUTH_TOKEN — source maps not uploading, releases not created
+
+#### Required Changes
+1. Add SENTRY_AUTH_TOKEN to Vercel env vars (prod + staging)
+2. Create instrumentation.ts at project root for server init
+3. Rename sentry.client.config.ts → instrumentation-client.ts
+4. Fix disableLogger deprecation in next.config.ts: replace `disableLogger: true` with `webpack.treeshake.removeDebugLogging: true`
+
+#### Notes
+- Sentry is capturing errors today — this is fidelity improvement not a blocker
+- Source maps needed for readable stack traces in dashboard
+- Do not add real DSN values to source code
+
+---
 
 ### BACKLOG-001 — Goal Type Breakdown in playerStats
 
@@ -1810,9 +1986,10 @@ without opening the match detail.
 
 ---
 
-### BACKLOG-033 — BUSALYMPICS Standings Recalculation
+### ~~BACKLOG-033 — BUSALYMPICS Standings Recalculation~~
 
-**Status:** OPEN — blocked on BACKLOG-017 (2 of 3 missing scores still unconfirmed)
+**Status:** RESOLVED — 2026-06-13. All scores patched, standings written to both staging and prod. See RUNLOG.md Session 10.
+**Was:** OPEN — blocked on BACKLOG-017 (2 of 3 missing scores still unconfirmed)
 **Priority:** High
 **Filed:** 2026-06-08
 

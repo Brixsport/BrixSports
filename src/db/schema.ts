@@ -92,9 +92,14 @@ export const playerTeamAffiliations = sqliteTable('player_team_affiliations', {
     endDate: integer('end_date', { mode: 'timestamp' }),
     jerseyNumber: integer('jersey_number'),
     position: text('position'),
+    nicknames: text('nicknames').default('[]'),
+    // JSON array of field aliases e.g. ["Blacko", "No.7"]
     // No expiry — university affiliation is permanent
     createdAt: integer('created_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
 });
+
+export const playerTeamAffiliationsUnique = uniqueIndex('pta_player_team_unique')
+    .on(playerTeamAffiliations.playerId, playerTeamAffiliations.teamId);
 
 // Player Organization Affiliations table
 // Stores institutional relationships such as university, college, department, and governing-body affiliations.

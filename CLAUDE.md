@@ -351,6 +351,16 @@ git push origin hotfix/description
 - Every run logged in `.agents/dev/RUNLOG.md`
 - Include: date, script name, what it did, row counts affected
 
+### Security Rules — Mandatory Read
+Before writing any script or code that touches:
+- The database (Turso/Drizzle, any direct libsql client)
+- Auth tokens, JWT, or session handling
+- Environment variables containing secrets
+- API keys (Cloudinary, Sentry, VAPID, AWS)
+- Any dev/ script that connects to staging or prod
+
+**Read `.agents/rules/security.md` first. Violations are blocking.**
+
 ---
 
 ## Cross-Project Knowledge
