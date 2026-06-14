@@ -61,6 +61,14 @@ activation: always_on
 
 2026-06-11 — Cherry-pick conflict when hotfix branch has features reinstated that dev has backscoped — `git cherry-pick` of a dev commit failed with 3-way conflict because the hotfix branch had Predictions/Polls imports and tab types active while dev had them commented out. The diff contained `setActiveTab('predictions')` on one side and `setActiveTab('overview')` on the other. Prevention: if a hotfix branch diverges from dev by having features reinstated, cherry-pick will always conflict on those files. Apply the fix manually instead.
 
+2026-06-14 — College team logos empty string in DB rendered as broken img — `logo: ''` for COLNAS/COLENG/COLMANS/COLENVS. Direct `<img src="">` renders broken image. Prevention: always pass logo through `isValidLogo()` before rendering; use `TeamLogo` component everywhere, not raw `<img>`.
+
+2026-06-14 — isValidLogo initially too strict, blocked working local paths — First implementation rejected all non-http paths, blocking `/assests/...` (local public folder) used by BUSA teams. Root cause: tried to enforce Cloudinary as part of validation. Fix: `isValidLogo` only rejects clearly broken values (empty string, null, undefined). Prevention: validation guards should protect against broken states, not enforce migration progress.
+
+2026-06-14 — db:push fails when schema has an index that doesn't exist in live DB — `organizations_slug_unique` added to schema.ts after DBs were created, no push was run at the time. Drizzle-kit tries to delete the index on reconcile, fails. Prevention: after adding any index to schema.ts, immediately apply via SQL direct or db:push to staging. Never let schema and live DB drift.
+
+2026-06-14 — staging and prod scores diverged silently for the same match — MD2 G1 had different homeScore on staging vs prod. No error surfaced. Prevention: after any PATCH script, always run a SELECT on both DBs and compare. Include a parity check at the end of every patch script.
+
 ## Anti-Patterns for This Codebase
 - Middleware matcher and internal logic check do not match.
 - try/catch without finally in any DB operation.

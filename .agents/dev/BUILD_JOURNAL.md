@@ -11,6 +11,58 @@
 
 ## Sessions
 
+### Sessions 11-12 — 2026-06-14
+
+**Focus:** BUSALYMPICS data completion (BACKLOG-017 + BACKLOG-033), Three.js hotfix to prod, and BACKLOG-037 Steps 1-4 (Roster Builder foundation) + TeamLogo utility.
+
+**Built:**
+
+- **`dev/patch-busalympics-scores.ts` (run + deleted):** PATCHed MD3 G1 (`_9nntLoOZZOZGzja8EQE9` COLNAS 3–1 COLENVS) and MD3 G2 (`y3KcCGtHA7N7MybKTHX5K` COLMANS 0–1 COLENG) on staging + prod. Also corrected MD2 G1 on staging (was wrong score). All 7 BUSALYMPICS fixtures now FINISHED on both DBs.
+
+- **`dev/recalculate-busalympics-standings.ts` (run + deleted):** Upserted 4 standings rows for `competitionId: 9q8LMVqW8KAtF4BJBlyk_` on staging + prod. Final excluded correctly. COLENG top of group (6pts, +3 GD).
+
+- **SQL direct — staging + prod:**
+  - `ALTER TABLE player_team_affiliations ADD COLUMN nicknames TEXT DEFAULT '[]'` — confirmed both DBs.
+  - `CREATE UNIQUE INDEX pta_player_team_unique ON player_team_affiliations (player_id, team_id)` — confirmed both DBs.
+  - `src/db/schema.ts` updated to match: `nicknames` column + `pta_player_team_unique` index.
+
+- **`src/app/api/admin/teams/[teamId]/roster/route.ts` (276 lines):** `POST /api/admin/teams/[teamId]/roster` — discriminated union (`mode: 'existing' | 'new'`), dedup against existing affiliation, `syncPlayerOrganizationAffiliations` on new-mode inserts. `tsc` clean.
+
+- **`src/app/api/players/search/route.ts` (219 lines):** `GET /api/players/search` — `q` (name/jerseyName/nickname), `excludeTeamId`, admin-only. Nickname search parses JSON array from `playerTeamAffiliations.nicknames`. `tsc` clean.
+
+- **`src/app/admin/teams/page.tsx` (231 lines):** Teams list page — cards with logo, org, crest type, "Manage Roster" CTA.
+
+- **`src/app/admin/teams/[id]/page.tsx` (919 lines):** Team detail with Roster Builder tab — "Add Existing" player search with debounce + dropdown, "Create New" inline form, batch submit, per-row inserted/skipped/error feedback. Fuzzy dedup warning panel for >70% name similarity.
+
+- **`src/lib/utils/team-logo.tsx`:** `isValidLogo()` guard (rejects empty string, non-http local paths, invalid URLs) + `TeamLogo` component with `onError` fallback to styled initials avatar. Migrated: `src/components/ui/MatchCard.tsx` (6 instances), `src/app/competitions/page.tsx` (5), `src/app/admin/page.tsx` (2) — 13 total. First-pass complete.
+
+- **`src/components/AdminSidebar.tsx`:** Teams entry added under Player Management section.
+
+- **Three.js hotfix:** `src/app/error.tsx` and `src/app/not-found.tsx` Three.js `dynamic` import and Scene JSX commented out. Pushed to prod. Error pages no longer load ~500KB Three.js bundle.
+
+- **New backlog/bug items filed:** BACKLOG-036 (college team logos), BACKLOG-037 (Roster Builder — already in flight), BACKLOG-038 (Bulk Register dedup), BACKLOG-039 (CSV nickname reconciliation), BACKLOG-040 (schema drift: organizations_slug_unique), BACKLOG-041 (nickname search in logger), BACKLOG-042 (Duplicate Merge Tool), BACKLOG-043 (Temp Player flow), BACKLOG-044 (Match Config: duration/sub rules). BUG-027 (competitions list incomplete), BUG-028 (hydration error #418 on competition detail).
+
+**Bugs encountered:**
+
+- **College team logos are empty string in DB** — `isValidLogo('')` returns false, initials fallback renders. Root cause: logos were never uploaded for COLNAS/COLENG/COLMANS/COLENVS. No code bug, data gap only. Tracked as BACKLOG-036.
+- **BUSA team logos use local public/ paths** (`/assests/...` typo) — `isValidLogo` initially blocked these. Fixed: `isValidLogo` now only rejects empty string and clearly invalid values, not local paths. Local paths resolve today; Cloudinary migration is future work (BACKLOG-036).
+- **organizations_slug_unique schema drift** — `src/db/schema.ts` declares the index but it does not exist in staging or prod. `db:push` fails. Root cause: index was added to schema after DBs were created without a push. Workaround: use SQL direct. Tracked as BACKLOG-040. Do not run `db:push` until resolved.
+
+**Resolved:** BACKLOG-017 (all 3 missing MD3 scores confirmed + patched), BACKLOG-033 (standings written to both DBs).
+
+**Deferred:**
+- BACKLOG-037 Steps 5-7 (Bulk Register dedup refinement, CSV import tab, Squad Selector)
+- BACKLOG-036 second pass — 18 files, 40 logo instances still using raw `<img>` instead of TeamLogo
+- BUG-025 (assignedLoggers NDPR leak on public /api/matches list — strip 2 fields, quick fix)
+- BUG-027 (competitions list missing BUSALYMPICS Football)
+- BUG-028 (hydration error #418 on competition detail page)
+- BACKLOG-026 (AWS SES broken email)
+- BUG-021–024 (notifications auth, unbounded queries, schema-nesa, duplicate routes)
+
+**Next session:** Verify Roster Builder on staging (/admin/teams → pick a team → add player). Then BUG-025 (strip `assignedLoggers` + `loggerId` from public `/api/matches` DTO — quick warm-up). Then BACKLOG-037 Step 5 (bulk-register pre-flight dedup: name+college similarity check, return `possible_duplicate` in skippedPlayers).
+
+---
+
 ### Session 11 — 2026-06-11
 
 **Focus:** Rules of Hooks violation fix in match detail page, Three.js error scene backscope, platform model documentation.

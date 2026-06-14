@@ -714,12 +714,12 @@ is in place:
 
 ---
 
-### BACKLOG-017 — Missing BUSALYMPICS Match Scores (Partially Resolved)
+### ~~BACKLOG-017 — Missing BUSALYMPICS Match Scores~~
 
-**Status:** PARTIAL — 1 of 3 confirmed, 2 remain (both MD3)
+**Status:** RESOLVED — 2026-06-14. All 3 scores confirmed and patched (staging + prod). MD3 G1: COLNAS 3–1 COLENVS. MD3 G2: COLMANS 0–1 COLENG. All 7 fixtures FINISHED.
 **Priority:** HIGH — standings still blocked until all scores confirmed
 **Filed:** 2026-06-07
-**Updated:** 2026-06-08
+**Updated:** 2026-06-14
 
 #### Status
 
@@ -2013,7 +2013,7 @@ without opening the match detail.
 
 ### ~~BACKLOG-033 — BUSALYMPICS Standings Recalculation~~
 
-**Status:** RESOLVED — 2026-06-13. All scores patched, standings written to both staging and prod. See RUNLOG.md Session 10.
+**Status:** RESOLVED — 2026-06-14. All scores patched, standings written to both staging and prod. 4 rows upserted. Final excluded correctly. COLENG top (6pts).
 **Was:** OPEN — blocked on BACKLOG-017 (2 of 3 missing scores still unconfirmed)
 **Priority:** High
 **Filed:** 2026-06-08
