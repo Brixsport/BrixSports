@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { Clock, MapPin, Trophy, TrendingUp } from 'lucide-react';
 import { format } from 'date-fns';
 import LiveMatchStatus from '@/components/LiveMatchStatus';
+import { TeamLogo } from '@/lib/utils/team-logo';
 
 interface MatchCardProps {
     match: {
@@ -93,13 +94,7 @@ export default function MatchCard({ match, variant = 'compact', showCompetition 
                     <div className="flex items-center justify-between">
                         {/* Home Team */}
                         <div className="flex items-center gap-3 flex-1">
-                            <div className="w-8 h-8 bg-white/10 rounded-lg flex items-center justify-center flex-shrink-0">
-                                {match.homeTeam.logo ? (
-                                    <img src={match.homeTeam.logo} alt={match.homeTeam.name} className="w-6 h-6 object-contain" />
-                                ) : (
-                                    <div className="w-6 h-6 rounded-full" style={{ backgroundColor: match.homeTeam.color }} />
-                                )}
-                            </div>
+                            <TeamLogo logo={match.homeTeam.logo} name={match.homeTeam.name} color={match.homeTeam.color} size="sm" />
                             <span className="text-white font-medium truncate">{match.homeTeam.shortName}</span>
                         </div>
 
@@ -129,13 +124,7 @@ export default function MatchCard({ match, variant = 'compact', showCompetition 
                         {/* Away Team */}
                         <div className="flex items-center gap-3 flex-1 justify-end">
                             <span className="text-white font-medium truncate">{match.awayTeam.shortName}</span>
-                            <div className="w-8 h-8 bg-white/10 rounded-lg flex items-center justify-center flex-shrink-0">
-                                {match.awayTeam.logo ? (
-                                    <img src={match.awayTeam.logo} alt={match.awayTeam.name} className="w-6 h-6 object-contain" />
-                                ) : (
-                                    <div className="w-6 h-6 rounded-full" style={{ backgroundColor: match.awayTeam.color }} />
-                                )}
-                            </div>
+                            <TeamLogo logo={match.awayTeam.logo} name={match.awayTeam.name} color={match.awayTeam.color} size="sm" />
                         </div>
                     </div>
 
@@ -180,13 +169,7 @@ export default function MatchCard({ match, variant = 'compact', showCompetition 
                         {/* Home Team */}
                         <div className="flex items-center justify-between">
                             <div className="flex items-center gap-4 flex-1">
-                                <div className="w-12 h-12 bg-white/10 rounded-xl flex items-center justify-center flex-shrink-0">
-                                    {match.homeTeam.logo ? (
-                                        <img src={match.homeTeam.logo} alt={match.homeTeam.name} className="w-10 h-10 object-contain" />
-                                    ) : (
-                                        <div className="w-10 h-10 rounded-full" style={{ backgroundColor: match.homeTeam.color }} />
-                                    )}
-                                </div>
+                                <TeamLogo logo={match.homeTeam.logo} name={match.homeTeam.name} color={match.homeTeam.color} size="md" />
                                 <div>
                                     <h3 className="text-xl font-bold text-white">{match.homeTeam.name}</h3>
                                     <p className="text-sm text-gray-400">Home</p>
@@ -198,13 +181,7 @@ export default function MatchCard({ match, variant = 'compact', showCompetition 
                         {/* Away Team */}
                         <div className="flex items-center justify-between">
                             <div className="flex items-center gap-4 flex-1">
-                                <div className="w-12 h-12 bg-white/10 rounded-xl flex items-center justify-center flex-shrink-0">
-                                    {match.awayTeam.logo ? (
-                                        <img src={match.awayTeam.logo} alt={match.awayTeam.name} className="w-10 h-10 object-contain" />
-                                    ) : (
-                                        <div className="w-10 h-10 rounded-full" style={{ backgroundColor: match.awayTeam.color }} />
-                                    )}
-                                </div>
+                                <TeamLogo logo={match.awayTeam.logo} name={match.awayTeam.name} color={match.awayTeam.color} size="md" />
                                 <div>
                                     <h3 className="text-xl font-bold text-white">{match.awayTeam.name}</h3>
                                     <p className="text-sm text-gray-400">Away</p>
@@ -262,12 +239,8 @@ export default function MatchCard({ match, variant = 'compact', showCompetition 
                 <div className="grid grid-cols-[1fr_auto_1fr] gap-6 items-center">
                     {/* Home Team */}
                     <div className="text-center">
-                        <div className="w-16 h-16 bg-white/10 rounded-xl flex items-center justify-center mx-auto mb-3">
-                            {match.homeTeam.logo ? (
-                                <img src={match.homeTeam.logo} alt={match.homeTeam.name} className="w-14 h-14 object-contain" />
-                            ) : (
-                                <div className="w-14 h-14 rounded-full" style={{ backgroundColor: match.homeTeam.color }} />
-                            )}
+                        <div className="flex justify-center mb-3">
+                            <TeamLogo logo={match.homeTeam.logo} name={match.homeTeam.name} color={match.homeTeam.color} size="lg" />
                         </div>
                         <h3 className="text-lg font-bold text-white mb-1">{match.homeTeam.name}</h3>
                         <p className="text-sm text-gray-400">Home</p>
@@ -288,12 +261,8 @@ export default function MatchCard({ match, variant = 'compact', showCompetition 
 
                     {/* Away Team */}
                     <div className="text-center">
-                        <div className="w-16 h-16 bg-white/10 rounded-xl flex items-center justify-center mx-auto mb-3">
-                            {match.awayTeam.logo ? (
-                                <img src={match.awayTeam.logo} alt={match.awayTeam.name} className="w-14 h-14 object-contain" />
-                            ) : (
-                                <div className="w-14 h-14 rounded-full" style={{ backgroundColor: match.awayTeam.color }} />
-                            )}
+                        <div className="flex justify-center mb-3">
+                            <TeamLogo logo={match.awayTeam.logo} name={match.awayTeam.name} color={match.awayTeam.color} size="lg" />
                         </div>
                         <h3 className="text-lg font-bold text-white mb-1">{match.awayTeam.name}</h3>
                         <p className="text-sm text-gray-400">Away</p>

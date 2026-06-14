@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
 import { Activity, Shield, Users, Server, Globe, Settings, Eye, AlertCircle, CheckCircle2, MoreVertical, Search, Filter, Newspaper, TrendingUp, Trophy, Calendar, Video, Timer, Bell } from 'lucide-react';
+import { TeamLogo } from '@/lib/utils/team-logo';
 
 
 export default function AdminPage() {
@@ -133,17 +134,9 @@ export default function AdminPage() {
                           <td className="p-4 md:p-6">
                             <div className="flex items-center gap-2 md:gap-3">
                               <div className="flex items-center gap-1 shrink-0">
-                                {homeTeam?.logo ? (
-                                  <img src={homeTeam.logo} alt={homeTeam.name} className="w-5 h-5 md:w-6 md:h-6 object-contain" />
-                                ) : (
-                                  <span className="text-sm md:text-xl">⚽</span>
-                                )}
+                                <TeamLogo logo={homeTeam?.logo} name={homeTeam?.name ?? ''} color={homeTeam?.color} size="sm" />
                                 <span className="text-[8px] md:text-xs font-bold italic text-white/40">VS</span>
-                                {awayTeam?.logo ? (
-                                  <img src={awayTeam.logo} alt={awayTeam.name} className="w-5 h-5 md:w-6 md:h-6 object-contain" />
-                                ) : (
-                                  <span className="text-sm md:text-xl">⚽</span>
-                                )}
+                                <TeamLogo logo={awayTeam?.logo} name={awayTeam?.name ?? ''} color={awayTeam?.color} size="sm" />
                               </div>
                               <div className="min-w-0">
                                 <p className="text-[11px] md:text-sm font-bold truncate max-w-[120px] md:max-w-none">{homeTeam?.shortName || 'TBD'} vs {awayTeam?.shortName || 'TBD'}</p>

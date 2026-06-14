@@ -7,6 +7,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import Image from 'next/image';
 import MatchCalendar from '@/components/MatchCalendar';
 import { isSameDay } from 'date-fns';
+import { TeamLogo } from '@/lib/utils/team-logo';
 
 type SportType = 'Football' | 'Basketball' | 'Track';
 
@@ -299,8 +300,8 @@ function CompetitionsContent() {
                           </td>
                           <td className="px-6 py-4">
                             <div className="flex items-center gap-4">
-                              <div className="w-10 h-10 relative flex-shrink-0 bg-white/5 rounded-lg p-1">
-                                {row.team.logo ? <img src={row.team.logo} alt={row.team.name} className="w-full h-full object-contain" /> : <div className="w-full h-full flex items-center justify-center text-xs font-bold text-white/20">{row.team.shortName}</div>}
+                              <div className="w-10 h-10 relative flex-shrink-0 bg-white/5 rounded-lg p-1 flex items-center justify-center">
+                                <TeamLogo logo={row.team.logo} name={row.team.name} size="sm" />
                               </div>
                               <div className="min-w-0">
                                 <p className="text-sm font-black uppercase tracking-tight truncate">{row.team.name}</p>
@@ -393,7 +394,7 @@ function CompetitionsContent() {
                             <p className="font-bold text-sm uppercase truncate">{match.homeTeam?.name || 'Home'}</p>
                           </div>
                           <div className="w-10 h-10 bg-white/5 rounded-lg p-1 flex items-center justify-center">
-                            {match.homeTeam?.logo ? <img src={match.homeTeam.logo} className="w-full h-full object-contain" /> : <span className="text-xs font-bold">{match.homeTeam?.shortName}</span>}
+                            <TeamLogo logo={match.homeTeam?.logo} name={match.homeTeam?.name ?? ''} size="sm" />
                           </div>
                         </div>
 
@@ -407,7 +408,7 @@ function CompetitionsContent() {
 
                         <div className="flex items-center gap-3 flex-1">
                           <div className="w-10 h-10 bg-white/5 rounded-lg p-1 flex items-center justify-center">
-                            {match.awayTeam?.logo ? <img src={match.awayTeam.logo} className="w-full h-full object-contain" /> : <span className="text-xs font-bold">{match.awayTeam?.shortName}</span>}
+                            <TeamLogo logo={match.awayTeam?.logo} name={match.awayTeam?.name ?? ''} size="sm" />
                           </div>
                           <div className="text-left flex-1">
                             <p className="font-bold text-sm uppercase truncate">{match.awayTeam?.name || 'Away'}</p>
@@ -459,7 +460,7 @@ function CompetitionsContent() {
                                 <div className="space-y-3">
                                   <div className="flex justify-between items-center">
                                     <div className="flex items-center gap-2">
-                                      <img src={match.homeTeam?.logo} className="w-6 h-6 object-contain" />
+                                      <TeamLogo logo={match.homeTeam?.logo} name={match.homeTeam?.name ?? 'TBD'} size="sm" />
                                       <span className="text-[10px] font-black uppercase text-white/60">{match.homeTeam?.name || 'TBD'}</span>
                                     </div>
                                     <span className="font-display italic text-lg">{match.homeScore ?? '-'}</span>
@@ -467,7 +468,7 @@ function CompetitionsContent() {
                                   <div className="h-px bg-white/5" />
                                   <div className="flex justify-between items-center">
                                     <div className="flex items-center gap-2">
-                                      <img src={match.awayTeam?.logo} className="w-6 h-6 object-contain" />
+                                      <TeamLogo logo={match.awayTeam?.logo} name={match.awayTeam?.name ?? 'TBD'} size="sm" />
                                       <span className="text-[10px] font-black uppercase text-white/60">{match.awayTeam?.name || 'TBD'}</span>
                                     </div>
                                     <span className="font-display italic text-lg">{match.awayScore ?? '-'}</span>

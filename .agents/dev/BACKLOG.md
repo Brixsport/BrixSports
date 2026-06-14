@@ -92,6 +92,28 @@
 **Filed:** 2026-06-13
 College teams (COLNAS, COLENG, COLMANS, COLENVS) have no logo images set. `logo: ''` in the DB. Needs Cloudinary upload + DB patch.
 
+**TeamLogo component built** (`src/lib/utils/team-logo.tsx`) — handles empty/null logo with initials fallback and `onError` handler. First-pass migration complete on 3 high-impact files (MatchCard, competitions page, admin dashboard — 13 instances total).
+
+**Remaining logo render sites to migrate to TeamLogo component (second pass):**
+- `src/app/admin/track-events/page.tsx` (2)
+- `src/app/admin/manager/page.tsx` (2)
+- `src/components/TrackLogger.tsx` (4)
+- `src/app/admin/transfers/page.tsx` (2)
+- `src/app/user/[userId]/page.tsx` (1)
+- `src/app/teams/[id]/page.tsx` (1)
+- `src/app/search/page.tsx` (2)
+- `src/app/admin/livestreams/page.tsx` (2)
+- `src/app/profile/page.tsx` (2)
+- `src/app/logger/page.tsx` (2)
+- `src/components/MatchLineups.tsx` (3)
+- `src/components/LiveStats.tsx` (2)
+- `src/components/lineup/TeamSelector.tsx` (3)
+- `src/components/lineup/MatchSelector.tsx` (2)
+- `src/components/GlobalSearch.tsx` (2)
+- `src/components/FullPitchLineups.tsx` (4)
+- `src/components/FootballLogger.tsx` (2)
+- `src/components/BasketballLogger.tsx` (7)
+
 ### BACKLOG-034 — Pre-Prod Clearance Script (Tier 1 → CI Gate)
 
 **Status:** TIER 1 COMPLETE — script live at `dev/pre-prod-check.ts`
