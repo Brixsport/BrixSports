@@ -215,6 +215,7 @@ No UI or API exists to link existing players to teams without creating duplicate
 - Create New: inline form same fields as bulk-register per-player row + nicknames field
 - Batch submit all rows in one POST request
 - Per-row feedback: inserted / skipped / error
+- **UI note (fuzzy dedup):** Show a "similar players found" warning panel for any player where name similarity > 70% — let admin decide whether to link or create. Catches variants like "Chukwuemeka" vs "Chukwu" that the unique index and LOWER(name) check won't catch. This is a UI-layer concern, not enforced server-side.
 
 **Step 5 — Bulk register pre-flight dedup**
 - Before inserting new player row in bulk-register route: search by name + college + position
@@ -225,7 +226,9 @@ No UI or API exists to link existing players to teams without creating duplicate
 **Step 6 — CSV import tab on Roster Builder**
 - Upload CSV: name/nickname, jersey number, position
 - Preview table: auto-match against team's affiliated players (name + nickname aware)
-- Manual dropdown for unmatched rows
+- Each row shows match confidence: exact name → high, jerseyName → medium, nickname → medium, no match → unmatched
+- Manual dropdown on any row for admin override (especially sub-threshold matches)
+- Unmatched rows default to "Create New" mode
 - Confirm → runs same POST /api/admin/teams/[teamId]/roster
 
 **Step 7 (future) — Squad Selector**
@@ -2103,3 +2106,134 @@ Currently:
 - BACKLOG-017 must be fully resolved (all 3 missing scores confirmed) before this runs
 - Related: BACKLOG-019 (post-match automation) — once that hook exists, standings
   recalculation will fire automatically on PATCH to FINISHED. Until then, manual trigger.
+
+---
+
+### BACKLOG-042 — Duplicate Player Merge Tool
+
+**Status:** OPEN
+**Priority:** Low — build after real duplicates appear in prod
+**Filed:** 2026-06-13
+
+#### Problem
+Two player profiles for the same person can exist with 
+different names (e.g. "Chukwuemeka" vs "Chukwu") or 
+created in different competitions. The unique index on 
+playerTeamAffiliations prevents same-team duplicates 
+but not same-person different-profile across teams.
+
+#### Required Changes
+Admin tool at /admin/players/merge:
+- Search two players by name
+- Show side-by-side: name, college, teams, stats, events
+- Select canonical profile (keep) and duplicate (merge from)
+- On confirm:
+  - Update all matchEvents.playerId references to canonical
+  - Update all playerTeamAffiliations.playerId to canonical
+  - Update all playerStats.playerId to canonical
+  - Delete duplicate players row
+  - Log merge in RUNLOG with both IDs
+
+#### Notes
+- Do not build until real duplicates appear in prod data
+- Fuzzy warning panel in Roster Builder (BACKLOG-037 Step 4) 
+  is the prevention layer — this is the cure
+- Merge is irreversible — require typed confirmation
+
+---
+
+### BACKLOG-043 — Temp Player / Unregistered Player Flow
+
+**Status:** OPEN
+**Priority:** Medium — hit in real matches
+**Filed:** 2026-06-13
+
+#### Problem
+During a match, a player shows up who is not on the 
+registered roster. Logger needs to log their goal/card 
+but cannot find them in the player search. Currently 
+no way to handle this without stopping the match flow.
+
+#### Required Changes
+In the logger platform (FootballLogger/BasketballLogger):
+- "Unregistered Player" button on player search
+- Creates a temp player entry scoped to this match only:
+  tempName: string (e.g. "No.9 COLNAS" or "Unknown Forward")
+  teamId: current match team
+  matchId: current match
+  isTemp: true flag on players row or separate tempPlayers table
+- Event logs against this temp player normally
+- After match: admin can resolve temp player → 
+  link to real player profile (triggers BACKLOG-042 merge flow)
+  or create as new permanent profile
+
+#### Notes
+- College football is loose — this will happen regularly
+- Temp entries must be clearly flagged in match events 
+  and stats so they don't corrupt leaderboards
+- Resolution flow (temp → real) is Part 2, 
+  can ship temp creation first
+
+---
+
+### BACKLOG-044 — Match Config: Duration, Substitution Rules, Format
+
+**Status:** OPEN
+**Priority:** High — affects live logging correctness
+**Filed:** 2026-06-13
+
+#### Problem
+The system assumes all matches are 90-minute, 
+3-substitution football. Real matches at Bells vary:
+- NPUGA 5-aside: 40 mins, unlimited rolling subs, 
+  players can re-enter after subbing off
+- Friendly: custom duration, no sub limit
+- BUSA League: standard 90 mins, 5 subs
+- Cup Final: 90 mins + extra time + penalties possible
+
+No match config exists. The logger platform has no 
+concept of match duration, sub limits, or rolling subs.
+
+#### Schema
+Revive competitionSportSettings table (exists, 0 rows, 
+no API, no UI). Add fields:
+- matchDuration: integer (minutes, default 90)
+- halfDuration: integer (minutes, default 45)  
+- maxSubstitutions: integer | null (null = unlimited)
+- rollingSubstitutions: boolean (default false)
+  true = player can re-enter after being subbed off
+- extraTimeEnabled: boolean (default false)
+- extraTimeDuration: integer (minutes, default 15)
+- penaltiesEnabled: boolean (default false)
+- teamSize: integer (default 11)
+
+Per-match override: same fields on matches table 
+as nullable columns — if set, override competition config.
+
+#### Logger Platform Changes
+- FootballLogger reads matchConfig on mount
+- Match timer counts down from matchDuration not up 
+  (or counts up with a duration ceiling)
+- Sub tracking: counts subs used vs maxSubstitutions, 
+  warns when limit reached
+- If rollingSubstitutions = true: allow same player 
+  to be subbed back in without blocking
+- Half time auto-prompt at halfDuration mark
+
+#### Admin Changes
+- Competition creation modal: sport settings tab
+  (duration, sub rules, team size)
+- Match creation: optional per-match overrides
+- Display match format on match cards 
+  (e.g. "5-aside · 40 mins" vs "11-aside · 90 mins")
+
+#### Notes
+- competitionSportSettings already exists in schema — 
+  additive columns only, no table rebuild
+- This affects rating calculator too — 
+  minutes played weight differs in 40-min vs 90-min game
+- Do not build before Roster Builder (BACKLOG-037) 
+  is complete — logger platform changes should come 
+  after roster is stable
+- Related: BACKLOG-033-B (event handler), 
+  BACKLOG-019 (post-match automation)
