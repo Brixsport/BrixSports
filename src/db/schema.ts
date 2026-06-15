@@ -274,6 +274,14 @@ export const competitionSportSettings = sqliteTable('competition_sport_settings'
     // e.g. {"format":"set-based","bestOf":5,"allowDoubles":true}
     customRules: text('custom_rules'), // JSON
     isTimed: integer('is_timed', { mode: 'boolean' }).default(true), // false for Chess, Scrabble, Table Tennis
+    maxSubstitutions: integer('maxSubstitutions'), // null = unlimited
+    allowSubbedOutReentry: integer('allowSubbedOutReentry', { mode: 'boolean' }).notNull().default(false),
+    extraTimeEnabled: integer('extraTimeEnabled', { mode: 'boolean' }).notNull().default(false),
+    extraTimeDuration: integer('extraTimeDuration').notNull().default(15), // minutes per half of extra time
+    penaltiesEnabled: integer('penaltiesEnabled', { mode: 'boolean' }).notNull().default(false),
+    allowDraws: integer('allowDraws', { mode: 'boolean' }).notNull().default(true),
+    pointsForWin: integer('pointsForWin').notNull().default(3),
+    pointsForDraw: integer('pointsForDraw').notNull().default(1),
     createdAt: integer('created_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
 });
 
@@ -326,6 +334,9 @@ export const matches = sqliteTable('matches', {
     managerNotes: text('manager_notes'),
     approvedBy: text('approved_by').references(() => users.id),
     approvedAt: integer('approved_at', { mode: 'timestamp' }),
+    penaltiesEnabledOverride: integer('penaltiesEnabledOverride', { mode: 'boolean' }),
+    allowDrawsOverride: integer('allowDrawsOverride', { mode: 'boolean' }),
+    extraTimeEnabledOverride: integer('extraTimeEnabledOverride', { mode: 'boolean' }),
     createdAt: integer('created_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
     updatedAt: integer('updated_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
 });

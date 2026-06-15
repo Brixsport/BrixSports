@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, Plus, Calendar, Users, MapPin, Trophy, Edit, Trash2, Eye, Filter, ClipboardList, Star } from 'lucide-react';
+import { ArrowLeft, Plus, Calendar, Users, MapPin, Trophy, Edit, Trash2, Eye, Filter, ClipboardList, Star, ChevronDown, ChevronUp } from 'lucide-react';
 import { nanoid } from 'nanoid';
 import { useToast } from '@/hooks/useToast';
 import { ToastContainer } from '@/components/admin/Toast';
@@ -96,8 +96,13 @@ function AdminMatchesPageContent() {
         livestreamEnabled: false,
         round: '',
         groupName: '',
-        matchday: null as number | null
+        matchday: null as number | null,
+        // Per-match overrides — null means "use competition match settings"
+        extraTimeEnabledOverride: null as boolean | null,
+        penaltiesEnabledOverride: null as boolean | null,
+        allowDrawsOverride: null as boolean | null,
     });
+    const [showMatchOverrides, setShowMatchOverrides] = useState(false);
 
     useEffect(() => {
         fetchMatches();
@@ -190,8 +195,12 @@ function AdminMatchesPageContent() {
                     livestreamEnabled: false,
                     round: '',
                     groupName: '',
-                    matchday: null
+                    matchday: null,
+                    extraTimeEnabledOverride: null,
+                    penaltiesEnabledOverride: null,
+                    allowDrawsOverride: null,
                 });
+                setShowMatchOverrides(false);
                 success('Match created successfully!');
             } else {
                 const data = await response.json();
@@ -258,7 +267,10 @@ function AdminMatchesPageContent() {
             livestreamEnabled: false,
             round: match.round || '',
             groupName: match.groupName || '',
-            matchday: match.matchday || null
+            matchday: match.matchday || null,
+            extraTimeEnabledOverride: null,
+            penaltiesEnabledOverride: null,
+            allowDrawsOverride: null,
         });
         setShowEditModal(true);
     };
@@ -686,6 +698,55 @@ function AdminMatchesPageContent() {
                                     </select>
                                 </div>
                             </div>
+                            {/* Match Overrides — collapsed by default */}
+                            <div className="border border-white/10 rounded-xl overflow-hidden">
+                                <button
+                                    type="button"
+                                    onClick={() => setShowMatchOverrides(v => !v)}
+                                    className="w-full flex items-center justify-between px-5 py-4 text-left hover:bg-white/5 transition-colors"
+                                >
+                                    <span className="text-[10px] font-black uppercase tracking-widest text-white/40">Override Match Settings for This Fixture</span>
+                                    {showMatchOverrides ? <ChevronUp size={16} className="text-white/40" /> : <ChevronDown size={16} className="text-white/40" />}
+                                </button>
+                                {showMatchOverrides && (
+                                    <div className="px-5 pb-5 border-t border-white/10 pt-4 space-y-3">
+                                        <p className="text-[10px] text-white/30 uppercase tracking-widest">Untouched toggles inherit from competition match settings. Toggle only what differs for this specific fixture.</p>
+                                        {(
+                                            [
+                                                { key: 'extraTimeEnabledOverride', label: 'Extra Time' },
+                                                { key: 'penaltiesEnabledOverride', label: 'Penalties' },
+                                                { key: 'allowDrawsOverride', label: 'Allow Draws' },
+                                            ] as const
+                                        ).map(({ key, label }) => {
+                                            const val = formData[key];
+                                            return (
+                                                <div key={key} className="flex items-center gap-4">
+                                                    <span className="text-sm font-bold text-white/60 w-32">{label}</span>
+                                                    <div className="flex gap-2">
+                                                        {(['inherit', 'on', 'off'] as const).map(opt => (
+                                                            <button
+                                                                key={opt}
+                                                                type="button"
+                                                                onClick={() => setFormData({ ...formData, [key]: opt === 'inherit' ? null : opt === 'on' })}
+                                                                className={`px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest border transition-colors ${
+                                                                    (opt === 'inherit' && val === null) ||
+                                                                    (opt === 'on' && val === true) ||
+                                                                    (opt === 'off' && val === false)
+                                                                        ? 'border-primary text-primary bg-primary/10'
+                                                                        : 'border-white/10 text-white/30 hover:border-white/30'
+                                                                }`}
+                                                            >
+                                                                {opt}
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                )}
+                            </div>
+
                             <div className="flex gap-4 pt-4">
                                 <button type="button" onClick={() => setShowCreateModal(false)} className="flex-1 py-4 text-[10px] font-black uppercase tracking-widest text-white/40 hover:text-white transition-colors">Cancel</button>
                                 <button type="submit" disabled={isCreating} className="flex-1 bg-primary text-black py-4 rounded-xl text-[10px] font-black uppercase italic tracking-widest hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-50">

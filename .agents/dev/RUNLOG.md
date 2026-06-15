@@ -319,6 +319,19 @@ Source code changes only this session. DB changes were applied in Session 15 (se
 
 ---
 
+## Session 18 — 2026-06-15
+
+### dev/migrate-sport-settings-columns.mjs
+- **Purpose:** Add BACKLOG-044 Phase A columns to staging DB
+- **Target:** STAGING (`libsql://brixsportsv2-staging-brixsports`)
+- **Outcome:** All 11 ALTER TABLE statements succeeded
+- **competition_sport_settings columns added:** `maxSubstitutions`, `allowSubbedOutReentry`, `extraTimeEnabled`, `extraTimeDuration`, `penaltiesEnabled`, `allowDraws`, `pointsForWin`, `pointsForDraw`
+- **matches columns added:** `penaltiesEnabledOverride`, `allowDrawsOverride`, `extraTimeEnabledOverride`
+- **Verified:** `pragma_table_info` confirmed all 11 new columns present
+- **Script:** Deleted after confirmed run
+
+---
+
 ## Outstanding / Pending Scripts
 
 | Script (not yet run) | Purpose | Blocked by |

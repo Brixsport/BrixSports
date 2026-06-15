@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Plus, Trophy, Calendar, Users, Settings, Edit, Trash2, Eye, X } from 'lucide-react';
+import { ArrowLeft, Plus, Trophy, Calendar, Users, Settings, Edit, Trash2, Eye, X, ChevronDown, ChevronUp } from 'lucide-react';
 import { useToast } from '@/hooks/useToast';
 import { ToastContainer } from '@/components/admin/Toast';
 import ConfirmDialog from '@/components/admin/ConfirmDialog';
@@ -41,20 +41,42 @@ const defaultFormData = {
     description: ''
 };
 
+const defaultMatchSettings = {
+    matchDuration: 90,
+    halfDuration: 45,
+    playersPerSide: 11,
+    maxSubstitutions: 5 as number | null,
+    unlimitedSubs: false,
+    allowSubbedOutReentry: false,
+    extraTimeEnabled: false,
+    extraTimeDuration: 15,
+    penaltiesEnabled: false,
+    allowDraws: true,
+    pointsForWin: 3,
+    pointsForDraw: 1,
+};
+
+type MatchSettingsForm = typeof defaultMatchSettings;
+
 interface CompetitionModalProps {
     mode: 'create' | 'edit';
     initialData: typeof defaultFormData;
-    onSubmit: (data: typeof defaultFormData) => Promise<void>;
+    initialMatchSettings?: MatchSettingsForm;
+    onSubmit: (data: typeof defaultFormData, matchSettings: MatchSettingsForm) => Promise<void>;
     onClose: () => void;
     isSubmitting: boolean;
 }
 
-function CompetitionModal({ mode, initialData, onSubmit, onClose, isSubmitting }: CompetitionModalProps) {
+function CompetitionModal({ mode, initialData, initialMatchSettings, onSubmit, onClose, isSubmitting }: CompetitionModalProps) {
     const [form, setForm] = useState(initialData);
+    const [matchSettings, setMatchSettings] = useState<MatchSettingsForm>(initialMatchSettings ?? defaultMatchSettings);
+    const [showMatchSettings, setShowMatchSettings] = useState(false);
+
+    const setMs = (patch: Partial<MatchSettingsForm>) => setMatchSettings(prev => ({ ...prev, ...patch }));
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        await onSubmit(form);
+        await onSubmit(form, matchSettings);
     };
 
     return (
@@ -219,6 +241,142 @@ function CompetitionModal({ mode, initialData, onSubmit, onClose, isSubmitting }
                         </div>
                     </div>
 
+                    {/* Match Settings — collapsible */}
+                    <div className="border border-white/10 rounded-xl overflow-hidden">
+                        <button
+                            type="button"
+                            onClick={() => setShowMatchSettings(v => !v)}
+                            className="w-full flex items-center justify-between px-5 py-4 text-left hover:bg-white/5 transition-colors"
+                        >
+                            <span className="text-[10px] font-black uppercase tracking-widest text-white/60">Match Settings</span>
+                            {showMatchSettings ? <ChevronUp size={16} className="text-white/40" /> : <ChevronDown size={16} className="text-white/40" />}
+                        </button>
+
+                        {showMatchSettings && (
+                            <div className="px-5 pb-6 space-y-5 border-t border-white/10 pt-5">
+                                {/* Duration */}
+                                <div className="grid grid-cols-3 gap-4">
+                                    <div>
+                                        <label className="block text-[10px] font-black uppercase tracking-widest text-white/40 mb-2">Match Duration (mins)</label>
+                                        <input type="number" min="1"
+                                            value={matchSettings.matchDuration}
+                                            onChange={e => setMs({ matchDuration: parseInt(e.target.value) || 90 })}
+                                            className="w-full bg-[#121212] border border-white/10 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-primary text-white"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-[10px] font-black uppercase tracking-widest text-white/40 mb-2">Half Duration (mins)</label>
+                                        <input type="number" min="1"
+                                            value={matchSettings.halfDuration}
+                                            onChange={e => setMs({ halfDuration: parseInt(e.target.value) || 45 })}
+                                            className="w-full bg-[#121212] border border-white/10 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-primary text-white"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-[10px] font-black uppercase tracking-widest text-white/40 mb-2">Players Per Side</label>
+                                        <input type="number" min="1"
+                                            value={matchSettings.playersPerSide}
+                                            onChange={e => setMs({ playersPerSide: parseInt(e.target.value) || 11 })}
+                                            className="w-full bg-[#121212] border border-white/10 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-primary text-white"
+                                        />
+                                    </div>
+                                </div>
+
+                                {/* Substitutions */}
+                                <div>
+                                    <label className="block text-[10px] font-black uppercase tracking-widest text-white/40 mb-2">Max Substitutions</label>
+                                    <div className="flex items-center gap-4">
+                                        <input type="number" min="0"
+                                            value={matchSettings.unlimitedSubs ? '' : (matchSettings.maxSubstitutions ?? '')}
+                                            disabled={matchSettings.unlimitedSubs}
+                                            onChange={e => setMs({ maxSubstitutions: parseInt(e.target.value) || 0 })}
+                                            className="w-32 bg-[#121212] border border-white/10 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-primary text-white disabled:opacity-30"
+                                        />
+                                        <label className="flex items-center gap-2 text-sm font-bold text-white/60 cursor-pointer">
+                                            <input type="checkbox"
+                                                checked={matchSettings.unlimitedSubs}
+                                                onChange={e => setMs({ unlimitedSubs: e.target.checked, maxSubstitutions: e.target.checked ? null : 5 })}
+                                                className="w-4 h-4 rounded border-white/10 bg-[#121212] text-primary focus:ring-primary"
+                                            />
+                                            Unlimited
+                                        </label>
+                                        <label className="flex items-center gap-2 text-sm font-bold text-white/60 cursor-pointer">
+                                            <input type="checkbox"
+                                                checked={matchSettings.allowSubbedOutReentry}
+                                                onChange={e => setMs({ allowSubbedOutReentry: e.target.checked })}
+                                                className="w-4 h-4 rounded border-white/10 bg-[#121212] text-primary focus:ring-primary"
+                                            />
+                                            Rolling substitutions
+                                        </label>
+                                    </div>
+                                </div>
+
+                                {/* Extra time + Penalties */}
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div className="space-y-3">
+                                        <label className="flex items-center gap-2 text-sm font-bold text-white/60 cursor-pointer">
+                                            <input type="checkbox"
+                                                checked={matchSettings.extraTimeEnabled}
+                                                onChange={e => setMs({ extraTimeEnabled: e.target.checked })}
+                                                className="w-4 h-4 rounded border-white/10 bg-[#121212] text-primary focus:ring-primary"
+                                            />
+                                            Extra Time
+                                        </label>
+                                        {matchSettings.extraTimeEnabled && (
+                                            <div>
+                                                <label className="block text-[10px] font-black uppercase tracking-widest text-white/40 mb-2">Extra Time per Half (mins)</label>
+                                                <input type="number" min="1"
+                                                    value={matchSettings.extraTimeDuration}
+                                                    onChange={e => setMs({ extraTimeDuration: parseInt(e.target.value) || 15 })}
+                                                    className="w-full bg-[#121212] border border-white/10 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-primary text-white"
+                                                />
+                                            </div>
+                                        )}
+                                    </div>
+                                    <label className="flex items-center gap-2 text-sm font-bold text-white/60 cursor-pointer self-start pt-1">
+                                        <input type="checkbox"
+                                            checked={matchSettings.penaltiesEnabled}
+                                            onChange={e => setMs({ penaltiesEnabled: e.target.checked })}
+                                            className="w-4 h-4 rounded border-white/10 bg-[#121212] text-primary focus:ring-primary"
+                                        />
+                                        Penalties
+                                    </label>
+                                </div>
+
+                                {/* Points */}
+                                <div className="grid grid-cols-3 gap-4">
+                                    <div>
+                                        <label className="flex items-center gap-2 text-sm font-bold text-white/60 cursor-pointer mb-3">
+                                            <input type="checkbox"
+                                                checked={matchSettings.allowDraws}
+                                                onChange={e => setMs({ allowDraws: e.target.checked })}
+                                                className="w-4 h-4 rounded border-white/10 bg-[#121212] text-primary focus:ring-primary"
+                                            />
+                                            {matchSettings.allowDraws ? 'Draws allowed' : 'Must produce winner'}
+                                        </label>
+                                    </div>
+                                    <div>
+                                        <label className="block text-[10px] font-black uppercase tracking-widest text-white/40 mb-2">Points for Win</label>
+                                        <input type="number" min="0"
+                                            value={matchSettings.pointsForWin}
+                                            onChange={e => setMs({ pointsForWin: parseInt(e.target.value) || 3 })}
+                                            className="w-full bg-[#121212] border border-white/10 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-primary text-white"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-[10px] font-black uppercase tracking-widest text-white/40 mb-2">Points for Draw</label>
+                                        <input type="number" min="0"
+                                            value={matchSettings.pointsForDraw}
+                                            disabled={!matchSettings.allowDraws}
+                                            onChange={e => setMs({ pointsForDraw: parseInt(e.target.value) || 1 })}
+                                            className="w-full bg-[#121212] border border-white/10 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-primary text-white disabled:opacity-30"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
                     <div className="flex justify-end gap-3 mt-8">
                         <button
                             type="button"
@@ -285,7 +443,28 @@ function AdminCompetitionsPageContent() {
         }
     };
 
-    const handleSubmit = async (data: typeof defaultFormData) => {
+    const saveMatchSettings = async (competitionId: string, sport: string, ms: MatchSettingsForm) => {
+        await fetch(`/api/competitions/${competitionId}/sport-settings`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                sport,
+                playersPerSide: ms.playersPerSide,
+                halfDuration: ms.halfDuration,
+                matchDuration: ms.matchDuration,
+                maxSubstitutions: ms.unlimitedSubs ? null : ms.maxSubstitutions,
+                allowSubbedOutReentry: ms.allowSubbedOutReentry,
+                extraTimeEnabled: ms.extraTimeEnabled,
+                extraTimeDuration: ms.extraTimeDuration,
+                penaltiesEnabled: ms.penaltiesEnabled,
+                allowDraws: ms.allowDraws,
+                pointsForWin: ms.pointsForWin,
+                pointsForDraw: ms.pointsForDraw,
+            }),
+        });
+    };
+
+    const handleSubmit = async (data: typeof defaultFormData, ms: MatchSettingsForm) => {
         setIsCreating(true);
 
         try {
@@ -297,6 +476,7 @@ function AdminCompetitionsPageContent() {
 
             if (response.ok) {
                 const newComp = await response.json();
+                await saveMatchSettings(newComp.id, data.sport, ms);
                 setCompetitions([...competitions, {
                     ...newComp,
                     scope: newComp.level === 'inter-university' ? 'external' : 'internal'
@@ -354,7 +534,7 @@ function AdminCompetitionsPageContent() {
         setEditingCompetition(comp);
     };
 
-    const handleEditSubmit = async (data: typeof defaultFormData) => {
+    const handleEditSubmit = async (data: typeof defaultFormData, ms: MatchSettingsForm) => {
         if (!editingCompetition) return;
         setIsEditSubmitting(true);
         try {
@@ -367,6 +547,7 @@ function AdminCompetitionsPageContent() {
                 }
             );
             if (res.ok) {
+                await saveMatchSettings(editingCompetition.id, data.sport, ms);
                 success('Competition updated successfully.');
                 setEditingCompetition(null);
                 fetchCompetitions();
@@ -544,8 +725,8 @@ function AdminCompetitionsPageContent() {
                 <CompetitionModal
                     mode="create"
                     initialData={defaultFormData}
-                    onSubmit={async (data) => {
-                        await handleSubmit(data);
+                    onSubmit={async (data, ms) => {
+                        await handleSubmit(data, ms);
                     }}
                     onClose={() => setShowCreateModal(false)}
                     isSubmitting={isCreating}
@@ -569,8 +750,8 @@ function AdminCompetitionsPageContent() {
                         isMultiSport: editingCompetition.isMultiSport || false,
                         description: editingCompetition.description || ''
                     }}
-                    onSubmit={async (data) => {
-                        await handleEditSubmit(data);
+                    onSubmit={async (data, ms) => {
+                        await handleEditSubmit(data, ms);
                     }}
                     onClose={() => setEditingCompetition(null)}
                     isSubmitting={isEditSubmitting}
