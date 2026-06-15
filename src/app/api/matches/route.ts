@@ -6,6 +6,9 @@ import { getAuthUser } from '@/lib/auth';
 
 export async function GET(request: NextRequest) {
     try {
+        const authUser = await getAuthUser(request).catch(() => null);
+        const isAdmin = authUser?.role === 'admin';
+
         const { searchParams } = new URL(request.url);
         const sport = searchParams.get('sport');
         const loggerId = searchParams.get('loggerId');
@@ -56,11 +59,8 @@ export async function GET(request: NextRequest) {
                 const homeTeam = teamsMap.get(match.homeTeamId);
                 const awayTeam = teamsMap.get(match.awayTeamId);
 
-                // BUG-025: strip all banned internal fields before returning public response.
-                // loggerId, assignedLoggers, approvalStatus, managerNotes, approvedBy, approvedAt
-                // are internal assignment/audit fields — never exposed to public viewers.
                 const {
-                    loggerId: _lid,
+                    loggerId,
                     approvalStatus: _as,
                     managerNotes: _mn,
                     approvedBy: _ab,
@@ -70,6 +70,7 @@ export async function GET(request: NextRequest) {
 
                 return {
                     ...publicMatch,
+                    ...(isAdmin && { loggerId }),
                     events,
                     stats: match.stats ? JSON.parse(match.stats) : {},
                     lineups: match.lineups ? JSON.parse(match.lineups) : null,
