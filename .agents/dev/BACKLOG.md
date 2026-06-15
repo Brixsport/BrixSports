@@ -61,9 +61,9 @@
 
 - ~~**BUG-022** _(MEDIUM — Performance)_: Unbounded queries missing `.limit()` on competitions + events routes. Fixed in prior session, confirmed present on code review 2026-06-15. Resolved: 2026-06-15.~~
 
-- **BUG-023** _(LOW)_: `src/db/schema-nesa-registrations.ts` references `players` and `organizations` tables without importing them. Will crash if the table is ever migrated or queried. Fix: add missing imports or delete the schema file if NESA registration is backscoped. Filed: 2026-06-08. Source: SYSTEM_AUDIT.md §9 #11.
+- ~~**BUG-023** _(LOW)_: `src/db/schema-nesa-registrations.ts` references `players` and `organizations` tables without importing them. Will crash if the table is ever migrated or queried. Fix: add missing imports or delete the schema file if NESA registration is backscoped. Filed: 2026-06-08. Source: SYSTEM_AUDIT.md §9 #11.~~ RESOLVED 2026-06-15 — file deleted. Tables never existed in any live DB. Zero imports anywhere in codebase.
 
-- **BUG-024** _(LOW)_: Duplicate match detail routes — `/match/[id]` (`src/app/match/[id]/page.tsx`) and `/matches/[id]` (`src/app/matches/[id]/page.tsx`) both exist. One is likely legacy. Audit to confirm which is canonical (check all internal links and nav references), delete the other. Filed: 2026-06-08. Source: SYSTEM_AUDIT.md §2.
+- ~~**BUG-024** _(LOW)_: Duplicate match detail routes — `/match/[id]` (`src/app/match/[id]/page.tsx`) and `/matches/[id]` (`src/app/matches/[id]/page.tsx`) both exist. One is likely legacy. Audit to confirm which is canonical (check all internal links and nav references), delete the other. Filed: 2026-06-08. Source: SYSTEM_AUDIT.md §2.~~ RESOLVED 2026-06-15 — false alarm. `/match/[id]` route never existed. All internal navigation uses `/matches/[id]` (canonical). No fix needed.
 
 - **BUG-026** _(MEDIUM — PWA/Cache)_: On direct page URL visits, CSS fails to render — page loads as unstyled raw HTML. Likely cause: service worker or PWA cache is not caching the CSS bundle correctly, or the cache manifest is stale. Symptom only appears on direct URL visit (hard nav), not on client-side route transitions.
 
@@ -2400,3 +2400,110 @@ read-only trace before any cleanup.
 Male/female teams: same org + sport, different gender column —
 both valid rows, need clear display differentiation in UI.
 Related: BACKLOG-014 (org duplicate entries)
+
+---
+
+### BACKLOG-053 — Inline Roster Editing (Affiliation-Level Fields)
+
+**Status:** OPEN
+**Priority:** Medium
+**Filed:** 2026-06-15
+
+#### Problem
+Roster table on /admin/teams/[id] shows jersey number, position,
+and nicknames but none are editable inline. Admins must go to
+a separate script or API call to fix these. Jersey numbers and
+nicknames are affiliation-level fields — editing them should not
+affect the player's profile or other team affiliations.
+
+#### Scope
+Editable in roster context (playerTeamAffiliations row only):
+- jerseyNumber — per-team jersey number
+- nicknames — JSON array of field aliases for this team
+- position — per-team position override (does not change players.position)
+- isActive — deactivate affiliation without deleting
+
+NOT editable from roster (profile-level, edit via BACKLOG-046):
+- name, jerseyName, college, university, rating
+
+#### Implementation
+- Edit icon per row in roster table
+- Opens inline form (not a modal) — replaces the row with input fields
+- PATCH /api/admin/teams/[teamId]/roster/[affiliationId] (new endpoint)
+- Save → row reverts to display mode with updated values
+- Cancel → no change
+
+#### Notes
+- affiliationId is the playerTeamAffiliations.id — need to confirm
+  it's returned in the roster GET response (add if missing)
+- Related: BACKLOG-046 (player profile edit), BACKLOG-037 Step 3
+  (roster GET endpoint)
+
+---
+
+### BACKLOG-054 — Match-Level Position Override (Formation Roster)
+
+**Status:** OPEN
+**Priority:** Medium — needed before formation/lineup features
+**Filed:** 2026-06-15
+
+#### Problem
+A player's canonical position (players.position) and per-team
+position (playerTeamAffiliations) don't cover match-specific
+role changes. MCtee is a CB but plays RB in a specific match.
+This override needs to live at the match level, not corrupt
+the player profile or team affiliation.
+
+#### Data Model
+matches.lineups JSON already exists (stores lineup per match).
+Add position override per player entry in the lineup JSON:
+{
+  playerId: string,
+  position: string,        // overrides profile position for this match
+  shirtNumber: number,     // overrides jersey number for this match
+  role: 'starter' | 'substitute'
+}
+
+#### Implementation
+- Formation/lineup editor reads squad for the match's competition
+- Admin drags player to position on pitch — position auto-set from
+  placement, or manually overridden via dropdown
+- Override stored in matches.lineups JSON — no new table needed
+- Match event logging reads lineup JSON for position context
+
+#### Notes
+- matches.lineups JSON column already exists — additive change
+- Related: BACKLOG-044 (match config), BACKLOG-037 Step 7 (squad),
+  existing /admin/match-lineups page (needs audit — may already
+  do some of this)
+
+---
+
+### BACKLOG-055 — Player Profile Position as Canonical Truth
+
+**Status:** OPEN
+**Priority:** Low
+**Filed:** 2026-06-15
+
+#### Problem
+players.position is a free-text field with no validation.
+Positions like 'CB', 'Centre Back', 'center-back' all mean
+the same thing but are stored differently. This breaks
+filtering, stat grouping, and formation display.
+
+#### Required Changes
+1. Define canonical position list per sport:
+   Football: GK, CB, LB, RB, LWB, RWB, CDM, CM, CAM,
+             LM, RM, LW, RW, CF, ST, SS
+   Basketball: PG, SG, SF, PF, C
+2. Validate position on player create/update against the list
+3. Migration: normalise existing position strings to canonical
+   values (read-only audit first, then SQL direct)
+4. Position dropdown in all player forms — no free text entry
+
+#### Notes
+- VALID_POSITIONS list already exists in the CSV import parser
+  (src/app/admin/teams/[id]/page.tsx) — extract to a shared
+  constant in src/lib/constants/positions.ts
+- Related: BACKLOG-046 (player profile edit), BACKLOG-053
+  (roster inline edit)

@@ -157,6 +157,20 @@ what fails with a one-line description.
 
 ---
 
+## Schema / Database
+
+### BUG-023 — NESA schema file
+- [x] `schema-nesa-registrations.ts` deleted
+- [x] No remaining imports of `schema-nesa` anywhere in codebase
+- [x] tsc no longer errors on missing `players`/`organizations` imports in this file
+
+### BUG-024 — Match detail route
+- [x] `/matches/[id]` loads match detail correctly
+- [x] All match cards link to `/matches/[id]` (not `/match/[id]`)
+- [x] No 404s on match navigation from homepage, live page, search, team page, player page
+
+---
+
 ## Known Broken (do not test — already filed)
 
 - PWA CSS on direct URL visit (BUG-026)
@@ -169,6 +183,8 @@ what fails with a one-line description.
 - /competitions list — sport=null competitions invisible (BUG-027) — fixed 2026-06-15
 - /competitions/[id] — hydration error #418 (BUG-028) — fixed 2026-06-15
 - Team logos for college teams — placeholder (BACKLOG-036) — migrated 2026-06-15
+- BUG-023 — schema-nesa deleted — 2026-06-15
+- BUG-024 — false alarm, /match/[id] never existed — 2026-06-15
 
 ---
 
