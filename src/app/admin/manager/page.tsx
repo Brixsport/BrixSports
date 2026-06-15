@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { useAuth } from '@/hooks/useAuth';
+import { TeamLogo } from '@/lib/utils/team-logo';
 
 export default function ManagerDashboard() {
     const { user } = useAuth();
@@ -394,11 +395,11 @@ function LiveOperationCard({ match, loggers }: any) {
             <div className="flex flex-col md:flex-row items-center gap-8">
                 <div className="flex items-center gap-6">
                     <div className="w-12 h-12 bg-white/5 rounded-2xl border border-white/10 flex items-center justify-center overflow-hidden">
-                        {match.homeTeam?.logo ? <img src={match.homeTeam.logo} className="w-8 h-8 object-contain" /> : <span className="text-xl">⚽</span>}
+                        <TeamLogo logo={match.homeTeam?.logo} name={match.homeTeam?.shortName ?? ''} size="sm" />
                     </div>
                     <div className="text-xl font-display italic text-white/20">VS</div>
                     <div className="w-12 h-12 bg-white/5 rounded-2xl border border-white/10 flex items-center justify-center overflow-hidden">
-                        {match.awayTeam?.logo ? <img src={match.awayTeam.logo} className="w-8 h-8 object-contain" /> : <span className="text-xl">⚽</span>}
+                        <TeamLogo logo={match.awayTeam?.logo} name={match.awayTeam?.shortName ?? ''} size="sm" />
                     </div>
                 </div>
 

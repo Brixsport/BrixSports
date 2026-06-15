@@ -40,6 +40,7 @@ import {
 } from 'lucide-react';
 import { Match, Team, Player } from '@/db/schema';
 import { getPrimaryTeam } from '@/lib/player-affiliation-utils';
+import { TeamLogo } from '@/lib/utils/team-logo';
 
 interface TrackLoggerProps {
     match: Match;
@@ -669,7 +670,7 @@ export function TrackLogger({ match, onExit, teams, players }: TrackLoggerProps)
                                                         className="bg-white/5 border border-white/10 rounded-2xl p-4 flex items-center justify-between hover:bg-white/10 transition-all"
                                                     >
                                                         <div className="flex items-center gap-3">
-                                                            {isInterCompetition && team?.logo && <img src={team.logo} alt={team.name} className="w-8 h-8 object-contain" />}
+                                                            {isInterCompetition && <TeamLogo logo={team?.logo} name={team?.name ?? ''} size="sm" />}
                                                             <div>
                                                                 <p className="text-sm font-black uppercase tracking-tight">{player.name}</p>
                                                                 {isInterCompetition && (
@@ -730,7 +731,7 @@ export function TrackLogger({ match, onExit, teams, players }: TrackLoggerProps)
                                                                 <div className="w-12 h-12 bg-white/10 rounded-xl flex items-center justify-center font-display text-2xl">
                                                                     {athlete.lane}
                                                                 </div>
-                                                                {isInterCompetition && team?.logo && <img src={team.logo} alt={team.name} className="w-8 h-8 object-contain" />}
+                                                                {isInterCompetition && <TeamLogo logo={team?.logo} name={team?.name ?? ''} size="sm" />}
                                                                 <div>
                                                                     <p className="text-sm font-black uppercase tracking-tight">{player?.name}</p>
                                                                     {isInterCompetition && (
@@ -810,7 +811,7 @@ export function TrackLogger({ match, onExit, teams, players }: TrackLoggerProps)
                                                     <div key={player.id} className="bg-white/5 border border-white/10 rounded-2xl p-4">
                                                         <div className="flex items-center justify-between mb-3">
                                                             <div className="flex items-center gap-3">
-                                                                {isInterCompetition && team?.logo && <img src={team.logo} alt={team.name} className="w-8 h-8 object-contain" />}
+                                                                {isInterCompetition && <TeamLogo logo={team?.logo} name={team?.name ?? ''} size="sm" />}
                                                                 <div>
                                                                     <p className="text-sm font-black uppercase tracking-tight">{player.name}</p>
                                                                     {isInterCompetition && (
@@ -913,7 +914,7 @@ export function TrackLogger({ match, onExit, teams, players }: TrackLoggerProps)
                                                                 }`}>
                                                                 {position}
                                                             </div>
-                                                            {isInterCompetition && team?.logo && <img src={team.logo} alt={team.name} className="w-8 h-8 object-contain" />}
+                                                            {isInterCompetition && <TeamLogo logo={team?.logo} name={team?.name ?? ''} size="sm" />}
                                                             <div>
                                                                 <p className="text-sm font-black uppercase tracking-tight">{player?.name}</p>
                                                                 {isInterCompetition && (

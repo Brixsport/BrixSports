@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { LogIn, Activity, Lock, User, CheckCircle2, AlertCircle, ChevronRight, Globe, WifiOff } from 'lucide-react';
 import { MatchLoggerUI } from '@/components/MatchLoggerUI';
 import { BasketballLogger } from '@/components/BasketballLogger';
+import { TeamLogo } from '@/lib/utils/team-logo';
 import { FootballLogger } from '@/components/FootballLogger';
 import { TrackLogger } from '@/components/TrackLogger';
 
@@ -328,11 +329,7 @@ export default function LoggerPage() {
 
                 <div className="flex items-center justify-between gap-2 mb-6 md:mb-8">
                   <div className="text-center flex-1 min-w-0">
-                    {homeTeam?.logo ? (
-                      <img src={homeTeam.logo} alt={homeTeam.name} className="w-12 h-12 md:w-16 md:h-16 mx-auto mb-2 object-contain" />
-                    ) : (
-                      <span className="text-3xl md:text-4xl mb-2 block">⚽</span>
-                    )}
+                    <TeamLogo logo={homeTeam?.logo} name={homeTeam?.name ?? ''} size="md" className="mx-auto mb-2" />
                     <p className="text-[10px] md:text-xs font-black uppercase tracking-widest truncate">{homeTeam?.shortName || 'HOME'}</p>
                   </div>
                   <div className="flex flex-col items-center gap-1 shrink-0">
@@ -343,11 +340,7 @@ export default function LoggerPage() {
                     </span>
                   </div>
                   <div className="text-center flex-1 min-w-0">
-                    {awayTeam?.logo ? (
-                      <img src={awayTeam.logo} alt={awayTeam.name} className="w-12 h-12 md:w-16 md:h-16 mx-auto mb-2 object-contain" />
-                    ) : (
-                      <span className="text-3xl md:text-4xl mb-2 block">⚽</span>
-                    )}
+                    <TeamLogo logo={awayTeam?.logo} name={awayTeam?.name ?? ''} size="md" className="mx-auto mb-2" />
                     <p className="text-[10px] md:text-xs font-black uppercase tracking-widest truncate">{awayTeam?.shortName || 'AWAY'}</p>
                   </div>
                 </div>

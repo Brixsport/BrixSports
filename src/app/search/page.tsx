@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Search, Users, TrendingUp, Trophy, Calendar, ArrowLeft, Filter } from 'lucide-react';
 import { PlayerProfileOverlay } from '@/components/PlayerProfileOverlay';
 import Link from 'next/link';
+import { TeamLogo } from '@/lib/utils/team-logo';
 
 interface SearchResults {
     teams: any[];
@@ -208,11 +209,7 @@ function SearchContent() {
                                                             className="w-14 h-14 rounded-xl flex items-center justify-center flex-shrink-0"
                                                             style={{ backgroundColor: team.color + '20' }}
                                                         >
-                                                            {team.logo ? (
-                                                                <img src={team.logo} alt={team.name} className="w-12 h-12 object-contain" />
-                                                            ) : (
-                                                                <span className="text-xl font-bold">{team.shortName.substring(0, 2)}</span>
-                                                            )}
+                                                            <TeamLogo logo={team.logo} name={team.name} size="sm" />
                                                         </div>
                                                         <div>
                                                             <div className="font-bold text-lg">{team.name}</div>

@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { toast } from 'sonner';
+import { TeamLogo } from '@/lib/utils/team-logo';
 
 interface UserProfile {
     id: string;
@@ -266,7 +267,7 @@ export default function UserProfilePage() {
                                     <h2 className="text-[10px] font-black uppercase tracking-[0.2em] text-white/40 mb-6 relative z-10">Favorite Team</h2>
                                     <div className="flex items-center gap-4 relative z-10">
                                         <div className="w-16 h-16 bg-white/5 rounded-2xl border border-white/10 flex items-center justify-center p-2">
-                                            <img src={profile.favoriteTeam.logo} alt={profile.favoriteTeam.name} className="w-full h-full object-contain" />
+                                            <TeamLogo logo={profile.favoriteTeam.logo} name={profile.favoriteTeam.name} size="md" />
                                         </div>
                                         <div>
                                             <p className="font-display text-2xl italic uppercase tracking-tighter text-white">{profile.favoriteTeam.name}</p>

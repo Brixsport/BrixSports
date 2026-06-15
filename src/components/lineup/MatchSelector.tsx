@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Calendar, MapPin, Trophy } from 'lucide-react';
+import { TeamLogo } from '@/lib/utils/team-logo';
 
 interface Match {
     id: string;
@@ -139,13 +140,7 @@ function MatchCard({ match, isSelected, onClick }: {
             {/* Teams */}
             <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-3 flex-1">
-                    {match.homeTeam?.logo && (
-                        match.homeTeam.logo.startsWith('/') || match.homeTeam.logo.startsWith('http') ? (
-                            <img src={match.homeTeam.logo} alt={match.homeTeam.name} className="w-8 h-8 object-contain" />
-                        ) : (
-                            <span className="text-2xl">{match.homeTeam.logo}</span>
-                        )
-                    ) || <span className="text-2xl">⚽</span>}
+                    <TeamLogo logo={match.homeTeam?.logo} name={match.homeTeam?.name ?? ''} size="sm" />
                     <span className="text-sm font-black uppercase tracking-tight">
                         {match.homeTeam?.shortName || 'TBD'}
                     </span>
@@ -155,13 +150,7 @@ function MatchCard({ match, isSelected, onClick }: {
                     <span className="text-sm font-black uppercase tracking-tight">
                         {match.awayTeam?.shortName || 'TBD'}
                     </span>
-                    {match.awayTeam?.logo && (
-                        match.awayTeam.logo.startsWith('/') || match.awayTeam.logo.startsWith('http') ? (
-                            <img src={match.awayTeam.logo} alt={match.awayTeam.name} className="w-8 h-8 object-contain" />
-                        ) : (
-                            <span className="text-2xl">{match.awayTeam.logo}</span>
-                        )
-                    ) || <span className="text-2xl">⚽</span>}
+                    <TeamLogo logo={match.awayTeam?.logo} name={match.awayTeam?.name ?? ''} size="sm" />
                 </div>
             </div>
 

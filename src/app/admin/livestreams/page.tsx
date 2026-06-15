@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { Video, Plus, Edit, Trash2, Eye, EyeOff, Save, X, Radio, Info, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { TeamLogo } from '@/lib/utils/team-logo';
 
 interface Match {
     id: string;
@@ -347,8 +348,8 @@ export default function LivestreamsAdminPage() {
                                                 <td className="px-6 py-4">
                                                     <div className="flex items-center gap-3">
                                                         <div className="flex -space-x-2">
-                                                            <img src={match.homeTeam.logo} alt="" className="w-8 h-8 rounded-full border-2 border-gray-900" />
-                                                            <img src={match.awayTeam.logo} alt="" className="w-8 h-8 rounded-full border-2 border-gray-900" />
+                                                            <TeamLogo logo={match.homeTeam.logo} name={match.homeTeam.name} size="sm" className="rounded-full border-2 border-gray-900" />
+                                                            <TeamLogo logo={match.awayTeam.logo} name={match.awayTeam.name} size="sm" className="rounded-full border-2 border-gray-900" />
                                                         </div>
                                                         <div>
                                                             <p className="font-semibold text-sm">

@@ -275,11 +275,18 @@ Applied directly via SQL (not drizzle-kit push — blocked by pre-existing `orga
 
 ## Session 14 — 2026-06-15
 
-Source code and agent changes only — no database scripts run:
-- BUG-021: `POST /api/notifications/subscribe` — auth guard already present (pre-existing fix, backlog not updated). Marked resolved.
-- BUG-022: `.limit()` calls already present on competitions + events routes. Marked resolved.
-- BUG-027: Client-side sport filter on `/competitions` page hid competitions with `sport=null`. Fixed by adding 'All' tab as default — `src/app/competitions/page.tsx`.
-- db-inspector agent rewritten to read `.agents/rules/security.md` before any query.
+Source code changes only — no database scripts run.
+
+**Commits:**
+- `fix: add All tab to competitions page, fix sport=null visibility (BUG-027)` — `src/app/competitions/page.tsx`
+- `fix: remove motion initial props to resolve hydration error #418 on standings page (BUG-028)` — `src/app/competitions/[id]/standings/page.tsx`
+- `feat: migrate team logo img tags to TeamLogo component across 13 files, skip size-sensitive instances (BACKLOG-036)` — commit `a02283b`
+
+**Notes:**
+- BUG-021 (`POST /api/notifications/subscribe` auth gate) and BUG-022 (`.limit()` on competitions + events routes) confirmed already fixed in a prior session — backlog updated to resolved.
+- BUG-027: root cause was client-side sport filter defaulting to 'Football', making `sport=null` competitions permanently invisible. Fixed by adding 'All' tab as default.
+- BUG-028: root cause was Framer Motion `initial` prop creating style attributes on client not present in SSR HTML; `<motion.tr>` tag mismatch was worst case. Fixed by removing all `initial` props from motion elements on the standings page.
+- BACKLOG-036: 13 files migrated to `TeamLogo` component. 5 files skipped (size-sensitive layout). tsc clean post-migration.
 
 ---
 
@@ -287,6 +294,6 @@ Source code and agent changes only — no database scripts run:
 
 | Script (not yet run) | Purpose | Blocked by |
 |----------------------|---------|------------|
-| PATCH MD3 G1 + MD3 G2 | Set scores + status: FINISHED for BACKLOG-017 remaining fixtures | Scores not yet confirmed from physical records |
-| Standings recalculation | Calculate BUSALYMPICS group standings | All 7 fixtures must be FINISHED first (BACKLOG-033) |
 | playerStats dedup audit | Investigate BUG-011 (718 goals anomaly) | Requires staging environment first (BACKLOG-005 Phase 1) |
+
+_Note: PATCH MD3 scores and BUSALYMPICS standings recalculation were completed in Session 10 (see above). Table updated 2026-06-15._

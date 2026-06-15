@@ -2,6 +2,7 @@
 
 import { motion } from 'framer-motion';
 import { TrendingUp, Target, Shield, Activity, Zap } from 'lucide-react';
+import { TeamLogo } from '@/lib/utils/team-logo';
 
 interface LiveStatsProps {
     stats: any;
@@ -191,11 +192,7 @@ export default function LiveStats({ stats, sport, homeTeam, awayTeam }: LiveStat
                         className="w-12 h-12 rounded-xl flex items-center justify-center"
                         style={{ backgroundColor: homeTeam.color + '20' }}
                     >
-                        {homeTeam.logo ? (
-                            <img src={homeTeam.logo} alt={homeTeam.name} className="w-10 h-10 object-contain" />
-                        ) : (
-                            <span className="text-xl font-bold">{homeTeam.shortName.substring(0, 2)}</span>
-                        )}
+                        <TeamLogo logo={homeTeam.logo} name={homeTeam.name} size="sm" />
                     </div>
                     <div>
                         <div className="font-bold">{homeTeam.name}</div>
@@ -210,11 +207,7 @@ export default function LiveStats({ stats, sport, homeTeam, awayTeam }: LiveStat
                         className="w-12 h-12 rounded-xl flex items-center justify-center"
                         style={{ backgroundColor: awayTeam.color + '20' }}
                     >
-                        {awayTeam.logo ? (
-                            <img src={awayTeam.logo} alt={awayTeam.name} className="w-10 h-10 object-contain" />
-                        ) : (
-                            <span className="text-xl font-bold">{awayTeam.shortName.substring(0, 2)}</span>
-                        )}
+                        <TeamLogo logo={awayTeam.logo} name={awayTeam.name} size="sm" />
                     </div>
                     <div className="text-right">
                         <div className="font-bold">{awayTeam.name}</div>

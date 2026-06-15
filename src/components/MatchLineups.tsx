@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Users, Shield, Target, TrendingUp, Star, ArrowRightLeft, ZoomIn, ZoomOut, Maximize2, GitCompare, X } from 'lucide-react';
 import { FullPitchLineups } from './FullPitchLineups';
 import { PlayerStatsModal } from './PlayerStatsModal';
+import { TeamLogo } from '@/lib/utils/team-logo';
 import { PlayerComparison } from './PlayerComparison';
 
 interface MatchLineupsProps {
@@ -347,7 +348,7 @@ export default function MatchLineups({ lineups, sport, homeTeam, awayTeam, event
                             className="bg-white/5 border border-white/10 rounded-2xl p-6"
                         >
                             <div className="flex items-center gap-3 mb-4">
-                                <img src={homeTeam.logo} alt={homeTeam.name} className="w-8 h-8 object-contain" />
+                                <TeamLogo logo={homeTeam.logo} name={homeTeam.name} size="sm" />
                                 <div>
                                     <h3 className="font-bold">{homeTeam.name}</h3>
                                     <p className="text-sm text-white/60">Substitutes</p>
@@ -370,7 +371,7 @@ export default function MatchLineups({ lineups, sport, homeTeam, awayTeam, event
                             className="bg-white/5 border border-white/10 rounded-2xl p-6"
                         >
                             <div className="flex items-center gap-3 mb-4">
-                                <img src={awayTeam.logo} alt={awayTeam.name} className="w-8 h-8 object-contain" />
+                                <TeamLogo logo={awayTeam.logo} name={awayTeam.name} size="sm" />
                                 <div>
                                     <h3 className="font-bold">{awayTeam.name}</h3>
                                     <p className="text-sm text-white/60">Substitutes</p>
@@ -429,7 +430,7 @@ const SubstitutionCard = ({ substitution, homeTeam, awayTeam }: any) => {
         <div className="bg-white/5 border border-white/10 rounded-xl p-4 hover:bg-white/10 transition-all">
             <div className="flex items-center gap-4">
                 {/* Team Logo */}
-                <img src={team.logo} alt={team.name} className="w-8 h-8 object-contain" />
+                <TeamLogo logo={team.logo} name={team.name} size="sm" />
 
                 {/* Substitution Details */}
                 <div className="flex-1 flex items-center gap-4">

@@ -57,14 +57,9 @@
 
 - ~~**BUG-020** _(MEDIUM — Critical Flow C)_: `/live` page fetched `/api/matches` once on mount only. Fixed: polling interval already existed at 30s — changed to 15s. Interval is cleared on unmount. Stopgap until WebSocket subscription lands on the public viewer. Resolved: 2026-06-08.~~
 
-- **BUG-021** _(MEDIUM)_: `src/app/api/notifications/subscribe/route.ts` — `POST /api/notifications/subscribe` has no auth gate. Any unauthenticated caller can register a push subscription endpoint. Fix: add `getAuthUser(request)` before processing subscription. Filed: 2026-06-08. Source: SYSTEM_AUDIT.md §9 #8.
+- ~~**BUG-021** _(MEDIUM)_: `POST /api/notifications/subscribe` — auth gate missing. Fixed in prior session, confirmed present on code review 2026-06-15. Resolved: 2026-06-15.~~
 
-- **BUG-022** _(MEDIUM — Performance)_: Unbounded queries missing `.limit()` clause:
-  - `GET /api/competitions` — `src/app/api/competitions/route.ts`
-  - `GET /api/events` GET handler — `src/app/api/events/route.ts`
-  - `GET /api/matches/[id]/events` — `src/app/api/matches/[id]/events/route.ts`
-  - Various competition sub-queries using `Promise.all`
-    Same pattern as BUG-005. Fix: add `.limit()` to each. Filed: 2026-06-08. Source: SYSTEM_AUDIT.md §10.
+- ~~**BUG-022** _(MEDIUM — Performance)_: Unbounded queries missing `.limit()` on competitions + events routes. Fixed in prior session, confirmed present on code review 2026-06-15. Resolved: 2026-06-15.~~
 
 - **BUG-023** _(LOW)_: `src/db/schema-nesa-registrations.ts` references `players` and `organizations` tables without importing them. Will crash if the table is ever migrated or queried. Fix: add missing imports or delete the schema file if NESA registration is backscoped. Filed: 2026-06-08. Source: SYSTEM_AUDIT.md §9 #11.
 
@@ -82,37 +77,20 @@
 
 - ~~**BUG-025** _(MEDIUM — NDPR)_: `GET /api/matches` public list response exposes `loggerId` field to unauthenticated viewers. Fixed: `getAuthUser` added to GET handler; `loggerId` conditionally returned for admin callers only, stripped from public DTO. `assignedLoggers` was already absent. Resolved: 2026-06-15.~~
 
-- **BUG-027** _(MEDIUM)_: `/competitions` list page not showing all competitions. Filed: 2026-06-13.
+- ~~**BUG-027** _(MEDIUM)_: `/competitions` list page not showing all competitions. Fixed: 'All' tab added as default; sport filter now shows `sport=null` competitions. `src/app/competitions/page.tsx`. Resolved: 2026-06-15.~~
 
-- **BUG-028** _(MEDIUM)_: React hydration error #418 on competition detail page. Filed: 2026-06-13.
+- ~~**BUG-028** _(MEDIUM)_: React hydration error #418 on competition detail/standings page. Fixed: `initial` props removed from all Framer Motion elements on standings page; `<motion.tr>` replaced with plain `<tr>`. `src/app/competitions/[id]/standings/page.tsx`. Resolved: 2026-06-15.~~
 
-### BACKLOG-036 — Missing team logos for intercollege college teams
-**Status:** OPEN
+### ~~BACKLOG-036 — TeamLogo component migration (second pass)~~
+**Status:** COMPLETE — 2026-06-15
 **Priority:** Low
 **Filed:** 2026-06-13
-College teams (COLNAS, COLENG, COLMANS, COLENVS) have no logo images set. `logo: ''` in the DB. Needs Cloudinary upload + DB patch.
 
-**TeamLogo component built** (`src/lib/utils/team-logo.tsx`) — handles empty/null logo with initials fallback and `onError` handler. First-pass migration complete on 3 high-impact files (MatchCard, competitions page, admin dashboard — 13 instances total).
+TeamLogo component (`src/lib/utils/team-logo.tsx`) handles null/empty logos with initials fallback and `onError` handler. Second-pass migration complete: 13 files migrated, 5 skipped for size regression risk. commit: `a02283b`.
 
-**Remaining logo render sites to migrate to TeamLogo component (second pass):**
-- `src/app/admin/track-events/page.tsx` (2)
-- `src/app/admin/manager/page.tsx` (2)
-- `src/components/TrackLogger.tsx` (4)
-- `src/app/admin/transfers/page.tsx` (2)
-- `src/app/user/[userId]/page.tsx` (1)
-- `src/app/teams/[id]/page.tsx` (1)
-- `src/app/search/page.tsx` (2)
-- `src/app/admin/livestreams/page.tsx` (2)
-- `src/app/profile/page.tsx` (2)
-- `src/app/logger/page.tsx` (2)
-- `src/components/MatchLineups.tsx` (3)
-- `src/components/LiveStats.tsx` (2)
-- `src/components/lineup/TeamSelector.tsx` (3)
-- `src/components/lineup/MatchSelector.tsx` (2)
-- `src/components/GlobalSearch.tsx` (2)
-- `src/components/FullPitchLineups.tsx` (4)
-- `src/components/FootballLogger.tsx` (2)
-- `src/components/BasketballLogger.tsx` (7)
+**Migrated (13 files):** `admin/manager`, `TrackLogger`, `admin/transfers`, `user/[userId]`, `search` (team only), `admin/livestreams`, `profile`, `logger`, `MatchLineups`, `LiveStats`, `lineup/MatchSelector`, `GlobalSearch` (team only), `FootballLogger`.
+
+**Skipped (size-sensitive — raw `<img>` retained):** `admin/track-events/page.tsx`, `teams/[id]/page.tsx`, `lineup/TeamSelector.tsx`, `BasketballLogger.tsx`, `FullPitchLineups.tsx`. `comp.logo` instances in `search/page.tsx` and `GlobalSearch.tsx` intentionally excluded (competition logos, not team logos).
 
 ### BACKLOG-034 — Pre-Prod Clearance Script (Tier 1 → CI Gate)
 
