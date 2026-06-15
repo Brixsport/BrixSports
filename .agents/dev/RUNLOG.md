@@ -273,6 +273,16 @@ Applied directly via SQL (not drizzle-kit push — blocked by pre-existing `orga
 
 ---
 
+## Session 14 — 2026-06-15
+
+Source code and agent changes only — no database scripts run:
+- BUG-021: `POST /api/notifications/subscribe` — auth guard already present (pre-existing fix, backlog not updated). Marked resolved.
+- BUG-022: `.limit()` calls already present on competitions + events routes. Marked resolved.
+- BUG-027: Client-side sport filter on `/competitions` page hid competitions with `sport=null`. Fixed by adding 'All' tab as default — `src/app/competitions/page.tsx`.
+- db-inspector agent rewritten to read `.agents/rules/security.md` before any query.
+
+---
+
 ## Outstanding / Pending Scripts
 
 | Script (not yet run) | Purpose | Blocked by |
