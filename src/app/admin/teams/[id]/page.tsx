@@ -565,6 +565,9 @@ function TeamDetailContent() {
     }>({ jerseyNumber: '', position: '', nicknames: '' });
     const [affiliationSaving, setAffiliationSaving] = useState(false);
 
+    const [editingSquadNumberId, setEditingSquadNumberId] = useState<string | null>(null);
+    const [squadNumberInput, setSquadNumberInput] = useState<string>('');
+
     const [squadCompetitions, setSquadCompetitions] = useState<TeamCompetition[]>([]);
     const [selectedCompetitionId, setSelectedCompetitionId] = useState<string | null>(null);
     const [squad, setSquad] = useState<SquadPlayer[]>([]);
@@ -926,6 +929,21 @@ function TeamDetailContent() {
         setAffiliationSaving(false);
     }
 
+    async function handleSaveSquadNumber(squadPlayerId: string) {
+        const res = await fetch(
+            `/api/admin/teams/${teamId}/squad/${squadPlayerId}`,
+            {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ squadNumber: Number(squadNumberInput) || null }),
+            },
+        );
+        if (res.ok) {
+            await fetchSquad(selectedCompetitionId!);
+            setEditingSquadNumberId(null);
+        }
+    }
+
     async function handleRemoveFromSquad(squadPlayerId: string) {
         if (!selectedCompetitionId) return;
         setSquadSaving(true);
@@ -1035,215 +1053,207 @@ function TeamDetailContent() {
                 {/* ── ROSTER TAB ─────────────────────────────────────────── */}
                 {activeTab === 'roster' && (
                     <div className="space-y-8">
-                        {/* Current roster */}
-                        <section>
-                            <h2 className="text-[10px] font-black uppercase tracking-[0.3em] text-white/30 mb-4">
-                                Full Squad
+                        {/* SECTION A — Competition selector */}
+                        <section className="space-y-3">
+                            <h2 className="text-[10px] font-black uppercase tracking-[0.3em] text-white/30">
+                                Select Competition
                             </h2>
-
-                            {roster.length === 0 ? (
-                                <div className="flex flex-col items-center justify-center py-16 bg-white/[0.02] rounded-[2rem] border border-white/5 gap-4">
-                                    <Users size={40} className="text-white/10" />
-                                    <p className="text-white/30 text-xs font-bold uppercase tracking-widest">
-                                        No players rostered yet
-                                    </p>
-                                </div>
+                            {squadCompetitions.length === 0 ? (
+                                <p className="text-white/30 text-xs font-bold uppercase tracking-widest py-8 text-center">
+                                    This team is not enrolled in any competitions.
+                                </p>
                             ) : (
-                                <div className="bg-white/[0.03] border border-white/10 rounded-[2rem] overflow-hidden">
-                                    <div className="overflow-x-auto">
-                                        <table className="w-full text-left">
-                                            <thead>
-                                                <tr className="border-b border-white/5">
-                                                    <th className="px-6 py-4 text-[9px] font-black uppercase tracking-widest text-primary/60 italic">#</th>
-                                                    <th className="px-6 py-4 text-[9px] font-black uppercase tracking-widest text-primary/60 italic">Name</th>
-                                                    <th className="px-6 py-4 text-[9px] font-black uppercase tracking-widest text-primary/60 italic">Position</th>
-                                                    <th className="px-6 py-4 text-[9px] font-black uppercase tracking-widest text-primary/60 italic">Jersey</th>
-                                                    <th className="px-6 py-4 text-[9px] font-black uppercase tracking-widest text-primary/60 italic">Type</th>
-                                                    <th className="px-6 py-4 text-[9px] font-black uppercase tracking-widest text-primary/60 italic">Primary</th>
-                                                    <th className="px-6 py-4 text-[9px] font-black uppercase tracking-widest text-primary/60 italic">Nicknames</th>
-                                                    <th className="px-6 py-4 text-[9px] font-black uppercase tracking-widest text-primary/60 italic">Actions</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                {roster.map((p, i) => {
-                                                    const isEditing = editingAffiliationId === p.affiliationId;
-                                                    return (
-                                                        <tr key={p.affiliationId} className="border-b border-white/5 last:border-0 hover:bg-white/[0.02] transition-colors">
-                                                            <td className="px-6 py-4 text-white/30 font-bold text-sm">{i + 1}</td>
-                                                            <td className="px-6 py-4">
-                                                                <div className="font-bold text-sm">{p.name}</div>
-                                                                {p.jerseyName && (
-                                                                    <div className="text-[10px] text-white/30 font-bold uppercase">{p.jerseyName}</div>
-                                                                )}
-                                                            </td>
-                                                            <td className="px-6 py-4 text-sm font-bold text-white/60">
-                                                                {isEditing ? (
-                                                                    <input
-                                                                        value={affiliationForm.position}
-                                                                        onChange={(e) => setAffiliationForm((f) => ({ ...f, position: e.target.value }))}
-                                                                        placeholder="e.g. CB"
-                                                                        className="w-20 bg-transparent border-b border-white/30 text-sm outline-none"
-                                                                    />
-                                                                ) : (
-                                                                    p.position ?? '—'
-                                                                )}
-                                                            </td>
-                                                            <td className="px-6 py-4">
-                                                                {isEditing ? (
-                                                                    <input
-                                                                        type="number"
-                                                                        value={affiliationForm.jerseyNumber}
-                                                                        onChange={(e) => setAffiliationForm((f) => ({ ...f, jerseyNumber: e.target.value }))}
-                                                                        placeholder="—"
-                                                                        className="w-12 bg-transparent border-b border-white/30 text-sm outline-none"
-                                                                    />
-                                                                ) : p.jerseyNumber != null ? (
-                                                                    <span className="px-2 py-0.5 bg-primary/20 text-primary text-[10px] font-black rounded uppercase">
-                                                                        #{p.jerseyNumber}
+                                <select
+                                    value={selectedCompetitionId ?? ''}
+                                    onChange={(e) => setSelectedCompetitionId(e.target.value || null)}
+                                    className="bg-white/5 border border-white/10 rounded-2xl px-4 py-3 text-sm font-bold text-white focus:outline-none focus:border-primary/50 transition-all w-full max-w-md"
+                                >
+                                    <option value="" disabled>— select a competition —</option>
+                                    {squadCompetitions.map((c) => (
+                                        <option key={c.id} value={c.id}>
+                                            {c.name} · {c.season}
+                                        </option>
+                                    ))}
+                                </select>
+                            )}
+                        </section>
+
+                        {!selectedCompetitionId && squadCompetitions.length > 0 && (
+                            <p className="text-white/30 text-xs font-bold uppercase tracking-widest py-8 text-center">
+                                Select a competition to manage the roster.
+                            </p>
+                        )}
+
+                        {/* SECTION B — Dual panel */}
+                        {selectedCompetitionId && (
+                            <section className="flex flex-col md:flex-row gap-6">
+                                {/* LEFT — Full Pool */}
+                                <div className="flex-1 space-y-3">
+                                    <div>
+                                        <h3 className="text-[10px] font-black uppercase tracking-[0.3em] text-white/30">
+                                            Full Pool ({availableCount})
+                                        </h3>
+                                        <p className="text-[10px] font-bold text-white/20 uppercase tracking-widest mt-0.5">
+                                            Affiliated players not yet on this roster
+                                        </p>
+                                    </div>
+                                    <div className="bg-white/[0.03] border border-white/10 rounded-[2rem] overflow-hidden">
+                                        {availablePlayers.length === 0 ? (
+                                            <p className="text-center text-white/20 text-xs font-bold uppercase tracking-widest py-10">
+                                                All pool players are on this roster.
+                                            </p>
+                                        ) : (
+                                            <ul className="divide-y divide-white/5">
+                                                {availablePlayers.map((p) => (
+                                                    <li key={p.playerId} className="flex items-center justify-between px-5 py-3.5 hover:bg-white/[0.02] transition-colors">
+                                                        <div className="min-w-0">
+                                                            <div className="font-bold text-sm truncate">{p.name}</div>
+                                                            <div className="flex items-center gap-2 mt-0.5">
+                                                                {p.position && (
+                                                                    <span className="px-1.5 py-0.5 bg-white/10 text-white/40 text-[9px] font-black rounded uppercase tracking-wider">
+                                                                        {p.position}
                                                                     </span>
-                                                                ) : (
-                                                                    <span className="text-white/20 text-sm">—</span>
                                                                 )}
-                                                            </td>
-                                                            <td className="px-6 py-4">
-                                                                <AffiliationBadge type={p.affiliationType} />
-                                                            </td>
-                                                            <td className="px-6 py-4">
-                                                                {p.isPrimary ? (
-                                                                    <span className="w-2 h-2 bg-green-400 rounded-full inline-block" title="Primary team" />
-                                                                ) : (
-                                                                    <span className="w-2 h-2 bg-white/10 rounded-full inline-block" />
+                                                                {p.jerseyName && (
+                                                                    <span className="text-[10px] text-white/30 font-bold uppercase truncate">
+                                                                        {p.jerseyName}
+                                                                    </span>
                                                                 )}
-                                                            </td>
-                                                            <td className="px-6 py-4 text-[10px] text-white/40 font-bold max-w-[160px]">
-                                                                {isEditing ? (
-                                                                    <input
-                                                                        value={affiliationForm.nicknames}
-                                                                        onChange={(e) => setAffiliationForm((f) => ({ ...f, nicknames: e.target.value }))}
-                                                                        placeholder="comma separated"
-                                                                        className="w-32 bg-transparent border-b border-white/30 text-sm outline-none"
-                                                                    />
-                                                                ) : (
-                                                                    <span className="truncate block">{p.nicknames.length > 0 ? p.nicknames.join(', ') : '—'}</span>
+                                                            </div>
+                                                        </div>
+                                                        <button
+                                                            onClick={() => handleAddToSquad(p.playerId)}
+                                                            disabled={squadSaving}
+                                                            className="shrink-0 ml-3 px-3 py-1.5 bg-primary/20 text-primary rounded-xl text-[9px] font-black uppercase hover:bg-primary hover:text-black transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                                                        >
+                                                            Add
+                                                        </button>
+                                                    </li>
+                                                ))}
+                                            </ul>
+                                        )}
+                                    </div>
+                                </div>
+
+                                {/* RIGHT — Roster (squadPlayers) */}
+                                <div className="flex-1 space-y-3">
+                                    <div>
+                                        <h3 className="text-[10px] font-black uppercase tracking-[0.3em] text-white/30">
+                                            Roster ({squad.length})
+                                        </h3>
+                                    </div>
+                                    <div className="bg-white/[0.03] border border-white/10 rounded-[2rem] overflow-hidden min-h-[80px]">
+                                        {squadLoading ? (
+                                            <div className="flex items-center justify-center py-10">
+                                                <Loader2 className="animate-spin text-primary" size={20} />
+                                            </div>
+                                        ) : squad.length === 0 ? (
+                                            <p className="text-center text-white/20 text-xs font-bold uppercase tracking-widest py-10">
+                                                No players on roster yet.
+                                            </p>
+                                        ) : (
+                                            <ul className="divide-y divide-white/5">
+                                                {squad.map((p) => (
+                                                    <li key={p.squadPlayerId} className="flex items-center justify-between px-5 py-3.5 hover:bg-white/[0.02] transition-colors">
+                                                        <div className="min-w-0 flex-1">
+                                                            <div className="font-bold text-sm truncate">{p.name}</div>
+                                                            <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                                                                {p.position && (
+                                                                    <span className="px-1.5 py-0.5 bg-white/10 text-white/40 text-[9px] font-black rounded uppercase tracking-wider">
+                                                                        {p.position}
+                                                                    </span>
                                                                 )}
-                                                            </td>
-                                                            <td className="px-6 py-4">
-                                                                {isEditing ? (
-                                                                    <div className="flex items-center gap-2">
+                                                                {p.role !== 'player' && (
+                                                                    <span className={`px-1.5 py-0.5 text-[9px] font-black rounded uppercase tracking-wider ${
+                                                                        p.role === 'captain' ? 'bg-yellow-500/20 text-yellow-400'
+                                                                        : p.role === 'vice_captain' ? 'bg-blue-500/20 text-blue-400'
+                                                                        : p.role === 'goalkeeper' ? 'bg-green-500/20 text-green-400'
+                                                                        : 'bg-white/10 text-white/40'
+                                                                    }`}>
+                                                                        {p.role.replace('_', ' ')}
+                                                                    </span>
+                                                                )}
+                                                                {editingSquadNumberId === p.squadPlayerId ? (
+                                                                    <div className="flex items-center gap-1.5">
+                                                                        <input
+                                                                            type="number"
+                                                                            value={squadNumberInput}
+                                                                            onChange={(e) => setSquadNumberInput(e.target.value)}
+                                                                            placeholder="—"
+                                                                            className="w-12 bg-transparent border-b border-white/30 text-sm outline-none text-white"
+                                                                            autoFocus
+                                                                        />
                                                                         <button
-                                                                            onClick={() => handleSaveAffiliation(p.affiliationId)}
-                                                                            disabled={affiliationSaving}
-                                                                            className="flex items-center gap-1 px-2.5 py-1.5 bg-primary/20 text-primary rounded-lg text-[9px] font-black uppercase hover:bg-primary hover:text-black transition-all disabled:opacity-40"
+                                                                            onClick={() => handleSaveSquadNumber(p.squadPlayerId)}
+                                                                            className="flex items-center gap-1 px-2 py-1 bg-primary/20 text-primary rounded-lg text-[9px] font-black uppercase hover:bg-primary hover:text-black transition-all"
                                                                         >
-                                                                            <Save size={11} />
-                                                                            Save
+                                                                            <Save size={10} />
                                                                         </button>
                                                                         <button
-                                                                            onClick={() => setEditingAffiliationId(null)}
-                                                                            className="flex items-center gap-1 px-2.5 py-1.5 bg-white/10 text-white/40 rounded-lg text-[9px] font-black uppercase hover:bg-white/20 transition-all"
+                                                                            onClick={() => setEditingSquadNumberId(null)}
+                                                                            className="p-1 hover:bg-white/5 rounded-lg transition-all text-white/30 hover:text-white"
                                                                         >
-                                                                            <XCircle size={11} />
-                                                                            Cancel
+                                                                            <XCircle size={12} />
                                                                         </button>
                                                                     </div>
                                                                 ) : (
                                                                     <button
                                                                         onClick={() => {
-                                                                            setEditingAffiliationId(p.affiliationId);
-                                                                            setAffiliationForm({
-                                                                                jerseyNumber: p.jerseyNumber?.toString() ?? '',
-                                                                                position: p.position ?? '',
-                                                                                nicknames: p.nicknames.join(', '),
-                                                                            });
+                                                                            setEditingSquadNumberId(p.squadPlayerId);
+                                                                            setSquadNumberInput(p.squadNumber?.toString() ?? '');
                                                                         }}
-                                                                        className="p-1.5 hover:bg-white/5 rounded-lg transition-all border border-transparent hover:border-white/10 group/edit"
-                                                                        title="Edit affiliation"
+                                                                        className="flex items-center gap-1 text-[10px] font-bold text-white/40 hover:text-white transition-colors group/num"
                                                                     >
-                                                                        <Pencil size={14} className="text-white/30 group-hover/edit:text-white" />
+                                                                        <span className="font-black">
+                                                                            {p.squadNumber != null ? `#${p.squadNumber}` : '# —'}
+                                                                        </span>
+                                                                        <Pencil size={10} className="text-white/20 group-hover/num:text-white transition-colors" />
                                                                     </button>
                                                                 )}
-                                                            </td>
-                                                        </tr>
-                                                    );
-                                                })}
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                </div>
-                            )}
-                        </section>
-
-                        {/* Add players panel */}
-                        <section>
-                            {!showAddPanel ? (
-                                <button
-                                    onClick={() => setShowAddPanel(true)}
-                                    className="flex items-center gap-2 px-6 py-4 bg-white/5 border border-white/10 rounded-2xl font-black uppercase italic text-xs tracking-widest hover:bg-primary hover:text-black hover:border-transparent transition-all"
-                                >
-                                    <Plus size={16} strokeWidth={3} />
-                                    Add to Squad
-                                </button>
-                            ) : (
-                                <div className="space-y-4">
-                                    <div className="flex items-center justify-between">
-                                        <h2 className="text-[10px] font-black uppercase tracking-[0.3em] text-white/30">
-                                            Add Players to Squad
-                                        </h2>
-                                        {!submitted && (
-                                            <button
-                                                onClick={resetPanel}
-                                                className="text-[10px] font-black uppercase text-white/30 hover:text-white transition-colors"
-                                            >
-                                                Cancel
-                                            </button>
-                                        )}
-                                    </div>
-
-                                    {entries.map((row, i) => (
-                                        <EntryRowUI
-                                            key={row.rowId}
-                                            row={row}
-                                            index={i}
-                                            teamId={teamId}
-                                            submitted={submitted}
-                                            onChange={(patch) => updateEntry(row.rowId, patch)}
-                                            onRemove={() => removeEntry(row.rowId)}
-                                        />
-                                    ))}
-
-                                    {!submitted && (
-                                        <button
-                                            onClick={() => setEntries((prev) => [...prev, makeRow()])}
-                                            className="flex items-center gap-2 w-full py-3 border border-dashed border-white/10 rounded-2xl font-black uppercase italic text-[10px] tracking-widest text-white/30 hover:text-white hover:border-white/30 transition-all justify-center"
-                                        >
-                                            <Plus size={14} strokeWidth={3} />
-                                            Add Another Player
-                                        </button>
-                                    )}
-
-                                    <div className="flex items-center gap-3 pt-2">
-                                        {!submitted ? (
-                                            <button
-                                                onClick={handleSubmit}
-                                                disabled={submitting}
-                                                className="flex items-center gap-2 px-8 py-4 bg-primary text-black rounded-2xl font-black uppercase italic text-xs tracking-widest hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-50 disabled:scale-100 shadow-[0_0_30px_rgba(var(--primary-rgb),0.2)]"
-                                            >
-                                                {submitting ? <Loader2 className="animate-spin" size={16} /> : <Layers size={16} />}
-                                                {submitting ? 'Submitting...' : `Submit ${entries.length} Player${entries.length !== 1 ? 's' : ''}`}
-                                            </button>
-                                        ) : (
-                                            <button
-                                                onClick={resetPanel}
-                                                className="flex items-center gap-2 px-8 py-4 bg-white/5 border border-white/10 rounded-2xl font-black uppercase italic text-xs tracking-widest hover:bg-white/10 transition-all"
-                                            >
-                                                <Plus size={16} strokeWidth={3} />
-                                                Add More Players
-                                            </button>
+                                                            </div>
+                                                        </div>
+                                                        {confirmingRemove === p.squadPlayerId ? (
+                                                            <div className="flex items-center gap-2 shrink-0 ml-3">
+                                                                <button
+                                                                    onClick={() => handleRemoveFromSquad(p.squadPlayerId)}
+                                                                    disabled={squadSaving}
+                                                                    className="px-3 py-1.5 bg-red-500/20 text-red-400 rounded-xl text-[9px] font-black uppercase hover:bg-red-500/40 transition-all disabled:opacity-40"
+                                                                >
+                                                                    Confirm
+                                                                </button>
+                                                                <button
+                                                                    onClick={() => setConfirmingRemove(null)}
+                                                                    className="px-3 py-1.5 bg-white/10 text-white/40 rounded-xl text-[9px] font-black uppercase hover:bg-white/20 transition-all"
+                                                                >
+                                                                    Cancel
+                                                                </button>
+                                                            </div>
+                                                        ) : (
+                                                            <button
+                                                                onClick={() => setConfirmingRemove(p.squadPlayerId)}
+                                                                disabled={squadSaving}
+                                                                className="shrink-0 ml-3 px-3 py-1.5 bg-red-500/10 text-red-400/60 rounded-xl text-[9px] font-black uppercase hover:bg-red-500/20 hover:text-red-400 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                                                            >
+                                                                Remove
+                                                            </button>
+                                                        )}
+                                                    </li>
+                                                ))}
+                                            </ul>
                                         )}
                                     </div>
                                 </div>
-                            )}
-                        </section>
+                            </section>
+                        )}
+
+                        {/* SECTION C — Summary bar */}
+                        {selectedCompetitionId && (
+                            <div className="flex items-center gap-3 px-2 text-[10px] font-black uppercase tracking-widest text-white/30">
+                                <span className="text-white/60">{squad.length} on roster</span>
+                                <span>·</span>
+                                <span>{availableCount} available in pool</span>
+                            </div>
+                        )}
                     </div>
                 )}
 
@@ -1510,164 +1520,215 @@ function TeamDetailContent() {
                 {/* ── SQUAD TAB ───────────────────────────────────────────── */}
                 {activeTab === 'squad' && (
                     <div className="space-y-8">
-                        {/* SECTION A — Competition selector */}
-                        <section className="space-y-3">
-                            <h2 className="text-[10px] font-black uppercase tracking-[0.3em] text-white/30">
-                                Select Competition
+                        {/* Pool table — full playerTeamAffiliations */}
+                        <section>
+                            <h2 className="text-[10px] font-black uppercase tracking-[0.3em] text-white/30 mb-4">
+                                Full Squad Pool
                             </h2>
-                            {squadCompetitions.length === 0 ? (
-                                <p className="text-white/30 text-xs font-bold uppercase tracking-widest py-8 text-center">
-                                    This team is not enrolled in any competitions.
-                                </p>
+
+                            {roster.length === 0 ? (
+                                <div className="flex flex-col items-center justify-center py-16 bg-white/[0.02] rounded-[2rem] border border-white/5 gap-4">
+                                    <Users size={40} className="text-white/10" />
+                                    <p className="text-white/30 text-xs font-bold uppercase tracking-widest">
+                                        No players affiliated with this team yet.
+                                    </p>
+                                </div>
                             ) : (
-                                <select
-                                    value={selectedCompetitionId ?? ''}
-                                    onChange={(e) => setSelectedCompetitionId(e.target.value || null)}
-                                    className="bg-white/5 border border-white/10 rounded-2xl px-4 py-3 text-sm font-bold text-white focus:outline-none focus:border-primary/50 transition-all w-full max-w-md"
-                                >
-                                    <option value="" disabled>— select a competition —</option>
-                                    {squadCompetitions.map((c) => (
-                                        <option key={c.id} value={c.id}>
-                                            {c.name} · {c.season}
-                                        </option>
-                                    ))}
-                                </select>
+                                <div className="bg-white/[0.03] border border-white/10 rounded-[2rem] overflow-hidden">
+                                    <div className="overflow-x-auto">
+                                        <table className="w-full text-left">
+                                            <thead>
+                                                <tr className="border-b border-white/5">
+                                                    <th className="px-6 py-4 text-[9px] font-black uppercase tracking-widest text-primary/60 italic">#</th>
+                                                    <th className="px-6 py-4 text-[9px] font-black uppercase tracking-widest text-primary/60 italic">Name</th>
+                                                    <th className="px-6 py-4 text-[9px] font-black uppercase tracking-widest text-primary/60 italic">Position</th>
+                                                    <th className="px-6 py-4 text-[9px] font-black uppercase tracking-widest text-primary/60 italic">Jersey</th>
+                                                    <th className="px-6 py-4 text-[9px] font-black uppercase tracking-widest text-primary/60 italic">Type</th>
+                                                    <th className="px-6 py-4 text-[9px] font-black uppercase tracking-widest text-primary/60 italic">Primary</th>
+                                                    <th className="px-6 py-4 text-[9px] font-black uppercase tracking-widest text-primary/60 italic">Nicknames</th>
+                                                    <th className="px-6 py-4 text-[9px] font-black uppercase tracking-widest text-primary/60 italic">Actions</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {roster.map((p, i) => {
+                                                    const isEditing = editingAffiliationId === p.affiliationId;
+                                                    return (
+                                                        <tr key={p.affiliationId} className="border-b border-white/5 last:border-0 hover:bg-white/[0.02] transition-colors">
+                                                            <td className="px-6 py-4 text-white/30 font-bold text-sm">{i + 1}</td>
+                                                            <td className="px-6 py-4">
+                                                                <div className="font-bold text-sm">{p.name}</div>
+                                                                {p.jerseyName && (
+                                                                    <div className="text-[10px] text-white/30 font-bold uppercase">{p.jerseyName}</div>
+                                                                )}
+                                                            </td>
+                                                            <td className="px-6 py-4 text-sm font-bold text-white/60">
+                                                                {isEditing ? (
+                                                                    <input
+                                                                        value={affiliationForm.position}
+                                                                        onChange={(e) => setAffiliationForm((f) => ({ ...f, position: e.target.value }))}
+                                                                        placeholder="e.g. CB"
+                                                                        className="w-20 bg-transparent border-b border-white/30 text-sm outline-none"
+                                                                    />
+                                                                ) : (
+                                                                    p.position ?? '—'
+                                                                )}
+                                                            </td>
+                                                            <td className="px-6 py-4">
+                                                                {isEditing ? (
+                                                                    <input
+                                                                        type="number"
+                                                                        value={affiliationForm.jerseyNumber}
+                                                                        onChange={(e) => setAffiliationForm((f) => ({ ...f, jerseyNumber: e.target.value }))}
+                                                                        placeholder="—"
+                                                                        className="w-12 bg-transparent border-b border-white/30 text-sm outline-none"
+                                                                    />
+                                                                ) : p.jerseyNumber != null ? (
+                                                                    <span className="px-2 py-0.5 bg-primary/20 text-primary text-[10px] font-black rounded uppercase">
+                                                                        #{p.jerseyNumber}
+                                                                    </span>
+                                                                ) : (
+                                                                    <span className="text-white/20 text-sm">—</span>
+                                                                )}
+                                                            </td>
+                                                            <td className="px-6 py-4">
+                                                                <AffiliationBadge type={p.affiliationType} />
+                                                            </td>
+                                                            <td className="px-6 py-4">
+                                                                {p.isPrimary ? (
+                                                                    <span className="w-2 h-2 bg-green-400 rounded-full inline-block" title="Primary team" />
+                                                                ) : (
+                                                                    <span className="w-2 h-2 bg-white/10 rounded-full inline-block" />
+                                                                )}
+                                                            </td>
+                                                            <td className="px-6 py-4 text-[10px] text-white/40 font-bold max-w-[160px]">
+                                                                {isEditing ? (
+                                                                    <input
+                                                                        value={affiliationForm.nicknames}
+                                                                        onChange={(e) => setAffiliationForm((f) => ({ ...f, nicknames: e.target.value }))}
+                                                                        placeholder="comma separated"
+                                                                        className="w-32 bg-transparent border-b border-white/30 text-sm outline-none"
+                                                                    />
+                                                                ) : (
+                                                                    <span className="truncate block">{p.nicknames.length > 0 ? p.nicknames.join(', ') : '—'}</span>
+                                                                )}
+                                                            </td>
+                                                            <td className="px-6 py-4">
+                                                                {isEditing ? (
+                                                                    <div className="flex items-center gap-2">
+                                                                        <button
+                                                                            onClick={() => handleSaveAffiliation(p.affiliationId)}
+                                                                            disabled={affiliationSaving}
+                                                                            className="flex items-center gap-1 px-2.5 py-1.5 bg-primary/20 text-primary rounded-lg text-[9px] font-black uppercase hover:bg-primary hover:text-black transition-all disabled:opacity-40"
+                                                                        >
+                                                                            <Save size={11} />
+                                                                            Save
+                                                                        </button>
+                                                                        <button
+                                                                            onClick={() => setEditingAffiliationId(null)}
+                                                                            className="flex items-center gap-1 px-2.5 py-1.5 bg-white/10 text-white/40 rounded-lg text-[9px] font-black uppercase hover:bg-white/20 transition-all"
+                                                                        >
+                                                                            <XCircle size={11} />
+                                                                            Cancel
+                                                                        </button>
+                                                                    </div>
+                                                                ) : (
+                                                                    <button
+                                                                        onClick={() => {
+                                                                            setEditingAffiliationId(p.affiliationId);
+                                                                            setAffiliationForm({
+                                                                                jerseyNumber: p.jerseyNumber?.toString() ?? '',
+                                                                                position: p.position ?? '',
+                                                                                nicknames: p.nicknames.join(', '),
+                                                                            });
+                                                                        }}
+                                                                        className="p-1.5 hover:bg-white/5 rounded-lg transition-all border border-transparent hover:border-white/10 group/edit"
+                                                                        title="Edit affiliation"
+                                                                    >
+                                                                        <Pencil size={14} className="text-white/30 group-hover/edit:text-white" />
+                                                                    </button>
+                                                                )}
+                                                            </td>
+                                                        </tr>
+                                                    );
+                                                })}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
                             )}
                         </section>
 
-                        {/* SECTION B — Dual panel */}
-                        {selectedCompetitionId && (
-                            <section className="flex flex-col md:flex-row gap-6">
-                                {/* LEFT — Available Players */}
-                                <div className="flex-1 space-y-3">
-                                    <div>
-                                        <h3 className="text-[10px] font-black uppercase tracking-[0.3em] text-white/30">
-                                            Full Squad ({availableCount})
-                                        </h3>
-                                        <p className="text-[10px] font-bold text-white/20 uppercase tracking-widest mt-0.5">
-                                            Players in squad not yet on this roster
-                                        </p>
+                        {/* Add players panel */}
+                        <section>
+                            {!showAddPanel ? (
+                                <button
+                                    onClick={() => setShowAddPanel(true)}
+                                    className="flex items-center gap-2 px-6 py-4 bg-white/5 border border-white/10 rounded-2xl font-black uppercase italic text-xs tracking-widest hover:bg-primary hover:text-black hover:border-transparent transition-all"
+                                >
+                                    <Plus size={16} strokeWidth={3} />
+                                    Add Players to Pool
+                                </button>
+                            ) : (
+                                <div className="space-y-4">
+                                    <div className="flex items-center justify-between">
+                                        <h2 className="text-[10px] font-black uppercase tracking-[0.3em] text-white/30">
+                                            Add Players to Pool
+                                        </h2>
+                                        {!submitted && (
+                                            <button
+                                                onClick={resetPanel}
+                                                className="text-[10px] font-black uppercase text-white/30 hover:text-white transition-colors"
+                                            >
+                                                Cancel
+                                            </button>
+                                        )}
                                     </div>
-                                    <div className="bg-white/[0.03] border border-white/10 rounded-[2rem] overflow-hidden">
-                                        {availablePlayers.length === 0 ? (
-                                            <p className="text-center text-white/20 text-xs font-bold uppercase tracking-widest py-10">
-                                                All squad players are on the roster.
-                                            </p>
+
+                                    {entries.map((row, i) => (
+                                        <EntryRowUI
+                                            key={row.rowId}
+                                            row={row}
+                                            index={i}
+                                            teamId={teamId}
+                                            submitted={submitted}
+                                            onChange={(patch) => updateEntry(row.rowId, patch)}
+                                            onRemove={() => removeEntry(row.rowId)}
+                                        />
+                                    ))}
+
+                                    {!submitted && (
+                                        <button
+                                            onClick={() => setEntries((prev) => [...prev, makeRow()])}
+                                            className="flex items-center gap-2 w-full py-3 border border-dashed border-white/10 rounded-2xl font-black uppercase italic text-[10px] tracking-widest text-white/30 hover:text-white hover:border-white/30 transition-all justify-center"
+                                        >
+                                            <Plus size={14} strokeWidth={3} />
+                                            Add Another Player
+                                        </button>
+                                    )}
+
+                                    <div className="flex items-center gap-3 pt-2">
+                                        {!submitted ? (
+                                            <button
+                                                onClick={handleSubmit}
+                                                disabled={submitting}
+                                                className="flex items-center gap-2 px-8 py-4 bg-primary text-black rounded-2xl font-black uppercase italic text-xs tracking-widest hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-50 disabled:scale-100 shadow-[0_0_30px_rgba(var(--primary-rgb),0.2)]"
+                                            >
+                                                {submitting ? <Loader2 className="animate-spin" size={16} /> : <Layers size={16} />}
+                                                {submitting ? 'Submitting...' : `Submit ${entries.length} Player${entries.length !== 1 ? 's' : ''}`}
+                                            </button>
                                         ) : (
-                                            <ul className="divide-y divide-white/5">
-                                                {availablePlayers.map((p) => (
-                                                    <li key={p.playerId} className="flex items-center justify-between px-5 py-3.5 hover:bg-white/[0.02] transition-colors">
-                                                        <div className="min-w-0">
-                                                            <div className="font-bold text-sm truncate">{p.name}</div>
-                                                            <div className="flex items-center gap-2 mt-0.5">
-                                                                {p.position && (
-                                                                    <span className="px-1.5 py-0.5 bg-white/10 text-white/40 text-[9px] font-black rounded uppercase tracking-wider">
-                                                                        {p.position}
-                                                                    </span>
-                                                                )}
-                                                                {p.jerseyName && (
-                                                                    <span className="text-[10px] text-white/30 font-bold uppercase truncate">
-                                                                        {p.jerseyName}
-                                                                    </span>
-                                                                )}
-                                                            </div>
-                                                        </div>
-                                                        <button
-                                                            onClick={() => handleAddToSquad(p.playerId)}
-                                                            disabled={squadSaving}
-                                                            className="shrink-0 ml-3 px-3 py-1.5 bg-primary/20 text-primary rounded-xl text-[9px] font-black uppercase hover:bg-primary hover:text-black transition-all disabled:opacity-40 disabled:cursor-not-allowed"
-                                                        >
-                                                            Add
-                                                        </button>
-                                                    </li>
-                                                ))}
-                                            </ul>
+                                            <button
+                                                onClick={resetPanel}
+                                                className="flex items-center gap-2 px-8 py-4 bg-white/5 border border-white/10 rounded-2xl font-black uppercase italic text-xs tracking-widest hover:bg-white/10 transition-all"
+                                            >
+                                                <Plus size={16} strokeWidth={3} />
+                                                Add More Players
+                                            </button>
                                         )}
                                     </div>
                                 </div>
-
-                                {/* RIGHT — Squad */}
-                                <div className="flex-1 space-y-3">
-                                    <div>
-                                        <h3 className="text-[10px] font-black uppercase tracking-[0.3em] text-white/30">
-                                            Roster ({squad.length})
-                                        </h3>
-                                    </div>
-                                    <div className="bg-white/[0.03] border border-white/10 rounded-[2rem] overflow-hidden min-h-[80px]">
-                                        {squadLoading ? (
-                                            <div className="flex items-center justify-center py-10">
-                                                <Loader2 className="animate-spin text-primary" size={20} />
-                                            </div>
-                                        ) : squad.length === 0 ? (
-                                            <p className="text-center text-white/20 text-xs font-bold uppercase tracking-widest py-10">
-                                                No players on roster yet. Add from the squad.
-                                            </p>
-                                        ) : (
-                                            <ul className="divide-y divide-white/5">
-                                                {squad.map((p) => (
-                                                    <li key={p.squadPlayerId} className="flex items-center justify-between px-5 py-3.5 hover:bg-white/[0.02] transition-colors">
-                                                        <div className="min-w-0">
-                                                            <div className="font-bold text-sm truncate">{p.name}</div>
-                                                            <div className="flex items-center gap-2 mt-0.5">
-                                                                {p.position && (
-                                                                    <span className="px-1.5 py-0.5 bg-white/10 text-white/40 text-[9px] font-black rounded uppercase tracking-wider">
-                                                                        {p.position}
-                                                                    </span>
-                                                                )}
-                                                                {p.role !== 'player' && (
-                                                                    <span className={`px-1.5 py-0.5 text-[9px] font-black rounded uppercase tracking-wider ${
-                                                                        p.role === 'captain' ? 'bg-yellow-500/20 text-yellow-400'
-                                                                        : p.role === 'vice_captain' ? 'bg-blue-500/20 text-blue-400'
-                                                                        : p.role === 'goalkeeper' ? 'bg-green-500/20 text-green-400'
-                                                                        : 'bg-white/10 text-white/40'
-                                                                    }`}>
-                                                                        {p.role.replace('_', ' ')}
-                                                                    </span>
-                                                                )}
-                                                            </div>
-                                                        </div>
-                                                        {confirmingRemove === p.squadPlayerId ? (
-                                                            <div className="flex items-center gap-2 shrink-0 ml-3">
-                                                                <button
-                                                                    onClick={() => handleRemoveFromSquad(p.squadPlayerId)}
-                                                                    disabled={squadSaving}
-                                                                    className="px-3 py-1.5 bg-red-500/20 text-red-400 rounded-xl text-[9px] font-black uppercase hover:bg-red-500/40 transition-all disabled:opacity-40"
-                                                                >
-                                                                    Confirm
-                                                                </button>
-                                                                <button
-                                                                    onClick={() => setConfirmingRemove(null)}
-                                                                    className="px-3 py-1.5 bg-white/10 text-white/40 rounded-xl text-[9px] font-black uppercase hover:bg-white/20 transition-all"
-                                                                >
-                                                                    Cancel
-                                                                </button>
-                                                            </div>
-                                                        ) : (
-                                                            <button
-                                                                onClick={() => setConfirmingRemove(p.squadPlayerId)}
-                                                                disabled={squadSaving}
-                                                                className="shrink-0 ml-3 px-3 py-1.5 bg-red-500/10 text-red-400/60 rounded-xl text-[9px] font-black uppercase hover:bg-red-500/20 hover:text-red-400 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
-                                                            >
-                                                                Remove
-                                                            </button>
-                                                        )}
-                                                    </li>
-                                                ))}
-                                            </ul>
-                                        )}
-                                    </div>
-                                </div>
-                            </section>
-                        )}
-
-                        {/* SECTION C — Summary bar */}
-                        {selectedCompetitionId && (
-                            <div className="flex items-center gap-3 px-2 text-[10px] font-black uppercase tracking-widest text-white/30">
-                                <span className="text-white/60">{squad.length} players on roster</span>
-                                <span>·</span>
-                                <span>{availableCount} available from squad</span>
-                            </div>
-                        )}
+                            )}
+                        </section>
                     </div>
                 )}
 
