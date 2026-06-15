@@ -970,7 +970,7 @@ function TeamDetailContent() {
             <div className="max-w-5xl mx-auto p-4 md:p-8">
                 {/* Tabs */}
                 <div className="flex gap-2 mb-8 flex-wrap">
-                    {(['roster', 'csv', 'squad', 'info'] as const).map((tab) => (
+                    {(['roster', 'squad', 'csv', 'info'] as const).map((tab) => (
                         <button
                             key={tab}
                             onClick={() => setActiveTab(tab)}
@@ -998,7 +998,7 @@ function TeamDetailContent() {
                         {/* Current roster */}
                         <section>
                             <h2 className="text-[10px] font-black uppercase tracking-[0.3em] text-white/30 mb-4">
-                                Current Roster
+                                Full Squad
                             </h2>
 
                             {roster.length === 0 ? (
@@ -1073,13 +1073,13 @@ function TeamDetailContent() {
                                     className="flex items-center gap-2 px-6 py-4 bg-white/5 border border-white/10 rounded-2xl font-black uppercase italic text-xs tracking-widest hover:bg-primary hover:text-black hover:border-transparent transition-all"
                                 >
                                     <Plus size={16} strokeWidth={3} />
-                                    Add Players
+                                    Add to Squad
                                 </button>
                             ) : (
                                 <div className="space-y-4">
                                     <div className="flex items-center justify-between">
                                         <h2 className="text-[10px] font-black uppercase tracking-[0.3em] text-white/30">
-                                            Add Players to Roster
+                                            Add Players to Squad
                                         </h2>
                                         {!submitted && (
                                             <button
@@ -1434,16 +1434,16 @@ function TeamDetailContent() {
                                 <div className="flex-1 space-y-3">
                                     <div>
                                         <h3 className="text-[10px] font-black uppercase tracking-[0.3em] text-white/30">
-                                            Available ({availableCount})
+                                            Full Squad ({availableCount})
                                         </h3>
                                         <p className="text-[10px] font-bold text-white/20 uppercase tracking-widest mt-0.5">
-                                            Players on roster not yet in this squad
+                                            Players in squad not yet on this roster
                                         </p>
                                     </div>
                                     <div className="bg-white/[0.03] border border-white/10 rounded-[2rem] overflow-hidden">
                                         {availablePlayers.length === 0 ? (
                                             <p className="text-center text-white/20 text-xs font-bold uppercase tracking-widest py-10">
-                                                All rostered players are in the squad.
+                                                All squad players are on the roster.
                                             </p>
                                         ) : (
                                             <ul className="divide-y divide-white/5">
@@ -1482,7 +1482,7 @@ function TeamDetailContent() {
                                 <div className="flex-1 space-y-3">
                                     <div>
                                         <h3 className="text-[10px] font-black uppercase tracking-[0.3em] text-white/30">
-                                            Squad ({squad.length})
+                                            Roster ({squad.length})
                                         </h3>
                                     </div>
                                     <div className="bg-white/[0.03] border border-white/10 rounded-[2rem] overflow-hidden min-h-[80px]">
@@ -1492,7 +1492,7 @@ function TeamDetailContent() {
                                             </div>
                                         ) : squad.length === 0 ? (
                                             <p className="text-center text-white/20 text-xs font-bold uppercase tracking-widest py-10">
-                                                No players in squad yet. Add from the roster.
+                                                No players on roster yet. Add from the squad.
                                             </p>
                                         ) : (
                                             <ul className="divide-y divide-white/5">
@@ -1555,9 +1555,9 @@ function TeamDetailContent() {
                         {/* SECTION C — Summary bar */}
                         {selectedCompetitionId && (
                             <div className="flex items-center gap-3 px-2 text-[10px] font-black uppercase tracking-widest text-white/30">
-                                <span className="text-white/60">{squad.length} players in squad</span>
+                                <span className="text-white/60">{squad.length} players on roster</span>
                                 <span>·</span>
-                                <span>{availableCount} available on roster</span>
+                                <span>{availableCount} available from squad</span>
                             </div>
                         )}
                     </div>
