@@ -290,6 +290,24 @@ Source code changes only — no database scripts run.
 
 ---
 
+## Session 15 — 2026-06-15
+
+### squad_players unique index (staging)
+2026-06-15 | `dev/add-squad-players-unique-index.mjs` | `brixsportsv2-staging` (STAGING) | SUCCESS | VERIFIED
+- SQL: `CREATE UNIQUE INDEX IF NOT EXISTS squad_players_team_comp_player_unique ON squad_players (team_id, competition_id, player_id)`
+- Verified via `SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='squad_players'`
+- Indexes confirmed: `sqlite_autoindex_squad_players_1`, `squad_players_team_comp_player_unique`
+- Script deleted after run.
+
+### squad_players unique index (prod)
+2026-06-15 | `dev/add-squad-players-unique-index.mjs` | `brixsportv2-brixsports` (PROD) | SUCCESS | VERIFIED
+- SQL: same as staging run above
+- Verified via `SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='squad_players'`
+- Indexes confirmed: `sqlite_autoindex_squad_players_1`, `squad_players_team_comp_player_unique`
+- Script deleted after run.
+
+---
+
 ## Outstanding / Pending Scripts
 
 | Script (not yet run) | Purpose | Blocked by |

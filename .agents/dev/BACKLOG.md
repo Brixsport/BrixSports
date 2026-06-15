@@ -177,7 +177,7 @@ Audit duplicate slugs first before deciding. Do not run db:push until this is re
 
 ### BACKLOG-037 — Roster Builder
 
-**Status:** OPEN — Steps 1-5 complete, Steps 6-7 remaining
+**Status:** OPEN — Steps 1-7 complete, Step 7b remaining
 **Priority:** High
 **Filed:** 2026-06-13
 **Blocked by:** Step 1 (unique constraint dedup) must run first
@@ -228,10 +228,16 @@ No UI or API exists to link existing players to teams without creating duplicate
 - Unmatched rows default to "Create New" mode
 - Confirm → runs same POST /api/admin/teams/[teamId]/roster
 
-**Step 7 (future) — Squad Selector**
-- Revive squadPlayers table (already has correct unique constraint: teamId + competitionId + playerId)
-- UI: competition → per-team squad selection from roster
-- Enables: match event logging validates player is in squad
+**Step 7 — Squad Selector** ✓ COMPLETE — 2026-06-15
+- Unique index `squad_players_team_comp_player_unique` added to both staging and prod DBs via SQL direct.
+- API: `GET/POST /api/admin/teams/[teamId]/squad`, `GET /api/admin/teams/[teamId]/competitions`, `DELETE /api/admin/teams/[teamId]/squad/[squadPlayerId]`. All admin-gated.
+- UI: Squad tab on `/admin/teams/[id]`. Competition dropdown → dual panel (available left / squad right). Two-click remove confirm. commit: `35af3a6`, `7c2cc69`.
+
+**Step 7b (future) — Role assignment UI**
+- Add captain, vice-captain, goalkeeper badge assignment per squad player
+- role column already stored in squadPlayers (default 'player')
+- UI: small role badge dropdown per player in the squad panel
+- Do not build until Step 7 (basic add/remove) is verified on staging
 
 #### Notes
 - jerseyNumber on playerTeamAffiliations is per-team, separate from players.number — allow null (college football is loose with numbers)
@@ -2268,3 +2274,129 @@ as nullable columns — if set, override competition config.
   after roster is stable
 - Related: BACKLOG-033-B (event handler), 
   BACKLOG-019 (post-match automation)
+- Competition-level squad limits belong here (max squad size per
+  competition). Do not enforce limits in BACKLOG-037 Step 7 —
+  read them from competition sport settings once BACKLOG-044 is built.
+
+---
+
+### BACKLOG-047 — Roster Add Existing: Eligibility Filters
+
+**Status:** OPEN
+**Priority:** Low
+**Filed:** 2026-06-15
+
+#### Problem
+"Add Existing" player search in the Roster Builder has no filters.
+All players in the system are searchable regardless of sport,
+university, or current squad status. This allows cross-sport or
+cross-university additions with no warning.
+
+#### Required Changes
+- Filter search results by sport when adding to a team roster
+- Filter by university for BUSA-scoped competitions
+- Show warning if player is already in active squad for another
+  team in the same competition
+- Eligibility checks (age, academic standing, transfer window) — Phase 7
+
+#### Notes
+- Do not build before Squad Selector (BACKLOG-037 Step 7) is complete
+- Related: BACKLOG-037 Step 3 (GET /api/players/search)
+
+---
+
+### BACKLOG-048 — Friendly Match Support
+
+**Status:** OPEN
+**Priority:** Medium
+**Filed:** 2026-06-15
+
+#### Problem
+Every match requires a competitionId. Friendly matches have no
+competition. Current workaround is creating a "Friendlies" dummy
+competition — this corrupts standings and stats.
+
+#### Required Changes
+1. Add matchType column to matches table via SQL direct (not db:push):
+   ALTER TABLE matches ADD COLUMN match_type TEXT NOT NULL DEFAULT 'competitive'
+   Values: 'competitive' | 'friendly'
+
+2. Make competitionId nullable for friendly matches — already nullable
+   in schema, just needs enforcement in match creation flow.
+
+3. Match creation form: toggle "Friendly" hides competition field,
+   sets matchType to 'friendly'.
+
+4. Friendly matches excluded from standings calculations.
+
+5. Friendly matches show "Friendly" badge instead of competition
+   name on public pages and match cards.
+
+6. Stats from friendlies: do not count toward player stats or
+   leaderboards by default. Competition sport settings can override
+   this when BACKLOG-044 (match config) is built.
+
+#### Notes
+- matchType column uses SQL direct — safe, additive, no db:push needed
+- Related: BACKLOG-044 (match config), BACKLOG-033-B (event handler)
+- Squad selection (BACKLOG-037 Step 7) should exclude friendly matches
+  from the competition dropdown — squads are competition-scoped only
+
+---
+
+### BACKLOG-049 — Seasonal Affiliations + Transfer Window
+
+**Status:** OPEN
+**Priority:** Low — not needed for Bells pilot
+**Filed:** 2026-06-15
+
+Add startDate and endDate to playerTeamAffiliations.
+"Current" affiliation = endDate IS NULL OR endDate > now().
+Transfer = close old affiliation, open new one.
+Squad selection filters to active affiliations only.
+Related: BACKLOG-037 Step 7, BACKLOG-048 (friendly matches)
+
+---
+
+### BACKLOG-050 — Team Type Field
+
+**Status:** OPEN
+**Priority:** Medium
+**Filed:** 2026-06-15
+
+Add teamType column to teams table via SQL direct:
+'university' | 'college' | 'club' | 'busa' | 'external'
+Currently implied by ownerOrganizationId — fragile.
+Squad selection and eligibility checks need explicit team type.
+Related: BACKLOG-047 (eligibility filters)
+
+---
+
+### BACKLOG-051 — Nigerian Football Format Research
+
+**Status:** OPEN
+**Priority:** Medium — needed before Phase 7 competition features
+**Filed:** 2026-06-15
+
+Dedicated research session needed. Output: FOOTBALL_FORMATS.md
+Topics: NPFL/NUC eligibility, NUGA/BUSA formats, age bands,
+academic eligibility, transfer windows, NPUGA rules.
+Findings seed specific backlog entries for competition config.
+Related: BACKLOG-044 (match config), BACKLOG-004 (multi-sport)
+
+---
+
+### BACKLOG-052 — Team Uniqueness + Duplicate Audit
+
+**Status:** OPEN
+**Priority:** Medium
+**Filed:** 2026-06-15
+
+Teams should be unique on (ownerOrganizationId, sport, gender).
+No uniqueness constraint exists today — duplicate team names possible.
+Display name should derive from org + sport + gender, not free text.
+Known duplicate: Bells team (same name, different sport) — needs
+read-only trace before any cleanup.
+Male/female teams: same org + sport, different gender column —
+both valid rows, need clear display differentiation in UI.
+Related: BACKLOG-014 (org duplicate entries)

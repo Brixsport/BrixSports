@@ -83,6 +83,10 @@ activation: always_on
 
 2026-06-15 — Directive field names diverge from actual type definitions — `RosterPlayer` uses `playerId` not `id`, and `nicknames` is already `string[]` from the GET handler — directive specified `match.player.id` and `JSON.parse(p.nicknames)`. Prevention: always read the actual type definition and GET handler before implementing anything that accesses a type's fields.
 
+2026-06-15 — `dotenv/config` does not load `.env.local` — `import 'dotenv/config'` loads `.env` only. `.env.local` is a Next.js convention, not a dotenv default. Use `config({ path: '.env.local' })` explicitly in scripts targeting the staging DB. Prevention: template all dev scripts with the explicit path import.
+
+2026-06-15 — Spec said `status !== 'archived'` but competitions schema uses `isArchived` boolean — filtering by `status === 'archived'` would always return false since that's not how archiving is modeled. Always read the schema before implementing a filter. The column name in the spec was an abstraction, not the actual DB column name.
+
 ## Anti-Patterns for This Codebase
 - Middleware matcher and internal logic check do not match.
 - try/catch without finally in any DB operation.

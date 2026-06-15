@@ -110,6 +110,44 @@
 
 ---
 
+### Session 15 — 2026-06-15
+
+**Focus:** BACKLOG-037 Step 7 — Squad Selector. Full implementation: unique DB constraint, three API routes, and dual-panel UI tab on the team detail page.
+
+**Built:**
+
+- **`squad_players` unique index (staging + prod):** `CREATE UNIQUE INDEX IF NOT EXISTS squad_players_team_comp_player_unique ON squad_players (team_id, competition_id, player_id)` — run via `dev/add-squad-players-unique-index.mjs` against both DBs. Verified in `sqlite_master`. Script deleted after run. Logged in RUNLOG.md.
+
+- **`src/app/api/admin/teams/[teamId]/competitions/route.ts` (GET):** Returns competitions this team is enrolled in, joined from `competitionTeamEntries → competitions`. Filters out `isArchived = true`. Auth: `getAuthUser + role === 'admin'`. Response: `{ competitions: [{ id, name, sport, status, season }] }`. Note: spec said `status !== 'archived'` but schema uses boolean `isArchived` — used the real column.
+
+- **`src/app/api/admin/teams/[teamId]/squad/route.ts` (GET + POST):** GET requires `?competitionId`, joins `squadPlayers → players`, returns squad with all metadata. POST validates roster membership via `playerTeamAffiliations` before insert; application-level dedup check before hitting DB constraint; graceful catch on `UNIQUE constraint failed` for race condition. `selectedBy` sourced from `authUser.id`.
+
+- **`src/app/api/admin/teams/[teamId]/squad/[squadPlayerId]/route.ts` (DELETE):** Fetches row first, verifies `row.teamId === teamId` before deleting — prevents cross-team deletion via URL manipulation. Returns 204/404/403.
+
+- **`src/app/admin/teams/[id]/page.tsx` — Squad tab (268 lines added):** `SquadPlayer` and `TeamCompetition` types added. `activeTab` extended to `'roster' | 'csv' | 'squad' | 'info'`. 6 new state vars: `squadCompetitions`, `selectedCompetitionId`, `squad`, `squadLoading`, `squadSaving`, `confirmingRemove`. Functions: `fetchSquadCompetitions` (called on mount), `fetchSquad` (useEffect on `selectedCompetitionId`), `handleAddToSquad`, `handleRemoveFromSquad`. Derived state: `squadPlayerIds` (Set), `availablePlayers`, `availableCount`. UI: competition dropdown (Section A), dual panel — Available left / Squad right (Section B), summary bar (Section C). Remove requires two-click confirm (`confirmingRemove` state).
+
+- **`.agents/dev/BACKLOG.md`:** BACKLOG-037 Step 7b filed (role assignment UI, deferred). BACKLOG-044 Notes updated (squad limits belong in competition sport settings). BACKLOG-047 through BACKLOG-052 filed.
+
+- **`.agents/dev/RUNLOG.md`:** Session 15 entries added for staging and prod index creation.
+
+**Bugs encountered:**
+
+- **`dotenv/config` doesn't load `.env.local`** — `import 'dotenv/config'` loads `.env` by default. `.env.local` requires `config({ path: '.env.local' })`. Fixed in the index script before running.
+
+- **Spec said `status !== 'archived'` but schema uses `isArchived` boolean** — competitions table has no `status === 'archived'` value; archived state is tracked by `isArchived: boolean`. Used `.filter((r) => !r.isArchived)` instead of status string comparison. If spec and schema diverge, always trust the schema.
+
+**Resolved:** BACKLOG-037 Step 7 (Squad Selector API + UI).
+
+**Deferred:**
+- BACKLOG-037 Step 7b (role assignment UI — captain/vice_captain/goalkeeper badges)
+- BACKLOG-045 (teams pagination), BACKLOG-046 (player profile edit)
+- BUG-023, BUG-024, BUG-026
+- BACKLOG-047 through BACKLOG-052 (all filed this session, all OPEN)
+
+**Next session:** Verify Squad Selector end-to-end on staging. Then BACKLOG-046 — Player Profile Edit page (`/admin/players/[id]` — PATCH API already exists at line 294 of `src/app/api/players/[id]/route.ts`, no UI built yet).
+
+---
+
 ### Sessions 11-12 — 2026-06-14
 
 **Focus:** BUSALYMPICS data completion (BACKLOG-017 + BACKLOG-033), Three.js hotfix to prod, and BACKLOG-037 Steps 1-4 (Roster Builder foundation) + TeamLogo utility.
