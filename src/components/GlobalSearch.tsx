@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Search, X, TrendingUp, Clock, Users, Trophy, Calendar, Loader2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useDebounce } from '@/hooks/useDebounce';
+import { TeamLogo } from '@/lib/utils/team-logo';
 
 interface SearchResult {
     teams: any[];
@@ -251,11 +252,7 @@ export default function GlobalSearch({ placeholder = 'Search teams, players, mat
                                                         className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0"
                                                         style={{ backgroundColor: team.color + '20' }}
                                                     >
-                                                        {team.logo ? (
-                                                            <img src={team.logo} alt={team.name} className="w-8 h-8 object-contain" />
-                                                        ) : (
-                                                            <span className="text-sm font-bold">{team.shortName.substring(0, 2)}</span>
-                                                        )}
+                                                        <TeamLogo logo={team.logo} name={team.name} size="sm" />
                                                     </div>
                                                     <div className="text-left">
                                                         <div className="font-semibold text-white">{team.name}</div>

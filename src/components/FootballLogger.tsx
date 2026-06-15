@@ -10,6 +10,7 @@ import { MultiLoggerStatus } from '@/components/MultiLoggerStatus';
 import { getMatchStateManager, MatchStateManager, MatchState, FootballEventType } from '@/lib/match-state-manager';
 import type { SyncEvent } from '@/lib/multiLogger';
 import { getPrimaryTeam } from '@/lib/player-affiliation-utils';
+import { TeamLogo } from '@/lib/utils/team-logo';
 // Import to initialize match event notification listener
 import '@/lib/notifications/event-driven-notifier';
 
@@ -1109,13 +1110,7 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                     <div className="flex items-center justify-between">
                         {/* Home */}
                         <div className="text-center flex-1 min-w-0">
-                            {homeTeam?.logo ? (
-                                <img src={homeTeam.logo} alt="" className="w-10 h-10 mx-auto mb-1.5 object-contain" />
-                            ) : (
-                                <div className="w-10 h-10 mx-auto mb-1.5 bg-white/10 rounded-full flex items-center justify-center text-xs font-black">
-                                    {homeTeam?.shortName?.charAt(0) || 'H'}
-                                </div>
-                            )}
+                            <TeamLogo logo={homeTeam?.logo} name={homeTeam?.name ?? ''} size="md" className="mx-auto mb-1.5" />
                             <div className="text-[10px] font-bold uppercase tracking-wider truncate px-1 flex items-center justify-center gap-1">
                                 {homeTeam?.shortName || 'Home'}
                                 {homeRedCards > 0 && (
@@ -1159,13 +1154,7 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
 
                         {/* Away */}
                         <div className="text-center flex-1 min-w-0">
-                            {awayTeam?.logo ? (
-                                <img src={awayTeam.logo} alt="" className="w-10 h-10 mx-auto mb-1.5 object-contain" />
-                            ) : (
-                                <div className="w-10 h-10 mx-auto mb-1.5 bg-white/10 rounded-full flex items-center justify-center text-xs font-black">
-                                    {awayTeam?.shortName?.charAt(0) || 'A'}
-                                </div>
-                            )}
+                            <TeamLogo logo={awayTeam?.logo} name={awayTeam?.name ?? ''} size="md" className="mx-auto mb-1.5" />
                             <div className="text-[10px] font-bold uppercase tracking-wider truncate px-1 flex items-center justify-center gap-1">
                                 {awayTeam?.shortName || 'Away'}
                                 {awayRedCards > 0 && (
