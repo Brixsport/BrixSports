@@ -6,7 +6,7 @@ import { useRouter, useParams } from 'next/navigation';
 import {
     ArrowLeft, Layers, Plus, X, Search, Loader2,
     CheckCircle, AlertCircle, SkipForward, AlertTriangle,
-    Users, Info, Upload,
+    Users, Info, Upload, Pencil, Save, XCircle,
 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/useToast';
@@ -27,6 +27,7 @@ interface Team {
 }
 
 interface RosterPlayer {
+    affiliationId: string;
     playerId: string;
     name: string;
     jerseyName: string | null;
@@ -556,6 +557,14 @@ function TeamDetailContent() {
     const [csvResults, setCsvResults] = useState<EntryResult[] | null>(null);
 
     // Squad
+    const [editingAffiliationId, setEditingAffiliationId] = useState<string | null>(null);
+    const [affiliationForm, setAffiliationForm] = useState<{
+        jerseyNumber: string;
+        position: string;
+        nicknames: string;
+    }>({ jerseyNumber: '', position: '', nicknames: '' });
+    const [affiliationSaving, setAffiliationSaving] = useState(false);
+
     const [squadCompetitions, setSquadCompetitions] = useState<TeamCompetition[]>([]);
     const [selectedCompetitionId, setSelectedCompetitionId] = useState<string | null>(null);
     const [squad, setSquad] = useState<SquadPlayer[]>([]);
@@ -886,6 +895,37 @@ function TeamDetailContent() {
         setSquadSaving(false);
     }
 
+    async function handleSaveAffiliation(affiliationId: string) {
+        setAffiliationSaving(true);
+        const body: Record<string, unknown> = {};
+
+        if (affiliationForm.jerseyNumber !== '') {
+            body.jerseyNumber = Number(affiliationForm.jerseyNumber) || null;
+        }
+        if (affiliationForm.position !== '') {
+            body.position = affiliationForm.position;
+        }
+        body.nicknames = affiliationForm.nicknames
+            .split(',')
+            .map((n) => n.trim())
+            .filter(Boolean);
+
+        const res = await fetch(`/api/admin/teams/${teamId}/roster/${affiliationId}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+        });
+        if (res.ok) {
+            const rosterRes = await fetch(`/api/admin/teams/${teamId}/roster`);
+            if (rosterRes.ok) {
+                const data = await rosterRes.json();
+                setRoster(data.roster ?? []);
+            }
+            setEditingAffiliationId(null);
+        }
+        setAffiliationSaving(false);
+    }
+
     async function handleRemoveFromSquad(squadPlayerId: string) {
         if (!selectedCompetitionId) return;
         setSquadSaving(true);
@@ -1021,43 +1061,111 @@ function TeamDetailContent() {
                                                     <th className="px-6 py-4 text-[9px] font-black uppercase tracking-widest text-primary/60 italic">Type</th>
                                                     <th className="px-6 py-4 text-[9px] font-black uppercase tracking-widest text-primary/60 italic">Primary</th>
                                                     <th className="px-6 py-4 text-[9px] font-black uppercase tracking-widest text-primary/60 italic">Nicknames</th>
+                                                    <th className="px-6 py-4 text-[9px] font-black uppercase tracking-widest text-primary/60 italic">Actions</th>
                                                 </tr>
                                             </thead>
                                             <tbody>
-                                                {roster.map((p, i) => (
-                                                    <tr key={p.playerId} className="border-b border-white/5 last:border-0 hover:bg-white/[0.02] transition-colors">
-                                                        <td className="px-6 py-4 text-white/30 font-bold text-sm">{i + 1}</td>
-                                                        <td className="px-6 py-4">
-                                                            <div className="font-bold text-sm">{p.name}</div>
-                                                            {p.jerseyName && (
-                                                                <div className="text-[10px] text-white/30 font-bold uppercase">{p.jerseyName}</div>
-                                                            )}
-                                                        </td>
-                                                        <td className="px-6 py-4 text-sm font-bold text-white/60">{p.position ?? '—'}</td>
-                                                        <td className="px-6 py-4">
-                                                            {p.jerseyNumber != null ? (
-                                                                <span className="px-2 py-0.5 bg-primary/20 text-primary text-[10px] font-black rounded uppercase">
-                                                                    #{p.jerseyNumber}
-                                                                </span>
-                                                            ) : (
-                                                                <span className="text-white/20 text-sm">—</span>
-                                                            )}
-                                                        </td>
-                                                        <td className="px-6 py-4">
-                                                            <AffiliationBadge type={p.affiliationType} />
-                                                        </td>
-                                                        <td className="px-6 py-4">
-                                                            {p.isPrimary ? (
-                                                                <span className="w-2 h-2 bg-green-400 rounded-full inline-block" title="Primary team" />
-                                                            ) : (
-                                                                <span className="w-2 h-2 bg-white/10 rounded-full inline-block" />
-                                                            )}
-                                                        </td>
-                                                        <td className="px-6 py-4 text-[10px] text-white/40 font-bold max-w-[160px] truncate">
-                                                            {p.nicknames.length > 0 ? p.nicknames.join(', ') : '—'}
-                                                        </td>
-                                                    </tr>
-                                                ))}
+                                                {roster.map((p, i) => {
+                                                    const isEditing = editingAffiliationId === p.affiliationId;
+                                                    return (
+                                                        <tr key={p.affiliationId} className="border-b border-white/5 last:border-0 hover:bg-white/[0.02] transition-colors">
+                                                            <td className="px-6 py-4 text-white/30 font-bold text-sm">{i + 1}</td>
+                                                            <td className="px-6 py-4">
+                                                                <div className="font-bold text-sm">{p.name}</div>
+                                                                {p.jerseyName && (
+                                                                    <div className="text-[10px] text-white/30 font-bold uppercase">{p.jerseyName}</div>
+                                                                )}
+                                                            </td>
+                                                            <td className="px-6 py-4 text-sm font-bold text-white/60">
+                                                                {isEditing ? (
+                                                                    <input
+                                                                        value={affiliationForm.position}
+                                                                        onChange={(e) => setAffiliationForm((f) => ({ ...f, position: e.target.value }))}
+                                                                        placeholder="e.g. CB"
+                                                                        className="w-20 bg-transparent border-b border-white/30 text-sm outline-none"
+                                                                    />
+                                                                ) : (
+                                                                    p.position ?? '—'
+                                                                )}
+                                                            </td>
+                                                            <td className="px-6 py-4">
+                                                                {isEditing ? (
+                                                                    <input
+                                                                        type="number"
+                                                                        value={affiliationForm.jerseyNumber}
+                                                                        onChange={(e) => setAffiliationForm((f) => ({ ...f, jerseyNumber: e.target.value }))}
+                                                                        placeholder="—"
+                                                                        className="w-12 bg-transparent border-b border-white/30 text-sm outline-none"
+                                                                    />
+                                                                ) : p.jerseyNumber != null ? (
+                                                                    <span className="px-2 py-0.5 bg-primary/20 text-primary text-[10px] font-black rounded uppercase">
+                                                                        #{p.jerseyNumber}
+                                                                    </span>
+                                                                ) : (
+                                                                    <span className="text-white/20 text-sm">—</span>
+                                                                )}
+                                                            </td>
+                                                            <td className="px-6 py-4">
+                                                                <AffiliationBadge type={p.affiliationType} />
+                                                            </td>
+                                                            <td className="px-6 py-4">
+                                                                {p.isPrimary ? (
+                                                                    <span className="w-2 h-2 bg-green-400 rounded-full inline-block" title="Primary team" />
+                                                                ) : (
+                                                                    <span className="w-2 h-2 bg-white/10 rounded-full inline-block" />
+                                                                )}
+                                                            </td>
+                                                            <td className="px-6 py-4 text-[10px] text-white/40 font-bold max-w-[160px]">
+                                                                {isEditing ? (
+                                                                    <input
+                                                                        value={affiliationForm.nicknames}
+                                                                        onChange={(e) => setAffiliationForm((f) => ({ ...f, nicknames: e.target.value }))}
+                                                                        placeholder="comma separated"
+                                                                        className="w-32 bg-transparent border-b border-white/30 text-sm outline-none"
+                                                                    />
+                                                                ) : (
+                                                                    <span className="truncate block">{p.nicknames.length > 0 ? p.nicknames.join(', ') : '—'}</span>
+                                                                )}
+                                                            </td>
+                                                            <td className="px-6 py-4">
+                                                                {isEditing ? (
+                                                                    <div className="flex items-center gap-2">
+                                                                        <button
+                                                                            onClick={() => handleSaveAffiliation(p.affiliationId)}
+                                                                            disabled={affiliationSaving}
+                                                                            className="flex items-center gap-1 px-2.5 py-1.5 bg-primary/20 text-primary rounded-lg text-[9px] font-black uppercase hover:bg-primary hover:text-black transition-all disabled:opacity-40"
+                                                                        >
+                                                                            <Save size={11} />
+                                                                            Save
+                                                                        </button>
+                                                                        <button
+                                                                            onClick={() => setEditingAffiliationId(null)}
+                                                                            className="flex items-center gap-1 px-2.5 py-1.5 bg-white/10 text-white/40 rounded-lg text-[9px] font-black uppercase hover:bg-white/20 transition-all"
+                                                                        >
+                                                                            <XCircle size={11} />
+                                                                            Cancel
+                                                                        </button>
+                                                                    </div>
+                                                                ) : (
+                                                                    <button
+                                                                        onClick={() => {
+                                                                            setEditingAffiliationId(p.affiliationId);
+                                                                            setAffiliationForm({
+                                                                                jerseyNumber: p.jerseyNumber?.toString() ?? '',
+                                                                                position: p.position ?? '',
+                                                                                nicknames: p.nicknames.join(', '),
+                                                                            });
+                                                                        }}
+                                                                        className="p-1.5 hover:bg-white/5 rounded-lg transition-all border border-transparent hover:border-white/10 group/edit"
+                                                                        title="Edit affiliation"
+                                                                    >
+                                                                        <Pencil size={14} className="text-white/30 group-hover/edit:text-white" />
+                                                                    </button>
+                                                                )}
+                                                            </td>
+                                                        </tr>
+                                                    );
+                                                })}
                                             </tbody>
                                         </table>
                                     </div>

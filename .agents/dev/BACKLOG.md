@@ -61,6 +61,8 @@
 
 - ~~**BUG-022** _(MEDIUM — Performance)_: Unbounded queries missing `.limit()` on competitions + events routes. Fixed in prior session, confirmed present on code review 2026-06-15. Resolved: 2026-06-15.~~
 
+- ~~**BUG-029** _(MEDIUM — NDPR)_: `GET /api/players/[id]` is unauthenticated and returns `player.email` in the public response. Email should only be returned when caller is admin. Fix: add `getAuthUser` check, strip `email` from response if `role !== 'admin'`. Filed: 2026-06-15.~~ RESOLVED 2026-06-15 — `getAuthUser(request).catch(() => null)` added. Email conditionally returned for admin callers only.
+
 - ~~**BUG-023** _(LOW)_: `src/db/schema-nesa-registrations.ts` references `players` and `organizations` tables without importing them. Will crash if the table is ever migrated or queried. Fix: add missing imports or delete the schema file if NESA registration is backscoped. Filed: 2026-06-08. Source: SYSTEM_AUDIT.md §9 #11.~~ RESOLVED 2026-06-15 — file deleted. Tables never existed in any live DB. Zero imports anywhere in codebase.
 
 - ~~**BUG-024** _(LOW)_: Duplicate match detail routes — `/match/[id]` (`src/app/match/[id]/page.tsx`) and `/matches/[id]` (`src/app/matches/[id]/page.tsx`) both exist. One is likely legacy. Audit to confirm which is canonical (check all internal links and nav references), delete the other. Filed: 2026-06-08. Source: SYSTEM_AUDIT.md §2.~~ RESOLVED 2026-06-15 — false alarm. `/match/[id]` route never existed. All internal navigation uses `/matches/[id]` (canonical). No fix needed.
@@ -2409,6 +2411,13 @@ Related: BACKLOG-014 (org duplicate entries)
 **Priority:** Medium
 **Filed:** 2026-06-15
 
+**NOTE: Directive drafted Session 16 but not run.
+Mental model correction required first:
+Roster tab must show squadPlayers (competition squad),
+not playerTeamAffiliations (that belongs on Squad tab).
+Inline edit targets squadPlayers.squadNumber + position,
+not affiliation row. Re-architect Roster tab first.**
+
 #### Problem
 Roster table on /admin/teams/[id] shows jersey number, position,
 and nicknames but none are editable inline. Admins must go to
@@ -2507,3 +2516,23 @@ filtering, stat grouping, and formation display.
   constant in src/lib/constants/positions.ts
 - Related: BACKLOG-046 (player profile edit), BACKLOG-053
   (roster inline edit)
+
+---
+
+### BACKLOG-056 — Role-Scoped Player Edit Permissions
+
+**Status:** OPEN
+**Priority:** Low — not needed until manager role exists
+**Filed:** 2026-06-15
+
+When manager role is introduced, PATCH /api/players/[id] needs
+role-scoped field allowlists:
+- admin: all 19 fields (current behaviour)
+- manager: name, jerseyName, number, position, age, college,
+  department only — no rating, marketValue, email, eyePoints
+- manager scope: only players affiliated to their team(s)
+
+/admin/players/[id] edit page: hide sensitive fields
+(rating, eyePoints, marketValue) from manager role.
+
+Related: BACKLOG-050 (team type), future manager role feature

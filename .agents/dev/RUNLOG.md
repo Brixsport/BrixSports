@@ -308,6 +308,17 @@ Source code changes only — no database scripts run.
 
 ---
 
+## Session 16 — 2026-06-15
+
+Source code changes only this session. DB changes were applied in Session 15 (see above).
+
+**DB changes logged this session:**
+- `squad_players_team_comp_player_unique` unique index added to `squad_players` on STAGING (2026-06-15) — logged under Session 15 above.
+- Same index added to PROD (2026-06-15) — logged under Session 15 above.
+- Scripts: one-off index script (`dev/add-squad-players-unique-index.mjs`), deleted after run.
+
+---
+
 ## Outstanding / Pending Scripts
 
 | Script (not yet run) | Purpose | Blocked by |

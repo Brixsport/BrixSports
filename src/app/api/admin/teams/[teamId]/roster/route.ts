@@ -246,6 +246,7 @@ export async function GET(
 
     const rows = await db
         .select({
+            affiliationId: playerTeamAffiliations.id,
             playerId: playerTeamAffiliations.playerId,
             name: players.name,
             jerseyName: players.jerseyName,

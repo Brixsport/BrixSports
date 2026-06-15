@@ -148,6 +148,43 @@
 
 ---
 
+### Session 16 — 2026-06-15
+
+**Focus:** Clean up remaining BUGs from last session, complete BACKLOG-046 (Player Profile Edit), and identify Roster tab mental model mismatch.
+
+**Built:**
+
+- **BUG-023 — `src/db/schema-nesa-registrations.ts` deleted.** Orphaned file referenced `players` and `organizations` tables without importing them. Zero imports anywhere in codebase. File deleted; tsc errors from that file eliminated.
+
+- **BUG-024 — closed as false alarm.** `/match/[id]` route never existed. `/matches/[id]` is and always was the canonical route. All internal navigation already uses the canonical path. No fix needed.
+
+- **BUG-029 — `GET /api/players/[id]` email strip.** `getAuthUser(request).catch(() => null)` added at top of handler. `email` returned only when `authUser?.role === 'admin'`. Public access unaffected — catch ensures unauthenticated callers get `null` auth, not a 401.
+
+- **BACKLOG-037 Step 7 tab order + label rename:** Tab order changed to Roster → Squad → CSV Import → Info. Labels renamed: "Roster" = competition squad (picked players), "Squad" = full affiliated pool. Matches football terminology.
+
+- **BACKLOG-046 — `/admin/players/[id]` Player Profile Edit page:** Full field edit (name, jerseyName, number, position, college, university, email, bio, nationality, DOB, height, weight, foot, rating). Memberships list (via playerOrganizationAffiliations). Org affiliations. Recent events. PATCH uses existing `/api/players/[id]` PATCH handler. View link added to players list alongside existing modal edit button.
+
+- **BACKLOG-049 through BACKLOG-056 — filed.**
+
+**Bugs encountered:**
+
+- **Roster tab mental model mismatch discovered mid-session.** BACKLOG-053 directive was drafted but NOT run after recognising the issue: Roster tab currently shows `playerTeamAffiliations` rows (the full affiliated pool). It should show `squadPlayers` for the selected competition. Inline edit belongs on `squadPlayers.squadNumber` + `position`, not the affiliation row. Squad tab keeps the affiliated pool. Deferred to next session.
+
+**Resolved:** BUG-023, BUG-024, BUG-029, BACKLOG-037 Step 7 (tab order/labels), BACKLOG-046.
+
+**Deferred:**
+- BACKLOG-053 — Roster tab re-architecture (show squadPlayers, not playerTeamAffiliations)
+- BUG-026 (PWA CSS cache failure)
+- BACKLOG-044 (match config: duration, sub rules)
+- BACKLOG-047 through BACKLOG-052 (filed last session, all OPEN)
+
+**DB changes:**
+- `squad_players_team_comp_player_unique` unique index added to `squad_players` on both staging and prod via SQL direct (Session 15 — logged in RUNLOG.md).
+
+**Next session:** Re-architect Roster tab to show `squadPlayers` for the selected competition. Inline edit targets `squadPlayers.squadNumber + position`. Squad tab keeps `playerTeamAffiliations` pool view.
+
+---
+
 ### Sessions 11-12 — 2026-06-14
 
 **Focus:** BUSALYMPICS data completion (BACKLOG-017 + BACKLOG-033), Three.js hotfix to prod, and BACKLOG-037 Steps 1-4 (Roster Builder foundation) + TeamLogo utility.
