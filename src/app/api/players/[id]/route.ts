@@ -21,6 +21,9 @@ export async function GET(
     { params }: RouteParams
 ) {
     try {
+        const authUser = await getAuthUser(request).catch(() => null);
+        const isAdmin = authUser?.role === 'admin';
+
         const { id } = await params;
 
         // Get player details
@@ -262,16 +265,19 @@ export async function GET(
             relatedProfiles.push(...relatedPlayers);
         }
 
+        const { email: _email, ...playerPublic } = player;
+        const playerPayload = isAdmin ? player : playerPublic;
+
         return NextResponse.json({
             player: {
-                ...player,
+                ...playerPayload,
                 team: {
                     ...team,
-                    sport: playerSport, // Add sport to team object
+                    sport: playerSport,
                 },
                 memberships,
                 organizationAffiliations,
-                relatedProfiles, // Add related profiles
+                relatedProfiles,
             },
             stats: seasonStats,
             competitionStats,
