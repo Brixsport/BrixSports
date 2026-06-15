@@ -46,20 +46,41 @@ what fails with a one-line description.
 ### Teams — Roster Builder (BACKLOG-037)
 - [ ] /admin/teams loads full team list (500 limit)
 - [ ] Search by name finds team
-- [ ] Search by shortName finds team
+- [ ] Search by shortName finds team (e.g. "CNAS" not "colnas")
 - [ ] Sport filter works correctly
-- [ ] /admin/teams/[id] loads team roster
-- [ ] Roster shows correct player count
-- [ ] ADD PLAYERS panel opens
+- [ ] /admin/teams/[id] loads with 4 tabs: Roster / Squad / CSV Import / Info
+
+#### Squad tab — Affiliation Pool (BACKLOG-053 Part 1)
+- [ ] Squad tab shows all playerTeamAffiliations rows for the team
+- [ ] Player count matches expected roster size
+- [ ] Pencil icon on a row opens inline edit fields (jerseyNumber, position, nicknames)
+- [ ] Save on inline edit PATCHes `/api/admin/teams/[teamId]/roster/[affiliationId]`
+- [ ] Saved changes persist on page refresh
+- [ ] Cancel discards unsaved changes
+- [ ] ADD PLAYERS TO POOL panel opens
 - [ ] Existing player search returns results
 - [ ] Existing player search matches on nickname
 - [ ] Adding existing player inserts affiliation row
-- [ ] Adding existing player already on team → skipped
-- [ ] New player form submits and creates profile
-- [ ] New player with duplicate name+college → flagged
+- [ ] Adding existing player already on team → skipped (not duplicated)
+- [ ] New player form submits and creates profile + affiliation
+- [ ] New player with duplicate name+college → flagged as possible_duplicate
 - [ ] Submit results show per-row inserted/skipped/error
 
-#### BACKLOG-037 Step 6 — CSV Import tab
+#### Roster tab — Competition Squad (BACKLOG-037 Step 7 + BACKLOG-053 Part 2)
+- [ ] Roster tab shows competition dropdown populated from team's enrolled competitions
+- [ ] Selecting a competition loads the dual panel
+- [ ] Left panel (Available) shows players in affiliation pool not yet in squad
+- [ ] Right panel (Squad) shows current squad players for that competition
+- [ ] Clicking a player in Available moves them to Squad (POST to `/api/admin/teams/[teamId]/squad`)
+- [ ] Remove button on squad player shows confirm step before DELETE
+- [ ] Confirmed remove deletes from squad, player returns to Available
+- [ ] Pencil icon on squad row opens inline squadNumber edit
+- [ ] Saving squadNumber PATCHes `/api/admin/teams/[teamId]/squad/[squadPlayerId]`
+- [ ] squadNumber persists on refresh
+- [ ] Cross-team manipulation blocked — squad DELETE/PATCH for wrong teamId returns 403
+- [ ] No competition selected → dual panel not shown
+
+#### CSV Import tab (BACKLOG-037 Step 6)
 - [ ] CSV Import tab visible on /admin/teams/[id]
 - [ ] File upload accepts .csv only
 - [ ] Parsed rows appear in preview table after upload
@@ -72,11 +93,22 @@ what fails with a one-line description.
 - [ ] Admin can unlink a high-confidence match to Create New
 - [ ] Import button POSTs to roster endpoint, shows results
 - [ ] Inserted / skipped / error counts shown after import
-- [ ] Roster tab refreshes after successful CSV import
+- [ ] Squad tab refreshes after successful CSV import
 
 ### Players
 - [ ] /admin/players loads player list
 - [ ] Player search works
+- [ ] "View" link on player row navigates to /admin/players/[id]
+
+#### Player Profile Edit (BACKLOG-046)
+- [ ] /admin/players/[id] loads with all profile fields populated
+- [ ] Can edit name, jerseyName, number, position, college, university
+- [ ] Can edit bio, nationality, DOB, height, weight, foot, rating
+- [ ] Save PATCHes `/api/players/[id]` and shows success
+- [ ] Memberships list shows correct organization affiliations
+- [ ] Recent events section loads if player has match history
+- [ ] Unauthenticated access to /api/players/[id] does NOT return email field (NDPR — BUG-029)
+- [ ] Admin-authenticated request to /api/players/[id] DOES return email field
 
 ### Bulk Register
 - [ ] Can register new team + players in one flow
@@ -155,36 +187,20 @@ what fails with a one-line description.
 - [ ] npx tsx dev/pre-prod-check.ts --staging → 20/20
 - [ ] npx tsx dev/pre-prod-check.ts --production → 20/20
 
----
-
-## Schema / Database
-
-### BUG-023 — NESA schema file
-- [x] `schema-nesa-registrations.ts` deleted
-- [x] No remaining imports of `schema-nesa` anywhere in codebase
-- [x] tsc no longer errors on missing `players`/`organizations` imports in this file
-
-### BUG-024 — Match detail route
-- [x] `/matches/[id]` loads match detail correctly
-- [x] All match cards link to `/matches/[id]` (not `/match/[id]`)
-- [x] No 404s on match navigation from homepage, live page, search, team page, player page
+### NDPR Regression Checks
+- [ ] `GET /api/matches` (unauthenticated) — response does NOT contain `loggerId`, `assignedLoggers`, `approvalStatus`, `managerNotes` (BUG-025)
+- [ ] `GET /api/players/[id]` (unauthenticated) — response does NOT contain `email` (BUG-029)
+- [ ] `GET /api/matches/[id]` (unauthenticated) — response does NOT contain `loggerId`, `approvedBy`, `approvalStatus`, `managerNotes` (BUG-018)
+- [ ] `GET /api/matches` (admin-authenticated) — response DOES contain `loggerId` for admin use
 
 ---
 
 ## Known Broken (do not test — already filed)
 
-- PWA CSS on direct URL visit (BUG-026)
-- Email sending broken — AWS SES (BACKLOG-026)
+- PWA CSS / stale SW chunk URLs on direct URL visit (BUG-026) — deferred post-core-features
+- Email sending broken — AWS SES misconfigured (BACKLOG-026)
 - Google OAuth staging not configured (BACKLOG-025)
 - Railway WS on staging not created (BACKLOG-027)
-
-## Resolved — moved to test sections above
-
-- /competitions list — sport=null competitions invisible (BUG-027) — fixed 2026-06-15
-- /competitions/[id] — hydration error #418 (BUG-028) — fixed 2026-06-15
-- Team logos for college teams — placeholder (BACKLOG-036) — migrated 2026-06-15
-- BUG-023 — schema-nesa deleted — 2026-06-15
-- BUG-024 — false alarm, /match/[id] never existed — 2026-06-15
 
 ---
 

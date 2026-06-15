@@ -5,7 +5,7 @@ import { eq, and } from 'drizzle-orm';
 import { getAuthUser } from '@/lib/auth';
 import { nanoid } from 'nanoid';
 
-// GET — fetch sport settings for a competition
+// GET — fetch match settings for a competition
 export async function GET(
     req: NextRequest,
     { params }: { params: { id: string } }
@@ -19,14 +19,12 @@ export async function GET(
 
         return NextResponse.json({ settings });
     } catch (err) {
-        console.error('[sport-settings GET] Error:', err);
-        return NextResponse.json({ error: 'Failed to fetch sport settings' }, { status: 500 });
-    } finally {
-        // no cleanup needed
+        console.error('[match-settings GET] Error:', err);
+        return NextResponse.json({ error: 'Failed to fetch match settings' }, { status: 500 });
     }
 }
 
-// POST — create or replace sport settings for a competition (upsert by competitionId + sport)
+// POST — create or replace match settings for a competition (upsert by competitionId + sport)
 export async function POST(
     req: NextRequest,
     { params }: { params: { id: string } }
@@ -146,7 +144,7 @@ export async function POST(
 
         return NextResponse.json({ settings: inserted }, { status: 201 });
     } catch (err) {
-        console.error('[sport-settings POST] Error:', err);
-        return NextResponse.json({ error: 'Failed to save sport settings' }, { status: 500 });
+        console.error('[match-settings POST] Error:', err);
+        return NextResponse.json({ error: 'Failed to save match settings' }, { status: 500 });
     }
 }

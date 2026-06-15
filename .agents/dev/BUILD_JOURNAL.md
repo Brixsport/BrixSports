@@ -11,6 +11,54 @@
 
 ## Sessions
 
+### Session 18 — 2026-06-15
+
+**Focus:** Backlog verification sweep and BUG-026 root cause update.
+
+**Verified (code-confirmed):**
+
+- BUG-021 — `getAuthUser` confirmed in `notifications/subscribe/route.ts`
+- BUG-022 — `.limit(500)` confirmed in `competitions/route.ts`
+- BUG-023 — `schema-nesa-registrations.ts` confirmed deleted
+- BUG-024 — confirmed false alarm (no `/match/[id]` route ever existed)
+- BUG-025 — `loggerId` confirmed conditionally admin-only in `matches/route.ts`
+- BUG-027 — `'All'` tab confirmed present in `competitions/page.tsx`
+- BUG-028 — no `motion.tr` remaining in standings page
+- BUG-029 — `email` confirmed destructured and stripped in `players/[id]/route.ts`
+- BACKLOG-036 — `TeamLogo` import confirmed in `FootballLogger.tsx` and others
+- BACKLOG-037 Steps 1-7 — all API routes and tabs confirmed present
+- BACKLOG-046 — `src/app/admin/players/[id]/page.tsx` confirmed exists
+- BACKLOG-053 Part 1 — `affiliationId` / `editingAffiliationId` confirmed (8 hits in team detail page)
+
+**Updated:**
+
+- BUG-026 — root cause clarified: SW serves stale JS chunk URLs after new deploy → unstyled page. Deferred until post-core-feature completion.
+- BACKLOG-046 — status updated to COMPLETE in backlog.
+
+**Later in Session 18 — BACKLOG-044 Phase A:**
+
+**Schema (`src/db/schema.ts`):**
+- `competitionSportSettings`: added 8 columns — `maxSubstitutions` (nullable integer), `allowSubbedOutReentry`, `extraTimeEnabled`, `extraTimeDuration`, `penaltiesEnabled`, `allowDraws`, `pointsForWin`, `pointsForDraw`
+- `matches`: added 3 nullable override columns — `penaltiesEnabledOverride`, `allowDrawsOverride`, `extraTimeEnabledOverride`
+
+**New API routes:**
+- `src/app/api/competitions/[id]/match-settings/route.ts` — `GET` (public list), `POST` (admin upsert by competitionId+sport). Upsert pattern: check for existing row, update if found, insert with nanoid if not.
+- `src/app/api/matches/[id]/config/route.ts` — public `GET`. Three-layer merge: match override → competition setting → sport default (hardcoded for football/basketball). Two-query pattern (no `competition` relation on `matchesRelations`).
+
+**Admin UI changes:**
+- `src/app/admin/competitions/page.tsx` — added `defaultMatchSettings`, `MatchSettingsForm` type, `saveMatchSettings()` helper (POSTs to `/api/competitions/[id]/match-settings`). Collapsible "Match Settings" section in `CompetitionModal` with duration grid, sub limit (number + unlimited toggle + rolling reentry), extra time, penalties, draws, and points grid.
+- `src/app/admin/matches/page.tsx` — added 3 override fields to `formData`, collapsible "Override Match Settings for This Fixture" with three-way inherit/on/off toggles per field.
+
+**DB migration (staging only):**
+- `migrate-sport-settings-columns.mjs` — 11 ALTER TABLE ADD COLUMN statements, run against staging Turso. All succeeded. Script deleted.
+- Prod migration pending (BACKLOG-044-B prerequisite).
+
+**Bug encountered:** `import 'dotenv/config'` loads `.env` not `.env.local`. Fixed with explicit `config({ path: resolve(cwd(), '.env.local') })`. Same issue as Session 15 — now in RUNLOG.
+
+**Next session:** BACKLOG-044 Phase B (FootballLogger config fetch, sub limit enforcement, rolling subs). Prod DB migration first.
+
+---
+
 ### Session 13 — 2026-06-15
 
 **Focus:** Verify Roster Builder on staging, close BUG-025, raise teams API limit, add BACKLOG-037 Step 5 (bulk register dedup), file new backlog items, create TEST_CHECKLIST.md.
@@ -145,6 +193,51 @@
 - BACKLOG-047 through BACKLOG-052 (all filed this session, all OPEN)
 
 **Next session:** Verify Squad Selector end-to-end on staging. Then BACKLOG-046 — Player Profile Edit page (`/admin/players/[id]` — PATCH API already exists at line 294 of `src/app/api/players/[id]/route.ts`, no UI built yet).
+
+---
+
+### Session 17 — 2026-06-15
+
+**Focus:** BACKLOG-053 — complete Roster tab re-architecture (Part 1: affiliationId + inline affiliation edit; Part 2: swap tab contents, add squadNumber inline edit, PATCH endpoints).
+
+**Built:**
+
+- **`src/app/api/admin/teams/[teamId]/roster/route.ts` — affiliationId added:** `affiliationId: playerTeamAffiliations.id` added to GET select. Needed to target inline affiliation edits from the UI.
+
+- **`src/app/api/admin/teams/[teamId]/roster/[affiliationId]/route.ts` — NEW PATCH handler:** Auth-gated (`getAuthUser + role === 'admin'`). Fetches row, verifies `existing.teamId !== teamId` → 403 (cross-team protection). Accepts `jerseyNumber`, `position`, `nicknames`, `isActive`. Returns updated row. Full try/catch with finally.
+
+- **`src/app/api/admin/teams/[teamId]/squad/[squadPlayerId]/route.ts` — PATCH handler appended:** Alongside existing DELETE. Same auth + cross-team protection pattern. Accepts `squadNumber`, `role`, `status`. Returns updated `squadPlayer` row.
+
+- **`src/app/admin/teams/[id]/page.tsx` — BACKLOG-053 Part 1 (commit dcd464c):**
+  - `affiliationId` field added to `RosterPlayer` type
+  - New state: `editingAffiliationId`, `affiliationEdits` (partial affiliation fields)
+  - `handleSaveAffiliation()` — PATCHes `/api/admin/teams/${teamId}/roster/${affiliationId}`, refreshes roster, clears edit state
+  - Squad tab rows: pencil icon → inline jersey/position/nicknames fields → Save/Cancel
+
+- **`src/app/admin/teams/[id]/page.tsx` — BACKLOG-053 Part 2 (commit 2e83f6d):**
+  - **Roster tab** now holds: competition dropdown (from `squadCompetitions`), dual panel (pool left = `availablePlayers`, squad right = `squadPlayers`), squadNumber inline edit per squad row (pencil → number input → PATCH `squad/[squadPlayerId]` → refresh → close). `handleAddToSquad`/`handleRemoveFromSquad` unchanged — now consumed by Roster tab.
+  - **Squad tab** now holds: flat `playerTeamAffiliations` table with inline affiliation edit (jerseyNumber, position, nicknames) + Add Players to Pool panel (existing search + create new form). Previously this was the Roster tab layout.
+  - New state: `editingSquadNumberId`, `squadNumberInput`
+  - New handler: `handleSaveSquadNumber()` — PATCHes `squad/${squadPlayerId}`, refreshes squad, closes edit
+
+**Bugs encountered:**
+
+- **Pre-existing tsc error at `page.tsx:1393`** — `row.resolution.playerId` in CSV tab. TypeScript can't narrow the `Resolution` discriminated union through JSX conditions. Untouched code, not introduced this session. Low priority.
+
+- **Write tool blocked on new file** — `squad/[squadPlayerId]/route.ts` couldn't be written because it hadn't been Read first. Fixed: read file (DELETE handler was already there), used Edit to append PATCH handler.
+
+- **Bash bracket escaping on Windows** — `ls` with `[teamId]` path brackets failed with EOF. Fixed: used forward slashes in path.
+
+**Resolved:** BACKLOG-053 (both parts) — Roster tab shows competition squad, Squad tab shows affiliation pool.
+
+**Deferred:**
+- BUG-026 (PWA CSS cache failure)
+- BACKLOG-044 (match config: duration, sub rules, team size per competition)
+- BACKLOG-045 (teams pagination)
+- BACKLOG-037 Step 7b (role assignment UI on squad players)
+- CSV tab tsc error at line 1393 (pre-existing, low priority)
+
+**Next session:** Verify BACKLOG-053 on staging — navigate to `/admin/teams/[id]`, select a competition on Roster tab, confirm dual panel, confirm squadNumber inline edit saves. Then BUG-026 or BACKLOG-044.
 
 ---
 

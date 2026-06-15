@@ -444,7 +444,7 @@ function AdminCompetitionsPageContent() {
     };
 
     const saveMatchSettings = async (competitionId: string, sport: string, ms: MatchSettingsForm) => {
-        await fetch(`/api/competitions/${competitionId}/sport-settings`, {
+        await fetch(`/api/competitions/${competitionId}/match-settings`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({

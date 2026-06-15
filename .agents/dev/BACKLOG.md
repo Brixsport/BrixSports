@@ -67,15 +67,9 @@
 
 - ~~**BUG-024** _(LOW)_: Duplicate match detail routes — `/match/[id]` (`src/app/match/[id]/page.tsx`) and `/matches/[id]` (`src/app/matches/[id]/page.tsx`) both exist. One is likely legacy. Audit to confirm which is canonical (check all internal links and nav references), delete the other. Filed: 2026-06-08. Source: SYSTEM_AUDIT.md §2.~~ RESOLVED 2026-06-15 — false alarm. `/match/[id]` route never existed. All internal navigation uses `/matches/[id]` (canonical). No fix needed.
 
-- **BUG-026** _(MEDIUM — PWA/Cache)_: On direct page URL visits, CSS fails to render — page loads as unstyled raw HTML. Likely cause: service worker or PWA cache is not caching the CSS bundle correctly, or the cache manifest is stale. Symptom only appears on direct URL visit (hard nav), not on client-side route transitions.
+- **BUG-026** _(MEDIUM — PWA/Cache)_: SW serves stale JS chunk URLs after a new deploy → unstyled page on direct URL visit (hard nav). Root cause: service worker caches asset URLs from the previous deploy; after a new build the chunk hashes change but the SW still serves the old (now-missing) URLs. Fix requires proper cache invalidation strategy + stale-while-revalidate for data fetches. **Deferred until post-core-feature completion.**
 
-  Investigate:
-  - Service worker registration and cache strategy (is CSS included in the precache manifest?)
-  - `next.config.ts` PWA config (if `next-pwa` is installed)
-  - Whether the issue reproduces on staging or prod only, or both
-  - Whether a hard refresh (Ctrl+Shift+R) resolves it temporarily (confirms cache root cause)
-
-  Filed: 2026-06-08. Found by: manual staging QA.
+  Filed: 2026-06-08. Root cause clarified: 2026-06-15.
 
 - ~~**BUG-025** _(MEDIUM — NDPR)_: `GET /api/matches` public list response exposes `loggerId` field to unauthenticated viewers. Fixed: `getAuthUser` added to GET handler; `loggerId` conditionally returned for admin callers only, stripped from public DTO. `assignedLoggers` was already absent. Resolved: 2026-06-15.~~
 
@@ -2181,9 +2175,9 @@ In the logger platform (FootballLogger/BasketballLogger):
 
 ---
 
-### BACKLOG-046 — Player Profile Edit Page
+### ~~BACKLOG-046 — Player Profile Edit Page~~
 
-**Status:** OPEN
+**Status:** COMPLETE — 2026-06-15
 **Priority:** Medium
 **Filed:** 2026-06-14
 
@@ -2217,7 +2211,7 @@ Current `.limit(500)` on `GET /api/teams` is a temporary ceiling. Build cursor-b
 
 ### BACKLOG-044 — Match Config: Duration, Substitution Rules, Format
 
-**Status:** OPEN
+**Status:** PHASE A COMPLETE — Phase B pending
 **Priority:** High — affects live logging correctness
 **Filed:** 2026-06-13
 
@@ -2279,6 +2273,23 @@ as nullable columns — if set, override competition config.
 - Competition-level squad limits belong here (max squad size per
   competition). Do not enforce limits in BACKLOG-037 Step 7 —
   read them from competition sport settings once BACKLOG-044 is built.
+
+#### Phase A — Complete (Session 18, 2026-06-15)
+- Schema: 8 new columns on `competitionSportSettings`, 3 override columns on `matches`
+- API: `GET/POST /api/competitions/[id]/match-settings` (upsert by sport)
+- API: `GET /api/matches/[id]/config` (3-layer merge: match override → competition → sport default)
+- Admin UI: "Match Settings" collapsible section in competition modal
+- Admin UI: "Override Match Settings" collapsible section in match creation/edit modal
+- DB migration run against staging (11 ALTER TABLE statements)
+
+#### Phase B — Pending (BACKLOG-044-B)
+- `src/lib/eventValidation.ts` — replace hardcoded `maxSubstitutions: 3` with config fetch
+- `src/components/logger/substitution-manager.ts` — replace hardcoded sport constants with config
+- `FootballLogger.tsx` — fetch `/api/matches/[id]/config` on mount; pass config to sub manager and timer
+- Match timer: count down from `matchDuration`, warn at `halfDuration`
+- Sub tracking: count subs used, warn when `maxSubstitutions` reached (skip check if null = unlimited)
+- Rolling subs: if `allowSubbedOutReentry = true`, do not block player from re-entering
+- Prod DB migration: run same 11 ALTERs against `libsql://brixsportv2-brixsports` via `.env.production`
 
 ---
 
@@ -2405,18 +2416,15 @@ Related: BACKLOG-014 (org duplicate entries)
 
 ---
 
-### BACKLOG-053 — Inline Roster Editing (Affiliation-Level Fields)
+### ~~BACKLOG-053 — Inline Roster Editing (Affiliation-Level Fields)~~
 
-**Status:** OPEN
+**Status:** COMPLETE — 2026-06-15 (Session 17)
 **Priority:** Medium
 **Filed:** 2026-06-15
 
-**NOTE: Directive drafted Session 16 but not run.
-Mental model correction required first:
-Roster tab must show squadPlayers (competition squad),
-not playerTeamAffiliations (that belongs on Squad tab).
-Inline edit targets squadPlayers.squadNumber + position,
-not affiliation row. Re-architect Roster tab first.**
+Both parts implemented and committed (dcd464c, 2e83f6d):
+- Part 1: `affiliationId` in roster GET, PATCH handler at `roster/[affiliationId]`, inline jersey/position/nicknames edit on Squad tab.
+- Part 2: Roster tab re-architected to show `squadPlayers` for selected competition. Dual panel (pool left / squad right). `squadNumber` inline edit → PATCH `squad/[squadPlayerId]`. Squad tab now holds `playerTeamAffiliations` pool + Add Players panel.
 
 #### Problem
 Roster table on /admin/teams/[id] shows jersey number, position,
