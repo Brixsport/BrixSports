@@ -6,7 +6,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
     ArrowLeft, Plus, Users, Search, Filter,
     Edit, Trash2, User, Shield, Info, X,
-    ChevronLeft, ChevronRight, Save, Loader2
+    ChevronLeft, ChevronRight, Save, Loader2, ExternalLink
 } from 'lucide-react';
 import { useToast } from '@/hooks/useToast';
 import { ToastContainer } from '@/components/admin/Toast';
@@ -454,6 +454,13 @@ function AdminPlayersPageContent() {
                                                 </td>
                                                 <td className="px-4 md:px-8 py-4 md:py-6 text-right">
                                                     <div className="flex items-center justify-end gap-1 md:gap-2">
+                                                        <Link
+                                                            href={`/admin/players/${player.id}`}
+                                                            className="p-1.5 md:p-2 hover:bg-white/5 rounded-lg md:rounded-xl transition-all border border-transparent hover:border-white/10 group/btn"
+                                                            title="View profile"
+                                                        >
+                                                            <ExternalLink size={18} className="text-white/40 group-hover/btn:text-primary" />
+                                                        </Link>
                                                         <button
                                                             onClick={() => handleOpenEdit(player)}
                                                             className="p-1.5 md:p-2 hover:bg-white/5 rounded-lg md:rounded-xl transition-all border border-transparent hover:border-white/10 group/btn"
