@@ -6,7 +6,7 @@ import { useRouter, useParams } from 'next/navigation';
 import {
     ArrowLeft, Layers, Plus, X, Search, Loader2,
     CheckCircle, AlertCircle, SkipForward, AlertTriangle,
-    Users, Info,
+    Users, Info, Upload,
 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/useToast';
@@ -82,6 +82,33 @@ interface EntryRow {
     // submit result
     result: EntryResult | null;
 }
+
+// ─── CSV Import Types ──────────────────────────────────────────────────────────
+
+type CSVRaw = {
+    name: string;
+    jerseyNumber: string;
+    position: string;
+};
+
+type MatchResult =
+    | { type: 'high'; player: RosterPlayer }
+    | { type: 'medium'; player: RosterPlayer }
+    | { type: 'none' };
+
+type Resolution =
+    | { mode: 'existing'; playerId: string }
+    | { mode: 'new' }
+    | { mode: 'pending' };
+
+type CSVPreviewRow = {
+    index: number;
+    raw: CSVRaw;
+    match: MatchResult;
+    resolution: Resolution;
+    positionValid: boolean;
+    linkSearch: string;
+};
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -493,13 +520,19 @@ function TeamDetailContent() {
     const [team, setTeam] = useState<Team | null>(null);
     const [roster, setRoster] = useState<RosterPlayer[]>([]);
     const [isLoading, setIsLoading] = useState(true);
-    const [activeTab, setActiveTab] = useState<'roster' | 'info'>('roster');
+    const [activeTab, setActiveTab] = useState<'roster' | 'csv' | 'info'>('roster');
 
     // Add-players panel
     const [showAddPanel, setShowAddPanel] = useState(false);
     const [entries, setEntries] = useState<EntryRow[]>([makeRow()]);
     const [submitting, setSubmitting] = useState(false);
     const [submitted, setSubmitted] = useState(false);
+
+    // CSV Import
+    const [csvFile, setCsvFile] = useState<File | null>(null);
+    const [csvRows, setCsvRows] = useState<CSVPreviewRow[]>([]);
+    const [csvImporting, setCsvImporting] = useState(false);
+    const [csvResults, setCsvResults] = useState<EntryResult[] | null>(null);
 
     const { toasts, removeToast, success, error: showError } = useToast();
 
@@ -625,6 +658,153 @@ function TeamDetailContent() {
         }
     };
 
+    const updateCsvRow = (index: number, patch: Partial<CSVPreviewRow>) => {
+        setCsvRows((prev) => prev.map((r, i) => i === index ? { ...r, ...patch } : r));
+    };
+
+    function parseAndMatchCSV(file: File) {
+        const VALID_POSITIONS = [
+            'GK', 'CB', 'LB', 'RB', 'LWB', 'RWB',
+            'CDM', 'CM', 'CAM', 'LM', 'RM',
+            'LW', 'RW', 'CF', 'ST', 'SS',
+            'PG', 'SG', 'SF', 'PF', 'C',
+            'Forward', 'Midfielder', 'Defender', 'Goalkeeper',
+            'DM', 'AM', 'FWD', 'MID', 'DEF',
+        ];
+
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const text = e.target?.result as string;
+            const lines = text
+                .replace(/\r\n/g, '\n')
+                .replace(/\r/g, '\n')
+                .split('\n')
+                .map((l) => l.trim())
+                .filter(Boolean);
+
+            // Skip header if second column of first row is non-numeric
+            const firstSecondCol = lines[0]?.split(',')[1]?.trim();
+            const dataLines =
+                firstSecondCol && isNaN(Number(firstSecondCol))
+                    ? lines.slice(1)
+                    : lines;
+
+            const rows: CSVPreviewRow[] = dataLines.map((line, i) => {
+                const parts = line.split(',').map((p) => p.trim());
+                const raw: CSVRaw = {
+                    name: parts[0] ?? '',
+                    jerseyNumber: parts[1] ?? '',
+                    position: parts[2] ?? '',
+                };
+
+                const nameLower = raw.name.toLowerCase();
+                let match: MatchResult = { type: 'none' };
+
+                // Priority: exact name → jerseyName → nickname
+                const exactName = roster.find(
+                    (p) => p.name.toLowerCase() === nameLower,
+                );
+                if (exactName) {
+                    match = { type: 'high', player: exactName };
+                } else {
+                    const jerseyMatch = roster.find(
+                        (p) => p.jerseyName?.toLowerCase() === nameLower,
+                    );
+                    if (jerseyMatch) {
+                        match = { type: 'medium', player: jerseyMatch };
+                    } else {
+                        // nicknames is already string[] after roster fetch
+                        const nicknameMatch = roster.find((p) =>
+                            p.nicknames.some(
+                                (n) => n.toLowerCase() === nameLower,
+                            ),
+                        );
+                        if (nicknameMatch) {
+                            match = { type: 'medium', player: nicknameMatch };
+                        }
+                    }
+                }
+
+                // Auto-resolve: high → existing, none → new, medium → pending
+                const resolution: Resolution =
+                    match.type === 'high'
+                        ? { mode: 'existing', playerId: match.player.playerId }
+                        : match.type === 'none'
+                        ? { mode: 'new' }
+                        : { mode: 'pending' };
+
+                const positionValid =
+                    raw.position.length > 0 &&
+                    VALID_POSITIONS.map((p) => p.toLowerCase()).includes(
+                        raw.position.toLowerCase(),
+                    );
+
+                return { index: i, raw, match, resolution, positionValid, linkSearch: '' };
+            });
+
+            setCsvRows(rows);
+        };
+        reader.readAsText(file);
+    }
+
+    async function handleCSVImport() {
+        const hasBlockers = csvRows.some(
+            (r) =>
+                r.resolution.mode === 'pending' ||
+                (r.resolution.mode === 'new' && !r.positionValid),
+        );
+        if (hasBlockers) return;
+
+        setCsvImporting(true);
+        setCsvResults(null);
+
+        const entries = csvRows.map((r) => {
+            if (r.resolution.mode === 'existing') {
+                return {
+                    mode: 'existing' as const,
+                    playerId: r.resolution.playerId,
+                    jerseyNumber: Number(r.raw.jerseyNumber) || undefined,
+                    position: r.raw.position || undefined,
+                };
+            } else {
+                return {
+                    mode: 'new' as const,
+                    name: r.raw.name,
+                    number: Number(r.raw.jerseyNumber) || 0,
+                    position: r.raw.position,
+                };
+            }
+        });
+
+        try {
+            const res = await fetch(`/api/admin/teams/${teamId}/roster`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ entries }),
+            });
+            const data = await res.json();
+            if (!res.ok) {
+                showError(data.error ?? 'Import failed');
+                return;
+            }
+            setCsvResults(data.results ?? []);
+            const { inserted, skipped } = data.summary ?? {};
+            if (inserted > 0) {
+                success(`${inserted} player${inserted !== 1 ? 's' : ''} added${skipped > 0 ? `, ${skipped} skipped` : ''}`);
+            }
+            // Refresh roster
+            const rosterRes = await fetch(`/api/admin/teams/${teamId}/roster`);
+            if (rosterRes.ok) {
+                const rosterData = await rosterRes.json();
+                setRoster(rosterData.roster ?? []);
+            }
+        } catch {
+            showError('Network error — please try again');
+        } finally {
+            setCsvImporting(false);
+        }
+    }
+
     const resetPanel = () => {
         setEntries([makeRow()]);
         setSubmitted(false);
@@ -697,7 +877,7 @@ function TeamDetailContent() {
             <div className="max-w-5xl mx-auto p-4 md:p-8">
                 {/* Tabs */}
                 <div className="flex gap-2 mb-8">
-                    {(['roster', 'info'] as const).map((tab) => (
+                    {(['roster', 'csv', 'info'] as const).map((tab) => (
                         <button
                             key={tab}
                             onClick={() => setActiveTab(tab)}
@@ -707,8 +887,8 @@ function TeamDetailContent() {
                                     : 'bg-white/5 text-white/40 border-white/10 hover:text-white hover:bg-white/10'
                             }`}
                         >
-                            {tab === 'roster' ? <Users size={14} /> : <Info size={14} />}
-                            {tab === 'roster' ? `Roster (${roster.length})` : 'Info'}
+                            {tab === 'roster' ? <Users size={14} /> : tab === 'csv' ? <Upload size={14} /> : <Info size={14} />}
+                            {tab === 'roster' ? `Roster (${roster.length})` : tab === 'csv' ? 'CSV Import' : 'Info'}
                         </button>
                     ))}
                 </div>
@@ -859,6 +1039,266 @@ function TeamDetailContent() {
                         </section>
                     </div>
                 )}
+
+                {/* ── CSV IMPORT TAB ──────────────────────────────────────── */}
+                {activeTab === 'csv' && (() => {
+                    const matched = csvRows.filter((r) => r.resolution.mode === 'existing').length;
+                    const toCreate = csvRows.filter((r) => r.resolution.mode === 'new').length;
+                    const needReview = csvRows.filter(
+                        (r) =>
+                            r.resolution.mode === 'pending' ||
+                            (r.resolution.mode === 'new' && !r.positionValid),
+                    ).length;
+                    const hasBlockers =
+                        needReview > 0 ||
+                        csvRows.some((r) => r.resolution.mode === 'pending');
+
+                    return (
+                        <div className="space-y-8">
+                            {/* SECTION A — File upload */}
+                            <section className="space-y-4">
+                                <h2 className="text-[10px] font-black uppercase tracking-[0.3em] text-white/30">
+                                    Import from CSV
+                                </h2>
+                                <label className="flex flex-col items-center justify-center gap-3 p-8 bg-white/[0.02] border-2 border-dashed border-white/10 rounded-[2rem] cursor-pointer hover:border-primary/30 hover:bg-white/[0.04] transition-all">
+                                    <Upload size={28} className="text-white/20" />
+                                    <span className="font-black text-sm text-white/40 uppercase italic tracking-widest">
+                                        {csvFile ? csvFile.name : 'Choose CSV file'}
+                                    </span>
+                                    <span className="text-[10px] font-bold text-white/20 uppercase tracking-widest">
+                                        Columns: name, jersey number, position
+                                    </span>
+                                    <input
+                                        type="file"
+                                        accept=".csv"
+                                        className="hidden"
+                                        onChange={(e) => {
+                                            const file = e.target.files?.[0];
+                                            if (!file) return;
+                                            setCsvFile(file);
+                                            setCsvResults(null);
+                                            parseAndMatchCSV(file);
+                                        }}
+                                    />
+                                </label>
+                            </section>
+
+                            {/* SECTION B — Preview table */}
+                            {csvRows.length > 0 && (
+                                <section className="space-y-3">
+                                    <h2 className="text-[10px] font-black uppercase tracking-[0.3em] text-white/30">
+                                        Preview — {csvRows.length} rows
+                                    </h2>
+                                    <div className="bg-white/[0.03] border border-white/10 rounded-[2rem] overflow-hidden">
+                                        <div className="overflow-x-auto">
+                                            <table className="w-full text-left">
+                                                <thead>
+                                                    <tr className="border-b border-white/5">
+                                                        <th className="px-4 py-3 text-[9px] font-black uppercase tracking-widest text-primary/60 italic">#</th>
+                                                        <th className="px-4 py-3 text-[9px] font-black uppercase tracking-widest text-primary/60 italic">CSV Name</th>
+                                                        <th className="px-4 py-3 text-[9px] font-black uppercase tracking-widest text-primary/60 italic">Jersey</th>
+                                                        <th className="px-4 py-3 text-[9px] font-black uppercase tracking-widest text-primary/60 italic">Position</th>
+                                                        <th className="px-4 py-3 text-[9px] font-black uppercase tracking-widest text-primary/60 italic">Match</th>
+                                                        <th className="px-4 py-3 text-[9px] font-black uppercase tracking-widest text-primary/60 italic">Action</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {csvRows.map((row, i) => {
+                                                        const isBlocked =
+                                                            row.resolution.mode === 'pending' ||
+                                                            (row.resolution.mode === 'new' && !row.positionValid);
+                                                        const rowBg = row.resolution.mode === 'pending'
+                                                            ? 'bg-yellow-500/5'
+                                                            : row.resolution.mode === 'new' && !row.positionValid
+                                                            ? 'bg-red-500/5'
+                                                            : '';
+                                                        const filteredRoster = row.linkSearch.length >= 1
+                                                            ? roster.filter(
+                                                                (p) =>
+                                                                    p.name.toLowerCase().includes(row.linkSearch.toLowerCase()) ||
+                                                                    p.jerseyName?.toLowerCase().includes(row.linkSearch.toLowerCase()),
+                                                              ).slice(0, 5)
+                                                            : [];
+                                                        return (
+                                                            <tr
+                                                                key={i}
+                                                                className={`border-b border-white/5 last:border-0 transition-colors ${rowBg}`}
+                                                            >
+                                                                <td className="px-4 py-3 text-white/30 font-bold text-sm">{i + 1}</td>
+                                                                <td className="px-4 py-3 font-bold text-sm">{row.raw.name}</td>
+                                                                <td className="px-4 py-3 font-bold text-sm text-white/60">{row.raw.jerseyNumber || '—'}</td>
+                                                                <td className={`px-4 py-3 font-bold text-sm ${!row.positionValid ? 'text-red-400' : 'text-white/60'}`}>
+                                                                    {row.raw.position || '—'}
+                                                                    {!row.positionValid && row.raw.position && (
+                                                                        <span className="ml-1 text-[9px] text-red-400/60">invalid</span>
+                                                                    )}
+                                                                </td>
+                                                                <td className="px-4 py-3">
+                                                                    {row.match.type === 'high' && (
+                                                                        <span className="px-2 py-0.5 bg-green-500/20 text-green-400 text-[9px] font-black rounded uppercase tracking-wider">
+                                                                            ✓ {row.match.player.name}
+                                                                        </span>
+                                                                    )}
+                                                                    {row.match.type === 'medium' && (
+                                                                        <span className="px-2 py-0.5 bg-yellow-500/20 text-yellow-400 text-[9px] font-black rounded uppercase tracking-wider">
+                                                                            ~ {row.match.player.name}
+                                                                        </span>
+                                                                    )}
+                                                                    {row.match.type === 'none' && (
+                                                                        <span className="text-white/20 text-[10px] font-bold">No match</span>
+                                                                    )}
+                                                                </td>
+                                                                <td className="px-4 py-3 min-w-[200px]">
+                                                                    {/* pending — medium confidence, admin must choose */}
+                                                                    {row.resolution.mode === 'pending' && row.match.type === 'medium' && (
+                                                                        <div className="flex flex-col gap-1.5">
+                                                                            <div className="flex gap-2">
+                                                                                <button
+                                                                                    onClick={() => updateCsvRow(i, { resolution: { mode: 'existing', playerId: (row.match as { type: 'medium'; player: RosterPlayer }).player.playerId } })}
+                                                                                    className="px-3 py-1.5 bg-green-500/20 text-green-400 rounded-xl text-[9px] font-black uppercase hover:bg-green-500/30 transition-colors"
+                                                                                >
+                                                                                    Link to {(row.match as { type: 'medium'; player: RosterPlayer }).player.name}
+                                                                                </button>
+                                                                                <button
+                                                                                    onClick={() => updateCsvRow(i, { resolution: { mode: 'new' } })}
+                                                                                    className="px-3 py-1.5 bg-white/10 text-white/60 rounded-xl text-[9px] font-black uppercase hover:bg-white/20 transition-colors"
+                                                                                >
+                                                                                    Create New
+                                                                                </button>
+                                                                            </div>
+                                                                        </div>
+                                                                    )}
+
+                                                                    {/* existing — resolved */}
+                                                                    {row.resolution.mode === 'existing' && (
+                                                                        <div className="flex items-center gap-2">
+                                                                            <span className="text-[10px] font-bold text-white/60 truncate max-w-[120px]">
+                                                                                {roster.find((p) => p.playerId === row.resolution.playerId)?.name ?? row.resolution.playerId.slice(0, 8)}
+                                                                            </span>
+                                                                            <button
+                                                                                onClick={() => updateCsvRow(i, { resolution: { mode: 'new' }, linkSearch: '' })}
+                                                                                className="shrink-0 text-[9px] font-black text-white/30 hover:text-red-400 transition-colors uppercase"
+                                                                            >
+                                                                                ✕ unlink
+                                                                            </button>
+                                                                        </div>
+                                                                    )}
+
+                                                                    {/* new — allow linking to existing */}
+                                                                    {row.resolution.mode === 'new' && (
+                                                                        <div className="space-y-1.5">
+                                                                            <span className="inline-block px-2 py-0.5 bg-white/10 text-white/40 text-[9px] font-black rounded uppercase tracking-wider">
+                                                                                Create New
+                                                                            </span>
+                                                                            <div className="relative">
+                                                                                <input
+                                                                                    type="text"
+                                                                                    placeholder="Link to existing..."
+                                                                                    value={row.linkSearch}
+                                                                                    onChange={(e) => updateCsvRow(i, { linkSearch: e.target.value })}
+                                                                                    className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-1.5 text-[10px] font-bold focus:outline-none focus:border-primary/50 transition-all"
+                                                                                />
+                                                                                {filteredRoster.length > 0 && (
+                                                                                    <div className="absolute z-20 top-full mt-1 w-full bg-zinc-900 border border-white/10 rounded-xl shadow-2xl overflow-hidden">
+                                                                                        {filteredRoster.map((p) => (
+                                                                                            <button
+                                                                                                key={p.playerId}
+                                                                                                onClick={() => updateCsvRow(i, {
+                                                                                                    resolution: { mode: 'existing', playerId: p.playerId },
+                                                                                                    linkSearch: '',
+                                                                                                })}
+                                                                                                className="w-full text-left px-3 py-2 hover:bg-white/5 transition-colors border-b border-white/5 last:border-0"
+                                                                                            >
+                                                                                                <div className="text-[10px] font-bold">{p.name}</div>
+                                                                                                {p.jerseyName && (
+                                                                                                    <div className="text-[9px] text-white/30 uppercase">{p.jerseyName}</div>
+                                                                                                )}
+                                                                                            </button>
+                                                                                        ))}
+                                                                                    </div>
+                                                                                )}
+                                                                            </div>
+                                                                        </div>
+                                                                    )}
+                                                                </td>
+                                                            </tr>
+                                                        );
+                                                    })}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                </section>
+                            )}
+
+                            {/* SECTION C — Summary bar */}
+                            {csvRows.length > 0 && (
+                                <div className="flex items-center gap-4 px-2 text-[10px] font-black uppercase tracking-widest">
+                                    <span className="text-green-400">{matched} matched</span>
+                                    <span className="text-white/30">·</span>
+                                    <span className="text-white/60">{toCreate} to create</span>
+                                    {needReview > 0 && (
+                                        <>
+                                            <span className="text-white/30">·</span>
+                                            <span className="text-yellow-400">{needReview} need review</span>
+                                        </>
+                                    )}
+                                </div>
+                            )}
+
+                            {/* SECTION D — Import button */}
+                            {csvRows.length > 0 && (
+                                <button
+                                    onClick={handleCSVImport}
+                                    disabled={hasBlockers || csvImporting}
+                                    className="flex items-center gap-2 px-8 py-4 bg-primary text-black rounded-2xl font-black uppercase italic text-xs tracking-widest hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-40 disabled:scale-100 disabled:cursor-not-allowed shadow-[0_0_30px_rgba(var(--primary-rgb),0.2)]"
+                                >
+                                    {csvImporting ? (
+                                        <><Loader2 className="animate-spin" size={16} /> Importing...</>
+                                    ) : (
+                                        <><Upload size={16} /> Import {csvRows.length} Player{csvRows.length !== 1 ? 's' : ''}</>
+                                    )}
+                                </button>
+                            )}
+
+                            {/* SECTION E — Results */}
+                            {csvResults && (() => {
+                                const ins = csvResults.filter((r) => r.status === 'inserted').length;
+                                const skp = csvResults.filter((r) => r.status === 'skipped').length;
+                                const err = csvResults.filter((r) => r.status === 'error');
+                                return (
+                                    <section className="space-y-4">
+                                        <h2 className="text-[10px] font-black uppercase tracking-[0.3em] text-white/30">
+                                            Import Results
+                                        </h2>
+                                        <div className="flex items-center gap-4 text-[10px] font-black uppercase tracking-widest">
+                                            <span className="text-green-400">{ins} inserted</span>
+                                            <span className="text-white/30">·</span>
+                                            <span className="text-yellow-400">{skp} skipped</span>
+                                            <span className="text-white/30">·</span>
+                                            <span className="text-red-400">{err.length} errors</span>
+                                        </div>
+                                        {err.length > 0 && (
+                                            <div className="space-y-2">
+                                                {err.map((r) => (
+                                                    <div
+                                                        key={r.index}
+                                                        className="flex items-center gap-3 px-4 py-3 bg-red-500/5 border border-red-500/20 rounded-xl"
+                                                    >
+                                                        <AlertCircle size={14} className="text-red-400 shrink-0" />
+                                                        <span className="text-[10px] font-bold text-red-300">
+                                                            Row {r.index + 1} — {r.reason?.replace(/_/g, ' ') ?? 'unknown error'}
+                                                        </span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </section>
+                                );
+                            })()}
+                        </div>
+                    );
+                })()}
 
                 {/* ── INFO TAB ────────────────────────────────────────────── */}
                 {activeTab === 'info' && (
