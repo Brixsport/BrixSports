@@ -7,7 +7,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { db } from '@/db';
 import { playerTeamAffiliations, players, teams } from '@/db/schema';
@@ -198,7 +198,13 @@ export async function POST(request: NextRequest) {
 
         const isExternalTeam = isNpugaCompetition && !isHomeInstitution;
         const createdPlayers: Array<{ id: string; name: string; number: number }> = [];
-        const skippedPlayers: Array<{ name: string; number: number; reason: string }> = [];
+        const skippedPlayers: Array<{
+            name: string;
+            number: number;
+            reason: string;
+            matchedPlayerId?: string;
+            matchedPlayerName?: string;
+        }> = [];
 
         for (const playerInput of playerList) {
             const existingOnLegacyTeam = await db.query.players.findFirst({
@@ -213,6 +219,38 @@ export async function POST(request: NextRequest) {
                     name: playerInput.name,
                     number: playerInput.number,
                     reason: 'Jersey number already taken',
+                });
+                continue;
+            }
+
+            // Pre-flight dedup: skip if a player with the same name+college already exists.
+            // Exempt: NPUGA email-reuse path (shouldReuseByEmail) — that path intentionally
+            // finds and reuses an existing player, so dedup would be a false positive there.
+            const inputCollege = isExternalTeam ? null : playerInput.college || null;
+            const dupCheck = await db
+                .select({ id: players.id, name: players.name })
+                .from(players)
+                .where(
+                    and(
+                        sql`LOWER(${players.name}) = LOWER(${playerInput.name})`,
+                        inputCollege
+                            ? eq(players.college, inputCollege)
+                            : sql`(${players.college} IS NULL OR ${players.college} = '')`
+                    )
+                )
+                .limit(1)
+                .get();
+
+            const willReuseByEmail =
+                isNpugaCompetition && isHomeInstitution && !!playerInput.email;
+
+            if (dupCheck && !willReuseByEmail) {
+                skippedPlayers.push({
+                    name: playerInput.name,
+                    number: playerInput.number,
+                    reason: 'possible_duplicate',
+                    matchedPlayerId: dupCheck.id,
+                    matchedPlayerName: dupCheck.name,
                 });
                 continue;
             }
