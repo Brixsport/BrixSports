@@ -9,7 +9,7 @@ import MatchCalendar from '@/components/MatchCalendar';
 import { isSameDay } from 'date-fns';
 import { TeamLogo } from '@/lib/utils/team-logo';
 
-type SportType = 'Football' | 'Basketball' | 'Track';
+type SportType = 'All' | 'Football' | 'Basketball' | 'Track';
 
 interface Competition {
   id: string;
@@ -73,7 +73,7 @@ function CompetitionsContent() {
   const initialComp = searchParams.get('competition');
 
   const [view, setView] = useState<'standings' | 'matches' | 'brackets'>('standings');
-  const [selectedSport, setSelectedSport] = useState<SportType>('Football');
+  const [selectedSport, setSelectedSport] = useState<SportType>('All');
   const [competitions, setCompetitions] = useState<Competition[]>([]);
   const [selectedComp, setSelectedComp] = useState<Competition | null>(null);
   const [standings, setStandings] = useState<Standing[]>([]);
@@ -165,8 +165,9 @@ function CompetitionsContent() {
   }, [selectedComp, selectedSport]);
 
   // Filter competitions for the current sport tab
-  const filteredCompetitions = competitions
-    .filter(c => c.isMultiSport || c.sport === selectedSport);
+  const filteredCompetitions = selectedSport === 'All'
+    ? competitions
+    : competitions.filter(c => c.isMultiSport || c.sport === selectedSport);
 
   if (loading && competitions.length === 0) {
     return (
@@ -225,12 +226,14 @@ function CompetitionsContent() {
         <div className="space-y-4 md:space-y-6">
           <div className="flex justify-center overflow-x-auto">
             <div className="inline-flex bg-white/5 p-1 rounded-2xl border border-white/10 gap-1">
-              {(['Football', 'Basketball', 'Track'] as SportType[]).map((sport) => (
+              {(['All', 'Football', 'Basketball', 'Track'] as SportType[]).map((sport) => (
                 <button
                   key={sport}
                   onClick={() => {
                     setSelectedSport(sport);
-                    const firstForSport = competitions.find(c => c.sport === sport);
+                    const firstForSport = sport === 'All'
+                      ? competitions[0]
+                      : competitions.find(c => c.sport === sport);
                     if (firstForSport) setSelectedComp(firstForSport);
                   }}
                   className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${selectedSport === sport ? 'bg-primary text-black' : 'text-white/40 hover:text-white'}`}
