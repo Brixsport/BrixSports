@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
+import { useParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     Trophy, TrendingUp, Award, Shield, Target, AlertCircle,
@@ -143,9 +144,6 @@ const mockCompetitionData = {
         },
     ],
 };
-
-import { useParams } from 'next/navigation';
-import { useEffect } from 'react';
 
 type TabType = 'standings' | 'scorers' | 'assists' | 'discipline' | 'rules';
 
@@ -383,10 +381,7 @@ function StandingsRow({
 
     return (
         <>
-            <motion.tr
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay }}
+            <tr
                 className="border-b border-white/5 hover:bg-white/5 transition-colors cursor-pointer"
                 onClick={onExpand}
             >
@@ -424,7 +419,7 @@ function StandingsRow({
                 <td className="px-4 py-4 text-center">
                     {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                 </td>
-            </motion.tr>
+            </tr>
             {isExpanded && (
                 <tr>
                     <td colSpan={12} className="px-6 py-4 bg-white/5">
@@ -439,7 +434,6 @@ function StandingsRow({
 function StandingsMobileCard({ team, delay }: { team: any; delay: number }) {
     return (
         <motion.div
-            initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay }}
             className="bg-white/5 border border-white/10 rounded-2xl p-4"
@@ -556,7 +550,6 @@ function TopScorersTable({ players }: { players: any[] }) {
                 {players.map((player, idx) => (
                     <motion.div
                         key={player.id}
-                        initial={{ opacity: 0, x: -20 }}
                         animate={{ opacity: 1, x: 0 }}
                         transition={{ delay: idx * 0.1 }}
                         className="flex items-center justify-between p-4 bg-white/5 border border-white/10 rounded-2xl hover:bg-white/10 transition-all"
@@ -599,7 +592,6 @@ function TopAssistsTable({ players }: { players: any[] }) {
                 {players.map((player, idx) => (
                     <motion.div
                         key={player.id}
-                        initial={{ opacity: 0, x: -20 }}
                         animate={{ opacity: 1, x: 0 }}
                         transition={{ delay: idx * 0.1 }}
                         className="flex items-center justify-between p-4 bg-white/5 border border-white/10 rounded-2xl hover:bg-white/10 transition-all"
@@ -642,7 +634,6 @@ function DisciplinaryTable({ players }: { players: any[] }) {
                 {players.map((player, idx) => (
                     <motion.div
                         key={player.id}
-                        initial={{ opacity: 0, x: -20 }}
                         animate={{ opacity: 1, x: 0 }}
                         transition={{ delay: idx * 0.1 }}
                         className="flex items-center justify-between p-4 bg-white/5 border border-white/10 rounded-2xl"
