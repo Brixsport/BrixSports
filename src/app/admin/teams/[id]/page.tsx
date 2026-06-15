@@ -110,6 +110,27 @@ type CSVPreviewRow = {
     linkSearch: string;
 };
 
+// ─── Squad Types ──────────────────────────────────────────────────────────────
+
+type SquadPlayer = {
+    squadPlayerId: string;
+    playerId: string;
+    name: string;
+    jerseyName: string | null;
+    position: string;
+    role: string;
+    status: string;
+    squadNumber: number | null;
+};
+
+type TeamCompetition = {
+    id: string;
+    name: string;
+    sport: string | null;
+    status: string;
+    season: string;
+};
+
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function makeRow(): EntryRow {
@@ -520,7 +541,7 @@ function TeamDetailContent() {
     const [team, setTeam] = useState<Team | null>(null);
     const [roster, setRoster] = useState<RosterPlayer[]>([]);
     const [isLoading, setIsLoading] = useState(true);
-    const [activeTab, setActiveTab] = useState<'roster' | 'csv' | 'info'>('roster');
+    const [activeTab, setActiveTab] = useState<'roster' | 'csv' | 'squad' | 'info'>('roster');
 
     // Add-players panel
     const [showAddPanel, setShowAddPanel] = useState(false);
@@ -533,6 +554,14 @@ function TeamDetailContent() {
     const [csvRows, setCsvRows] = useState<CSVPreviewRow[]>([]);
     const [csvImporting, setCsvImporting] = useState(false);
     const [csvResults, setCsvResults] = useState<EntryResult[] | null>(null);
+
+    // Squad
+    const [squadCompetitions, setSquadCompetitions] = useState<TeamCompetition[]>([]);
+    const [selectedCompetitionId, setSelectedCompetitionId] = useState<string | null>(null);
+    const [squad, setSquad] = useState<SquadPlayer[]>([]);
+    const [squadLoading, setSquadLoading] = useState(false);
+    const [squadSaving, setSquadSaving] = useState(false);
+    const [confirmingRemove, setConfirmingRemove] = useState<string | null>(null);
 
     const { toasts, removeToast, success, error: showError } = useToast();
 
@@ -549,6 +578,7 @@ function TeamDetailContent() {
                     fetch(`/api/teams/${teamId}`),
                     fetch(`/api/admin/teams/${teamId}/roster`),
                 ]);
+                fetchSquadCompetitions();
                 if (teamRes.ok) {
                     const data = await teamRes.json();
                     setTeam(data.team ?? data);
@@ -565,6 +595,12 @@ function TeamDetailContent() {
         };
         load();
     }, [teamId]);
+
+    useEffect(() => {
+        if (selectedCompetitionId) {
+            fetchSquad(selectedCompetitionId);
+        }
+    }, [selectedCompetitionId]);
 
     const updateEntry = useCallback((rowId: string, patch: Partial<EntryRow>) => {
         setEntries((prev) => prev.map((r) => r.rowId === rowId ? { ...r, ...patch } : r));
@@ -811,6 +847,63 @@ function TeamDetailContent() {
         setShowAddPanel(false);
     };
 
+    async function fetchSquadCompetitions() {
+        const res = await fetch(`/api/admin/teams/${teamId}/competitions`);
+        if (!res.ok) return;
+        const data = await res.json();
+        setSquadCompetitions(data.competitions);
+        if (data.competitions.length === 1) {
+            setSelectedCompetitionId(data.competitions[0].id);
+        }
+    }
+
+    async function fetchSquad(competitionId: string) {
+        setSquadLoading(true);
+        const res = await fetch(
+            `/api/admin/teams/${teamId}/squad?competitionId=${competitionId}`,
+        );
+        if (res.ok) {
+            const data = await res.json();
+            setSquad(data.squad);
+        }
+        setSquadLoading(false);
+    }
+
+    async function handleAddToSquad(playerId: string) {
+        if (!selectedCompetitionId) return;
+        setSquadSaving(true);
+        const res = await fetch(`/api/admin/teams/${teamId}/squad`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                competitionId: selectedCompetitionId,
+                playerIds: [playerId],
+            }),
+        });
+        if (res.ok) {
+            await fetchSquad(selectedCompetitionId);
+        }
+        setSquadSaving(false);
+    }
+
+    async function handleRemoveFromSquad(squadPlayerId: string) {
+        if (!selectedCompetitionId) return;
+        setSquadSaving(true);
+        const res = await fetch(
+            `/api/admin/teams/${teamId}/squad/${squadPlayerId}`,
+            { method: 'DELETE' },
+        );
+        if (res.ok) {
+            setSquad((prev) => prev.filter((p) => p.squadPlayerId !== squadPlayerId));
+        }
+        setConfirmingRemove(null);
+        setSquadSaving(false);
+    }
+
+    const squadPlayerIds = new Set(squad.map((p) => p.playerId));
+    const availablePlayers = roster.filter((p) => !squadPlayerIds.has(p.playerId));
+    const availableCount = availablePlayers.length;
+
     if (authLoading || isLoading) {
         return (
             <div className="min-h-screen bg-black flex items-center justify-center">
@@ -876,8 +969,8 @@ function TeamDetailContent() {
 
             <div className="max-w-5xl mx-auto p-4 md:p-8">
                 {/* Tabs */}
-                <div className="flex gap-2 mb-8">
-                    {(['roster', 'csv', 'info'] as const).map((tab) => (
+                <div className="flex gap-2 mb-8 flex-wrap">
+                    {(['roster', 'csv', 'squad', 'info'] as const).map((tab) => (
                         <button
                             key={tab}
                             onClick={() => setActiveTab(tab)}
@@ -887,8 +980,14 @@ function TeamDetailContent() {
                                     : 'bg-white/5 text-white/40 border-white/10 hover:text-white hover:bg-white/10'
                             }`}
                         >
-                            {tab === 'roster' ? <Users size={14} /> : tab === 'csv' ? <Upload size={14} /> : <Info size={14} />}
-                            {tab === 'roster' ? `Roster (${roster.length})` : tab === 'csv' ? 'CSV Import' : 'Info'}
+                            {tab === 'roster' ? <Users size={14} />
+                                : tab === 'csv' ? <Upload size={14} />
+                                : tab === 'squad' ? <Layers size={14} />
+                                : <Info size={14} />}
+                            {tab === 'roster' ? `Roster (${roster.length})`
+                                : tab === 'csv' ? 'CSV Import'
+                                : tab === 'squad' ? 'Squad'
+                                : 'Info'}
                         </button>
                     ))}
                 </div>
@@ -1299,6 +1398,170 @@ function TeamDetailContent() {
                         </div>
                     );
                 })()}
+
+                {/* ── SQUAD TAB ───────────────────────────────────────────── */}
+                {activeTab === 'squad' && (
+                    <div className="space-y-8">
+                        {/* SECTION A — Competition selector */}
+                        <section className="space-y-3">
+                            <h2 className="text-[10px] font-black uppercase tracking-[0.3em] text-white/30">
+                                Select Competition
+                            </h2>
+                            {squadCompetitions.length === 0 ? (
+                                <p className="text-white/30 text-xs font-bold uppercase tracking-widest py-8 text-center">
+                                    This team is not enrolled in any competitions.
+                                </p>
+                            ) : (
+                                <select
+                                    value={selectedCompetitionId ?? ''}
+                                    onChange={(e) => setSelectedCompetitionId(e.target.value || null)}
+                                    className="bg-white/5 border border-white/10 rounded-2xl px-4 py-3 text-sm font-bold text-white focus:outline-none focus:border-primary/50 transition-all w-full max-w-md"
+                                >
+                                    <option value="" disabled>— select a competition —</option>
+                                    {squadCompetitions.map((c) => (
+                                        <option key={c.id} value={c.id}>
+                                            {c.name} · {c.season}
+                                        </option>
+                                    ))}
+                                </select>
+                            )}
+                        </section>
+
+                        {/* SECTION B — Dual panel */}
+                        {selectedCompetitionId && (
+                            <section className="flex flex-col md:flex-row gap-6">
+                                {/* LEFT — Available Players */}
+                                <div className="flex-1 space-y-3">
+                                    <div>
+                                        <h3 className="text-[10px] font-black uppercase tracking-[0.3em] text-white/30">
+                                            Available ({availableCount})
+                                        </h3>
+                                        <p className="text-[10px] font-bold text-white/20 uppercase tracking-widest mt-0.5">
+                                            Players on roster not yet in this squad
+                                        </p>
+                                    </div>
+                                    <div className="bg-white/[0.03] border border-white/10 rounded-[2rem] overflow-hidden">
+                                        {availablePlayers.length === 0 ? (
+                                            <p className="text-center text-white/20 text-xs font-bold uppercase tracking-widest py-10">
+                                                All rostered players are in the squad.
+                                            </p>
+                                        ) : (
+                                            <ul className="divide-y divide-white/5">
+                                                {availablePlayers.map((p) => (
+                                                    <li key={p.playerId} className="flex items-center justify-between px-5 py-3.5 hover:bg-white/[0.02] transition-colors">
+                                                        <div className="min-w-0">
+                                                            <div className="font-bold text-sm truncate">{p.name}</div>
+                                                            <div className="flex items-center gap-2 mt-0.5">
+                                                                {p.position && (
+                                                                    <span className="px-1.5 py-0.5 bg-white/10 text-white/40 text-[9px] font-black rounded uppercase tracking-wider">
+                                                                        {p.position}
+                                                                    </span>
+                                                                )}
+                                                                {p.jerseyName && (
+                                                                    <span className="text-[10px] text-white/30 font-bold uppercase truncate">
+                                                                        {p.jerseyName}
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                        <button
+                                                            onClick={() => handleAddToSquad(p.playerId)}
+                                                            disabled={squadSaving}
+                                                            className="shrink-0 ml-3 px-3 py-1.5 bg-primary/20 text-primary rounded-xl text-[9px] font-black uppercase hover:bg-primary hover:text-black transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                                                        >
+                                                            Add
+                                                        </button>
+                                                    </li>
+                                                ))}
+                                            </ul>
+                                        )}
+                                    </div>
+                                </div>
+
+                                {/* RIGHT — Squad */}
+                                <div className="flex-1 space-y-3">
+                                    <div>
+                                        <h3 className="text-[10px] font-black uppercase tracking-[0.3em] text-white/30">
+                                            Squad ({squad.length})
+                                        </h3>
+                                    </div>
+                                    <div className="bg-white/[0.03] border border-white/10 rounded-[2rem] overflow-hidden min-h-[80px]">
+                                        {squadLoading ? (
+                                            <div className="flex items-center justify-center py-10">
+                                                <Loader2 className="animate-spin text-primary" size={20} />
+                                            </div>
+                                        ) : squad.length === 0 ? (
+                                            <p className="text-center text-white/20 text-xs font-bold uppercase tracking-widest py-10">
+                                                No players in squad yet. Add from the roster.
+                                            </p>
+                                        ) : (
+                                            <ul className="divide-y divide-white/5">
+                                                {squad.map((p) => (
+                                                    <li key={p.squadPlayerId} className="flex items-center justify-between px-5 py-3.5 hover:bg-white/[0.02] transition-colors">
+                                                        <div className="min-w-0">
+                                                            <div className="font-bold text-sm truncate">{p.name}</div>
+                                                            <div className="flex items-center gap-2 mt-0.5">
+                                                                {p.position && (
+                                                                    <span className="px-1.5 py-0.5 bg-white/10 text-white/40 text-[9px] font-black rounded uppercase tracking-wider">
+                                                                        {p.position}
+                                                                    </span>
+                                                                )}
+                                                                {p.role !== 'player' && (
+                                                                    <span className={`px-1.5 py-0.5 text-[9px] font-black rounded uppercase tracking-wider ${
+                                                                        p.role === 'captain' ? 'bg-yellow-500/20 text-yellow-400'
+                                                                        : p.role === 'vice_captain' ? 'bg-blue-500/20 text-blue-400'
+                                                                        : p.role === 'goalkeeper' ? 'bg-green-500/20 text-green-400'
+                                                                        : 'bg-white/10 text-white/40'
+                                                                    }`}>
+                                                                        {p.role.replace('_', ' ')}
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                        {confirmingRemove === p.squadPlayerId ? (
+                                                            <div className="flex items-center gap-2 shrink-0 ml-3">
+                                                                <button
+                                                                    onClick={() => handleRemoveFromSquad(p.squadPlayerId)}
+                                                                    disabled={squadSaving}
+                                                                    className="px-3 py-1.5 bg-red-500/20 text-red-400 rounded-xl text-[9px] font-black uppercase hover:bg-red-500/40 transition-all disabled:opacity-40"
+                                                                >
+                                                                    Confirm
+                                                                </button>
+                                                                <button
+                                                                    onClick={() => setConfirmingRemove(null)}
+                                                                    className="px-3 py-1.5 bg-white/10 text-white/40 rounded-xl text-[9px] font-black uppercase hover:bg-white/20 transition-all"
+                                                                >
+                                                                    Cancel
+                                                                </button>
+                                                            </div>
+                                                        ) : (
+                                                            <button
+                                                                onClick={() => setConfirmingRemove(p.squadPlayerId)}
+                                                                disabled={squadSaving}
+                                                                className="shrink-0 ml-3 px-3 py-1.5 bg-red-500/10 text-red-400/60 rounded-xl text-[9px] font-black uppercase hover:bg-red-500/20 hover:text-red-400 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                                                            >
+                                                                Remove
+                                                            </button>
+                                                        )}
+                                                    </li>
+                                                ))}
+                                            </ul>
+                                        )}
+                                    </div>
+                                </div>
+                            </section>
+                        )}
+
+                        {/* SECTION C — Summary bar */}
+                        {selectedCompetitionId && (
+                            <div className="flex items-center gap-3 px-2 text-[10px] font-black uppercase tracking-widest text-white/30">
+                                <span className="text-white/60">{squad.length} players in squad</span>
+                                <span>·</span>
+                                <span>{availableCount} available on roster</span>
+                            </div>
+                        )}
+                    </div>
+                )}
 
                 {/* ── INFO TAB ────────────────────────────────────────────── */}
                 {activeTab === 'info' && (
