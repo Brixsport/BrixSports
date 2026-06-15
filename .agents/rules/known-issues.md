@@ -69,6 +69,12 @@ activation: always_on
 
 2026-06-14 — staging and prod scores diverged silently for the same match — MD2 G1 had different homeScore on staging vs prod. No error surfaced. Prevention: after any PATCH script, always run a SELECT on both DBs and compare. Include a parity check at the end of every patch script.
 
+2026-06-15 — Teams beyond .limit(200) silently missing from admin list — 236 teams in DB, cap was 200; the last 36 (including all 4 college teams) never appeared. No error, no warning — list just stopped. Root cause: limit set conservatively when DB had ~100 teams and never revisited. Prevention: when raising a limit, check actual row count first. Document the ceiling and set a backlog item when count approaches it (BACKLOG-045).
+
+2026-06-15 — College team shortNames are CNAS/CENG not COLNAS/COLENG — searching "colnas" on the teams page finds nothing; searching "college" finds all 4 via the `name` field ("College of Engineering" etc.). The shortName abbreviation scheme is different from the old BUSA-style codes. Prevention: when investigating "missing" teams, query the DB to see exact shortName values before assuming a search bug.
+
+2026-06-15 — Conditional field return based on role requires non-throwing getAuthUser — `getAuthUser` throws on invalid/missing token. Wrapping with `.catch(() => null)` in GET handlers that should be public but conditionally richer for admins. Prevention: when a public GET needs to return extra data for admins, always use `.catch(() => null)` pattern — never let an auth failure block the public response.
+
 ## Anti-Patterns for This Codebase
 - Middleware matcher and internal logic check do not match.
 - try/catch without finally in any DB operation.

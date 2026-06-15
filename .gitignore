@@ -46,6 +46,7 @@ next-env.d.ts
 notes/*
 dev/*
 !dev/pre-prod-check.ts
+!dev/RUNLOG.md
 # .agents/*
 local.db
 local.db-*

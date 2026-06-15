@@ -80,7 +80,7 @@
 
   Filed: 2026-06-08. Found by: manual staging QA.
 
-- **BUG-025** _(MEDIUM — NDPR)_: `GET /api/matches` public list response exposes `assignedLoggers` full object and `loggerId` field to unauthenticated viewers. Both are banned internal fields per CLAUDE.md. File: `src/app/api/matches/route.ts` GET handler response map. Fix: strip `loggerId` and `assignedLoggers` from the public DTO. If an admin caller needs assignment data, return it conditionally based on `authUser.role`. Filed: 2026-06-08. Found by: flow-checker during `b1a6ec9` review.
+- ~~**BUG-025** _(MEDIUM — NDPR)_: `GET /api/matches` public list response exposes `loggerId` field to unauthenticated viewers. Fixed: `getAuthUser` added to GET handler; `loggerId` conditionally returned for admin callers only, stripped from public DTO. `assignedLoggers` was already absent. Resolved: 2026-06-15.~~
 
 - **BUG-027** _(MEDIUM)_: `/competitions` list page not showing all competitions. Filed: 2026-06-13.
 
@@ -199,7 +199,7 @@ Audit duplicate slugs first before deciding. Do not run db:push until this is re
 
 ### BACKLOG-037 — Roster Builder
 
-**Status:** OPEN
+**Status:** OPEN — Steps 1-5 complete, Steps 6-7 remaining
 **Priority:** High
 **Filed:** 2026-06-13
 **Blocked by:** Step 1 (unique constraint dedup) must run first
@@ -239,11 +239,8 @@ No UI or API exists to link existing players to teams without creating duplicate
 - Per-row feedback: inserted / skipped / error
 - **UI note (fuzzy dedup):** Show a "similar players found" warning panel for any player where name similarity > 70% — let admin decide whether to link or create. Catches variants like "Chukwuemeka" vs "Chukwu" that the unique index and LOWER(name) check won't catch. This is a UI-layer concern, not enforced server-side.
 
-**Step 5 — Bulk register pre-flight dedup**
-- Before inserting new player row in bulk-register route: search by name + college + position
-- If strong match found: flag as potential duplicate, return in skippedPlayers with reason 'possible_duplicate'
-- Include matched player id and name in response — do not silently create duplicate profile
-- Admin can then use Roster Builder to link the existing player instead
+**Step 5 — Bulk register pre-flight dedup** ✓ COMPLETE — 2026-06-15
+- Pre-flight query by `LOWER(name)` + college before any INSERT. Match → skip with `reason: 'possible_duplicate'`, `matchedPlayerId`, `matchedPlayerName`. NPUGA email-reuse path exempted.
 
 **Step 6 — CSV import tab on Roster Builder**
 - Upload CSV: name/nickname, jersey number, position
@@ -2195,6 +2192,40 @@ In the logger platform (FootballLogger/BasketballLogger):
   and stats so they don't corrupt leaderboards
 - Resolution flow (temp → real) is Part 2, 
   can ship temp creation first
+
+---
+
+### BACKLOG-046 — Player Profile Edit Page
+
+**Status:** OPEN
+**Priority:** Medium
+**Filed:** 2026-06-14
+
+#### Problem
+`PATCH /api/players/[id]` exists and is implemented (line 294 of `src/app/api/players/[id]/route.ts`) but there is no admin UI to drive it. Player profiles can only be edited via direct API calls or scripts.
+
+#### Required Changes
+- `src/app/admin/players/[id]/page.tsx` — player detail + edit page
+- Fields: `name`, `jerseyName`, `number`, `position`, `college`, `department`, `university`, `age`, `height`, `weight`, `nationality`, `image` (Cloudinary upload)
+- Nicknames management: view/add/remove nicknames from `playerTeamAffiliations` rows for this player
+- Current teams: list all affiliations with `affiliationType`, `isPrimary`, `isActive` — ability to deactivate an affiliation
+- Jersey number override per team: edit `jerseyNumber` on the affiliation row, not on the `players` row
+- "Merge with another player" button → links to BACKLOG-042 (Duplicate Merge Tool)
+
+#### Notes
+- Follows same pattern as `/admin/teams/[id]` built in BACKLOG-037 Step 4
+- Do not build before BACKLOG-037 Steps 5-6 are complete — roster builder and player edit are related surfaces
+- Related: BACKLOG-042 (merge), BACKLOG-037 (roster builder), BACKLOG-041 (nickname search)
+
+---
+
+### BACKLOG-045 — Teams List Pagination
+
+**Status:** OPEN
+**Priority:** Low
+**Filed:** 2026-06-15
+
+Current `.limit(500)` on `GET /api/teams` is a temporary ceiling. Build cursor-based pagination on the API and infinite scroll or page controls on `/admin/teams` when team count approaches 500.
 
 ---
 

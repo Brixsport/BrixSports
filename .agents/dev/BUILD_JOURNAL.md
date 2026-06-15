@@ -11,6 +11,47 @@
 
 ## Sessions
 
+### Session 13 — 2026-06-15
+
+**Focus:** Verify Roster Builder on staging, close BUG-025, raise teams API limit, add BACKLOG-037 Step 5 (bulk register dedup), file new backlog items, create TEST_CHECKLIST.md.
+
+**Built:**
+
+- **`src/app/api/matches/route.ts` — BUG-025 fix:** `getAuthUser(request).catch(() => null)` added at top of GET handler. `loggerId` now conditionally included — present for `isAdmin` callers, stripped for public. `assignedLoggers` was already absent from the DB row. Lines changed: +2 (auth check), destructure rename, +1 spread conditional.
+
+- **`src/app/api/teams/route.ts` — limit raised:** `.limit(200)` → `.limit(500)`. Root cause of missing college teams: 236 teams in DB, 200 cap cut off the last 36 which included CNAS/CENG/CMANS/CENVS.
+
+- **`src/app/admin/teams/page.tsx` — catch block:** Silent `catch {}` → `catch (err) { console.error('Teams fetch failed:', err); }`. Failures now visible in console.
+
+- **`src/app/api/players/bulk-register/route.ts` — BACKLOG-037 Step 5:** Pre-flight dedup check inserted before both player INSERT paths (lines ~220-248). Query: `LOWER(name) = LOWER(input.name) AND college match`. If match found and caller is not on the NPUGA email-reuse path → skip with `reason: 'possible_duplicate'`, `matchedPlayerId`, `matchedPlayerName` in `skippedPlayers`. `sql` added to drizzle import. `skippedPlayers` type widened to include optional `matchedPlayerId?` and `matchedPlayerName?`.
+
+- **`.agents/dev/TEST_CHECKLIST.md`** — created. Full manual test checklist covering Critical Flows A/B/C, all admin surfaces (including Roster Builder), public pages, auth, security pre-prod-check, and Known Broken section.
+
+- **BACKLOG-045 filed** — Teams list pagination (500 is temporary ceiling).
+- **BACKLOG-046 filed** — Player Profile Edit page (`/admin/players/[id]` — PATCH API exists, no UI).
+
+- **Staging verification:** Roster Builder confirmed end-to-end — `/admin/teams` loads college teams when searching "college", CNAS roster shows 21 players, existing player search works, new player form with nicknames field works, ADD PLAYERS panel submits correctly.
+
+**Bugs encountered:**
+
+- **College teams missing from teams list:** `/api/teams` `.limit(200)`, 236 teams in DB — college teams were in the missing 36. Root cause was a too-low limit set before DB grew. Fix: raised to 500.
+- **Teams page `shortName` filter already correct:** Filter at lines 78-83 already matched `name`, `shortName`, `university` — no change needed. Confirmed by reading the file. The search "college" (not "colnas") finds them correctly since `shortName` is `CNAS` not `COLNAS`.
+
+**Resolved:** BUG-025 (loggerId NDPR leak on public matches list), BACKLOG-037 Step 5 (bulk register dedup).
+
+**Deferred:**
+- BACKLOG-037 Steps 6-7 (CSV import tab, Squad Selector)
+- BUG-021 (notifications/subscribe no auth)
+- BUG-022 (unbounded queries — competitions, events)
+- BUG-027 (competitions list incomplete)
+- BUG-028 (hydration error #418)
+- BACKLOG-036 (logo second pass — 18 files)
+- BACKLOG-046 (player profile edit page)
+
+**Next session:** BUG-021 (5 min — add `getAuthUser` to `POST /api/notifications/subscribe`), then BUG-022 (add `.limit()` to competitions + events routes), then investigate BUG-027 (competitions list missing entries).
+
+---
+
 ### Sessions 11-12 — 2026-06-14
 
 **Focus:** BUSALYMPICS data completion (BACKLOG-017 + BACKLOG-033), Three.js hotfix to prod, and BACKLOG-037 Steps 1-4 (Roster Builder foundation) + TeamLogo utility.
