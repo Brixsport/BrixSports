@@ -52,6 +52,64 @@
 
 ---
 
+### Session 14 — 2026-06-15
+
+**Focus:** Close BUG-021/022 (confirmed already resolved), fix BUG-027 (competitions filter) and BUG-028 (hydration #418), complete BACKLOG-036 TeamLogo second pass (13 files), add BACKLOG-037 Step 6 (CSV Import tab), update test checklist.
+
+**Built:**
+
+- **`src/app/competitions/page.tsx` — BUG-027:** `activeTab` type widened to include `'All'`. Default changed `'Football'` → `'All'`. Tab array extended: `['All', 'Football', 'Basketball', 'Track']`. Filter logic: `selectedSport === 'All' ? competitions : competitions.filter(c => c.isMultiSport || c.sport === selectedSport)`. Tab-switch handler: `sport === 'All' ? competitions[0]` instead of `competitions.find(c => c.sport === sport)`.
+
+- **`src/app/competitions/[id]/standings/page.tsx` — BUG-028:** Moved misplaced `useParams`/`useEffect` imports from line 147 to top of file. Replaced `<motion.tr>` with plain `<tr>`. Removed `initial={{ opacity: 0, y: 20 }}` from `StandingsMobileCard`. Removed `initial={{ opacity: 0, x: -20 }}` from `TopScorersTable`, `TopAssistsTable`, `DisciplinaryTable` (3 occurrences via `replace_all`). Kept all `animate` and `transition` props intact.
+
+- **BACKLOG-036 second pass — 13 files migrated to `TeamLogo` component:**
+  - `src/app/admin/manager/page.tsx` (2 instances)
+  - `src/components/TrackLogger.tsx` (4 instances — removed `team?.logo &&` guard; TeamLogo handles null internally)
+  - `src/app/admin/transfers/page.tsx` (2)
+  - `src/app/user/[userId]/page.tsx` (1 — used `profile.favoriteTeam`, not `user.favoriteTeam`)
+  - `src/app/search/page.tsx` (1 team instance; `comp.logo` at line 293 intentionally skipped)
+  - `src/app/admin/livestreams/page.tsx` (2 — preserved `border-2 border-gray-900` via `className`)
+  - `src/app/profile/page.tsx` (2 — CRLF file; fixed via node.js inline replace)
+  - `src/app/logger/page.tsx` (2 — preserved `mx-auto mb-2` via `className`)
+  - `src/components/MatchLineups.tsx` (3)
+  - `src/components/LiveStats.tsx` (2)
+  - `src/components/lineup/MatchSelector.tsx` (2)
+  - `src/components/GlobalSearch.tsx` (1 team instance; `comp.logo` at line 316 intentionally skipped)
+  - `src/components/FootballLogger.tsx` (2 — preserved `mx-auto mb-1.5` via `className`)
+  - **Skipped (size-sensitive layout):** `admin/track-events`, `teams/[id]`, `lineup/TeamSelector`, `BasketballLogger`, `FullPitchLineups`
+
+- **`src/app/admin/teams/[id]/page.tsx` — BACKLOG-037 Step 6 (CSV Import tab):**
+  - Added `Upload` to lucide imports
+  - Added 4 new types: `CSVRaw`, `MatchResult`, `Resolution`, `CSVPreviewRow` (extended with `linkSearch` field for inline search state)
+  - Extended `activeTab` union: `'roster' | 'csv' | 'info'`
+  - Added 4 CSV state vars: `csvFile`, `csvRows`, `csvImporting`, `csvResults`
+  - `updateCsvRow(index, patch)` — patches single row in `csvRows`
+  - `parseAndMatchCSV(file)` — `FileReader` → split → match against `roster` state (exact name → jerseyName → nickname priority), auto-resolves high to `existing`, none to `new`, medium to `pending`
+  - `handleCSVImport()` — POSTs `{ entries }` to existing `/api/admin/teams/${teamId}/roster`, inlines roster refresh after success, surfaces errors via `showError`
+  - CSV tab UI: file upload label (Section A), preview table with per-row action column (Section B), summary bar (Section C), import button with blocker guard (Section D), results panel (Section E)
+
+- **`.agents/dev/TEST_CHECKLIST.md`:** Added BUG-027 (5 items), BUG-028 (3 items), BACKLOG-036 (3 items), BACKLOG-037 Step 6 (13 items). Removed resolved bugs from Known Broken.
+
+**Bugs encountered:**
+
+- **CRLF line endings in 3 files** (`search/page.tsx`, `livestreams/page.tsx`, `profile/page.tsx`) — Edit tool string matching fails on Windows CRLF files because `old_string` uses `\n` only. Root cause: files authored on Windows. Fix: node.js inline script with `.replace(/\r\n/g, '\n')` to normalise before writing.
+- **`user/[userId]/page.tsx` wrong variable name** — initial edit used `user.favoriteTeam.logo` but file uses `profile.favoriteTeam.logo`. Caught by grepping before edit.
+- **`RosterPlayer` uses `playerId` not `id`** — directive specified `match.player.id` in auto-resolve; fixed to `match.player.playerId` during implementation.
+- **`nicknames` is already `string[]`** — directive included `JSON.parse(p.nicknames)` in matching logic but the GET handler already parses the JSON before returning roster. Fixed: direct array access.
+- **BUG-021 and BUG-022 already fixed** — confirmed by reading the files; backlog updated to resolved without code change.
+
+**Resolved:** BUG-021, BUG-022 (confirmed pre-existing), BUG-027, BUG-028, BACKLOG-036.
+
+**Deferred:**
+- `chore: session 14 wrap` commit (and earlier `feat: BACKLOG-036` + `feat: BACKLOG-037 Step 6`) — commits were declined by user at prompt; code is complete but unstaged
+- BACKLOG-037 Step 7 (Squad Selector)
+- BUG-023 (dead schema file), BUG-024 (duplicate match routes), BUG-026 (PWA CSS)
+- BACKLOG-045 (teams pagination), BACKLOG-046 (Player Profile Edit)
+
+**Next session:** Commit all staged work (`feat: BACKLOG-036`, `feat: BACKLOG-037 Step 6`, `chore: session 14 wrap`). Then BACKLOG-037 Step 7 (Squad Selector — revive `squadPlayers` table, competition → per-team squad selection UI).
+
+---
+
 ### Sessions 11-12 — 2026-06-14
 
 **Focus:** BUSALYMPICS data completion (BACKLOG-017 + BACKLOG-033), Three.js hotfix to prod, and BACKLOG-037 Steps 1-4 (Roster Builder foundation) + TeamLogo utility.

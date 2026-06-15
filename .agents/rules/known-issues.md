@@ -75,6 +75,14 @@ activation: always_on
 
 2026-06-15 — Conditional field return based on role requires non-throwing getAuthUser — `getAuthUser` throws on invalid/missing token. Wrapping with `.catch(() => null)` in GET handlers that should be public but conditionally richer for admins. Prevention: when a public GET needs to return extra data for admins, always use `.catch(() => null)` pattern — never let an auth failure block the public response.
 
+2026-06-15 — CRLF line endings break Edit tool string matching — 3 files (`search/page.tsx`, `livestreams/page.tsx`, `profile/page.tsx`) authored on Windows have `\r\n`. Edit tool `old_string` uses `\n` only, so match fails silently. Fix: node.js inline replace with `.replace(/\r\n/g, '\n')` before writing. Prevention: when Edit fails on a file that looks correct, suspect CRLF; open with a diagnostic node script to check.
+
+2026-06-15 — Framer Motion `initial` prop causes hydration mismatch #418 — `initial={{ opacity: 0 }}` writes a `style` attribute on first client render not present in SSR HTML. `<motion.tr>` is especially bad: server renders `<tr>`, client renders a non-standard motion element tag. Prevention: never use `initial` prop on server-rendered components. Use `animate` and `transition` only; let elements start at their animated state.
+
+2026-06-15 — Client-side tab filter with a non-null default hides data that has null in the filtered field — `/competitions` page defaulted to `sport: 'Football'`; competitions with `sport: null` were permanently invisible because no filter branch returned them. Prevention: any filter on a nullable column must have an explicit "All" / pass-through state as the default.
+
+2026-06-15 — Directive field names diverge from actual type definitions — `RosterPlayer` uses `playerId` not `id`, and `nicknames` is already `string[]` from the GET handler — directive specified `match.player.id` and `JSON.parse(p.nicknames)`. Prevention: always read the actual type definition and GET handler before implementing anything that accesses a type's fields.
+
 ## Anti-Patterns for This Codebase
 - Middleware matcher and internal logic check do not match.
 - try/catch without finally in any DB operation.

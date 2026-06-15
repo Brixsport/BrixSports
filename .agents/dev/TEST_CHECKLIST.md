@@ -59,6 +59,21 @@ what fails with a one-line description.
 - [ ] New player with duplicate name+college → flagged
 - [ ] Submit results show per-row inserted/skipped/error
 
+#### BACKLOG-037 Step 6 — CSV Import tab
+- [ ] CSV Import tab visible on /admin/teams/[id]
+- [ ] File upload accepts .csv only
+- [ ] Parsed rows appear in preview table after upload
+- [ ] High confidence match auto-resolves to existing (green badge)
+- [ ] Medium confidence match shows pending state (yellow badge)
+- [ ] No match defaults to Create New (grey)
+- [ ] Pending rows block the Import button
+- [ ] Invalid position (mode: new) highlights row red, blocks import
+- [ ] Admin can link a pending row to existing player via search
+- [ ] Admin can unlink a high-confidence match to Create New
+- [ ] Import button POSTs to roster endpoint, shows results
+- [ ] Inserted / skipped / error counts shown after import
+- [ ] Roster tab refreshes after successful CSV import
+
 ### Players
 - [ ] /admin/players loads player list
 - [ ] Player search works
@@ -85,6 +100,11 @@ what fails with a one-line description.
 - [ ] Team logos render (or initials fallback)
 - [ ] No broken img tags in console
 
+#### BACKLOG-036 — TeamLogo component
+- [ ] Teams with no logo show initials fallback in: manager page, transfers, user profile, search results, livestreams, profile, logger, match lineups, live stats, match selector, global search, football logger
+- [ ] Broken image URL triggers onError fallback (not broken img icon)
+- [ ] Logo renders correctly when valid Cloudinary path is present
+
 ### Competitions
 - [ ] /competitions lists all competitions
 - [ ] BUSALYMPICS (Football) visible
@@ -92,6 +112,18 @@ what fails with a one-line description.
 - [ ] Competition detail loads without hydration error
 - [ ] Standings tab shows correct table
 - [ ] BUSALYMPICS standings: CNAS 1st, CENG 2nd
+
+#### BUG-027 — Competitions page sport filter
+- [ ] All tab shows all competitions including sport=null
+- [ ] Football tab shows only Football + isMultiSport competitions
+- [ ] Basketball tab shows only Basketball competitions
+- [ ] Switching tabs selects first competition in that sport
+- [ ] Empty tab (no competitions for sport) shows empty state gracefully
+
+#### BUG-028 — Competition standings page
+- [ ] Standings page loads without hydration warning in browser console
+- [ ] Table rows animate in without opacity flash on first paint
+- [ ] Mobile cards animate without position flash on first paint
 
 ### Match Detail
 - [ ] /matches/[id] loads without 500 error
@@ -127,13 +159,16 @@ what fails with a one-line description.
 
 ## Known Broken (do not test — already filed)
 
-- /competitions/[id] — hydration error #418 (BUG-028)
-- /competitions list — missing some competitions (BUG-027)  
 - PWA CSS on direct URL visit (BUG-026)
 - Email sending broken — AWS SES (BACKLOG-026)
 - Google OAuth staging not configured (BACKLOG-025)
-- Team logos for college teams — placeholder (BACKLOG-036)
 - Railway WS on staging not created (BACKLOG-027)
+
+## Resolved — moved to test sections above
+
+- /competitions list — sport=null competitions invisible (BUG-027) — fixed 2026-06-15
+- /competitions/[id] — hydration error #418 (BUG-028) — fixed 2026-06-15
+- Team logos for college teams — placeholder (BACKLOG-036) — migrated 2026-06-15
 
 ---
 
