@@ -63,8 +63,8 @@ function TeamsPageContent() {
                     const data = await res.json();
                     if (Array.isArray(data)) setTeams(data);
                 }
-            } catch {
-                // network error — leave list empty
+            } catch (err) {
+                console.error('Teams fetch failed:', err);
             } finally {
                 setIsLoading(false);
             }
