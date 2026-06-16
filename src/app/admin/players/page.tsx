@@ -618,14 +618,45 @@ function AdminPlayersPageContent() {
                                         </div>
                                         <div>
                                             <label className="block text-[10px] font-black uppercase tracking-widest text-white/40 mb-2 italic">Tactical Position</label>
-                                            <input
-                                                type="text"
-                                                required
-                                                value={formData.position}
-                                                onChange={e => setFormData({ ...formData, position: e.target.value })}
+                                            <select
+                                                value={formData.position || ''}
+                                                onChange={(e) => setFormData({ ...formData, position: e.target.value })}
                                                 className="w-full bg-white/5 border border-white/10 rounded-[1.25rem] px-5 py-4 focus:outline-none focus:border-primary/50 font-bold transition-all"
-                                                placeholder="e.g. GK, CB, CM, ST"
-                                            />
+                                            >
+                                                <option value="">Select position</option>
+                                                <optgroup label="Goalkeeper">
+                                                    <option value="GK">GK — Goalkeeper</option>
+                                                </optgroup>
+                                                <optgroup label="Defenders">
+                                                    <option value="CB">CB — Centre Back</option>
+                                                    <option value="LB">LB — Left Back</option>
+                                                    <option value="RB">RB — Right Back</option>
+                                                    <option value="LWB">LWB — Left Wing Back</option>
+                                                    <option value="RWB">RWB — Right Wing Back</option>
+                                                </optgroup>
+                                                <optgroup label="Midfielders">
+                                                    <option value="CDM">CDM — Defensive Mid</option>
+                                                    <option value="CM">CM — Central Mid</option>
+                                                    <option value="CAM">CAM — Attacking Mid</option>
+                                                    <option value="LM">LM — Left Mid</option>
+                                                    <option value="RM">RM — Right Mid</option>
+                                                </optgroup>
+                                                <optgroup label="Forwards">
+                                                    <option value="LW">LW — Left Wing</option>
+                                                    <option value="RW">RW — Right Wing</option>
+                                                    <option value="CF">CF — Centre Forward</option>
+                                                    <option value="ST">ST — Striker</option>
+                                                    <option value="SS">SS — Second Striker</option>
+                                                </optgroup>
+                                                <optgroup label="Basketball">
+                                                    <option value="PG">PG — Point Guard</option>
+                                                    <option value="SG">SG — Shooting Guard</option>
+                                                    <option value="SF">SF — Small Forward</option>
+                                                    <option value="PF">PF — Power Forward</option>
+                                                    <option value="C">C — Center</option>
+                                                    <option value="G/F">G/F — Guard/Forward</option>
+                                                </optgroup>
+                                            </select>
                                         </div>
                                         <div className="grid grid-cols-2 gap-4">
                                             <div>
@@ -658,23 +689,29 @@ function AdminPlayersPageContent() {
                                         <div className="space-y-6">
                                             <div>
                                                 <label className="block text-[10px] font-black uppercase tracking-widest text-white/40 mb-2 italic">University</label>
-                                                <input
-                                                    type="text"
+                                                <select
                                                     value={formData.university || ''}
-                                                    onChange={e => setFormData({ ...formData, university: e.target.value })}
+                                                    onChange={(e) => setFormData({ ...formData, university: e.target.value })}
                                                     className="w-full bg-white/5 border border-white/10 rounded-[1.25rem] px-5 py-4 focus:outline-none focus:border-primary/50 font-bold transition-all"
-                                                    placeholder="e.g. Bells University"
-                                                />
+                                                >
+                                                    <option value="">Not specified</option>
+                                                    <option value="Bells University of Technology">Bells University of Technology</option>
+                                                    <option value="Other">Other</option>
+                                                </select>
                                             </div>
                                             <div>
                                                 <label className="block text-[10px] font-black uppercase tracking-widest text-white/40 mb-2 italic">College</label>
-                                                <input
-                                                    type="text"
+                                                <select
                                                     value={formData.college || ''}
-                                                    onChange={e => setFormData({ ...formData, college: e.target.value })}
+                                                    onChange={(e) => setFormData({ ...formData, college: e.target.value })}
                                                     className="w-full bg-white/5 border border-white/10 rounded-[1.25rem] px-5 py-4 focus:outline-none focus:border-primary/50 font-bold transition-all"
-                                                    placeholder="e.g. COLENG"
-                                                />
+                                                >
+                                                    <option value="">None / External</option>
+                                                    <option value="COLNAS">COLNAS — Natural &amp; Applied Sciences</option>
+                                                    <option value="COLENG">COLENG — Engineering</option>
+                                                    <option value="COLMANS">COLMANS — Management Sciences</option>
+                                                    <option value="COLENVS">COLENVS — Environmental Sciences</option>
+                                                </select>
                                             </div>
                                             <div>
                                                 <label className="block text-[10px] font-black uppercase tracking-widest text-white/40 mb-2 italic">Department</label>
