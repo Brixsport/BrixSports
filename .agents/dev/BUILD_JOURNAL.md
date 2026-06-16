@@ -11,6 +11,45 @@
 
 ## Sessions
 
+### Session 19 — 2026-06-16
+
+**Focus:** BACKLOG-044 Phase A schema cleanup, prod DB migration, UI improvements, BUG-026 hotfix.
+
+**Built:**
+
+- **Schema cleanup (`src/db/schema.ts`):** Removed `matchDuration` and `extraTimeDuration` from `competitionSportSettings`. `matchDuration` is now computed as `halfDuration * 2` in the config route — not stored.
+- **`src/app/api/matches/[id]/config/route.ts`:** Removed `matchDuration` and `extraTimeDuration` from `SPORT_DEFAULTS` type and both sport objects. Config response now computes `matchDuration: halfDuration * 2` inline.
+- **`src/app/api/competitions/[id]/match-settings/route.ts`:** Removed `matchDuration` and `extraTimeDuration` from POST body destructure and both upsert/insert blocks.
+- **Staging DB:** Dropped `match_duration` and `extraTimeDuration` columns from `competition_sport_settings` via `drop-redundant-columns-staging.mjs`. Both confirmed absent via pragma.
+- **Prod DB migration (BACKLOG-044 Phase A):** `migrate-sport-settings-prod.mjs` ran 10 ALTER TABLE ADD COLUMN statements against `libsql://brixsportv2-brixsports`. All succeeded. `competition_sport_settings`: +7 columns. `matches`: +3 override columns. Script deleted.
+- **Admin UI — `src/app/admin/competitions/page.tsx`:**
+  - `playersPerSide` raw number input replaced with 3-button selector: Standard (11) / 5-aside / Custom (shows number input). State: `playersOption`, `playersCustom`. Edit mode derives correct option from loaded value via `derivePlayersOption()`.
+  - Rolling subs (`allowSubbedOutReentry`) ON now hides `maxSubstitutions` input + Unlimited checkbox entirely.
+  - Edit modal now fetches existing match settings from `GET /api/competitions/[id]/match-settings` via `handleEditClick` before opening — starts from real saved values, not defaults.
+- **BUG-026 fix (`next.config.ts`, `public/sw-user.js`, `public/sw-admin.js`):**
+  - `next.config.ts`: added `source: '/sw:path*.js'` with `Cache-Control: no-store, max-age=0`.
+  - `sw-user.js` + `sw-admin.js`: version bumped `v1 → v2`, document bypass added at top of fetch handler (HTML pages always network-only).
+  - `sw.js`: push-only, no caching — confirmed no changes needed.
+- **Backlog:** BACKLOG-057 (tab rename), BACKLOG-058 (logger offline queue — CRITICAL), BACKLOG-059 (SW scope audit), BACKLOG-060 (SW architecture cleanup) filed.
+- **RUNLOG.md:** Staging drop + prod migration logged.
+- **TEST_CHECKLIST.md:** BUG-026 moved from Known Broken to fixed. BACKLOG-044 Phase A and PWA test items added.
+
+**Bugs encountered:**
+
+- `import 'dotenv/config'` loads `.env` not `.env.local` — URL_INVALID crash at libsql client. Fixed with `config({ path: '.env.local' })`. Saved to memory (`feedback_dotenv_local.md`). Also documented: `.env.local` = staging, `.env.production` = prod.
+- Staging `match_duration` column was snake_case (`match_duration`) but schema called it `matchDuration` — drop script initially used wrong name. Fixed by running pragma first to inspect actual column names.
+- `CompetitionModal` linter applied `matchDuration`/`extraTimeDuration` removal mid-session before the Edit tool ran — caused "string not found" error on second pass. Resolved by re-reading the file.
+
+**Deferred:**
+
+- `match_duration` (original pre-Phase-A column) still present on prod — was not in scope to drop this session.
+- BACKLOG-044 Phase B (logger integration — DB-driven sub counter, halfDuration timer, eventValidation.ts).
+- BACKLOG-059 SW scope audit (must come before Phase B logger work).
+
+**Next session:** BACKLOG-059 — SW scope conflict audit (layout.tsx registration check, sw.js retirement decision). Then BACKLOG-044 Phase B.
+
+---
+
 ### Session 18 — 2026-06-15
 
 **Focus:** Backlog verification sweep and BUG-026 root cause update.

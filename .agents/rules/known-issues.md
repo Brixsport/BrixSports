@@ -87,6 +87,12 @@ activation: always_on
 
 2026-06-15 — Spec said `status !== 'archived'` but competitions schema uses `isArchived` boolean — filtering by `status === 'archived'` would always return false since that's not how archiving is modeled. Always read the schema before implementing a filter. The column name in the spec was an abstraction, not the actual DB column name.
 
+2026-06-16 — `import 'dotenv/config'` does not load `.env.local` — loads `.env` only; `.env.local` is a Next.js convention, not a dotenv default. `process.env.*` returns `undefined` silently, causing a URL_INVALID crash at the libsql client. Always use `import { config } from 'dotenv'; config({ path: '.env.local' })` in dev scripts. `.env.local` = staging, `.env.production` = prod.
+
+2026-06-16 — Dropped column name was snake_case in DB but camelCase in schema.ts — `match_duration` in the live DB, `matchDuration` in schema.ts. `ALTER TABLE DROP COLUMN matchDuration` returned SQL_INPUT_ERROR (no such column). Always run `PRAGMA table_info('table_name')` first to confirm exact column names before any DROP or ALTER.
+
+2026-06-16 — SW serves stale HTML with old JS chunk hashes after deploy (BUG-026) — dynamic cache stored HTML pages indefinitely; after deploy, old HTML references chunk filenames that no longer exist on CDN → blank page or broken app on direct URL visit. Fix: HTML documents must never be cached by SW. Add `if (request.destination === 'document') { event.respondWith(fetch(request)...); return; }` at top of every SW fetch handler. Also add `Cache-Control: no-store` to SW files themselves so CDN never caches the SW.
+
 ## Anti-Patterns for This Codebase
 - Middleware matcher and internal logic check do not match.
 - try/catch without finally in any DB operation.
