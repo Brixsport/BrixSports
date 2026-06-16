@@ -425,6 +425,32 @@ Source code changes only this session. DB changes were applied in Session 15 (se
 
 ---
 
+### dev/query-bells-no-college.mjs (retained in dev/)
+- **Purpose:** Diagnostic read — identify Bells BUSA-league players with no college team affiliation
+- **Target:** STAGING (`brixsportsv2-staging`, `.env.local`) — read-only
+- **Logic:** Find all teams with `university = 'Bells University of Technology'` excluding the 4 college teams (`College of%`). Then return all players affiliated with those BUSA-league teams who have no affiliation with any of the 4 college team IDs.
+- **Result:** 22 Bells BUSA-league teams found. **110 players** have no college affiliation.
+
+  | Team | Count |
+  |------|-------|
+  | Hammers | 18 |
+  | Rim Reapers | 13 |
+  | Siberia | 17 |
+  | Storm | 16 |
+  | TBK | 11 |
+  | Titans | 11 |
+  | Vikings | 14 |
+  | Kings FC | 2 |
+  | Pirates FC | 7 |
+  | (others — 0 on staging) | — |
+
+  Full player list (player_id | name | team | jersey):
+  `8a1670b4…|Ahima|Hammers|16`, `19983528…|Charles|Hammers|14`, `6514e137…|Charles (400L)|Hammers|78`, `1649e892…|Collins (Eberechi)|Hammers|2`, `40f8b853…|Fuad|Hammers|4`, `0e7240cc…|Gundi|Hammers|7`, `73dcf9a4…|Ike|Hammers|1`, `cbf4241e…|Lazzy (woods)|Hammers|77`, `61777abf…|OBA|Hammers|85`, `b0fc2b78…|Otti|Hammers|6`, `62f597ce…|Peter|Hammers|96`, `a7a0900f…|Sancho|Hammers|8`, `ea57cca8…|Seyi|Hammers|76`, `7da1267c…|Sky (ATk)|Hammers|17`, `f50e5eb2…|Spectrum|Hammers|10`, `1ee6d046…|Speedy|Hammers|11`, `6d0d67bc…|Stacey|Hammers|22`, `e65f3039…|Timi|Hammers|5`, `player-1767972271332…|Abdulazeez Jolaoye|Kings FC|20`, `player-1767972271817…|Ola-praise Abadoni|Kings FC|88`, `player-1767973516655…|Blacko|Pirates FC|60`, `busa-pirates-player-4|Courage Alegbe|Pirates FC|4`, `busa-pirates-player-2|Daniel Ezekwe|Pirates FC|2`, `busa-pirates-player-24|Khalid Adeboye|Pirates FC|24`, `player-1767971391197…|Malcom|Pirates FC|50`, `busa-pirates-player-19|Netochukwu Mba|Pirates FC|19`, `busa-pirates-player-1|Tomipe Oshi Bodu|Pirates FC|1`, `zqdgloSq…|CYRIL|Rim Reapers|12`, `zdkZd4Lg…|JOHN|Rim Reapers|50`, `4GSiChHs…|MARK|Rim Reapers|3`, `FYoN6GSL…|PAUL|Rim Reapers|14`, `X-nVJcXw…|ZAZA|Rim Reapers|6`, `0YixHHv4…|abdurrahman|Rim Reapers|0`, `oqoJV6Pj…|becky|Rim Reapers|24`, `nxs2DmVj…|damilare|Rim Reapers|9`, `F7DwPfnX…|dekunle|Rim Reapers|77`, `hPvgRXBO…|great|Rim Reapers|22`, `r-GRRz8I…|joseph|Rim Reapers|23`, `vr76h3RU…|leo|Rim Reapers|7`, `vLRWQkAE…|mazi|Rim Reapers|1`, `gSLGBDLi…|nathaniel|Rim Reapers|8`, `vb3dvALn…|AISHA|Siberia|12`, `1jjhvT4z…|BOBBY|Siberia|2`, `FAbUhBii…|BOSCO|Siberia|14`, `bdzYqbDO…|DC AIRWAY|Siberia|18`, `_CRC995n…|ERAH|Siberia|1`, `uPGu5PWO…|ERAH JR|Siberia|13`, `w7DvEoaa…|Flourish|Siberia|9`, `wt7u32zw…|JOSEPH|Siberia|11`, `ozsMYr5d…|Juba|Siberia|4`, `k-5lN92H…|LEO|Siberia|90`, `Honp_mvw…|Melody|Siberia|5`, `NssQR_4F…|RATHODE|Siberia|15`, `4hMYnlcN…|REHAN|Siberia|6`, `kREfbf7C…|RIRI|Siberia|8`, `047rkkX2…|SAMMY|Siberia|0`, `jBmn2ZFE…|STORMZY|Siberia|10`, `yQ91lM-e…|Uzomba|Siberia|7`, `zdc4c5li…|ALEX|Storm|11`, `3180cIoh…|CAMPBELL|Storm|9`, `l80urSGC…|CLEOPATRA|Storm|12`, `SVuGZdrB…|DANIEL|Storm|33`, `WkhHN7Bo…|DAVEREX|Storm|14`, `6A9ZehNP…|EMEKE|Storm|8`, `bKG4XfdR…|ERIN|Storm|6`, `uw_LfW0O…|FRED|Storm|4`, `uoQWh03x…|GBENGA|Storm|27`, `DRSlwyUm…|JABBAR|Storm|11`, `zzyrKo8t…|JORDAN|Storm|24`, `kEo85MZn…|Jaba|Storm|13`, `-zlcLnIu…|LUKE|Storm|21`, `j2GX36-c…|MOSES|Storm|15`, `4rm-fJoP…|OLA|Storm|5`, `ZS4ba_U1…|PLAYER17|Storm|17`, `d1mGQmmC…|DARA|TBK|24`, `-SESd9Ji…|FRANK|TBK|14`, `Up-j9fdP…|INI|TBK|25`, `p70CX0KJ…|IYANU|TBK|67`, `26chM5DL…|KOSI|TBK|3`, `dkwaBucS…|OSHAI|TBK|6`, `6Dy8Q0pK…|POSI|TBK|9`, `1E0VD5Lf…|RAYMOND|TBK|20`, `i7VBmo4R…|RICHARD|TBK|13`, `iyOhJ7CV…|RUTH|TBK|7`, `EIEBH4Uk…|SALIM|TBK|1`, `Ib-uvLcX…|Ade|Titans|5`, `mlalrGqB…|DMLA|Titans|20`, `JLEcwMtk…|Donald|Titans|9`, `tX0zxQTa…|Ebuka|Titans|30`, `56JdXXHr…|Fatiu|Titans|12`, `h6dKDAUb…|Great Man|Titans|22`, `YHiM_sg0…|Hines|Titans|2`, `rgq56UL8…|Koredolus|Titans|3`, `D7rYUyIh…|M.E.A.C|Titans|0`, `3T-XeXEc…|Miracle|Titans|23`, `pHkBCHcO…|agee14|Titans|14`, `38ka6Nb4…|DAVID|Vikings|1`, `PAzrC3xr…|ERIC|Vikings|9`, `0odlBakG…|HIBACHI|Vikings|11`, `17BKPHCh…|JEHU|Vikings|13`, `C4l2KYE9…|KAMKID|Vikings|10`, `TKIPfsct…|LIGHT|Vikings|74`, `ijguIz6o…|LUMI|Vikings|17`, `xMzOrL5R…|OJAY|Vikings|0`, `iqt9ZijA…|PLAYER14|Vikings|14`, `c8GH6YDC…|REX|Vikings|15`, `DWRrxdMr…|SARAH|Vikings|3`, `54ovWpku…|THOMAS|Vikings|44`, `HzIVk9iR…|WILTON|Vikings|16`, `LkeRna_s…|ZUBBY|Vikings|12`
+
+- **No writes.** Next step: assign each player to the correct college team row via affiliation insert script (to be built next session).
+
+---
+
 ## Outstanding / Pending Scripts
 
 | Script (not yet run) | Purpose | Blocked by |

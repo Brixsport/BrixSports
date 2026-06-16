@@ -11,6 +11,45 @@
 
 ## Sessions
 
+### Session 22 — 2026-06-16
+
+**Focus:** BUG-032 null playerId gate on POST /api/events. Housekeeping: RUNLOG merge, BACKLOG cleanup, data investigation (joseph/leo players, Bells BUSA-league college gap).
+
+**Built:**
+
+- **`src/app/api/events/route.ts` — BUG-032 fix:**
+  - Added `PLAYER_REQUIRED_TYPES` guard block between substitution validation and `newEvent` object creation. Rejects POST bodies where `playerId` is absent for Goal, Penalty, Own Goal, Yellow Card, Red Card, Assist, Save. Returns `400 { error: "Event type 'X' requires a playerId" }`.
+  - Normalization logic mirrors `RatingCalculator.normalizeType()` — `type.toLowerCase().replace(/[\s_-]+/g, '')` — so all casing variants of each type hit the same check.
+  - Removed unused `desc` import from `drizzle-orm`.
+  - Renamed local `normalizedType` → `normalizedEventType` to avoid TS2451 collision with the existing `normalizedType` const in the score recalculation block at line ~309.
+  - tsc: zero new errors. Pre-existing errors in other files unchanged.
+  - Commit: `7b445e5`
+
+**Data investigations (read-only, staging):**
+
+- `dev/query-joseph-leo-affiliations.mjs` — confirmed 4 distinct players (JOSEPH/LEO on Siberia, joseph/leo on Rim Reapers). No duplicate rows. Filed BACKLOG-065 as suspicious — pending manual verification against physical records.
+- `dev/query-bells-no-college.mjs` — identified 110 Bells BUSA-league players across 22 teams with no college affiliation. Full list in RUNLOG Session 22.
+
+**Housekeeping:**
+
+- `dev/RUNLOG.md` (stale secondary) merged into `.agents/dev/RUNLOG.md` (canonical) and deleted. Unique entry rescued: Session 13 `query-col-teams.mjs`.
+- `BACKLOG.md` Bugs (Open) section cleaned: removed duplicate BUG-026/030/031 entries; resolved entries moved to Bugs (Resolved) section.
+- BACKLOG-065 filed (suspicious players) and BACKLOG.md updated.
+
+**Bugs encountered:**
+
+- `normalizedType` TS2451 redeclaration — new const in the player guard block collided with existing `normalizedType` at line ~309 in the same function scope. Renamed to `normalizedEventType`.
+
+**Deferred:**
+
+- 39 existing null-player event rows on staging + prod — not touched. Require separate audit before any backfill.
+- 110 Bells BUSA-league players with no college affiliation — identified this session, resolution deferred to next session.
+- BACKLOG-065 — joseph/leo player identity pending physical record verification.
+
+**Next session:** Resolve college affiliations for the 110 identified Bells BUSA-league players — assign each player to their correct college team row. Then BACKLOG-061 step 3 (TopScorers/Assists/Discipline in standings page).
+
+---
+
 ### Session 19 — 2026-06-16
 
 **Focus:** BACKLOG-044 Phase A schema cleanup, prod DB migration, UI improvements, BUG-026 hotfix.
