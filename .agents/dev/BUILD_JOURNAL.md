@@ -873,6 +873,55 @@
 
 ---
 
+### Session 21 — 2026-06-16
+
+**Focus:** BACKLOG-062 (player modal dropdowns) → Prod DB normalisation → Animashun duplicate cleanup → Bells stub team cleanup → Full DB integrity audit.
+
+**Built:**
+
+- **BACKLOG-062 — Player modal select dropdowns (`src/app/admin/players/page.tsx`, commit `f0070e0`):**
+  - Position (line ~621): free-text `<input>` → grouped `<select>` with Football (GK/CB/LB/RB/LWB/RWB/CDM/CM/CAM/LM/RM/LW/RW/CF/ST/SS) and Basketball (PG/SG/SF/PF/C/G/F) `<optgroup>` sections.
+  - University (line ~661): free-text `<input>` → `<select>` locked to `Bells University of Technology` + `Other` + empty.
+  - College (line ~671): free-text `<input>` → `<select>` locked to COLNAS / COLENG / COLMANS / COLENVS + empty. Department field (line 717) confirmed untouched.
+
+- **Prod college/university normalisation (RUNLOG logged):**
+  - `dev/fix-player-college-university-prod.mjs` run against prod. Results matched staging exactly: `ColEng → COLENG` (2), `Colmans → COLMANS` (1), `'' → NULL` (3), university normalised (178). Post-verify: 5 college values canonical, single university value. Script deleted.
+
+- **Animashun duplicate delete (RUNLOG logged):**
+  - `dev/delete-animashun-stub.mjs` run against staging then prod. Deleted 1 `player_team_affiliations` row + 1 `players` row for `sQVPtcWxrN3VBeGvL88_O` ("Animashun") on both DBs. Pre-flight confirmed 0 events, 0 stats. Post-verify: exactly 1 Animashun row remains (`Animashun Oluwanifemi`, `player-1767972615670-yet6lrue1`). Scripts deleted.
+
+- **Bells stub team cleanup (RUNLOG logged):**
+  - `dev/delete-bells-stub-teams.mjs` run against staging then prod. Deleted 10 team rows: `bells-uni-id` ("Bells University") + 9 "Bells University of Technology [Sport] (M/F)" variants. Pre-flight: 0 affiliations, 0 matches. FK blocker found and resolved: `users.favorite_team_id` — 2 accounts had stub teams as favourite (`temitopeyr@gmail.com`, `ramotaadenike67@gmail.com`), nulled before delete. Post-verify: exactly 4 Bells-related teams remain (4 college teams, correct player counts). Scripts deleted.
+
+- **Full DB integrity audit (`dev/audit-player-team-integrity.mjs`, read-only):**
+  - Ran against staging and prod — both identical.
+  - Results: college ✅, university ✅, affiliations orphans ✅, match event orphans 🔴 (39 null player_id — BUG-032), BUSA FC stubs flagged (BACKLOG-063).
+
+**Bugs encountered:**
+
+- `users.favorite_team_id` FK constraint blocked team deletes — not caught by affiliation/matches pre-flight because table is `users`, not `user_profiles` (checked schema.ts for the right column name). Fixed by running PRAGMA foreign_key_list on all tables to find all FK children, adding `users.favorite_team_id` null step to the delete script. **Saved to known-issues.**
+
+**Filed:**
+
+- **BUG-032** — 39 `match_events` rows with `player_id = NULL` on both staging and prod. No writes — investigation only. Event IDs preserved in backlog.
+- **BACKLOG-063** — 12 BUSA FC stub teams with zero affiliations. Awaiting decision on which are active vs dead.
+- **BACKLOG-064** — `joseph` × 2 and `leo` × 2 exact-name collisions (distinct players on different basketball clubs). Need disambiguation via name rename.
+
+**Resolved:** BACKLOG-062 (player modal dropdowns).
+
+**Deferred:**
+
+- BACKLOG-063 decision (which BUSA FC stubs to delete) — awaiting Richard's confirmation on active clubs
+- BACKLOG-064 name disambiguation (`joseph (RR)` / `joseph (SIB)` etc.)
+- BUG-032 root cause investigation (null player_id events) — 39 rows, no writes until source understood
+- BACKLOG-061 step 3 (wire TopScorers/Assists/Discipline/Rules fetches in standings/page.tsx)
+- BACKLOG-044 Phase B (logger integration)
+- BACKLOG-058 (logger offline queue — CRITICAL)
+
+**Next session:** BACKLOG-061 step 3 — wire TopScorers (`GET /api/competitions/[id]/stats?type=scorers`), Assists (`type=assists`), and Discipline (`type=discipline`) fetches in `src/app/competitions/[id]/standings/page.tsx`. All 3 APIs are built and returning data. UI shells exist — just need `useEffect` fetches wired in.
+
+---
+
 ### Session 3 — 2026-06-04
 
 **Focus:** Refactor Competition admin forms and setup backlog architecture.
