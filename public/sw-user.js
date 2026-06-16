@@ -3,7 +3,7 @@
  * Handles caching, offline support, and push notifications for users
  */
 
-const CACHE_VERSION = 'brixsport-user-v1';
+const CACHE_VERSION = 'brixsport-user-v2';
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const DYNAMIC_CACHE = `${CACHE_VERSION}-dynamic`;
 const IMAGE_CACHE = `${CACHE_VERSION}-images`;
@@ -74,6 +74,15 @@ self.addEventListener('fetch', (event) => {
 
     // Skip unsupported URL schemes (chrome-extension, etc.)
     if (!url.protocol.startsWith('http')) {
+        return;
+    }
+
+    // HTML documents: always network-first, never cache
+    // Stale HTML after a deploy causes missing JS chunk errors (BUG-026)
+    if (request.destination === 'document') {
+        event.respondWith(
+            fetch(request).catch(() => caches.match('/offline'))
+        );
         return;
     }
 
