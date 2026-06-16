@@ -9,6 +9,12 @@ export function usePWA(swPath: string, scope?: string, appType: 'user' | 'admin'
     const [error, setError] = useState<Error | null>(null);
 
     useEffect(() => {
+        // Don't register user SW on admin/logger paths — sw-admin.js owns those
+        if (swPath.includes('sw-user') &&
+            (window.location.pathname.startsWith('/admin') ||
+             window.location.pathname.startsWith('/logger'))) {
+            return;
+        }
         registerServiceWorker(swPath, { scope })
             .then((reg) => {
                 if (reg) {

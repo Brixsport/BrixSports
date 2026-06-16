@@ -37,7 +37,11 @@ class PushNotificationService {
             console.log('[PushService] Existing SW registrations:', registrations.length);
             
             // Register service worker
-            this.registration = await navigator.serviceWorker.register('/sw-user.js');
+            this.registration = await navigator.serviceWorker.getRegistration('/') ?? null;
+            if (!this.registration) {
+                console.warn('[PushService] No active SW registration found — PWAProvider must register first');
+                return false;
+            }
             console.log('[PushService] Service Worker registered:', this.registration.scope);
             
             // Wait for the service worker to be active
