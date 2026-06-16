@@ -273,6 +273,17 @@ Applied directly via SQL (not drizzle-kit push — blocked by pre-existing `orga
 
 ---
 
+## Session 13 — 2026-06-15
+
+### dev/query-col-teams.mjs (deleted after run)
+- **Purpose:** Diagnostic read — identify college team IDs and short_name values on staging
+- **Target:** STAGING (`brixsportsv2-staging`) — read-only
+- **Query:** `SELECT id, name, short_name, sport FROM teams WHERE name LIKE '%col%' OR short_name LIKE '%col%'`
+- **Result:** 4 rows — CENG (College of Engineering), CENVS (College of Environmental Sciences), CMANS (College of Management Sciences), CNAS (College of Natural & Applied Sciences). All Football. `short_name` values are `CENG`/`CENVS`/`CMANS`/`CNAS` — match came from full name not short_name.
+- **Notes:** Confirmed `shortName` abbreviation scheme differs from BUSA-style codes (`COLNAS`/`COLENG`). No writes. Script deleted after run.
+
+---
+
 ## Session 14 — 2026-06-15
 
 Source code changes only — no database scripts run.
@@ -388,6 +399,29 @@ Source code changes only this session. DB changes were applied in Session 15 (se
 - **Deleted:** 10 team rows on both staging and prod
 - **Post-verify:** Exactly 4 Bells-related teams remain on both DBs: College of Engineering (34 players), College of Environmental Sciences (6), College of Management Sciences (7), College of Natural & Applied Sciences (21)
 - Scripts deleted after confirmed
+
+---
+
+## Session 22 — 2026-06-16
+
+### dev/query-joseph-leo-affiliations.mjs (retained in dev/)
+- **Purpose:** Diagnostic read — investigate player affiliation flags for players named 'joseph' and 'leo' (suspected transfer dual-row candidates)
+- **Target:** STAGING (`brixsportsv2-staging`, `.env.local`) — read-only
+- **Query:** `SELECT p.id, p.name, pta.team_id, t.name as team_name, pta.is_primary, pta.is_active, pta.jersey_number, pta.created_at FROM players p JOIN player_team_affiliations pta ON pta.player_id = p.id JOIN teams t ON t.id = pta.team_id WHERE LOWER(TRIM(p.name)) IN ('joseph', 'leo') ORDER BY p.name, pta.created_at DESC`
+- **Result:** 4 rows — each player has exactly 1 affiliation (no transfer rows). `JOSEPH` (Siberia, jersey 11, `wt7u32zw…`), `LEO` (Siberia, jersey 90, `k-5lN92H…`), `joseph` (Rim Reapers, jersey 23, `r-GRRz8I…`), `leo` (Rim Reapers, jersey 7, `vr76h3RU…`). `JOSEPH`/Siberia has `created_at: null`.
+- **No writes.** Filed as BACKLOG-065 (Suspicious — pending manual verification against physical registration records).
+
+---
+
+### src/app/api/events/route.ts — BUG-032 null playerId gate (code change, no DB)
+- **Purpose:** Block future `player_id = NULL` insertions for stat-affecting event types
+- **Target:** Source code only — no DB writes
+- **Changes:**
+  - Added `PLAYER_REQUIRED_TYPES` guard block after substitution validation in `POST /api/events` — rejects requests where `playerId` is absent for Goal, Penalty, Own Goal, Yellow Card, Red Card, Assist, Save event types. Returns 400 with descriptive error.
+  - Removed unused `desc` import from `drizzle-orm`
+  - Renamed local `normalizedType` to `normalizedEventType` to avoid collision with the existing `normalizedType` const in the score recalculation block below it
+- **tsc:** Zero new errors. Pre-existing errors in other files unchanged.
+- **Note:** 39 existing null-player event rows on staging + prod are NOT touched. Separate audit required before any backfill. Resolves BUG-032 (forward gate only).
 
 ---
 

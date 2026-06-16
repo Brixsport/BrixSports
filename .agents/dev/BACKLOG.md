@@ -36,57 +36,38 @@
 
 ## Bugs (Open)
 
+- **BACKLOG-065** _(LOW — Data Integrity — Suspicious)_: Four players with duplicate first names found across two teams — identity not confirmed. Query `WHERE LOWER(TRIM(p.name)) IN ('joseph', 'leo')` returned 4 distinct `player_id` rows: `JOSEPH` (Siberia, jersey 11, `wt7u32zw…`), `LEO` (Siberia, jersey 90, `k-5lN92H…`), `joseph` (Rim Reapers, jersey 23, `r-GRRz8I…`), `leo` (Rim Reapers, jersey 7, `vr76h3RU…`). May be legitimate separate players or duplicate registrations with name casing variance. `JOSEPH`/Siberia row has `created_at: null` (further data quality flag). **Action:** Verify against physical registration records. If duplicates confirmed, merge player rows and re-point any `match_events` rows to the canonical ID before deleting the duplicate. Filed: 2026-06-16.
+
 - **BUG-011**: `playerStats` data corruption — 718 goals vs 133 appearances (~5.4 goals/appearance). Root cause identified: duplicate backfill runs with differing `startTime` formats bypass the duplicate match check. No writes made. Needs dedup audit of all `matchEvents` before any data correction. Do not run any backfill until resolved.
 
 - **AUDIT-002 (remaining)**: `POST /api/matches` — Missing comprehensive Zod validation for match creation payload. Partial fix (null coerce on `competitionId`) applied in Session 2. Full schema validation still absent.
 
-- **BUG-026** _(MEDIUM — PWA/Cache)_: SW serves stale JS chunk URLs after a new deploy → unstyled page on direct URL visit (hard nav). Root cause: service worker caches asset URLs from the previous deploy; after a new build the chunk hashes change but the SW still serves the old (now-missing) URLs. Fix: document bypass + `no-store` headers on SW files shipped in Session 19. **Prod verification still open — TEST_CHECKLIST.md items unchecked.**
+- **BUG-026** _(MEDIUM — PWA/Cache)_: SW serves stale JS chunk URLs after a new deploy → unstyled page on direct URL visit (hard nav). Fix: document bypass + `no-store` headers on SW files shipped in Session 19. **Prod verification still open — TEST_CHECKLIST.md items unchecked.** Filed: 2026-06-08. Hotfix shipped: 2026-06-16.
 
-  Filed: 2026-06-08. Root cause clarified: 2026-06-15. Hotfix shipped: 2026-06-16.
-
-- ~~**BUG-030** _(LOW)_: `/competitions/[id]` base route returns 404.~~ RESOLVED 2026-06-16 — `src/app/competitions/[id]/page.tsx` created with server-side `redirect()` to `[id]/standings`. Commit `3be1731`.
-
-- ~~**BUG-031** _(LOW — Visual)_: `standings/page.tsx` renders raw teamLogo strings at 5 sites.~~ RESOLVED 2026-06-16 — All 5 sites (lines 395, 444, 561, 603, 642) replaced with `<TeamLogo>` component. Import added. Commit `bb0a1ed`.
-
-- ~~**BUG-015** _(CRITICAL)_: `src/app/api/matches/[id]/route.ts` PATCH handler — no `getAuthUser` check. Fixed: `getAuthUser(request)` added before body read. Admin passes through; logger role verified against `isLoggerAssigned(matchId, authUser.id)`. Returns 401/403. Resolved: 2026-06-08.~~
-
-- ~~**BUG-016** _(HIGH)_: `src/app/api/competitions/route.ts` POST handler — no `getAuthUser` check. Fixed: `getAuthUser(request)` + `role === 'admin'` added before body read. Resolved: 2026-06-08.~~
-
-- ~~**BUG-017** _(HIGH)_: Three debug/test routes with no auth gate deleted:
-  - `src/app/api/notifications/debug/route.ts` — DELETED
-  - `src/app/api/notifications/test/route.ts` — DELETED
-  - `src/app/api/email/test/route.ts` — DELETED
-    Note: `PushNotificationDebugger.tsx` still calls `/api/notifications/debug` and `/api/notifications/test` — will 404. Track as follow-up: remove those fetch calls from the component. Resolved: 2026-06-08.~~
-
-- ~~**BUG-018** _(MEDIUM — NDPR)_: `GET /api/matches/[id]` leaking `approvalStatus`, `managerNotes`, `loggerId`, `approvedBy`, `approvedAt` in public response. Fixed: explicit destructure excludes all banned fields before response is returned. Resolved: 2026-06-08.~~
-
-- ~~**BUG-019** _(MEDIUM)_: `GET /api/admin/infrastructure` and `GET /api/analytics/system` — middleware-only auth. Fixed: `getAuthUser(request)` + `role === 'admin'` added to both handlers. Resolved: 2026-06-08.~~
-
-- ~~**BUG-020** _(MEDIUM — Critical Flow C)_: `/live` page fetched `/api/matches` once on mount only. Fixed: polling interval already existed at 30s — changed to 15s. Interval is cleared on unmount. Stopgap until WebSocket subscription lands on the public viewer. Resolved: 2026-06-08.~~
-
-- ~~**BUG-021** _(MEDIUM)_: `POST /api/notifications/subscribe` — auth gate missing. Fixed in prior session, confirmed present on code review 2026-06-15. Resolved: 2026-06-15.~~
-
-- ~~**BUG-022** _(MEDIUM — Performance)_: Unbounded queries missing `.limit()` on competitions + events routes. Fixed in prior session, confirmed present on code review 2026-06-15. Resolved: 2026-06-15.~~
-
-- ~~**BUG-029** _(MEDIUM — NDPR)_: `GET /api/players/[id]` is unauthenticated and returns `player.email` in the public response. Email should only be returned when caller is admin. Fix: add `getAuthUser` check, strip `email` from response if `role !== 'admin'`. Filed: 2026-06-15.~~ RESOLVED 2026-06-15 — `getAuthUser(request).catch(() => null)` added. Email conditionally returned for admin callers only.
-
-- ~~**BUG-023** _(LOW)_: `src/db/schema-nesa-registrations.ts` references `players` and `organizations` tables without importing them. Will crash if the table is ever migrated or queried. Fix: add missing imports or delete the schema file if NESA registration is backscoped. Filed: 2026-06-08. Source: SYSTEM_AUDIT.md §9 #11.~~ RESOLVED 2026-06-15 — file deleted. Tables never existed in any live DB. Zero imports anywhere in codebase.
-
-- ~~**BUG-024** _(LOW)_: Duplicate match detail routes — `/match/[id]` (`src/app/match/[id]/page.tsx`) and `/matches/[id]` (`src/app/matches/[id]/page.tsx`) both exist. One is likely legacy. Audit to confirm which is canonical (check all internal links and nav references), delete the other. Filed: 2026-06-08. Source: SYSTEM_AUDIT.md §2.~~ RESOLVED 2026-06-15 — false alarm. `/match/[id]` route never existed. All internal navigation uses `/matches/[id]` (canonical). No fix needed.
-
-- **BUG-026** _(MEDIUM — PWA/Cache)_: SW serves stale JS chunk URLs after a new deploy → unstyled page on direct URL visit (hard nav). Root cause: service worker caches asset URLs from the previous deploy; after a new build the chunk hashes change but the SW still serves the old (now-missing) URLs. Fix: document bypass + `no-store` headers on SW files shipped in Session 19. **Prod verification still open — TEST_CHECKLIST.md items unchecked.**
-
-  Filed: 2026-06-08. Root cause clarified: 2026-06-15. Hotfix shipped: 2026-06-16.
-
-- ~~**BUG-030** _(LOW)_: `/competitions/[id]` base route returns 404.~~ RESOLVED 2026-06-16 — `src/app/competitions/[id]/page.tsx` created with server-side `redirect()` to `[id]/standings`. Commit `3be1731`.
-
-- ~~**BUG-031** _(LOW — Visual)_: `standings/page.tsx` renders raw teamLogo strings at 5 sites.~~ RESOLVED 2026-06-16 — All 5 sites (lines 395, 444, 561, 603, 642) replaced with `<TeamLogo>` component. Import added. Commit `bb0a1ed`.
-
-- **BUG-032** _(MEDIUM — Data Integrity)_: 39 `match_events` rows have `player_id = NULL` on both staging and prod. Events logged without a player reference — goals, cards, or substitutions that were never linked to a player. They count toward match scores and team stats but cannot be attributed to any player, corrupting leaderboards and `playerStats`. Root cause unknown — likely events entered via the logger with no player selected, or backfill rows where CSV reconciliation failed to match a player. **No writes until root cause is confirmed. Do not include these events in any backfill run.** Relates to BUG-011 (playerStats corruption).
+- ~~**BUG-032**~~ _(MEDIUM — Data Integrity)_: 39 `match_events` rows have `player_id = NULL` on both staging and prod. **Forward submissions now blocked** — `POST /api/events` rejects null `playerId` for all stat-affecting event types (Goal, Penalty, Own Goal, Yellow Card, Red Card, Assist, Save). The 39 existing null-player rows are not touched — they require a separate audit before any backfill. Do not include them in any backfill run. Relates to BUG-011. RESOLVED (gate only) 2026-06-16.
 
   Event IDs (identical on staging and prod): `PgCZ27rPw8puIrqGrn5ET`, `MOW5LnM7BnZPceo1EfNFG`, `0nRXEcu-47yWHnhzxnslR`, `mI8xLOJ9I9b9iYNj-4kJz`, `0V7jfxuB5Xx_QAKiQabJ2`, `VIBs_9slwaVOPDq2bVtoY`, `TUko0OhLCE3xZJL7fFjXz`, `Mky4ZzXeDsii0g0U6x4Lb`, `beDfnn98Kby7MHGqSu4Ih`, `hG-GiJofok53M9n1Dhid8`, `YCWEpHea96oNuwj0D7-SI`, `U9z2I58lOKa9knr02mZVz`, `yxeGjM1dncTLNFbpUVDGe`, `m_S_62bgcUyoxRow7dHZj`, `fRNnOokCdT-4PakPIkdyV`, `fQIeiSok9oJgiI-vyWepw`, `4tSgbmxI3Ck0ef66pkaNb`, `n7ZOn6tJdIz3Bh43Km8R2`, `4S7qyVWm7GtakOizaQWjc`, `oFk3adEagm1T7UZzjXPr5`, `Gd4Fi7XeuoDHSD-IHJjUf`, `3ETpELZx3t006Z-Mohbqx`, `-tN5u2EIsOJ8VsuC4_2G7`, `yAyzsTqkwiQlh5GfjKDBV`, `pDqf4GJggQpxvcP_gVnZW`, `5GG8B7NnXc3Z3fdHCxNIp`, `0hLgkDqfBHAbEpQY3sZLK`, `_PHNbJv4S4Ctq4Iq5lGYs`, `tF3EIAIj0L-X7rD4vt2lH`, `zNA4BBA1n-sE2saQODh82`, `S_vTbEW8q218pz5TgOuvF`, `2rSnM33hfnQ7FW3567CwV`, `7nhZ9HZaKziXUxfWpbKNL`, `95QMnbsU-kaskeVLahq-h`, `LmJmU-jFnFwXZAN_aIN2F`, `_PocAdTBo8G-Al-AysspK`, `tYruNu5Yr15Dlb2it4UkB`, `YNrvnIl5iPcT4y55ACdq7`, `0hYD6ESZNftfG7q2HTCL6`
 
   Filed: 2026-06-16.
+
+## Bugs (Resolved)
+
+- ~~**BUG-015**~~: PATCH `/api/matches/[id]` — no auth gate. Fixed: getAuthUser + admin/logger check. Resolved: 2026-06-08.
+- ~~**BUG-016**~~: POST `/api/competitions` — no auth gate. Fixed: getAuthUser + admin check. Resolved: 2026-06-08.
+- ~~**BUG-017**~~: Three debug/test routes with no auth gate deleted (`/api/notifications/debug`, `/api/notifications/test`, `/api/email/test`). Resolved: 2026-06-08.
+- ~~**BUG-018**~~: GET `/api/matches/[id]` leaking `approvalStatus`, `managerNotes`, `loggerId`, `approvedBy`, `approvedAt`. Fixed: explicit DTO destructure. Resolved: 2026-06-08.
+- ~~**BUG-019**~~: `/api/admin/infrastructure` + `/api/analytics/system` — middleware-only auth. Fixed: handler-level getAuthUser + admin check. Resolved: 2026-06-08.
+- ~~**BUG-020**~~: `/live` page no polling. Fixed: 30s → 15s polling interval, cleared on unmount. Resolved: 2026-06-08.
+- ~~**BUG-021**~~: POST `/api/notifications/subscribe` — no auth gate. Resolved: 2026-06-15.
+- ~~**BUG-022**~~: Unbounded queries on competitions + events routes. Fixed: `.limit()` added. Resolved: 2026-06-15.
+- ~~**BUG-023**~~: `schema-nesa-registrations.ts` — orphaned schema file with missing imports. Deleted. Resolved: 2026-06-15.
+- ~~**BUG-024**~~: Suspected duplicate `/match/[id]` route — false alarm, route never existed. Resolved: 2026-06-15.
+- ~~**BUG-025**~~: GET `/api/matches` exposed `loggerId` to public. Fixed: conditionally returned for admin only. Resolved: 2026-06-15.
+- ~~**BUG-027**~~: `/competitions` page sport filter hid `sport=null` competitions. Fixed: `'All'` tab as default. Resolved: 2026-06-15.
+- ~~**BUG-028**~~: Framer Motion `initial` prop hydration mismatch #418 on standings page. Fixed: `initial` removed, `<motion.tr>` replaced with `<tr>`. Resolved: 2026-06-15.
+- ~~**BUG-029**~~: GET `/api/players/[id]` returned `email` to unauthenticated callers. Fixed: `.catch(() => null)` pattern, email admin-only. Resolved: 2026-06-15.
+- ~~**BUG-030**~~: `/competitions/[id]` base route 404. Fixed: redirect to `[id]/standings`. Resolved: 2026-06-16.
+- ~~**BUG-031**~~: `standings/page.tsx` rendered raw teamLogo strings at 5 sites. Fixed: `<TeamLogo>` component. Resolved: 2026-06-16.
 
 ### ~~BACKLOG-036 — TeamLogo component migration (second pass)~~
 **Status:** COMPLETE — 2026-06-15
