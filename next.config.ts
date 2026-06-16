@@ -45,6 +45,14 @@ const nextConfig: NextConfig = {
         ],
       },
       {
+        // Service worker files must never be cached by CDN or browser
+        // Stale SW files prevent cache invalidation after deploys (BUG-026)
+        source: '/sw:path*.js',
+        headers: [
+          { key: 'Cache-Control', value: 'no-store, max-age=0' },
+        ],
+      },
+      {
         // Specific headers for llms.txt files
         source: '/llms:suffix*.txt',
         headers: [

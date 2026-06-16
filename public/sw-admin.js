@@ -3,7 +3,7 @@
  * Handles caching, offline support, and real-time sync for admin and logger
  */
 
-const CACHE_VERSION = 'brixsport-admin-v1';
+const CACHE_VERSION = 'brixsport-admin-v2';
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const DYNAMIC_CACHE = `${CACHE_VERSION}-dynamic`;
 const API_CACHE = `${CACHE_VERSION}-api`;
@@ -71,6 +71,15 @@ self.addEventListener('fetch', (event) => {
 
     // Skip non-GET requests for caching (but allow them to pass through)
     if (request.method !== 'GET') {
+        return;
+    }
+
+    // HTML documents: always network-first, never cache
+    // Stale HTML after a deploy causes missing JS chunk errors (BUG-026)
+    if (request.destination === 'document') {
+        event.respondWith(
+            fetch(request).catch(() => caches.match('/offline'))
+        );
         return;
     }
 
