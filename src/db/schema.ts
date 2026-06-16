@@ -268,7 +268,6 @@ export const competitionSportSettings = sqliteTable('competition_sport_settings'
     format: text('format'), // '5-aside' | '3x3' | '1v1' | 'singles' | 'doubles' | 'standard'
     playersPerSide: integer('players_per_side').notNull(),
     halfDuration: integer('half_duration'), // in minutes — null for non-timed sports
-    matchDuration: integer('match_duration'), // total in minutes — null for non-timed sports
     // For round/set based sports (Chess, Scrabble, Table Tennis)
     // e.g. {"format":"round-based","tracking":"score-per-game","rounds":3}
     // e.g. {"format":"set-based","bestOf":5,"allowDoubles":true}
@@ -277,8 +276,7 @@ export const competitionSportSettings = sqliteTable('competition_sport_settings'
     maxSubstitutions: integer('maxSubstitutions'), // null = unlimited
     allowSubbedOutReentry: integer('allowSubbedOutReentry', { mode: 'boolean' }).notNull().default(false),
     extraTimeEnabled: integer('extraTimeEnabled', { mode: 'boolean' }).notNull().default(false),
-    extraTimeDuration: integer('extraTimeDuration').notNull().default(15), // minutes per half of extra time
-    penaltiesEnabled: integer('penaltiesEnabled', { mode: 'boolean' }).notNull().default(false),
+penaltiesEnabled: integer('penaltiesEnabled', { mode: 'boolean' }).notNull().default(false),
     allowDraws: integer('allowDraws', { mode: 'boolean' }).notNull().default(true),
     pointsForWin: integer('pointsForWin').notNull().default(3),
     pointsForDraw: integer('pointsForDraw').notNull().default(1),

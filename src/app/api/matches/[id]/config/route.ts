@@ -8,12 +8,10 @@ const SPORT_DEFAULTS: Record<string, {
     maxSubstitutions: number | null;
     allowSubbedOutReentry: boolean;
     extraTimeEnabled: boolean;
-    extraTimeDuration: number;
     penaltiesEnabled: boolean;
     allowDraws: boolean;
     pointsForWin: number;
     pointsForDraw: number;
-    matchDuration: number;
     halfDuration: number;
     playersPerSide: number;
 }> = {
@@ -21,12 +19,10 @@ const SPORT_DEFAULTS: Record<string, {
         maxSubstitutions: 5,
         allowSubbedOutReentry: false,
         extraTimeEnabled: false,
-        extraTimeDuration: 15,
         penaltiesEnabled: false,
         allowDraws: true,
         pointsForWin: 3,
         pointsForDraw: 1,
-        matchDuration: 90,
         halfDuration: 45,
         playersPerSide: 11,
     },
@@ -34,12 +30,10 @@ const SPORT_DEFAULTS: Record<string, {
         maxSubstitutions: null,
         allowSubbedOutReentry: true,
         extraTimeEnabled: true,
-        extraTimeDuration: 5,
         penaltiesEnabled: false,
         allowDraws: false,
         pointsForWin: 2,
         pointsForDraw: 0,
-        matchDuration: 40,
         halfDuration: 10,
         playersPerSide: 5,
     },
@@ -77,14 +71,14 @@ export async function GET(
         const sportDefaults = SPORT_DEFAULTS[sport] ?? DEFAULT_FALLBACK;
 
         // Three-layer merge: match override → competition setting → sport default
+        const halfDuration = compSettings?.halfDuration ?? sportDefaults.halfDuration;
         const config = {
-            matchDuration: compSettings?.matchDuration ?? sportDefaults.matchDuration,
-            halfDuration: compSettings?.halfDuration ?? sportDefaults.halfDuration,
+            halfDuration,
+            matchDuration: halfDuration * 2,
             playersPerSide: compSettings?.playersPerSide ?? sportDefaults.playersPerSide,
             maxSubstitutions: compSettings?.maxSubstitutions ?? sportDefaults.maxSubstitutions,
             allowSubbedOutReentry: compSettings?.allowSubbedOutReentry ?? sportDefaults.allowSubbedOutReentry,
             extraTimeEnabled: match.extraTimeEnabledOverride ?? compSettings?.extraTimeEnabled ?? sportDefaults.extraTimeEnabled,
-            extraTimeDuration: compSettings?.extraTimeDuration ?? sportDefaults.extraTimeDuration,
             penaltiesEnabled: match.penaltiesEnabledOverride ?? compSettings?.penaltiesEnabled ?? sportDefaults.penaltiesEnabled,
             allowDraws: match.allowDrawsOverride ?? compSettings?.allowDraws ?? sportDefaults.allowDraws,
             pointsForWin: compSettings?.pointsForWin ?? sportDefaults.pointsForWin,
