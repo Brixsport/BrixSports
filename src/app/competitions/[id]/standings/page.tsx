@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { useLiveStandings } from '@/hooks/useLiveStandings';
+import { TeamLogo } from '@/lib/utils/team-logo';
 import { StandingsFilters, FilterOptions, SortOption } from '@/components/StandingsFilters';
 
 // Mock data - will be replaced with real API calls
@@ -392,7 +393,7 @@ function StandingsRow({
                 </td>
                 <td className="px-6 py-4">
                     <div className="flex items-center gap-3">
-                        <span className="text-2xl">{team.teamLogo}</span>
+                        <TeamLogo logo={team.teamLogo} name={team.teamName} size="md" />
                         <div>
                             <p className="text-sm font-black uppercase tracking-tight">{team.teamName}</p>
                             <p className="text-[10px] text-white/40 font-bold uppercase">{team.university}</p>
@@ -441,7 +442,7 @@ function StandingsMobileCard({ team, delay }: { team: any; delay: number }) {
             <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-3">
                     <span className="text-2xl font-display italic text-primary">{team.position}</span>
-                    <span className="text-2xl">{team.teamLogo}</span>
+                    <TeamLogo logo={team.teamLogo} name={team.teamName} size="md" />
                     <div>
                         <p className="text-sm font-black uppercase">{team.teamName}</p>
                         <p className="text-xs text-white/40">{team.university}</p>
@@ -558,7 +559,7 @@ function TopScorersTable({ players }: { players: any[] }) {
                             <span className={`text-2xl font-display italic ${idx < 3 ? 'text-primary' : 'text-white/40'}`}>
                                 {idx + 1}
                             </span>
-                            <span className="text-2xl">{player.teamLogo}</span>
+                            <TeamLogo logo={player.teamLogo} name={player.name} size="md" />
                             <div>
                                 <p className="text-sm font-black uppercase">{player.name}</p>
                                 <p className="text-xs text-white/60">{player.team}</p>
@@ -600,7 +601,7 @@ function TopAssistsTable({ players }: { players: any[] }) {
                             <span className={`text-2xl font-display italic ${idx < 3 ? 'text-primary' : 'text-white/40'}`}>
                                 {idx + 1}
                             </span>
-                            <span className="text-2xl">{player.teamLogo}</span>
+                            <TeamLogo logo={player.teamLogo} name={player.name} size="md" />
                             <div>
                                 <p className="text-sm font-black uppercase">{player.name}</p>
                                 <p className="text-xs text-white/60">{player.team}</p>
@@ -639,7 +640,7 @@ function DisciplinaryTable({ players }: { players: any[] }) {
                         className="flex items-center justify-between p-4 bg-white/5 border border-white/10 rounded-2xl"
                     >
                         <div className="flex items-center gap-4">
-                            <span className="text-2xl">{player.teamLogo}</span>
+                            <TeamLogo logo={player.teamLogo} name={player.name} size="md" />
                             <div>
                                 <p className="text-sm font-black uppercase">{player.name}</p>
                                 <p className="text-xs text-white/60">{player.team}</p>
