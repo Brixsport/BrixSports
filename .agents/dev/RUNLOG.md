@@ -350,6 +350,17 @@ Source code changes only this session. DB changes were applied in Session 15 (se
 
 ---
 
+## Session 20 — 2026-06-16
+
+### Staging — player college + university normalization
+2026-06-16 | `dev/fix-player-college-university.mjs` | STAGING (`libsql://brixsportsv2-staging-brixsports`) | SUCCESS | VERIFIED
+- **College fixes:** `ColEng` → `COLENG` (2 rows), `Colmans` → `COLMANS` (1 row), `''` → `NULL` (3 rows)
+- **University fixes:** 178 rows updated (`'Bells University'` and `'Bells University of Technolgy'` → `'Bells University of Technology'`)
+- **Post-verify:** college distribution = NULL(111), COLENG(34), COLENVS(6), COLMANS(7), COLNAS(21). Single distinct university value: `Bells University of Technology`
+- Script left in dev/ pending prod run after staging verification
+
+---
+
 ## Outstanding / Pending Scripts
 
 | Script (not yet run) | Purpose | Blocked by |

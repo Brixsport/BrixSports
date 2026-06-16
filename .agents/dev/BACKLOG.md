@@ -17,29 +17,36 @@
 - ~~**BUG-005 (remaining)**: `/api/teams` — `.limit(200)` added. `/api/loggers` — `.limit(200)` added. `/api/players` — `.limit(500)` added with comment (higher cap because route feeds in-memory search/filter across all players).~~
 - ~~**BUG-006**: `src/lib/utils/format-content.ts` — Added `escapeHtml()` helper. Applied to all user-supplied text before template string injection (headings, list items, blockquotes, paragraphs). Link handler in `formatInlineText` now validates URLs — only `http://` and `https://` permitted; all other schemes (`javascript:`, `data:` etc.) replaced with `#`. Closes stored XSS via `dangerouslySetInnerHTML` in news pages.~~
 - ~~**BUG-008**: `src/app/api/matches/[id]/assign-logger/route.ts` — Race condition fixed by moving check-then-insert into a Drizzle transaction. `assignedBy` now sourced from verified `authUser.id` (not client body). Missing auth gate added — endpoint now requires `role === 'admin'`.~~
+- ~~**BUG-013**: `src/app/api/players/bulk-register/route.ts` — `POST /api/players/bulk-register` had no `getAuthUser` check and no admin role verification. Fixed: `getAuthUser(request)` + `authUser.role !== 'admin'` check added at top of POST handler. Resolved: 2026-06-07.~~
+- ~~**BUG-014**: `src/app/admin/matches/page.tsx` — Match cards displayed raw team IDs for teams beyond the `/api/teams` `.limit(200)` cap. Fixed: `homeTeam`/`awayTeam` embedded from API response used directly; `getTeamName(id)` replaced with `getTeamDisplay(match, side)`. Resolved: 2026-06-07.~~
+- ~~**BUG-015** _(CRITICAL)_: `PATCH /api/matches/[id]` — no `getAuthUser` check. Fixed: auth + role check added. Resolved: 2026-06-08.~~
+- ~~**BUG-016** _(HIGH)_: `POST /api/competitions` — no `getAuthUser` check. Fixed: auth + admin role check added. Resolved: 2026-06-08.~~
+- ~~**BUG-017** _(HIGH)_: Three debug/test routes deleted — `/api/notifications/debug`, `/api/notifications/test`, `/api/email/test`. Resolved: 2026-06-08.~~
+- ~~**BUG-018** _(MEDIUM — NDPR)_: `GET /api/matches/[id]` leaking `approvalStatus`, `managerNotes`, `loggerId`, `approvedBy`, `approvedAt`. Fixed: explicit DTO destructure. Resolved: 2026-06-08.~~
+- ~~**BUG-019** _(MEDIUM)_: `GET /api/admin/infrastructure` and `GET /api/analytics/system` — middleware-only auth. Fixed: handler-level `getAuthUser` + admin check. Resolved: 2026-06-08.~~
+- ~~**BUG-020** _(MEDIUM — Critical Flow C)_: `/live` page polled only on mount. Fixed: polling interval 30s → 15s, cleared on unmount. Resolved: 2026-06-08.~~
+- ~~**BUG-021** _(MEDIUM)_: `POST /api/notifications/subscribe` — auth gate missing. Resolved: 2026-06-15 (confirmed on code review).~~
+- ~~**BUG-022** _(MEDIUM — Performance)_: Unbounded queries on competitions + events routes. Fixed: `.limit()` added. Resolved: 2026-06-15.~~
+- ~~**BUG-023** _(LOW)_: `schema-nesa-registrations.ts` — orphaned schema file deleted. Resolved: 2026-06-15.~~
+- ~~**BUG-024** _(LOW)_: Suspected duplicate match routes `/match/[id]` vs `/matches/[id]`. False alarm — only `/matches/[id]` ever existed. Resolved: 2026-06-15.~~
+- ~~**BUG-025** _(MEDIUM — NDPR)_: `GET /api/matches` exposed `loggerId` to public. Fixed: conditionally returned for admin only. Resolved: 2026-06-15.~~
+- ~~**BUG-027** _(MEDIUM)_: `/competitions` page sport filter hid `sport=null` competitions. Fixed: `'All'` tab added as default. Resolved: 2026-06-15.~~
+- ~~**BUG-028** _(MEDIUM)_: React hydration error #418 on standings page (Framer Motion `initial` prop). Fixed: `initial` removed from all motion elements; `<motion.tr>` replaced with `<tr>`. Resolved: 2026-06-15.~~
+- ~~**BUG-029** _(MEDIUM — NDPR)_: `GET /api/players/[id]` returned `email` to unauthenticated callers. Fixed: `.catch(() => null)` pattern on `getAuthUser`, email conditionally returned for admin only. Resolved: 2026-06-15.~~
 
 ## Bugs (Open)
 
-- ~~**BUG-013**: `src/app/api/players/bulk-register/route.ts` — `POST /api/players/bulk-register` has no `getAuthUser` check and no admin role verification. Fixed: `getAuthUser(request)` + `authUser.role !== 'admin'` check added at top of POST handler, before body is read. Returns 401. Matches BUG-001/002 pattern exactly.~~
+- **BUG-011**: `playerStats` data corruption — 718 goals vs 133 appearances (~5.4 goals/appearance). Root cause identified: duplicate backfill runs with differing `startTime` formats bypass the duplicate match check. No writes made. Needs dedup audit of all `matchEvents` before any data correction. Do not run any backfill until resolved.
 
-- ~~**BUG-014**: `src/app/admin/matches/page.tsx` — Match cards displayed raw team IDs for teams beyond the `/api/teams` `.limit(200)` cap (236 teams in DB). Fixed: added `homeTeam`/`awayTeam` to `Match` interface (API already returns them). Replaced `getTeamName(id)` with `getTeamDisplay(match, side)` which reads `shortName` from the embedded API response first, falls back to the local teams-list lookup, then raw ID. All four call sites updated. Resolved 2026-06-07.~~
+- **AUDIT-002 (remaining)**: `POST /api/matches` — Missing comprehensive Zod validation for match creation payload. Partial fix (null coerce on `competitionId`) applied in Session 2. Full schema validation still absent.
 
-- **BUG-001**: `src/middleware.ts` — `matcher` includes `/api/admin/*` but internal `if` check only matches `/admin`. All admin API routes are currently bypassed by middleware.
-- **BUG-002**: `/api/admin/*` — Handlers (e.g., `users`, `ads`, `settings`) missing internal `getAuthUser` and `hasRole` checks.
-- **BUG-003**: `src/app/api/auth/test/route.ts` — Debug endpoint live in production (leaks auth cookie state).
-- **BUG-004**: `src/app/admin/transfers/page.tsx L189` — `createdBy: 'admin-1'` hardcoded (corrupts audit trail).
-- **BUG-005 (remaining)**: `/api/teams, /api/players, /api/loggers` — Unbounded queries (no `.limit()` clause).
-- **BUG-006**: `src/lib/utils/format-content.ts` — `formatNewsContent` fails to escape HTML tags in input. Leads to stored XSS via `dangerouslySetInnerHTML` in news pages.
-- **BUG-007 (NDPR/GDPR Leak)**: `/api/matches` public response — `assignedLoggers` includes real emails in the response map (Privacy Violation).
-- **BUG-008 (Race Condition)**: Match `assignedLoggers` array — Duplicate logger entries (same logger inserted twice). Match logger assignment lacks atomic uniqueness checks.
-  - **Trace**: `src/app/api/matches/[id]/assign-logger/route.ts`
-  - **Root Cause**: Non-atomic "Check-then-Insert" pattern. The handler `awaits` a SELECT (L27) and then `awaits` an INSERT (L47). Concurrent requests pass the check simultaneously before either has finished inserting.
-  - **Fix Needed**: Implement a unique constraint in `matchLoggerAssignments` schema or use a transaction with `upsert` logic.
-- **AUDIT-002 (remaining)**: `/api/matches` (POST) — Missing comprehensive Zod validation for match creation payload.
-- **BUG-009**: `src/app/api/matches/route.ts` — `POST /api/matches` has no `getAuthUser` check. Unauthenticated match creation is possible. Fix: add `getAuthUser` + `role === 'admin'` check at top of POST handler.
-- **BUG-010**: `src/app/api/events/route.ts` — Verify and add auth check to `POST /api/events`. Currently unconfirmed whether handler enforces logger identity server-side.
-- **BUG-011**: `playerStats` data corruption — 718 goals vs 133 appearances (~5.4 goals/appearance). Likely caused by duplicate backfill runs without deduplication. Needs investigation before any further backfill runs.
-- **BUG-012**: Event type casing mismatch — rating calculator uses `'GOAL'`, `'SAVE'`, `'BLOCK'` (uppercase) but `FootballLogger` dispatches `'Goal'`, `'Save'`, `'Block'` (PascalCase). Breaks all rating calculations for live-logged matches.
+- **BUG-026** _(MEDIUM — PWA/Cache)_: SW serves stale JS chunk URLs after a new deploy → unstyled page on direct URL visit (hard nav). Root cause: service worker caches asset URLs from the previous deploy; after a new build the chunk hashes change but the SW still serves the old (now-missing) URLs. Fix: document bypass + `no-store` headers on SW files shipped in Session 19. **Prod verification still open — TEST_CHECKLIST.md items unchecked.**
+
+  Filed: 2026-06-08. Root cause clarified: 2026-06-15. Hotfix shipped: 2026-06-16.
+
+- ~~**BUG-030** _(LOW)_: `/competitions/[id]` base route returns 404.~~ RESOLVED 2026-06-16 — `src/app/competitions/[id]/page.tsx` created with server-side `redirect()` to `[id]/standings`. Commit `3be1731`.
+
+- ~~**BUG-031** _(LOW — Visual)_: `standings/page.tsx` renders raw teamLogo strings at 5 sites.~~ RESOLVED 2026-06-16 — All 5 sites (lines 395, 444, 561, 603, 642) replaced with `<TeamLogo>` component. Import added. Commit `bb0a1ed`.
 
 - ~~**BUG-015** _(CRITICAL)_: `src/app/api/matches/[id]/route.ts` PATCH handler — no `getAuthUser` check. Fixed: `getAuthUser(request)` added before body read. Admin passes through; logger role verified against `isLoggerAssigned(matchId, authUser.id)`. Returns 401/403. Resolved: 2026-06-08.~~
 
@@ -67,15 +74,14 @@
 
 - ~~**BUG-024** _(LOW)_: Duplicate match detail routes — `/match/[id]` (`src/app/match/[id]/page.tsx`) and `/matches/[id]` (`src/app/matches/[id]/page.tsx`) both exist. One is likely legacy. Audit to confirm which is canonical (check all internal links and nav references), delete the other. Filed: 2026-06-08. Source: SYSTEM_AUDIT.md §2.~~ RESOLVED 2026-06-15 — false alarm. `/match/[id]` route never existed. All internal navigation uses `/matches/[id]` (canonical). No fix needed.
 
-- **BUG-026** _(MEDIUM — PWA/Cache)_: SW serves stale JS chunk URLs after a new deploy → unstyled page on direct URL visit (hard nav). Root cause: service worker caches asset URLs from the previous deploy; after a new build the chunk hashes change but the SW still serves the old (now-missing) URLs. Fix requires proper cache invalidation strategy + stale-while-revalidate for data fetches. **Deferred until post-core-feature completion.**
+- **BUG-026** _(MEDIUM — PWA/Cache)_: SW serves stale JS chunk URLs after a new deploy → unstyled page on direct URL visit (hard nav). Root cause: service worker caches asset URLs from the previous deploy; after a new build the chunk hashes change but the SW still serves the old (now-missing) URLs. Fix: document bypass + `no-store` headers on SW files shipped in Session 19. **Prod verification still open — TEST_CHECKLIST.md items unchecked.**
 
-  Filed: 2026-06-08. Root cause clarified: 2026-06-15.
+  Filed: 2026-06-08. Root cause clarified: 2026-06-15. Hotfix shipped: 2026-06-16.
 
-- ~~**BUG-025** _(MEDIUM — NDPR)_: `GET /api/matches` public list response exposes `loggerId` field to unauthenticated viewers. Fixed: `getAuthUser` added to GET handler; `loggerId` conditionally returned for admin callers only, stripped from public DTO. `assignedLoggers` was already absent. Resolved: 2026-06-15.~~
+- ~~**BUG-030** _(LOW)_: `/competitions/[id]` base route returns 404.~~ RESOLVED 2026-06-16 — `src/app/competitions/[id]/page.tsx` created with server-side `redirect()` to `[id]/standings`. Commit `3be1731`.
 
-- ~~**BUG-027** _(MEDIUM)_: `/competitions` list page not showing all competitions. Fixed: 'All' tab added as default; sport filter now shows `sport=null` competitions. `src/app/competitions/page.tsx`. Resolved: 2026-06-15.~~
+- ~~**BUG-031** _(LOW — Visual)_: `standings/page.tsx` renders raw teamLogo strings at 5 sites.~~ RESOLVED 2026-06-16 — All 5 sites (lines 395, 444, 561, 603, 642) replaced with `<TeamLogo>` component. Import added. Commit `bb0a1ed`.
 
-- ~~**BUG-028** _(MEDIUM)_: React hydration error #418 on competition detail/standings page. Fixed: `initial` props removed from all Framer Motion elements on standings page; `<motion.tr>` replaced with plain `<tr>`. `src/app/competitions/[id]/standings/page.tsx`. Resolved: 2026-06-15.~~
 
 ### ~~BACKLOG-036 — TeamLogo component migration (second pass)~~
 **Status:** COMPLETE — 2026-06-15
@@ -118,9 +124,10 @@ Convert to `.github/workflows/pre-prod-check.yml`. Trigger on PR to `main`. Pass
 - **TD-002**: Deduplication for event logging submissions on slow connections to prevent double-tap glitches.
 - **TD-003**: Match status transitions need a proper state machine (PENDING → LIVE → FINISHED) with automated triggers.
 - **TD-004**: Update `.env.example` to match the actual 29 keys discovered in the codebase (currently only lists 16).
-- **TD-005**: Atomic refactor for logger assignment (resolves BUG-008).
-- **TD-006**: Implement response sanitization for `/api/matches` to prevent email leaks (resolves BUG-007).
+- ~~**TD-005**: Atomic refactor for logger assignment — resolved as part of BUG-008 (2026-06-05). Transaction wraps check-then-insert in `assign-logger/route.ts`.~~
+- ~~**TD-006**: Response sanitization for `/api/matches` email leak — resolved as part of BUG-007 (2026-06-05). Email stripped from public `assignedLoggers` select.~~
 - **TD-007**: Bulk Register UX placement — `/admin/bulk-register` currently lives as a standalone route but registration flows (team + player creation) may belong inside the competition or team management context instead. Needs a UX review to determine the correct placement before the page grows further.
+- ~~**TD-008**~~: `useLiveStandings.ts` — `teamLogo: string` type was wrong (should be `string | null`); `|| '❓'` emoji fallback masked null values causing `TeamLogo` to receive a literal emoji string. RESOLVED 2026-06-16 — type fixed to `string | null`, fallback changed to `null`. Commit `bb0a1ed`.
 
 ## Descoped Features (Future Work)
 
@@ -141,7 +148,7 @@ Convert to `.github/workflows/pre-prod-check.yml`. Trigger on PR to `main`. Pass
 **Status:** OPEN
 **Priority:** Medium
 **Filed:** 2026-06-13
-**Blocked by:** BACKLOG-037 Step 1 (nicknames column — added to staging 2026-06-13, prod pending)
+**Note:** BACKLOG-037 Step 1 (nicknames column) complete on both staging and prod DBs. No longer blocked.
 
 #### Problem
 When a logger searches for a player during live logging, search matches only against `players.name` and `players.jerseyName`. Physical logsheets use field aliases ("Blacko", "No.7 LW") that don't match DB records, forcing loggers to search by full name mid-match.
@@ -176,7 +183,6 @@ Audit duplicate slugs first before deciding. Do not run db:push until this is re
 **Status:** OPEN — Steps 1-7 complete, Step 7b remaining
 **Priority:** High
 **Filed:** 2026-06-13
-**Blocked by:** Step 1 (unique constraint dedup) must run first
 
 #### Problem
 No UI or API exists to link existing players to teams without creating duplicate profiles. Bulk register always creates new player rows. The 68 intercollege players were fixed via a one-off script — this must be a repeatable, permanent flow.
@@ -248,7 +254,7 @@ No UI or API exists to link existing players to teams without creating duplicate
 **Status:** OPEN
 **Priority:** Medium
 **Filed:** 2026-06-13
-**Blocked by:** BACKLOG-037 Step 5
+**Note:** BACKLOG-037 Step 5 (pre-flight dedup by name+college) is complete — the core dedup mechanism exists. This item covers the edge case: players registered via `playerTeamAffiliations` only (no legacy `teamId`) who would still bypass jersey number collision checks.
 
 #### Problem
 Bulk register's dedup check queries players.teamId (legacy column) for jersey number collision. A player registered via playerTeamAffiliations only (no legacy teamId) would not be caught — creating a duplicate profile.
@@ -270,7 +276,7 @@ Admin can then use Roster Builder to link the existing player instead.
 **Status:** OPEN
 **Priority:** Medium
 **Filed:** 2026-06-13
-**Blocked by:** BACKLOG-037 Step 1 (nicknames column must exist first)
+**Note:** BACKLOG-037 Step 1 (nicknames column) complete on both staging and prod DBs. No longer blocked.
 
 #### Problem
 The existing backfill CSV reconciliation preview matches player names against name and jerseyName fields only. Physical logsheets use nicknames and field names ("Blacko", "No.7 LW") that don't match DB records.
@@ -807,6 +813,103 @@ Current gaps:
   cases where teams are always new; this is additive, not a rewrite
 - Related: BACKLOG-006 (select existing players in bulk-register),
   TD-007 (bulk-register placement), BUG-013 (missing auth gate)
+
+---
+
+### BACKLOG-061 — Competition Detail Page: Tab Audit & Completeness
+
+**Status:** OPEN — trace complete, ready for implementation
+**Priority:** Medium
+**Filed:** 2026-06-16
+
+#### Problem
+
+The competition detail experience is split across two divergent implementations with no shared code:
+
+1. **`/competitions` split-pane** (`src/app/competitions/page.tsx`) — left panel = competition list, right panel = Standings/Matches/Brackets tabs. Matches and Brackets work here. Standings is a basic table only (no TopScorers/Discipline).
+
+2. **`/competitions/[id]/standings`** (`src/app/competitions/[id]/standings/page.tsx`) — richer tab set (Standings/Top Scorers/Assists/Discipline/Rules) but Matches and Brackets are absent. TopScorers/Assists/Discipline are empty shells (`players={[]}`). Rules is hardcoded mock text. Logo rendering is broken (BUG-031).
+
+Additionally `/competitions/[id]` (base route) returns a 404 — BUG-030.
+
+#### Scope — verified status after trace (2026-06-16)
+
+| Tab | Route | API | UI status |
+|-----|-------|-----|-----------|
+| Standings | `GET /api/competitions/[id]/standings` | ✅ built | ✅ rendering real data — BUG-031 (logo) |
+| Matches | `GET /api/competitions/[id]/fixtures` | ✅ built | ✅ works in split-pane only — not in `[id]/standings` |
+| Brackets | `GET /api/brackets?competitionId=` | ✅ built | ✅ works in split-pane + football page — not in `[id]/standings` |
+| Top Scorers | `GET /api/competitions/[id]/stats?type=scorers` | ✅ built | ❌ empty shell — fetch not wired |
+| Top Assists | `GET /api/competitions/[id]/stats?type=assists` | ✅ built | ❌ empty shell — fetch not wired |
+| Discipline | `GET /api/competitions/[id]/stats?type=discipline` | ✅ built | ❌ empty shell — fetch not wired |
+| Teams | `GET /api/competitions/[id]/teams` | ✅ built | ❌ no UI tab anywhere |
+| Rules | `GET /api/competitions/[id]/match-settings` | ✅ built (Phase A data live) | ❌ hardcoded mock — fetch not wired |
+
+#### Bugs filed from this audit
+
+- **BUG-030** — `/competitions/[id]` base route returns 404. Needs `page.tsx` that redirects to `/competitions/[id]/standings`.
+- **BUG-031** — `StandingsRow`, `StandingsMobileCard`, `TopScorersTable`, `TopAssistsTable`, `DisciplinaryTable` in `standings/page.tsx` all render `{team.teamLogo}` / `{player.teamLogo}` as a raw string span. Must replace with `<TeamLogo>` at 5 sites (lines 395, 444, 561, 603, 642).
+
+#### Additional finding
+
+`src/components/FixtureCard.tsx` still uses raw `<img>` tags for team logos (not `TeamLogo` component). Not in the `[id]` route but used in other pages. Track separately.
+
+#### Implementation order
+
+1. **BUG-030** — create `src/app/competitions/[id]/page.tsx` with redirect to `[id]/standings` (1 file, ~5 lines)
+2. **BUG-031** — replace 5 `{team.teamLogo}` spans with `<TeamLogo>` in `standings/page.tsx`
+3. **Wire Top Scorers/Assists/Discipline** — add 3 `useEffect` fetches to `standings/page.tsx`, pass real data to existing shells
+4. **Wire Rules tab** — fetch `GET /api/competitions/[id]/match-settings`, replace hardcoded points/format text with real Phase A data
+5. **Teams tab** — add new tab + fetch to `standings/page.tsx` using `GET /api/competitions/[id]/teams`
+6. **Matches tab** — add as sixth tab using `GET /api/competitions/[id]/fixtures`, grouped by status (Live → Upcoming → Results). Reuse or adapt `MatchCard` (already uses `TeamLogo`)
+7. **Brackets tab** — add seventh tab using `GET /api/brackets?competitionId=`. Extract the inline bracket renderer from `competitions/page.tsx` into a shared component
+8. **Architecture decision** — once `[id]/standings` is complete, evaluate whether to retire the split-pane standings view or keep both
+
+#### Notes
+
+- All APIs are already built and functional — this is purely UI work
+- `MatchCard` (`src/components/ui/MatchCard.tsx`) already uses `TeamLogo` correctly — safe to reuse for Matches tab
+- `stats/route.ts` queries `playerStats` for discipline (card counts), not raw `matchEvents` — discipline data availability depends on `playerStats` being populated for the competition
+- Bells-specific priority: Top Scorers + Discipline are highest viewer value for BUSALYMPICS and BUSA League. Brackets only matter for BUSA League KO stage.
+- Do not build items 6–8 before items 1–4 are verified on staging
+
+---
+
+### BACKLOG-062 — Player Modal: College Select + University Lock
+
+**Status:** OPEN — trace complete, ready for implementation
+**Priority:** Medium
+**Filed:** 2026-06-16
+
+#### Problem
+
+The player create/edit modal (`src/app/admin/players/page.tsx`) uses free-text `<input>` fields for `college` and `university`. This is the root cause of the DB casing inconsistencies fixed in Session 20 (`ColEng`, `Colmans`, `''`). An admin can type any value and create new dirty variants.
+
+#### Required Changes
+
+1. **College** (line 671) — replace `<input type="text">` with `<select>`:
+   ```tsx
+   <select value={formData.college || ''} onChange={...}>
+     <option value="">None</option>
+     <option value="COLENG">College of Engineering</option>
+     <option value="COLENVS">College of Environmental Sciences</option>
+     <option value="COLMANS">College of Management Sciences</option>
+     <option value="COLNAS">College of Natural & Applied Sciences</option>
+   </select>
+   ```
+   Only 4 canonical values. Free-text input must be removed entirely.
+
+2. **University** (line 661) — change to read-only display. The auto-populate useEffect (line 122-129) already sets university from the selected team. The input is editable but shouldn't be — a typo here corrupts the university field for the player. Options:
+   - Make it `readOnly` (show value, prevent typing)
+   - OR replace with a `<p>` display element that shows the auto-populated value
+   - Either way: admin should NOT be able to type a custom university string
+
+3. **Position** (line 621) — optionally convert to `<select>` with standard positions (GK, CB, RB, LB, CDM, CM, CAM, RW, LW, CF, ST). Lower priority — less data corruption risk.
+
+#### Notes
+
+- College cleanup script (`dev/fix-player-college-university.mjs`) ran against staging 2026-06-16. Must run on prod before shipping this modal fix, otherwise modal will show `ColEng` etc. in the select and break validation.
+- PATCH `/api/players/[id]` already accepts college as a plain string — no API change needed, just UI enforcement.
 
 ---
 

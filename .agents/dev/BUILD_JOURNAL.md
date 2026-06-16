@@ -816,6 +816,63 @@
 
 ---
 
+### Session 20 — 2026-06-16
+
+**Focus:** BACKLOG-061 tab audit → BUG-030/031 fixes → BACKLOG-059 SW scope fixes → Player DB normalisation (staging) → Player modal field trace.
+
+**Built:**
+
+**Phase 1 — Competition detail audit (read-only):**
+- Traced all 8 competition detail tabs. Confirmed: Standings renders real data (logo broken), TopScorers/Assists/Discipline are empty shells, Rules is hardcoded, Matches/Brackets only in split-pane. All 8 APIs already built.
+- Filed BUG-030, BUG-031, BACKLOG-061.
+
+**Phase 2 — BUG-030 fix (commit `3be1731`):**
+- `src/app/competitions/[id]/page.tsx` — CREATED. 6-line server component with `redirect('/competitions/${params.id}/standings')`. Fixes 404 on base competition URL.
+
+**Phase 3 — BUG-031 + TD-008 (commit `bb0a1ed`):**
+- `src/app/competitions/[id]/standings/page.tsx` — 5 sites where `{team/player.teamLogo}` rendered as a raw string span replaced with `<TeamLogo logo={X} name={Y} size="md" />`. Sites: lines 395 (StandingsRow), 444 (StandingsMobileCard), 561 (TopScorers), 603 (TopAssists), 642 (Disciplinary). `import { TeamLogo }` added.
+- `src/hooks/useLiveStandings.ts` — `teamLogo: string` → `string | null` (line 15). Fallback `|| '❓'` → `|| null` (line 75). Emoji fallback was masking null — `TeamLogo` handles null correctly with initials.
+
+**Phase 4 — BACKLOG-059 SW scope fixes (commit `4977e42`):**
+- `src/hooks/usePWA.ts` — Path guard added before `registerServiceWorker()` call. If `swPath.includes('sw-user')` AND current path starts with `/admin` or `/logger`, returns early without registering. Guard lives in the hook, not in `PWAProvider`, so it fires before registration happens (PWAProvider's useEffect ran too late — after usePWA had already registered).
+- `src/lib/notifications/push-service.ts` — Removed `navigator.serviceWorker.register('/sw-user.js')` call (line ~40). Replaced with `getRegistration('/')` — uses the existing registration from `PWAProvider` instead of creating a competing one. Console warn if no registration found.
+- `src/components/pwa/PWAProvider.tsx` — Removed unused `useEffect` import. Dropped `{ registration, isRegistered, error }` destructure (hook result unused after cleanup). Deleted dead suppression useEffect block (30-52) that tried to suppress registration after-the-fact.
+- `public/sw.js` — Confirmed dead (no registrar in `src/`). **Pending manual deletion**: `del public\sw.js` + `git commit`.
+
+**Phase 5 — Player DB normalisation (staging):**
+- `dev/fix-player-college-university.mjs` — Written and run against staging. Results:
+  - College: `ColEng → COLENG` (2 rows), `Colmans → COLMANS` (1 row), `'' → NULL` (3 rows)
+  - University: 178 rows updated (`'Bells University'` + `'Bells University of Technolgy'` → `'Bells University of Technology'`)
+  - Post-verify: 5 canonical college values (NULL×111, COLENG×34, COLENVS×6, COLMANS×7, COLNAS×21). Single distinct university value.
+- RUNLOG.md updated — Session 20 DB run logged.
+- **Prod run: PENDING.** Must verify on staging first (done), then apply same script against `.env.production`.
+
+**Phase 6 — Player modal + API trace (read-only):**
+- `src/app/admin/players/page.tsx` modal fields mapped: Team = `<select>` (line 607, ✅ correct), Position = `<input type="text">` (line 621, should be select), University = `<input type="text">` (line 661, should be locked/read-only), College = `<input type="text">` (line 671, **should be `<select>` with COLENG/COLENVS/COLMANS/COLNAS**), Department = `<input type="text">` (line 681).
+- `src/app/api/players/[id]/route.ts` PATCH handler traced (line 300-415): team change is fully handled — updates both `players.teamId` and `playerTeamAffiliations`. Old affiliations demoted to `isPrimary: false` (never deleted, by design). `syncPlayerOrganizationAffiliations` called after team change. No gap.
+
+**Bugs encountered:**
+
+- BUG-031 Edit 3 — import `old_str` initially used incomplete fragment. Fixed by reading exact line first.
+- BUG-031 Edit 8 (Disciplinary) — indent was 12-space not 8-space in actual file. Fixed by reading lines 638-648 before edit.
+- BACKLOG-059 — `PWAProvider` dead useEffect suppression ran after `usePWA` had already registered the SW. Race window: useEffect fires asynchronously, so the "don't register" guard always lost. Root cause: guard in the wrong layer.
+
+**Resolved:** BUG-030, BUG-031, TD-008, BACKLOG-059 (code complete, `sw.js` deletion pending).
+
+**Deferred:**
+
+- `public/sw.js` manual deletion — run `del public\sw.js && git add public/sw.js && git commit -m "chore(pwa): delete retired sw.js (BACKLOG-059)"`
+- Player college/university DB fix on **prod** — same script, swap env to `.env.production`
+- Player modal UX fixes (BACKLOG-062) — college → `<select>`, university → locked — pending next directive
+- BACKLOG-061 steps 3-8 (wire TopScorers/Assists/Discipline/Rules/Teams/Matches/Brackets fetches)
+- BACKLOG-044 Phase B (logger integration — now unblocked by BACKLOG-059)
+- BACKLOG-058 (logger offline queue — CRITICAL for live match resilience)
+- 6 confirmed duplicate player pairs from DB audit — need BACKLOG-042 (merge tool) or manual resolution
+
+**Next session:** Run player DB fix on prod (5 min). Then BACKLOG-062 (college `<select>`, university locked in player modal). Then BACKLOG-061 step 3 (wire TopScorers/Assists/Discipline fetches in standings/page.tsx).
+
+---
+
 ### Session 3 — 2026-06-04
 
 **Focus:** Refactor Competition admin forms and setup backlog architecture.

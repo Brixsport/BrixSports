@@ -93,6 +93,14 @@ activation: always_on
 
 2026-06-16 — SW serves stale HTML with old JS chunk hashes after deploy (BUG-026) — dynamic cache stored HTML pages indefinitely; after deploy, old HTML references chunk filenames that no longer exist on CDN → blank page or broken app on direct URL visit. Fix: HTML documents must never be cached by SW. Add `if (request.destination === 'document') { event.respondWith(fetch(request)...); return; }` at top of every SW fetch handler. Also add `Cache-Control: no-store` to SW files themselves so CDN never caches the SW.
 
+2026-06-16 — SW path guard in the wrong layer caused a registration race — `PWAProvider` useEffect tried to suppress `usePWA`'s registration after the fact, but `usePWA`'s useEffect already ran first. Guard must live inside the hook (before `registerServiceWorker()` is called), not in the consumer. Prevention: suppression logic must always be co-located with the action it suppresses.
+
+2026-06-16 — SW double-registration from two independent callers — `push-service.ts` called `navigator.serviceWorker.register('/sw-user.js')` independently while `PWAProvider` already registered via `usePWA`. Two `register()` calls for the same SW URL is benign (browser deduplicates) but creates scope confusion and bypasses any path guards in `usePWA`. Prevention: only one place should ever call `register()` for a given SW. Secondary consumers must use `getRegistration()` to receive the already-registered SW.
+
+2026-06-16 — Free-text inputs for canonical enum data caused DB casing drift — college codes (`ColEng`, `Colmans`, `''`) entered by admins via a plain `<input type="text">` instead of a select. Required a one-off cleanup script to fix 6 rows. Prevention: any field with a fixed set of valid values must use `<select>` in every UI that writes it. Never trust admins to type canonical codes correctly.
+
+2026-06-16 — `useLiveStandings` emoji fallback (`|| '❓'`) masked null team logos — hook returned a literal emoji string instead of null, so `TeamLogo` received an emoji and tried to render it as a URL. `isValidLogo` rejected it, triggering initials — correct output by accident, but wrong data type. Prevention: when a child component handles null gracefully, always pass null — not an emoji or placeholder string — as the null-state value.
+
 ## Anti-Patterns for This Codebase
 - Middleware matcher and internal logic check do not match.
 - try/catch without finally in any DB operation.
