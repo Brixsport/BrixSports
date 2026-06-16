@@ -2561,3 +2561,80 @@ Squad tab (competition-scoped) shows competition squad numbers, editable inline.
 No data model change needed — purely a label/copy change in the relevant tab component.
 
 Related: BACKLOG-053 (inline roster editing), BACKLOG-056
+
+---
+
+### BACKLOG-058 — Logger Offline Event Queue (PRE-LIVE-MATCH BLOCKER)
+
+**Status:** OPEN
+**Priority:** CRITICAL — live match data loss risk
+**Filed:** 2026-06-16
+
+#### Problem
+sw-admin.js has syncMatchEvents() written and the background sync handler
+is in place. But FootballLogger never writes to IndexedDB on network failure
+and never calls registration.sync.register('sync-match-events').
+If connection drops mid-match, events are silently lost. No retry, no queue.
+
+#### Fix
+- On POST /api/matches/[id]/events network failure → write event to IndexedDB
+  (pendingEvents store)
+- Show "Queued — will sync" badge in logger UI
+- Call registration.sync.register('sync-match-events')
+- SW drains queue on network restore → POST each pending event
+- Notify client → update UI to "Synced ✓"
+
+#### Files
+- FootballLogger component (add IndexedDB write + sync.register on failure)
+- sw-admin.js (sync handler already exists — verify drain logic is correct)
+
+#### Notes
+- Do not build before BACKLOG-059 SW audit is complete
+- This is a pre-live-match blocker — must ship before any real match is logged
+
+---
+
+### BACKLOG-059 — SW Scope Conflict Audit (PRE-LIVE-MATCH BLOCKER)
+
+**Status:** OPEN
+**Priority:** HIGH — potential SW scope conflict in production
+**Filed:** 2026-06-16
+
+#### Problem
+Three SWs exist: sw.js, sw-user.js, sw-admin.js.
+sw.js and sw-user.js both handle push events.
+Unclear which layout registers which — possible scope conflict where
+two SWs fight over the same registration scope.
+
+#### Fix
+- Audit root layout.tsx and admin layout.tsx — confirm which SW each registers
+- Confirm sw.js is not double-registering on same scope as sw-user.js
+- Retire sw.js or repurpose as logger-only push handler
+- Document final SW ownership in PWA_IMPLEMENTATION_GUIDE.md
+
+#### Notes
+- Must resolve before BACKLOG-058 (logger offline queue)
+- Pre-live-match blocker
+
+---
+
+### BACKLOG-060 — SW Architecture Cleanup
+
+**Status:** OPEN
+**Priority:** MEDIUM — quality improvement, not blocking
+**Filed:** 2026-06-16
+
+#### Problem
+Current SWs use blanket API caching — volatile data (live events) treated
+same as static data (team rosters). Cloudinary requests intercepted by SW
+unnecessarily, wasting Cache Storage quota.
+
+#### Fix
+- Skip res.cloudinary.com requests in both sw-user.js and sw-admin.js
+- Per-route API TTL strategy:
+  - Never cache: /api/matches/[id]/events (POST), /api/auth/*, /api/matches/[id]/config
+  - Network-first 30s stale: /api/matches, /api/competitions
+  - Stale-while-revalidate: /api/players, /api/teams
+- Retire sw.js after BACKLOG-059 audit confirms it's safe to remove
+
+#### Depends on: BACKLOG-059

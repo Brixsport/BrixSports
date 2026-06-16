@@ -37,11 +37,35 @@ what fails with a one-line description.
 - [ ] Can assign logger to match
 - [ ] Can change match status
 
+#### Match Overrides (BACKLOG-044 Phase A)
+- [ ] Match creation form has collapsible "Override Match Settings for This Fixture"
+- [ ] Extra Time override toggle: Inherit / On / Off (null/true/false)
+- [ ] Penalties override toggle: same three states
+- [ ] Allow Draws override toggle: same three states
+- [ ] Overrides saved on match creation
+- [ ] GET /api/matches/[id]/config reflects match-level override over competition setting
+
 ### Competitions
 - [ ] /admin/competitions loads all competitions
 - [ ] Can create new competition
 - [ ] Can edit existing competition
 - [ ] Competition detail shows enrolled teams
+
+#### Match Settings (BACKLOG-044 Phase A)
+- [ ] Competition modal has collapsible "Match Settings" section
+- [ ] Match Duration field saves and reloads correctly
+- [ ] Half Duration field saves and reloads correctly
+- [ ] Players Per Side: Standard (11) / 5-aside / Custom selector works
+- [ ] Custom option shows number input
+- [ ] Max Substitutions field saves (null when Unlimited checked)
+- [ ] Rolling Subs toggle ON hides Max Substitutions field
+- [ ] Extra Time toggle ON saves correctly
+- [ ] Penalties toggle saves correctly
+- [ ] Allow Draws toggle saves correctly
+- [ ] Points for Win / Points for Draw save correctly
+- [ ] Edit mode loads existing match settings (not defaults)
+- [ ] GET /api/competitions/[id]/match-settings returns saved values
+- [ ] GET /api/matches/[id]/config returns merged config (match → competition → sport default)
 
 ### Teams — Roster Builder (BACKLOG-037)
 - [ ] /admin/teams loads full team list (500 limit)
@@ -145,6 +169,12 @@ what fails with a one-line description.
 - [ ] Standings tab shows correct table
 - [ ] BUSALYMPICS standings: CNAS 1st, CENG 2nd
 
+### PWA (BUG-026 — hotfix shipped 2026-06-16)
+- [ ] Direct URL visit (e.g. brixsports.com/competitions) loads with full styles — no unstyled flash
+- [ ] Hard reload not required to get styles
+- [ ] Browser console shows no 404 errors for JS chunks on first load
+- [ ] After new deploy: clear SW cache manually → direct URL visit still loads correctly
+
 #### BUG-027 — Competitions page sport filter
 - [ ] All tab shows all competitions including sport=null
 - [ ] Football tab shows only Football + isMultiSport competitions
@@ -197,7 +227,7 @@ what fails with a one-line description.
 
 ## Known Broken (do not test — already filed)
 
-- PWA CSS / stale SW chunk URLs on direct URL visit (BUG-026) — deferred post-core-features
+- ~~PWA CSS / stale SW chunk URLs on direct URL visit (BUG-026)~~ — **FIXED 2026-06-16** (no-store headers + document bypass + cache version bump)
 - Email sending broken — AWS SES misconfigured (BACKLOG-026)
 - Google OAuth staging not configured (BACKLOG-025)
 - Railway WS on staging not created (BACKLOG-027)
