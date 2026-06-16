@@ -2544,3 +2544,20 @@ role-scoped field allowlists:
 (rating, eyePoints, marketValue) from manager role.
 
 Related: BACKLOG-050 (team type), future manager role feature
+
+### BACKLOG-057 — Rename Pool/Squad Tab Labels
+
+**Status:** OPEN
+**Priority:** Low — cosmetic/terminology only
+**Filed:** 2026-06-16
+
+Current labels are swapped conceptually:
+- "Roster" tab → should be **"Pool"** (permanent jersey numbers, persists across competitions)
+- "Squad" tab → should be **"Squad"** (competition-scoped, editable squad numbers inline)
+
+Pool tab loads permanent jersey numbers already set on the player record.
+Squad tab (competition-scoped) shows competition squad numbers, editable inline.
+
+No data model change needed — purely a label/copy change in the relevant tab component.
+
+Related: BACKLOG-053 (inline roster editing), BACKLOG-056
