@@ -359,6 +359,36 @@ Source code changes only this session. DB changes were applied in Session 15 (se
 - **Post-verify:** college distribution = NULL(111), COLENG(34), COLENVS(6), COLMANS(7), COLNAS(21). Single distinct university value: `Bells University of Technology`
 - Script left in dev/ pending prod run after staging verification
 
+## Session 21 — 2026-06-16
+
+### Production — player college + university normalization
+2026-06-16 | `dev/fix-player-college-university-prod.mjs` | PROD (`libsql://brixsportv2-brixsports`) | SUCCESS | VERIFIED
+- **College fixes:** `ColEng` → `COLENG` (2 rows), `Colmans` → `COLMANS` (1 row), `''` → `NULL` (3 rows)
+- **University fixes:** 178 rows updated (`'Bells University of Technolgy'` and `'Bells University'` → `'Bells University of Technology'`)
+- **Post-verify:** college distribution = NULL(111), COLENG(34), COLENVS(6), COLMANS(7), COLNAS(21). Single distinct university: `Bells University of Technology`
+- Script deleted after successful run
+
+---
+
+### Staging + Production — Animashun duplicate player stub deletion
+2026-06-16 | `dev/delete-animashun-stub.mjs` | STAGING then PROD | SUCCESS | VERIFIED
+- **Pre-flight:** Animashun (`sQVPtcWxrN3VBeGvL88_O`) confirmed 0 events, 0 stats, 1 affiliation (team: "Bells University") — safe to delete
+- **Deleted:** 1 `player_team_affiliations` row + 1 `players` row on both staging and prod
+- **Post-verify:** Exactly 1 Animashun row remains on both DBs: `Animashun Oluwanifemi` (`player-1767972615670-yet6lrue1`)
+- **"Bells University" team (`bells-uni-id`):** now 0 affiliations remaining — team row NOT deleted, awaiting decision
+- Script deleted after confirmed
+
+---
+
+### Staging + Production — Delete Bells University stub teams
+2026-06-16 | `dev/delete-bells-stub-teams.mjs` | STAGING then PROD | SUCCESS | VERIFIED
+- **Targets (10 teams):** `bells-uni-id` ("Bells University") + 9 "Bells University of Technology [Sport] (M/F)" variants
+- **Pre-flight checks:** 0 affiliations, 0 matches — all clean on both DBs
+- **Blocker found and resolved:** `users.favorite_team_id` — 2 users had stub team IDs as their favourite team (temitopeyr@gmail.com → `wrKivda1UMTyJ0nntZJjn`; ramotaadenike67@gmail.com → `bells-uni-id`). Nulled before delete.
+- **Deleted:** 10 team rows on both staging and prod
+- **Post-verify:** Exactly 4 Bells-related teams remain on both DBs: College of Engineering (34 players), College of Environmental Sciences (6), College of Management Sciences (7), College of Natural & Applied Sciences (21)
+- Scripts deleted after confirmed
+
 ---
 
 ## Outstanding / Pending Scripts

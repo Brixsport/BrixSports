@@ -82,6 +82,11 @@
 
 - ~~**BUG-031** _(LOW — Visual)_: `standings/page.tsx` renders raw teamLogo strings at 5 sites.~~ RESOLVED 2026-06-16 — All 5 sites (lines 395, 444, 561, 603, 642) replaced with `<TeamLogo>` component. Import added. Commit `bb0a1ed`.
 
+- **BUG-032** _(MEDIUM — Data Integrity)_: 39 `match_events` rows have `player_id = NULL` on both staging and prod. Events logged without a player reference — goals, cards, or substitutions that were never linked to a player. They count toward match scores and team stats but cannot be attributed to any player, corrupting leaderboards and `playerStats`. Root cause unknown — likely events entered via the logger with no player selected, or backfill rows where CSV reconciliation failed to match a player. **No writes until root cause is confirmed. Do not include these events in any backfill run.** Relates to BUG-011 (playerStats corruption).
+
+  Event IDs (identical on staging and prod): `PgCZ27rPw8puIrqGrn5ET`, `MOW5LnM7BnZPceo1EfNFG`, `0nRXEcu-47yWHnhzxnslR`, `mI8xLOJ9I9b9iYNj-4kJz`, `0V7jfxuB5Xx_QAKiQabJ2`, `VIBs_9slwaVOPDq2bVtoY`, `TUko0OhLCE3xZJL7fFjXz`, `Mky4ZzXeDsii0g0U6x4Lb`, `beDfnn98Kby7MHGqSu4Ih`, `hG-GiJofok53M9n1Dhid8`, `YCWEpHea96oNuwj0D7-SI`, `U9z2I58lOKa9knr02mZVz`, `yxeGjM1dncTLNFbpUVDGe`, `m_S_62bgcUyoxRow7dHZj`, `fRNnOokCdT-4PakPIkdyV`, `fQIeiSok9oJgiI-vyWepw`, `4tSgbmxI3Ck0ef66pkaNb`, `n7ZOn6tJdIz3Bh43Km8R2`, `4S7qyVWm7GtakOizaQWjc`, `oFk3adEagm1T7UZzjXPr5`, `Gd4Fi7XeuoDHSD-IHJjUf`, `3ETpELZx3t006Z-Mohbqx`, `-tN5u2EIsOJ8VsuC4_2G7`, `yAyzsTqkwiQlh5GfjKDBV`, `pDqf4GJggQpxvcP_gVnZW`, `5GG8B7NnXc3Z3fdHCxNIp`, `0hLgkDqfBHAbEpQY3sZLK`, `_PHNbJv4S4Ctq4Iq5lGYs`, `tF3EIAIj0L-X7rD4vt2lH`, `zNA4BBA1n-sE2saQODh82`, `S_vTbEW8q218pz5TgOuvF`, `2rSnM33hfnQ7FW3567CwV`, `7nhZ9HZaKziXUxfWpbKNL`, `95QMnbsU-kaskeVLahq-h`, `LmJmU-jFnFwXZAN_aIN2F`, `_PocAdTBo8G-Al-AysspK`, `tYruNu5Yr15Dlb2it4UkB`, `YNrvnIl5iPcT4y55ACdq7`, `0hYD6ESZNftfG7q2HTCL6`
+
+  Filed: 2026-06-16.
 
 ### ~~BACKLOG-036 — TeamLogo component migration (second pass)~~
 **Status:** COMPLETE — 2026-06-15
@@ -875,9 +880,68 @@ Additionally `/competitions/[id]` (base route) returns a 404 — BUG-030.
 
 ---
 
-### BACKLOG-062 — Player Modal: College Select + University Lock
+### BACKLOG-064 — Duplicate single-name basketball players (joseph × 2, leo × 2)
 
-**Status:** OPEN — trace complete, ready for implementation
+**Status:** OPEN — confirmed distinct people, low priority
+**Priority:** Low
+**Filed:** 2026-06-16
+
+#### Finding
+
+Integrity audit found 2 exact-match name collisions:
+- `joseph` × 2: `r-GRRz8IbecIZ5UIiOIP-` (Rim Reapers Basketball) and `wt7u32zwM8Q3tbznYPMjj` (Siberia Basketball)
+- `leo` × 2: `k-5lN92Hfj0T5rmoM0Xch` (Siberia Basketball) and `vr76h3RUb4i-ZAq24Zu7S` (Rim Reapers Basketball)
+
+Both pairs are different clubs, different IDs. These are **not duplicates** — they are two different players who share the same single-name display label. Confirmed from Session 20 investigation.
+
+#### Required Change
+
+Disambiguate the display names so scoreboards and leaderboards don't collapse them:
+- `joseph` (Rim Reapers) → `joseph (RR)` or `joseph (Rim Reapers)`
+- `joseph` (Siberia) → `joseph (SIB)` or `joseph (Siberia)`
+- Same pattern for the two `leo` entries
+
+This is a UI concern — the player rows are correct in the DB. The leaderboard / playerStats display just needs to differentiate when two players share the same name.
+
+#### Notes
+
+- Do not merge these records — they are distinct people
+- Rename at the player row level (UPDATE players SET name = ...) rather than in display code — source-of-truth fix
+- Cross-check with the logger who registered them before renaming
+
+---
+
+### BACKLOG-063 — BUSA FC stub teams with zero affiliations
+
+**Status:** OPEN — low risk, low priority
+**Priority:** Low
+**Filed:** 2026-06-16
+
+#### Finding
+
+12 BUSA-prefixed football club teams exist with zero player affiliations:
+`Agenda FC`, `Allianz FC`, `Cruise FC`, `Deadline FC`, `La Fabrica`, `Legacy FC`, `Prime FC`, `Quantum FC`, `Santos`, `Underrated FC`, `Westbridge`, `Wolves FC`
+
+All have `busa-*` IDs suggesting they were seeded as future or historical clubs — not the same as the NPUGA university scaffolding (which is explicitly known-future). These could be:
+1. Former BUSA clubs that no longer field teams
+2. Placeholder clubs created ahead of a new season
+3. Teams that were bulk-created but never had players registered
+
+#### Required Action
+
+Before deleting: confirm with Richard whether any of these clubs are expected to field players in an upcoming season. If none are active, delete as a batch (same pattern as Bells stub cleanup). If any are upcoming, mark them with a note.
+
+#### Notes
+
+- Same FK bloat risk as the Bells stubs — run the same pre-flight checks (affiliations, matches, users.favorite_team_id) before any delete
+- `Joga-Bonito` (21 players) is NOT in this list — it is an active club
+- `Westbridge` and `Wolves FC` sound like active clubs — verify before touching
+
+---
+
+### ~~BACKLOG-062 — Player Modal: College Select + University Lock~~
+
+**Status:** COMPLETE — 2026-06-16. Commit `f0070e0`.
 **Priority:** Medium
 **Filed:** 2026-06-16
 

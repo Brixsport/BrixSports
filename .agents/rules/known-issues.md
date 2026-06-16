@@ -101,6 +101,10 @@ activation: always_on
 
 2026-06-16 — `useLiveStandings` emoji fallback (`|| '❓'`) masked null team logos — hook returned a literal emoji string instead of null, so `TeamLogo` received an emoji and tried to render it as a URL. `isValidLogo` rejected it, triggering initials — correct output by accident, but wrong data type. Prevention: when a child component handles null gracefully, always pass null — not an emoji or placeholder string — as the null-state value.
 
+2026-06-16 — match_events rows with player_id = NULL corrupt playerStats silently (BUG-032) — 39 events exist with no player reference. They count toward match scores but cannot be attributed to any player. The logger UI and backfill import both allow saving an event with no player selected — this must be blocked at the API level. Prevention: POST /api/events must validate that player_id is present for all event types that affect player stats (goals, cards, assists, substitutions). Backfill import must reject CSV rows where the player column is unmatched rather than inserting a NULL player_id row.
+
+2026-06-16 — users.favorite_team_id silently blocks team deletion — FK constraint failed when deleting stub teams because two user accounts had them set as favourite_team_id. This column was not in the initial FK scan because the table was named `users` not `user_profiles`. Prevention: before any team delete, always query users.favorite_team_id in the pre-flight check alongside affiliations and matches. The PRAGMA foreign_key_list scan is the reliable fallback when you don't know all child tables.
+
 ## Anti-Patterns for This Codebase
 - Middleware matcher and internal logic check do not match.
 - try/catch without finally in any DB operation.
