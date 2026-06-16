@@ -332,6 +332,24 @@ Source code changes only this session. DB changes were applied in Session 15 (se
 
 ---
 
+## Session 19 — 2026-06-16
+
+### Staging — drop redundant columns
+2026-06-16 | `dev/drop-redundant-columns-staging.mjs` | STAGING (`libsql://brixsportsv2-staging-brixsports`) | SUCCESS | VERIFIED
+- Dropped `match_duration` (original col) and `extraTimeDuration` (Phase A col) from `competition_sport_settings`
+- Verified via `pragma_table_info` — 16 columns remain, both removed columns absent
+- Script deleted after run
+
+### Prod — BACKLOG-044 Phase A migration
+2026-06-16 | `dev/migrate-sport-settings-prod.mjs` | PROD (`libsql://brixsportv2-brixsports`) | SUCCESS | VERIFIED
+- **competition_sport_settings columns added:** `maxSubstitutions`, `allowSubbedOutReentry`, `extraTimeEnabled`, `penaltiesEnabled`, `allowDraws`, `pointsForWin`, `pointsForDraw` (7 columns)
+- **matches columns added:** `penaltiesEnabledOverride`, `allowDrawsOverride`, `extraTimeEnabledOverride` (3 columns)
+- Note: `match_duration` (col 6) still present on prod — original pre-Phase-A column, not introduced by this session. Staging had this dropped; prod drop deferred.
+- Verified via `pragma_table_info` — all 10 new columns confirmed present
+- Script deleted after run
+
+---
+
 ## Outstanding / Pending Scripts
 
 | Script (not yet run) | Purpose | Blocked by |
