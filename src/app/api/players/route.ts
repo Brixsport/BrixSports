@@ -153,6 +153,8 @@ export async function POST(request: Request) {
         const newPlayer = await db.insert(players).values({
             ...body,
             id: playerId,
+            teamId: body.teamId || null,
+            number: body.number || null,
             university: inferredUniversity || body.university || 'Unknown',
         }).returning();
 
