@@ -154,7 +154,7 @@ export async function POST(request: Request) {
             ...body,
             id: playerId,
             teamId: body.teamId || null,
-            number: body.number || null,
+            number: body.number ?? 0,
             university: inferredUniversity || body.university || 'Unknown',
         }).returning();
 
