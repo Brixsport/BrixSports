@@ -36,6 +36,8 @@
 
 ## Bugs (Open)
 
+- **BUG-033** _(MEDIUM)_: Team roster pool on `/admin/teams/[id]` Squad tab does not filter by sport. All affiliated players show regardless of sport — a basketball player affiliated to COLNAS appears in the COLNAS Football pool. Fix: filter playerTeamAffiliations by the team's sport, or by the selected competition's sport. Filed: 2026-06-17.
+
 - **BACKLOG-065** _(LOW — Data Integrity — Suspicious)_: Four players with duplicate first names found across two teams — identity not confirmed. Query `WHERE LOWER(TRIM(p.name)) IN ('joseph', 'leo')` returned 4 distinct `player_id` rows: `JOSEPH` (Siberia, jersey 11, `wt7u32zw…`), `LEO` (Siberia, jersey 90, `k-5lN92H…`), `joseph` (Rim Reapers, jersey 23, `r-GRRz8I…`), `leo` (Rim Reapers, jersey 7, `vr76h3RU…`). May be legitimate separate players or duplicate registrations with name casing variance. `JOSEPH`/Siberia row has `created_at: null` (further data quality flag). **Action:** Verify against physical registration records. If duplicates confirmed, merge player rows and re-point any `match_events` rows to the canonical ID before deleting the duplicate. Filed: 2026-06-16.
 
 - **BUG-011**: `playerStats` data corruption — 718 goals vs 133 appearances (~5.4 goals/appearance). Root cause identified: duplicate backfill runs with differing `startTime` formats bypass the duplicate match check. No writes made. Needs dedup audit of all `matchEvents` before any data correction. Do not run any backfill until resolved.
@@ -3221,3 +3223,31 @@ Three compounding issues make BUSA league data unreliable:
 - Do not touch playerStats or run any backfill until Phase 1 dedup audit is complete
 - BUG-011 (718 goals), BUG-032 (39 null-player events), and this item are all linked — resolve in order
 - Related: BUG-011, BUG-032, BACKLOG-037 (Roster Builder), BACKLOG-070 (college NULL players)
+
+---
+
+### BUG-033 — Squad Tab Pool Does Not Filter by Sport
+
+**Status:** OPEN
+**Priority:** Medium — not blocking, causes confusion at scale
+**Filed:** 2026-06-17
+
+#### Problem
+`/admin/teams/[id]` Squad tab shows all affiliated players in the pool regardless of sport. A basketball player affiliated to COLNAS appears in the COLNAS Football pool. At small scale this is just noise; at full scale (multi-sport players, multiple competition types) it will make the pool unusable.
+
+#### Root Cause
+The pool query fetches all `playerTeamAffiliations` rows for the team without joining on sport context.
+
+#### Fix Options
+1. **Filter by team sport** — when building the pool, filter `playerTeamAffiliations` by the sport stored on the team row. Simple, works without a competition selected.
+2. **Filter by competition sport** — when a competition is selected in the dropdown, filter pool by that competition's sport. More precise but requires competition to be selected first.
+
+Recommended: option 1 as the baseline (always filter by team sport), option 2 as a refinement on top.
+
+#### Files
+- `src/app/admin/teams/[id]/page.tsx` — Squad tab pool query / data fetch
+- `src/app/api/admin/teams/[teamId]/roster/route.ts` — GET handler building the pool response (add sport filter here)
+
+#### Notes
+- Related: BACKLOG-037 Step 7 (Squad Selector), BACKLOG-068 (multi-sport player merge)
+- Do not fix in isolation before BACKLOG-068 audit is done — multi-sport players may have a single profile with two affiliations, so the sport filter must match against the affiliation row's context, not just the player profile
