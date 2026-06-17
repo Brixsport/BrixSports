@@ -138,8 +138,8 @@ export async function POST(request: Request) {
             inferredUniversity = selectedTeam?.university ?? '';
         }
 
-        if (!body.name || !body.position) {
-            return NextResponse.json({ error: 'Name and Position are required' }, { status: 400 });
+        if (!body.name) {
+            return NextResponse.json({ error: 'Name is required' }, { status: 400 });
         }
 
         if (!body.teamId && !inferredUniversity && !body.college && !body.department) {

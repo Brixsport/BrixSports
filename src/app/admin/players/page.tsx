@@ -579,7 +579,6 @@ function AdminPlayersPageContent() {
                                                 <label className="block text-[10px] font-black uppercase tracking-widest text-white/40 mb-2 italic">Jersey #</label>
                                                 <input
                                                     type="number"
-                                                    required
                                                     value={formData.number || ''}
                                                     onChange={e => setFormData({ ...formData, number: parseInt(e.target.value) })}
                                                     className="w-full bg-white/5 border border-white/10 rounded-[1.25rem] px-5 py-4 focus:outline-none focus:border-primary/50 font-bold transition-all"
@@ -605,12 +604,11 @@ function AdminPlayersPageContent() {
                                         <div>
                                             <label className="block text-[10px] font-black uppercase tracking-widest text-white/40 mb-2 italic">Assigned Team</label>
                                             <select
-                                                required
                                                 value={formData.teamId}
                                                 onChange={e => setFormData({ ...formData, teamId: e.target.value })}
                                                 className="w-full bg-white/5 border border-white/10 rounded-[1.25rem] px-5 py-4 focus:outline-none focus:border-primary/50 font-bold transition-all appearance-none"
                                             >
-                                                <option value="" disabled>Select Team...</option>
+                                                <option value="">No team assigned</option>
                                                 {teams.map(t => (
                                                     <option key={t.id} value={t.id}>{t.name} ({t.sport})</option>
                                                 ))}
