@@ -57,6 +57,39 @@
 
 ---
 
+### Session 23 (continued) — 2026-06-17
+
+**Focus:** College affiliation backfill (10 existing + 20 new BUSALYMPICS profiles), prod mirror, player profile form fixes, security audit, backlog filing.
+
+**Built:**
+- **`dev/backfill-college-affiliations-staging.mjs`** — deletes wrong affiliation rows + inserts missing ones for all 4 colleges. Idempotent. Run: 1 deleted (Sukunmi SK wrong COLENVS row), 14 inserted. Result: 81 players, 0 mismatches staging.
+- **`dev/precheck-busalympics-players.mjs`** — pre-flight name match against DB before creating new profiles. Surfaces existing rows with similar names so they're not duplicated.
+- **`dev/create-busalympics-players.mjs`** — creates 20 new BUSALYMPICS profiles (11 COLENVS, 9 COLMANS) with college + team affiliations. TOJU: COLENVS college + Wolves FC team affiliation.
+- **`dev/copy-new-players-to-prod.mjs`** — copies 30 new players (full row + all affiliation rows) from staging → prod by explicit ID list. Pre-checks for existing IDs, skips safely.
+- **`src/app/api/players/route.ts`** — removed `position` from required fields. Added `teamId: body.teamId || null` and `number: body.number ?? 0` to prevent FK + NOT NULL failures when fields are omitted.
+- **`src/app/admin/players/page.tsx`** — removed `required` from Jersey # and Assigned Team. Team select placeholder changed to "No team assigned".
+
+**Bugs encountered:**
+- `SQLITE_CONSTRAINT: FOREIGN KEY` — `teamId: ''` not coerced to null. Fix: `body.teamId || null`.
+- `SQLITE_CONSTRAINT: NOT NULL on players.number` — null sent when field empty. Fix: `body.number ?? 0`.
+- `SQLITE_CONSTRAINT: NOT NULL on players.position` — DB column NOT NULL; script fix: pass `''`. API fix: server no longer rejects missing position.
+- `mirror-college-to-prod.mjs` returned `rowsAffected: 0` for all 30 — script does UPDATE not INSERT; new players absent from prod so no rows matched. Built `copy-new-players-to-prod.mjs` to INSERT by explicit ID list.
+
+**Data state after session:**
+- Staging: 208 Bells students, 0 college affiliation mismatches
+- Prod: 30 new players inserted, 37 affiliation rows, 0 missing affiliations — full parity with staging
+
+**Deferred:**
+- 97 Bells players still `college = NULL` — Richard to set via admin modal
+- `players.number` nullable schema migration (BACKLOG-072)
+- Client-side error feedback on player create form (BACKLOG-071)
+- BUSA league full audit: event dedup, playerStats reset, team affiliation wiring (BACKLOG-074)
+- Security upgrades: Next.js 15.5.18, drizzle-orm 0.45.2, swiper patch (BACKLOG-073)
+
+**Next session:** Continue setting college for 97 NULL players → re-run `query-bells-college-diagnostic.mjs` → run `backfill-college-affiliations-staging.mjs` + `copy-new-players-to-prod.mjs` → then BACKLOG-073 Item C (swiper patch) → then BACKLOG-074 Phase 1 (event log dedup audit).
+
+---
+
 ### Session 22 — 2026-06-16
 
 **Focus:** BUG-032 null playerId gate on POST /api/events. Housekeeping: RUNLOG merge, BACKLOG cleanup, data investigation (joseph/leo players, Bells BUSA-league college gap).

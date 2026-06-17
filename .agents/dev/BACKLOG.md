@@ -3029,3 +3029,195 @@ When player creation fails (server 400/500), the form shows nothing — no toast
 - Workaround currently in place: `number: body.number ?? 0` — prevents crash but still stores 0 for unassigned players
 - Run a quick count before migration: `SELECT COUNT(*) FROM players WHERE number = 0` — to know how many rows will need backfill treatment post-migration
 - Related: BACKLOG-069 (partial player profile audit)
+
+---
+
+### BACKLOG-073 — Dependabot Security Audit + Fixes
+
+**Status:** OPEN
+**Priority:** High
+**Filed:** 2026-06-17
+**Source:** 53 Dependabot alerts on `dev` branch — 1 critical, 20 high, 28 medium, 4 low
+
+---
+
+#### Item A — Upgrade Next.js (kills ~20 alerts)
+
+**Priority:** HIGH
+**Current:** `15.3.8`
+**Fix:** `15.5.18`
+
+Alerts resolved by this upgrade:
+- [HIGH] Middleware / Proxy bypass via segment-prefetch routes (+ incomplete fix follow-up)
+- [HIGH] Middleware / Proxy bypass in Pages Router i18n
+- [HIGH] Server Components DoS (two separate CVEs)
+- [HIGH] Cache Components connection exhaustion DoS
+- [HIGH] Server-side request forgery via WebSocket upgrades
+- [HIGH] HTTP request deserialization DoS via insecure RSC
+- [MEDIUM] Cache poisoning via RSC responses
+- [MEDIUM] Cache poisoning via React Server Component cache-busting
+- [MEDIUM] Middleware / Proxy redirect cache poisoning
+- [MEDIUM] XSS via CSP nonces in App Router
+- [MEDIUM] XSS in beforeInteractive scripts
+- [MEDIUM] Image Optimization API DoS
+- [MEDIUM] Image Optimization API disk cache growth
+- [MEDIUM] HTTP request smuggling in rewrites
+- [MEDIUM] Image Optimization cache key confusion
+- [MEDIUM] Image Optimization content injection
+- [MEDIUM] Improper Middleware redirect SSRF
+- [LOW] Cache poisoning via RSC cache-busting
+- [LOW] Middleware / Proxy redirect cache poisoning
+
+**Steps:**
+1. `npm install next@15.5.18 --save-exact`
+2. Run `tsc --noEmit` — zero new errors
+3. Boot app locally, verify Three Critical Flows (match creation, event logging, public livescore)
+4. Deploy to staging, verify before prod
+5. Check for any breaking changes in Next.js 15.3 → 15.5 changelog before upgrading
+
+**Risk:** Medium — minor version bump, but Next.js has had breaking changes in patch releases before. Test thoroughly on staging.
+
+---
+
+#### Item B — Upgrade drizzle-orm (SQL injection)
+
+**Priority:** HIGH
+**Current:** `^0.44.7`
+**Fix:** `0.45.2+`
+
+Alert: SQL injection via improperly escaped SQL identifiers (`drizzle-orm < 0.45.2`).
+Directly affects all DB queries in BrixSports.
+
+**Steps:**
+1. `npm install drizzle-orm@0.45.2 --save-exact`
+2. Run `tsc --noEmit` — Drizzle often has minor type-level breaking changes between minor versions
+3. Run existing DB queries manually to verify correct output
+4. Check Drizzle 0.44 → 0.45 changelog for breaking changes before upgrading
+
+**Risk:** Medium — Drizzle minor versions have had breaking API changes before.
+
+---
+
+#### Item C — Upgrade swiper (CRITICAL prototype pollution)
+
+**Priority:** CRITICAL
+**Current:** `^12.0.3`
+**Fix:** `12.1.2`
+
+Alert: Prototype pollution in swiper `>= 6.5.1, < 12.1.2`.
+Already on `^12.x` — just needs a patch bump.
+
+**Steps:**
+1. `npm update swiper`
+2. Verify swiper still renders correctly in any page using it (search for `swiper` usage in src/)
+3. Commit and deploy
+
+**Risk:** Low — patch bump within same major version.
+
+---
+
+#### Item D — xlsx: no fix available
+
+**Priority:** Medium — track only, no action yet
+**Current:** `0.18.5`
+**Alerts:**
+- [HIGH] ReDoS in SheetJS — no fix yet
+- [HIGH] Prototype Pollution in SheetJS — no fix yet (fix in `0.19.3` for PP, but ReDoS has no fix)
+
+xlsx has no published fix for the ReDoS vulnerability. Options:
+1. **Replace with `exceljs`** — actively maintained alternative, drop-in for most read/write operations
+2. **Restrict xlsx usage** — ensure it only runs server-side on admin-uploaded files (never public-facing), validate file size before parsing
+3. **Wait** — monitor for a patch release
+
+**Steps (interim mitigation):**
+- Audit where xlsx is used: `grep -r "xlsx" src/ --include="*.ts" --include="*.tsx"`
+- Confirm it only runs server-side on admin-authenticated routes (never public endpoints)
+- Add file size cap before parsing to limit ReDoS blast radius
+- File a follow-up to replace with `exceljs` if no patch in 30 days
+
+**Risk of current state:** Medium — only exploitable if an attacker can upload a malicious spreadsheet to an admin route. Confirm admin auth gates on all xlsx usage.
+
+---
+
+#### Item E — Transitive dep noise (no direct action needed)
+
+These are transitive dependencies pulled in by Next.js, esbuild, or other tools. They will be resolved by upgrading the direct deps above. No direct action required:
+
+- `ws < 8.20.1` — transitive via Next.js
+- `socket.io-parser < 4.2.6` — transitive
+- `qs <= 6.15.1` — transitive
+- `uuid < 11.1.1` — transitive
+- `lodash <= 4.17.23` — transitive
+- `minimatch < 3.1.3` / `< 9.0.7` — transitive
+- `flatted <= 3.4.1` — transitive
+- `fast-xml-parser < 5.7.0` — transitive
+- `fast-xml-builder <= 1.1.6` — transitive
+- `markdown-it < 14.2.0` — transitive
+- `picomatch < 2.3.2` / `< 4.0.4` — transitive
+- `bn.js < 4.12.3` — transitive
+- `js-yaml < 4.1.1` — transitive
+- `postcss < 8.5.10` — transitive
+- `nodemailer <= 8.0.5` — transitive
+- `preact < 10.28.2` — transitive (likely via Next.js)
+- `prismjs < 1.30.0` — transitive
+- `esbuild` — **Withdrawn advisory, ignore**
+
+#### Execution Order
+1. Item C — swiper patch (lowest risk, CRITICAL severity, 1 command)
+2. Item A — Next.js upgrade (most alerts resolved, medium risk)
+3. Item B — drizzle-orm upgrade (SQL injection, medium risk)
+4. Item D — xlsx audit + mitigation (no patch available)
+
+Do Items C → A → B in separate PRs so regressions can be isolated per upgrade.
+
+---
+
+### BACKLOG-074 — BUSA League Full Audit: Data Integrity, Event Backfill, Team & Affiliation Wiring
+
+**Status:** OPEN
+**Priority:** HIGH — blocks accurate stats, leaderboards, and eligibility across all BUSA competitions
+**Filed:** 2026-06-17
+
+#### Problem
+Three compounding issues make BUSA league data unreliable:
+
+1. **Match event / goal log disparity (BUG-011)** — 718 goals logged vs 133 appearances (~5.4 goals/appearance). Root cause: duplicate backfill runs with differing `startTime` formats bypassed the dedup check. 39 `match_events` rows have `player_id = NULL`. `playerStats` is corrupted and cannot be trusted until a full dedup audit is done.
+
+2. **Team affiliation gaps** — Many BUSA league players are not properly affiliated to their teams via `playerTeamAffiliations`. Some still rely only on the legacy `players.teamId` column. Roster Builder (BACKLOG-037) is partly built but not fully wired — team affiliation rows are incomplete across the league.
+
+3. **College affiliation gaps** — 97 players still have `college = NULL` on staging. Intercollege rosters cannot be built until these are resolved. Ongoing this session.
+
+#### Required Work (in order)
+
+**Phase 1 — Event log dedup audit**
+- Query `match_events` for duplicate rows: same `match_id + player_id + type + minute` (or near-minute)
+- Output a report: how many duplicates, which matches, which players affected
+- Do NOT delete anything yet — audit only
+- Cross-reference against the 39 null-player event IDs listed in BUG-032
+- Relates to BUG-011 — do not run any backfill until this is clean
+
+**Phase 2 — playerStats reset and rebuild**
+- Once dedup audit is clean and duplicates are confirmed/removed:
+- Zero out `playerStats` for all affected players
+- Re-derive from `match_events` via backfill endpoint or script
+- Verify: goals/appearances ratio plausible per player
+
+**Phase 3 — Team affiliation wiring**
+- For every BUSA league player, confirm a `playerTeamAffiliations` row exists with `affiliation_type = 'team'` pointing to their correct BUSA team
+- Players with only `players.teamId` set (legacy column) need an affiliation row inserted
+- Script: read `players.teamId WHERE teamId LIKE 'busa-%'`, insert missing `playerTeamAffiliations` rows
+
+**Phase 4 — College affiliation completion**
+- Complete the 97 NULL-college players (ongoing — BACKLOG-070)
+- Run final diagnostic: 0 NULL, 0 mismatches on staging and prod
+
+**Phase 5 — Cross-competition eligibility audit**
+- Once team and college affiliations are clean, audit squad eligibility:
+  - A player in BUSA league should be eligible for intercollege via their college affiliation
+  - A player in intercollege should not appear as a BUSA-only player
+  - Run eligibility queries per competition to surface any broken links
+
+#### Notes
+- Do not touch playerStats or run any backfill until Phase 1 dedup audit is complete
+- BUG-011 (718 goals), BUG-032 (39 null-player events), and this item are all linked — resolve in order
+- Related: BUG-011, BUG-032, BACKLOG-037 (Roster Builder), BACKLOG-070 (college NULL players)

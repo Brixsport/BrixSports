@@ -514,5 +514,29 @@ Source code changes only this session. DB changes were applied in Session 15 (se
 |----------------------|---------|------------|
 | playerStats dedup audit | Investigate BUG-011 (718 goals anomaly) | Requires staging environment first (BACKLOG-005 Phase 1) |
 | ~~backfill-college-affiliations-staging.mjs (prod run)~~ | Superseded by mirror-college-to-prod.mjs ✓ | DONE |
+| mirror-college-to-prod.mjs (re-run after new profiles) | Mirror 20 new BUSALYMPICS profiles + their affiliations to prod | Run after staging verify ✓ |
 
 _Note: PATCH MD3 scores and BUSALYMPICS standings recalculation were completed in Session 10 (see above). Table updated 2026-06-15._
+
+---
+
+### dev/copy-new-players-to-prod.mjs
+- **Purpose:** Copy 30 new Bells players (10 already-profiled + 20 new BUSALYMPICS profiles) from staging to prod, including all affiliation rows
+- **Target:** PROD (`libsql://brixsportv2-brixsports`, `.env.production`)
+- **Players inserted:** 30 (COLENG×3, COLENVS×14, COLMANS×9, COLNAS×3)
+- **Affiliation rows inserted:** 37 (college affiliations + BUSA team affiliations for Chris/Effiong/Enoch/Alex/Bruno/Smart/TOJU)
+- **TOJU:** COLENVS college + Wolves FC team — both rows confirmed on prod ✓
+- **Verify:** 30 players, 0 missing affiliations on prod ✓
+
+---
+
+### College affiliation backfill + new player profiles (staging + prod)
+
+2026-06-17 | mirror-college-to-prod.mjs + copy-new-players-to-prod.mjs | STAGING + PROD | SUCCESS | VERIFIED
+
+- Staging: 20 new player profiles created (11 COLENVS, 9 COLMANS), all with correct college affiliation rows
+- TOJU: dual affiliation — COLENVS college + Wolves FC team
+- 10 already-profiled players backfilled with missing affiliation rows
+- Final state staging: 208 Bells students, 0 college affiliation mismatches
+- Prod mirror: 30 players inserted, 37 affiliation rows inserted (college + BUSA team where applicable)
+- Final state prod: 0 missing affiliations

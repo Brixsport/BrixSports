@@ -123,3 +123,11 @@ activation: always_on
 - Live update mechanism must have a fallback if the channel drops.
 - Viewer must see stale data clearly on failure, not a crash.
 - Target update latency: under 5 seconds from event save to public display.
+
+2026-06-17 — Empty string teamId causes FOREIGN KEY constraint failure on player create — `body.teamId` arrives as `''` when no team selected; DB rejects it as a non-null FK reference. Fix: always coerce `body.teamId || null` before insert. Applies to any optional FK column.
+
+2026-06-17 — players.number is NOT NULL in DB despite nullable intent — schema has `notNull().default(0)` so null is rejected at DB level. Used `body.number ?? 0` as workaround (0 = unassigned sentinel). Real fix: make column nullable via migration (BACKLOG-072).
+
+2026-06-17 — mirror script (UPDATE) silently no-ops when target rows don't exist on prod — `rowsAffected: 0` for all 30 new players because UPDATE finds no matching IDs. New player rows require INSERT not UPDATE. Always check whether target rows exist on prod before writing a mirror script; if new profiles may be absent, build an INSERT-with-skip-existing script instead.
+
+2026-06-17 — UI form required attribute blocks valid partial profiles — Jersey # and Assigned Team marked `required` in HTML prevented BUSALYMPICS-only players (no team, no jersey) from being created, even though the API and DB allow it. Browser enforces HTML required before the request is sent. Prevention: only add `required` to inputs that the server also enforces as required.
