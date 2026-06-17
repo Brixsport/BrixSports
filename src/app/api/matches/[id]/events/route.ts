@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
-import { matchEvents, matches } from '@/db/schema';
-import { eq, asc } from 'drizzle-orm';
+import { matchEvents, matches, matchLoggerAssignments } from '@/db/schema';
+import { eq, asc, and } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
+import { getAuthUser } from '@/lib/auth';
 
 // GET /api/matches/[id]/events - Get all events for a match
 export async function GET(
@@ -55,6 +56,32 @@ export async function POST(
 ) {
     try {
         const { id: matchId } = await params;
+
+        // Auth: admin or assigned logger only
+        const authUser = await getAuthUser(request);
+        if (!authUser) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+        if (authUser.role !== 'admin' && authUser.role !== 'logger') {
+            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+        }
+        if (authUser.role === 'logger') {
+            const [assignment] = await db
+                .select({ id: matchLoggerAssignments.id })
+                .from(matchLoggerAssignments)
+                .where(
+                    and(
+                        eq(matchLoggerAssignments.matchId, matchId),
+                        eq(matchLoggerAssignments.loggerId, authUser.id),
+                        eq(matchLoggerAssignments.status, 'active')
+                    )
+                )
+                .limit(1);
+            if (!assignment) {
+                return NextResponse.json({ error: 'Forbidden — not assigned to this match' }, { status: 403 });
+            }
+        }
+
         const body = await request.json();
         const {
             type,
@@ -66,7 +93,6 @@ export async function POST(
             detail,
             isEyePoint = false,
             value,
-            loggerId,
             loggerName,
             period,
         } = body;
@@ -107,7 +133,7 @@ export async function POST(
             detail: detail || null,
             isEyePoint,
             value: value ? JSON.stringify(value) : null,
-            loggerId: loggerId || null,
+            loggerId: authUser.id,
             loggerName: loggerName || null,
             period: period || null,
             createdAt: new Date(),
@@ -171,6 +197,32 @@ export async function DELETE(
 ) {
     try {
         const { id: matchId } = await params;
+
+        // Auth: admin or assigned logger only
+        const authUser = await getAuthUser(request);
+        if (!authUser) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+        if (authUser.role !== 'admin' && authUser.role !== 'logger') {
+            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+        }
+        if (authUser.role === 'logger') {
+            const [assignment] = await db
+                .select({ id: matchLoggerAssignments.id })
+                .from(matchLoggerAssignments)
+                .where(
+                    and(
+                        eq(matchLoggerAssignments.matchId, matchId),
+                        eq(matchLoggerAssignments.loggerId, authUser.id),
+                        eq(matchLoggerAssignments.status, 'active')
+                    )
+                )
+                .limit(1);
+            if (!assignment) {
+                return NextResponse.json({ error: 'Forbidden — not assigned to this match' }, { status: 403 });
+            }
+        }
+
         const { searchParams } = new URL(request.url);
         const eventId = searchParams.get('eventId');
 
