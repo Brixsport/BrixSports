@@ -11,6 +11,52 @@
 
 ## Sessions
 
+### Session 23 — 2026-06-17
+
+**Focus:** College affiliation data integrity — diagnose, correct individual cases, plan bulk reconcile for 110 players with no college affiliation.
+
+**Built:**
+
+- **`dev/fix-joga-player2-college-affiliation.mjs`** — delete wrong CENVS affiliation + insert correct COLENG affiliation for `busa-joga-player-2` on **staging**. Verified: 2 rows (team + correct college). Retained in dev/.
+- **`dev/fix-joga-player2-college-affiliation-prod.mjs`** — same operation on **prod** (`libsql://brixsportv2-brixsports`). Uses `player_id + team_id + affiliation_type` predicate (no hardcoded row ID). Verified: 2 rows confirmed, parity with staging. Retained in dev/.
+- **`dev/query-bells-college-diagnostic.mjs`** — read-only diagnostic: total Bells students, breakdown by college, non-Bells count, affiliation mismatches (players with college set but wrong/missing affiliation row). Run against staging.
+- **`dev/preflight-joga-player2-college-row.mjs`** — point-in-time preflight confirming the wrong CENVS row existed before the fix.
+- **`dev/query-bells-college-distribution.mjs`** — college distribution query (written, not run this session — superseded by diagnostic).
+
+**Data findings (staging):**
+
+- 178 total Bells students. 0 non-Bells players.
+- College breakdown: NULL (110), COLENG (35), COLNAS (21), COLMANS (7), COLENVS (5)
+- 0 affiliation mismatches — all 68 players with college set have correct affiliation rows
+- 110 players have `college = NULL` — cannot be auto-affiliated until college is set via admin modal
+- The COLENG count (35) includes the McTee fix applied this session (was 34 pre-fix)
+
+**Architecture decisions:**
+
+- **`players.college` is display metadata only** — neither admin modal writes a `playerTeamAffiliations` row. The affiliation row is what connects a player to a college team for roster/squad/eligibility. Both fields must be set independently until BACKLOG-066 lands.
+- **Reconcile script pattern confirmed:** read `players.college`, look up correct team_id from map, delete any wrong college affiliation, insert correct one if missing. Idempotent — safe to re-run. Handles all cases: missing row, wrong row, already correct (skip).
+
+**Bugs encountered:** None.
+
+**Deferred:**
+
+- `dev/backfill-college-affiliations.mjs` — the reconcile script for all 110 players. Not built yet — blocked on Richard setting `players.college` for all 110 via the admin modal.
+- BACKLOG-066 (college field change auto-manages affiliation) — depends on BACKLOG-049.
+
+**Additional fixes (end of session):**
+- `dev/fix-mcanthony-college-prod.mjs` — McAnthony Uzowuru (`busa-joga-player-2`) had `players.college = 'COLENVS'` on prod but `COLENG` on staging and COLENG affiliation on both. Corrected prod college field to `COLENG`. Post-diagnostic confirmed full parity: staging and prod both at 178 total, 110 NULL, COLENG 35, COLNAS 21, COLMANS 7, COLENVS 5, 0 mismatches.
+
+**Continuation (same session):**
+- Richard updated college for 13 more players via admin modal on staging — NULL count dropped from 110 → 97, mismatch count rose to 14
+- Built and ran `dev/backfill-college-affiliations-staging.mjs` — deleted 1 wrong row (Sukunmi SK's COLENVS affiliation, college=COLENG), inserted 14 missing affiliation rows (COLENG×8, COLENVS×3, COLMANS×1, COLNAS×2)
+- Verify output: 81 players with college set, 0 remaining mismatches ✓
+- Filed BACKLOG-067 (competition display name per squad entry), BACKLOG-068 (multi-sport player profile merge audit), BACKLOG-069 (partial player profile audit)
+- Updated BACKLOG-057 scope: Pool/Squad tab rename + "Add Player" panel relocation confirmed as pure UI change (no data model change)
+
+**Next session:** Richard sets college for remaining 97 NULL players → re-run diagnostic to confirm 0 NULL → build prod version of backfill script → verify prod diagnostic parity → run on prod → final parity check.
+
+---
+
 ### Session 22 — 2026-06-16
 
 **Focus:** BUG-032 null playerId gate on POST /api/events. Housekeeping: RUNLOG merge, BACKLOG cleanup, data investigation (joseph/leo players, Bells BUSA-league college gap).

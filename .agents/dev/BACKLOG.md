@@ -112,6 +112,8 @@ Convert to `.github/workflows/pre-prod-check.yml`. Trigger on PR to `main`. Pass
 - **TD-004**: Update `.env.example` to match the actual 29 keys discovered in the codebase (currently only lists 16).
 - ~~**TD-005**: Atomic refactor for logger assignment — resolved as part of BUG-008 (2026-06-05). Transaction wraps check-then-insert in `assign-logger/route.ts`.~~
 - ~~**TD-006**: Response sanitization for `/api/matches` email leak — resolved as part of BUG-007 (2026-06-05). Email stripped from public `assignedLoggers` select.~~
+- **TD-009** _(MEDIUM)_: Extract shared `PlayerForm` component. `/admin/players` modal and `/admin/players/[id]` edit profile page are two separate form implementations with identical fields (college select, university lock, position dropdown, validation). One source of truth required. **Do not fix either form in isolation before this refactor is scoped — fixing one creates a second copy to maintain.** Implement after roster upload is complete.
+
 - **TD-007**: Bulk Register UX placement — `/admin/bulk-register` currently lives as a standalone route but registration flows (team + player creation) may belong inside the competition or team management context instead. Needs a UX review to determine the correct placement before the page grows further.
 - ~~**TD-008**~~: `useLiveStandings.ts` — `teamLogo: string` type was wrong (should be `string | null`); `|| '❓'` emoji fallback masked null values causing `TeamLogo` to receive a literal emoji string. RESOLVED 2026-06-16 — type fixed to `string | null`, fallback changed to `null`. Commit `bb0a1ed`.
 
@@ -2505,6 +2507,40 @@ competition — this corrupts standings and stats.
 
 ---
 
+### BACKLOG-066 — College field change auto-manages college team affiliation
+
+**Status:** OPEN
+**Priority:** Medium
+**Filed:** 2026-06-17
+**Depends on:** BACKLOG-049 (start_date/end_date wiring must be active first)
+
+#### Problem
+
+`players.college` field and `player_team_affiliations` college rows are currently managed independently. Setting `college = 'COLNAS'` on a player does not automatically create or update the corresponding affiliation row — they can silently drift out of sync.
+
+#### Correct Architecture
+
+When `college` is set or changed on a player profile (via admin modal or edit profile):
+
+1. Look up the team row where `ownerOrganizationId` matches the college code
+2. If no active college affiliation exists → create one (`affiliation_type: 'college'`, `is_primary: false`, `start_date: now`, `is_active: true`)
+3. If an active affiliation to a **different** college team exists → close it (`end_date: now`, `is_active: false`), open the new one
+4. Old row is retained as history — preserves transfer/college-change audit trail
+
+#### Impact
+
+- Edit modal becomes the automatic trigger for affiliation management — no manual roster scripts for future college assignments
+- History preserved via `start_date`/`end_date` (BACKLOG-049 enabler)
+- The 110 players missing college affiliations will be resolved automatically once their `college` field is set via a script or admin UI
+
+#### Notes
+
+- For the 110 current missing players — script approach remains the correct immediate fix since this is not yet built
+- Once BACKLOG-066 lands, the script is unnecessary for future cases
+- Implementation: server-side logic in `PATCH /api/players/[id]` — detect college field change, run affiliation lookup + create/close logic atomically
+
+---
+
 ### BACKLOG-049 — Seasonal Affiliations + Transfer Window
 
 **Status:** OPEN
@@ -2786,3 +2822,210 @@ unnecessarily, wasting Cache Storage quota.
 - Retire sw.js after BACKLOG-059 audit confirms it's safe to remove
 
 #### Depends on: BACKLOG-059
+
+
+---
+
+### BACKLOG-057 — Pool/Squad Tab Rename + "Add Player" Panel Relocation (updated scope)
+
+**Status:** OPEN
+**Priority:** Low — cosmetic/UX only, no data model change
+**Filed:** 2026-06-16 (updated scope 2026-06-17)
+
+#### Problem
+Tab labels are conceptually swapped and the "Add Player to Pool" panel is mounted in the wrong tab.
+
+Current state:
+- "Roster" tab → should be **Pool** (permanent affiliation management — add/remove players, set jersey numbers)
+- "Squad" tab → should be **Squad** (competition-scoped — who's selected, editable squad/jersey numbers per competition)
+- "Add Player to Pool" panel currently lives in the Squad tab — it belongs in the Pool tab
+
+#### Required Changes
+1. Rename the Roster tab label → **Pool**
+2. Rename the Squad tab label → **Squad** (already correct semantically, just confirming)
+3. Move the "Add Player to Pool" panel from Squad tab into Pool tab
+4. Squad tab shows only competition-scoped squad entries — jersey/squad number editing inline
+
+No schema or API changes. UI-only.
+
+#### Notes
+- Build after BACKLOG-037 roster upload is verified on staging
+- Related: BACKLOG-053 (roster inline edit), BACKLOG-067 (competition display name per squad entry)
+
+---
+
+### BACKLOG-067 — Competition Display Name Per Squad Entry
+
+**Status:** OPEN
+**Priority:** Medium
+**Filed:** 2026-06-17
+
+#### Problem
+A player may go by different names in different competitions — e.g. "Puyoo" in BUSA League, "Posi" in Intercollege. The current squad pencil icon only edits `squadNumber`. There is no way to record a competition-specific display name per squad entry.
+
+The `nicknames` JSON array on `playerTeamAffiliations` is the right home for this — it's already per-team-affiliation. The squad entry (squadPlayers row) needs a `displayName` field that a logger or admin can set per competition.
+
+#### Required Changes
+1. Add `displayName` text column (nullable) to `squadPlayers` table
+2. Run `db:push` against staging, then prod
+3. Squad tab pencil icon edit form: add a "Competition display name" text input alongside `squadNumber`
+4. PATCH `/api/admin/teams/[teamId]/squad/[squadPlayerId]` — accept and persist `displayName`
+5. Logger player search: surface `displayName` when set (show alongside `jerseyName`)
+6. Match event logging: when logging an event, show `displayName` if set for that competition's squad
+
+#### Notes
+- `nicknames` on `playerTeamAffiliations` is per-team, not per-competition — `displayName` on `squadPlayers` is the correct per-competition scoping
+- Do not start until BACKLOG-037 Step 7 (Squad Selector) is verified on staging
+- Related: BACKLOG-041 (nickname search in logger), BACKLOG-057
+
+---
+
+### BACKLOG-068 — Multi-Sport Player Profile Audit and Merge
+
+**Status:** OPEN
+**Priority:** Medium — data integrity, not blocking live matches
+**Filed:** 2026-06-17
+
+#### Problem
+Players who compete in multiple sports (e.g. Jabbar in football + basketball) have separate player profiles — one per sport. The correct model is one canonical player profile with multiple `playerTeamAffiliations` rows across different sports and teams.
+
+Separate profiles cause stat fragmentation, duplicate search results, and broken cross-sport leaderboards.
+
+#### Required Changes
+1. **Audit** — query for players with name similarity > 80% across different sport contexts. Output a report: name, sport, team, player_id, match_events count per profile.
+2. **Merge script** — for confirmed duplicates:
+   - Identify canonical profile (higher match_events count, or earliest created_at)
+   - Re-point all `match_events`, `playerStats`, `playerRatings`, `squadPlayers`, `playerTeamAffiliations` rows from the duplicate to the canonical `player_id`
+   - Delete the duplicate `players` row
+3. **Add second-sport affiliation** to the canonical profile via `playerTeamAffiliations` (college team or BUSA team for that sport)
+
+#### Notes
+- Do not touch this without a written merge plan per player — it is a destructive data operation
+- Run audit script first, confirm with Richard, then build merge script
+- Merge tool (BACKLOG-042) would be the right permanent solution — this is a one-off manual fix until that exists
+- Related: BACKLOG-042 (player merge tool)
+
+---
+
+### BACKLOG-069 — Partial Player Profile Audit
+
+**Status:** OPEN
+**Priority:** Medium — data quality, not blocking
+**Filed:** 2026-06-17
+
+#### Problem
+Many player profiles have missing fields — some non-critical (nicknames, age), some critical for live logging and competition eligibility (college, position, jersey number). No systematic report exists of which fields are missing and for how many players.
+
+#### Required Changes
+1. **Audit script** (`dev/audit-player-profiles.mjs`) — query all Bells BUSA-league players and output a structured report:
+   - Critical missing: `college` (NULL), `position` (NULL or empty), `jerseyNumber` / `number` (NULL)
+   - Non-critical missing: `jerseyName` (NULL), `university` (NULL), `age` (NULL), `email` (NULL)
+   - Flag players with `college` set but no matching `playerTeamAffiliations` college row (should be 0 after BACKLOG affiliation backfill, but verify)
+   - Output: CSV or table grouped by team, with counts per field
+
+2. **Fix flow** — after report:
+   - Critical fields: fix via admin player modal (individual) or a targeted update script (bulk)
+   - Non-critical fields: defer unless a specific feature requires them
+
+#### Notes
+- Run audit script against staging first — verify counts match prod before touching prod
+- College NULL count should be ~97 (post session 23 backfill of 110→97 via admin modal)
+- Position and jersey number gaps are likely higher — unknown until script runs
+- Related: BACKLOG-062 (college select dropdown — already shipped), BACKLOG-055 (position canonical values)
+
+---
+
+### BACKLOG-070 — Set College for 97 NULL-College Bells Players (+ New Player Profiling)
+
+**Status:** OPEN — blocked on Richard
+**Priority:** High — blocks college team rosters and eligibility
+**Filed:** 2026-06-17
+
+#### Problem
+97 Bells BUSA-league players have `players.college = NULL` on staging (35 of these also NULL on prod). Until college is set, no `playerTeamAffiliations` college row can be inserted — these players don't appear in any college team roster.
+
+Additionally, new players not yet in the DB need to be profiled before they can be rostered.
+
+#### Action Required (Richard — admin UI on staging)
+
+**Existing players with no college set:**
+- Go to `/admin/players` → open each player modal → set College dropdown → save
+- 97 players total — college select dropdown already ships (BACKLOG-062 ✓)
+- Minimum fields to set: **College** (the affiliation backfill handles the rest)
+
+**New players not yet in DB:**
+- Create via `/admin/players` → new player form
+- Minimum fields to unblock roster: **Name** + **College** (COLNAS / COLENG / COLMANS / COLENVS)
+- All other fields (position, jersey number, jerseyName) can be filled later
+
+#### After Richard sets colleges
+
+Re-run diagnostic to confirm count of new mismatches:
+```
+node dev/query-bells-college-diagnostic.mjs
+```
+
+Then run the affiliation backfill (already covers new players automatically — any player with college set and no matching affiliation row is caught):
+```
+node dev/backfill-college-affiliations-staging.mjs
+```
+
+Then mirror to prod:
+```
+node dev/mirror-college-to-prod.mjs
+```
+
+#### Notes
+- The diagnostic mismatch query catches ALL players where `college IS NOT NULL AND affiliation = NONE` — new profiles created via admin UI are picked up automatically on next run, no script changes needed
+- Do staging first, verify 0 mismatches, then run prod mirror
+- Related: BACKLOG-066 (college field auto-manages affiliation — long-term fix so this is never manual again)
+
+---
+
+### BACKLOG-071 — Player Create Form: No Client-Side Error Feedback
+
+**Status:** OPEN
+**Priority:** Medium — UX blocker during active player profiling
+**Filed:** 2026-06-17
+
+#### Problem
+When player creation fails (server 400/500), the form shows nothing — no toast, no inline error, no UI change. Admin has no idea whether the save succeeded or failed without checking the server logs.
+
+#### Required Changes
+- On POST failure, surface the server `error` field (or a generic fallback) as a toast or inline error banner in the modal
+- On success, show a success toast and close the modal
+- Loading state on the save button while the request is in flight (already has `disabled={isSaving}` but no spinner/label change)
+
+#### Files
+- `src/app/admin/players/page.tsx` — the create/edit modal submit handler
+
+---
+
+### BACKLOG-072 — Make players.number Nullable (Schema Fix)
+
+**Status:** OPEN
+**Priority:** Medium — correctness issue
+**Filed:** 2026-06-17
+
+#### Problem
+`players.number` is `integer('number').notNull().default(0)` in schema. Using `0` as the sentinel for "no jersey number assigned" is wrong — jersey number 0 is valid in some sports (e.g. basketball). Current workaround inserts `0` when no number is provided, which corrupts the meaning of the field.
+
+#### Required Changes
+1. In `src/db/schema.ts` — change:
+   ```ts
+   number: integer('number').notNull().default(0)
+   ```
+   to:
+   ```ts
+   number: integer('number')
+   ```
+   (nullable, no default — null = unassigned)
+
+2. Run `db:push` against staging, verify, then prod
+3. Update any UI that displays `number === 0` as a jersey number — should treat `null` or `0` as "—" (unassigned display)
+4. Remove the `?? 0` workaround in `POST /api/players` once migration lands
+
+#### Notes
+- Workaround currently in place: `number: body.number ?? 0` — prevents crash but still stores 0 for unassigned players
+- Run a quick count before migration: `SELECT COUNT(*) FROM players WHERE number = 0` — to know how many rows will need backfill treatment post-migration
+- Related: BACKLOG-069 (partial player profile audit)

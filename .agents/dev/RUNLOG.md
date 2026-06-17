@@ -451,10 +451,68 @@ Source code changes only this session. DB changes were applied in Session 15 (se
 
 ---
 
+## Session 23 — 2026-06-17
+
+### dev/fix-joga-player2-college-affiliation.mjs
+- **Purpose:** Correct wrong college affiliation for `busa-joga-player-2` — was pointing to CENVS (`U6R7aZSXNvA0iMsdVi3XV`), should be COLENG (`k6BgZFG_mtatQ11NZNQb9`)
+- **Target:** STAGING (`brixsportsv2-staging`, `.env.local`)
+- **Step 1 — DELETE:** Row `SQfFGTX8DX7o5KDVxTV7J` deleted. `rowsAffected: 1` ✓
+- **Step 2 — INSERT:** New row `pta-mctee-coleng-1781690183` inserted. `rowsAffected: 1` ✓
+- **Step 3 — VERIFY:** 2 rows confirmed for `busa-joga-player-2`:
+  - `pta-mctee-coleng-1781690183` → COLENG, `affiliation_type: college`, `is_active: 1`, `position: CB` ✓
+  - `rgUk1POhEFILphL00NGMh` → busa-joga, `affiliation_type: team`, `is_active: 1` ✓
+- **Prod:** Not run yet — staging only.
+
+---
+
+### dev/fix-joga-player2-college-affiliation-prod.mjs
+- **Purpose:** Correct wrong college affiliation for `busa-joga-player-2` on prod — was CENVS (`U6R7aZSXNvA0iMsdVi3XV`), corrected to COLENG (`k6BgZFG_mtatQ11NZNQb9`)
+- **Target:** PROD (`libsql://brixsportv2-brixsports.aws-eu-west-1.turso.io`, `.env.production`)
+- **Step 1 — DELETE:** 1 row removed (CENVS affiliation). `rowsAffected: 1` ✓
+- **Step 2 — INSERT:** New row `pta-mctee-coleng-prod-1781690362` inserted → COLENG, `affiliation_type: college`, `is_active: 1`, `position: CB`. `rowsAffected: 1` ✓
+- **Step 3 — VERIFY:** 2 rows confirmed — COLENG college affiliation + busa-joga team affiliation. Parity with staging ✓
+- Script retained in dev/
+
+---
+
+### dev/fix-mcanthony-college-prod.mjs
+- **Purpose:** Fix `players.college` for McAnthony Uzowuru (`busa-joga-player-2`) on prod — was `COLENVS`, corrected to `COLENG`
+- **Target:** PROD (`libsql://brixsportv2-brixsports.aws-eu-west-1.turso.io`, `.env.production`)
+- **Step 1 — Lookup:** `busa-joga-player-2` confirmed as McAnthony Uzowuru, `college: COLENVS` ✓
+- **Step 2 — UPDATE:** `college = 'COLENG'`. `rowsAffected: 1` ✓
+- **Step 3 — Verify:** `college: COLENG` confirmed ✓
+- **Post-diagnostic:** Prod now at full parity with staging — 178 total, 110 NULL, COLENG 35, COLNAS 21, COLMANS 7, COLENVS 5, 0 mismatches ✓
+
+---
+
+### dev/backfill-college-affiliations-staging.mjs
+- **Purpose:** Fix all 14 college affiliation mismatches on staging — 8 COLENG, 3 COLENVS, 1 COLMANS, 2 COLNAS players with `college` set but no matching affiliation row (or wrong row)
+- **Target:** STAGING (`brixsportsv2-staging`, `.env.local`)
+- **Pre-flight:** 14 mismatches confirmed — including Sukunmi SK with wrong COLENVS row (college=COLENG)
+- **Step 1 — DELETE wrong rows:** 1 row deleted (Sukunmi SK's COLENVS affiliation). `rowsAffected: 1` ✓
+- **Step 2 — INSERT missing:** COLENG: 8, COLENVS: 3, COLMANS: 1, COLNAS: 2 = 14 rows total ✓
+- **Step 3 — VERIFY:** 81 players with college set, all ✓. Remaining mismatches: 0 ✓
+- **Prod:** Not run yet — blocked on Richard setting college for 97 NULL players on staging first, then prod mirror
+
+---
+
+### dev/mirror-college-to-prod.mjs
+- **Purpose:** Mirror staging college field updates to prod + fix all affiliation mismatches on prod
+- **Target:** PROD (`libsql://brixsportv2-brixsports`, `.env.production`) — staging used as source of truth
+- **Delta:** 14 players with college set on staging but NULL/wrong on prod — all updated ✓
+- **Step 4 — UPDATE college fields:** 14 rows updated (13 NULL→set, 1 Sukunmi SK COLENVS→COLENG) ✓
+- **Step 5 — DELETE wrong rows:** 1 deleted (Sukunmi SK's wrong COLENVS affiliation) ✓
+- **Step 6 — INSERT missing:** COLENG×8, COLENVS×3, COLMANS×1, COLNAS×2 = 14 rows inserted ✓
+- **Step 7 — VERIFY:** 81 players with college set, 0 missing affiliations, 0 remaining mismatches ✓
+- **Prod now at full parity with staging** — 81 players across COLENG/COLENVS/COLMANS/COLNAS all ✓
+
+---
+
 ## Outstanding / Pending Scripts
 
 | Script (not yet run) | Purpose | Blocked by |
 |----------------------|---------|------------|
 | playerStats dedup audit | Investigate BUG-011 (718 goals anomaly) | Requires staging environment first (BACKLOG-005 Phase 1) |
+| ~~backfill-college-affiliations-staging.mjs (prod run)~~ | Superseded by mirror-college-to-prod.mjs ✓ | DONE |
 
 _Note: PATCH MD3 scores and BUSALYMPICS standings recalculation were completed in Session 10 (see above). Table updated 2026-06-15._
