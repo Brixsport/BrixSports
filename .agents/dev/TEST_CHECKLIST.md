@@ -202,6 +202,13 @@ what fails with a one-line description.
 **Auth guard (tokenless row protection):**
 - [ ] If a row somehow has no token, confirm SW console shows `[SW Admin] Skipping event … — no token stored` (not a 401 error in Network tab)
 
+**Expiry-guard path (< 30 min remaining → refuse to queue):**
+- [ ] In `FootballLogger.tsx`, temporarily change the threshold constant from `30 * 60` to `9999999` (do NOT commit)
+- [ ] Set Network → Offline → log a goal
+- [ ] Confirm an alert fires with the "token expiring soon" message
+- [ ] Confirm DevTools → IndexedDB → `BrixsportAdminDB` → `pendingMatchEvents` → row was NOT written
+- [ ] Revert the threshold change before any commit
+
 **iOS Safari note (known limitation — do not file as bug):**
 - Background Sync API not supported on iOS Safari — queued events will not auto-drain. Logger must return to the page online to trigger drain. Not a regression.
 

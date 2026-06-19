@@ -1049,13 +1049,16 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                                 <div>
                                     <h4 className="text-[10px] font-black uppercase tracking-widest text-white/40 mb-2">Starters</h4>
                                     <div className="space-y-1">
-                                        {(lineups.home?.starters || lineups.home?.players || []).map((p: any) => (
-                                            <div key={p.id || p} className="flex items-center gap-2 text-sm p-2 bg-black/20 rounded-lg">
-                                                <span className="font-mono text-white/40 w-6 text-right">{p.number}</span>
-                                                <span className="font-bold">{p.name}</span>
-                                                <span className="text-xs text-white/30 ml-auto">{p.position}</span>
-                                            </div>
-                                        ))}
+                                        {(lineups.home?.starters || lineups.home?.players || []).map((p: any) => {
+                                            const full = homePlayers.find(pl => pl.id === (p.playerId || p.id)) || p;
+                                            return (
+                                                <div key={p.playerId || p.id || p} className="flex items-center gap-2 text-sm p-2 bg-black/20 rounded-lg">
+                                                    <span className="font-mono text-white/40 w-6 text-right">{full.number ?? p.jerseyNumber}</span>
+                                                    <span className="font-bold">{full.name ?? p.jerseyName}</span>
+                                                    <span className="text-xs text-white/30 ml-auto">{full.position ?? p.position}</span>
+                                                </div>
+                                            );
+                                        })}
                                         {(!(lineups.home?.starters || lineups.home?.players) || (lineups.home?.starters || lineups.home?.players).length === 0) && (
                                             <div className="text-white/20 text-sm italic p-2">No players set</div>
                                         )}
@@ -1076,13 +1079,16 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                                 <div>
                                     <h4 className="text-[10px] font-black uppercase tracking-widest text-white/40 mb-2">Starters</h4>
                                     <div className="space-y-1">
-                                        {(lineups.away?.starters || lineups.away?.players || []).map((p: any) => (
-                                            <div key={p.id || p} className="flex items-center gap-2 text-sm p-2 bg-black/20 rounded-lg">
-                                                <span className="font-mono text-white/40 w-6 text-right">{p.number}</span>
-                                                <span className="font-bold">{p.name}</span>
-                                                <span className="text-xs text-white/30 ml-auto">{p.position}</span>
-                                            </div>
-                                        ))}
+                                        {(lineups.away?.starters || lineups.away?.players || []).map((p: any) => {
+                                            const full = awayPlayers.find(pl => pl.id === (p.playerId || p.id)) || p;
+                                            return (
+                                                <div key={p.playerId || p.id || p} className="flex items-center gap-2 text-sm p-2 bg-black/20 rounded-lg">
+                                                    <span className="font-mono text-white/40 w-6 text-right">{full.number ?? p.jerseyNumber}</span>
+                                                    <span className="font-bold">{full.name ?? p.jerseyName}</span>
+                                                    <span className="text-xs text-white/30 ml-auto">{full.position ?? p.position}</span>
+                                                </div>
+                                            );
+                                        })}
                                         {(!(lineups.away?.starters || lineups.away?.players) || (lineups.away?.starters || lineups.away?.players).length === 0) && (
                                             <div className="text-white/20 text-sm italic p-2">No players set</div>
                                         )}

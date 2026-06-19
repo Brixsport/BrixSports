@@ -36,6 +36,10 @@
 
 ## Bugs (Open)
 
+- ~~**BUG-042**~~ _(LOW — Logger UX)_: Logger confirm-lineup screen showed blank player names and numbers. Root cause: admin publish route stores lightweight stubs `{ playerId, jerseyNumber, jerseyName }` in `matches.lineups`, but `FootballLogger.tsx` confirm screen rendered `p.name`/`p.number`/`p.position` directly on those stubs — fields that don't exist on them. Fix: resolve each starter's `playerId` against the already-fetched `homePlayers`/`awayPlayers` array; fall back to `jerseyName`/`jerseyNumber` from the stub. **RESOLVED — 2026-06-19** (`src/components/FootballLogger.tsx`).
+
+- **BUG-043** _(LOW — Admin UX)_: "Publish Official Lineups" button on `/admin/match-lineups` is silently disabled when no captain is set for either team. The button shows no tooltip, no inline hint — users with 11/11 starters see an active-looking button that doesn't respond. Both teams need a captain assigned (click "Set Captain" on one player per side) before publish enables. No code fix needed — this is a UX discoverability gap. Consider adding a disabled-state tooltip or inline validation message listing unmet conditions.
+
 - **BUG-033** _(MEDIUM — Part 1 DONE / Part 2 open)_: Team roster pool on `/admin/teams/[id]` Squad tab does not filter by sport.
   - **Part 1 (data cleanup) — RESOLVED on staging 2026-06-17. ⚠️ PROD CLEANUP UNVERIFIED:** 5 Basketball players (KAMKID, RICHARD, ZUBBY/COLENG; LIGHT, OJAY/COLNAS) wrong Football college affiliations deleted on staging. `backfill-college-affiliations-staging.mjs` updated with sport guard. Basketball college teams created for COLENG/COLNAS (BACKLOG-076 resolved). **Still needed: verify and run the same affiliation cleanup on prod before running the basketball backfill.**
   - **Part 2 (UI fix) — OPEN:** Squad tab API (`GET /api/admin/teams/[teamId]/squad`) does not filter the player pool by sport. Competition dropdown already knows the sport — pass it as a filter param and join through teams.sport on playerTeamAffiliations. Do not build until BACKLOG-068 (multi-sport player audit) is done — sport filter must match affiliation context, not just player profile.
