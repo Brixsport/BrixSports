@@ -3,6 +3,55 @@
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Activity, Save, Undo2, Clock, Play, Pause, Settings, Lock as LockIcon, MessageSquare, AlertTriangle, Send } from 'lucide-react';
+
+// ── Offline queue helpers ─────────────────────────────────────────────────────
+// Write to BrixsportAdminDB.pendingMatchEvents — the same DB sw-admin.js drains.
+// Do NOT use offline-queue.ts / brixsport-offline.events — that DB has no reader.
+
+function openAdminDB(): Promise<IDBDatabase> {
+    return new Promise((resolve, reject) => {
+        const req = indexedDB.open('BrixsportAdminDB', 1);
+        req.onerror = () => reject(req.error);
+        req.onsuccess = () => resolve(req.result as IDBDatabase);
+        req.onupgradeneeded = (e) => {
+            // Mirror sw-admin.js schema so both sides agree on store shape.
+            const db = (e.target as IDBOpenDBRequest).result;
+            if (!db.objectStoreNames.contains('pendingMatchEvents')) {
+                const store = db.createObjectStore('pendingMatchEvents', { keyPath: 'id', autoIncrement: true });
+                store.createIndex('matchId', 'matchId', { unique: false });
+                store.createIndex('timestamp', 'timestamp', { unique: false });
+            }
+        };
+    });
+}
+
+async function queueOfflineEvent(matchId: string, data: object, token: string): Promise<void> {
+    const db = await openAdminDB();
+    return new Promise((resolve, reject) => {
+        const tx = db.transaction('pendingMatchEvents', 'readwrite');
+        const store = tx.objectStore('pendingMatchEvents');
+        // Row shape must match what syncMatchEvents() in sw-admin.js reads back:
+        // { matchId, data, token, timestamp }
+        const req = store.add({ matchId, data, token, timestamp: Date.now() });
+        req.onsuccess = () => resolve();
+        req.onerror = () => reject(req.error);
+    });
+}
+
+// Returns remaining token lifetime in seconds, or 0 if unreadable / already expired.
+// JWT TTL is 7 days (src/lib/auth.ts). Threshold for queueing: 30 min (1800s).
+function jwtSecondsRemaining(token: string): number {
+    try {
+        const payloadB64 = token.split('.')[1];
+        if (!payloadB64) return 0;
+        const decoded = JSON.parse(atob(payloadB64.replace(/-/g, '+').replace(/_/g, '/')));
+        if (typeof decoded.exp !== 'number') return 0;
+        return decoded.exp - Math.floor(Date.now() / 1000);
+    } catch {
+        return 0;
+    }
+}
+// ─────────────────────────────────────────────────────────────────────────────
 import { useAuth } from '@/hooks/useAuth';
 import { useMultiLogger } from '@/hooks/useMultiLogger';
 import { useWebSocket } from '@/hooks/useWebSocket';
@@ -106,6 +155,19 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
     const [noteContent, setNoteContent] = useState('');
     const { user } = useAuth();
     const [showLineupEditModal, setShowLineupEditModal] = useState(false);
+    const [queuedOfflineCount, setQueuedOfflineCount] = useState(0);
+
+    // Listen for background-sync completion from sw-admin.js
+    useEffect(() => {
+        if (!('serviceWorker' in navigator)) return;
+        const handleMessage = (e: MessageEvent) => {
+            if (e.data?.type === 'SYNC_COMPLETE' && e.data?.tag === 'sync-match-events') {
+                setQueuedOfflineCount(0);
+            }
+        };
+        navigator.serviceWorker.addEventListener('message', handleMessage);
+        return () => navigator.serviceWorker.removeEventListener('message', handleMessage);
+    }, []);
     const [editingTeam, setEditingTeam] = useState<'home' | 'away'>('home');
     const [draftLineup, setDraftLineup] = useState<{ starters: Player[], subs: Player[] }>({ starters: [], subs: [] });
 
@@ -501,19 +563,20 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
             }
 
             // 2. Persist to API
+            // Hoisted so catch block can queue the same payload on network failure.
+            const payload = {
+                type: event.type,
+                minute: event.absoluteMinute,
+                second: event.second,
+                teamId: event.teamId,
+                playerId: event.playerId,
+                relatedPlayerId: event.relatedPlayerId,
+                detail: event.detail,
+                loggerId: event.loggerId,
+                loggerName: currentLogger?.name,
+                period: event.period,
+            };
             try {
-                const payload = {
-                    type: event.type,
-                    minute: event.absoluteMinute,
-                    second: event.second,
-                    teamId: event.teamId,
-                    playerId: event.playerId,
-                    relatedPlayerId: event.relatedPlayerId,
-                    detail: event.detail,
-                    loggerId: event.loggerId,
-                    loggerName: currentLogger?.name,
-                    period: event.period,
-                };
 
                 const res = await fetch(`/api/matches/${match.id}/events`, {
                     method: 'POST',
@@ -526,9 +589,42 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                     if (saved.event && saved.event.id) {
                         manager.confirmEvent(event.id, saved.event.id);
                     }
+                } else {
+                    // Server rejection (4xx/5xx) — real error, not a connectivity issue.
+                    // Do NOT queue: the server received and rejected the event.
+                    const errBody = await res.json().catch(() => ({}));
+                    console.error('[FootballLogger] Event POST rejected by server:', res.status, errBody);
                 }
             } catch (e) {
-                console.error("Propagation API Error:", e);
+                // Network failure — server never received the event. Queue for background sync.
+                const token = localStorage.getItem('authToken');
+                if (!token) {
+                    // No token = no recovery path. Surface visibly rather than silently losing the event.
+                    console.error('[FootballLogger] Network error and no token available — event cannot be queued:', e);
+                    alert('Network error: could not save this event and no session found. Please re-login and re-log this event manually.');
+                    return;
+                }
+                // JWT TTL is 7 days. Refuse to queue if < 30 min remaining —
+                // a drained sync with an expired token will 401 with no recovery path.
+                const QUEUE_MIN_TTL_SECONDS = 30 * 60;
+                if (jwtSecondsRemaining(token) < QUEUE_MIN_TTL_SECONDS) {
+                    console.warn('[FootballLogger] Token expiring soon — refusing to queue offline event');
+                    alert('Your session is expiring soon. This event was NOT queued for offline sync — please re-login before continuing offline, then re-log this event.');
+                    return;
+                }
+                try {
+                    await queueOfflineEvent(match.id, payload, token);
+                    setQueuedOfflineCount(prev => prev + 1);
+                    if ('serviceWorker' in navigator) {
+                        const reg = await navigator.serviceWorker.ready;
+                        if ('sync' in reg) {
+                            await (reg as ServiceWorkerRegistration & { sync: { register: (tag: string) => Promise<void> } }).sync.register('sync-match-events');
+                        }
+                    }
+                    console.log('[FootballLogger] Event queued for background sync');
+                } catch (queueErr) {
+                    console.error('[FootballLogger] Failed to queue event:', queueErr);
+                }
             }
         });
 
@@ -1082,6 +1178,14 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                                 {isSocketConnected ? 'Live Sync' : 'Offline'}
                             </span>
                         </div>
+                        {queuedOfflineCount > 0 && (
+                            <div className="flex items-center gap-1.5 px-2 py-1 bg-orange-500/10 rounded-lg border border-orange-500/30 shrink-0">
+                                <span className="w-1.5 h-1.5 rounded-full bg-orange-500 animate-pulse" />
+                                <span className="text-[8px] font-black uppercase tracking-tighter text-orange-400">
+                                    {queuedOfflineCount} Queued
+                                </span>
+                            </div>
+                        )}
                         <button onClick={() => setShowCommsModal(true)} className="p-1.5 bg-white/5 rounded-lg hover:bg-white/10 shrink-0 relative">
                             <MessageSquare size={16} />
                             {comms.some(c => !c.isRead) && (
