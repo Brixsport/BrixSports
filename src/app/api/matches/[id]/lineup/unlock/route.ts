@@ -3,6 +3,7 @@ import { db } from '@/db';
 import { matches } from '@/db/schema';
 import { eq } from 'drizzle-orm';
 import jwt from 'jsonwebtoken';
+import { env } from '@/lib/env';
 
 // POST /api/matches/[id]/lineup/unlock - Unlock published lineup (Admin only)
 export async function POST(
@@ -27,9 +28,12 @@ export async function POST(
 
         let decoded: { id: string; email: string; role: string; name?: string };
         try {
+            if (!env.jwtSecret) {
+                return NextResponse.json({ error: 'Server misconfiguration' }, { status: 500 });
+            }
             decoded = jwt.verify(
                 token,
-                process.env.JWT_SECRET || 'your-secret-key-change-in-production'
+                env.jwtSecret
             ) as { id: string; email: string; role: string; name?: string };
 
             if (decoded.role !== 'admin') {

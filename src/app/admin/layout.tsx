@@ -2,6 +2,7 @@ import { Metadata } from 'next';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { jwtVerify } from 'jose';
+import { env } from '@/lib/env';
 import { PWAProvider } from '@/components/pwa/PWAProvider';
 import { AdminDashboardLayout } from '@/components/admin/AdminDashboardLayout';
 
@@ -31,9 +32,11 @@ export default async function AdminLayout({
     }
 
     try {
-        const secret = new TextEncoder().encode(
-            process.env.JWT_SECRET || 'your-secret-key-change-in-production'
-        );
+        if (!env.jwtSecret) {
+            console.error('[AdminLayout] JWT_SECRET is not configured');
+            redirect('/login?callbackUrl=/admin');
+        }
+        const secret = new TextEncoder().encode(env.jwtSecret);
 
         const { payload } = await jwtVerify(token, secret);
 

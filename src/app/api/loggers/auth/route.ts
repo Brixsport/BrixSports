@@ -5,6 +5,7 @@ import { eq, or } from 'drizzle-orm';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { getLoggerMatches } from '@/lib/match-logger-helpers';
+import { env } from '@/lib/env';
 
 // POST /api/loggers/auth - Authenticate a logger
 export async function POST(request: NextRequest) {
@@ -46,13 +47,16 @@ export async function POST(request: NextRequest) {
         const assignedMatches = await getLoggerMatches(logger[0].id);
 
         // Generate JWT token
+        if (!env.jwtSecret) {
+            return NextResponse.json({ error: 'Server misconfiguration' }, { status: 500 });
+        }
         const token = jwt.sign(
             {
                 id: logger[0].id,
                 email: logger[0].email,
                 role: logger[0].role,
             },
-            process.env.JWT_SECRET || 'your-secret-key-change-in-production',
+            env.jwtSecret,
             { expiresIn: '7d' }
         );
 

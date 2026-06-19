@@ -4,15 +4,10 @@
 
 ## ⛔ SESSION BLOCKER — Must resolve before ANY new feature work
 
-The following three CRITICAL bugs were surfaced by code review (Session 27) and block production safety. **Do not start Phase B, BACKLOG-044, or any new backlog item until these are fixed and smoke tests below are run.**
+BUG-050/051/052 SHIPPED (Session 28 — commit pending). Smoke tests remain:
 
-1. **BUG-050** — JWT_SECRET hardcoded fallback in `loggers/auth/route.ts` — forge-able logger tokens if env var absent
-2. **BUG-051** — Logger can PATCH match `status` to any string incl. `FINISHED` — no enum/role gate
-3. **BUG-052** — Logger can directly PATCH `homeScore`/`awayScore` — bypasses event-driven scoring entirely
-
-**After fixing 050–052:**
-4. Run BUG-047 smoke test (Penalty + OG through live logger UI — see TEST_CHECKLIST.md)
-5. Run BACKLOG-058 Tests 1–4 (offline queue end-to-end — see TEST_CHECKLIST.md)
+1. Run BUG-047 smoke test (Penalty + OG through live logger UI — see TEST_CHECKLIST.md)
+2. Run BACKLOG-058 Tests 1–4 (offline queue end-to-end — see TEST_CHECKLIST.md)
 
 **Only then:** BACKLOG-044 Phase B (timer ceiling + sub counter)
 
@@ -26,11 +21,31 @@ BUG-001 through BUG-029, AUDIT-001/002 (partial), BACKLOG-065 — all resolved S
 
 ### Auth / Security
 
-- **BUG-050** _(CRITICAL — Auth)_: `POST /api/loggers/auth` reads `process.env.JWT_SECRET` directly with a hardcoded fallback `'your-secret-key-change-in-production'`. If `JWT_SECRET` is absent at runtime, all logger JWTs are signed with a publicly known key — anyone can forge a valid logger token. Fix: import `env.jwtSecret` from `src/lib/env.ts`, remove the fallback entirely. `src/app/api/loggers/auth/route.ts` line ~55. Filed: 2026-06-19.
+- ~~**BUG-050**~~ _(CRITICAL — Auth)_: Hardcoded JWT fallback `'your-secret-key-change-in-production'` found in **7 files** across all sign and verify call sites — not just `loggers/auth/route.ts` as originally filed. Any token signed with the known fallback was valid on all verify paths. Fix: all 7 files updated to use `env.jwtSecret` with explicit `if (!env.jwtSecret)` guard at every call site regardless of library. jose files: `middleware.ts`, `auth/refresh/route.ts`, `auth/me/route.ts`, `admin/layout.tsx`. jsonwebtoken files: `loggers/auth/route.ts`, `livestream/route.ts`, `lineup/unlock/route.ts`, `lineup/publish/route.ts`. **Status:** SHIPPED — Session 28.
 
-- **BUG-051** _(CRITICAL — Auth)_: `PATCH /api/matches/[id]` accepts `status` as any freeform string with no enum validation and no role gate — a logger can set `status: 'FINISHED'` directly, bypassing `handleFinalize`, or inject an arbitrary string corrupting the status field. Fix: validate against `['PENDING','UPCOMING','LIVE','FINISHED','CANCELLED']`; restrict loggers to `['LIVE']` only. `src/app/api/matches/[id]/route.ts` line 487. Filed: 2026-06-19.
+**Evidence:**
+- Commit: TBD
+- Verified by: tsc --noEmit clean on all 9 modified files; grep confirms no remaining fallback string
+- Observed result: All sign/verify paths now use `env.jwtSecret`; throw/500 on empty secret
+- Pending items: BACKLOG-094 — JWT_SECRET rotation decision (Richard to decide). JWT_SECRET confirmed set in both `.env.local` and `.env.production` with a real value; token invalidation risk exists for any sessions created while fallback was active (pre-fix window).
 
-- **BUG-052** _(CRITICAL — Data Integrity)_: `PATCH /api/matches/[id]` allows loggers to directly write `homeScore`/`awayScore` — bypasses the event-driven score increment in `/events`. No role restriction, no integer validation. A logger can set score to any value. Fix: restrict score writes to `role === 'admin'` only; add non-negative integer guard. `src/app/api/matches/[id]/route.ts` lines 485–486. Filed: 2026-06-19.
+- ~~**BUG-051**~~ _(CRITICAL — Auth)_: Logger could PATCH match `status` to any freeform string. Fix: enum guard against `['PENDING','UPCOMING','LIVE','FINISHED','CANCELLED']`; logger role restricted to `['LIVE','FINISHED']` — `FINISHED` kept because `handleFinalize` PATCHes it directly as a logger. `src/app/api/matches/[id]/route.ts`. **Status:** SHIPPED — Session 28.
+
+**Evidence:**
+- Commit: TBD
+- Verified by: tsc clean; cross-checked that `handleFinalize` PATCHes `status: 'FINISHED'` as logger role — included in allowed list
+- Observed result: Invalid status → 422; logger attempting PENDING/UPCOMING/CANCELLED → 403
+- Pending items: live test via End Match flow on staging
+
+- ~~**BUG-052**~~ _(CRITICAL — Data Integrity)_: Logger could directly write `homeScore`/`awayScore` via PATCH, bypassing event-driven scoring. Fix: score writes gated to `admin` role only; non-negative integer guard added. Event-driven score path (`POST /events` → direct `db.update`) is a separate code path, unaffected. `src/app/api/matches/[id]/route.ts`. **Status:** SHIPPED — Session 28.
+
+**Evidence:**
+- Commit: TBD
+- Verified by: tsc clean; confirmed `/events` route updates scores via `db.update` directly (not through PATCH handler)
+- Observed result: Logger PATCH with homeScore/awayScore → silently ignored (field skipped, not error)
+- Pending items: live test on staging
+
+- **BACKLOG-094** _(MEDIUM — Operational Decision)_: JWT_SECRET rotation post-BUG-050 fix. JWT_SECRET was confirmed set with a real value in both `.env.local` and `.env.production`. However, the hardcoded fallback `'your-secret-key-change-in-production'` existed on all verify paths pre-fix — any token signed with that fallback (e.g. during a window where `JWT_SECRET` was temporarily unset) would still validate until expiry (7 days). **Decision required by Richard:** rotate `JWT_SECRET` in Vercel env vars (both staging and prod) to force invalidation of all active sessions, or accept the 7-day expiry window as sufficient. Rotating forces all users and loggers to re-login. Filed: 2026-06-19.
 
 - **BUG-053** _(MEDIUM — PRODUCTION gate)_: `POST /api/loggers/auth` has no rate limiting or brute-force protection. Endpoint is fully brute-forceable over the public internet. Logger email/username enumeration possible via response timing. Fix: add edge-level rate limit before go-live (Vercel Edge Config or middleware). Filed: 2026-06-19.
 

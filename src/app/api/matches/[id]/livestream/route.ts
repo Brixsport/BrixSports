@@ -3,6 +3,7 @@ import { db } from '@/db';
 import { matches } from '@/db/schema';
 import { eq } from 'drizzle-orm';
 import jwt from 'jsonwebtoken';
+import { env } from '@/lib/env';
 
 // GET /api/matches/[id]/livestream - Get livestream info
 export async function GET(
@@ -77,9 +78,12 @@ export async function PATCH(
         }
 
         try {
+            if (!env.jwtSecret) {
+                return NextResponse.json({ error: 'Server misconfiguration' }, { status: 500 });
+            }
             const decoded = jwt.verify(
                 token,
-                process.env.JWT_SECRET || 'your-secret-key-change-in-production'
+                env.jwtSecret
             ) as { id: string; email: string; role: string };
 
             if (decoded.role !== 'admin') {
