@@ -37,10 +37,10 @@
 ## Bugs (Open)
 
 - **BUG-033** _(MEDIUM — Part 1 DONE / Part 2 open)_: Team roster pool on `/admin/teams/[id]` Squad tab does not filter by sport.
-  - **Part 1 (data cleanup) — RESOLVED 2026-06-17:** 5 Basketball players (KAMKID, RICHARD, ZUBBY/COLENG; LIGHT, OJAY/COLNAS) were wrongly affiliated to Football college teams by the backfill script. Wrong affiliations deleted on staging. `backfill-college-affiliations-staging.mjs` updated with sport guard (`NOT IN players with non-Football primary team`). These 5 players have no college affiliation until basketball college teams are created. Prod cleanup still pending (verify first).
+  - **Part 1 (data cleanup) — RESOLVED on staging 2026-06-17. ⚠️ PROD CLEANUP UNVERIFIED:** 5 Basketball players (KAMKID, RICHARD, ZUBBY/COLENG; LIGHT, OJAY/COLNAS) wrong Football college affiliations deleted on staging. `backfill-college-affiliations-staging.mjs` updated with sport guard. Basketball college teams created for COLENG/COLNAS (BACKLOG-076 resolved). **Still needed: verify and run the same affiliation cleanup on prod before running the basketball backfill.**
   - **Part 2 (UI fix) — OPEN:** Squad tab API (`GET /api/admin/teams/[teamId]/squad`) does not filter the player pool by sport. Competition dropdown already knows the sport — pass it as a filter param and join through teams.sport on playerTeamAffiliations. Do not build until BACKLOG-068 (multi-sport player audit) is done — sport filter must match affiliation context, not just player profile.
 
-- **BACKLOG-065** _(LOW — Data Integrity — Suspicious)_: Four players with duplicate first names found across two teams — identity not confirmed. Query `WHERE LOWER(TRIM(p.name)) IN ('joseph', 'leo')` returned 4 distinct `player_id` rows: `JOSEPH` (Siberia, jersey 11, `wt7u32zw…`), `LEO` (Siberia, jersey 90, `k-5lN92H…`), `joseph` (Rim Reapers, jersey 23, `r-GRRz8I…`), `leo` (Rim Reapers, jersey 7, `vr76h3RU…`). May be legitimate separate players or duplicate registrations with name casing variance. `JOSEPH`/Siberia row has `created_at: null` (further data quality flag). **Action:** Verify against physical registration records. If duplicates confirmed, merge player rows and re-point any `match_events` rows to the canonical ID before deleting the duplicate. Filed: 2026-06-16.
+- ~~**BACKLOG-065**~~ _(LOW — Data Integrity)_: CLOSED — superseded by BACKLOG-064. Session 20 investigation confirmed all 4 players (joseph × 2, leo × 2) are distinct people across different clubs. Action moved to BACKLOG-064 (display name disambiguation). Filed: 2026-06-16.
 
 - **BUG-011**: `playerStats` data corruption — 718 goals vs 133 appearances (~5.4 goals/appearance). Root cause identified: duplicate backfill runs with differing `startTime` formats bypass the duplicate match check. No writes made. Needs dedup audit of all `matchEvents` before any data correction. Do not run any backfill until resolved.
 
@@ -726,9 +726,9 @@ Once scores confirmed from physical records:
 
 ---
 
-### BACKLOG-016 — Roster Builder (Replace / Supplement Bulk Register)
+### ~~BACKLOG-016~~ — Roster Builder (Replace / Supplement Bulk Register)
 
-**Status:** OPEN
+**Status:** SUPERSEDED by BACKLOG-037 — which is the active, progress-tracked version. BACKLOG-037 Steps 1–7 complete. Refer there for current state.
 **Priority:** High
 **Filed:** 2026-06-07
 
@@ -1012,11 +1012,11 @@ members) is inaccessible from the UI.
 
 ### BACKLOG-005 — Next Phase Roadmap
 
-**Status:** OPEN
+**Status:** OPEN — Phase 1 COMPLETE. Phases 2–8 in various states of progress.
 **Priority:** High
 **Filed:** 2026-06-04
 
-#### Phase 1 — Dev/Production Infrastructure
+#### Phase 1 — Dev/Production Infrastructure ✅ COMPLETE
 
 - Set up staging branch (dev/staging) separate from main
 - Deploy staging to Vercel as separate project or
@@ -1028,23 +1028,20 @@ members) is inaccessible from the UI.
 - Git branching strategy: main = prod, dev = staging,
   feature branches off dev
 
-#### Phase 2 — Bug Fixes & Pending Blockers
+#### Phase 2 — Bug Fixes & Pending Blockers ✅ LARGELY COMPLETE
 
-- Fix all OPEN bugs from original audit:
-  BUG-001 middleware bypass /api/admin/\*
-  BUG-002 admin routes missing getAuthUser
-  BUG-003 debug auth endpoint /api/auth/test (DELETE FILE)
-  BUG-004 hardcoded createdBy: 'admin-1'
-  BUG-005 unbounded queries (partially fixed)
-  BUG-006 XSS via dangerouslySetInnerHTML
-  BUG-007 assignedLoggers emails exposed in public API
-  BUG-008 duplicate logger assignment race condition
-- Fix team logo path issue (local paths vs Cloudinary URLs)
-- Fix SAVE/BLOCK casing mismatch
-  (frontend PascalCase vs calculator UPPERCASE)
-- Fix Goal/GOAL casing mismatch in rating calculator
-- Fix startDate/endDate PATCH crash (BACKLOG-003)
-- Fix competition creation NaN console warnings
+- ~~BUG-001~~ middleware bypass — RESOLVED Session 3
+- ~~BUG-002~~ admin routes missing getAuthUser — RESOLVED Session 3
+- ~~BUG-003~~ debug auth endpoint /api/auth/test — RESOLVED Session 3
+- ~~BUG-004~~ hardcoded createdBy: 'admin-1' — RESOLVED Session 3
+- ~~BUG-005~~ unbounded queries — RESOLVED Sessions 3 + 6
+- ~~BUG-006~~ XSS via dangerouslySetInnerHTML — RESOLVED Session 3
+- ~~BUG-007~~ assignedLoggers emails exposed — RESOLVED Session 3
+- ~~BUG-008~~ duplicate logger assignment race condition — RESOLVED Session 3
+- ~~Fix Goal/GOAL casing mismatch~~ — RESOLVED BUG-012 Session 3
+- Fix SAVE/BLOCK casing mismatch (still OPEN)
+- Fix startDate/endDate PATCH crash (BACKLOG-003 — still OPEN)
+- Fix competition creation NaN console warnings (still OPEN)
 
 #### Phase 3 — UI & Experience Cleanup
 
@@ -1441,8 +1438,8 @@ a false impression of the platform's capability.
 | Any admin page missing auth gate | Security risk if any remain            | Audit needed — check after Phase 5    |
 | Lineup Builder                   | Marked NEW, unknown stability 🔴       | Stability audit + test on staging     |
 | Ads feature                      | Recently added, untested under load 🔴 | Load test on staging                  |
-| Transfers page                   | Intersects BUG-004 🔴                  | BUG-004 full resolution               |
-| News / articles                  | Intersects BUG-006 XSS 🔴              | BUG-006 complete + XSS audit          |
+| Transfers page                   | BUG-004 resolved ✅ — stability audit still needed | Full UI audit + staging test     |
+| News / articles                  | BUG-006 XSS resolved ✅ — still 🔴 high volatility | Full audit + staging test        |
 
 ##### Notes
 
@@ -3288,8 +3285,8 @@ Storing sport on the player row creates a second source of truth that will alway
 
 ### BACKLOG-076 — Basketball College Teams Do Not Exist; 5 Players Unaffiliated
 
-**Status:** RESOLVED — 2026-06-17 — teams created, 5 players wired on staging + prod
-**Priority:** High — 5 Bells basketball players have no college affiliation after BUG-033 data cleanup
+**Status:** RESOLVED — 2026-06-17 — basketball college teams created for COLENG and COLNAS; 5 players (KAMKID, RICHARD, ZUBBY, LIGHT, OJAY) wired on staging + prod.
+**Priority:** ~~High~~ — resolved.
 **Filed:** 2026-06-17
 
 #### Problem
@@ -3462,7 +3459,7 @@ Replace with a `.where(eq(teams.sport, 'Basketball'))` clause to push the filter
 ### BACKLOG-077 — No "Create Team" UI on /admin/teams
 
 **Status:** OPEN
-**Priority:** High — currently blocking basketball college team creation (BACKLOG-076)
+**Priority:** Medium — BACKLOG-076 (basketball college teams) is now RESOLVED, so the original blocker context is gone. Still needed as a UX gap: admins cannot create empty teams from the UI.
 **Filed:** 2026-06-17
 
 #### Problem
@@ -3670,3 +3667,36 @@ Two confirmed failure patterns (Lighthouse Accessibility 89/100):
 **Filed:** 2026-06-17
 
 Re-run Lighthouse after each of: BUG-041 fix, BACKLOG-090 (RSC migration), BACKLOG-091 (accessibility), BACKLOG-079 (security headers). Log delta against BACKLOG-085 baseline. Same device, same network, same URL each time.
+
+---
+
+### BACKLOG-093 — Logger Has No Service Worker Coverage
+
+**Status:** OPEN
+**Priority:** CRITICAL — Phase 0. Blocks BACKLOG-058 (offline event logging) and BACKLOG-044 Phase B.
+**Filed:** 2026-06-19
+
+#### Finding (SESSION_25_RECON.md §2)
+
+`src/app/logger/` has no `layout.tsx`. The root layout wraps `/logger` with `<PWAProvider swPath="/sw-user.js">`, but `usePWA.ts:13-16` explicitly blocks sw-user.js registration on `/logger` paths. Result: loggers run with zero service worker coverage.
+
+Impact:
+- No offline caching for logger UI
+- No background sync — `registration.sync.register('sync-match-events')` cannot fire
+- No push notifications for logger role
+- `offline-queue.ts` is unwired AND unrunnable until this is fixed
+
+#### sw-admin.js readiness (verified 2026-06-19)
+
+`sw-admin.js` has a real `sync` event listener (line 152) and a working `syncMatchEvents()` drain function (lines 163–195) that reads from `BrixsportAdminDB.pendingMatchEvents` and POSTs to `/api/matches/${event.matchId}/events`.
+
+**Known gap in sync handler:** drain POSTs carry no auth token. BUG-034 gated that endpoint — background sync will 401. This must be fixed in the same pass as BACKLOG-058 (wiring the queue), not after.
+
+#### Fix
+
+1. Create `src/app/logger/layout.tsx` — wrap with `<PWAProvider swPath="/sw-admin.js">`. Logger shares the admin SW; both roles need offline event logging and push.
+2. Fix auth in `syncMatchEvents()` in `sw-admin.js` — SW context has no cookie. Solution: store the JWT token in IndexedDB alongside the event payload at write time (FootballLogger writes it when queuing the event), then attach it as `Authorization: Bearer <token>` header in the sync drain fetch.
+
+#### Dependency chain
+
+BACKLOG-093 → BACKLOG-058 (wire offline-queue.ts into FootballLogger catch block) → BACKLOG-044 Phase B (match config on mount, timer ceiling, sub rules)

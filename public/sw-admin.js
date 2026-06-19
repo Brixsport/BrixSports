@@ -166,9 +166,18 @@ async function syncMatchEvents() {
         const pendingEvents = await db.getAll('pendingMatchEvents');
 
         for (const event of pendingEvents) {
+            // token is stored at queue-write time by FootballLogger (BACKLOG-058).
+            // SW background sync fires outside any browser session — no cookie available.
+            const headers = { 'Content-Type': 'application/json' };
+            if (event.token) {
+                headers['Authorization'] = `Bearer ${event.token}`;
+            } else {
+                console.warn('[SW Admin] No token on pending event', event.id, '— POST will 401');
+            }
+
             const response = await fetch(`/api/matches/${event.matchId}/events`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers,
                 body: JSON.stringify(event.data),
             });
 
@@ -241,6 +250,8 @@ function openDB() {
             const db = event.target.result;
 
             if (!db.objectStoreNames.contains('pendingMatchEvents')) {
+                // Row shape: { id (auto), matchId, data (event payload), token (JWT — stored at write time), timestamp }
+                // token is required for Authorization header in syncMatchEvents() — see BACKLOG-058 for write-side wiring
                 const store = db.createObjectStore('pendingMatchEvents', { keyPath: 'id', autoIncrement: true });
                 store.createIndex('matchId', 'matchId', { unique: false });
                 store.createIndex('timestamp', 'timestamp', { unique: false });
