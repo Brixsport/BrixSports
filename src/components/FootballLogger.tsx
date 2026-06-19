@@ -84,6 +84,7 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
     const [awayPlayers, setAwayPlayers] = useState<Player[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
+    const [isStartingMatch, setIsStartingMatch] = useState(false);
     const [showSettingsModal, setShowSettingsModal] = useState(false);
     const getPlayerTeam = (player?: Player | null) =>
         player ? (getPrimaryTeam(player as Player & Record<string, unknown>) as Team | null) : null;
@@ -824,10 +825,9 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
     const handleFinalize = async () => {
         if (!confirm('Are you sure you want to end the match?')) return;
         setIsSaving(true);
-        stateManager.current?.transitionStatus('FINISHED');
 
         try {
-            await fetch(`/api/matches/${match.id}`, {
+            const res = await fetch(`/api/matches/${match.id}`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -837,6 +837,9 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                     stats: matchState?.stats
                 }),
             });
+            if (!res.ok) throw new Error(`Server returned ${res.status}`);
+            // PATCH confirmed — transition local state to FINISHED
+            stateManager.current?.transitionStatus('FINISHED');
 
             // Sync status via socket immediately
             if (isSocketConnected) {
@@ -1301,16 +1304,29 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                 <div className="flex flex-wrap gap-2 mb-4">
                     {currentPeriod === 'NOT_STARTED' && (
                         <button
+                            disabled={isStartingMatch}
                             onClick={async () => {
-                                if (stateManager.current) {
+                                if (!stateManager.current || isStartingMatch) return;
+                                setIsStartingMatch(true);
+                                try {
+                                    const res = await fetch(`/api/matches/${match.id}`, {
+                                        method: 'PATCH',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({ status: 'LIVE' }),
+                                    });
+                                    if (!res.ok) throw new Error(`Server returned ${res.status}`);
+                                    // PATCH confirmed — now transition local state and start the clock
                                     stateManager.current.transitionStatus('FIRST_HALF');
-                                    try { await fetch(`/api/matches/${match.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'LIVE' }) }); } catch (e) { console.error(e); }
-                                    try { await fetch('/api/notifications/match-event', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ matchId: match.id, homeTeamId: match.homeTeamId, awayTeamId: match.awayTeamId, eventType: 'MATCH_START', teamName: `${homeTeam?.name || 'Home'} vs ${awayTeam?.name || 'Away'}` }) }); } catch (e) { console.error(e); }
+                                    try { await fetch('/api/notifications/match-event', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ matchId: match.id, homeTeamId: match.homeTeamId, awayTeamId: match.awayTeamId, eventType: 'MATCH_START', teamName: `${homeTeam?.name || 'Home'} vs ${awayTeam?.name || 'Away'}` }) }); } catch (e) { console.error('Notification failed (non-blocking):', e); }
+                                } catch (e) {
+                                    console.error('Failed to start match:', e);
+                                    alert('Couldn\'t start match — check connection and try again.');
+                                    setIsStartingMatch(false);
                                 }
                             }}
-                            className="flex-1 py-3 bg-green-500 text-black font-black uppercase tracking-widest rounded-xl hover:scale-[1.02] transition-transform shadow-lg shadow-green-500/20 animate-pulse text-sm"
+                            className={`flex-1 py-3 font-black uppercase tracking-widest rounded-xl text-sm transition-all shadow-lg ${isStartingMatch ? 'bg-green-500/50 text-black/50 cursor-not-allowed' : 'bg-green-500 text-black hover:scale-[1.02] shadow-green-500/20 animate-pulse'}`}
                         >
-                            ▶ Start Match
+                            {isStartingMatch ? 'Starting...' : '▶ Start Match'}
                         </button>
                     )}
 

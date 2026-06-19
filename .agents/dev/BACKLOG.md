@@ -50,7 +50,7 @@
 
 ### Scoring — Pending Live Verification
 
-- **BUG-047** _(HIGH — ⚠️ LIVE TEST + PROD AUDIT PENDING)_: Penalty and Own Goal events did not update match score. Root cause: condition was `type.toUpperCase() === 'GOAL' || value` — neither `'Penalty'` nor `'Own Goal'` matched, and `value` is never in the client payload. OG additional bug: `teamId` is the conceding team; old logic credited them instead of the opponent. Fix: `src/app/api/matches/[id]/events/route.ts` expanded to `GOAL | PENALTY | OWN GOAL | value`; OG inverts `isHomeTeam`. Commit `5fbc3e5` (2026-06-19). Staging audit: 0 Penalty/OG events ever logged — no mismatches to correct. **Two items still open: (1) live smoke test — log one Penalty + one OG through logger UI, confirm scores move (see TEST_CHECKLIST.md → BUG-047). (2) prod audit — run `dev/audit-penalty-og-scores.mjs` with `.env.production`.** Do not close until both done. Do not run any score correction script until BUG-011 scope is confirmed.
+- **BUG-047** _(HIGH — ⚠️ LIVE TEST PENDING)_: Penalty and Own Goal events did not update match score. Root cause: condition was `type.toUpperCase() === 'GOAL' || value` — neither `'Penalty'` nor `'Own Goal'` matched, and `value` is never in the client payload. OG additional bug: `teamId` is the conceding team; old logic credited them instead of the opponent. Fix: `src/app/api/matches/[id]/events/route.ts` expanded to `GOAL | PENALTY | OWN GOAL | value`; OG inverts `isHomeTeam`. Commit `5fbc3e5` (2026-06-19). Staging audit: 0 Penalty/OG events ever logged — no mismatches to correct. **Two items still open: (1) live smoke test — log one Penalty + one OG through logger UI, confirm scores move (see TEST_CHECKLIST.md → BUG-047). (2) prod audit — run `dev/audit-penalty-og-scores.mjs` with `.env.production`.** Do not close until both done. Do not run any score correction script until BUG-011 scope is confirmed.
 
 ### Public Page
 
@@ -71,6 +71,16 @@
 ---
 
 ## Bugs (Resolved)
+
+### Session 27 — 2026-06-19
+
+- ~~**BUG-049**~~ _(HIGH — Logger Flow)_: Start Match silent ghost-state failure. Logger UI flipped to FIRST_HALF before PATCH resolved; PATCH failures swallowed by bare `console.error` — logger saw "live", DB stayed PENDING, no error shown. Same pattern in `handleFinalize` (local state → FINISHED before PATCH). **Fix (both):** PATCH fires first, `res.ok` checked, local `transitionStatus` only called on confirmed success. On failure: `alert()` shown, state unchanged, button re-enabled. `isStartingMatch` state added for Start button; `isSaving` reused for End (already exclusively scoped). `src/components/FootballLogger.tsx`. **Status:** SHIPPED — live test via TEST_CHECKLIST.md → "Start Match silent-failure fix" required before RESOLVED.
+
+**Evidence:**
+- Commit: *(this session — pending)*
+- Verified by: code trace — catch path confirmed non-silent (alert fires, state does not transition)
+- Observed result: N/A — code-level fix only, live test still required
+- Pending items: run TEST_CHECKLIST.md Start Match + End Match tests (happy path + DevTools block path)
 
 ### Session 26 — 2026-06-19
 

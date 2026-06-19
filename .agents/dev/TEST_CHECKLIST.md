@@ -180,6 +180,56 @@ what fails with a one-line description.
 - [ ] Navigate to `/` (homepage) → confirm `sw-user.js` is still active there (no regression)
 - [ ] Navigate to `/admin` → confirm `sw-admin.js` is active (unchanged)
 
+### Start Match silent-failure fix (Session 27)
+> Fix shipped (FootballLogger.tsx). PATCH now fires before local state transitions. Failure shows alert, re-enables button. Run this before BUG-047 and BACKLOG-058 — everything downstream depends on Start Match working.
+
+**Setup:**
+- Log in as a logger account
+- Navigate to a PENDING match in the logger UI (`/logger` → select match)
+- Open DevTools → Network tab
+
+**Test A — Happy path:**
+- Tap "▶ Start Match"
+- Confirm button shows "Starting..." and is disabled while PATCH is in-flight
+- Confirm PATCH `/api/matches/[id]` returns 200 in Network tab
+- Confirm button disappears (replaced by "⏸ End 1st Half") — period flipped to FIRST_HALF
+- Confirm event buttons are now unlocked
+- Check DB: `matches.status = 'LIVE'` for this match ✓
+
+**Test B — Failure path (simulate with DevTools):**
+- Open DevTools → Network → block requests matching `/api/matches`
+- Tap "▶ Start Match"
+- Confirm button shows "Starting..." briefly
+- Confirm an alert pops: "Couldn't start match — check connection and try again."
+- Confirm button re-enables after the alert — period is still NOT_STARTED (clock has NOT started)
+- Unblock network, tap again → should succeed as Test A
+
+---
+
+### End Match silent-failure fix (Session 27)
+> Same ordering fix as Start Match, applied to `handleFinalize`. PATCH now fires before `transitionStatus('FINISHED')`. On failure: alert shown, local period stays in prior state (logger can retry). `isSaving` already correctly scoped to this handler — reused, no new state var.
+
+**Setup:**
+- Active LIVE match with events logged, logger session open
+- Open DevTools → Network tab
+
+**Test A — Happy path:**
+- Tap "🏁 End", confirm the confirm dialog, click OK
+- Confirm button shows "..." (isSaving) and is disabled during PATCH
+- Confirm PATCH `/api/matches/[id]` returns 200
+- Confirm `alert('Match finalized.')` appears
+- Confirm period transitions to FINISHED, event buttons lock
+- Check DB: `matches.status = 'FINISHED'` ✓
+
+**Test B — Failure path:**
+- Open DevTools → Network → block `/api/matches`
+- Tap "🏁 End" and confirm
+- Confirm `alert('Error saving match result.')` appears
+- Confirm period is still in its prior state (NOT FINISHED) — logger can tap End again
+- Unblock network, retry → should succeed as Test A
+
+---
+
 ### BUG-047 — Penalty and Own Goal score update
 > ⚠️ Code fix shipped (commit `5fbc3e5`) but **not yet exercised by a real logged event**. Run this before BACKLOG-058 tests.
 

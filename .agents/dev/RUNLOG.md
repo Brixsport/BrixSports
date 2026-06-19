@@ -508,6 +508,25 @@ Source code changes only this session. DB changes were applied in Session 15 (se
 
 ---
 
+## Session 27 — 2026-06-19
+
+### College football team shortName update (CENG/CENVS/CMANS/CNAS → COLENG/COLENVS/COLMANS/COLNAS)
+
+2026-06-19 | check-college-shortnames.mjs | STAGING | READ-ONLY | VERIFIED
+- Confirmed 8 college teams: 4 football (CENG, CENVS, CMANS, CNAS) + 4 basketball (COLENG-B, COLENVS-B, COLMANS-B, COLNAS-B)
+
+2026-06-19 | update-college-shortnames.mjs (football only) | STAGING | SUCCESS | VERIFIED
+- Updated 4 football teams: CENG→COLENG, CENVS→COLENVS, CMANS→COLMANS, CNAS→COLNAS
+- Basketball teams unchanged (COLENG-B etc. intentionally kept for sport disambiguation)
+- Rows affected: 4/4 ✓
+
+2026-06-19 | update-college-shortnames.mjs (football only) | PROD | SUCCESS | VERIFIED
+- Same 4 football teams updated on prod
+- Rows affected: 4/4 ✓
+- Final state: staging and prod identical — football=COLENG/COLENVS/COLMANS/COLNAS, basketball=COLENG-B/COLENVS-B/COLMANS-B/COLNAS-B
+
+---
+
 ## Outstanding / Pending Scripts
 
 | Script (not yet run) | Purpose | Blocked by |
