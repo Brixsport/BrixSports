@@ -3854,3 +3854,185 @@ Blocked on BACKLOG-090 (RSC architecture decision) for public pages. Logger and 
 - WebSocket (`useWebSocket`) already exists for real-time updates — the issue is it connects to the production Railway URL from staging (seen in console 400 errors). Fix the WS env var before relying on it as the primary update mechanism.
 - Do not introduce SWR or React Query without a session decision (BACKLOG-090) — adding a data-fetching library before the RSC migration will require rework.
 - Related: BACKLOG-090 (RSC/CSR architecture), BUG-026 (SW stale cache), BUG-041 (hydration), BUG-046 (match page blank screen).
+
+---
+
+### BACKLOG-098 — Formalise BACKLOG Lifecycle States
+
+**Status:** OPEN
+**Priority:** HIGH — process debt
+**Filed:** 2026-06-19
+
+#### Problem
+
+The current BACKLOG lifecycle has two states: `OPEN` and `RESOLVED`. This is too coarse. Session 26 produced two items (BACKLOG-058, BUG-047) that are neither — code is committed and correct, but a live end-to-end test hasn't happened. Forcing them into `RESOLVED` produced false positives that required manual discovery. Forcing them to stay `OPEN` doesn't represent what's been done.
+
+The missing state is: **code shipped, not yet live-tested.**
+
+#### Required States (proposed)
+
+| State | Meaning |
+|-------|---------|
+| `OPEN` | Problem known, work not yet started |
+| `IN PROGRESS` | Active this session |
+| `SHIPPED` | Code committed. Test not yet run. Do not treat as done. |
+| `UNVERIFIED` | Test run attempted but result disputed or incomplete |
+| `RESOLVED` | Live-tested, evidence block attached, dependencies confirmed |
+| `WONT FIX` | Consciously deferred — reason documented |
+
+#### Required Changes
+
+1. Update `CLAUDE.md` Backlog Close rule to require one of these states, not just "RESOLVED" or "OPEN".
+2. Retroactively update BUG-047 (`SHIPPED — AWAITING LIVE TEST`) and BACKLOG-058 (`UNVERIFIED — AWAITING FULL TEST PASS`).
+3. Apply `SHIPPED` state going forward any time code is committed without a live test cycle completed.
+
+#### Notes
+
+- `SHIPPED` must never appear in a commit message as a final state — it is explicitly "not done."
+- Related: BACKLOG-099 (integration tests), BACKLOG-100 (RUNLOG upgrade), CLAUDE.md Backlog Close rule.
+
+---
+
+### BACKLOG-099 — Flow A/B/C Integration Test Suite (pre-prod-check Tier 3)
+
+**Status:** OPEN
+**Priority:** HIGH — verification currently lives entirely in manual vigilance
+**Filed:** 2026-06-19
+
+#### Problem
+
+The Three Critical Flows (Flow A: match creation → public appearance; Flow B: live event logging → score update; Flow C: public livescore polling) are currently verified only by manual testing before deploys. `dev/pre-prod-check.ts` covers auth gates and DB integrity (Tier 1) but does not exercise the actual flows at all.
+
+This means:
+- A regression on Flow B (e.g. BACKLOG-058 offline queue broken, BUG-047 score update silently wrong) can be live for multiple sessions without detection.
+- Every "is this safe to deploy?" question requires someone to run through the flows by hand.
+- The one session that skips manual verification is the one where a broken flow reaches a live match.
+
+#### Required Changes
+
+**Tier 3 addition to `dev/pre-prod-check.ts`** (or a separate `dev/smoke-test-flows.mjs`):
+
+**Flow A smoke test:**
+1. POST `/api/matches` (admin auth) with minimal valid payload → confirm 201, match ID returned
+2. GET `/api/matches` (public) → confirm the new match appears
+3. DELETE or PATCH to clean up (or use a dedicated test-match ID)
+
+**Flow B smoke test:**
+1. Set test match to LIVE status
+2. POST `/api/matches/[id]/events` with `{ type: 'Goal', minute: 1, teamId: homeTeamId }` (logger auth)
+3. GET `/api/matches/[id]` → confirm `homeScore` incremented by 1
+4. POST with `{ type: 'Penalty', ... }` → confirm score increments
+5. POST with `{ type: 'Own Goal', teamId: homeTeamId }` → confirm **away** score increments
+6. Clean up test events
+
+**Flow C smoke test:**
+1. GET `/api/matches` (public, unauthenticated) → confirm test match appears with updated score
+2. Confirm no banned NDPR fields (`loggerId`, `assignedLoggers.email`, etc.) in response
+
+#### Exit criteria
+
+- Exit 0 = all flows pass → `[FLOWS CLEAR]`
+- Exit 1 = any flow fails → `[FLOWS BLOCKED — do not deploy]`
+
+#### Notes
+
+- Requires a designated test match and test logger account on staging (can reuse existing).
+- Run before every PR to `main` — add to the deploy checklist alongside `dev/pre-prod-check.ts`.
+- Do not build until BACKLOG-058 (offline queue) is actually verified — the smoke test should include the offline queue path once BACKLOG-058 is confirmed working.
+- Related: BACKLOG-034 (pre-prod-check Tier 1/2), BACKLOG-058 (offline queue), BUG-047 (scoring).
+
+---
+
+### BACKLOG-100 — RUNLOG Structure Upgrade: Auditable Entries
+
+**Status:** OPEN
+**Priority:** MEDIUM
+**Filed:** 2026-06-19
+
+#### Problem
+
+Current RUNLOG entries are descriptive, not auditable:
+```
+Date: 2026-06-17
+Script: backfill-college-affiliations-staging.mjs
+What it did: deleted 1 wrong row, inserted 14 affiliation rows
+Row counts: 14 inserted, 1 deleted
+```
+
+This records what was attempted. It doesn't record:
+- What the state was **before** the script ran (pre-state assertion)
+- Whether the output matched what was expected (post-state verification)
+- Whether anomalies were noticed and what was done about them
+- Whether the result was manually confirmed or just inferred from exit code
+
+More critically: there is no RUNLOG entry format for **test runs**. "Was BACKLOG-058 ever successfully tested?" is currently a memory question. It should be queryable.
+
+#### Required Changes
+
+**New RUNLOG entry format for DB scripts:**
+```
+## [Date] — [Script name]
+Target: staging | prod
+Pre-state: [what was true before — e.g. "14 players with wrong affiliations"]
+Action: [what the script did]
+Result: [row counts, output]
+Post-state: [what is true after — confirmed by query]
+Anomalies: [anything unexpected]
+Verified by: [query / visual check / none]
+```
+
+**New RUNLOG entry format for manual test runs:**
+```
+## [Date] — Manual test: [feature / backlog item]
+Tester: [Richard / staging]
+Test: [what was tested — reference TEST_CHECKLIST.md item]
+Result: PASS | FAIL | PARTIAL
+Evidence: [what was observed]
+Follow-up: [any items filed as a result]
+```
+
+#### Notes
+
+- Manual test entries make "has BACKLOG-058 been live-tested?" a query against RUNLOG, not a memory question.
+- Related: BACKLOG-098 (lifecycle states), BACKLOG-099 (integration tests).
+
+---
+
+### BACKLOG-101 — Explicit Dependency Tracking in BACKLOG Entries
+
+**Status:** OPEN
+**Priority:** MEDIUM
+**Filed:** 2026-06-19
+
+#### Problem
+
+Dependencies between backlog items are currently expressed in prose inside the entry body (e.g. "Do not build until BACKLOG-068 is done", "Do not run correction until BUG-011 scope is confirmed"). This means:
+- Checking "can I close BACKLOG-058?" requires reading the full BACKLOG-058 entry and remembering that BUG-044 was a dependency.
+- When BUG-044 is resolved, nobody updates BACKLOG-058 to say "your blocker is now gone."
+- The chain is only discoverable by reading — it's never queryable.
+
+Session 26 example: BACKLOG-058 was marked RESOLVED while BUG-044 (its auth dependency) was still broken. A formal `Blocked by: BUG-044` field would have made this visible at resolution time.
+
+#### Required Convention
+
+Add a `**Blocked by:**` field to any BACKLOG/BUG entry that has a hard dependency:
+
+```markdown
+**Blocked by:** BUG-044 (logger auth cookie — must be RESOLVED before BACKLOG-058 can be tested)
+```
+
+When the blocker is resolved:
+1. The blocker's own BACKLOG close update must grep for entries that listed it in `Blocked by:`
+2. Each dependent entry gets a note: `Blocker BUG-044 resolved 2026-06-19 — dependency cleared`
+
+#### Entries to retroactively update
+
+- BACKLOG-058: `Blocked by: BUG-044` (now cleared — add note)
+- BUG-047 score correction: `Blocked by: BUG-011` (still active)
+- BACKLOG-037 Step 7b: `Blocked by: Step 7 verification` (still active)
+- BUG-033 Part 2: `Blocked by: BACKLOG-068` (still active)
+
+#### Notes
+
+- This is a convention update, not a code change.
+- Related: BACKLOG-098 (lifecycle states), CLAUDE.md Backlog Close rule.

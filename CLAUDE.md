@@ -243,6 +243,35 @@ Before committing or starting the next task, update `.agents/dev/BACKLOG.md`:
 
 **Never commit a fix without closing or updating its corresponding backlog entry in the same commit.**
 
+#### Mandatory Lifecycle States
+
+Every BACKLOG/BUG entry must use one of these states — not freeform text:
+
+| State | Meaning |
+|-------|---------|
+| `OPEN` | Known, not yet started |
+| `IN PROGRESS` | Active this session |
+| `SHIPPED` | Code committed. Live test NOT yet run. Do not treat as done. |
+| `UNVERIFIED` | Test run attempted but result disputed or incomplete |
+| `RESOLVED` | Live-tested, evidence block attached (see below) |
+| `WONT FIX` | Consciously deferred — reason documented |
+
+`SHIPPED` is never a final state. It must advance to `RESOLVED` or `UNVERIFIED` after a test run.
+
+#### Mandatory Evidence Block for RESOLVED
+
+Every entry moving to `RESOLVED` must include an evidence block:
+
+```
+**Evidence:**
+- Commit: <hash>
+- Verified by: <live test | staging smoke test | DB query | manual check>
+- Observed result: <what was seen — not what was expected>
+- Pending items: <any remaining actions, or "none">
+```
+
+No evidence block = the entry is `SHIPPED`, not `RESOLVED`. This is not optional.
+
 ---
 
 ## Live Event Readiness Checklist
