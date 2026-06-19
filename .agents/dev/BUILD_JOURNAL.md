@@ -11,6 +11,45 @@
 
 ## Sessions
 
+### Session 27 — 2026-06-19
+
+**Focus:** Logger flow hardening, Start Match / End Match ordering fix, college shortName DB update, code review sweep.
+
+**Built / Fixed:**
+
+- **BUG-049 — Start Match + End Match PATCH-before-transition fix** (`src/components/FootballLogger.tsx`)
+  - Both handlers had the same ghost-state failure: local state flipped before PATCH resolved, PATCH errors swallowed by `console.error` only.
+  - Start Match: added `isStartingMatch` state. PATCH fires first, awaited. On 200 → `transitionStatus('FIRST_HALF')`. On failure → `alert()`, button re-enables, period stays NOT_STARTED.
+  - handleFinalize: `transitionStatus('FINISHED')` moved inside try block, after `res.ok` check. `isSaving` reused (already exclusively scoped). On failure → existing alert fires, period unchanged.
+  - Commit: `0561748`
+
+- **College football shortName update** (staging + prod DB, both confirmed)
+  - CENG → COLENG, CENVS → COLENVS, CMANS → COLMANS, CNAS → COLNAS
+  - Basketball unchanged: COLENG-B / COLENVS-B / COLMANS-B / COLNAS-B (sport disambiguation intentional)
+  - Scripts: `dev/check-college-shortnames.mjs`, `dev/update-college-shortnames.mjs`
+
+**Code review findings (7 new bugs filed, not yet fixed):**
+
+- BUG-050 (CRITICAL): JWT_SECRET hardcoded fallback in `loggers/auth/route.ts`
+- BUG-051 (CRITICAL): Logger can PATCH any `status` string including `FINISHED` — no enum/role gate
+- BUG-052 (CRITICAL): Logger can directly write `homeScore`/`awayScore` via PATCH — bypasses event scoring
+- BUG-053 (MEDIUM): No brute-force protection on logger auth endpoint — PRODUCTION gate
+- BUG-054 (MEDIUM): OWN GOAL undo (DELETE /events) doesn't invert team direction — mirror of BUG-047
+- BUG-055 (MEDIUM): `isScoringEvent || value` too broad — any truthy `value` field triggers score increment
+- BUG-056 (LOW): 401 mid-match on event POST silently drops event, no logger UI feedback
+- TD-010: Period transitions (HT confirm, 2nd half) have no server PATCH — period state ephemeral
+- TD-011: `season: '2024'` hardcoded in `updatePlayerStats`
+
+**Deferred:**
+- BUG-047 live smoke test (Penalty + OG through real logger UI) — still SHIPPED, not RESOLVED
+- BACKLOG-058 full test checklist (Tests 1–4) — still SHIPPED, not RESOLVED
+- BACKLOG-044 Phase B (timer ceiling, sub counter) — not started; blocked by smoke tests
+
+**Next session:**
+⚠️ HARD BLOCKER — must resolve BUG-050, BUG-051, BUG-052 before any new feature work. These are CRITICAL auth/data-integrity holes surfaced by code review. Then run BUG-047 + BACKLOG-058 smoke tests. Only then Phase B.
+
+---
+
 ### Session 26 — 2026-06-19
 
 **Focus:** BACKLOG-058 offline queue end-to-end testing, logger flow debugging, event pipeline audit, Penalty/OG score fix, player name investigation.

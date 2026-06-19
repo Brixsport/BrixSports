@@ -1,38 +1,26 @@
 # BrixSports — Backlog
 
-## Resolved
+---
 
-- ~~**BUG-005 (partial)**: `/api/matches` — Added `.limit(50)` to GET handler. Other endpoints (`/api/teams`, `/api/players`, `/api/loggers`) still unbounded.~~
-- ~~**AUDIT-001**: `/api/events` POST — Added `getAuthUser()` + logger assignment check. Now returns 401/403 correctly.~~
-  _> (stashed)_
-- ~~**AUDIT-002 (partial)**: `/api/matches` (POST) — Coerced `competitionId` to `null` if empty string, fixing 500 error on match creation. Generic server validation still missing.~~
-- ~~**BUG-001**: `src/middleware.ts` — Fixed `pathname.startsWith('/admin')` to also cover `/api/admin`. API routes now return 401/403 JSON instead of browser redirect. All debug console.logs removed.~~
-- ~~**BUG-003**: `src/app/api/auth/test/route.ts` — File deleted. Debug endpoint no longer live.~~
-- ~~**BUG-002**: `/api/admin/users`, `/api/admin/ads`, `/api/admin/settings` — `getAuthUser` + `role === 'admin'` check added to all handlers (GET, PATCH, POST where applicable). `/api/admin/organizations` already had auth — no change needed. `createdBy`/`updatedBy` audit fields now sourced from verified session user, not client-supplied body.~~
-- ~~**BUG-007 (NDPR/GDPR Leak)**: `/api/matches` public GET — `email` field removed from `assignedLoggers` select query and response map. Logger emails no longer exposed to public viewers.~~
-- ~~**BUG-009**: `POST /api/matches` — `getAuthUser` + admin role check added at top of handler. Handler signature upgraded from `Request` to `NextRequest`.~~
-- ~~**BUG-010**: `POST /api/events` — `getAuthUser` added. Admins pass through; loggers verified against `matchLoggerAssignments` (active status) for the specific matchId. `DELETE /api/events` gated to admin or logger role. `GET /api/events` remains public.~~
-- ~~**BUG-012**: Event type casing mismatch — added `normalizeType()` helper to `RatingCalculator` (`s.toLowerCase().replace(/[\s_-]+/g, '')`). All event type comparisons in `calculateStatsFromEvents` updated to use it. Score trigger and score tally loop in `POST /api/events` also updated with the same normalization. Handles `Goal`/`GOAL`/`Yellow Card`/`YELLOW_CARD` and all variants consistently.~~
-- ~~**BUG-004**: `src/app/admin/transfers/page.tsx` L189 — `createdBy: 'admin-1'` replaced with `user?.id ?? null` sourced from `useAuth()` hook.~~
-- ~~**BUG-005 (remaining)**: `/api/teams` — `.limit(200)` added. `/api/loggers` — `.limit(200)` added. `/api/players` — `.limit(500)` added with comment (higher cap because route feeds in-memory search/filter across all players).~~
-- ~~**BUG-006**: `src/lib/utils/format-content.ts` — Added `escapeHtml()` helper. Applied to all user-supplied text before template string injection (headings, list items, blockquotes, paragraphs). Link handler in `formatInlineText` now validates URLs — only `http://` and `https://` permitted; all other schemes (`javascript:`, `data:` etc.) replaced with `#`. Closes stored XSS via `dangerouslySetInnerHTML` in news pages.~~
-- ~~**BUG-008**: `src/app/api/matches/[id]/assign-logger/route.ts` — Race condition fixed by moving check-then-insert into a Drizzle transaction. `assignedBy` now sourced from verified `authUser.id` (not client body). Missing auth gate added — endpoint now requires `role === 'admin'`.~~
-- ~~**BUG-013**: `src/app/api/players/bulk-register/route.ts` — `POST /api/players/bulk-register` had no `getAuthUser` check and no admin role verification. Fixed: `getAuthUser(request)` + `authUser.role !== 'admin'` check added at top of POST handler. Resolved: 2026-06-07.~~
-- ~~**BUG-014**: `src/app/admin/matches/page.tsx` — Match cards displayed raw team IDs for teams beyond the `/api/teams` `.limit(200)` cap. Fixed: `homeTeam`/`awayTeam` embedded from API response used directly; `getTeamName(id)` replaced with `getTeamDisplay(match, side)`. Resolved: 2026-06-07.~~
-- ~~**BUG-015** _(CRITICAL)_: `PATCH /api/matches/[id]` — no `getAuthUser` check. Fixed: auth + role check added. Resolved: 2026-06-08.~~
-- ~~**BUG-016** _(HIGH)_: `POST /api/competitions` — no `getAuthUser` check. Fixed: auth + admin role check added. Resolved: 2026-06-08.~~
-- ~~**BUG-017** _(HIGH)_: Three debug/test routes deleted — `/api/notifications/debug`, `/api/notifications/test`, `/api/email/test`. Resolved: 2026-06-08.~~
-- ~~**BUG-018** _(MEDIUM — NDPR)_: `GET /api/matches/[id]` leaking `approvalStatus`, `managerNotes`, `loggerId`, `approvedBy`, `approvedAt`. Fixed: explicit DTO destructure. Resolved: 2026-06-08.~~
-- ~~**BUG-019** _(MEDIUM)_: `GET /api/admin/infrastructure` and `GET /api/analytics/system` — middleware-only auth. Fixed: handler-level `getAuthUser` + admin check. Resolved: 2026-06-08.~~
-- ~~**BUG-020** _(MEDIUM — Critical Flow C)_: `/live` page polled only on mount. Fixed: polling interval 30s → 15s, cleared on unmount. Resolved: 2026-06-08.~~
-- ~~**BUG-021** _(MEDIUM)_: `POST /api/notifications/subscribe` — auth gate missing. Resolved: 2026-06-15 (confirmed on code review).~~
-- ~~**BUG-022** _(MEDIUM — Performance)_: Unbounded queries on competitions + events routes. Fixed: `.limit()` added. Resolved: 2026-06-15.~~
-- ~~**BUG-023** _(LOW)_: `schema-nesa-registrations.ts` — orphaned schema file deleted. Resolved: 2026-06-15.~~
-- ~~**BUG-024** _(LOW)_: Suspected duplicate match routes `/match/[id]` vs `/matches/[id]`. False alarm — only `/matches/[id]` ever existed. Resolved: 2026-06-15.~~
-- ~~**BUG-025** _(MEDIUM — NDPR)_: `GET /api/matches` exposed `loggerId` to public. Fixed: conditionally returned for admin only. Resolved: 2026-06-15.~~
-- ~~**BUG-027** _(MEDIUM)_: `/competitions` page sport filter hid `sport=null` competitions. Fixed: `'All'` tab added as default. Resolved: 2026-06-15.~~
-- ~~**BUG-028** _(MEDIUM)_: React hydration error #418 on standings page (Framer Motion `initial` prop). Fixed: `initial` removed from all motion elements; `<motion.tr>` replaced with `<tr>`. Resolved: 2026-06-15.~~
-- ~~**BUG-029** _(MEDIUM — NDPR)_: `GET /api/players/[id]` returned `email` to unauthenticated callers. Fixed: `.catch(() => null)` pattern on `getAuthUser`, email conditionally returned for admin only. Resolved: 2026-06-15.~~
+## ⛔ SESSION BLOCKER — Must resolve before ANY new feature work
+
+The following three CRITICAL bugs were surfaced by code review (Session 27) and block production safety. **Do not start Phase B, BACKLOG-044, or any new backlog item until these are fixed and smoke tests below are run.**
+
+1. **BUG-050** — JWT_SECRET hardcoded fallback in `loggers/auth/route.ts` — forge-able logger tokens if env var absent
+2. **BUG-051** — Logger can PATCH match `status` to any string incl. `FINISHED` — no enum/role gate
+3. **BUG-052** — Logger can directly PATCH `homeScore`/`awayScore` — bypasses event-driven scoring entirely
+
+**After fixing 050–052:**
+4. Run BUG-047 smoke test (Penalty + OG through live logger UI — see TEST_CHECKLIST.md)
+5. Run BACKLOG-058 Tests 1–4 (offline queue end-to-end — see TEST_CHECKLIST.md)
+
+**Only then:** BACKLOG-044 Phase B (timer ceiling + sub counter)
+
+---
+
+## Resolved (Compressed — Sessions 1–25)
+
+BUG-001 through BUG-029, AUDIT-001/002 (partial), BACKLOG-065 — all resolved Sessions 1–25. Full history in `known-issues.md` and `BUILD_JOURNAL.md`.
 
 ## Bugs (Open)
 
@@ -95,7 +83,7 @@
 - ~~**BUG-049**~~ _(HIGH — Logger Flow)_: Start Match silent ghost-state failure. Logger UI flipped to FIRST_HALF before PATCH resolved; PATCH failures swallowed by bare `console.error` — logger saw "live", DB stayed PENDING, no error shown. Same pattern in `handleFinalize` (local state → FINISHED before PATCH). **Fix (both):** PATCH fires first, `res.ok` checked, local `transitionStatus` only called on confirmed success. On failure: `alert()` shown, state unchanged, button re-enabled. `isStartingMatch` state added for Start button; `isSaving` reused for End (already exclusively scoped). `src/components/FootballLogger.tsx`. **Status:** SHIPPED — live test via TEST_CHECKLIST.md → "Start Match silent-failure fix" required before RESOLVED.
 
 **Evidence:**
-- Commit: *(this session — pending)*
+- Commit: `0561748`
 - Verified by: code trace — catch path confirmed non-silent (alert fires, state does not transition)
 - Observed result: N/A — code-level fix only, live test still required
 - Pending items: run TEST_CHECKLIST.md Start Match + End Match tests (happy path + DevTools block path)
@@ -106,61 +94,21 @@
 
 - ~~**BUG-044**~~ _(HIGH — Logger Auth)_: All logger API calls returned 401. Root cause: `POST /api/loggers/auth` returned JWT in JSON body only — never set `authToken` cookie. `getAuthUser()` reads cookie first, got null on every subsequent request. Fix: set httpOnly `authToken` cookie in logger auth response; store token in `localStorage` on login for offline queue SW path; clear both on logout. `src/app/api/loggers/auth/route.ts` + `src/app/logger/page.tsx`. Commit `7808a20`. Resolved: 2026-06-19.
 
-### Earlier Sessions
+### Earlier Sessions (Sessions 1–25, compressed)
 
-- ~~**BUG-032**~~ _(MEDIUM — Data Integrity)_: 39 `match_events` rows with `player_id = NULL`. Forward gate added — `POST /api/events` now rejects null `playerId` for stat-affecting types. Existing 39 rows untouched — require separate audit before any backfill. Relates to BUG-011. RESOLVED (gate only) 2026-06-16. Event IDs: `PgCZ27rPw8puIrqGrn5ET`, `MOW5LnM7BnZPceo1EfNFG`, `0nRXEcu-47yWHnhzxnslR`, `mI8xLOJ9I9b9iYNj-4kJz`, `0V7jfxuB5Xx_QAKiQabJ2`, `VIBs_9slwaVOPDq2bVtoY`, `TUko0OhLCE3xZJL7fFjXz`, `Mky4ZzXeDsii0g0U6x4Lb`, `beDfnn98Kby7MHGqSu4Ih`, `hG-GiJofok53M9n1Dhid8`, `YCWEpHea96oNuwj0D7-SI`, `U9z2I58lOKa9knr02mZVz`, `yxeGjM1dncTLNFbpUVDGe`, `m_S_62bgcUyoxRow7dHZj`, `fRNnOokCdT-4PakPIkdyV`, `fQIeiSok9oJgiI-vyWepw`, `4tSgbmxI3Ck0ef66pkaNb`, `n7ZOn6tJdIz3Bh43Km8R2`, `4S7qyVWm7GtakOizaQWjc`, `oFk3adEagm1T7UZzjXPr5`, `Gd4Fi7XeuoDHSD-IHJjUf`, `3ETpELZx3t006Z-Mohbqx`, `-tN5u2EIsOJ8VsuC4_2G7`, `yAyzsTqkwiQlh5GfjKDBV`, `pDqf4GJggQpxvcP_gVnZW`, `5GG8B7NnXc3Z3fdHCxNIp`, `0hLgkDqfBHAbEpQY3sZLK`, `_PHNbJv4S4Ctq4Iq5lGYs`, `tF3EIAIj0L-X7rD4vt2lH`, `zNA4BBA1n-sE2saQODh82`, `S_vTbEW8q218pz5TgOuvF`, `2rSnM33hfnQ7FW3567CwV`, `7nhZ9HZaKziXUxfWpbKNL`, `95QMnbsU-kaskeVLahq-h`, `LmJmU-jFnFwXZAN_aIN2F`, `_PocAdTBo8G-Al-AysspK`, `tYruNu5Yr15Dlb2it4UkB`, `YNrvnIl5iPcT4y55ACdq7`, `0hYD6ESZNftfG7q2HTCL6`.
+~~BUG-032~~ — 39 null player_id events, forward gate added (2026-06-16)
+~~BUG-030~~ — `/competitions/[id]` 404, redirect added (2026-06-16)
+~~BUG-031~~ — standings raw logo strings, TeamLogo component (2026-06-16)
+~~BUG-027~~ — competitions sport filter hid null-sport rows, All tab (2026-06-15)
+~~BUG-028~~ — Framer Motion hydration #418, `initial` removed (2026-06-15)
+~~BUG-029~~ — `/api/players/[id]` leaked email, admin-only (2026-06-15)
+~~BUG-021/022/023/024/025~~ — auth gates, unbounded queries, orphaned schema, false-alarm route, loggerId public leak (2026-06-15)
+~~BUG-015/016/017/018/019/020~~ — PATCH no auth, POST /competitions no auth, 3 debug routes deleted, GET /matches/[id] internal leak, middleware-only admin APIs, /live no polling (2026-06-08)
+~~BUG-001–014~~ — middleware mismatch, debug endpoint, admin auth, NDPR leaks, event auth, casing mismatch, hardcoded audit field, race condition, XSS, unbounded queries, bulk register auth, match card IDs (Sessions 1–10)
+~~BACKLOG-065~~ — joseph×2/leo×2 confirmed distinct people, moved to BACKLOG-064 (2026-06-16)
 
-- ~~**BACKLOG-065**~~ _(LOW — Data Integrity)_: CLOSED — superseded by BACKLOG-064. 4 players (joseph × 2, leo × 2) confirmed as distinct people. Action moved to BACKLOG-064 (display name disambiguation). 2026-06-16.
-
-- ~~**BUG-015**~~: PATCH `/api/matches/[id]` — no auth gate. Fixed: getAuthUser + admin/logger check. 2026-06-08.
-- ~~**BUG-016**~~: POST `/api/competitions` — no auth gate. Fixed: getAuthUser + admin check. 2026-06-08.
-- ~~**BUG-017**~~: Three debug/test routes deleted. 2026-06-08.
-- ~~**BUG-018**~~: GET `/api/matches/[id]` leaking internal fields. Fixed: explicit DTO destructure. 2026-06-08.
-- ~~**BUG-019**~~: `/api/admin/infrastructure` + `/api/analytics/system` — middleware-only auth. Fixed: handler-level check. 2026-06-08.
-- ~~**BUG-020**~~: `/live` page no polling. Fixed: 15s interval, cleared on unmount. 2026-06-08.
-- ~~**BUG-021**~~: POST `/api/notifications/subscribe` — no auth gate. 2026-06-15.
-- ~~**BUG-022**~~: Unbounded queries on competitions + events routes. Fixed: `.limit()`. 2026-06-15.
-- ~~**BUG-023**~~: `schema-nesa-registrations.ts` — orphaned file. Deleted. 2026-06-15.
-- ~~**BUG-024**~~: Suspected duplicate `/match/[id]` route — false alarm. 2026-06-15.
-- ~~**BUG-025**~~: GET `/api/matches` exposed `loggerId` to public. Fixed: admin-only. 2026-06-15.
-- ~~**BUG-027**~~: `/competitions` page hid `sport=null` competitions. Fixed: 'All' tab default. 2026-06-15.
-- ~~**BUG-028**~~: Framer Motion hydration mismatch #418 on standings. Fixed: `initial` removed, `<motion.tr>` replaced. 2026-06-15.
-- ~~**BUG-029**~~: GET `/api/players/[id]` returned `email` to unauthenticated callers. Fixed: admin-only. 2026-06-15.
-- ~~**BUG-030**~~: `/competitions/[id]` base route 404. Fixed: redirect to `[id]/standings`. 2026-06-16.
-- ~~**BUG-031**~~: `standings/page.tsx` rendered raw teamLogo strings. Fixed: `<TeamLogo>` component. 2026-06-16.
-
-### ~~BACKLOG-036 — TeamLogo component migration (second pass)~~
-**Status:** COMPLETE — 2026-06-15
-**Priority:** Low
-**Filed:** 2026-06-13
-
-TeamLogo component (`src/lib/utils/team-logo.tsx`) handles null/empty logos with initials fallback and `onError` handler. Second-pass migration complete: 13 files migrated, 5 skipped for size regression risk. commit: `a02283b`.
-
-**Migrated (13 files):** `admin/manager`, `TrackLogger`, `admin/transfers`, `user/[userId]`, `search` (team only), `admin/livestreams`, `profile`, `logger`, `MatchLineups`, `LiveStats`, `lineup/MatchSelector`, `GlobalSearch` (team only), `FootballLogger`.
-
-**Skipped (size-sensitive — raw `<img>` retained):** `admin/track-events/page.tsx`, `teams/[id]/page.tsx`, `lineup/TeamSelector.tsx`, `BasketballLogger.tsx`, `FullPitchLineups.tsx`. `comp.logo` instances in `search/page.tsx` and `GlobalSearch.tsx` intentionally excluded (competition logos, not team logos).
-
-### BACKLOG-034 — Pre-Prod Clearance Script (Tier 1 → CI Gate)
-
-**Status:** TIER 1 COMPLETE — script live at `dev/pre-prod-check.ts`
-**Priority:** High
-**Filed:** 2026-06-08
-
-#### What was built
-
-`dev/pre-prod-check.ts` — automated pre-merge clearance script. Run manually before every PR to `main`. Checks:
-
-- Block 1: Auth gates (5 protected endpoints → 401 unauthenticated)
-- Block 2: `/api/matches` response shape — banned NDPR fields absent, `round` present
-- Block 3: DB integrity (null competitionId, dirty strings, entry counts)
-- Block 4: Round distribution (normalisation complete)
-- Block 5: Expected competitions present
-
-Exit 0 = `[CLEAR TO MERGE]`. Exit 1 = `[BLOCKED]`. Ready for CI integration with zero changes.
-
-#### Tier 2 — When BACKLOG-021 (GitHub Actions) is live
-
-Convert to `.github/workflows/pre-prod-check.yml`. Trigger on PR to `main`. Pass staging env vars from GitHub Secrets. No script changes needed.
+~~BACKLOG-036~~ — TeamLogo migration second pass — 13 files migrated, 5 skipped. Commit `a02283b`. COMPLETE 2026-06-15.
+~~BACKLOG-034~~ — Pre-prod clearance script Tier 1 — `dev/pre-prod-check.ts` live. Auth gates, NDPR shape, DB integrity, round distribution. Tier 2 (CI) pending BACKLOG-021. COMPLETE 2026-06-08.
 
 ---
 
