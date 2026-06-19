@@ -131,3 +131,9 @@ activation: always_on
 2026-06-17 — mirror script (UPDATE) silently no-ops when target rows don't exist on prod — `rowsAffected: 0` for all 30 new players because UPDATE finds no matching IDs. New player rows require INSERT not UPDATE. Always check whether target rows exist on prod before writing a mirror script; if new profiles may be absent, build an INSERT-with-skip-existing script instead.
 
 2026-06-17 — UI form required attribute blocks valid partial profiles — Jersey # and Assigned Team marked `required` in HTML prevented BUSALYMPICS-only players (no team, no jersey) from being created, even though the API and DB allow it. Browser enforces HTML required before the request is sent. Prevention: only add `required` to inputs that the server also enforces as required.
+
+2026-06-17 — Backfill script without sport guard (BUG-033) — college affiliation backfill inserted all players with matching college field into football college team IDs, regardless of sport — always join through the player primary team sport before any affiliation INSERT; add AND (primary_team.sport = 'Football' OR no primary team) guard to every college backfill script.
+
+2026-06-17 — Per-match event route missing auth (BUG-034) — /api/matches/[id]/events POST had no getAuthUser() while /api/events (the other event route) was correctly gated. Two routes serving the same function, only one audited — when adding auth to a route, grep for sibling routes at the same resource level (/api/events AND /api/matches/[id]/events) and audit all of them together.
+
+2026-06-17 — loggerId from client body (BUG-034) — event creation accepted loggerId from the request body, allowing any caller to attribute events to any logger — audit fields (loggerId, createdBy, updatedBy) must always be sourced from the verified authUser, never from the request body.

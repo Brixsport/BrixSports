@@ -540,3 +540,30 @@ _Note: PATCH MD3 scores and BUSALYMPICS standings recalculation were completed i
 - Final state staging: 208 Bells students, 0 college affiliation mismatches
 - Prod mirror: 30 players inserted, 37 affiliation rows inserted (college + BUSA team where applicable)
 - Final state prod: 0 missing affiliations
+
+---
+
+### Basketball college affiliation cleanup (BUG-033 data fix)
+
+2026-06-17 | audit-basketball-college-affiliations.mjs → cleanup-basketball-college-affiliations.mjs | STAGING | SUCCESS | VERIFIED
+
+- Audit found 5 Basketball players wrongly affiliated to Football college teams (inserted by backfill-college-affiliations-staging.mjs which had no sport guard)
+- Players removed: KAMKID (COLENG/Vikings), RICHARD (COLENG/TBK), ZUBBY (COLENG/Vikings), LIGHT (COLNAS/Vikings), OJAY (COLNAS/Vikings)
+- Deleted 5 player_team_affiliations rows; verify query returned 0 remaining wrong affiliations
+- These 5 players now have no college affiliation — will need re-linking once basketball college teams are created
+- backfill-college-affiliations-staging.mjs updated with sport guard: excludes players whose primary team sport != Football
+- PROD cleanup: 2026-06-17 | cleanup-basketball-college-affiliations-prod.mjs | PROD | SUCCESS | VERIFIED — same 5 rows deleted, verify query returned 0 rows
+
+---
+
+### Basketball college teams creation + player affiliation wiring
+
+2026-06-17 | create-basketball-college-teams-staging.mjs → wire-basketball-college-affiliations.mjs | STAGING + PROD | SUCCESS | VERIFIED
+
+- Created 4 basketball college teams on staging (coleng-basketball, colnas-basketball, colmans-basketball, colenvs-basketball)
+- Prod: same 4 teams created via wire script (INSERT OR IGNORE)
+- Wired 5 basketball players to correct college teams on both staging and prod:
+  - KAMKID, RICHARD, ZUBBY → coleng-basketball (COLENG-B)
+  - LIGHT, OJAY → colnas-basketball (COLNAS-B)
+- Verify query returned 5 rows on both DBs, 0 mismatches
+- BACKLOG-076 (blocked on team creation) now unblocked — teams exist, players wired

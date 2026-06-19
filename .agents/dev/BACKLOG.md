@@ -36,7 +36,9 @@
 
 ## Bugs (Open)
 
-- **BUG-033** _(MEDIUM)_: Team roster pool on `/admin/teams/[id]` Squad tab does not filter by sport. All affiliated players show regardless of sport — a basketball player affiliated to COLNAS appears in the COLNAS Football pool. Fix: filter playerTeamAffiliations by the team's sport, or by the selected competition's sport. Filed: 2026-06-17.
+- **BUG-033** _(MEDIUM — Part 1 DONE / Part 2 open)_: Team roster pool on `/admin/teams/[id]` Squad tab does not filter by sport.
+  - **Part 1 (data cleanup) — RESOLVED 2026-06-17:** 5 Basketball players (KAMKID, RICHARD, ZUBBY/COLENG; LIGHT, OJAY/COLNAS) were wrongly affiliated to Football college teams by the backfill script. Wrong affiliations deleted on staging. `backfill-college-affiliations-staging.mjs` updated with sport guard (`NOT IN players with non-Football primary team`). These 5 players have no college affiliation until basketball college teams are created. Prod cleanup still pending (verify first).
+  - **Part 2 (UI fix) — OPEN:** Squad tab API (`GET /api/admin/teams/[teamId]/squad`) does not filter the player pool by sport. Competition dropdown already knows the sport — pass it as a filter param and join through teams.sport on playerTeamAffiliations. Do not build until BACKLOG-068 (multi-sport player audit) is done — sport filter must match affiliation context, not just player profile.
 
 - **BACKLOG-065** _(LOW — Data Integrity — Suspicious)_: Four players with duplicate first names found across two teams — identity not confirmed. Query `WHERE LOWER(TRIM(p.name)) IN ('joseph', 'leo')` returned 4 distinct `player_id` rows: `JOSEPH` (Siberia, jersey 11, `wt7u32zw…`), `LEO` (Siberia, jersey 90, `k-5lN92H…`), `joseph` (Rim Reapers, jersey 23, `r-GRRz8I…`), `leo` (Rim Reapers, jersey 7, `vr76h3RU…`). May be legitimate separate players or duplicate registrations with name casing variance. `JOSEPH`/Siberia row has `created_at: null` (further data quality flag). **Action:** Verify against physical registration records. If duplicates confirmed, merge player rows and re-point any `match_events` rows to the canonical ID before deleting the duplicate. Filed: 2026-06-16.
 
@@ -3251,3 +3253,420 @@ Recommended: option 1 as the baseline (always filter by team sport), option 2 as
 #### Notes
 - Related: BACKLOG-037 Step 7 (Squad Selector), BACKLOG-068 (multi-sport player merge)
 - Do not fix in isolation before BACKLOG-068 audit is done — multi-sport players may have a single profile with two affiliations, so the sport filter must match against the affiliation row's context, not just the player profile
+
+---
+
+### BACKLOG-075 — Remove players.sport Free-Text Field from Player Create/Edit Forms
+
+**Status:** OPEN
+**Priority:** Medium
+**Filed:** 2026-06-17
+
+#### Problem
+`players.sport` is a free-text field on the player create and edit forms. It gives the wrong mental model — the system was designed around Football and the field is inconsistently populated (83 basketball players on basketball teams all have `sport = NULL` on their profile row). Sport is not a property of a player profile; it is a property of the team they are affiliated to.
+
+#### Correct Model
+Sport is derived from team affiliations at display time:
+- Player affiliated to a Football team → footballer
+- Player affiliated to a Basketball team → basketball player
+- Player affiliated to both → multi-sport (see BACKLOG-068)
+
+Storing sport on the player row creates a second source of truth that will always drift from affiliations.
+
+#### Required Changes
+1. Remove `sport` from the player create form (admin UI)
+2. Remove `sport` from the player edit/profile form (admin UI)
+3. Where sport is displayed on a player profile, compute it from their active team affiliations instead of reading `players.sport`
+4. Do NOT drop the `players.sport` column from the schema yet — audit all reads first, then file a migration to drop it once all display sites are using computed sport
+
+#### Notes
+- `players.sport` default is `'Football'` in schema — currently misleading for basketball players
+- This simplifies BACKLOG-068 (multi-sport player merge): one canonical profile, affiliations to both sport teams, no `sport` field conflict on the profile row
+- Related: BACKLOG-068 (multi-sport player merge), BUG-033 Part 2 (squad tab sport filter)
+
+---
+
+### BACKLOG-076 — Basketball College Teams Do Not Exist; 5 Players Unaffiliated
+
+**Status:** RESOLVED — 2026-06-17 — teams created, 5 players wired on staging + prod
+**Priority:** High — 5 Bells basketball players have no college affiliation after BUG-033 data cleanup
+**Filed:** 2026-06-17
+
+#### Problem
+The 5 basketball players with a Bells college set (KAMKID, RICHARD, ZUBBY / COLENG; LIGHT, OJAY / COLNAS) were removed from their incorrect Football college affiliations. They now have no college affiliation. No basketball college teams exist for COLENG or COLNAS (Q2 confirmed: 0 basketball college teams in DB).
+
+#### Blocked On
+Basketball college teams must be created first (in admin UI or via script):
+- **COLENG Basketball** — for KAMKID, RICHARD, ZUBBY
+- **COLNAS Basketball** — for LIGHT, OJAY
+
+The other 78 basketball players have `college = NULL` so this doesn't affect them yet — but they will also need college set and basketball college teams before they can be rostered.
+
+#### Action Required
+1. Richard creates basketball college teams in admin UI (or confirm team names/IDs and Claude runs a script)
+2. Once team IDs are known, run sport-aware affiliation backfill:
+   - INSERT into player_team_affiliations for players where `college = 'COLENG'` AND primary team sport = 'Basketball' → COLENG Basketball team ID
+   - Same for COLNAS
+3. Set `college` on the 78 basketball players who still have `college = NULL` — same process as BACKLOG-070 but for basketball players
+
+#### Current State (staging)
+| Team | Players | With college set |
+|------|---------|-----------------|
+| Vikings | 14 | 4 (KAMKID, ZUBBY, LIGHT, OJAY) |
+| TBK | 11 | 1 (RICHARD) |
+| Storm | 16 | 0 |
+| Siberia | 17 | 0 |
+| Rim Reapers | 14 | 0 |
+| Titans | 11 | 0 |
+
+#### Notes
+- Do not create basketball college teams until the sport-aware backfill script is ready — creating teams without immediately wiring players causes the same orphan state we just cleaned up
+- Related: BUG-033 (data cleanup done), BACKLOG-070 (football college NULL players), BACKLOG-068 (multi-sport profile merge)
+
+---
+
+### BUG-034 — CRITICAL: POST /api/matches/[id]/events Has No Auth Gate
+
+**Status:** RESOLVED — 2026-06-17 (commit 0e55cd4)
+**Priority:** CRITICAL — Flow B violation. Any unauthenticated caller can inject events into any live match.
+**Filed:** 2026-06-17
+
+#### Problem
+`src/app/api/matches/[id]/events/route.ts` POST handler has zero auth. No `getAuthUser()` call exists anywhere in the file. Anyone with a match ID can POST arbitrary events (goals, cards, substitutions) to any live match — no token required.
+
+This is a separate route from `/api/events` (which IS gated). The logger UI uses this per-match route for event logging. It was never secured.
+
+#### Impact
+- Flow B (Live Event Logging) is wide open — match results can be tampered from the outside
+- `loggerId` is accepted from the request body (line 69), not from a verified session — fake logger attribution possible
+- Score triggers and player stats can be corrupted
+
+#### Fix
+Add to top of POST handler (before `request.json()`):
+```ts
+const authUser = await getAuthUser(request);
+if (!authUser) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+if (authUser.role !== 'admin' && authUser.role !== 'logger')
+  return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+// If logger role — verify assignment
+if (authUser.role === 'logger') {
+  const assigned = await isLoggerAssigned(matchId, authUser.id);
+  if (!assigned) return NextResponse.json({ error: 'Not assigned to this match' }, { status: 403 });
+}
+```
+Remove `loggerId` from body destructure — source it from `authUser.id`.
+
+#### Files
+- `src/app/api/matches/[id]/events/route.ts` — POST handler (line 52)
+
+#### Notes
+- Same pattern as the fix applied to `/api/events` (POST) in Session 6, BACKLOG-029
+- Also check PATCH/DELETE handlers in `src/app/api/matches/[id]/events/[eventId]/route.ts` — same file family
+
+---
+
+### BUG-035 — MEDIUM: POST /api/squads, PATCH /api/squads, DELETE /api/squads Have No Auth Gate
+
+**Status:** RESOLVED — 2026-06-17 (commit 0e55cd4)
+**Priority:** Medium — squad manipulation without authentication
+**Filed:** 2026-06-17
+
+#### Problem
+`src/app/api/squads/route.ts` exports POST (line 62), DELETE (line 122), and PATCH (line 152) handlers. None call `getAuthUser()`. Any caller can modify squad composition without authentication.
+
+GET is public (squad data is not sensitive), but mutations are unprotected.
+
+#### Fix
+Add `getAuthUser()` + admin role check at top of POST, PATCH, DELETE handlers.
+
+#### Files
+- `src/app/api/squads/route.ts`
+
+---
+
+### BUG-036 — MEDIUM: POST /api/polls and PATCH /api/polls Have No Auth Gate
+
+**Status:** OPEN
+**Priority:** Medium — poll creation/modification without authentication
+**Filed:** 2026-06-17
+
+#### Problem
+`src/app/api/polls/route.ts` POST (line 74) and PATCH (line 139) have no `getAuthUser()` call. Any caller can create or modify polls.
+
+Polls are admin-created content tied to live matches. Unauthenticated poll creation is a content injection vector.
+
+#### Fix
+POST — add `getAuthUser()` + admin role check.
+PATCH — add `getAuthUser()` + admin role check.
+GET — leave public.
+
+#### Files
+- `src/app/api/polls/route.ts`
+
+---
+
+### BUG-037 — LOW: POST /api/user/xi Has No Auth Gate
+
+**Status:** OPEN
+**Priority:** Low — user XI creation without authentication (userId accepted from body)
+**Filed:** 2026-06-17
+
+#### Problem
+`src/app/api/user/xi/route.ts` POST handler (line 48) has no `getAuthUser()` call. `userId` is accepted from the request body (line 51) — any caller can create an XI attributed to any user ID.
+
+Low severity because XI data is not sensitive and has no match or financial impact.
+
+#### Fix
+Add `getAuthUser()`. Source `userId` from `authUser.id`, not the request body.
+
+#### Files
+- `src/app/api/user/xi/route.ts`
+
+---
+
+### BUG-038 — LOW: DELETE /api/reminders and POST /api/reminders Have No Auth Gate
+
+**Status:** OPEN
+**Priority:** Low — reminder creation/deletion without authentication
+**Filed:** 2026-06-17
+
+#### Problem
+`src/app/api/reminders/route.ts` POST (line 54) and DELETE (line 137) have no `getAuthUser()` call. Any caller can create or delete match reminders for any user ID (accepted from body).
+
+#### Fix
+Add `getAuthUser()` to POST and DELETE. Source `userId` from `authUser.id`, not the request body.
+
+#### Files
+- `src/app/api/reminders/route.ts`
+
+---
+
+### BUG-039 — LOW: Unbounded Teams Query in /api/basketball/players
+
+**Status:** OPEN
+**Priority:** Low — performance issue, not a security issue
+**Filed:** 2026-06-17
+
+#### Problem
+`src/app/api/basketball/players/route.ts` line 14 runs `db.select().from(teams).all()` — loads all 236+ teams from the DB just to filter in JS to the ~6 basketball teams by name. This full table scan runs on every basketball player page load.
+
+#### Fix
+Replace with a `.where(eq(teams.sport, 'Basketball'))` clause to push the filter to SQLite.
+
+#### Files
+- `src/app/api/basketball/players/route.ts`
+
+
+---
+
+### BACKLOG-077 — No "Create Team" UI on /admin/teams
+
+**Status:** OPEN
+**Priority:** High — currently blocking basketball college team creation (BACKLOG-076)
+**Filed:** 2026-06-17
+
+#### Problem
+`/admin/teams` is a read-only list page with no create button. The only way to create a team today is through `/admin/bulk-register` — which creates a team as a side effect of registering players, not as a standalone operation. That path sets wrong defaults and breaks business logic when you need an empty team (e.g. basketball college teams with no players yet).
+
+`POST /api/teams` exists and is gated — the UI just doesn't surface it.
+
+#### Required Changes
+Add a "Create Team" modal or inline form to `/admin/teams/page.tsx` with fields:
+- Name (required)
+- Short name (required)
+- Sport — dropdown: Football / Basketball / Scrabble / Chess / Table Tennis (required)
+- University (required)
+- Gender — Male / Female / Mixed
+- Colour picker or hex input
+- Logo upload (Cloudinary, optional — can add later)
+
+On submit: POST to `/api/teams`, refresh list.
+
+#### Notes
+- `POST /api/teams` route exists at `src/app/api/teams/route.ts` — verify it accepts the full shape before wiring
+- Minimal viable version: name + sport + university + shortName. Other fields can be optional/defaulted.
+- Blocking BACKLOG-076 (basketball college teams) — those teams need creating before the affiliation backfill can run
+
+---
+
+### BUG-040 — LOW: /placeholder.png Returns 400 via Next.js Image Optimizer
+
+**Status:** OPEN
+**Priority:** Low
+**Filed:** 2026-06-17
+
+/_next/image?url=%2Fassests%2FLogos%2Fplaceholder.png returns 400. Path has typo: assests (double s) — matches codebase convention so do not rename the folder. Verify file exists at public/assests/Logos/placeholder.png. If missing, add a placeholder PNG.
+
+---
+
+### BUG-041 — HIGH: React Error 418 (Hydration Mismatch) Confirmed Live on Homepage
+
+**Status:** OPEN
+**Priority:** High — actively degrading every real user experience
+**Filed:** 2026-06-17
+
+React hydration error 418 confirmed firing in prod console on the homepage. Previously fixed for standings page (BUG-028, resolved 2026-06-15). This is a wider recurrence.
+
+Evidence: error fires on homepage, tied to repeated long-tasks of 9.2s to 16s TBT from chunk 168-0d859fc25e0313e8.js recurring throughout session lifetime, not just on load.
+
+Root cause hypothesis: same pattern as BUG-028 — Framer Motion initial prop or SSR/CSR mismatch on homepage components. Audit homepage components for Framer Motion initial props, dynamic imports without ssr:false, Math.random() in render, Date.now() outside hooks.
+
+Related: BUG-028 (resolved standings instance), BACKLOG-085, BACKLOG-090.
+
+---
+
+### BACKLOG-078 — Privacy Policy + Terms of Service Pages
+
+**Status:** OPEN
+**Priority:** High — required before any public user data collection
+**Filed:** 2026-06-17
+
+Legal pages /privacy and /terms required for NDPA compliance and PWA listing. Link from footer and registration flows. Related: BACKLOG-086 (NDPA registration).
+
+---
+
+### BACKLOG-079 — Security Headers Configuration
+
+**Status:** OPEN
+**Priority:** High
+**Filed:** 2026-06-17
+
+Configure HTTP security headers in next.config.ts: Content-Security-Policy, X-Frame-Options DENY, X-Content-Type-Options nosniff, Referrer-Policy strict-origin-when-cross-origin, Permissions-Policy. None currently set. Pre-prod blocker.
+
+---
+
+### BACKLOG-080 — Rate Limiting: Auth Endpoints
+
+**Status:** OPEN
+**Priority:** High
+**Filed:** 2026-06-17
+
+/api/auth/login, /api/auth/register, /api/auth/forgot-password have no rate limiting. Brute-force and credential-stuffing attacks are unmitigated. Implement IP-based rate limiting (Upstash or middleware-level) before public launch.
+
+---
+
+### BACKLOG-081 — Umami Analytics
+
+**Status:** OPEN
+**Priority:** Medium
+**Filed:** 2026-06-17
+
+Add Umami (self-hosted or cloud) for privacy-respecting analytics. No cookies, no consent banner required. Embed script in layout.tsx. Track key events: match view, logger login, live page visits.
+
+---
+
+### BACKLOG-082 — Uptime Monitoring
+
+**Status:** OPEN
+**Priority:** Medium
+**Filed:** 2026-06-17
+
+Set up uptime monitoring (BetterStack or UptimeRobot) on brixsports.com/api/health and staging.brixsports.com/api/health. Alert to email on downtime. Required before live match deployment.
+
+---
+
+### BACKLOG-083 — JSON-LD Structured Data
+
+**Status:** OPEN
+**Priority:** Medium
+**Filed:** 2026-06-17
+
+Add JSON-LD to /matches/[id] (SportsEvent), /players/[id] (Person), /competitions/[id] (SportsOrganization). Add after RSC migration (BACKLOG-090) so metadata is server-rendered.
+
+---
+
+### BACKLOG-084 — robots.txt + Sitemap
+
+**Status:** OPEN
+**Priority:** Low
+**Filed:** 2026-06-17
+
+public/robots.txt: disallow /admin, /api, /logger. Dynamic sitemap covering /matches/[id], /players/[id], /competitions/[id], /teams/[id]. Use next-sitemap or App Router sitemap.ts.
+
+---
+
+### BACKLOG-085 — Core Web Vitals Audit
+
+**Status:** OPEN — baseline established 2026-06-17
+**Priority:** Medium
+**Filed:** 2026-06-17
+
+Lighthouse baseline (homepage, prod, 2026-06-17): Performance 22-24/100, Accessibility 89/100, Best Practices 95-96/100, SEO 100/100. One run returned NO_FCP (complete failure). TBT 9.2s-16s from chunk 168-0d859fc25e0313e8.js. Performance score of 22-24 is critically low.
+
+Primary blockers: large JS bundle (chunk 168), React hydration error 418 (BUG-041), CSR-everywhere architecture (BACKLOG-090).
+
+---
+
+### BACKLOG-086 — NDPA Registration
+
+**Status:** OPEN
+**Priority:** Medium — required before collecting Nigerian user data at scale
+**Filed:** 2026-06-17
+
+Register BrixSports as a data controller with Nigeria Data Protection Authority. Prerequisite: BACKLOG-078 (Privacy Policy) must be live first. Steps: complete NDPA portal registration, obtain certificate, display on /privacy page.
+
+---
+
+### BACKLOG-087 — Rate Limiting: All Mutation Endpoints
+
+**Status:** OPEN
+**Priority:** Medium
+**Filed:** 2026-06-17
+
+Extend rate limiting beyond auth endpoints (BACKLOG-080) to event logging (POST /api/matches/[id]/events, POST /api/events), player registration, and competition registration. Prevents event spam during live matches. Implement after BACKLOG-080 proves the pattern.
+
+---
+
+### BACKLOG-088 — Database Backup Strategy
+
+**Status:** OPEN
+**Priority:** Medium — no recovery path if Turso data is lost
+**Filed:** 2026-06-17
+
+Verify Turso point-in-time recovery is enabled and retention window is adequate. Document recovery procedure. Schedule periodic export of critical tables (matches, players, events) to secondary store. Test restore path before public launch.
+
+---
+
+### BACKLOG-089 — Sentry Alerts Configuration
+
+**Status:** OPEN
+**Priority:** Low
+**Filed:** 2026-06-17
+
+Sentry is capturing errors (confirmed active). Missing: alert rules for new issues and error spikes, Slack/email notification channel, issue assignment rules for Flow A/B/C errors. Related: BACKLOG-035 (Sentry config cleanup).
+
+---
+
+### BACKLOG-090 — CSR/RSC Architecture Decision for Public Pages
+
+**Status:** OPEN
+**Priority:** High — root cause of 22/100 Lighthouse performance score
+**Filed:** 2026-06-17
+
+All public pages (/, /live, /football, /basketball, /matches/[id]) are fully client-side rendered. Users download and execute the full JS bundle before seeing any content. This is the primary driver of 9.2s-16s TBT and 22/100 performance.
+
+Candidate approach: migrate page shells to React Server Components with client islands for live data only. Shell and static content to RSC (zero JS), score updates and live feed to client island with polling/SSE, auth-dependent UI to client island.
+
+Architectural decision requiring a full session to scope. Do not start until BUG-041 (hydration error) is resolved first.
+
+---
+
+### BACKLOG-091 — Accessibility Batch Fix
+
+**Status:** OPEN
+**Priority:** Medium
+**Filed:** 2026-06-17
+
+Two confirmed failure patterns (Lighthouse Accessibility 89/100):
+1. Icon-only nav buttons missing aria-label: hamburger, search, and nav action icons have no accessible label.
+2. Color contrast failures: FT, FINAL, MATCH DAY, and sport-filter-tab labels use #6c6c6c-on-dark pattern that fails WCAG AA. Likely a shared utility class — one fix covers all instances.
+
+---
+
+### BACKLOG-092 — Lighthouse Performance Baseline Tracking
+
+**Status:** OPEN — baseline logged in BACKLOG-085
+**Priority:** Tracking only
+**Filed:** 2026-06-17
+
+Re-run Lighthouse after each of: BUG-041 fix, BACKLOG-090 (RSC migration), BACKLOG-091 (accessibility), BACKLOG-079 (security headers). Log delta against BACKLOG-085 baseline. Same device, same network, same URL each time.

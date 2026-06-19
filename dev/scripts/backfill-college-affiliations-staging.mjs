@@ -71,6 +71,15 @@ async function main() {
           CAST(strftime('%s','now') AS INTEGER)
         FROM players p
         WHERE p.college = :college
+        -- sport guard: only affiliate players whose primary team is Football (or have no primary team).
+        -- Basketball/Scrabble/Chess/Table Tennis players belong to sport-specific college teams, not these Football IDs.
+        AND p.id NOT IN (
+          SELECT pta2.player_id
+          FROM player_team_affiliations pta2
+          JOIN teams t2 ON t2.id = pta2.team_id
+          WHERE pta2.affiliation_type != 'college'
+            AND t2.sport != 'Football'
+        )
         AND p.id NOT IN (
           SELECT player_id FROM player_team_affiliations
           WHERE team_id = :teamId

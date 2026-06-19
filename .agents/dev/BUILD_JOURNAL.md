@@ -1048,3 +1048,40 @@
 **Resolved:** Hoisted defaultFormData and mapped types using typeof to resolve circular reference.
 **Deferred:** All newly added backlog items (001, 002, 003, 004).
 **Next session:** Execute BACKLOG-001 — Goal Type Breakdown schema migration
+
+---
+
+### Session 24 — 2026-06-17
+
+**Focus:** Security gate fixes (BUG-034/035), full system read, basketball college data cleanup, backlog filing batch.
+
+**Built / Changed:**
+- `src/app/api/matches/[id]/events/route.ts` — POST and DELETE handlers: added `getAuthUser()` before `request.json()`, admin pass-through, logger verified against `matchLoggerAssignments` (active status), `loggerId` now sourced from `authUser.id` not client body. Imports: added `matchLoggerAssignments`, `and`, `getAuthUser`. (BUG-034, commit `0e55cd4`)
+- `src/app/api/squads/route.ts` — POST, DELETE, PATCH handlers: added `getAuthUser()` + `role === 'admin'` gate on all three. GET left public. (BUG-035, commit `0e55cd4`)
+- `src/app/admin/bulk-register/page.tsx` — `maxLength` on shortName input raised from 5 to 12, placeholder updated to `COLENG-B`. (commit `2c1cf5d`)
+- `dev/scripts/backfill-college-affiliations-staging.mjs` — sport guard added: INSERT now excludes players whose primary team sport != Football. Prevents basketball/other-sport players being affiliated to football college team IDs in future runs.
+- `dev/` scripts created (gitignored): `audit-basketball-college-affiliations.mjs`, `cleanup-basketball-college-affiliations.mjs`, `cleanup-basketball-college-affiliations-prod.mjs`, `create-basketball-college-teams-staging.mjs`, `wire-basketball-college-affiliations.mjs`, `audit-basketball-state.mjs`, `verify-basketball-final.mjs`
+- 4 basketball college teams created on staging + prod: `coleng-basketball` (COLENG-B), `colnas-basketball` (COLNAS-B), `colmans-basketball` (COLMANS-B), `colenvs-basketball` (COLENVS-B)
+- 5 basketball players wired to correct college teams on staging + prod: KAMKID/RICHARD/ZUBBY → COLENG Basketball; LIGHT/OJAY → COLNAS Basketball
+- BACKLOG.md: filed BUG-033 Part 1 resolved, BUG-034–041, BACKLOG-075–092
+
+**Bugs encountered:**
+- Turso connection drops mid-sequential-INSERT (Windows Node.js assertion error `UV_HANDLE_CLOSING`). Root cause: Windows libuv async handle closed before process.exit() — script data is already committed, it is a process cleanup race. Workaround: run scripts separately, use INSERT OR IGNORE for idempotency.
+- Bash heredoc with apostrophes in content fails shell parsing. Root cause: single-quoted heredoc EOF terminates on any `'` inside the body. Workaround: use Edit tool append pattern instead of heredoc for long text.
+
+**Resolved:**
+- BUG-033 Part 1 (data): 5 basketball players wrongly affiliated to football college teams (backfill script had no sport guard). Deleted wrong affiliations on staging + prod. Sport guard added to backfill script.
+- BUG-034 (CRITICAL): `POST /api/matches/[id]/events` had zero auth. Any caller could inject live match events. Fix: `getAuthUser()` + logger assignment check, `loggerId` sourced from session.
+- BUG-035 (MEDIUM): `POST/PATCH/DELETE /api/squads` had zero auth. Fix: admin gate on all three mutations.
+- shortName 5-char UI cap blocking `COLENG-BKT` format inputs.
+- BACKLOG-076 resolved: 4 basketball college teams created and 5 players wired.
+
+**Deferred:**
+- BUG-033 Part 2 (UI): Squad tab pool sport filter — blocked on BACKLOG-068 (multi-sport player audit)
+- BUG-036–039 (polls, user XI, reminders auth gaps) — low attack surface, deprioritised
+- BUG-041 (React error #418 on homepage, TBT 9–16s) — Lighthouse 22/100 performance
+- BACKLOG-090 (CSR/RSC architecture decision) — requires BUG-041 resolved first
+- 78 basketball players still have `college = NULL` — blocked on Richard setting colleges via admin UI
+- COLMANS/COLENVS basketball players not yet wired (no players with those colleges + Basketball primary team yet)
+
+**Next session:** BUG-041 — React hydration error #418 on homepage. Audit homepage components for Framer Motion `initial` prop usage and SSR/CSR mismatches. Then Lighthouse re-run to measure delta.
