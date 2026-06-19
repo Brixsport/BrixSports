@@ -24,7 +24,7 @@ BUG-001 through BUG-029, AUDIT-001/002 (partial), BACKLOG-065 — all resolved S
 - ~~**BUG-050**~~ _(CRITICAL — Auth)_: Hardcoded JWT fallback `'your-secret-key-change-in-production'` found in **7 files** across all sign and verify call sites — not just `loggers/auth/route.ts` as originally filed. Any token signed with the known fallback was valid on all verify paths. Fix: all 7 files updated to use `env.jwtSecret` with explicit `if (!env.jwtSecret)` guard at every call site regardless of library. jose files: `middleware.ts`, `auth/refresh/route.ts`, `auth/me/route.ts`, `admin/layout.tsx`. jsonwebtoken files: `loggers/auth/route.ts`, `livestream/route.ts`, `lineup/unlock/route.ts`, `lineup/publish/route.ts`. **Status:** SHIPPED — Session 28.
 
 **Evidence:**
-- Commit: TBD
+- Commit: `1824256`
 - Verified by: tsc --noEmit clean on all 9 modified files; grep confirms no remaining fallback string
 - Observed result: All sign/verify paths now use `env.jwtSecret`; throw/500 on empty secret
 - Pending items: BACKLOG-094 — JWT_SECRET rotation decision (Richard to decide). JWT_SECRET confirmed set in both `.env.local` and `.env.production` with a real value; token invalidation risk exists for any sessions created while fallback was active (pre-fix window).
@@ -32,7 +32,7 @@ BUG-001 through BUG-029, AUDIT-001/002 (partial), BACKLOG-065 — all resolved S
 - ~~**BUG-051**~~ _(CRITICAL — Auth)_: Logger could PATCH match `status` to any freeform string. Fix: enum guard against `['PENDING','UPCOMING','LIVE','FINISHED','CANCELLED']`; logger role restricted to `['LIVE','FINISHED']` — `FINISHED` kept because `handleFinalize` PATCHes it directly as a logger. `src/app/api/matches/[id]/route.ts`. **Status:** SHIPPED — Session 28.
 
 **Evidence:**
-- Commit: TBD
+- Commit: `1824256`
 - Verified by: tsc clean; cross-checked that `handleFinalize` PATCHes `status: 'FINISHED'` as logger role — included in allowed list
 - Observed result: Invalid status → 422; logger attempting PENDING/UPCOMING/CANCELLED → 403
 - Pending items: live test via End Match flow on staging
@@ -40,7 +40,7 @@ BUG-001 through BUG-029, AUDIT-001/002 (partial), BACKLOG-065 — all resolved S
 - ~~**BUG-052**~~ _(CRITICAL — Data Integrity)_: Logger could directly write `homeScore`/`awayScore` via PATCH, bypassing event-driven scoring. Fix: score writes gated to `admin` role only; non-negative integer guard added. Event-driven score path (`POST /events` → direct `db.update`) is a separate code path, unaffected. `src/app/api/matches/[id]/route.ts`. **Status:** SHIPPED — Session 28.
 
 **Evidence:**
-- Commit: TBD
+- Commit: `1824256`
 - Verified by: tsc clean; confirmed `/events` route updates scores via `db.update` directly (not through PATCH handler)
 - Observed result: Logger PATCH with homeScore/awayScore → silently ignored (field skipped, not error)
 - Pending items: live test on staging
