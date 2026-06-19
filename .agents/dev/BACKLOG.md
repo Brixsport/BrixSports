@@ -36,58 +36,70 @@
 
 ## Bugs (Open)
 
-- ~~**BUG-042**~~ _(LOW — Logger UX)_: Logger confirm-lineup screen showed blank player names and numbers. Root cause: admin publish route stores lightweight stubs `{ playerId, jerseyNumber, jerseyName }` in `matches.lineups`, but `FootballLogger.tsx` confirm screen rendered `p.name`/`p.number`/`p.position` directly on those stubs — fields that don't exist on them. Fix: resolve each starter's `playerId` against the already-fetched `homePlayers`/`awayPlayers` array; fall back to `jerseyName`/`jerseyNumber` from the stub. **RESOLVED — 2026-06-19** (`src/components/FootballLogger.tsx`).
+### Logger Flow
 
-- **BUG-045** _(MEDIUM — Logger Dashboard)_: Match card on logger dashboard shows "INVALID DATE" under the match. `startTime` on the match is null or in a format the date formatter can't parse. Fix: add a null/invalid guard to the date display on the logger match card — fall back to "Date TBC" rather than crashing the formatter.
+- **BUG-044b** _(MEDIUM)_: Logger dashboard stats show "-" (total events, logged matches). Root cause: dashboard fetches `/api/auth/me` which is admin-auth only — logger JWTs are not recognised. Fix: create `/api/loggers/me` endpoint that reads the logger session and returns their stats, or wire to existing `/api/loggers/[id]`. Filed: 2026-06-19.
 
-- **BUG-046** _(MEDIUM — Public Match Page)_: `/matches/[id]` shows a full black screen with a spinner indefinitely when accessed from an admin browser session (non-incognito, separate tab). No error in console visible from screenshot. Likely cause: SW serving a stale cached shell after a recent deploy, or a client-side data fetch hanging with no timeout/error state. Needs reproduction and network tab capture to confirm root cause. Related: BUG-026 (SW stale cache after deploy).
+- **BUG-045** _(MEDIUM)_: Logger match card shows "INVALID DATE". `startTime` on the match is null or in an unparseable format. Fix: null/invalid guard on the date display — fall back to "Date TBC". Filed: 2026-06-19.
 
-- ~~**BUG-044**~~ _(HIGH — Logger Flow)_: Logger cannot start a match — `PATCH /api/matches/[id]` returned 401 because the logger auth endpoint never set an `authToken` cookie, so `getAuthUser()` received no token on any subsequent request (including event POST). Fix: `POST /api/loggers/auth` now sets `authToken` as httpOnly cookie matching the JWT expiry. `logger/page.tsx` also stores the token in localStorage for the offline queue. **RESOLVED — 2026-06-19 (commit 7808a20).**
+### Admin UX
 
-- **BUG-044b** _(MEDIUM — Logger Flow)_: Logger `/api/auth/me` returns 401 — the `/api/auth/me` endpoint uses admin auth context, not logger auth. Logger dashboard stats (total events, logged matches) fetch from `/api/auth/me` which doesn't know about logger sessions. Needs a `/api/loggers/me` endpoint or the existing `/api/loggers/[id]` to be used instead. Filed: 2026-06-19.
+- **BUG-043** _(LOW)_: "Publish Official Lineups" button silently disabled when no captain is set. Users with 11/11 starters see a button that does nothing — no tooltip, no hint. Both teams need a captain via "Set Captain" before publish enables. Fix: add disabled-state tooltip or inline validation message listing unmet conditions. No code fix needed for functionality. Filed: 2026-06-19.
 
-- ~~**BUG-047**~~ _(HIGH — Scoring)_: `Penalty` and `Own Goal` events did not update match score. Root cause: score update condition was `type.toUpperCase() === 'GOAL' || value` — `'Penalty'` and `'Own Goal'` don't match, and `value` is never sent in the client payload. Additional OG bug: OG credited the conceding team's score instead of the opposing team (wrong direction). Fix: `src/app/api/matches/[id]/events/route.ts` — condition expanded to include `PENALTY` and `OWN GOAL`; OG logic inverts `isHomeTeam` so the opposing team gets the point. **Code fixed 2026-06-19 (commit 5fbc3e5). Score impact audit run on staging: 0 Penalty/OG events found — no mismatches on staging. ⚠️ PROD AUDIT NOT YET RUN.** Script at `dev/audit-penalty-og-scores.mjs` — run with `.env.production` to confirm prod is clean. Do not close until prod audit is clear. Do not run any score correction script until BUG-011 (playerStats dedup) scope is confirmed.
+- **BUG-048** _(LOW)_: Cross-team player in departmental lineup shows blank name on logger confirm screen even after BUG-042 fix. Root cause: BUG-042 resolves `playerId` against the team's eligible-players list — a player from another club won't be in that list. Fallback hits `jerseyName` from the stub, which is `null` if admin didn't fill it. Data entry gap, not a code regression. Mitigation: warn at publish time if any starter stub has `jerseyName: null`. Filed: 2026-06-19.
 
-- **BUG-048** _(LOW — Logger UX)_: Cross-team players in departmental matches may show blank name on logger confirm screen even after BUG-042 fix. Root cause: BUG-042 resolves `playerId` against the team's eligible-players list — but a player from another club (e.g. BUSA Kings player appearing in a CNAS departmental lineup) won't be in that list. Fallback hits `jerseyName` from the stub, which is `null` if the admin didn't fill it in. This is a data entry gap, not a code regression. Mitigation: warn admin at lineup publish time if any starter stub has `jerseyName: null`. Filed: 2026-06-19.
+### Scoring — Pending Live Verification
 
-- **BUG-043** _(LOW — Admin UX)_: "Publish Official Lineups" button on `/admin/match-lineups` is silently disabled when no captain is set for either team. The button shows no tooltip, no inline hint — users with 11/11 starters see an active-looking button that doesn't respond. Both teams need a captain assigned (click "Set Captain" on one player per side) before publish enables. No code fix needed — this is a UX discoverability gap. Consider adding a disabled-state tooltip or inline validation message listing unmet conditions.
+- **BUG-047** _(HIGH — ⚠️ LIVE TEST + PROD AUDIT PENDING)_: Penalty and Own Goal events did not update match score. Root cause: condition was `type.toUpperCase() === 'GOAL' || value` — neither `'Penalty'` nor `'Own Goal'` matched, and `value` is never in the client payload. OG additional bug: `teamId` is the conceding team; old logic credited them instead of the opponent. Fix: `src/app/api/matches/[id]/events/route.ts` expanded to `GOAL | PENALTY | OWN GOAL | value`; OG inverts `isHomeTeam`. Commit `5fbc3e5` (2026-06-19). Staging audit: 0 Penalty/OG events ever logged — no mismatches to correct. **Two items still open: (1) live smoke test — log one Penalty + one OG through logger UI, confirm scores move (see TEST_CHECKLIST.md → BUG-047). (2) prod audit — run `dev/audit-penalty-og-scores.mjs` with `.env.production`.** Do not close until both done. Do not run any score correction script until BUG-011 scope is confirmed.
 
-- **BUG-033** _(MEDIUM — Part 1 DONE / Part 2 open)_: Team roster pool on `/admin/teams/[id]` Squad tab does not filter by sport.
-  - **Part 1 (data cleanup) — RESOLVED on staging 2026-06-17. ⚠️ PROD CLEANUP UNVERIFIED:** 5 Basketball players (KAMKID, RICHARD, ZUBBY/COLENG; LIGHT, OJAY/COLNAS) wrong Football college affiliations deleted on staging. `backfill-college-affiliations-staging.mjs` updated with sport guard. Basketball college teams created for COLENG/COLNAS (BACKLOG-076 resolved). **Still needed: verify and run the same affiliation cleanup on prod before running the basketball backfill.**
-  - **Part 2 (UI fix) — OPEN:** Squad tab API (`GET /api/admin/teams/[teamId]/squad`) does not filter the player pool by sport. Competition dropdown already knows the sport — pass it as a filter param and join through teams.sport on playerTeamAffiliations. Do not build until BACKLOG-068 (multi-sport player audit) is done — sport filter must match affiliation context, not just player profile.
+### Public Page
 
-- ~~**BACKLOG-065**~~ _(LOW — Data Integrity)_: CLOSED — superseded by BACKLOG-064. Session 20 investigation confirmed all 4 players (joseph × 2, leo × 2) are distinct people across different clubs. Action moved to BACKLOG-064 (display name disambiguation). Filed: 2026-06-16.
+- **BUG-046** _(MEDIUM)_: `/matches/[id]` shows full black screen with spinner indefinitely from admin browser session (non-incognito). No console errors visible. Likely SW serving a stale cached shell after deploy, or data fetch hanging with no error state. Needs reproduction + Network tab capture to confirm. Related: BUG-026. Filed: 2026-06-19.
 
-- **BUG-011**: `playerStats` data corruption — 718 goals vs 133 appearances (~5.4 goals/appearance). Root cause identified: duplicate backfill runs with differing `startTime` formats bypass the duplicate match check. No writes made. Needs dedup audit of all `matchEvents` before any data correction. Do not run any backfill until resolved.
+### Data Integrity
 
-- **AUDIT-002 (remaining)**: `POST /api/matches` — Missing comprehensive Zod validation for match creation payload. Partial fix (null coerce on `competitionId`) applied in Session 2. Full schema validation still absent.
+- **BUG-011** _(HIGH)_: `playerStats` data corruption — 718 goals vs 133 appearances (~5.4 goals/game). Root cause: duplicate backfill runs with differing `startTime` formats bypass the duplicate match check. No writes made. Needs dedup audit of all `matchEvents` before any data correction. Do not run any backfill or score correction until resolved. Blocks: BUG-047 score correction (if needed on prod).
 
-- **BUG-026** _(MEDIUM — PWA/Cache)_: SW serves stale JS chunk URLs after a new deploy → unstyled page on direct URL visit (hard nav). Fix: document bypass + `no-store` headers on SW files shipped in Session 19. **Prod verification still open — TEST_CHECKLIST.md items unchecked.** Filed: 2026-06-08. Hotfix shipped: 2026-06-16.
+- **BUG-033** _(MEDIUM — Part 1 done / Part 2 open)_: Squad tab player pool does not filter by sport.
+  - **Part 1 (data) — RESOLVED staging 2026-06-17. ⚠️ PROD CLEANUP UNVERIFIED:** 5 basketball players' wrong football college affiliations deleted staging. Basketball college teams created for COLENG/COLNAS. Still needed: run same cleanup on prod.
+  - **Part 2 (UI) — OPEN:** `GET /api/admin/teams/[teamId]/squad` does not filter pool by sport. Do not build until BACKLOG-068 (multi-sport player audit) is done.
 
-- ~~**BUG-032**~~ _(MEDIUM — Data Integrity)_: 39 `match_events` rows have `player_id = NULL` on both staging and prod. **Forward submissions now blocked** — `POST /api/events` rejects null `playerId` for all stat-affecting event types (Goal, Penalty, Own Goal, Yellow Card, Red Card, Assist, Save). The 39 existing null-player rows are not touched — they require a separate audit before any backfill. Do not include them in any backfill run. Relates to BUG-011. RESOLVED (gate only) 2026-06-16.
+- **BUG-026** _(MEDIUM — PWA/Cache)_: SW serves stale JS chunk URLs after new deploy → unstyled page on direct URL visit. Fix shipped Session 19 (document bypass + `no-store` on SW files). **Prod verification still open — TEST_CHECKLIST.md items unchecked.**
 
-  Event IDs (identical on staging and prod): `PgCZ27rPw8puIrqGrn5ET`, `MOW5LnM7BnZPceo1EfNFG`, `0nRXEcu-47yWHnhzxnslR`, `mI8xLOJ9I9b9iYNj-4kJz`, `0V7jfxuB5Xx_QAKiQabJ2`, `VIBs_9slwaVOPDq2bVtoY`, `TUko0OhLCE3xZJL7fFjXz`, `Mky4ZzXeDsii0g0U6x4Lb`, `beDfnn98Kby7MHGqSu4Ih`, `hG-GiJofok53M9n1Dhid8`, `YCWEpHea96oNuwj0D7-SI`, `U9z2I58lOKa9knr02mZVz`, `yxeGjM1dncTLNFbpUVDGe`, `m_S_62bgcUyoxRow7dHZj`, `fRNnOokCdT-4PakPIkdyV`, `fQIeiSok9oJgiI-vyWepw`, `4tSgbmxI3Ck0ef66pkaNb`, `n7ZOn6tJdIz3Bh43Km8R2`, `4S7qyVWm7GtakOizaQWjc`, `oFk3adEagm1T7UZzjXPr5`, `Gd4Fi7XeuoDHSD-IHJjUf`, `3ETpELZx3t006Z-Mohbqx`, `-tN5u2EIsOJ8VsuC4_2G7`, `yAyzsTqkwiQlh5GfjKDBV`, `pDqf4GJggQpxvcP_gVnZW`, `5GG8B7NnXc3Z3fdHCxNIp`, `0hLgkDqfBHAbEpQY3sZLK`, `_PHNbJv4S4Ctq4Iq5lGYs`, `tF3EIAIj0L-X7rD4vt2lH`, `zNA4BBA1n-sE2saQODh82`, `S_vTbEW8q218pz5TgOuvF`, `2rSnM33hfnQ7FW3567CwV`, `7nhZ9HZaKziXUxfWpbKNL`, `95QMnbsU-kaskeVLahq-h`, `LmJmU-jFnFwXZAN_aIN2F`, `_PocAdTBo8G-Al-AysspK`, `tYruNu5Yr15Dlb2it4UkB`, `YNrvnIl5iPcT4y55ACdq7`, `0hYD6ESZNftfG7q2HTCL6`
+- **AUDIT-002 (remaining)**: `POST /api/matches` — missing comprehensive Zod validation. Partial fix (null-coerce `competitionId`) applied Session 2. Full schema validation absent.
 
-  Filed: 2026-06-16.
+---
 
 ## Bugs (Resolved)
 
-- ~~**BUG-015**~~: PATCH `/api/matches/[id]` — no auth gate. Fixed: getAuthUser + admin/logger check. Resolved: 2026-06-08.
-- ~~**BUG-016**~~: POST `/api/competitions` — no auth gate. Fixed: getAuthUser + admin check. Resolved: 2026-06-08.
-- ~~**BUG-017**~~: Three debug/test routes with no auth gate deleted (`/api/notifications/debug`, `/api/notifications/test`, `/api/email/test`). Resolved: 2026-06-08.
-- ~~**BUG-018**~~: GET `/api/matches/[id]` leaking `approvalStatus`, `managerNotes`, `loggerId`, `approvedBy`, `approvedAt`. Fixed: explicit DTO destructure. Resolved: 2026-06-08.
-- ~~**BUG-019**~~: `/api/admin/infrastructure` + `/api/analytics/system` — middleware-only auth. Fixed: handler-level getAuthUser + admin check. Resolved: 2026-06-08.
-- ~~**BUG-020**~~: `/live` page no polling. Fixed: 30s → 15s polling interval, cleared on unmount. Resolved: 2026-06-08.
-- ~~**BUG-021**~~: POST `/api/notifications/subscribe` — no auth gate. Resolved: 2026-06-15.
-- ~~**BUG-022**~~: Unbounded queries on competitions + events routes. Fixed: `.limit()` added. Resolved: 2026-06-15.
-- ~~**BUG-023**~~: `schema-nesa-registrations.ts` — orphaned schema file with missing imports. Deleted. Resolved: 2026-06-15.
-- ~~**BUG-024**~~: Suspected duplicate `/match/[id]` route — false alarm, route never existed. Resolved: 2026-06-15.
-- ~~**BUG-025**~~: GET `/api/matches` exposed `loggerId` to public. Fixed: conditionally returned for admin only. Resolved: 2026-06-15.
-- ~~**BUG-027**~~: `/competitions` page sport filter hid `sport=null` competitions. Fixed: `'All'` tab as default. Resolved: 2026-06-15.
-- ~~**BUG-028**~~: Framer Motion `initial` prop hydration mismatch #418 on standings page. Fixed: `initial` removed, `<motion.tr>` replaced with `<tr>`. Resolved: 2026-06-15.
-- ~~**BUG-029**~~: GET `/api/players/[id]` returned `email` to unauthenticated callers. Fixed: `.catch(() => null)` pattern, email admin-only. Resolved: 2026-06-15.
-- ~~**BUG-030**~~: `/competitions/[id]` base route 404. Fixed: redirect to `[id]/standings`. Resolved: 2026-06-16.
-- ~~**BUG-031**~~: `standings/page.tsx` rendered raw teamLogo strings at 5 sites. Fixed: `<TeamLogo>` component. Resolved: 2026-06-16.
+### Session 26 — 2026-06-19
+
+- ~~**BUG-042**~~ _(LOW — Logger UX)_: Logger confirm-lineup screen showed blank player names. Root cause: admin publish stores stubs `{ playerId, jerseyNumber, jerseyName }` — confirm screen rendered `p.name`/`p.number`/`p.position` which don't exist on stubs. Fix: resolve `playerId` against `homePlayers`/`awayPlayers` array; fall back to stub fields. `src/components/FootballLogger.tsx`. Commit `04d49dc`. Resolved: 2026-06-19.
+
+- ~~**BUG-044**~~ _(HIGH — Logger Auth)_: All logger API calls returned 401. Root cause: `POST /api/loggers/auth` returned JWT in JSON body only — never set `authToken` cookie. `getAuthUser()` reads cookie first, got null on every subsequent request. Fix: set httpOnly `authToken` cookie in logger auth response; store token in `localStorage` on login for offline queue SW path; clear both on logout. `src/app/api/loggers/auth/route.ts` + `src/app/logger/page.tsx`. Commit `7808a20`. Resolved: 2026-06-19.
+
+### Earlier Sessions
+
+- ~~**BUG-032**~~ _(MEDIUM — Data Integrity)_: 39 `match_events` rows with `player_id = NULL`. Forward gate added — `POST /api/events` now rejects null `playerId` for stat-affecting types. Existing 39 rows untouched — require separate audit before any backfill. Relates to BUG-011. RESOLVED (gate only) 2026-06-16. Event IDs: `PgCZ27rPw8puIrqGrn5ET`, `MOW5LnM7BnZPceo1EfNFG`, `0nRXEcu-47yWHnhzxnslR`, `mI8xLOJ9I9b9iYNj-4kJz`, `0V7jfxuB5Xx_QAKiQabJ2`, `VIBs_9slwaVOPDq2bVtoY`, `TUko0OhLCE3xZJL7fFjXz`, `Mky4ZzXeDsii0g0U6x4Lb`, `beDfnn98Kby7MHGqSu4Ih`, `hG-GiJofok53M9n1Dhid8`, `YCWEpHea96oNuwj0D7-SI`, `U9z2I58lOKa9knr02mZVz`, `yxeGjM1dncTLNFbpUVDGe`, `m_S_62bgcUyoxRow7dHZj`, `fRNnOokCdT-4PakPIkdyV`, `fQIeiSok9oJgiI-vyWepw`, `4tSgbmxI3Ck0ef66pkaNb`, `n7ZOn6tJdIz3Bh43Km8R2`, `4S7qyVWm7GtakOizaQWjc`, `oFk3adEagm1T7UZzjXPr5`, `Gd4Fi7XeuoDHSD-IHJjUf`, `3ETpELZx3t006Z-Mohbqx`, `-tN5u2EIsOJ8VsuC4_2G7`, `yAyzsTqkwiQlh5GfjKDBV`, `pDqf4GJggQpxvcP_gVnZW`, `5GG8B7NnXc3Z3fdHCxNIp`, `0hLgkDqfBHAbEpQY3sZLK`, `_PHNbJv4S4Ctq4Iq5lGYs`, `tF3EIAIj0L-X7rD4vt2lH`, `zNA4BBA1n-sE2saQODh82`, `S_vTbEW8q218pz5TgOuvF`, `2rSnM33hfnQ7FW3567CwV`, `7nhZ9HZaKziXUxfWpbKNL`, `95QMnbsU-kaskeVLahq-h`, `LmJmU-jFnFwXZAN_aIN2F`, `_PocAdTBo8G-Al-AysspK`, `tYruNu5Yr15Dlb2it4UkB`, `YNrvnIl5iPcT4y55ACdq7`, `0hYD6ESZNftfG7q2HTCL6`.
+
+- ~~**BACKLOG-065**~~ _(LOW — Data Integrity)_: CLOSED — superseded by BACKLOG-064. 4 players (joseph × 2, leo × 2) confirmed as distinct people. Action moved to BACKLOG-064 (display name disambiguation). 2026-06-16.
+
+- ~~**BUG-015**~~: PATCH `/api/matches/[id]` — no auth gate. Fixed: getAuthUser + admin/logger check. 2026-06-08.
+- ~~**BUG-016**~~: POST `/api/competitions` — no auth gate. Fixed: getAuthUser + admin check. 2026-06-08.
+- ~~**BUG-017**~~: Three debug/test routes deleted. 2026-06-08.
+- ~~**BUG-018**~~: GET `/api/matches/[id]` leaking internal fields. Fixed: explicit DTO destructure. 2026-06-08.
+- ~~**BUG-019**~~: `/api/admin/infrastructure` + `/api/analytics/system` — middleware-only auth. Fixed: handler-level check. 2026-06-08.
+- ~~**BUG-020**~~: `/live` page no polling. Fixed: 15s interval, cleared on unmount. 2026-06-08.
+- ~~**BUG-021**~~: POST `/api/notifications/subscribe` — no auth gate. 2026-06-15.
+- ~~**BUG-022**~~: Unbounded queries on competitions + events routes. Fixed: `.limit()`. 2026-06-15.
+- ~~**BUG-023**~~: `schema-nesa-registrations.ts` — orphaned file. Deleted. 2026-06-15.
+- ~~**BUG-024**~~: Suspected duplicate `/match/[id]` route — false alarm. 2026-06-15.
+- ~~**BUG-025**~~: GET `/api/matches` exposed `loggerId` to public. Fixed: admin-only. 2026-06-15.
+- ~~**BUG-027**~~: `/competitions` page hid `sport=null` competitions. Fixed: 'All' tab default. 2026-06-15.
+- ~~**BUG-028**~~: Framer Motion hydration mismatch #418 on standings. Fixed: `initial` removed, `<motion.tr>` replaced. 2026-06-15.
+- ~~**BUG-029**~~: GET `/api/players/[id]` returned `email` to unauthenticated callers. Fixed: admin-only. 2026-06-15.
+- ~~**BUG-030**~~: `/competitions/[id]` base route 404. Fixed: redirect to `[id]/standings`. 2026-06-16.
+- ~~**BUG-031**~~: `standings/page.tsx` rendered raw teamLogo strings. Fixed: `<TeamLogo>` component. 2026-06-16.
 
 ### ~~BACKLOG-036 — TeamLogo component migration (second pass)~~
 **Status:** COMPLETE — 2026-06-15
