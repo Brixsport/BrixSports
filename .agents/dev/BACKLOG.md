@@ -38,6 +38,16 @@
 
 - ~~**BUG-042**~~ _(LOW — Logger UX)_: Logger confirm-lineup screen showed blank player names and numbers. Root cause: admin publish route stores lightweight stubs `{ playerId, jerseyNumber, jerseyName }` in `matches.lineups`, but `FootballLogger.tsx` confirm screen rendered `p.name`/`p.number`/`p.position` directly on those stubs — fields that don't exist on them. Fix: resolve each starter's `playerId` against the already-fetched `homePlayers`/`awayPlayers` array; fall back to `jerseyName`/`jerseyNumber` from the stub. **RESOLVED — 2026-06-19** (`src/components/FootballLogger.tsx`).
 
+- **BUG-045** _(MEDIUM — Logger Dashboard)_: Match card on logger dashboard shows "INVALID DATE" under the match. `startTime` on the match is null or in a format the date formatter can't parse. Fix: add a null/invalid guard to the date display on the logger match card — fall back to "Date TBC" rather than crashing the formatter.
+
+- **BUG-046** _(MEDIUM — Public Match Page)_: `/matches/[id]` shows a full black screen with a spinner indefinitely when accessed from an admin browser session (non-incognito, separate tab). No error in console visible from screenshot. Likely cause: SW serving a stale cached shell after a recent deploy, or a client-side data fetch hanging with no timeout/error state. Needs reproduction and network tab capture to confirm root cause. Related: BUG-026 (SW stale cache after deploy).
+
+- ~~**BUG-044**~~ _(HIGH — Logger Flow)_: Logger cannot start a match — `PATCH /api/matches/[id]` returned 401 because the logger auth endpoint never set an `authToken` cookie, so `getAuthUser()` received no token on any subsequent request (including event POST). Fix: `POST /api/loggers/auth` now sets `authToken` as httpOnly cookie matching the JWT expiry. `logger/page.tsx` also stores the token in localStorage for the offline queue. **RESOLVED — 2026-06-19 (commit 7808a20).**
+
+- **BUG-044b** _(MEDIUM — Logger Flow)_: Logger `/api/auth/me` returns 401 — the `/api/auth/me` endpoint uses admin auth context, not logger auth. Logger dashboard stats (total events, logged matches) fetch from `/api/auth/me` which doesn't know about logger sessions. Needs a `/api/loggers/me` endpoint or the existing `/api/loggers/[id]` to be used instead. Filed: 2026-06-19.
+
+- **BUG-044** _(HIGH — Logger Flow)_: Logger cannot start a match. `PATCH /api/matches/[id]` with `{ status: 'LIVE' }` requires `role === 'admin'` — logger role gets 401. But the logger is pitch-side; the admin is not. Logger must be able to transition their assigned match from PENDING/UPCOMING → LIVE. Fix: in the PATCH handler, allow logger role if `isLoggerAssigned(matchId, authUser.id)` passes — same pattern used in BUG-015 fix for event logging. Scope: status transitions to LIVE and FINISHED only; all other PATCH fields remain admin-only. **This blocks Flow B end-to-end — logger cannot log events without a LIVE match.**
+
 - **BUG-043** _(LOW — Admin UX)_: "Publish Official Lineups" button on `/admin/match-lineups` is silently disabled when no captain is set for either team. The button shows no tooltip, no inline hint — users with 11/11 starters see an active-looking button that doesn't respond. Both teams need a captain assigned (click "Set Captain" on one player per side) before publish enables. No code fix needed — this is a UX discoverability gap. Consider adding a disabled-state tooltip or inline validation message listing unmet conditions.
 
 - **BUG-033** _(MEDIUM — Part 1 DONE / Part 2 open)_: Team roster pool on `/admin/teams/[id]` Squad tab does not filter by sport.
@@ -3729,3 +3739,100 @@ Logger accounts have no admin access — compromise enables false event injectio
 
 - Do not change TTL without a refresh flow in place — a logger getting hard-expired mid-match and losing their session is worse than a long TTL.
 - Related: BACKLOG-058 (offline queue JWT storage), BACKLOG-080 (rate limiting on auth endpoints).
+
+---
+
+### BACKLOG-096 — Event Pipeline: No Server-Side WebSocket Emit on Event Save
+
+**Status:** OPEN
+**Priority:** HIGH — Flow B and Flow C correctness
+**Filed:** 2026-06-19
+
+#### Finding
+
+`POST /api/matches/[id]/events` saves the event and updates the score in the DB, but never emits to any real-time channel. The current "real-time" update path is:
+
+1. Logger client emits `event:log` via `useWebSocket` (Railway socket — currently dead)
+2. Public viewer polls `/api/matches/[id]` every 15s (BUG-020 fix)
+
+This means:
+- **When Railway WS is alive:** viewers get the update within socket latency — works
+- **When Railway WS is dead (current state):** viewers wait up to 15s — polling only
+- **The clock** (`match:time:update`) is emitted client-side every second from FootballLogger via socket — when socket is dead, the public clock never updates
+
+#### Events emitted client-side (all dead when Railway is down)
+- `match:time:update` — clock tick, every second
+- `match:score:updated` — on score change
+- `match:status:changed` — on period transition
+- `event:log` — on event save
+- `event:undo` — on event delete
+- `match:lineup:update` — on lineup change
+
+#### What fires server-side (works regardless of WS)
+- DB write (matchEvents INSERT) ✅
+- Score update (matches UPDATE) ✅
+- Player stats update ✅
+- Ratings recalculation (internal fetch) ✅
+- **Standings update — NOT TRIGGERED** (see BACKLOG-097)
+
+#### Fix options (in priority order)
+1. **Short term:** Keep 15s polling on public page as the fallback. Accept 15s latency when WS is down.
+2. **Medium term:** Add SSE endpoint `GET /api/matches/[id]/stream` — server pushes events to viewer on each DB write. No Railway dependency.
+3. **Long term:** Fix Railway WS or self-host socket server. Required for sub-second clock sync on public pages.
+
+Related: BACKLOG-090 (RSC/client island architecture), BACKLOG-095 (data freshness strategy), BUG-026.
+
+---
+
+### BACKLOG-097 — Event Pipeline: No Standings/Points Update on Goal Save
+
+**Status:** OPEN
+**Priority:** MEDIUM
+**Filed:** 2026-06-19
+
+#### Finding
+
+When a goal is logged via `POST /api/matches/[id]/events`, the competition standings (points table, win/draw/loss record) are **never updated**. Standing recalculation only happens when match status transitions to FINISHED — and even that is not confirmed to be wired automatically.
+
+Affected flows:
+- Live standings during a match show stale data (correct — standings update on full-time, not on each goal)
+- **BUT:** if the match ends (status → FINISHED) without a dedicated standings trigger, points are never awarded
+
+#### Required Audit
+1. Check `PATCH /api/matches/[id]` — does setting `status: 'FINISHED'` trigger a standings recalculation?
+2. Check `/api/competitions/[id]/standings` — does it recalculate on the fly from match results, or read from a cached table?
+3. If neither triggers a recalculation: wire standings update into the FINISHED status transition.
+
+Do not build anything until the audit confirms whether the gap is real.
+
+---
+
+### BACKLOG-095 — Data Freshness Strategy: Per-Zone Caching and Update Mechanisms
+
+**Status:** OPEN
+**Priority:** Medium — architecture decision, not an active bug
+**Filed:** 2026-06-19
+
+#### Problem
+
+The app currently has no coherent data freshness strategy. Public pages do a full client-side fetch on every mount. The logger fetches all data on load with no update mechanism. Match detail pages get stale and require manual refresh. The approach is not consistent across zones and does not scale.
+
+#### Proposed Zone Model
+
+| Zone | Content | Strategy |
+|---|---|---|
+| **Public livescore** (`/live`, `/matches/[id]`) | Live score, events | Client island polling every 10–15s, or SSE stream. Shell to RSC (see BACKLOG-090). |
+| **Logger interface** | Events, clock state | Already client-managed via `MatchStateManager`. New events from co-logger via WebSocket sync (already wired via `useMultiLogger`). No polling needed — event-driven only. |
+| **Admin match list** | Match status, assignments | SWR/React Query with 30s revalidation. Stale-while-revalidate is fine. |
+| **Public player/team pages** | Stats, profile | Aggressive cache (5 min stale-ok). No real-time requirement. |
+| **Auth endpoints** | JWT session | Never cache — always network-first. |
+| **SW cache rules** | All of the above | SW must never cache: HTML documents, `/api/auth/*`, `/api/matches/[id]/events` (POST), match config. Cache: static assets (JS/CSS/images) with cache-busting on deploy. |
+
+#### Dependency
+
+Blocked on BACKLOG-090 (RSC architecture decision) for public pages. Logger and admin zones can be addressed independently.
+
+#### Notes
+- WebSocket (`useWebSocket`) already exists for real-time updates — the issue is it connects to the production Railway URL from staging (seen in console 400 errors). Fix the WS env var before relying on it as the primary update mechanism.
+- Do not introduce SWR or React Query without a session decision (BACKLOG-090) — adding a data-fetching library before the RSC migration will require rework.
+- Related: BACKLOG-090 (RSC/CSR architecture), BUG-026 (SW stale cache), BUG-041 (hydration), BUG-046 (match page blank screen).
