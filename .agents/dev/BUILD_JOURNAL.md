@@ -1085,3 +1085,53 @@
 - COLMANS/COLENVS basketball players not yet wired (no players with those colleges + Basketball primary team yet)
 
 **Next session:** BUG-041 — React hydration error #418 on homepage. Audit homepage components for Framer Motion `initial` prop usage and SSR/CSR mismatches. Then Lighthouse re-run to measure delta.
+
+---
+
+### Session 25 — 2026-06-19
+
+**Focus:** PWA backlog audit and reconciliation, BACKLOG-093 (logger SW gap), BACKLOG-058 (offline event queue), BACKLOG-094 filed.
+
+**Built / Changed:**
+
+- **`src/app/logger/layout.tsx`** (new file, commit `71d57f7`) — `PWAProvider` with `swPath="/sw-admin.js"`, `scope="/logger"`. Closes the critical gap where `/logger` had zero SW coverage: `usePWA.ts:13-16` blocks `sw-user.js` on logger paths, so without this layout the logger ran with no service worker at all. No server-side JWT check — logger page owns its own login form.
+- **`public/sw-admin.js`** — `syncMatchEvents()` auth fix (commit `ca35f2d`): added token presence guard (`if (!event.token) { continue; }`) before every POST. Without this, tokenless events would 401 indefinitely and trigger infinite retry storms. Also added schema comment documenting the `token` field and BACKLOG-058 contract.
+- **`src/components/FootballLogger.tsx`** — BACKLOG-058 offline queue wiring (commit `33d9b4d`):
+  - Three helpers added at module level: `openAdminDB()` (opens `BrixsportAdminDB` v1, creates `pendingMatchEvents` store), `queueOfflineEvent()` (adds row with `{ matchId, data, token, timestamp }`), `jwtSecondsRemaining()` (base64 decode of exp claim, no library)
+  - `payload` hoisted above try block (was inside try — invisible to catch, caused TS2304)
+  - Catch block (network failure) — three-path logic: (1) no token → alert + return; (2) token < 30 min remaining → alert + return; (3) token healthy → write to `BrixsportAdminDB.pendingMatchEvents` → `sync.register('sync-match-events')`
+  - `!res.ok` else branch added — logs server error, does NOT touch IndexedDB (server error ≠ network failure)
+  - `queuedOfflineCount` state + orange "N Queued" badge in status bar
+  - `SYNC_COMPLETE` postMessage listener → resets badge count
+- **`.agents/dev/BACKLOG.md`** (commit `fc32231`): BACKLOG-058 closed (RESOLVED), BACKLOG-093 closed (RESOLVED), BACKLOG-094 filed (logger JWT TTL too long).
+- **`CLAUDE.md`** (commit `fc32231`): Added "Backlog Close — Mandatory Before Moving On" to Definition of Done. Added BACKLOG.md update step to Before Every Commit.
+- **`.agents/dev/SESSION_25_RECON.md`** (new file, commit `fc32231`): read-only reconciliation verdicts for BACKLOG-059, SW state, BACKLOG-058, BACKLOG-044 Phase B, git status, and PWA guide discrepancy register.
+
+**Bugs encountered:**
+
+- **TS2304 `Cannot find name 'payload'`** — `payload` declared inside `try` block was invisible to the `catch` block. Root cause: const scoping. Fix: hoist `const payload = { ... }` above the try statement.
+- **Tokenless events sent to 401 endpoint** — original sync code logged a warning but still POSTed without a token → 401 → endless retry. Fix: `continue` to skip entirely in `syncMatchEvents()` when no token.
+
+**Architecture decisions:**
+
+- **Two disconnected IndexedDB implementations exist**: `offline-queue.ts` (`brixsport-offline.events` store) has no reader anywhere — it is effectively dead code. `sw-admin.js` drains `BrixsportAdminDB.pendingMatchEvents`. FootballLogger now writes directly to `BrixsportAdminDB` to match the drain side. `offline-queue.ts` left untouched.
+- **JWT stored in IndexedDB (unencrypted)** — conscious accepted risk. Mitigated by refusing to queue if token < 30 min from expiry. Logger accounts have no admin access — compromise enables false event injection only. BACKLOG-094 filed for future TTL shortening + refresh flow. Do not shorten TTL until a silent refresh flow is in place (hard expiry mid-match is worse than a long TTL).
+- **Background sync auth pattern** — token stored at write time by FootballLogger and read back in `syncMatchEvents()`. SW background sync fires outside any browser session, so no cookie or live auth context is available. Token must be embedded in the queued row.
+
+**Resolved:**
+
+- BACKLOG-093: Logger has no service worker coverage. Fixed via `src/app/logger/layout.tsx`.
+- BACKLOG-058: Offline event queue unwired. Fixed: FootballLogger catch now writes to `BrixsportAdminDB.pendingMatchEvents` with JWT, drain side (`syncMatchEvents`) now attaches Bearer header.
+
+**Filed:**
+
+- BACKLOG-094: Logger JWT TTL 7 days — shorten to 8–12h + add silent refresh flow (Low priority, not a live blocker).
+
+**Deferred:**
+
+- BACKLOG-044 Phase B: match config fetch on logger mount, timer ceiling from config, sub counter wired to `maxSubstitutions`. Next item in dependency chain after BACKLOG-093 + BACKLOG-058.
+- BACKLOG-094: JWT TTL shortening — do not implement until silent refresh flow is ready.
+
+**Next session:** BACKLOG-044 Phase B — fetch match config from `/api/matches/[id]/config` on FootballLogger mount; wire `halfDuration` to timer ceiling; wire `maxSubstitutions` to sub counter; enforce event validation from `eventValidation.ts`.
+
+**Next session:** BUG-041 — React hydration error #418 on homepage. Audit homepage components for Framer Motion `initial` prop usage and SSR/CSR mismatches. Then Lighthouse re-run to measure delta.
