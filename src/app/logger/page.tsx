@@ -48,6 +48,8 @@ export default function LoggerPage() {
       setAssignedMatches(data.assignedMatches || []);
       setIsLoggedIn(true);
       localStorage.setItem('logger', JSON.stringify(data.logger));
+      // Store token for offline queue (sw-admin.js reads this from IndexedDB rows at sync time)
+      if (data.token) localStorage.setItem('authToken', data.token);
     } catch (err) {
       setError('Network error. Please try again.');
     } finally {
@@ -203,6 +205,7 @@ export default function LoggerPage() {
     setLogger(null);
     setAssignedMatches([]);
     localStorage.removeItem('logger');
+    localStorage.removeItem('authToken');
   };
 
   return (

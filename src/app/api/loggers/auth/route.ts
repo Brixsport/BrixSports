@@ -56,7 +56,7 @@ export async function POST(request: NextRequest) {
             { expiresIn: '7d' }
         );
 
-        return NextResponse.json({
+        const response = NextResponse.json({
             logger: {
                 id: logger[0].id,
                 name: logger[0].name,
@@ -66,6 +66,17 @@ export async function POST(request: NextRequest) {
             assignedMatches,
             token,
         });
+
+        // Set authToken cookie so getAuthUser() can authenticate logger API requests
+        response.cookies.set('authToken', token, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'lax',
+            maxAge: 7 * 24 * 60 * 60, // 7 days — matches JWT expiry
+            path: '/',
+        });
+
+        return response;
     } catch (error) {
         console.error('Error authenticating logger:', error);
         return NextResponse.json(
