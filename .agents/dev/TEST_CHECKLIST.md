@@ -175,6 +175,36 @@ what fails with a one-line description.
 - [ ] Browser console shows no 404 errors for JS chunks on first load
 - [ ] After new deploy: clear SW cache manually → direct URL visit still loads correctly
 
+### PWA — Logger SW Coverage (BACKLOG-093, shipped 2026-06-19)
+- [ ] Navigate to `/logger/[match-id]` → DevTools → Application → Service Workers → confirm `sw-admin.js` is the active SW (not sw-user.js, not empty)
+- [ ] Navigate to `/` (homepage) → confirm `sw-user.js` is still active there (no regression)
+- [ ] Navigate to `/admin` → confirm `sw-admin.js` is active (unchanged)
+
+### PWA — Logger Offline Event Queue (BACKLOG-058, shipped 2026-06-19)
+**Online path (no queue should be used):**
+- [ ] Logger logs a goal while online → Network tab shows POST to `/api/matches/[id]/events` succeeds (200/201)
+- [ ] DevTools → Application → IndexedDB → `BrixsportAdminDB` → `pendingMatchEvents` → empty after successful online log
+- [ ] Orange "N Queued" badge does NOT appear during normal online logging
+
+**Offline path (queue wired correctly):**
+- [ ] DevTools → Network → set Offline → log a goal → no crash, no unhandled error in console
+- [ ] Orange "N Queued" badge appears in logger status bar (count increments per queued event)
+- [ ] DevTools → IndexedDB → `BrixsportAdminDB` → `pendingMatchEvents` → row exists with `matchId`, `data`, `token`, `timestamp` fields populated
+- [ ] `token` field in the row is a non-empty JWT string (not null, not undefined)
+
+**Drain / sync path:**
+- [ ] Set Network back to Online
+- [ ] DevTools → Application → Service Workers → click "sync" next to `sync-match-events` (or wait for background sync to fire)
+- [ ] `pendingMatchEvents` row is deleted from IndexedDB after successful drain
+- [ ] Orange badge resets to 0
+- [ ] Event appears in the match (confirm via `/api/matches/[id]/events` or public match page score)
+
+**Auth guard (tokenless row protection):**
+- [ ] If a row somehow has no token, confirm SW console shows `[SW Admin] Skipping event … — no token stored` (not a 401 error in Network tab)
+
+**iOS Safari note (known limitation — do not file as bug):**
+- Background Sync API not supported on iOS Safari — queued events will not auto-drain. Logger must return to the page online to trigger drain. Not a regression.
+
 #### BUG-027 — Competitions page sport filter
 - [ ] All tab shows all competitions including sport=null
 - [ ] Football tab shows only Football + isMultiSport competitions
