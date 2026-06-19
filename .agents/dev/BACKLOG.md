@@ -46,7 +46,7 @@
 
 - **BUG-044b** _(MEDIUM — Logger Flow)_: Logger `/api/auth/me` returns 401 — the `/api/auth/me` endpoint uses admin auth context, not logger auth. Logger dashboard stats (total events, logged matches) fetch from `/api/auth/me` which doesn't know about logger sessions. Needs a `/api/loggers/me` endpoint or the existing `/api/loggers/[id]` to be used instead. Filed: 2026-06-19.
 
-- ~~**BUG-047**~~ _(HIGH — Scoring)_: `Penalty` and `Own Goal` events did not update match score. Root cause: score update condition was `type.toUpperCase() === 'GOAL' || value` — `'Penalty'` and `'Own Goal'` don't match, and `value` is never sent in the client payload. Additional OG bug: OG credited the conceding team's score instead of the opposing team (wrong direction). Fix: `src/app/api/matches/[id]/events/route.ts` — condition expanded to include `PENALTY` and `OWN GOAL`; OG logic inverts `isHomeTeam` so the opposing team gets the point. **RESOLVED — 2026-06-19.**
+- ~~**BUG-047**~~ _(HIGH — Scoring)_: `Penalty` and `Own Goal` events did not update match score. Root cause: score update condition was `type.toUpperCase() === 'GOAL' || value` — `'Penalty'` and `'Own Goal'` don't match, and `value` is never sent in the client payload. Additional OG bug: OG credited the conceding team's score instead of the opposing team (wrong direction). Fix: `src/app/api/matches/[id]/events/route.ts` — condition expanded to include `PENALTY` and `OWN GOAL`; OG logic inverts `isHomeTeam` so the opposing team gets the point. **Code fixed 2026-06-19 (commit 5fbc3e5). Score impact audit run on staging: 0 Penalty/OG events found — no mismatches on staging. ⚠️ PROD AUDIT NOT YET RUN.** Script at `dev/audit-penalty-og-scores.mjs` — run with `.env.production` to confirm prod is clean. Do not close until prod audit is clear. Do not run any score correction script until BUG-011 (playerStats dedup) scope is confirmed.
 
 - **BUG-048** _(LOW — Logger UX)_: Cross-team players in departmental matches may show blank name on logger confirm screen even after BUG-042 fix. Root cause: BUG-042 resolves `playerId` against the team's eligible-players list — but a player from another club (e.g. BUSA Kings player appearing in a CNAS departmental lineup) won't be in that list. Fallback hits `jerseyName` from the stub, which is `null` if the admin didn't fill it in. This is a data entry gap, not a code regression. Mitigation: warn admin at lineup publish time if any starter stub has `jerseyName: null`. Filed: 2026-06-19.
 
@@ -2765,11 +2765,13 @@ Related: BACKLOG-053 (inline roster editing), BACKLOG-056
 
 ---
 
-### ~~BACKLOG-058~~ — Logger Offline Event Queue (PRE-LIVE-MATCH BLOCKER)
+### BACKLOG-058 — Logger Offline Event Queue (PRE-LIVE-MATCH BLOCKER)
 
-**Status:** RESOLVED — 2026-06-19 (commit 33d9b4d)
-**Priority:** ~~CRITICAL~~ — resolved.
+**Status:** ⚠️ UNVERIFIED — code shipped (commit 33d9b4d, 2026-06-19) but end-to-end test never completed.
+**Priority:** CRITICAL — must verify before any live match deployment.
 **Filed:** 2026-06-16
+
+**Why unverified:** RESOLVED label was applied on code review only. At the time of commit 33d9b4d, BUG-044 (logger auth cookie) was still broken — `localStorage('authToken')` was never populated on login, so the queue write path would have gated at `if (!token)` and alerted rather than queuing. The SW drain path reads `event.token` from IndexedDB (not the cookie), which also would have been null. No actual offline → queue → drain → sync cycle could have completed successfully before commit 7808a20 (BUG-044 fix). **Do not re-resolve this entry until the TEST_CHECKLIST.md BACKLOG-058 test suite passes in full with BUG-044 fix in place.**
 
 #### Problem
 sw-admin.js has syncMatchEvents() written and the background sync handler
@@ -3741,6 +3743,8 @@ Logger accounts have no admin access — compromise enables false event injectio
 
 - Do not change TTL without a refresh flow in place — a logger getting hard-expired mid-match and losing their session is worse than a long TTL.
 - Related: BACKLOG-058 (offline queue JWT storage), BACKLOG-080 (rate limiting on auth endpoints).
+
+**Dual-token sync risk (added 2026-06-19):** Logger auth now issues both an httpOnly cookie (for live API calls) and a localStorage token (for the offline SW queue). These can go out of sync — e.g. the cookie expires or is cleared by the browser while the localStorage token remains (or vice versa after a force-logout). Current logout clears both, which is correct. Risk: if the cookie is cleared server-side (e.g. a forced logout via token invalidation added later) without clearing localStorage, the offline queue would drain successfully but live API calls would 401. No fix needed at current scope — note this when implementing any server-side token invalidation or refresh flow.
 
 ---
 

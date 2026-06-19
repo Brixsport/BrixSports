@@ -132,12 +132,16 @@ All `emit(...)` calls in FootballLogger are fire-and-forget with no crash on fai
 
 ---
 
-#### Next session
+#### Next session (revised — do not skip to Phase B)
 
-1. Commit BUG-047 fix and update BACKLOG-047 entry
-2. BUG-044b — `/api/loggers/me` endpoint for logger dashboard stats
-3. BUG-045 — INVALID DATE guard on logger match card
-4. BACKLOG-044 Phase B — timer ceiling from `halfDuration`, sub counter wired to `maxSubstitutions`, event validation
+1. **Verify 33d9b4d scope** — DONE this session. Commit is real and matches BACKLOG-058. Auth was broken when it landed; see BACKLOG-058 status correction.
+2. **Run BACKLOG-058 test checklist for real** — now that BUG-044 is fixed, token IS in localStorage and cookie. Run Tests 1–4 from TEST_CHECKLIST.md against a live match: online path, offline path, drain path, expiry-guard path. Do not proceed to Phase B until all four pass.
+3. **Run BUG-047 prod score audit** — `node dev/audit-penalty-og-scores.mjs` with `.env.production` credentials. If mismatches found, scope the correction separately (do not combine with BUG-011). If clean, close BUG-047 fully.
+4. **BUG-044b** — `/api/loggers/me` endpoint for logger dashboard stats.
+5. **BUG-045** — INVALID DATE guard on logger match card.
+6. **BACKLOG-044 Phase B** — only after steps 2–3 are done.
+
+**Do not mark BACKLOG-058 RESOLVED again until step 2 produces a passing live test with a visible "Synced ✓" badge.**
 
 ---
 
