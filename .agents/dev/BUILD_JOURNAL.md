@@ -134,14 +134,13 @@ All `emit(...)` calls in FootballLogger are fire-and-forget with no crash on fai
 
 #### Next session (revised — do not skip to Phase B)
 
+0. **BUG-047 live smoke test (2 minutes)** — code fix is correct on paper but no real event has gone through the updated path. Log one Penalty and one Own Goal through the actual logger UI on staging. Confirm score increments correctly and OG credits the opposing team. See TEST_CHECKLIST.md → BUG-047 section. **Run this before anything else — same category of gap as BACKLOG-058's false RESOLVED.**
 1. **Verify 33d9b4d scope** — DONE this session. Commit is real and matches BACKLOG-058. Auth was broken when it landed; see BACKLOG-058 status correction.
-2. **Run BACKLOG-058 test checklist for real** — now that BUG-044 is fixed, token IS in localStorage and cookie. Run Tests 1–4 from TEST_CHECKLIST.md against a live match: online path, offline path, drain path, expiry-guard path. Do not proceed to Phase B until all four pass.
+2. **Run BACKLOG-058 test checklist for real** — now that BUG-044 is fixed, token IS in localStorage and cookie. Run Tests 1–4 from TEST_CHECKLIST.md against a live match: online path, offline path, drain path, expiry-guard path. Do not proceed to Phase B until all four pass. **Do not mark BACKLOG-058 RESOLVED again until "Synced ✓" badge is visible in the UI.**
 3. **Run BUG-047 prod score audit** — `node dev/audit-penalty-og-scores.mjs` with `.env.production` credentials. If mismatches found, scope the correction separately (do not combine with BUG-011). If clean, close BUG-047 fully.
 4. **BUG-044b** — `/api/loggers/me` endpoint for logger dashboard stats.
 5. **BUG-045** — INVALID DATE guard on logger match card.
-6. **BACKLOG-044 Phase B** — only after steps 2–3 are done.
-
-**Do not mark BACKLOG-058 RESOLVED again until step 2 produces a passing live test with a visible "Synced ✓" badge.**
+6. **BACKLOG-044 Phase B** — only after steps 0–3 are done.
 
 ---
 

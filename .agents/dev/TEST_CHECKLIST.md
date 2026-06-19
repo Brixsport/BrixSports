@@ -180,34 +180,78 @@ what fails with a one-line description.
 - [ ] Navigate to `/` (homepage) → confirm `sw-user.js` is still active there (no regression)
 - [ ] Navigate to `/admin` → confirm `sw-admin.js` is active (unchanged)
 
-### PWA — Logger Offline Event Queue (BACKLOG-058, shipped 2026-06-19)
-**Online path (no queue should be used):**
-- [ ] Logger logs a goal while online → Network tab shows POST to `/api/matches/[id]/events` succeeds (200/201)
-- [ ] DevTools → Application → IndexedDB → `BrixsportAdminDB` → `pendingMatchEvents` → empty after successful online log
-- [ ] Orange "N Queued" badge does NOT appear during normal online logging
+### BUG-047 — Penalty and Own Goal score update
+> ⚠️ Code fix shipped (commit `5fbc3e5`) but **not yet exercised by a real logged event**. Run this before BACKLOG-058 tests.
 
-**Offline path (queue wired correctly):**
-- [ ] DevTools → Network → set Offline → log a goal → no crash, no unhandled error in console
-- [ ] Orange "N Queued" badge appears in logger status bar (count increments per queued event)
-- [ ] DevTools → IndexedDB → `BrixsportAdminDB` → `pendingMatchEvents` → row exists with `matchId`, `data`, `token`, `timestamp` fields populated
-- [ ] `token` field in the row is a non-empty JWT string (not null, not undefined)
+**Setup:**
+- Open Chrome on desktop (or Android Chrome)
+- Log in as a logger account
+- Navigate to a LIVE match in the logger interface (`/logger` → select match)
+- Open DevTools → Network tab
+- Note the current score before starting
 
-**Drain / sync path:**
-- [ ] Set Network back to Online
-- [ ] DevTools → Application → Service Workers → click "sync" next to `sync-match-events` (or wait for background sync to fire)
-- [ ] `pendingMatchEvents` row is deleted from IndexedDB after successful drain
-- [ ] Orange badge resets to 0
-- [ ] Event appears in the match (confirm via `/api/matches/[id]/events` or public match page score)
+**Test A — Penalty (normal play, not shootout):**
+- Select a team and a player
+- Tap the "Penalty" button (in the normal play event grid, not penalty shootout mode)
+- Complete the penalty flow if a modal appears
+- Network tab: confirm `POST /api/matches/[id]/events` returns 201
+- Request body: confirm `type` field is `"Penalty"`
+- Open `/api/matches/[id]` in a new tab (or check the public match page score)
+- ✅ Score should have incremented by 1 for the team that took the penalty
 
-**Auth guard (tokenless row protection):**
-- [ ] If a row somehow has no token, confirm SW console shows `[SW Admin] Skipping event … — no token stored` (not a 401 error in Network tab)
+**Test B — Own Goal:**
+- Select the defending team (the team who scored the own goal)
+- Tap the "OG" button
+- Select the player who scored the OG
+- Network tab: confirm `POST /api/matches/[id]/events` returns 201
+- Request body: confirm `type` field is `"Own Goal"` and `teamId` is the defending team
+- Open `/api/matches/[id]` or public page
+- ✅ Score should have incremented by 1 for the **opposing** team (not the team in `teamId`)
 
-**Expiry-guard path (< 30 min remaining → refuse to queue):**
-- [ ] In `FootballLogger.tsx`, temporarily change the threshold constant from `30 * 60` to `9999999` (do NOT commit)
-- [ ] Set Network → Offline → log a goal
-- [ ] Confirm an alert fires with the "token expiring soon" message
-- [ ] Confirm DevTools → IndexedDB → `BrixsportAdminDB` → `pendingMatchEvents` → row was NOT written
-- [ ] Revert the threshold change before any commit
+---
+
+### PWA — Logger Offline Event Queue (BACKLOG-058)
+> ⚠️ Code shipped (commit `33d9b4d`, 2026-06-19) but **never tested end-to-end with working auth**. BUG-044 (auth cookie) was broken when this was shipped — `localStorage('authToken')` was never set so every queued event had `token: null` and the SW null-guard silently skipped them all. **Run BUG-047 tests above first, then proceed.**
+
+**Setup:**
+- Open Chrome on desktop (Android Chrome for the real mobile path)
+- Log in as a logger account — after login, verify `localStorage.getItem('authToken')` is a real JWT string (DevTools → Application → Local Storage → check `authToken` key exists and is non-empty)
+- Navigate to a LIVE match in the logger interface
+- Open DevTools with three tabs ready: Network, Application → IndexedDB → `BrixsportAdminDB`, Application → Service Workers
+
+**Test 1 — Online path (nothing should queue):**
+- Log an event (e.g. a goal)
+- Network tab: confirm `POST /api/matches/[id]/events` returns 200/201
+- Application → IndexedDB → `BrixsportAdminDB` → `pendingMatchEvents` → should be empty
+- No orange "N Queued" badge should appear
+
+**Test 2 — Offline path (queue wires up):**
+- DevTools → Network → throttle dropdown → **Offline**
+- Log a goal
+- Confirm: no crash, no unhandled console error
+- Confirm: orange "N Queued" badge appears in logger status bar
+- Application → IndexedDB → `BrixsportAdminDB` → `pendingMatchEvents` → one row should exist
+- Inspect the row: confirm `matchId`, `data`, `token`, `timestamp` fields are all present
+- Confirm `token` is a real non-null JWT string (not `null`, not `undefined`, not empty)
+
+**Test 3 — Drain:**
+- Set Network back to **Online**
+- Application → Service Workers → find `sync-match-events` → click **Sync** (or wait for background sync to fire automatically — may take a few seconds)
+- Confirm: row disappears from `pendingMatchEvents` in IndexedDB
+- Confirm: orange badge resets to 0
+- Confirm: event appears on the match — check the public match page or call `/api/matches/[id]/events` directly
+
+**Test 4 — Expiry guard (temporary code edit, do NOT commit):**
+- In `src/components/FootballLogger.tsx`, find the `jwtSecondsRemaining(token) < QUEUE_MIN_TTL_SECONDS` check in the offline catch block
+- Temporarily change `QUEUE_MIN_TTL_SECONDS` (or the threshold inline) from `30 * 60` to `9999999`
+- Save — let dev server hot-reload
+- Set Network → **Offline** → log a goal
+- Confirm: an alert fires with the "token expiring soon" message
+- Confirm: `pendingMatchEvents` in IndexedDB has **no new row** (event was refused, not queued)
+- **Revert the threshold change before any commit**
+
+**Auth guard (skip not 401-storm):**
+- If a row somehow has no token, confirm SW console shows `[SW Admin] Skipping event … — no token stored` and no 401 appears in Network tab
 
 **iOS Safari note (known limitation — do not file as bug):**
 - Background Sync API not supported on iOS Safari — queued events will not auto-drain. Logger must return to the page online to trigger drain. Not a regression.
