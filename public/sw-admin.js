@@ -168,12 +168,18 @@ async function syncMatchEvents() {
         for (const event of pendingEvents) {
             // token is stored at queue-write time by FootballLogger (BACKLOG-058).
             // SW background sync fires outside any browser session — no cookie available.
-            const headers = { 'Content-Type': 'application/json' };
-            if (event.token) {
-                headers['Authorization'] = `Bearer ${event.token}`;
-            } else {
-                console.warn('[SW Admin] No token on pending event', event.id, '— POST will 401');
+            if (!event.token) {
+                // No token means the write side (BACKLOG-058) hasn't stored one yet.
+                // Skip rather than POST — a tokenless request will 401, throw, and
+                // trigger an infinite retry storm for every event in the queue.
+                console.warn('[SW Admin] Skipping event', event.id, '— no token stored, will retry on next sync');
+                continue;
             }
+
+            const headers = {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${event.token}`,
+            };
 
             const response = await fetch(`/api/matches/${event.matchId}/events`, {
                 method: 'POST',
