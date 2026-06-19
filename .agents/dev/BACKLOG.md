@@ -2749,10 +2749,10 @@ Related: BACKLOG-053 (inline roster editing), BACKLOG-056
 
 ---
 
-### BACKLOG-058 — Logger Offline Event Queue (PRE-LIVE-MATCH BLOCKER)
+### ~~BACKLOG-058~~ — Logger Offline Event Queue (PRE-LIVE-MATCH BLOCKER)
 
-**Status:** OPEN
-**Priority:** CRITICAL — live match data loss risk
+**Status:** RESOLVED — 2026-06-19 (commit 33d9b4d)
+**Priority:** ~~CRITICAL~~ — resolved.
 **Filed:** 2026-06-16
 
 #### Problem
@@ -3700,3 +3700,28 @@ Impact:
 #### Dependency chain
 
 BACKLOG-093 → BACKLOG-058 (wire offline-queue.ts into FootballLogger catch block) → BACKLOG-044 Phase B (match config on mount, timer ceiling, sub rules)
+
+---
+
+### BACKLOG-094 — Logger JWT TTL Too Long (7 Days)
+
+**Status:** OPEN
+**Priority:** Low — not a live blocker, conscious accepted risk noted in BACKLOG-058.
+**Filed:** 2026-06-19
+
+#### Finding
+
+`src/lib/auth.ts:132` issues logger tokens with `expiresIn: '7d'`. A logger token exfiltrated via XSS, shared device, or any other path is live for up to a week. The 30-min IndexedDB exposure window (BACKLOG-058) bounds how long a token sits in unencrypted local storage, but does not reduce the token's actual validity window after exfiltration.
+
+Logger accounts have no admin access — compromise enables false event injection into live matches, not data exfiltration. Assessed as acceptable at MVP tier.
+
+#### Required Changes
+
+1. Shorten logger token TTL — e.g. 8–12 hours (covers a full match day without being permanently live).
+2. Add a silent refresh flow so a logger mid-match doesn't get hard-expired during a long game — refresh token or re-auth on next successful POST, not on an alert.
+3. Consider separate TTL config per role (`admin` vs `logger` vs `user`) rather than one global value in `auth.ts`.
+
+#### Notes
+
+- Do not change TTL without a refresh flow in place — a logger getting hard-expired mid-match and losing their session is worse than a long TTL.
+- Related: BACKLOG-058 (offline queue JWT storage), BACKLOG-080 (rate limiting on auth endpoints).

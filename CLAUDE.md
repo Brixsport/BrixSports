@@ -231,6 +231,18 @@ A feature is complete when:
 - Error states are visible and actionable
 - Manual test scenarios pass on both desktop and mobile
 
+### Backlog Close — Mandatory Before Moving On
+
+Before committing or starting the next task, update `.agents/dev/BACKLOG.md`:
+
+1. **Bug fixed** → change `**Status:** OPEN` to `**Status:** RESOLVED — YYYY-MM-DD (commit <hash>)` and strike through the heading (`~~BUG-XXX~~`). Move to Bugs (Resolved) section if it is in Bugs (Open).
+2. **Feature complete** → change `**Status:** OPEN` to `**Status:** COMPLETE — YYYY-MM-DD`. Strike through the heading if the item is fully done.
+3. **Partially resolved** → update the status line with what changed and what remains open. Never leave the status line unchanged after a partial fix.
+4. **Stale blocker note** → if the fix removes a dependency that another item listed (e.g. "Blocked by BUG-XXX"), update that item's notes too.
+5. **Priority drift** → if resolving this item changes the priority of a related item, update that item's `**Priority:**` line.
+
+**Never commit a fix without closing or updating its corresponding backlog entry in the same commit.**
+
 ---
 
 ## Live Event Readiness Checklist
@@ -333,6 +345,7 @@ git push origin hotfix/description
 ### Before Every Commit
 - Run `tsc --noEmit` — zero new errors only (pre-existing errors in `src/db/` scripts are known and acceptable)
 - Confirm you are on the correct branch
+- **Update `.agents/dev/BACKLOG.md`** — close or update every BUG/BACKLOG entry touched by this commit (see Definition of Done → Backlog Close). This is not optional. Do not commit without it.
 - Write descriptive commit messages using these types:
   - `feat:` — new feature
   - `fix:` — bug fix
