@@ -36,7 +36,25 @@
 
 ## Bugs (Open)
 
+### Auth / Security
+
+- **BUG-050** _(CRITICAL — Auth)_: `POST /api/loggers/auth` reads `process.env.JWT_SECRET` directly with a hardcoded fallback `'your-secret-key-change-in-production'`. If `JWT_SECRET` is absent at runtime, all logger JWTs are signed with a publicly known key — anyone can forge a valid logger token. Fix: import `env.jwtSecret` from `src/lib/env.ts`, remove the fallback entirely. `src/app/api/loggers/auth/route.ts` line ~55. Filed: 2026-06-19.
+
+- **BUG-051** _(CRITICAL — Auth)_: `PATCH /api/matches/[id]` accepts `status` as any freeform string with no enum validation and no role gate — a logger can set `status: 'FINISHED'` directly, bypassing `handleFinalize`, or inject an arbitrary string corrupting the status field. Fix: validate against `['PENDING','UPCOMING','LIVE','FINISHED','CANCELLED']`; restrict loggers to `['LIVE']` only. `src/app/api/matches/[id]/route.ts` line 487. Filed: 2026-06-19.
+
+- **BUG-052** _(CRITICAL — Data Integrity)_: `PATCH /api/matches/[id]` allows loggers to directly write `homeScore`/`awayScore` — bypasses the event-driven score increment in `/events`. No role restriction, no integer validation. A logger can set score to any value. Fix: restrict score writes to `role === 'admin'` only; add non-negative integer guard. `src/app/api/matches/[id]/route.ts` lines 485–486. Filed: 2026-06-19.
+
+- **BUG-053** _(MEDIUM — PRODUCTION gate)_: `POST /api/loggers/auth` has no rate limiting or brute-force protection. Endpoint is fully brute-forceable over the public internet. Logger email/username enumeration possible via response timing. Fix: add edge-level rate limit before go-live (Vercel Edge Config or middleware). Filed: 2026-06-19.
+
+### Scoring
+
+- **BUG-054** _(MEDIUM — Data Integrity)_: `DELETE /api/matches/[id]/events` (undo event) does not invert team direction for Own Goals. POST correctly credits the opponent (`teamId` = conceding team → opponent gets the point). DELETE subtracts from `teamId`'s score — which was never incremented. Result: undoing an OWN GOAL leaves the away score permanently 1 too high. Mirror the POST inversion logic in the DELETE handler. `src/app/api/matches/[id]/events/route.ts` lines 261–278. Filed: 2026-06-19.
+
+- **BUG-055** _(MEDIUM — Data Integrity)_: `isScoringEvent` condition in `POST /api/matches/[id]/events` includes `|| value` — any event with a truthy `value` field triggers a score increment (defaulting to 1 point). Future events with structured `value` payloads (substitution jersey number, stat multiplier, etc.) will silently increment the score. Fix: make scoring condition type-explicit — remove `|| value`, use `['GOAL','PENALTY','OWN GOAL'].includes(upperType)` only. `src/app/api/matches/[id]/events/route.ts` line 147. Filed: 2026-06-19.
+
 ### Logger Flow
+
+- **BUG-056** _(LOW)_: 401/403 on event POST (e.g. token expiry mid-match) silently drops the event — logger sees no UI feedback. The server-rejection branch in `FootballLogger.tsx` only `console.error`s. Fix: show a visible alert or toast for 4xx responses on event save — especially 401 (session expired). `src/components/FootballLogger.tsx` line ~594. Filed: 2026-06-19.
 
 - **BUG-044b** _(MEDIUM)_: Logger dashboard stats show "-" (total events, logged matches). Root cause: dashboard fetches `/api/auth/me` which is admin-auth only — logger JWTs are not recognised. Fix: create `/api/loggers/me` endpoint that reads the logger session and returns their stats, or wire to existing `/api/loggers/[id]`. Filed: 2026-06-19.
 
@@ -147,6 +165,10 @@ Convert to `.github/workflows/pre-prod-check.yml`. Trigger on PR to `main`. Pass
 ---
 
 ## Tech Debt
+
+- **TD-010** _(MEDIUM — Design Gap)_: `handlePeriodEndConfirm` and "Start 2nd Half" button do no server PATCH — period transitions are local-only in `MatchStateManager` (localStorage). If logger's browser crashes or reloads mid-second-half, the DB has no period record and the reconstituted logger has no way to know which half they're in. Decision required: either PATCH `currentPeriod` on each transition, or explicitly document that period state is ephemeral and implement state-from-event-history reconstitution on reload. `src/components/FootballLogger.tsx` lines 780–789, 1346. Filed: 2026-06-19.
+
+- **TD-011** _(LOW)_: `updatePlayerStats` in `src/app/api/matches/[id]/events/route.ts` has `season: '2024'` hardcoded on insert (lines ~357, ~396). Will silently write to the wrong season bucket from 2025 onward. Fix: derive season from match `startTime` or pass as a match field. Filed: 2026-06-19.
 
 - **TD-001** _(IN PROGRESS)_: `src/lib/env.ts` created — typed `env` object and `validateEnv()` startup check in place. `middleware.ts` migrated to use `env.jwtSecret` and `env.isStaging`. Remaining work: migrate all other `process.env` reads across 30+ files, add Zod validation. Full migration deferred — do not scatter `process.env` reads in new code from this point forward.
 - **TD-002**: Deduplication for event logging submissions on slow connections to prevent double-tap glitches.
