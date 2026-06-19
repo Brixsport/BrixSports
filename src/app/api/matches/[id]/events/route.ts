@@ -142,11 +142,18 @@ export async function POST(
         await db.insert(matchEvents).values(newEvent);
 
         // Update match score for scoring events
-        if (type.toUpperCase() === 'GOAL' || value) {
-            const isHomeTeam = teamId === match.homeTeamId;
+        const upperType = type.toUpperCase();
+        const isOwnGoal = upperType === 'OWN GOAL';
+        const isScoringEvent = upperType === 'GOAL' || upperType === 'PENALTY' || isOwnGoal || value;
+
+        if (isScoringEvent) {
             const currentHomeScore = match.homeScore || 0;
             const currentAwayScore = match.awayScore || 0;
             const points = typeof value === 'number' ? value : 1;
+            // Own goal: teamId is the player's team (who conceded) — credit the opposing team
+            const isHomeTeam = isOwnGoal
+                ? teamId !== match.homeTeamId
+                : teamId === match.homeTeamId;
 
             await db
                 .update(matches)

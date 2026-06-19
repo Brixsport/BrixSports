@@ -11,6 +11,136 @@
 
 ## Sessions
 
+### Session 26 — 2026-06-19
+
+**Focus:** BACKLOG-058 offline queue end-to-end testing, logger flow debugging, event pipeline audit, Penalty/OG score fix, player name investigation.
+
+---
+
+#### What was built / fixed
+
+**BUG-042 — Blank player names on logger confirm-lineup screen (RESOLVED, commit `04d49dc`)**
+
+- **Root cause:** Admin lineup publish stores lightweight stubs: `{ playerId, jerseyNumber, jerseyName, position, isCaptain }`. The FootballLogger confirm screen rendered `p.name`, `p.number`, `p.position` directly on those stubs — fields that don't exist.
+- **Fix:** Resolve each starter's `playerId` against the already-fetched `homePlayers`/`awayPlayers` array; fall back to stub fields (`jerseyName`, `jerseyNumber`, `position`) if the full record isn't found.
+- **Pattern applied to both home and away sides in `FootballLogger.tsx`.**
+
+**BUG-044 — Logger auth: all API calls returning 401 (RESOLVED, commit `7808a20`)**
+
+- **Root cause (traced):** `POST /api/loggers/auth` returned the JWT in JSON body only. `getAuthUser()` reads `authToken` cookie first, then `Authorization` header — but neither was set. Every subsequent logger API call (PATCH match status, POST events) failed auth silently.
+- **Root cause investigation:** HAR file loaded to trace exact request sequence. `PATCH /api/matches/[id]` 401 was initially suspected to be a missing role check, but the PATCH handler already had a logger+`isLoggerAssigned` check at line 431. The real failure was `getAuthUser()` returning null because no token was available.
+- **Fix (two parts):**
+  1. `src/app/api/loggers/auth/route.ts` — set `authToken` httpOnly cookie on the `NextResponse` before returning. Cookie `maxAge: 7 days` matches JWT expiry.
+  2. `src/app/logger/page.tsx` — store token in `localStorage('authToken')` on successful login for the offline queue SW sync path; clear it on logout.
+- **Why both?** The cookie handles server-side auth for all API calls; localStorage handles the offline event queue because the service worker (`syncMatchEvents`) reads `localStorage` to attach the token to queued event requests.
+
+**BUG-047 — Penalty and Own Goal events do not update the match score (RESOLVED, this session)**
+
+- **Root cause:** Score update condition in `POST /api/matches/[id]/events` was:
+  ```ts
+  if (type.toUpperCase() === 'GOAL' || value)
+  ```
+  The client sends `type: 'Penalty'` or `type: 'Own Goal'`. Neither matches `'GOAL'`. `value` is never included in the payload (confirmed by reading `confirmEvent` in `FootballLogger.tsx` — payload is constructed without a `value` field). So Penalty goals and Own Goals silently saved to DB without incrementing either team's score.
+- **Additional OG bug:** For Own Goal events `teamId` is the player's team (the team that conceded). The previous logic credited that team — the wrong direction.
+- **Fix in `src/app/api/matches/[id]/events/route.ts`:**
+  ```ts
+  const upperType = type.toUpperCase();
+  const isOwnGoal = upperType === 'OWN GOAL';
+  const isScoringEvent = upperType === 'GOAL' || upperType === 'PENALTY' || isOwnGoal || value;
+
+  if (isScoringEvent) {
+      const points = typeof value === 'number' ? value : 1;
+      // OG: teamId is the conceding team — credit the opposing side
+      const isHomeTeam = isOwnGoal
+          ? teamId !== match.homeTeamId
+          : teamId === match.homeTeamId;
+      ...
+  }
+  ```
+
+---
+
+#### Investigation findings (no immediate code fix)
+
+**Player #10 null name on CNAS lineup (BUG-048 filed)**
+
+- DB query of `busa-kings-player-10`: `{ name: 'Innocent Kedem', jersey_name: null }` — player has a `name` but `jerseyName` was never filled in.
+- Lineup stub stored by admin: `{ playerId: 'busa-kings-player-10', jerseyNumber: 10, jerseyName: null }`.
+- BUG-042 fix resolves blank name when the player IS in the team's eligible-players list (full record found → `full.name` displayed). But this player is from BUSA Kings team, placed in a CNAS departmental match lineup. `homePlayers` (fetched from eligible-players API for CNAS) does not include BUSA Kings players — so `homePlayers.find(pl => pl.id === p.playerId)` returns `undefined`, fallback hits `p.jerseyName` = `null`.
+- **Context:** this is a departmental match where players from different clubs represent their college. Expected pattern — not an isolated case.
+- **Decision:** Root is a data entry gap (admin must fill `jerseyName` for cross-team players in departmental lineups). No code fix this session. BUG-048 filed with UX mitigation suggestion (warn admin at publish time if any starter has `jerseyName: null`).
+
+**Event pipeline audit — what fires on `POST /api/matches/[id]/events`**
+
+Full chain confirmed:
+1. INSERT event row
+2. UPDATE `matches.homeScore`/`awayScore` (now correctly handles GOAL, PENALTY, OWN GOAL)
+3. `updatePlayerStats(sport, playerId, type, value)` — player stat row updated
+4. Non-blocking internal `fetch` → `POST /api/matches/[id]/ratings` — ratings recalculation
+5. **Nothing else.** No WebSocket emit server-side. No standings update.
+
+All client-side socket emits in `FootballLogger.tsx` are dead — Railway free tier expired. System degrades gracefully: public pages fall back to 15-second polling. Not a crash.
+
+**WebSocket status**
+
+All `emit(...)` calls in FootballLogger are fire-and-forget with no crash on failure. The logger logs `[FootballLogger] Socket NOT connected` to console and continues. Polling fallback on `/live` and public match pages means live updates still reach viewers within ~15 seconds. BACKLOG-096 filed for future WS replacement (Railway → alternative or Ably/Pusher).
+
+**Clock investigation**
+
+`MatchStateManager` is timestamp-based (`startTimestamp`, `lastTickTimestamp`) persisted to `localStorage`. Clock at 16:35 on logger entry was real elapsed match time from when the match was set LIVE by admin — not a bug.
+
+---
+
+#### Bugs filed this session
+
+| ID | Severity | Description | Status |
+|----|----------|-------------|--------|
+| BUG-042 | LOW | Blank player names on logger confirm screen | RESOLVED `04d49dc` |
+| BUG-043 | LOW | Silent publish button disable (no captain tooltip) | OPEN |
+| BUG-044 | HIGH | Logger auth 401 — no cookie set | RESOLVED `7808a20` |
+| BUG-044b | MEDIUM | Logger `/api/auth/me` → 401 (admin endpoint, not logger) | OPEN |
+| BUG-045 | MEDIUM | "INVALID DATE" on logger match card | OPEN |
+| BUG-046 | MEDIUM | Black spinner on `/matches/[id]` from admin session | OPEN |
+| BUG-047 | HIGH | Penalty/OG events don't update score | RESOLVED this session |
+| BUG-048 | LOW | Cross-team player in dept match: `jerseyName: null` not surfaced at publish | OPEN |
+
+**Backlog items filed:**
+- BACKLOG-095 — data freshness per-zone strategy (logger vs public vs admin)
+- BACKLOG-096 — no server-side WS emit on event save
+- BACKLOG-097 — no standings update on goal (needs audit on FINISHED transition)
+
+---
+
+#### Decisions made
+
+- **Logger auth dual-path** (cookie + localStorage) is intentional: cookie for live API calls, localStorage for offline queue SW path. Both must stay in sync — logout must clear both.
+- **Railway WS dead** — treat as degraded-graceful for now. No immediate fix. System works on polling.
+- **Cross-team departmental match player** — `jerseyName: null` is a data entry gap, not a code regression. Admin responsible for filling it in the lineup builder for cross-team players. Fix: warn at publish time if null.
+- **BACKLOG-044 Phase B** (timer ceiling, sub counter wiring) — still the formal "next" planned feature, not yet started.
+
+---
+
+#### Commits this session
+
+| Hash | Scope | Description |
+|------|-------|-------------|
+| `04d49dc` | `fix(logger)` | BUG-042 — resolve player stubs against full roster on confirm screen |
+| `7808a20` | `fix(logger)` | BUG-044 — set authToken cookie in logger auth response; store in localStorage |
+| *(uncommitted)* | `fix(events)` | BUG-047 — Penalty/OG score update logic |
+
+> BUG-047 fix is staged but not yet committed at session end.
+
+---
+
+#### Next session
+
+1. Commit BUG-047 fix and update BACKLOG-047 entry
+2. BUG-044b — `/api/loggers/me` endpoint for logger dashboard stats
+3. BUG-045 — INVALID DATE guard on logger match card
+4. BACKLOG-044 Phase B — timer ceiling from `halfDuration`, sub counter wired to `maxSubstitutions`, event validation
+
+---
+
 ### Session 23 — 2026-06-17
 
 **Focus:** College affiliation data integrity — diagnose, correct individual cases, plan bulk reconcile for 110 players with no college affiliation.
