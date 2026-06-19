@@ -3670,10 +3670,10 @@ Re-run Lighthouse after each of: BUG-041 fix, BACKLOG-090 (RSC migration), BACKL
 
 ---
 
-### BACKLOG-093 — Logger Has No Service Worker Coverage
+### ~~BACKLOG-093~~ — Logger Has No Service Worker Coverage
 
-**Status:** OPEN
-**Priority:** CRITICAL — Phase 0. Blocks BACKLOG-058 (offline event logging) and BACKLOG-044 Phase B.
+**Status:** RESOLVED — 2026-06-19 (commit 71d57f7)
+**Priority:** ~~CRITICAL~~ — resolved.
 **Filed:** 2026-06-19
 
 #### Finding (SESSION_25_RECON.md §2)
