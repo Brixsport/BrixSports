@@ -103,6 +103,15 @@ Fix written in `src/lib/auth.ts` (not yet committed):
 4. Run BUG-047 (Penalty + OG) and BACKLOG-058 (offline queue) after Start Match confirmed working
 5. BACKLOG-044 Phase B only after all smoke tests pass
 
+> **Update (same session):** BUG-057 committed directly to dev (commit `1401ee2`), pushed. Staging deployed. Smoke test run:
+> - Logger login → authToken cookie set ✅
+> - Start Match (PATCH `{ status: "LIVE" }`) → 200 ✅
+> - 9 events posted (Goal ×2, Penalty ×1, Own Goal ×2, Foul ×3, Assist ×1) → all 201 ✅
+> - Logger showed 2-3 at First Half. Public page showed 2-2 (polling lag, not a bug). ✅
+> - BUG-047 confirmed RESOLVED. BUG-057 confirmed RESOLVED.
+> - Flow B confirmed live for the first time end-to-end.
+> - **Next session starts with:** BACKLOG-058 Tests 1–4 (offline queue), then BACKLOG-044 Phase B.
+
 ---
 
 ### Session 26 — 2026-06-19
