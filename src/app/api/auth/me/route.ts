@@ -4,6 +4,7 @@ import { db } from '@/db';
 import { users, teams } from '@/db/schema';
 import { eq } from 'drizzle-orm';
 import { jwtVerify } from 'jose';
+import { env } from '@/lib/env';
 
 // GET /api/auth/me - Get current authenticated user
 export async function GET(request: NextRequest) {
@@ -23,9 +24,10 @@ export async function GET(request: NextRequest) {
         }
         
         // Verify token
-        const secret = new TextEncoder().encode(
-            process.env.JWT_SECRET || 'your-secret-key-change-in-production'
-        );
+        if (!env.jwtSecret) {
+            return NextResponse.json({ error: 'Server misconfiguration' }, { status: 500 });
+        }
+        const secret = new TextEncoder().encode(env.jwtSecret);
         const { payload } = await jwtVerify(authToken, secret);
         
         console.log(`[Auth/Me] Token verified for userId: ${payload.userId}`);

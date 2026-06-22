@@ -3,6 +3,7 @@ import { db } from '@/db';
 import { matches } from '@/db/schema';
 import { eq } from 'drizzle-orm';
 import jwt from 'jsonwebtoken';
+import { env } from '@/lib/env';
 
 // POST /api/matches/[id]/lineup/publish - Publish lineup (lock it)
 export async function POST(
@@ -23,9 +24,12 @@ export async function POST(
 
         if (token) {
             try {
+                if (!env.jwtSecret) {
+                    return NextResponse.json({ error: 'Server misconfiguration' }, { status: 500 });
+                }
                 const decoded = jwt.verify(
                     token,
-                    process.env.JWT_SECRET || 'your-secret-key-change-in-production'
+                    env.jwtSecret
                 ) as { id: string; email: string; role: string; name?: string };
 
                 userId = decoded.id;

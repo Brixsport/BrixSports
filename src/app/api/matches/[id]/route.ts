@@ -451,6 +451,18 @@ export async function PATCH(
 
         const body = await request.json();
 
+        // BUG-051: validate status against allowed enum; restrict loggers to safe transitions only
+        const VALID_STATUSES = ['PENDING', 'UPCOMING', 'LIVE', 'FINISHED', 'CANCELLED'] as const;
+        const LOGGER_ALLOWED_STATUSES: string[] = ['LIVE', 'FINISHED'];
+        if (body.status !== undefined) {
+            if (!VALID_STATUSES.includes(body.status)) {
+                return NextResponse.json({ error: 'Invalid status value' }, { status: 422 });
+            }
+            if (authUser.role === 'logger' && !LOGGER_ALLOWED_STATUSES.includes(body.status)) {
+                return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+            }
+        }
+
         // If assigning a logger, validate that the match isn't already assigned to another logger
         if (body.loggerId !== undefined && body.loggerId !== null) {
             const [existingMatch] = await db
@@ -482,9 +494,24 @@ export async function PATCH(
         };
 
         // Update allowed fields
-        if (body.homeScore !== undefined) updateData.homeScore = body.homeScore;
-        if (body.awayScore !== undefined) updateData.awayScore = body.awayScore;
-        if (body.status) updateData.status = body.status;
+        // BUG-052: score writes restricted to admin only; integer guard prevents corruption
+        if (authUser.role === 'admin') {
+            if (body.homeScore !== undefined) {
+                const s = Number(body.homeScore);
+                if (!Number.isInteger(s) || s < 0) {
+                    return NextResponse.json({ error: 'Invalid homeScore' }, { status: 422 });
+                }
+                updateData.homeScore = s;
+            }
+            if (body.awayScore !== undefined) {
+                const s = Number(body.awayScore);
+                if (!Number.isInteger(s) || s < 0) {
+                    return NextResponse.json({ error: 'Invalid awayScore' }, { status: 422 });
+                }
+                updateData.awayScore = s;
+            }
+        }
+        if (body.status !== undefined) updateData.status = body.status;
         if (body.loggerId !== undefined) updateData.loggerId = body.loggerId;
         if (body.stats) updateData.stats = JSON.stringify(body.stats);
         if (body.lineups) updateData.lineups = JSON.stringify(body.lineups);

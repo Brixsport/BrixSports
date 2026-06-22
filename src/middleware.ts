@@ -3,9 +3,10 @@ import type { NextRequest } from 'next/server';
 import { jwtVerify } from 'jose';
 import { env } from '@/lib/env';
 
-const JWT_SECRET = new TextEncoder().encode(
-    env.jwtSecret || 'your-secret-key-change-in-production'
-);
+if (!env.jwtSecret) {
+    throw new Error('JWT_SECRET is not configured');
+}
+const JWT_SECRET = new TextEncoder().encode(env.jwtSecret);
 
 async function verifyToken(token: string) {
     try {
