@@ -112,6 +112,20 @@ Fix written in `src/lib/auth.ts` (not yet committed):
 > - Flow B confirmed live for the first time end-to-end.
 > - **Next session starts with:** BACKLOG-058 Tests 1–4 (offline queue), then BACKLOG-044 Phase B.
 
+> **Update (same session) — BACKLOG-058 Test 2 (offline path) + BUG-058b:**
+>
+> Ran BACKLOG-058 Test 2: went offline, pushed an event from the logger. Expected: IndexedDB write. Observed: alert "Network error: could not save this event and no session found. Please re-login and re-log this event manually." — no IndexedDB write, no queue row.
+>
+> **Root cause — BUG-058b:** `AuthContext.tsx` (line 74) runs `checkAuth` on every page mount. It calls `GET /api/auth/me`, which returns 401 for logger sessions (that endpoint is admin-only). On 401, `checkAuth` calls `localStorage.removeItem('authToken')`. By the time FootballLogger's offline `catch` block reads `localStorage.getItem('authToken')`, the token is gone → `!token` guard fires → alert, no queue write.
+>
+> **Fix — two files:**
+> 1. `src/app/api/auth/refresh/route.ts` — updated to handle logger tokens. Normalises `payload.userId ?? payload.id`, branches on `actorRole === 'logger'` to query the `loggers` table, signs new token with `{ id, email, role }` (matching what `/api/loggers/auth` issues), and now returns `token` in the JSON body (previously cookie-only).
+> 2. `src/components/FootballLogger.tsx` — added mount `useEffect` that calls `POST /api/auth/refresh` with `credentials: 'include'`, reads `data.token` from the response body, and writes it back to `localStorage.authToken`. Runs once on mount, silently skips if offline. This ensures the token survives the AuthContext wipe.
+>
+> tsc clean on both files. **Not yet committed** — waiting for backlog + journal update first.
+>
+> **Next session starts with:** commit BUG-058b fix, push to dev, redeploy staging, re-run BACKLOG-058 Tests 1–4 in full.
+
 ---
 
 ### Session 26 — 2026-06-19

@@ -6,10 +6,12 @@
 
 BUG-050/051/052/057 RESOLVED. BUG-047 RESOLVED. Flow B confirmed live (Session 28).
 
-Remaining smoke test:
-1. BACKLOG-058 Tests 1–4 (offline queue end-to-end — see TEST_CHECKLIST.md)
+BUG-058b IN PROGRESS (Session 28) — BACKLOG-058 Test 2 revealed AuthContext wipes localStorage.authToken for logger sessions → offline queue gets null token → "no session found" alert, no queue write. Fix written (refresh endpoint + FootballLogger mount effect), not yet committed.
 
-**Only then:** BACKLOG-044 Phase B (timer ceiling + sub counter)
+Remaining:
+1. Commit BUG-058b fix and deploy staging
+2. Re-run BACKLOG-058 Tests 1–4 with fix in place
+3. Then: BACKLOG-044 Phase B (timer ceiling + sub counter)
 
 ---
 
@@ -66,6 +68,8 @@ BUG-001 through BUG-029, AUDIT-001/002 (partial), BACKLOG-065 — all resolved S
 - Pending items: none
 
 - **BUG-056** _(LOW)_: 401/403 on event POST (e.g. token expiry mid-match) silently drops the event — logger sees no UI feedback. The server-rejection branch in `FootballLogger.tsx` only `console.error`s. Fix: show a visible alert or toast for 4xx responses on event save — especially 401 (session expired). `src/components/FootballLogger.tsx` line ~594. Filed: 2026-06-19.
+
+- **BUG-058b** _(CRITICAL — Logger Offline Queue)_: `AuthContext.checkAuth()` runs on every logger page mount. It calls `GET /api/auth/me` with the `authToken` cookie → 401 for logger role → falls back to localStorage token → calls `/api/auth/me` again with `Authorization: Bearer` → still 401 → **calls `localStorage.removeItem('authToken')`** at line 74 of `AuthContext.tsx`. By the time FootballLogger's offline catch block runs `localStorage.getItem('authToken')`, the value is null → hits the `!token` branch → shows "Network error: could not save this event and no session found" alert → **no queue write, event silently lost**. Discovered during BACKLOG-058 Test 2 on staging (Session 28). Fix: (a) `POST /api/auth/refresh` updated to handle logger token payload (`id` not `userId`, `loggers` table not `users`), returns token in response body; (b) FootballLogger `useEffect` on mount calls refresh and re-stores token in localStorage. Files: `src/app/api/auth/refresh/route.ts`, `src/components/FootballLogger.tsx`. **Status:** IN PROGRESS — Session 28.
 
 - **BUG-044b** _(MEDIUM)_: Logger dashboard stats show "-" (total events, logged matches). Root cause: dashboard fetches `/api/auth/me` which is admin-auth only — logger JWTs are not recognised. Fix: create `/api/loggers/me` endpoint that reads the logger session and returns their stats, or wire to existing `/api/loggers/[id]`. Filed: 2026-06-19.
 
@@ -2788,11 +2792,11 @@ Related: BACKLOG-053 (inline roster editing), BACKLOG-056
 
 ### BACKLOG-058 — Logger Offline Event Queue (PRE-LIVE-MATCH BLOCKER)
 
-**Status:** ⚠️ UNVERIFIED — code shipped (commit 33d9b4d, 2026-06-19) but end-to-end test never completed.
+**Status:** ⚠️ UNVERIFIED — Test 1 (online path) not yet run. Test 2 (offline path) run on 2026-06-22: revealed BUG-058b (AuthContext wipes localStorage.authToken, offline queue gets null token). Fix for BUG-058b written but not yet committed. Re-run all 4 tests after BUG-058b is deployed.
 **Priority:** CRITICAL — must verify before any live match deployment.
 **Filed:** 2026-06-16
 
-**Why unverified:** RESOLVED label was applied on code review only. At the time of commit 33d9b4d, BUG-044 (logger auth cookie) was still broken — `localStorage('authToken')` was never populated on login, so the queue write path would have gated at `if (!token)` and alerted rather than queuing. The SW drain path reads `event.token` from IndexedDB (not the cookie), which also would have been null. No actual offline → queue → drain → sync cycle could have completed successfully before commit 7808a20 (BUG-044 fix). **Do not re-resolve this entry until the TEST_CHECKLIST.md BACKLOG-058 test suite passes in full with BUG-044 fix in place.**
+**Root cause of repeated failures:** two separate auth bugs blocked this in sequence. BUG-044 (cookie never set) blocked initial test. BUG-058b (AuthContext wipes localStorage on mount) blocked Test 2 even after BUG-044 was fixed. **Do not re-resolve this entry until all 4 TEST_CHECKLIST.md tests pass in sequence with BUG-058b deployed.**
 
 #### Problem
 sw-admin.js has syncMatchEvents() written and the background sync handler

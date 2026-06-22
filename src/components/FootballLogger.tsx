@@ -169,6 +169,24 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
         navigator.serviceWorker.addEventListener('message', handleMessage);
         return () => navigator.serviceWorker.removeEventListener('message', handleMessage);
     }, []);
+
+    // Ensure localStorage.authToken is populated for the offline queue path.
+    // AuthContext wipes localStorage when /api/auth/me returns 401 for logger roles.
+    // On mount, refresh via cookie to re-store the token.
+    useEffect(() => {
+        const ensureLocalToken = async () => {
+            try {
+                const res = await fetch('/api/auth/refresh', { method: 'POST', credentials: 'include' });
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data.token) localStorage.setItem('authToken', data.token);
+                }
+            } catch {
+                // offline at mount — silently ignore, token may already be in localStorage
+            }
+        };
+        ensureLocalToken();
+    }, []);
     const [editingTeam, setEditingTeam] = useState<'home' | 'away'>('home');
     const [draftLineup, setDraftLineup] = useState<{ starters: Player[], subs: Player[] }>({ starters: [], subs: [] });
 
