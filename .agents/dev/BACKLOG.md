@@ -61,7 +61,13 @@ BUG-001 through BUG-029, AUDIT-001/002 (partial), BACKLOG-065 — all resolved S
 
 ### Logger Flow
 
-- **BUG-057** _(CRITICAL — Auth)_: `getAuthUser()` in `src/lib/auth.ts` does not support logger sessions. Logger JWTs carry `{ id, email, role }` but `verifyAuth` casts to `AuthUser` which expects `{ userId, email, role }` — so `authData.userId` is `undefined`. `getAuthUser` then queries the `users` table with `undefined`, returns no row, returns `null`. Every handler that calls `getAuthUser` (PATCH `/api/matches/[id]`, POST `/api/matches/[id]/events`, etc.) returns 401 for ALL logger requests despite a valid `authToken` cookie. Root cause discovered during Session 28 smoke test — logger could log in successfully (`POST /api/loggers/auth` returned 200, cookie set) but every subsequent authenticated call returned 401. Fix: (a) `verifyAuth` normalises `decoded.userId ?? decoded.id` so logger tokens resolve correctly; (b) `getAuthUser` branches on `role === 'logger'` and queries the `loggers` table instead of `users`. `src/lib/auth.ts`. **Status:** IN PROGRESS — Session 28.
+- **BUG-057** _(CRITICAL — Auth)_: `getAuthUser()` in `src/lib/auth.ts` does not support logger sessions. Logger JWTs carry `{ id, email, role }` but `verifyAuth` casts to `AuthUser` which expects `{ userId, email, role }` — so `authData.userId` is `undefined`. `getAuthUser` then queries the `users` table with `undefined`, returns no row, returns `null`. Every handler that calls `getAuthUser` (PATCH `/api/matches/[id]`, POST `/api/matches/[id]/events`, etc.) returns 401 for ALL logger requests despite a valid `authToken` cookie. Root cause discovered during Session 28 smoke test — logger could log in successfully (`POST /api/loggers/auth` returned 200, cookie set) but every subsequent authenticated call returned 401. Fix: (a) `verifyAuth` normalises `decoded.userId ?? decoded.id` so logger tokens resolve correctly; (b) `getAuthUser` branches on `role === 'logger'` and queries the `loggers` table instead of `users`. `src/lib/auth.ts`. **Status:** SHIPPED — Session 28.
+
+**Evidence:**
+- Commit: `1401ee2`
+- Verified by: tsc clean (no new errors in auth.ts); code review of fix
+- Observed result: fix written and committed; live test pending staging deploy
+- Pending items: smoke test — logger login → Start Match → log event → End Match
 
 - **BUG-056** _(LOW)_: 401/403 on event POST (e.g. token expiry mid-match) silently drops the event — logger sees no UI feedback. The server-rejection branch in `FootballLogger.tsx` only `console.error`s. Fix: show a visible alert or toast for 4xx responses on event save — especially 401 (session expired). `src/components/FootballLogger.tsx` line ~594. Filed: 2026-06-19.
 
