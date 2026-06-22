@@ -4,14 +4,10 @@
 
 ## ⛔ SESSION BLOCKER — Must resolve before ANY new feature work
 
-BUG-050/051/052 SHIPPED (Session 28 — commit 1824256). BUG-057 IN PROGRESS (Session 28 — fix written, not yet committed).
+BUG-050/051/052/057 RESOLVED. BUG-047 RESOLVED. Flow B confirmed live (Session 28).
 
-**Current blocker:** BUG-057 must be committed and smoke tested before anything else.
-
-Smoke tests still pending:
-1. BUG-057 — verify logger can Start Match (PATCH) and log events (POST) after login
-2. BUG-047 smoke test (Penalty + OG through live logger UI — see TEST_CHECKLIST.md)
-3. BACKLOG-058 Tests 1–4 (offline queue end-to-end — see TEST_CHECKLIST.md)
+Remaining smoke test:
+1. BACKLOG-058 Tests 1–4 (offline queue end-to-end — see TEST_CHECKLIST.md)
 
 **Only then:** BACKLOG-044 Phase B (timer ceiling + sub counter)
 
@@ -61,13 +57,13 @@ BUG-001 through BUG-029, AUDIT-001/002 (partial), BACKLOG-065 — all resolved S
 
 ### Logger Flow
 
-- **BUG-057** _(CRITICAL — Auth)_: `getAuthUser()` in `src/lib/auth.ts` does not support logger sessions. Logger JWTs carry `{ id, email, role }` but `verifyAuth` casts to `AuthUser` which expects `{ userId, email, role }` — so `authData.userId` is `undefined`. `getAuthUser` then queries the `users` table with `undefined`, returns no row, returns `null`. Every handler that calls `getAuthUser` (PATCH `/api/matches/[id]`, POST `/api/matches/[id]/events`, etc.) returns 401 for ALL logger requests despite a valid `authToken` cookie. Root cause discovered during Session 28 smoke test — logger could log in successfully (`POST /api/loggers/auth` returned 200, cookie set) but every subsequent authenticated call returned 401. Fix: (a) `verifyAuth` normalises `decoded.userId ?? decoded.id` so logger tokens resolve correctly; (b) `getAuthUser` branches on `role === 'logger'` and queries the `loggers` table instead of `users`. `src/lib/auth.ts`. **Status:** SHIPPED — Session 28.
+- **BUG-057** _(CRITICAL — Auth)_: `getAuthUser()` in `src/lib/auth.ts` does not support logger sessions. Logger JWTs carry `{ id, email, role }` but `verifyAuth` casts to `AuthUser` which expects `{ userId, email, role }` — so `authData.userId` is `undefined`. `getAuthUser` then queries the `users` table with `undefined`, returns no row, returns `null`. Every handler that calls `getAuthUser` (PATCH `/api/matches/[id]`, POST `/api/matches/[id]/events`, etc.) returns 401 for ALL logger requests despite a valid `authToken` cookie. Root cause discovered during Session 28 smoke test — logger could log in successfully (`POST /api/loggers/auth` returned 200, cookie set) but every subsequent authenticated call returned 401. Fix: (a) `verifyAuth` normalises `decoded.userId ?? decoded.id` so logger tokens resolve correctly; (b) `getAuthUser` branches on `role === 'logger'` and queries the `loggers` table instead of `users`. `src/lib/auth.ts`. **Status:** RESOLVED — 2026-06-22.
 
 **Evidence:**
 - Commit: `1401ee2`
-- Verified by: tsc clean (no new errors in auth.ts); code review of fix
-- Observed result: fix written and committed; live test pending staging deploy
-- Pending items: smoke test — logger login → Start Match → log event → End Match
+- Verified by: live logger session on staging — login → Start Match (PATCH 200) → 9 events posted (all 201) → no 401s after login
+- Observed result: logger auth now resolves correctly via loggers table; all authenticated logger requests succeed
+- Pending items: none
 
 - **BUG-056** _(LOW)_: 401/403 on event POST (e.g. token expiry mid-match) silently drops the event — logger sees no UI feedback. The server-rejection branch in `FootballLogger.tsx` only `console.error`s. Fix: show a visible alert or toast for 4xx responses on event save — especially 401 (session expired). `src/components/FootballLogger.tsx` line ~594. Filed: 2026-06-19.
 
@@ -83,7 +79,13 @@ BUG-001 through BUG-029, AUDIT-001/002 (partial), BACKLOG-065 — all resolved S
 
 ### Scoring — Pending Live Verification
 
-- **BUG-047** _(HIGH — ⚠️ LIVE TEST PENDING)_: Penalty and Own Goal events did not update match score. Root cause: condition was `type.toUpperCase() === 'GOAL' || value` — neither `'Penalty'` nor `'Own Goal'` matched, and `value` is never in the client payload. OG additional bug: `teamId` is the conceding team; old logic credited them instead of the opponent. Fix: `src/app/api/matches/[id]/events/route.ts` expanded to `GOAL | PENALTY | OWN GOAL | value`; OG inverts `isHomeTeam`. Commit `5fbc3e5` (2026-06-19). Staging audit: 0 Penalty/OG events ever logged — no mismatches to correct. **Two items still open: (1) live smoke test — log one Penalty + one OG through logger UI, confirm scores move (see TEST_CHECKLIST.md → BUG-047). (2) prod audit — run `dev/audit-penalty-og-scores.mjs` with `.env.production`.** Do not close until both done. Do not run any score correction script until BUG-011 scope is confirmed.
+- ~~**BUG-047**~~ _(HIGH)_: Penalty and Own Goal events did not update match score. Root cause: condition was `type.toUpperCase() === 'GOAL' || value` — neither `'Penalty'` nor `'Own Goal'` matched, and `value` is never in the client payload. OG additional bug: `teamId` is the conceding team; old logic credited them instead of the opponent. Fix: `src/app/api/matches/[id]/events/route.ts` expanded to `GOAL | PENALTY | OWN GOAL | value`; OG inverts `isHomeTeam`. Commit `5fbc3e5` (2026-06-19). **Status:** RESOLVED — 2026-06-22.
+
+**Evidence:**
+- Commit: `5fbc3e5`
+- Verified by: live logger session on staging — 9 events posted (Goal ×2, Penalty ×1, Own Goal ×2, Foul ×3, Assist ×1), all 201. Logger UI showed 2-3 after events. Public page confirmed score updated on next poll.
+- Observed result: Penalty incremented correct team score; Own Goal credited opponent (not teamId team) — inversion logic confirmed correct.
+- Pending items: prod audit (`dev/audit-penalty-og-scores.mjs`) — blocked by BUG-011 scope confirmation.
 
 ### Public Page
 
