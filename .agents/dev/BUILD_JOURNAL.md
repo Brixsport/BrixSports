@@ -50,6 +50,61 @@
 
 ---
 
+### Session 28 — 2026-06-22
+
+**Focus:** Resolve BUG-050/051/052 (CRITICAL JWT and auth guards), smoke test logger flow on staging, diagnose 401 root cause, file + fix BUG-057.
+
+**Built / Fixed:**
+
+- **BUG-050 (expanded) — JWT fallback removed from all 7 files** (`src/middleware.ts`, `src/app/api/auth/refresh/route.ts`, `src/app/api/auth/me/route.ts`, `src/app/admin/layout.tsx`, `src/app/api/loggers/auth/route.ts`, `src/app/api/matches/[id]/livestream/route.ts`, `src/app/api/matches/[id]/lineup/unlock/route.ts`, `src/app/api/matches/[id]/lineup/publish/route.ts`)
+  - All 7 call sites (both sign and verify) replaced `process.env.JWT_SECRET || 'your-secret-key-change-in-production'` with `env.jwtSecret` + explicit guard.
+  - jose call sites: throw at module level on empty secret. jsonwebtoken call sites: return 500.
+  - jose already enforces 32-byte minimum; explicit guard added for consistency.
+  - Commit: `1824256`
+
+- **BUG-051 — Status enum gate + logger role restriction** (`src/app/api/matches/[id]/route.ts`)
+  - PATCH now validates `status` against `['PENDING','UPCOMING','LIVE','FINISHED','CANCELLED']` → 422 on unknown value.
+  - Logger role restricted to `['LIVE','FINISHED']` — `FINISHED` kept because `handleFinalize` PATCHes it as logger.
+  - Commit: `1824256`
+
+- **BUG-052 — Admin-only score writes** (`src/app/api/matches/[id]/route.ts`)
+  - `homeScore`/`awayScore` PATCH writes gated to `admin` role; non-negative integer guard added.
+  - Event-driven scoring (`POST /events` → `db.update` directly) confirmed separate code path — unaffected.
+  - Commit: `1824256`
+
+**Smoke test — root cause found (BUG-057):**
+
+Logger logged into staging via `/logger` login page. `POST /api/loggers/auth` returned 200, `authToken` cookie was set (confirmed in DevTools). But every subsequent call — `PATCH /api/matches/[id]`, `POST /api/matches/[id]/events`, `GET /api/auth/me` — returned 401.
+
+Root cause: `getAuthUser()` in `src/lib/auth.ts` is broken for logger sessions.
+- Logger JWTs carry `{ id, email, role }`. Admin JWTs carry `{ userId, email, role }`.
+- `verifyAuth` casts to `AuthUser` (has `userId` field) — but the spread doesn't rename `id` → `userId`. So `authData.userId` is `undefined` for all logger tokens.
+- `getAuthUser` queries `users` table with `WHERE id = undefined` → no rows → returns `null` → 401.
+- This means **every logger API call has always returned 401**. Start Match, log events, End Match — all broken.
+
+Fix written in `src/lib/auth.ts` (not yet committed):
+1. `verifyAuth`: decode as `{ userId?: string; id?: string; email; role }`, return `userId: decoded.userId ?? decoded.id ?? ''`.
+2. `getAuthUser`: when `authData.role === 'logger'`, query `loggers` table and return a shaped `AuthenticatedUser` with null defaults for user-only fields.
+
+**Also noted:**
+- `BUG-044b`: Logger dashboard `GET /api/auth/me` will still return 401 for loggers — that endpoint is admin-auth only. Separate fix needed (`/api/loggers/me` endpoint). Not in scope this session.
+- WebSocket errors on staging (`wss://brixsports-production.up.railway.app`) — pre-existing BACKLOG-027. Not a regression.
+- Staging-wide auth gate in middleware (env.isStaging) correctly exempts `/api/auth/*` but NOT `/api/loggers/*`. Logger login goes through `/api/loggers/auth` which is exempted. OK.
+
+**Deferred:**
+- BUG-047 smoke test — blocked on BUG-057 commit + deploy
+- BACKLOG-058 Tests 1–4 — blocked on BUG-057
+- BACKLOG-044 Phase B — blocked on smoke tests
+
+**Next session:**
+1. Commit BUG-057 fix (`src/lib/auth.ts`) after tsc clean
+2. Push to `fix/bug-057-logger-auth` branch, PR to dev, merge
+3. Deploy staging → smoke test: logger login → Start Match → log Goal → check score → End Match
+4. Run BUG-047 (Penalty + OG) and BACKLOG-058 (offline queue) after Start Match confirmed working
+5. BACKLOG-044 Phase B only after all smoke tests pass
+
+---
+
 ### Session 26 — 2026-06-19
 
 **Focus:** BACKLOG-058 offline queue end-to-end testing, logger flow debugging, event pipeline audit, Penalty/OG score fix, player name investigation.

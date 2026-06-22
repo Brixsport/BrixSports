@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server';
 import jwt from 'jsonwebtoken';
 import { db } from '@/db';
-import { users } from '@/db/schema';
+import { users, loggers } from '@/db/schema';
 import { eq } from 'drizzle-orm';
 import { env } from '@/lib/env';
 
@@ -52,10 +52,14 @@ export async function verifyAuth(request: NextRequest): Promise<AuthUser | null>
             return null;
         }
 
-        const decoded = jwt.verify(token, env.jwtSecret) as AuthUser;
+        // Logger JWTs use { id, email, role }; admin JWTs use { userId, email, role }.
+        // Normalise to userId so downstream callers work uniformly.
+        const decoded = jwt.verify(token, env.jwtSecret) as { userId?: string; id?: string; email: string; role: string };
+        const userId = decoded.userId ?? decoded.id ?? '';
 
         return {
-            ...decoded,
+            userId,
+            email: decoded.email,
             role: normalizeUserRole(decoded.role),
         };
     } catch (error) {
@@ -75,6 +79,31 @@ export async function getAuthUser(request: NextRequest): Promise<AuthenticatedUs
 
         if (!authData) {
             return null;
+        }
+
+        // Logger sessions are stored in the loggers table, not users.
+        if (authData.role === 'logger') {
+            const loggerResult = await db
+                .select()
+                .from(loggers)
+                .where(eq(loggers.id, authData.userId))
+                .limit(1);
+
+            const logger = loggerResult[0];
+            if (!logger) return null;
+
+            return {
+                id: logger.id,
+                email: logger.email ?? '',
+                name: logger.name,
+                role: 'logger',
+                avatar: null,
+                coverImage: null,
+                bio: null,
+                favoriteTeamId: null,
+                createdAt: logger.createdAt,
+                updatedAt: null,
+            };
         }
 
         const userResult = await db
