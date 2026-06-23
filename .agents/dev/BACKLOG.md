@@ -83,13 +83,19 @@ BUG-001 through BUG-029, AUDIT-001/002 (partial), BACKLOG-065 — all resolved S
 
 ### Scoring — Pending Live Verification
 
-- ~~**BUG-047**~~ _(HIGH)_: Penalty and Own Goal events did not update match score. Root cause: condition was `type.toUpperCase() === 'GOAL' || value` — neither `'Penalty'` nor `'Own Goal'` matched, and `value` is never in the client payload. OG additional bug: `teamId` is the conceding team; old logic credited them instead of the opponent. Fix: `src/app/api/matches/[id]/events/route.ts` expanded to `GOAL | PENALTY | OWN GOAL | value`; OG inverts `isHomeTeam`. Commit `5fbc3e5` (2026-06-19). **Status:** RESOLVED — 2026-06-22.
+- **BUG-047** _(HIGH)_: Penalty and Own Goal events did not update match score. Root cause: condition was `type.toUpperCase() === 'GOAL' || value` — neither `'Penalty'` nor `'Own Goal'` matched, and `value` is never in the client payload. OG additional bug: `teamId` is the conceding team; old logic credited them instead of the opponent. Fix: `src/app/api/matches/[id]/events/route.ts` expanded to `GOAL | PENALTY | OWN GOAL | value`; OG inverts `isHomeTeam`. Commit `5fbc3e5` (2026-06-19). **Status:** ⚠️ SHIPPED — AWAITING DB VERIFICATION.
 
-**Evidence:**
-- Commit: `5fbc3e5`
-- Verified by: live logger session on staging — 9 events posted (Goal ×2, Penalty ×1, Own Goal ×2, Foul ×3, Assist ×1), all 201. Logger UI showed 2-3 after events. Public page confirmed score updated on next poll.
-- Observed result: Penalty incremented correct team score; Own Goal credited opponent (not teamId team) — inversion logic confirmed correct.
-- Pending items: prod audit (`dev/audit-penalty-og-scores.mjs`) — blocked by BUG-011 scope confirmation.
+**Why reverted from RESOLVED:** Evidence block cited "logger UI showed 2-3." Logger UI computes score from locally-dispatched events — it does not read `matches.homeScore` / `matches.awayScore` from the DB. Those are two different numbers. "UI showed X" does not confirm DB state. RESOLVED requires a DB query confirming (a) `homeScore`/`awayScore` match expected counts, and (b) for each Own Goal event, the score increment went to the opponent team, not `teamId`.
+
+**Verification query (run against staging DB):**
+```sql
+SELECT homeScore, awayScore FROM matches WHERE id = 'LFkN14uB90brGn2E8sW1N';
+
+SELECT type, teamId, detail FROM match_events 
+WHERE matchId = 'LFkN14uB90brGn2E8sW1N' 
+ORDER BY createdAt;
+```
+Cross-check: for each `Own Goal` row, `teamId` is the conceding team — the opposing team's score column must be the one that incremented. Confirm numbers add up before re-opening as RESOLVED.
 
 ### Public Page
 

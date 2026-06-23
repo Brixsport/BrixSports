@@ -272,6 +272,18 @@ Every entry moving to `RESOLVED` must include an evidence block:
 
 No evidence block = the entry is `SHIPPED`, not `RESOLVED`. This is not optional.
 
+#### What Does NOT Count as Evidence
+
+The following are explicitly invalid as evidence for RESOLVED — they demonstrate the fix ran, not that it worked correctly:
+
+- "The UI showed X" — client state is computed locally and may diverge from DB
+- "All requests returned 201/200" — a 201 confirms row insertion, not correctness of the data written
+- "The logger showed score Y" — logger score is derived from locally dispatched events, not from `matches.homeScore` / `matches.awayScore`
+- "No errors in console" — absence of error is not presence of correct state
+- "Smoke test passed" — only counts if the smoke test explicitly reads back the DB state and confirms it matches expected values
+
+**For any bug that writes data to the DB**: evidence must include a DB query result showing the actual stored values match expected values. Screenshots and HTTP response codes are supporting context, not proof.
+
 ---
 
 ## Live Event Readiness Checklist
