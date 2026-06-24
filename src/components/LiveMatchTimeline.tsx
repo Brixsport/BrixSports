@@ -434,14 +434,14 @@ export default function LiveMatchTimeline({ events, homeTeam, awayTeam, eyePoint
             ))}
 
             {/* Eye Points Summary */}
-            {eyePoints.length > 0 && (
+            {(eyePoints ?? []).length > 0 && (
                 <div className="mt-8 p-6 bg-purple-500/10 border border-purple-500/30 rounded-2xl">
                     <div className="flex items-center gap-2 mb-4">
                         <Eye className="w-5 h-5 text-purple-500" />
                         <h3 className="font-bold text-lg">Eye Point Awards</h3>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                        {eyePoints.map((award) => (
+                        {(eyePoints ?? []).map((award) => (
                             <div key={award.id} className="flex items-center gap-3 p-3 bg-white/5 rounded-lg">
                                 <Award className="w-5 h-5 text-purple-500" />
                                 <div>

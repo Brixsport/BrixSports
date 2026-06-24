@@ -69,7 +69,15 @@ BUG-001 through BUG-029, AUDIT-001/002 (partial), BACKLOG-065 — all resolved S
 
 - **BUG-056** _(LOW)_: 401/403 on event POST (e.g. token expiry mid-match) silently drops the event — logger sees no UI feedback. The server-rejection branch in `FootballLogger.tsx` only `console.error`s. Fix: show a visible alert or toast for 4xx responses on event save — especially 401 (session expired). `src/components/FootballLogger.tsx` line ~594. Filed: 2026-06-19.
 
-- **BUG-058b** _(CRITICAL — Logger Offline Queue)_: `AuthContext.checkAuth()` runs on every logger page mount. It calls `GET /api/auth/me` with the `authToken` cookie → 401 for logger role → falls back to localStorage token → calls `/api/auth/me` again with `Authorization: Bearer` → still 401 → **calls `localStorage.removeItem('authToken')`** at line 74 of `AuthContext.tsx`. By the time FootballLogger's offline catch block runs `localStorage.getItem('authToken')`, the value is null → hits the `!token` branch → shows "Network error: could not save this event and no session found" alert → **no queue write, event silently lost**. Discovered during BACKLOG-058 Test 2 on staging (Session 28). Fix: (a) `POST /api/auth/refresh` updated to handle logger token payload (`id` not `userId`, `loggers` table not `users`), returns token in response body; (b) FootballLogger `useEffect` on mount calls refresh and re-stores token in localStorage. Files: `src/app/api/auth/refresh/route.ts`, `src/components/FootballLogger.tsx`. **Status:** IN PROGRESS — Session 28.
+- ~~**BUG-058b**~~ _(CRITICAL — Logger Offline Queue)_: `AuthContext.checkAuth()` runs on every logger page mount. It calls `GET /api/auth/me` with the `authToken` cookie → 401 for logger role → falls back to localStorage token → calls `/api/auth/me` again with `Authorization: Bearer` → still 401 → **calls `localStorage.removeItem('authToken')`** at line 74 of `AuthContext.tsx`. By the time FootballLogger's offline catch block runs `localStorage.getItem('authToken')`, the value is null → hits the `!token` branch → shows "Network error: could not save this event and no session found" alert → **no queue write, event silently lost**. Discovered during BACKLOG-058 Test 2 on staging (Session 28). Fix: (a) `POST /api/auth/refresh` updated to handle logger token payload (`id` not `userId`, `loggers` table not `users`), returns token in response body; (b) FootballLogger `useEffect` on mount calls refresh and re-stores token in localStorage. Files: `src/app/api/auth/refresh/route.ts`, `src/components/FootballLogger.tsx`. **Status:** SHIPPED — commit `1057f22`, 2026-06-24. Pending: BACKLOG-058 Test 2 re-run to confirm queue write now succeeds.
+
+- ~~**BUG-059**~~ _(HIGH — Match Detail Page)_: Timeline tab crashes on render with `TypeError: Cannot read properties of undefined (reading 'length')`. Root cause: `LiveMatchTimeline` receives `eyePoints` prop from the page, which destructures it from `matchData` (line 234 of `matches/[id]/page.tsx`). The GET handler at `src/app/api/matches/[id]/route.ts` returns `{ match, events }` — no `eyePoints` key. So `eyePoints` is `undefined`. `LiveMatchTimeline.tsx` line 437 calls `eyePoints.length` unconditionally → TypeError → component crash. The network "500" observed during the Session 28 smoke test was this render error surfacing. Fix: `(eyePoints ?? []).length` and `(eyePoints ?? []).map(...)` in `LiveMatchTimeline.tsx`. **Status:** RESOLVED — 2026-06-24.
+
+**Evidence:**
+- Commit: (pending)
+- Verified by: code trace — `eyePoints` key absent from GET response shape confirmed by reading route.ts lines 408–418; `eyePoints.length` call on undefined confirmed at LiveMatchTimeline.tsx:437
+- Observed result: fix guards both the conditional and the map call with `?? []`
+- Pending items: confirm Timeline tab renders without crash on staging after deploy
 
 - **BUG-044b** _(MEDIUM)_: Logger dashboard stats show "-" (total events, logged matches). Root cause: dashboard fetches `/api/auth/me` which is admin-auth only — logger JWTs are not recognised. Fix: create `/api/loggers/me` endpoint that reads the logger session and returns their stats, or wire to existing `/api/loggers/[id]`. Filed: 2026-06-19.
 
@@ -2797,11 +2805,13 @@ Related: BACKLOG-053 (inline roster editing), BACKLOG-056
 
 ### BACKLOG-058 — Logger Offline Event Queue (PRE-LIVE-MATCH BLOCKER)
 
-**Status:** ⚠️ UNVERIFIED — Test 1 (online path) not yet run. Test 2 (offline path) run on 2026-06-22: revealed BUG-058b (AuthContext wipes localStorage.authToken, offline queue gets null token). Fix for BUG-058b written but not yet committed. Re-run all 4 tests after BUG-058b is deployed.
+**Status:** ⚠️ UNVERIFIED — BUG-058b fix shipped (commit `1057f22`, 2026-06-24). Tests 1–4 not yet re-run. **Test 3 (drain → public page) is the critical unverified step** — queue-write path is now fixed but no queued event has yet been drained by the SW and confirmed visible on the public page. Do not mark RESOLVED until drain-to-visible is confirmed end-to-end.
 **Priority:** CRITICAL — must verify before any live match deployment.
 **Filed:** 2026-06-16
 
-**Root cause of repeated failures:** two separate auth bugs blocked this in sequence. BUG-044 (cookie never set) blocked initial test. BUG-058b (AuthContext wipes localStorage on mount) blocked Test 2 even after BUG-044 was fixed. **Do not re-resolve this entry until all 4 TEST_CHECKLIST.md tests pass in sequence with BUG-058b deployed.**
+**IndexedDB wiring status (as of 2026-06-24):** The "two parallel implementations" bug (known-issues.md) is RESOLVED — `offline-queue.ts` is correctly unwired; FootballLogger writes directly to `BrixsportAdminDB.pendingMatchEvents` (the same store sw-admin.js drains). The write path is implemented and the token is now re-seeded on mount (BUG-058b fix). What remains unverified: does the SW actually drain that row and POST it successfully when connectivity is restored?
+
+**Root cause of repeated failures:** three separate bugs blocked this in sequence — BUG-044 (cookie never set), the "two parallel IndexedDB implementations" (wrong store wired), and BUG-058b (AuthContext wipes localStorage on mount). All three are now fixed. **Do not re-resolve this entry until all 4 TEST_CHECKLIST.md tests pass in sequence.**
 
 #### Problem
 sw-admin.js has syncMatchEvents() written and the background sync handler
