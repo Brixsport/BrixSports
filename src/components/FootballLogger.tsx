@@ -286,11 +286,11 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                 // Filter eligible players by team — memberships-aware so multi-affiliated players
                 // (e.g. college + BUSA team) resolve against the match team, not just their primary affiliation
                 const hPlayers = eligiblePlayers.filter((player: Player) =>
-                    player.memberships?.some((m: any) => m.team?.id === match.homeTeamId)
+                    (player as any).memberships?.some((m: any) => m.team?.id === match.homeTeamId)
                     || getPlayerTeam(player)?.id === match.homeTeamId
                 );
                 const aPlayers = eligiblePlayers.filter((player: Player) =>
-                    player.memberships?.some((m: any) => m.team?.id === match.awayTeamId)
+                    (player as any).memberships?.some((m: any) => m.team?.id === match.awayTeamId)
                     || getPlayerTeam(player)?.id === match.awayTeamId
                 );
 
@@ -321,7 +321,13 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                     match.competition?.toLowerCase().includes('npuga');
                 matchHalfDuration = isFiveAside ? 20 : 35;
 
-                // Initialize Manager
+                // Initialize Manager — seed currentPeriod from DB so period survives phone refresh
+                // (DB value wins over localStorage via initial?.clock spread in initializeState)
+                const VALID_PERIODS = ['NOT_STARTED','FIRST_HALF','HALF_TIME','SECOND_HALF','EXTRA_TIME_1','EXTRA_TIME_2','PENALTY_SHOOTOUT','FINISHED'] as const;
+                type SeedPeriod = typeof VALID_PERIODS[number];
+                const seedPeriod: SeedPeriod = VALID_PERIODS.includes(match.currentPeriod as SeedPeriod)
+                    ? (match.currentPeriod as SeedPeriod)
+                    : 'NOT_STARTED';
                 const manager = getMatchStateManager(match.id, {
                     homeTeamId: match.homeTeamId,
                     awayTeamId: match.awayTeamId,
@@ -330,6 +336,7 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                         home: match.homeScore || 0,
                         away: match.awayScore || 0
                     },
+                    clock: { period: seedPeriod } as import('@/lib/match-state-manager').MatchClock,
                 });
 
                 manager.registerPlayers(hPlayers, 'home');
@@ -806,8 +813,17 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
     const handlePeriodEndConfirm = () => {
         if (!stateManager.current || !pendingPeriodTransition) return;
 
+        const nextPeriod = pendingPeriodTransition.next;
+
         // Complete the transition to next period
-        stateManager.current.completePeriodTransition(pendingPeriodTransition.next as any);
+        stateManager.current.completePeriodTransition(nextPeriod as any);
+
+        // Persist period to DB — non-blocking, failure does not affect logger UI
+        fetch(`/api/matches/${match.id}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ currentPeriod: nextPeriod }),
+        }).catch((e) => console.error('[TD-010] Failed to persist currentPeriod:', e));
 
         // Close modal and reset state
         setShowPeriodEndModal(false);
@@ -1342,6 +1358,12 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                                     if (!res.ok) throw new Error(`Server returned ${res.status}`);
                                     // PATCH confirmed — now transition local state and start the clock
                                     stateManager.current.transitionStatus('FIRST_HALF');
+                                    // Persist period to DB — non-blocking
+                                    fetch(`/api/matches/${match.id}`, {
+                                        method: 'PATCH',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({ currentPeriod: 'FIRST_HALF' }),
+                                    }).catch((e) => console.error('[TD-010] Failed to persist currentPeriod:', e));
                                     try { await fetch('/api/notifications/match-event', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ matchId: match.id, homeTeamId: match.homeTeamId, awayTeamId: match.awayTeamId, eventType: 'MATCH_START', teamName: `${homeTeam?.name || 'Home'} vs ${awayTeam?.name || 'Away'}` }) }); } catch (e) { console.error('Notification failed (non-blocking):', e); }
                                 } catch (e) {
                                     console.error('Failed to start match:', e);

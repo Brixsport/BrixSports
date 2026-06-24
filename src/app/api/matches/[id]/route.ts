@@ -512,6 +512,7 @@ export async function PATCH(
             }
         }
         if (body.status !== undefined) updateData.status = body.status;
+        if (body.currentPeriod !== undefined) updateData.currentPeriod = body.currentPeriod;
         if (body.loggerId !== undefined) updateData.loggerId = body.loggerId;
         if (body.stats) updateData.stats = JSON.stringify(body.stats);
         if (body.lineups) updateData.lineups = JSON.stringify(body.lineups);

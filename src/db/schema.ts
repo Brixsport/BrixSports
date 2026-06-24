@@ -335,6 +335,7 @@ export const matches = sqliteTable('matches', {
     penaltiesEnabledOverride: integer('penaltiesEnabledOverride', { mode: 'boolean' }),
     allowDrawsOverride: integer('allowDrawsOverride', { mode: 'boolean' }),
     extraTimeEnabledOverride: integer('extraTimeEnabledOverride', { mode: 'boolean' }),
+    currentPeriod: text('current_period').default('NOT_STARTED'),
     createdAt: integer('created_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
     updatedAt: integer('updated_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
 });

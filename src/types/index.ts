@@ -43,6 +43,7 @@ export interface Player {
     jerseyName?: string;
     college?: string;
     department?: string;
+    memberships?: Array<{ affiliation?: { isPrimary?: boolean }; team?: { id: string; name: string } | null }>;
 }
 
 export type MatchStatus = 'UPCOMING' | 'LIVE' | 'FINISHED';
@@ -68,6 +69,7 @@ export interface Match {
         home: LineupEntry[];
         away: LineupEntry[];
     };
+    currentPeriod?: string | null;
     isStreaming?: boolean;
     streamUrl?: string;
     streamType?: 'youtube' | 'twitch' | 'facebook' | 'hls' | 'dash' | 'custom';
