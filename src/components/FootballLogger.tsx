@@ -283,9 +283,16 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                 setHomeTeam(home || null);
                 setAwayTeam(away || null);
 
-                // Filter eligible players by team
-                const hPlayers = eligiblePlayers.filter((player: Player) => getPlayerTeam(player)?.id === match.homeTeamId);
-                const aPlayers = eligiblePlayers.filter((player: Player) => getPlayerTeam(player)?.id === match.awayTeamId);
+                // Filter eligible players by team — memberships-aware so multi-affiliated players
+                // (e.g. college + BUSA team) resolve against the match team, not just their primary affiliation
+                const hPlayers = eligiblePlayers.filter((player: Player) =>
+                    player.memberships?.some((m: any) => m.team?.id === match.homeTeamId)
+                    || getPlayerTeam(player)?.id === match.homeTeamId
+                );
+                const aPlayers = eligiblePlayers.filter((player: Player) =>
+                    player.memberships?.some((m: any) => m.team?.id === match.awayTeamId)
+                    || getPlayerTeam(player)?.id === match.awayTeamId
+                );
 
                 setHomePlayers(hPlayers);
                 setAwayPlayers(aPlayers);
