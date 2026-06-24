@@ -2817,13 +2817,13 @@ Related: BACKLOG-053 (inline roster editing), BACKLOG-056
 
 ### BACKLOG-058 — Logger Offline Event Queue (PRE-LIVE-MATCH BLOCKER)
 
-**Status:** ⚠️ UNVERIFIED — BUG-058b fix shipped (commit `1057f22`, 2026-06-24). Tests 1–4 not yet re-run. **Test 3 (drain → public page) is the critical unverified step** — queue-write path is now fixed but no queued event has yet been drained by the SW and confirmed visible on the public page. Do not mark RESOLVED until drain-to-visible is confirmed end-to-end.
+**Status:** ⚠️ UNVERIFIED — BUG-058b fix shipped (commit `1057f22`, 2026-06-24). SW drain crash fixed (Session 30, commit TBD — `db.getAll is not a function` corrected to raw IDB helpers). Tests 1–4 not yet re-run. **Test 3 (drain → public page) is the critical unverified step** — queue-write path is fixed, drain crash is fixed, but no queued event has yet been drained end-to-end and confirmed visible on the public page. Do not mark RESOLVED until drain-to-visible is confirmed.
 **Priority:** CRITICAL — must verify before any live match deployment.
 **Filed:** 2026-06-16
 
-**IndexedDB wiring status (as of 2026-06-24):** The "two parallel implementations" bug (known-issues.md) is RESOLVED — `offline-queue.ts` is correctly unwired; FootballLogger writes directly to `BrixsportAdminDB.pendingMatchEvents` (the same store sw-admin.js drains). The write path is implemented and the token is now re-seeded on mount (BUG-058b fix). What remains unverified: does the SW actually drain that row and POST it successfully when connectivity is restored?
+**IndexedDB wiring status (as of 2026-06-24/Session 30):** The "two parallel implementations" bug is RESOLVED. FootballLogger writes directly to `BrixsportAdminDB.pendingMatchEvents`. Token re-seeded on mount (BUG-058b). SW drain crash fixed — `db.getAll(storeName)` and `db.delete(storeName, key)` were Dexie.js patterns; `openDB()` returns a raw `IDBDatabase`. Replaced with `idbGetAll(db, storeName)` and `idbDelete(db, storeName, key)` helpers using the raw IDB transaction → objectStore API. All 4 Dexie-style calls replaced (both `syncMatchEvents` and `syncAdminChanges`).
 
-**Root cause of repeated failures:** three separate bugs blocked this in sequence — BUG-044 (cookie never set), the "two parallel IndexedDB implementations" (wrong store wired), and BUG-058b (AuthContext wipes localStorage on mount). All three are now fixed. **Do not re-resolve this entry until all 4 TEST_CHECKLIST.md tests pass in sequence.**
+**Root cause of repeated failures:** four separate bugs blocked this in sequence — BUG-044 (cookie never set), the "two parallel IndexedDB implementations" (wrong store wired), BUG-058b (AuthContext wipes localStorage on mount), and the SW drain IDB API mismatch. All four are now fixed. **Do not re-resolve this entry until all 4 TEST_CHECKLIST.md tests pass in sequence.**
 
 #### Problem
 sw-admin.js has syncMatchEvents() written and the background sync handler

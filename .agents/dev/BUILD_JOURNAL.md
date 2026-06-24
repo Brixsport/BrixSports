@@ -100,18 +100,23 @@
 - Ratings: fire-and-forget background fetch on POST, non-blocking.
 
 **Deferred:**
-- `dev/cleanup-test-match.mjs --apply` — run manually before next session
-- BACKLOG-058 Tests 1–4 re-run on staging (BUG-058b now deployed, Test 3 drain is critical unverified step)
+- ~~`dev/cleanup-test-match.mjs --apply`~~ — DONE (run Session 29, see RUNLOG Session 29)
+- BACKLOG-058 Tests 1–4 re-run on staging (BUG-058b now deployed; Test 3 drain fix now landed — re-run required)
 - TD-010 implementation
 - BACKLOG-044 Phase B (blocked on TD-010)
 - BACKLOG-094 fix (eyePoints client-side derive)
 - BUG-060 fix (stat decrement on event delete)
 
+**Additional fix landed this session (Session 30):**
+- **BACKLOG-058 Test 3 drain crash fixed** (`public/sw-admin.js`) — commit TBD
+  - Root cause: `db.getAll(storeName)` and `db.delete(storeName, key)` are Dexie.js patterns. `openDB()` returns a raw `IDBDatabase` — neither method exists on that object. Crash: `db.getAll is not a function` at line 166.
+  - Fix: added `idbGetAll(db, storeName)` and `idbDelete(db, storeName, key)` promise helpers using raw IDB transaction → objectStore API. Replaced all 4 Dexie-style calls in both `syncMatchEvents()` and `syncAdminChanges()`.
+  - `node --check` passes. BACKLOG-058 Test 3 still needs a live run to confirm drain → public page end to end.
+
 **Next session:**
-1. Run `node dev/cleanup-test-match.mjs --apply` to zero dirty stat rows and delete test match
-2. Re-run BACKLOG-058 Tests 1–4 on staging — confirm queue write (Test 2), drain → public page (Test 3), expiry guard (Test 4)
-3. Implement TD-010: `currentPeriod` column + PATCH on period transitions + mount read in FootballLogger
-4. Then BACKLOG-044 Phase B
+1. Re-run BACKLOG-058 Tests 1–4 on staging — drain fix is live, Test 3 is the critical unverified step
+2. Implement TD-010: `currentPeriod` column + PATCH on period transitions + mount read in FootballLogger
+3. Then BACKLOG-044 Phase B
 
 ### Session 28 — 2026-06-22
 

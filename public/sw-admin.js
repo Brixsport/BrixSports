@@ -163,7 +163,7 @@ self.addEventListener('sync', (event) => {
 async function syncMatchEvents() {
     try {
         const db = await openDB();
-        const pendingEvents = await db.getAll('pendingMatchEvents');
+        const pendingEvents = await idbGetAll(db, 'pendingMatchEvents');
 
         for (const event of pendingEvents) {
             // token is stored at queue-write time by FootballLogger (BACKLOG-058).
@@ -188,7 +188,7 @@ async function syncMatchEvents() {
             });
 
             if (response.ok) {
-                await db.delete('pendingMatchEvents', event.id);
+                await idbDelete(db, 'pendingMatchEvents', event.id);
                 console.log('[SW Admin] Match event synced:', event.id);
             }
         }
@@ -213,7 +213,7 @@ async function syncMatchEvents() {
 async function syncAdminChanges() {
     try {
         const db = await openDB();
-        const pendingChanges = await db.getAll('pendingAdminChanges');
+        const pendingChanges = await idbGetAll(db, 'pendingAdminChanges');
 
         for (const change of pendingChanges) {
             const response = await fetch(change.url, {
@@ -223,7 +223,7 @@ async function syncAdminChanges() {
             });
 
             if (response.ok) {
-                await db.delete('pendingAdminChanges', change.id);
+                await idbDelete(db, 'pendingAdminChanges', change.id);
                 console.log('[SW Admin] Admin change synced:', change.id);
             }
         }
@@ -242,6 +242,25 @@ async function syncAdminChanges() {
         console.error('[SW Admin] Error syncing admin changes:', error);
         throw error;
     }
+}
+
+// Raw IDB helpers — IDBDatabase has no .getAll()/.delete(); must go through a transaction → objectStore
+function idbGetAll(db, storeName) {
+    return new Promise((resolve, reject) => {
+        const tx = db.transaction(storeName, 'readonly');
+        const req = tx.objectStore(storeName).getAll();
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+    });
+}
+
+function idbDelete(db, storeName, key) {
+    return new Promise((resolve, reject) => {
+        const tx = db.transaction(storeName, 'readwrite');
+        const req = tx.objectStore(storeName).delete(key);
+        req.onsuccess = () => resolve();
+        req.onerror = () => reject(req.error);
+    });
 }
 
 // Open IndexedDB
