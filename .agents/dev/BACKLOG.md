@@ -6,12 +6,15 @@
 
 BUG-050/051/052/057 RESOLVED. BUG-047 RESOLVED. Flow B confirmed live (Session 28).
 
-BUG-058b IN PROGRESS (Session 28) — BACKLOG-058 Test 2 revealed AuthContext wipes localStorage.authToken for logger sessions → offline queue gets null token → "no session found" alert, no queue write. Fix written (refresh endpoint + FootballLogger mount effect), not yet committed.
+BUG-058b SHIPPED (commit `1057f22`, 2026-06-24). BUG-059 RESOLVED (commit `8c56f67`). BUG-060 filed (stat not rolled back on event delete).
 
-Remaining:
-1. Commit BUG-058b fix and deploy staging
-2. Re-run BACKLOG-058 Tests 1–4 with fix in place
-3. Then: BACKLOG-044 Phase B (timer ceiling + sub counter)
+**Pre-match-day sequence (locked):**
+1. Re-run BACKLOG-058 Tests 1–4 on staging (Test 3 drain → public page is the critical unverified step)
+2. TD-010 — period persistence (`currentPeriod` column + PATCH on transition + mount read) — **CRITICAL, elevated 2026-06-24**
+3. BACKLOG-044 Phase B — timer ceiling + sub counter — **blocked on TD-010**
+4. First real match day
+
+TD-010 and Phase B must land together. Phase B without TD-010 = correct timer ceiling on a period that resets to zero on any phone refresh.
 
 ---
 
@@ -71,13 +74,17 @@ BUG-001 through BUG-029, AUDIT-001/002 (partial), BACKLOG-065 — all resolved S
 
 - ~~**BUG-058b**~~ _(CRITICAL — Logger Offline Queue)_: `AuthContext.checkAuth()` runs on every logger page mount. It calls `GET /api/auth/me` with the `authToken` cookie → 401 for logger role → falls back to localStorage token → calls `/api/auth/me` again with `Authorization: Bearer` → still 401 → **calls `localStorage.removeItem('authToken')`** at line 74 of `AuthContext.tsx`. By the time FootballLogger's offline catch block runs `localStorage.getItem('authToken')`, the value is null → hits the `!token` branch → shows "Network error: could not save this event and no session found" alert → **no queue write, event silently lost**. Discovered during BACKLOG-058 Test 2 on staging (Session 28). Fix: (a) `POST /api/auth/refresh` updated to handle logger token payload (`id` not `userId`, `loggers` table not `users`), returns token in response body; (b) FootballLogger `useEffect` on mount calls refresh and re-stores token in localStorage. Files: `src/app/api/auth/refresh/route.ts`, `src/components/FootballLogger.tsx`. **Status:** SHIPPED — commit `1057f22`, 2026-06-24. Pending: BACKLOG-058 Test 2 re-run to confirm queue write now succeeds.
 
+- **BACKLOG-094** _(MEDIUM — Eye Point Awards panel never renders)_: `LiveMatchTimeline` expects an `eyePoints: any[]` prop — a pre-computed list of per-match Eye Point award objects. `GET /api/matches/[id]` never queries `eyePointAwards` (schema-enhanced.ts:247) and never returns this key. The page destructures `eyePoints` from `matchData` (page.tsx:234), gets `undefined`, passes it to the component. The crash was fixed (BUG-059, `?? []` guard) but the Eye Point Awards summary section at the bottom of the Timeline tab now silently never renders even when Eye Point events exist. Fix: either (a) in `GET /api/matches/[id]`, query `eyePointAwards` where `matchId = id` and include in response, or (b) derive the award list client-side from `events.filter(e => e.isEyePoint)` in the page and pass that. Option (b) is simpler and avoids an extra DB query since events are already fetched. Note: `isEyePoint` boolean already exists on every event row in the response. Filed: 2026-06-24.
+
 - ~~**BUG-059**~~ _(HIGH — Match Detail Page)_: Timeline tab crashes on render with `TypeError: Cannot read properties of undefined (reading 'length')`. Root cause: `LiveMatchTimeline` receives `eyePoints` prop from the page, which destructures it from `matchData` (line 234 of `matches/[id]/page.tsx`). The GET handler at `src/app/api/matches/[id]/route.ts` returns `{ match, events }` — no `eyePoints` key. So `eyePoints` is `undefined`. `LiveMatchTimeline.tsx` line 437 calls `eyePoints.length` unconditionally → TypeError → component crash. The network "500" observed during the Session 28 smoke test was this render error surfacing. Fix: `(eyePoints ?? []).length` and `(eyePoints ?? []).map(...)` in `LiveMatchTimeline.tsx`. **Status:** RESOLVED — 2026-06-24.
 
 **Evidence:**
 - Commit: (pending)
 - Verified by: code trace — `eyePoints` key absent from GET response shape confirmed by reading route.ts lines 408–418; `eyePoints.length` call on undefined confirmed at LiveMatchTimeline.tsx:437
 - Observed result: fix guards both the conditional and the map call with `?? []`
-- Pending items: confirm Timeline tab renders without crash on staging after deploy
+- Pending items: confirm Timeline tab renders without crash on staging after deploy. Note: the "500" seen in the Session 28 network panel was a client-side TypeError (render crash), not a server 500 — Sentry will log this as a client exception, not a server error. Relevant when triaging BACKLOG-035 (Sentry config). Eye Point Awards panel still silently empty — tracked as BACKLOG-094.
+
+- **BUG-060** _(HIGH — Data Integrity)_: `DELETE /api/matches/[id]/events` reverts `matches.homeScore`/`awayScore` correctly, but **never calls `updatePlayerStats` in reverse**. If a logger deletes a goal event, the score corrects but the scorer's `footballPlayerStats.goals` (and any other incremented stat) is permanently orphaned — the player carries a ghost goal forever. Discovered during test match cleanup 2026-06-24: had to write a manual decrement script because no automated path exists. This is the same class of problem as BUG-011 (stat corruption) but from the delete direction rather than duplicate inserts. Fix: `DELETE /api/matches/[id]/events` must mirror the `updatePlayerStats` call with decrements, using the same type-switch logic but subtracting instead of adding. Must guard against going below 0 (`Math.max(0, current - 1)`). Scope: also check the individual event delete route (`DELETE /api/matches/[id]/events/[eventId]`). Related to BACKLOG-019 (post-match stats pipeline) — the correct long-term fix is event-sourced stats recomputed from `match_events` on demand rather than mutable increments, but the immediate fix is the decrement mirror. **Status:** OPEN. Filed: 2026-06-24.
 
 - **BUG-044b** _(MEDIUM)_: Logger dashboard stats show "-" (total events, logged matches). Root cause: dashboard fetches `/api/auth/me` which is admin-auth only — logger JWTs are not recognised. Fix: create `/api/loggers/me` endpoint that reads the logger session and returns their stats, or wire to existing `/api/loggers/[id]`. Filed: 2026-06-19.
 
@@ -160,7 +167,7 @@ BUG-001 through BUG-029, AUDIT-001/002 (partial), BACKLOG-065 — all resolved S
 
 ## Tech Debt
 
-- **TD-010** _(MEDIUM — Design Gap)_: `handlePeriodEndConfirm` and "Start 2nd Half" button do no server PATCH — period transitions are local-only in `MatchStateManager` (localStorage). If logger's browser crashes or reloads mid-second-half, the DB has no period record and the reconstituted logger has no way to know which half they're in. Decision required: either PATCH `currentPeriod` on each transition, or explicitly document that period state is ephemeral and implement state-from-event-history reconstitution on reload. `src/components/FootballLogger.tsx` lines 780–789, 1346. Filed: 2026-06-19.
+- **TD-010** _(CRITICAL — PRE-LIVE-MATCH BLOCKER)_: Period transitions are local-only — no server PATCH on `handlePeriodEndConfirm` or "Start 2nd Half". If the logger's phone crashes, refreshes, or re-logs in mid-match, the DB still shows `status: LIVE` but the logger UI resets to `NOT_STARTED` at 0:00. The logger must manually restart the period. Anyone watching the public page sees the match appear to reset. This is a trust failure in a live crowd context — same category as BUG-049 (ghost state). **Re-classified from MEDIUM tech debt to CRITICAL pre-live-match blocker, 2026-06-24.** Minimal fix: add `currentPeriod` column to `matches` table; PATCH it on every period transition alongside the status PATCH; read it on FootballLogger mount and restore period display. Timer precision is not required — period label is what matters for event attribution. **Must ship before first real match day, before BACKLOG-044 Phase B.** `src/components/FootballLogger.tsx` lines 780–789, 1346. Filed: 2026-06-19.
 
 - **TD-011** _(LOW)_: `updatePlayerStats` in `src/app/api/matches/[id]/events/route.ts` has `season: '2024'` hardcoded on insert (lines ~357, ~396). Will silently write to the wrong season bucket from 2025 onward. Fix: derive season from match `startTime` or pass as a match field. Filed: 2026-06-19.
 
@@ -2488,6 +2495,9 @@ as nullable columns — if set, override competition config.
 - DB migration run against staging (11 ALTER TABLE statements)
 
 #### Phase B — Pending (BACKLOG-044-B)
+
+**Blocked by TD-010.** TD-010 (period persistence) must ship first. Phase B configures the timer ceiling and sub counter correctly — but if a logger refreshes and the period resets to `NOT_STARTED`, a correct timer ceiling is useless. Both must land together to be safe for a real match day. Sequence: TD-010 → BACKLOG-044-B → match day.
+
 - `src/lib/eventValidation.ts` — replace hardcoded `maxSubstitutions: 3` with config fetch
 - `src/components/logger/substitution-manager.ts` — replace hardcoded sport constants with config
 - `FootballLogger.tsx` — fetch `/api/matches/[id]/config` on mount; pass config to sub manager and timer
