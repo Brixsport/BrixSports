@@ -113,6 +113,7 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
     // Variant Detection — fetched from competition data or string fallback
     const [competitionPlayersPerSide, setCompetitionPlayersPerSide] = useState<number | null>(null);
     const [halfDuration, setHalfDuration] = useState<number>(45); // Will be updated in init
+    const [maxSubstitutions, setMaxSubstitutions] = useState<number | null>(null); // null = no cap
 
     const is5Aside = competitionPlayersPerSide === 5 ||
         matchState?.halfDuration === 20 ||
@@ -343,6 +344,21 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                 manager.registerPlayers(aPlayers, 'away');
 
                 stateManager.current = manager;
+
+                // Fetch match config and apply halfDuration + maxSubstitutions
+                try {
+                    const configRes = await fetch(`/api/matches/${match.id}/config`);
+                    if (configRes.ok) {
+                        const { config } = await configRes.json();
+                        stateManager.current.updateConfig({ halfDuration: config.halfDuration });
+                        setHalfDuration(config.halfDuration);
+                        setMaxSubstitutions(config.maxSubstitutions ?? null);
+                    } else {
+                        alert('Match config failed to load — using default duration. Check settings before starting.');
+                    }
+                } catch (e) {
+                    alert('Match config failed to load — using default duration. Check settings before starting.');
+                }
 
                 unsubscribe = manager.subscribe((newState) => {
                     setMatchState({ ...newState });
@@ -725,6 +741,16 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
 
     const handleSubIn = (playerInId: string) => {
         if (!playerComingOut) return;
+        if (maxSubstitutions !== null) {
+            const teamIndex = selectedTeam === 'home' ? 0 : 1;
+            const subsMade = matchState?.stats?.substitutions[teamIndex] ?? 0;
+            if (subsMade >= maxSubstitutions) {
+                alert(`Maximum substitutions reached for this team (${maxSubstitutions})`);
+                setShowSubInModal(false);
+                setPlayerComingOut(null);
+                return;
+            }
+        }
         confirmEvent('Substitution', playerComingOut, playerInId);
         setShowSubInModal(false);
         setPlayerComingOut(null);
