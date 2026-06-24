@@ -50,6 +50,69 @@
 
 ---
 
+### Session 29 — 2026-06-24
+
+**Focus:** Commit and verify BUG-058b fix, enforce RESOLVED lifecycle rules, trace and fix Timeline 500, triage test match pollution, elevate TD-010 to pre-match-day blocker.
+
+**Built / Fixed:**
+
+- **BUG-058b SHIPPED** (`src/app/api/auth/refresh/route.ts`, `src/components/FootballLogger.tsx`) — commit `1057f22`
+  - `POST /api/auth/refresh`: normalises `payload.userId ?? payload.id`, branches on `role === 'logger'` to query `loggers` table directly (not via `getAuthUser`), signs token with `{ id, email, role }`, returns token in response body (previously cookie-only).
+  - `FootballLogger.tsx`: mount `useEffect` calls `POST /api/auth/refresh` with `credentials: 'include'`, reads `data.token` from body, writes to `localStorage.authToken`. Survives AuthContext wipe on every subsequent mount.
+  - Confirmed: refresh route has its own direct `loggers` table query — independent of the `getAuthUser` fix. Not a pass-through risk.
+
+- **BUG-059 RESOLVED** (`src/components/LiveMatchTimeline.tsx`) — commit `8c56f67`
+  - Root cause: `eyePoints` prop destructured from `matchData` (page.tsx:234), but `GET /api/matches/[id]` never returns `eyePoints` key → `undefined`. Line 437 called `eyePoints.length` unconditionally → TypeError → Timeline tab crash every time.
+  - Observed as a "500" in the network panel — actually a client-side render crash, not a server error. Sentry will log as client exception, not server 500. Documented for BACKLOG-035 triage.
+  - Fix: `(eyePoints ?? []).length` and `(eyePoints ?? []).map(...)`. One-line guard, no logic change.
+  - Follow-up: `eyePoints` is a real feature (per-match Eye Point award list from `eyePointAwards` table in schema-enhanced.ts). API never wires it. Panel silently empty even when Eye Point events exist. Filed as BACKLOG-094 — fix is client-side derive from `events.filter(e => e.isEyePoint)`.
+
+- **RESOLVED lifecycle rules enforced** (`CLAUDE.md`) — commit `51e17df`
+  - Added "What Does NOT Count as Evidence" section. Explicitly invalid: UI state, 201 status codes, logger score display, absence of console errors, vague smoke test pass.
+  - Rule: any bug that writes to the DB requires a DB query result as evidence before RESOLVED label applies.
+
+- **BUG-047 properly RESOLVED** (`dev/verify-bug-047-scores.mjs`) — commit `2bc973f`
+  - Was incorrectly marked RESOLVED based on "logger showed 2-3." Logger score is locally computed — not DB state.
+  - Verification script ran `SELECT home_score, away_score FROM matches` + full event audit against staging match `LFkN14uB90brGn2E8sW1N`. Result: expected 3-3, DB 3-3. Both OG events credited the opponent team (not `teamId` team). PASS.
+  - Only now legitimately RESOLVED with DB query output as evidence.
+
+- **TD-010 elevated to CRITICAL pre-live-match blocker** — commit `dd5a939`
+  - Period transitions (HT, 2nd half start, FT) do no server PATCH. Period state lives in React `useState` only. Phone refresh mid-match resets period to `NOT_STARTED` at 0:00 — same trust-failure category as BUG-049.
+  - Re-scoped to minimal fix: `currentPeriod` column on `matches`, PATCH on each transition, read on mount. Timer precision not required — period label is what matters.
+  - BACKLOG-044 Phase B explicitly blocked on TD-010. Both must land together before first match day.
+
+**Bugs filed this session:**
+- **BUG-059** — Timeline tab TypeError on `eyePoints.length` (RESOLVED, `8c56f67`)
+- **BUG-060** — `DELETE /api/matches/[id]/events` reverts score but not `footballPlayerStats` — ghost stat on deleted goal. Same class as BUG-011 from delete direction.
+- **BACKLOG-094** — Eye Point Awards panel silently never renders (API doesn't return `eyePoints` array)
+
+**Test match triage:**
+- Match `LFkN14uB90brGn2E8sW1N` status: FINISHED (finalise PATCH went through). Score: 3-3 (DB confirmed).
+- Dirty stat rows: Emmanuel Adeyanju (+1 goal, +1 assist), Benjamin Adenuga (+1 goal), Justin (+1 goal, no stats row — write never fired), Tisco Jr (+1 assist, no-op).
+- Own Goals, Penalties, Fouls: zero stat impact — `updatePlayerStats` switch has no case for these types. Confirmed gap.
+- Cleanup script written: `dev/cleanup-test-match.mjs`. Dry-run output verified. **Run `--apply` to execute — not yet done.**
+
+**Stat pipeline gaps confirmed:**
+- Football stats written on event POST: Goal, Assist, Yellow Card, Red Card, Save only.
+- Penalty (scores match, not player), Own Goal (scores match, not player), Foul — no stat write.
+- Stats are mutable increments — no rollback on event DELETE. `footballPlayerStats` orphans on event undo.
+- Standings: computed at read time from `matches` rows, not touched during event logging.
+- Ratings: fire-and-forget background fetch on POST, non-blocking.
+
+**Deferred:**
+- `dev/cleanup-test-match.mjs --apply` — run manually before next session
+- BACKLOG-058 Tests 1–4 re-run on staging (BUG-058b now deployed, Test 3 drain is critical unverified step)
+- TD-010 implementation
+- BACKLOG-044 Phase B (blocked on TD-010)
+- BACKLOG-094 fix (eyePoints client-side derive)
+- BUG-060 fix (stat decrement on event delete)
+
+**Next session:**
+1. Run `node dev/cleanup-test-match.mjs --apply` to zero dirty stat rows and delete test match
+2. Re-run BACKLOG-058 Tests 1–4 on staging — confirm queue write (Test 2), drain → public page (Test 3), expiry guard (Test 4)
+3. Implement TD-010: `currentPeriod` column + PATCH on period transitions + mount read in FootballLogger
+4. Then BACKLOG-044 Phase B
+
 ### Session 28 — 2026-06-22
 
 **Focus:** Resolve BUG-050/051/052 (CRITICAL JWT and auth guards), smoke test logger flow on staging, diagnose 401 root cause, file + fix BUG-057.

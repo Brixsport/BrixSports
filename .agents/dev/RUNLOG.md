@@ -586,3 +586,28 @@ _Note: PATCH MD3 scores and BUSALYMPICS standings recalculation were completed i
   - LIGHT, OJAY → colnas-basketball (COLNAS-B)
 - Verify query returned 5 rows on both DBs, 0 mismatches
 - BACKLOG-076 (blocked on team creation) now unblocked — teams exist, players wired
+
+---
+
+### Session 29 — 2026-06-24
+
+#### Test match verification + cleanup
+
+2026-06-24 | `dev/verify-bug-047-scores.mjs` | STAGING | SUCCESS | VERIFIED
+- Queried match `LFkN14uB90brGn2E8sW1N` — `home_score=3`, `away_score=3`
+- Event audit: 11 events, expected home=3 away=3. DB match confirmed.
+- Both Own Goal events credited the opponent team (not `teamId` team). OG inversion logic confirmed correct.
+- BUG-047 now legitimately RESOLVED with DB evidence.
+
+2026-06-24 | `dev/check-test-match.mjs` | STAGING | SUCCESS | VERIFIED
+- Match status: FINISHED. Score: 3-3.
+- Dirty `football_player_stats` rows identified: Emmanuel Adeyanju (+1 goal, +1 assist), Benjamin Adenuga (+1 goal), Tisco Jr (no-op — no stat-writing events).
+- Justin: no `football_player_stats` row — goal event did not write stats (no row to insert/update against).
+- Own Goals, Penalties, Fouls: zero stat impact confirmed — `updatePlayerStats` switch has no case for these types.
+- McAnthony Uzowuru and Ebube: no stat-writing events in test match. Pre-existing stat values unaffected.
+
+2026-06-24 | `dev/cleanup-test-match.mjs --apply` | STAGING | SUCCESS | VERIFIED
+- Decremented: Emmanuel Adeyanju goals 2→1, assists 1→0. Benjamin Adenuga goals 3→2 (assists no-op). Tisco Jr no-op.
+- Justin skipped — no `football_player_stats` row existed.
+- Match `LFkN14uB90brGn2E8sW1N` deleted. Cascade cleaned: `match_events` (11 rows), `match_logger_assignments`, `player_ratings`.
+- Prod: NOT run — test match was staging only. Prod DB unaffected.
