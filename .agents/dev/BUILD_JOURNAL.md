@@ -50,6 +50,62 @@
 
 ---
 
+### Session 30 — 2026-06-24
+
+**Focus:** Close BACKLOG-058 (offline drain), fix BUG-061 (away roster), implement TD-010 (period persistence).
+
+**Built / Fixed:**
+
+- **BACKLOG-058 RESOLVED** — SW drain fix (`public/sw-admin.js`) — commit `49ce483`
+  - Root cause: `db.getAll(storeName)` and `db.delete(storeName, key)` are Dexie.js API patterns. `openDB()` returns a raw `IDBDatabase` — neither method exists on it. Crash: `db.getAll is not a function` at line 166.
+  - Fix: added `idbGetAll(db, storeName)` and `idbDelete(db, storeName, key)` promise helpers using raw IDB `transaction → objectStore` API. Replaced all 4 Dexie-style calls in both `syncMatchEvents()` and `syncAdminChanges()`.
+  - Live Test 3 passed on staging: 15 queued events drained, IDB cleared to 0, events visible on public page. Full chain confirmed end-to-end.
+
+- **BUG-061 RESOLVED** — Away team roster fix (`src/components/FootballLogger.tsx`) — commit `e847902`
+  - Root cause: `getPlayerTeam(player)` calls `getPrimaryTeam()` which resolves to the player's `isPrimary` membership. Multi-affiliated players (college + BUSA team) had their college team as primary — `getPlayerTeam(p)?.id === match.awayTeamId` failed → player dropped from away roster.
+  - Fix: `(player as any).memberships?.some((m: any) => m.team?.id === match.awayTeamId) || getPlayerTeam(player)?.id === match.awayTeamId` — checks all memberships first, falls back to primary team.
+
+- **TD-010 SHIPPED** — Period state persistence (`src/db/schema.ts`, `src/app/api/matches/[id]/route.ts`, `src/components/FootballLogger.tsx`, `src/types/index.ts`) — commit `b66eb95`
+  - `currentPeriod: text('current_period').default('NOT_STARTED')` added to matches schema
+  - PATCH handler: accepts `body.currentPeriod`, writes to DB — no new role gate (same logger+admin access)
+  - FootballLogger mount: seeds `MatchStateManager` with `clock: { period: seedPeriod }` from `match.currentPeriod` — DB value wins over `localStorage` via `initial?.clock` spread at match-state-manager.ts:1266
+  - Period transition PATCHes: fire-and-forget after `FIRST_HALF` (Start Match inline handler) and after `completePeriodTransition` (handlePeriodEndConfirm) — non-blocking `.catch()` only
+  - Staging migration run: `ALTER TABLE matches ADD COLUMN current_period TEXT DEFAULT 'NOT_STARTED'` — column confirmed, sample rows defaulted correctly
+  - DB write confirmed: match `AIr6gMTlUscTNHzYTL8fI` shows `current_period: FIRST_HALF` after Start Match PATCH
+
+- **TD-010 period trace (READ ONLY)** — confirmed period is 100% ephemeral pre-fix: `MatchStateManager` reads `localStorage` only, zero DB writes on any transition, no `current_period` column in schema. `initial?.clock` at line 1266 confirmed as the correct injection point (spreads after `...saved?.clock`, so DB value always wins over stale localStorage).
+
+- **BUG-061–065 filed** from BACKLOG-058 Test 3 live run:
+  - BUG-061 RESOLVED (away roster)
+  - BUG-062 OPEN: Lineup wipes on browser refresh — viewState not persisted
+  - BUG-063 OPEN: HALF_TIME not shown on public page — closes when TD-010 migration + loggers API fix land
+  - BUG-064 OPEN: Match tabs horizontal scroll on mobile
+  - BUG-065 OPEN: Event counter display broken in logger header
+
+**TD-010 — fully correct, pending clean verification:**
+- Staging migration applied ✓, DB PATCH writes confirmed ✓ (`current_period: FIRST_HALF` in DB after Start Match)
+- `getLoggerMatches` (match-logger-helpers.ts) uses `match: matches` — full row select — `current_period` flows through automatically ✓ No code gaps.
+- **Why period still showed NOT_STARTED on the test match:** match `AIr6gMTlUscTNHzYTL8fI` was started and transitioned to 2ND HALF *before* `b66eb95` deployed and *before* the migration ran. Those transitions never wrote `current_period`. Migration defaulted all existing rows to `NOT_STARTED`. Hard refresh read the default → seed fell through → correct given the history, not a bug in the implementation.
+- **Real verification:** spin a fresh test match after `b66eb95` is deployed, start it, transition to FIRST_HALF, hard refresh → must show FIRST_HALF. Existing match is a write-off for TD-010 testing purposes.
+
+**Bugs filed this session:**
+- BUG-061 (RESOLVED), BUG-062, BUG-063, BUG-064, BUG-065
+
+**Deferred:**
+- `GET /api/loggers/[id]` fix — add `current_period` to assignedMatches select
+- Prod migration for TD-010 (pending staging period-survival verification)
+- BACKLOG-044 Phase B (blocked on TD-010 full verification)
+- BUG-060 (stat decrement on event DELETE)
+- BUG-062 (lineup wipes on refresh)
+
+**Next session:**
+1. Read `src/app/api/loggers/[id]/route.ts` — confirm `current_period` is in assignedMatches response. If missing, add it. This is the final piece of TD-010.
+2. Verify period survives refresh on staging after fix
+3. Run prod migration
+4. Then BACKLOG-044 Phase B
+
+---
+
 ### Session 29 — 2026-06-24
 
 **Focus:** Commit and verify BUG-058b fix, enforce RESOLVED lifecycle rules, trace and fix Timeline 500, triage test match pollution, elevate TD-010 to pre-match-day blocker.
@@ -108,14 +164,35 @@
 - BUG-060 fix (stat decrement on event delete)
 
 **Additional fix landed this session (Session 30):**
-- **BACKLOG-058 Test 3 drain crash fixed** (`public/sw-admin.js`) — commit TBD
+- **BACKLOG-058 Test 3 drain crash fixed** (`public/sw-admin.js`) — commit `49ce483`
   - Root cause: `db.getAll(storeName)` and `db.delete(storeName, key)` are Dexie.js patterns. `openDB()` returns a raw `IDBDatabase` — neither method exists on that object. Crash: `db.getAll is not a function` at line 166.
   - Fix: added `idbGetAll(db, storeName)` and `idbDelete(db, storeName, key)` promise helpers using raw IDB transaction → objectStore API. Replaced all 4 Dexie-style calls in both `syncMatchEvents()` and `syncAdminChanges()`.
-  - `node --check` passes. BACKLOG-058 Test 3 still needs a live run to confirm drain → public page end to end.
+  - `node --check` passes.
+
+- **BACKLOG-058 RESOLVED** — Test 3 passed live on staging (2026-06-24)
+  - SW background sync fired, drained 15 queued events (events 1–15 all POSTed successfully)
+  - IDB `pendingMatchEvents` store: Total entries: 0 after drain — queue fully cleared
+  - Public page: offline events visible (Own Goal 36:28, Red Card, Yellow Card, Foul 36:54–57)
+  - Verified on staging via Chrome DevTools Application tab (IDB inspector) + public page observation
+
+- **TD-010 period trace completed** (read-only analysis)
+  - `currentPeriod` is derived from `matchState?.clock.period ?? 'NOT_STARTED'`
+  - `matchState` comes from `MatchStateManager`, which rehydrates from `localStorage.getItem('match_state_${matchId}')` on mount
+  - Period transitions (`transitionStatus()`) write only to in-memory state + `localStorage.setItem()` — **zero DB writes, zero PATCH calls**
+  - `matches` table has no `current_period` column — confirmed via schema.ts
+  - PATCH handler (`/api/matches/[id]/route.ts`) has no period field — confirmed by grep
+  - Period survival: same device/browser only. Different phone, cleared storage, or private mode → resets to `NOT_STARTED`
+
+**Bugs filed this session:**
+- BUG-061 — Away team roster not populating in player picker (HIGH, pre-match blocker)
+- BUG-062 — Lineup data wipes on browser refresh (MEDIUM)
+- BUG-063 — HALF_TIME not reflected on public page — blocked by TD-010 (MEDIUM)
+- BUG-064 — Match tabs horizontal scroll on mobile (LOW)
+- BUG-065 — Event counter in logger header broken (LOW)
 
 **Next session:**
-1. Re-run BACKLOG-058 Tests 1–4 on staging — drain fix is live, Test 3 is the critical unverified step
-2. Implement TD-010: `currentPeriod` column + PATCH on period transitions + mount read in FootballLogger
+1. Implement TD-010: `currentPeriod` column on `matches` + PATCH on every period transition + mount read in FootballLogger seeding the StateManager
+2. BUG-061 — trace and fix away team roster query
 3. Then BACKLOG-044 Phase B
 
 ### Session 28 — 2026-06-22

@@ -611,3 +611,11 @@ _Note: PATCH MD3 scores and BUSALYMPICS standings recalculation were completed i
 - Justin skipped — no `football_player_stats` row existed.
 - Match `LFkN14uB90brGn2E8sW1N` deleted. Cascade cleaned: `match_events` (11 rows), `match_logger_assignments`, `player_ratings`.
 - Prod: NOT run — test match was staging only. Prod DB unaffected.
+
+#### TD-010 schema migration — staging
+
+2026-06-24 | `dev/run-td010-migration-staging.mjs` | STAGING (`brixsportsv2-staging`) | SUCCESS | VERIFIED
+- SQL: `ALTER TABLE matches ADD COLUMN current_period TEXT DEFAULT 'NOT_STARTED'`
+- `PRAGMA table_info(matches)` confirmed: `name=current_period, type=TEXT, default='NOT_STARTED'`
+- 5 sample rows checked — all existing matches defaulted to `NOT_STARTED` as expected
+- Prod: NOT yet run — pending staging verification of period survival on live match

@@ -6,13 +6,15 @@
 
 BUG-050/051/052/057 RESOLVED. BUG-047 RESOLVED. Flow B confirmed live (Session 28).
 
-BUG-058b SHIPPED (commit `1057f22`, 2026-06-24). BUG-059 RESOLVED (commit `8c56f67`). BUG-060 filed (stat not rolled back on event delete).
+BUG-058b SHIPPED (`1057f22`). BACKLOG-058 **RESOLVED** — Test 3 passed live 2026-06-24 (15 events drained, IDB cleared, public page confirmed). BUG-059 RESOLVED (`8c56f67`). BUG-060 filed. BUG-061 RESOLVED (`e847902`). BUG-062–065 filed (Session 30). TD-010 SHIPPED (`b66eb95`) — DB writes confirmed, staging migration applied. **One remaining gap: `GET /api/loggers/[id]` may not return `current_period` in assignedMatches — must fix before period survives refresh.**
 
 **Pre-match-day sequence (locked):**
-1. Re-run BACKLOG-058 Tests 1–4 on staging (Test 3 drain → public page is the critical unverified step)
-2. TD-010 — period persistence (`currentPeriod` column + PATCH on transition + mount read) — **CRITICAL, elevated 2026-06-24**
-3. BACKLOG-044 Phase B — timer ceiling + sub counter — **blocked on TD-010**
-4. First real match day
+1. ~~BACKLOG-058~~ — RESOLVED ✅
+2. ~~BUG-061 (away roster)~~ — RESOLVED ✅
+3. **TD-010 final fix** — check `src/app/api/loggers/[id]/route.ts`, add `current_period` to assignedMatches select if missing — **CRITICAL, must complete before match day**
+4. Run prod migration for TD-010 (after staging period-survival verified)
+5. BACKLOG-044 Phase B — timer ceiling + sub counter — **blocked on TD-010 full verification**
+6. First real match day
 
 TD-010 and Phase B must land together. Phase B without TD-010 = correct timer ceiling on a period that resets to zero on any phone refresh.
 
@@ -87,6 +89,22 @@ BUG-001 through BUG-029, AUDIT-001/002 (partial), BACKLOG-065 — all resolved S
 - Pending items: confirm Timeline tab renders without crash on staging after deploy. Note: the "500" seen in the Session 28 network panel was a client-side TypeError (render crash), not a server 500 — Sentry will log this as a client exception, not a server error. Relevant when triaging BACKLOG-035 (Sentry config). Eye Point Awards panel still silently empty — tracked as BACKLOG-094.
 
 - **BUG-060** _(HIGH — Data Integrity)_: `DELETE /api/matches/[id]/events` reverts `matches.homeScore`/`awayScore` correctly, but **never calls `updatePlayerStats` in reverse**. If a logger deletes a goal event, the score corrects but the scorer's `footballPlayerStats.goals` (and any other incremented stat) is permanently orphaned — the player carries a ghost goal forever. Discovered during test match cleanup 2026-06-24: had to write a manual decrement script because no automated path exists. This is the same class of problem as BUG-011 (stat corruption) but from the delete direction rather than duplicate inserts. Fix: `DELETE /api/matches/[id]/events` must mirror the `updatePlayerStats` call with decrements, using the same type-switch logic but subtracting instead of adding. Must guard against going below 0 (`Math.max(0, current - 1)`). Scope: also check the individual event delete route (`DELETE /api/matches/[id]/events/[eventId]`). Related to BACKLOG-019 (post-match stats pipeline) — the correct long-term fix is event-sourced stats recomputed from `match_events` on demand rather than mutable increments, but the immediate fix is the decrement mirror. **Status:** OPEN. Filed: 2026-06-24.
+
+- ~~**BUG-061**~~ _(HIGH — Logger Flow)_: Away team roster never populates in the logger player picker. Root cause: `getPlayerTeam(player)` resolves to primary affiliation — multi-affiliated players (college + BUSA team) had college as primary, so `getPlayerTeam(p)?.id === match.awayTeamId` failed and they were dropped. Fix: check `player.memberships?.some(m => m.team?.id === teamId)` before falling back to `getPrimaryTeam`. `src/components/FootballLogger.tsx` lines 287–296. **Status:** RESOLVED — 2026-06-24 (commit `e847902`).
+
+**Evidence:**
+- Commit: `e847902`
+- Verified by: live test on staging — away team roster populated correctly after fix, confirmed by Richard
+- Observed result: away team players visible in player picker during live match test (BACKLOG-058 Test 3 run)
+- Pending items: none
+
+- **BUG-062** _(MEDIUM — Logger UX)_: Lineup data is wiped on browser refresh — the logger returns to the "Confirm & Start" screen instead of resuming the active match view. The `MatchStateManager` rehydrates period from `localStorage` correctly (see TD-010 trace), but lineup state (`lineups`, `viewState`) is not persisted — it is re-fetched on mount and if the fetch returns empty or the lineup check fails, the component falls back to `confirm_lineup` view state. Fix: persist `viewState` to localStorage alongside match state, or re-derive it from the rehydrated period (if `period !== NOT_STARTED` → go straight to `'active'` unconditionally). Filed: 2026-06-24. **Status:** OPEN.
+
+- **BUG-063** _(MEDIUM — Public Page / TD-010 adjacent)_: `HALF_TIME` status transition is not reflected on the public match page. When the logger ends 1st half, the public page continues to show the 1st half period label (or no label change). Root cause: period is never PATCHed to the DB (TD-010 — confirmed by trace this session), so the public page polling/socket sees no change to `matches.status` or any period field. The fix is TD-010 (write `currentPeriod` to DB on transition), which will make this visible automatically. Do not fix BUG-063 separately — it closes when TD-010 lands. Filed: 2026-06-24. **Status:** OPEN, blocked by TD-010.
+
+- **BUG-064** _(LOW — Mobile UX)_: Match tabs (Score, Timeline, Stats, etc.) scroll horizontally on mobile — `overflow-x` is not clipped. Tabs extend beyond the viewport width instead of wrapping or truncating. Fix: add `overflow-x: hidden` or `overflow-x: auto` with a scroll container on the tab bar. Filed: 2026-06-24. **Status:** OPEN.
+
+- **BUG-065** _(LOW — Logger UX)_: Event counter in the logger header is not displaying correctly. Counter shows wrong value or no value. Not yet root-caused — likely a display logic issue in the header component reading from `recordedEvents` or `matchState.events`. Filed: 2026-06-24. **Status:** OPEN.
 
 - **BUG-044b** _(MEDIUM)_: Logger dashboard stats show "-" (total events, logged matches). Root cause: dashboard fetches `/api/auth/me` which is admin-auth only — logger JWTs are not recognised. Fix: create `/api/loggers/me` endpoint that reads the logger session and returns their stats, or wire to existing `/api/loggers/[id]`. Filed: 2026-06-19.
 
@@ -169,7 +187,11 @@ BUG-001 through BUG-029, AUDIT-001/002 (partial), BACKLOG-065 — all resolved S
 
 ## Tech Debt
 
-- **TD-010** _(CRITICAL — PRE-LIVE-MATCH BLOCKER)_: Period transitions are local-only — no server PATCH on `handlePeriodEndConfirm` or "Start 2nd Half". If the logger's phone crashes, refreshes, or re-logs in mid-match, the DB still shows `status: LIVE` but the logger UI resets to `NOT_STARTED` at 0:00. The logger must manually restart the period. Anyone watching the public page sees the match appear to reset. This is a trust failure in a live crowd context — same category as BUG-049 (ghost state). **Re-classified from MEDIUM tech debt to CRITICAL pre-live-match blocker, 2026-06-24.** Minimal fix: add `currentPeriod` column to `matches` table; PATCH it on every period transition alongside the status PATCH; read it on FootballLogger mount and restore period display. Timer precision is not required — period label is what matters for event attribution. **Must ship before first real match day, before BACKLOG-044 Phase B.** `src/components/FootballLogger.tsx` lines 780–789, 1346. Filed: 2026-06-19.
+- **TD-010** _(CRITICAL — PRE-LIVE-MATCH BLOCKER)_: **Status: SHIPPED — commit `b66eb95`, 2026-06-24. Pending clean verification.**
+  - Column added (`current_period TEXT DEFAULT 'NOT_STARTED'`), staging migration applied, PATCH writes confirmed, `getLoggerMatches` selects `match: matches` (full row) — `current_period` flows through automatically. No code gaps remain.
+  - **Why period still showed NOT_STARTED on the test match:** the test match (`AIr6gMTlUscTNHzYTL8fI`) was started and transitioned to 2ND HALF *before* `b66eb95` deployed and *before* the migration ran. Those transitions never wrote `current_period` — the column didn't exist yet. Migration defaulted all existing rows to `NOT_STARTED`. Hard refresh read `NOT_STARTED` from DB → seed fell through → correct behaviour given the history, not a bug.
+  - **Verification required:** spin a fresh test match *after* `b66eb95` is deployed. Start match → transition to `FIRST_HALF` → hard refresh → must show `FIRST_HALF`. That is the real TD-010 test. The existing test match is a write-off for this purpose.
+  - Prod migration: NOT yet run — pending staging clean-test verification.
 
 - **TD-011** _(LOW)_: `updatePlayerStats` in `src/app/api/matches/[id]/events/route.ts` has `season: '2024'` hardcoded on insert (lines ~357, ~396). Will silently write to the wrong season bucket from 2025 onward. Fix: derive season from match `startTime` or pass as a match field. Filed: 2026-06-19.
 
@@ -2815,15 +2837,24 @@ Related: BACKLOG-053 (inline roster editing), BACKLOG-056
 
 ---
 
-### BACKLOG-058 — Logger Offline Event Queue (PRE-LIVE-MATCH BLOCKER)
+### ~~BACKLOG-058~~ — Logger Offline Event Queue
 
-**Status:** ⚠️ UNVERIFIED — BUG-058b fix shipped (commit `1057f22`, 2026-06-24). SW drain crash fixed (Session 30, commit TBD — `db.getAll is not a function` corrected to raw IDB helpers). Tests 1–4 not yet re-run. **Test 3 (drain → public page) is the critical unverified step** — queue-write path is fixed, drain crash is fixed, but no queued event has yet been drained end-to-end and confirmed visible on the public page. Do not mark RESOLVED until drain-to-visible is confirmed.
-**Priority:** CRITICAL — must verify before any live match deployment.
+**Status:** RESOLVED — 2026-06-24 (Session 30)
+**Priority:** ~~CRITICAL~~ — closed
 **Filed:** 2026-06-16
 
-**IndexedDB wiring status (as of 2026-06-24/Session 30):** The "two parallel implementations" bug is RESOLVED. FootballLogger writes directly to `BrixsportAdminDB.pendingMatchEvents`. Token re-seeded on mount (BUG-058b). SW drain crash fixed — `db.getAll(storeName)` and `db.delete(storeName, key)` were Dexie.js patterns; `openDB()` returns a raw `IDBDatabase`. Replaced with `idbGetAll(db, storeName)` and `idbDelete(db, storeName, key)` helpers using the raw IDB transaction → objectStore API. All 4 Dexie-style calls replaced (both `syncMatchEvents` and `syncAdminChanges`).
+**Evidence:**
+- Commits: BUG-058b `1057f22` (refresh/localStorage re-seed), drain fix `49ce483` (IDB API correction)
+- Verified by: Live Test 3 run on staging (brixsports-staging.vercel.app/logger), iPhone 12 Pro viewport, incognito
+- Observed result:
+  - SW background sync fired: `[SW Admin] Background sync: sync-match-events`
+  - 15 queued events drained and POSTed (events 1–15 logged as "Match event synced: N")
+  - `[SW Admin] All match events synced` confirmed
+  - IDB `pendingMatchEvents` store: **Total entries: 0** after drain — queue fully cleared
+  - Public page: offline events visible (Own Goal 36:28, Red Card, Yellow Card, Foul 36:54–57) — all landed
+- Pending items: none
 
-**Root cause of repeated failures:** four separate bugs blocked this in sequence — BUG-044 (cookie never set), the "two parallel IndexedDB implementations" (wrong store wired), BUG-058b (AuthContext wipes localStorage on mount), and the SW drain IDB API mismatch. All four are now fixed. **Do not re-resolve this entry until all 4 TEST_CHECKLIST.md tests pass in sequence.**
+**Root cause chain (full history):** BUG-044 (cookie never set) → two parallel IDB implementations (wrong store wired) → BUG-058b (AuthContext wipes localStorage on mount) → SW drain IDB API mismatch (`db.getAll` Dexie pattern on raw `IDBDatabase`). All four now fixed.
 
 #### Problem
 sw-admin.js has syncMatchEvents() written and the background sync handler
