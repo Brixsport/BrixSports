@@ -6,17 +6,26 @@
 
 BUG-050/051/052/057 RESOLVED. BUG-047 RESOLVED. Flow B confirmed live (Session 28).
 
-BUG-058b SHIPPED (`1057f22`). BACKLOG-058 **RESOLVED** — Test 3 passed live 2026-06-24 (15 events drained, IDB cleared, public page confirmed). BUG-059 RESOLVED (`8c56f67`). BUG-060 filed. BUG-061 RESOLVED (`e847902`). BUG-062–065 filed (Session 30). TD-010 SHIPPED (`b66eb95`) — DB writes confirmed, staging migration applied. **One remaining gap: `GET /api/loggers/[id]` may not return `current_period` in assignedMatches — must fix before period survives refresh.**
+**Session 31 state (2026-06-25):**
+
+| Item | Status |
+|------|--------|
+| BACKLOG-058 (offline drain) | ✅ RESOLVED |
+| BUG-061 (away roster) | ✅ RESOLVED |
+| TD-010 (period persistence) | Code done (`b66eb95`). `getLoggerMatches` confirmed full-row select — `current_period` flows through automatically. Needs fresh match test to close. |
+| BACKLOG-044 Phase B (config mount, timer ceiling, sub cap) | Code done (`64b0974`). Config load ✅ timer ceiling ✅ toggle lock ✅. Sub cap gate + period survival need fresh match test to close. |
+| BUG-063 (HALF_TIME on public page) | Closes with TD-010 verification — separate fix still needed (wire `current_period` into public API + render) |
+
+**Both pending verifications happen on the same fresh test match. One session, two checks, then TD-010 + Phase B close together.**
 
 **Pre-match-day sequence (locked):**
 1. ~~BACKLOG-058~~ — RESOLVED ✅
 2. ~~BUG-061 (away roster)~~ — RESOLVED ✅
-3. **TD-010 final fix** — check `src/app/api/loggers/[id]/route.ts`, add `current_period` to assignedMatches select if missing — **CRITICAL, must complete before match day**
-4. Run prod migration for TD-010 (after staging period-survival verified)
-5. BACKLOG-044 Phase B — timer ceiling + sub counter — **blocked on TD-010 full verification**
-6. First real match day
-
-TD-010 and Phase B must land together. Phase B without TD-010 = correct timer ceiling on a period that resets to zero on any phone refresh.
+3. ~~TD-010 API gap~~ — confirmed no gap (`getLoggerMatches` uses `match: matches` full row select) ✅
+4. **Fresh match test** — start match → transition to FIRST_HALF → hard refresh → confirm period survives. Log subs past cap → confirm gate blocks. Both checks in one session.
+5. Run prod migration for TD-010 (after fresh match test passes)
+6. Fix BUG-063 (wire `current_period` into public match API + render period label)
+7. First real match day
 
 ---
 
@@ -100,7 +109,7 @@ BUG-001 through BUG-029, AUDIT-001/002 (partial), BACKLOG-065 — all resolved S
 
 - **BUG-062** _(MEDIUM — Logger UX)_: Lineup data is wiped on browser refresh — the logger returns to the "Confirm & Start" screen instead of resuming the active match view. The `MatchStateManager` rehydrates period from `localStorage` correctly (see TD-010 trace), but lineup state (`lineups`, `viewState`) is not persisted — it is re-fetched on mount and if the fetch returns empty or the lineup check fails, the component falls back to `confirm_lineup` view state. Fix: persist `viewState` to localStorage alongside match state, or re-derive it from the rehydrated period (if `period !== NOT_STARTED` → go straight to `'active'` unconditionally). Filed: 2026-06-24. **Status:** OPEN.
 
-- **BUG-063** _(MEDIUM — Public Page / TD-010 adjacent)_: `HALF_TIME` status transition is not reflected on the public match page. When the logger ends 1st half, the public page continues to show the 1st half period label (or no label change). Root cause: period is never PATCHed to the DB (TD-010 — confirmed by trace this session), so the public page polling/socket sees no change to `matches.status` or any period field. The fix is TD-010 (write `currentPeriod` to DB on transition), which will make this visible automatically. Do not fix BUG-063 separately — it closes when TD-010 lands. Filed: 2026-06-24. **Status:** OPEN, blocked by TD-010.
+- ~~**BUG-063**~~ _(MEDIUM — Public Page)_: Half period label not shown on public match page. **Status: SHIPPED — 2026-06-25 (commit `ea4a1d5`)**. Fix: `src/app/matches/[id]/page.tsx` — `displayPeriod = matchTime?.period ?? match.currentPeriod ?? match.status`. WS period is live source; DB `currentPeriod` (TD-010) is the fallback for page load and no-logger state. `PERIOD_LABELS` map covers `FIRST_HALF → 1ST HALF`, `HALF_TIME → HT`, `SECOND_HALF → 2ND HALF`, `EXTRA_TIME_1 → ET1`, `ET2 → ET2`, `PENALTY_SHOOTOUT → PK`, `FINISHED → FT`. Score header shows period badge + minute for active play; `HT`/`FT` for stopped play. Overview status card updated. MatchCard unchanged (already uses `LiveMatchStatus` via WS). Pending: live verification on a fresh match.
 
 - **BUG-064** _(LOW — Mobile UX)_: Match tabs (Score, Timeline, Stats, etc.) scroll horizontally on mobile — `overflow-x` is not clipped. Tabs extend beyond the viewport width instead of wrapping or truncating. Fix: add `overflow-x: hidden` or `overflow-x: auto` with a scroll container on the tab bar. Filed: 2026-06-24. **Status:** OPEN.
 
@@ -2447,7 +2456,7 @@ Current `.limit(500)` on `GET /api/teams` is a temporary ceiling. Build cursor-b
 
 ### BACKLOG-044 — Match Config: Duration, Substitution Rules, Format
 
-**Status:** PHASE A COMPLETE — Phase B pending
+**Status:** PHASE B SHIPPED — commit `64b0974` — conditionally done, pending fresh match verification (sub cap gate + period survival)
 **Priority:** High — affects live logging correctness
 **Filed:** 2026-06-13
 
@@ -2518,17 +2527,22 @@ as nullable columns — if set, override competition config.
 - Admin UI: "Override Match Settings" collapsible section in match creation/edit modal
 - DB migration run against staging (11 ALTER TABLE statements)
 
-#### Phase B — Pending (BACKLOG-044-B)
+#### Phase B — UNVERIFIED (commit `64b0974`)
 
-**Blocked by TD-010.** TD-010 (period persistence) must ship first. Phase B configures the timer ceiling and sub counter correctly — but if a logger refreshes and the period resets to `NOT_STARTED`, a correct timer ceiling is useless. Both must land together to be safe for a real match day. Sequence: TD-010 → BACKLOG-044-B → match day.
+`FootballLogger.tsx` — after `MatchStateManager` init on mount:
+1. `GET /api/matches/[id]/config` → applies `config.halfDuration` via `updateConfig` + `setHalfDuration`; stores `config.maxSubstitutions` in `useState<number | null>(null)`
+2. Sub cap gate in `handleSubIn`: reads `matchState?.stats?.substitutions[teamIndex]`, blocks with `alert()` if at cap (skipped when `maxSubstitutions === null`)
+3. Half-duration toggle already locked post-`NOT_STARTED` (pre-existing, confirmed)
+4. Alert on config fetch failure — falls back to hardcoded default, does not block logger
 
-- `src/lib/eventValidation.ts` — replace hardcoded `maxSubstitutions: 3` with config fetch
-- `src/components/logger/substitution-manager.ts` — replace hardcoded sport constants with config
-- `FootballLogger.tsx` — fetch `/api/matches/[id]/config` on mount; pass config to sub manager and timer
-- Match timer: count down from `matchDuration`, warn at `halfDuration`
-- Sub tracking: count subs used, warn when `maxSubstitutions` reached (skip check if null = unlimited)
-- Rolling subs: if `allowSubbedOutReentry = true`, do not block player from re-entering
-- Prod DB migration: run same 11 ALTERs against `libsql://brixsportv2-brixsports` via `.env.production`
+**Live verification 2026-06-25 (partial):**
+- Period `HALF_TIME` written correctly ✅
+- `halfDuration: 35` loaded from config, toggle shows 15/20/25/30/35/40/45 ✅
+- Toggle locked in `HALF_TIME` (not `NOT_STARTED`) ✅
+- Lineups locked indicator visible ✅
+- **Sub cap gate: NOT YET TESTED** — verify on next live match test (log a sub past cap, confirm alert blocks)
+
+Remaining Phase B items (rolling subs, auto half-time prompt, prod DB migration) — deferred.
 
 ---
 
@@ -4107,3 +4121,53 @@ When the blocker is resolved:
 
 - This is a convention update, not a code change.
 - Related: BACKLOG-098 (lifecycle states), CLAUDE.md Backlog Close rule.
+
+---
+
+### BACKLOG-102 — Live Match Clock on Public Pages
+
+**Status:** OPEN
+**Priority:** Medium
+**Filed:** 2026-06-25
+
+#### Problem
+
+The public viewer has no ticking match clock. `MatchStateManager` runs entirely client-side in the logger's browser — `displayMinute` and `second` are never pushed to the DB or broadcast over the WebSocket. The public page shows score and events but no elapsed time.
+
+#### Desired display
+
+**`/matches/[id]` (match detail page):**
+Show full clock: `33:23` — minutes and seconds, updating live. Alongside the period label (H1 / HT / H2 / ET / PK) from BUG-063. Source: WebSocket broadcast from logger.
+
+**`/matches` list and homepage match cards:**
+Show minute only: `33'` — alongside the period badge (H1, H2, HT, PK). Update cadence: every 60s polling is acceptable here (cards don't need second-level precision). Source: either WS or a `/clock` poll endpoint.
+
+#### Mechanism
+
+`MatchStateManager` clock state is never persisted or broadcast — this is the core gap. Two options:
+
+**Option A — Logger emits clock ticks over WS (recommended)**
+- Logger `FootballLogger` emits a `match:clock` event over the socket every 30s (or on each minute tick) with `{ matchId, displayMinute, second, period }`
+- WS server stores last-known clock state in memory (per matchId) and rebroadcasts to all viewers in the match room
+- Public match page receives `match:clock` via socket and updates a local `clockState`
+- On page load / reconnect, public page can request current clock from a `GET /api/matches/[id]/clock` endpoint that returns the in-memory WS state (or `null` if no logger is active)
+
+**Option B — Poll `/clock` endpoint**
+- Logger PATCHes `displayMinute` to a lightweight `match_clock` table (or a column on `matches`) every 60s
+- Public page polls `GET /api/matches/[id]/clock` every 30s
+- Simpler but 30–60s stale. Acceptable for cards, not ideal for detail page.
+
+#### Implementation order
+
+1. Logger emits `match:clock` event every 60s (or on each minute boundary in `MatchStateManager`)
+2. WS server stores last clock per matchId in memory, rebroadcasts to match room
+3. Public match detail page (`/matches/[id]`) subscribes to `match:clock` — renders `MM:SS` clock
+4. Public match list / homepage cards — poll `GET /api/matches/[id]/clock` every 60s — renders `MM'` only
+5. BUG-063 (period label) must land first — clock display without correct period label is confusing
+
+#### Notes
+
+- Do not implement before BUG-063 is resolved — period label and clock must ship together on the detail page
+- Logger session must be active for clock to tick on public page — when no logger is connected, hide the clock display (do not show stale `0'`)
+- `match-state-manager.ts` already has `getFormattedTime()` — use that output for the WS payload
+- Related: BUG-063 (period label), BACKLOG-096 (WS event pipeline), BACKLOG-044 (match config / half duration)
