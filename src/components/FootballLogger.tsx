@@ -84,6 +84,7 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
     const [awayPlayers, setAwayPlayers] = useState<Player[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
+    const [isUndoing, setIsUndoing] = useState(false);
     const [isStartingMatch, setIsStartingMatch] = useState(false);
     const [showSettingsModal, setShowSettingsModal] = useState(false);
     const getPlayerTeam = (player?: Player | null) =>
@@ -906,27 +907,45 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
         }
     };
 
-    const handleUndo = () => {
-        if (!stateManager.current) return;
+    const handleUndo = async () => {
+        if (!stateManager.current || isUndoing) return;
         const manager = stateManager.current;
         const currentEvents = manager.getState().events;
         if (currentEvents.length === 0) return;
 
         const eventToUndo = currentEvents[currentEvents.length - 1];
-        manager.undoLastEvent();
 
-        // Sync Undo with overlay clients
-        if (isSocketConnected) {
-            const fullState = manager.getState();
-            console.log(`[FootballLogger] Emitting event:undo for match ${match.id}, eventId: ${eventToUndo.id}`);
-            emit('event:undo', {
-                matchId: match.id,
-                eventId: eventToUndo.id,
-                score: fullState.score,
-                stats: fullState.stats,
-                lineups: fullState.lineups,
-                teamRatings: fullState.teamRatings
+        setIsUndoing(true);
+        try {
+            const res = await fetch(`/api/matches/${match.id}/events/${eventToUndo.id}`, {
+                method: 'DELETE',
+                credentials: 'include',
             });
+
+            if (!res.ok) {
+                const data = await res.json().catch(() => ({}));
+                alert(`Failed to undo event: ${data.error || res.status}`);
+                return;
+            }
+
+            // DB delete confirmed — now update local state and broadcast
+            manager.undoLastEvent();
+
+            if (isSocketConnected) {
+                const fullState = manager.getState();
+                emit('event:undo', {
+                    matchId: match.id,
+                    eventId: eventToUndo.id,
+                    score: fullState.score,
+                    stats: fullState.stats,
+                    lineups: fullState.lineups,
+                    teamRatings: fullState.teamRatings,
+                });
+            }
+        } catch {
+            alert('Network error — could not undo event. Try again.');
+        } finally {
+            setIsUndoing(false);
         }
     };
 
@@ -1284,10 +1303,10 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                     <div className="flex items-center gap-1.5 shrink-0">
                         <button
                             onClick={handleUndo}
-                            disabled={!canLogEvents || recordedEvents.length === 0}
-                            className={`p-1.5 rounded-lg transition-colors ${canLogEvents && recordedEvents.length > 0 ? 'bg-white/5 hover:bg-white/10' : 'opacity-20 cursor-not-allowed'}`}
+                            disabled={!canLogEvents || recordedEvents.length === 0 || isUndoing}
+                            className={`p-1.5 rounded-lg transition-colors ${canLogEvents && recordedEvents.length > 0 && !isUndoing ? 'bg-white/5 hover:bg-white/10' : 'opacity-20 cursor-not-allowed'}`}
                         >
-                            <Undo2 size={16} />
+                            {isUndoing ? <span className="text-[10px]">...</span> : <Undo2 size={16} />}
                         </button>
                         <div className="flex items-center gap-1.5 px-2 py-1 bg-white/5 rounded-lg border border-white/10 shrink-0">
                             <span className={`w-1.5 h-1.5 rounded-full ${isSocketConnected ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.5)]' : 'bg-red-500 animate-pulse'}`} />
