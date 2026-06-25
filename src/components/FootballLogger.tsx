@@ -239,14 +239,21 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
         const teamId = team === 'home' ? match.homeTeamId : match.awayTeamId;
         const teamLineup = lineups[team];
 
-        // Players who have been subbed OFF this match — exclude from picker
-        const subbedOffIds = new Set(
-            (matchState?.events ?? [])
-                .filter((e: any) => e.type === 'Substitution' && e.teamId === teamId && e.playerId)
-                .map((e: any) => e.playerId)
+        const subEvents = (matchState?.events ?? []).filter(
+            (e: any) => e.type === 'Substitution' && e.teamId === teamId
         );
+        // Players who went OFF — exclude from picker
+        const subbedOffIds = new Set(subEvents.filter((e: any) => e.playerId).map((e: any) => e.playerId));
+        // Players who came ON mid-match — include even if not in the original lineup/bench list
+        const subbedOnIds = new Set(subEvents.filter((e: any) => e.relatedPlayerId).map((e: any) => e.relatedPlayerId));
+        const subbedOnPlayers = roster.filter(p => subbedOnIds.has(p.id) && !subbedOffIds.has(p.id));
 
-        if (!teamLineup) return roster.filter(p => !subbedOffIds.has(p.id));
+        const addSubbedOn = (base: typeof roster) => [
+            ...base,
+            ...subbedOnPlayers.filter(p => !base.find(b => b.id === p.id)),
+        ];
+
+        if (!teamLineup) return addSubbedOn(roster.filter(p => !subbedOffIds.has(p.id)));
 
         const starterList = teamLineup.starters || teamLineup.players || [];
         const subList = teamLineup.substitutes || [];
@@ -257,9 +264,9 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
         ].filter(Boolean));
 
         if (lineupIds.size > 0) {
-            return roster.filter(p => lineupIds.has(p.id) && !subbedOffIds.has(p.id));
+            return addSubbedOn(roster.filter(p => lineupIds.has(p.id) && !subbedOffIds.has(p.id)));
         }
-        return roster.filter(p => !subbedOffIds.has(p.id));
+        return addSubbedOn(roster.filter(p => !subbedOffIds.has(p.id)));
     };
 
     // Initial Load & Manager Setup
