@@ -1771,3 +1771,49 @@ All `emit(...)` calls in FootballLogger are fire-and-forget with no crash on fai
 **Next session:** BACKLOG-044 Phase B — fetch match config from `/api/matches/[id]/config` on FootballLogger mount; wire `halfDuration` to timer ceiling; wire `maxSubstitutions` to sub counter; enforce event validation from `eventValidation.ts`.
 
 **Next session:** BUG-041 — React hydration error #418 on homepage. Audit homepage components for Framer Motion `initial` prop usage and SSR/CSR mismatches. Then Lighthouse re-run to measure delta.
+
+---
+
+### Session 33 — 2026-06-25
+
+**Focus:** Test match audit and cleanup (KIN vs JOG), PWA iOS limitations documentation, BUG-076 root cause investigation and fix.
+
+**Built / Fixed:**
+
+- **KIN vs JOG test match cleanup** — `dev/audit-kin-jog-test-match.mjs` + `dev/cleanup-kin-jog-test-match.mjs --apply`
+  - Match `VdOX62T7r6V0uZWCoYO9e` deleted. 49 events removed, 1 logger assignment removed.
+  - Stats decremented for 11 players: Victor Ememe, Temidayo Olusesi, Samuel Olapite, Nasirudeen Alabi, Timileyin Teniola, Hussein Johnson, Justin Onyeka, Innocent Kedem, Ola-praise Abadoni, Osemudiamen Amromawhe, Ayomiposi Peters.
+  - Verified: match does not exist in DB post-cleanup. All stat floors held at 0 via MAX(0, col + delta).
+
+- **BUG-076 SHIPPED** (`60aa93d`) — `src/components/FootballLogger.tsx`
+  - Root cause: `handleFinalize` (the only path that writes `status: 'FINISHED'`) was guarded by `currentPeriod !== 'FINISHED'`. When logger confirms "End 2nd Half" modal → `handlePeriodEndConfirm` transitions `currentPeriod` to `'FINISHED'` → re-render hides End Match button → `handleFinalize` permanently unreachable. Every real match would be stuck `status: LIVE` forever.
+  - Fix 1: `handlePeriodEndConfirm` now detects `nextPeriod === 'FINISHED' && homeScore !== awayScore` and folds `status: 'FINISHED'` into the same PATCH (single DB write for the decisive whistle).
+  - Fix 2: End Match button guard relaxed from `currentPeriod !== 'FINISHED' && currentPeriod !== 'NOT_STARTED'` to `currentPeriod !== 'NOT_STARTED'` — keeps it visible at FINISHED as a fallback for ET/Penalties paths where the auto-finalize doesn't trigger.
+  - Confirmed by HAR: 5 match PATCHes in the test session — none carried `status: FINISHED`. The `currentPeriod: FINISHED` PATCH at 14:39 UTC (3h after match) was from the period modal, not `handleFinalize`.
+
+- **PWA_LIMITATIONS.md filed** — `.agents/dev/PWA_LIMITATIONS.md`
+  - Background Sync broken on iOS (sync.register no-ops). Push from browser tab not supported. `beforeinstallprompt` absent. Cookie isolation in Home Screen PWA. SW lifetime ~30s on iOS background.
+  - Manifest scope bug confirmed in every console log: `start_url` outside `scope` blocks iOS install.
+  - Staging WS confirmed 100% dead: 70 failed connections to `wss://brixsports-production.up.railway.app` throughout entire HAR session.
+
+- **Bugs filed:** BUG-073 (sub detail direction inverted), BUG-074 (staging WS → prod URL), BUG-075 (manifest scope), BUG-076 (status stuck LIVE — fixed same session), BACKLOG-107 (iOS drain fallback)
+
+**Bugs encountered:**
+
+- **8 events status=0 in HAR** — initially appeared as data loss (including a goal). Confirmed NOT lost: requests were aborted by page navigation (reload at 11:03), server never received them. SW offline queue caught them, all 8 resent and confirmed 201 after reload. No data loss.
+- **3 bad substitution events in test match DB** — Omari Dennis listed as OUT twice (once at 48', again at 63'58"), phantom Daniel Tiamiyu sub at 64' (duplicate of 48'). Caused by BUG-067 sub picker not yet deployed at time of test. Cleaned via match delete.
+- **Sub `detail` field direction inverted (BUG-073)** — discovered during sub event analysis. `detail` = `"{outPlayer} IN for {inPlayer}"` but correct English/semantics is `"{inPlayer} IN for {outPlayer}"`. Cosmetic only — display reads `playerId`/`relatedPlayerId` directly.
+
+**Deferred:**
+
+- BUG-062 — lineup/player selector empty on refresh. Fix clear: if `currentPeriod !== NOT_STARTED` on mount, skip confirm screen + re-fetch lineups. Cache exploration explicitly deferred (no feature branch).
+- BACKLOG-107 — iOS online/visibilitychange drain fallback. Not started.
+- BUG-075 — manifest scope fix. Not started.
+- BUG-074 — staging WS env var. Not started.
+- Fresh staging match test — needed to RESOLVE TD-010 SECOND_HALF, BUG-076, BUG-067, LiveStats. Prod migrations blocked until this passes.
+
+**Next session:**
+1. Fix BUG-062 — auto-refetch lineups + skip confirm screen when match already in progress on mount (`currentPeriod !== NOT_STARTED`)
+2. Fix BACKLOG-107 — `online`/`visibilitychange` drain handler in FootballLogger.tsx for iOS
+3. Run fresh staging match test (8-point checklist) to RESOLVE all SHIPPED items
+4. If staging test passes: run prod migrations (`current_period`, `own_goals`, `penalties_scored`)
