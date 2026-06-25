@@ -6,24 +6,37 @@ interface LiveMatchStatusProps {
     matchId: string;
     sport: string;
     variant?: 'default' | 'badge';
+    fallbackPeriod?: string;
 }
 
-export default function LiveMatchStatus({ matchId, sport, variant = 'default' }: LiveMatchStatusProps) {
+const PERIOD_LABELS: Record<string, string> = {
+    FIRST_HALF: '1ST HALF',
+    HALF_TIME: 'HT',
+    SECOND_HALF: '2ND HALF',
+    EXTRA_TIME_1: 'ET',
+    EXTRA_TIME_2: 'ET',
+    EXTRA_TIME_BREAK: 'ET HT',
+    PENALTY_SHOOTOUT: 'PK',
+    FINISHED: 'FT',
+};
+
+export default function LiveMatchStatus({ matchId, sport, variant = 'default', fallbackPeriod }: LiveMatchStatusProps) {
     const matchTime = useMatchTimer(matchId);
 
     if (!matchTime) {
+        const fallbackLabel = fallbackPeriod ? (PERIOD_LABELS[fallbackPeriod] ?? 'LIVE') : 'LIVE';
         if (variant === 'badge') {
             return (
                 <div className="flex items-center gap-2 bg-red-600 text-white px-3 py-1 rounded-full text-xs font-bold">
                     <div className="w-2 h-2 bg-white rounded-full animate-pulse" />
-                    LIVE
+                    {fallbackLabel}
                 </div>
             );
         }
         return (
             <div className="text-red-500 text-xs font-bold flex items-center gap-1">
                 <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse"></span>
-                LIVE
+                {fallbackLabel}
             </div>
         );
     }

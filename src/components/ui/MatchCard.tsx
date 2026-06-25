@@ -27,6 +27,7 @@ interface MatchCardProps {
         homeScore: number;
         awayScore: number;
         status: 'LIVE' | 'FINISHED' | 'UPCOMING' | 'HALF_TIME';
+        currentPeriod?: string | null;
         startTime: string;
         venue: string;
         competition: string;
@@ -113,7 +114,7 @@ export default function MatchCard({ match, variant = 'compact', showCompetition 
                             )}
                             {isLive && (
                                 <div className="flex items-center gap-1.5">
-                                    <LiveMatchStatus matchId={match.id} sport={match.sport} />
+                                    <LiveMatchStatus matchId={match.id} sport={match.sport} fallbackPeriod={match.currentPeriod ?? undefined} />
                                 </div>
                             )}
                             {isFinished && (
@@ -150,10 +151,7 @@ export default function MatchCard({ match, variant = 'compact', showCompetition 
                 >
                     {/* Live Indicator */}
                     <div className="absolute top-4 right-4">
-                        <div className="flex items-center gap-2 bg-red-500/20 backdrop-blur-sm px-3 py-1.5 rounded-full">
-                            <div className="w-2.5 h-2.5 bg-red-500 rounded-full animate-pulse" />
-                            <span className="text-red-400 text-sm font-bold">LIVE</span>
-                        </div>
+                        <LiveMatchStatus matchId={match.id} sport={match.sport} variant="badge" fallbackPeriod={match.currentPeriod ?? undefined} />
                     </div>
 
                     {/* Competition */}
