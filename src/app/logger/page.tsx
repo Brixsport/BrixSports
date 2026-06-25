@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { LogIn, Activity, Lock, User, CheckCircle2, AlertCircle, ChevronRight, Globe, WifiOff } from 'lucide-react';
 import { MatchLoggerUI } from '@/components/MatchLoggerUI';
@@ -14,6 +14,7 @@ import { Match, Logger } from '@/db/schema';
 export default function LoggerPage() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [selectedMatchId, setSelectedMatchId] = useState<string | null>(null);
+  const rehydratedRef = useRef(false);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -68,6 +69,25 @@ export default function LoggerPage() {
       fetchAssignedMatches(loggerData.id);
     }
   }, []);
+
+  // Persist selectedMatchId across hard refresh — cleared on exit or match end
+  useEffect(() => {
+    if (selectedMatchId) {
+      localStorage.setItem('brix_logger_matchId', selectedMatchId);
+    } else {
+      localStorage.removeItem('brix_logger_matchId');
+    }
+  }, [selectedMatchId]);
+
+  // Rehydrate selectedMatchId once assignedMatches first loads after refresh
+  useEffect(() => {
+    if (rehydratedRef.current || assignedMatches.length === 0) return;
+    rehydratedRef.current = true;
+    const savedId = localStorage.getItem('brix_logger_matchId');
+    if (savedId && assignedMatches.some(m => m.id === savedId)) {
+      setSelectedMatchId(savedId);
+    }
+  }, [assignedMatches]);
 
   // Fetch teams when logged in
   useEffect(() => {
