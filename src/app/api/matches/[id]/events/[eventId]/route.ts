@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
-import { matchEvents, matches } from '@/db/schema';
-import { eq } from 'drizzle-orm';
+import { matchEvents, matches, matchLoggerAssignments } from '@/db/schema';
+import { eq, and } from 'drizzle-orm';
+import { getAuthUser } from '@/lib/auth';
 
 // PATCH /api/matches/[id]/events/[eventId] - Update match event
 export async function PATCH(
@@ -9,7 +10,32 @@ export async function PATCH(
     { params }: { params: { id: string; eventId: string } }
 ) {
     try {
-        const { eventId } = params;
+        const { id: matchId, eventId } = params;
+
+        const authUser = await getAuthUser(request);
+        if (!authUser) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+        if (authUser.role !== 'admin' && authUser.role !== 'logger') {
+            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+        }
+        if (authUser.role === 'logger') {
+            const [assignment] = await db
+                .select({ id: matchLoggerAssignments.id })
+                .from(matchLoggerAssignments)
+                .where(
+                    and(
+                        eq(matchLoggerAssignments.matchId, matchId),
+                        eq(matchLoggerAssignments.loggerId, authUser.id),
+                        eq(matchLoggerAssignments.status, 'active')
+                    )
+                )
+                .limit(1);
+            if (!assignment) {
+                return NextResponse.json({ error: 'Forbidden — not assigned to this match' }, { status: 403 });
+            }
+        }
+
         const updates = await request.json();
 
         // Verify event exists
@@ -64,22 +90,50 @@ export async function DELETE(
     try {
         const { id: matchId, eventId } = params;
 
-        // Verify event exists
+        const authUser = await getAuthUser(request);
+        if (!authUser) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+        if (authUser.role !== 'admin' && authUser.role !== 'logger') {
+            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+        }
+        if (authUser.role === 'logger') {
+            const [assignment] = await db
+                .select({ id: matchLoggerAssignments.id })
+                .from(matchLoggerAssignments)
+                .where(
+                    and(
+                        eq(matchLoggerAssignments.matchId, matchId),
+                        eq(matchLoggerAssignments.loggerId, authUser.id),
+                        eq(matchLoggerAssignments.status, 'active')
+                    )
+                )
+                .limit(1);
+            if (!assignment) {
+                return NextResponse.json({ error: 'Forbidden — not assigned to this match' }, { status: 403 });
+            }
+        }
+
+        // Verify event exists and belongs to this match
         const event = await db
             .select()
             .from(matchEvents)
             .where(eq(matchEvents.id, eventId))
             .get();
 
-        if (!event) {
+        if (!event || event.matchId !== matchId) {
             return NextResponse.json(
                 { error: 'Event not found' },
                 { status: 404 }
             );
         }
 
-        // If it's a goal, update the match score
-        if (event.type.toUpperCase() === 'GOAL') {
+        const upperType = event.type.toUpperCase();
+        const isOwnGoal = upperType === 'OWN GOAL';
+        const isScoringEvent = upperType === 'GOAL' || upperType === 'PENALTY' || isOwnGoal;
+
+        // Revert score if scoring event
+        if (isScoringEvent) {
             const match = await db
                 .select()
                 .from(matches)
@@ -87,15 +141,16 @@ export async function DELETE(
                 .get();
 
             if (match) {
-                const isHomeTeam = event.teamId === match.homeTeamId;
-                const currentHomeScore = match.homeScore || 0;
-                const currentAwayScore = match.awayScore || 0;
+                // OWN GOAL: teamId is the conceding team — the opponent was credited. Revert opponent.
+                const isHomeTeam = isOwnGoal
+                    ? event.teamId !== match.homeTeamId
+                    : event.teamId === match.homeTeamId;
 
                 await db
                     .update(matches)
                     .set({
-                        homeScore: isHomeTeam ? Math.max(0, currentHomeScore - 1) : currentHomeScore,
-                        awayScore: !isHomeTeam ? Math.max(0, currentAwayScore - 1) : currentAwayScore,
+                        homeScore: isHomeTeam ? Math.max(0, (match.homeScore || 0) - 1) : (match.homeScore || 0),
+                        awayScore: !isHomeTeam ? Math.max(0, (match.awayScore || 0) - 1) : (match.awayScore || 0),
                         updatedAt: new Date(),
                     })
                     .where(eq(matches.id, matchId));

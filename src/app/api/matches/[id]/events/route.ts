@@ -142,11 +142,15 @@ export async function POST(
         await db.insert(matchEvents).values(newEvent);
 
         // Update match score for scoring events
+        // Penalty shootout events must NOT write to match score or player stats —
+        // shootout score is tracked separately (BACKLOG-105). Skip all writes during this period.
+        const isPenaltyShootout = match.currentPeriod === 'PENALTY_SHOOTOUT';
+
         const upperType = type.toUpperCase();
         const isOwnGoal = upperType === 'OWN GOAL';
         const isScoringEvent = upperType === 'GOAL' || upperType === 'PENALTY' || isOwnGoal || value;
 
-        if (isScoringEvent) {
+        if (isScoringEvent && !isPenaltyShootout) {
             const currentHomeScore = match.homeScore || 0;
             const currentAwayScore = match.awayScore || 0;
             const points = typeof value === 'number' ? value : 1;
@@ -165,8 +169,8 @@ export async function POST(
                 .where(eq(matches.id, matchId));
         }
 
-        // Update player stats for competitive matches only — friendlies do not count
-        if (playerId && match.matchType !== 'friendly') {
+        // Update player stats for competitive matches only — friendlies and shootout events do not count
+        if (playerId && match.matchType !== 'friendly' && !isPenaltyShootout) {
             await updatePlayerStats(match.sport, playerId, type, value);
         }
 
