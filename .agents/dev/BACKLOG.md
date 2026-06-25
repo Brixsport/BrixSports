@@ -23,6 +23,13 @@ BUG-050/051/052/057 RESOLVED. BUG-047 RESOLVED. Flow B confirmed live (Session 2
 
 **Session 32 closed most items. One gate remains before prod migrations.**
 
+**Session 33B additions (2026-06-25):**
+
+| Item | Status |
+|------|--------|
+| BUG-062 (selectedMatchId not persisted) | SHIPPED `37712ba` — pending fresh match verify |
+| BUG-077 (lineup edit modal starters not pre-selected) | SHIPPED `d96db0a` — pending fresh match verify |
+
 **Pre-match-day sequence (updated 2026-06-25):**
 1. ~~BACKLOG-058~~ — RESOLVED ✅
 2. ~~BUG-061 (away roster)~~ — RESOLVED ✅
@@ -148,6 +155,10 @@ BUG-001 through BUG-029, AUDIT-001/002 (partial), BACKLOG-065 — all resolved S
   - Pending items: BUG-068 (cosmetic — incoming sub still shows BENCH tag, uncommitted fix in progress)
 
 - **BUG-068** _(LOW — Logger UX cosmetic)_: Players who came ON as mid-match subs are styled with greyed BENCH tag in the sub-OUT picker. `PlayerSelectionModal` determines `isBench` from `!starterIds.has(p.id)` — pure lineup check, no awareness of current on-pitch status. Fix written (uncommitted): added `subbedOnPlayerIds?: Set<string>` prop; `isBench = !starterIds.has(p.id) && !subbedOnPlayerIds?.has(p.id)`. Data is correct — player is selectable. This is cosmetic only. `src/components/FootballLogger.tsx`. **Status:** SHIPPED (uncommitted) — 2026-06-25
+
+- **~~BUG-062~~** _(MEDIUM — Logger UX)_: Hard browser refresh dropped logger back to match selection list — `selectedMatchId` was not persisted. On refresh, React state reset to `null`, logger had to manually re-tap the match. Fix: `localStorage.setItem('brix_logger_matchId', selectedMatchId)` on every change; rehydration effect reads it back once `assignedMatches` first loads; `removeItem` on exit/logout. `src/app/logger/page.tsx`. **Status:** SHIPPED — `37712ba`, 2026-06-25. Pending: live match verify — hard refresh mid-match must resume directly in active logger view.
+
+- **~~BUG-077~~** _(LOW — Logger UX)_: Lineup edit modal opened with all players shown as SUB — starters not pre-highlighted. Root cause: `handleEditLineup` built `starterIds` from `p.id || p` but admin-published lineup stubs use `playerId` not `id` — so `p.id` was always `undefined`, the Set was full of objects, and `starterIds.has(p.id)` always returned `false`. Fix: `p.playerId || p.id || p` — one character change, same pattern used everywhere else in the file. `src/components/FootballLogger.tsx` line 1046. **Status:** SHIPPED — `d96db0a`, 2026-06-25. Pending: verify modal opens with correct starters pre-selected on next test match.
 
 - **BUG-072** _(LOW — Logger UX)_: Second Yellow auto-inserts a Red Card event via `MatchStateManager.recordEvent`. Undo (Option A) removes only the last event — the auto Red Card — leaving the Yellow Card in both local state and DB. Logger tapping undo after a second yellow expects both cards removed but only the Red goes. Not data-corrupting (Yellow stays, which is correct), but confusing UX. Fix: when `undoLastEvent` removes a Red Card whose `detail` is `'Red Card (Second Yellow)'`, also remove the preceding Yellow Card for the same player. Scope: `match-state-manager.ts` + a second DELETE call in `handleUndo`. Filed: 2026-06-25. **Status:** OPEN
 
