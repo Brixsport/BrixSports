@@ -107,7 +107,7 @@ BUG-001 through BUG-029, AUDIT-001/002 (partial), BACKLOG-065 — all resolved S
 - Observed result: fix guards both the conditional and the map call with `?? []`
 - Pending items: confirm Timeline tab renders without crash on staging after deploy. Note: the "500" seen in the Session 28 network panel was a client-side TypeError (render crash), not a server 500 — Sentry will log this as a client exception, not a server error. Relevant when triaging BACKLOG-035 (Sentry config). Eye Point Awards panel still silently empty — tracked as BACKLOG-094.
 
-- **BUG-060** _(HIGH — Data Integrity)_: `DELETE /api/matches/[id]/events` reverts `matches.homeScore`/`awayScore` correctly, but **never calls `updatePlayerStats` in reverse**. If a logger deletes a goal event, the score corrects but the scorer's `footballPlayerStats.goals` (and any other incremented stat) is permanently orphaned — the player carries a ghost goal forever. Discovered during test match cleanup 2026-06-24: had to write a manual decrement script because no automated path exists. This is the same class of problem as BUG-011 (stat corruption) but from the delete direction rather than duplicate inserts. Fix: `DELETE /api/matches/[id]/events` must mirror the `updatePlayerStats` call with decrements, using the same type-switch logic but subtracting instead of adding. Must guard against going below 0 (`Math.max(0, current - 1)`). Scope: also check the individual event delete route (`DELETE /api/matches/[id]/events/[eventId]`). Related to BACKLOG-019 (post-match stats pipeline) — the correct long-term fix is event-sourced stats recomputed from `match_events` on demand rather than mutable increments, but the immediate fix is the decrement mirror. **Status:** OPEN. Filed: 2026-06-24.
+- **BUG-060** _(HIGH — Data Integrity)_: `DELETE /api/matches/[id]/events` reverts `matches.homeScore`/`awayScore` correctly, but **never calls `updatePlayerStats` in reverse**. If a logger deletes a goal event, the score corrects but the scorer's `footballPlayerStats.goals` (and any other incremented stat) is permanently orphaned — the player carries a ghost goal forever. Discovered during test match cleanup 2026-06-24: had to write a manual decrement script because no automated path exists. This is the same class of problem as BUG-011 (stat corruption) but from the delete direction rather than duplicate inserts. Fix: `DELETE /api/matches/[id]/events` must mirror the `updatePlayerStats` call with decrements, using the same type-switch logic but subtracting instead of adding. Must guard against going below 0 (`Math.max(0, current - 1)`). Scope: also check the individual event delete route (`DELETE /api/matches/[id]/events/[eventId]`). Related to **BACKLOG-106** (per-match stat rows) — the correct long-term fix is replacing the mutable increment model entirely. The immediate fix (next session) is the decrement mirror in the DELETE handler. **Status:** OPEN. Filed: 2026-06-24.
 
 - ~~**BUG-061**~~ _(HIGH — Logger Flow)_: Away team roster never populates in the logger player picker. Root cause: `getPlayerTeam(player)` resolves to primary affiliation — multi-affiliated players (college + BUSA team) had college as primary, so `getPlayerTeam(p)?.id === match.awayTeamId` failed and they were dropped. Fix: check `player.memberships?.some(m => m.team?.id === teamId)` before falling back to `getPrimaryTeam`. `src/components/FootballLogger.tsx` lines 287–296. **Status:** RESOLVED — 2026-06-24 (commit `e847902`).
 
@@ -141,15 +141,29 @@ BUG-001 through BUG-029, AUDIT-001/002 (partial), BACKLOG-065 — all resolved S
 
 - **BUG-068** _(LOW — Logger UX cosmetic)_: Players who came ON as mid-match subs are styled with greyed BENCH tag in the sub-OUT picker. `PlayerSelectionModal` determines `isBench` from `!starterIds.has(p.id)` — pure lineup check, no awareness of current on-pitch status. Fix written (uncommitted): added `subbedOnPlayerIds?: Set<string>` prop; `isBench = !starterIds.has(p.id) && !subbedOnPlayerIds?.has(p.id)`. Data is correct — player is selectable. This is cosmetic only. `src/components/FootballLogger.tsx`. **Status:** SHIPPED (uncommitted) — 2026-06-25
 
+- **BUG-072** _(LOW — Logger UX)_: Second Yellow auto-inserts a Red Card event via `MatchStateManager.recordEvent`. Undo (Option A) removes only the last event — the auto Red Card — leaving the Yellow Card in both local state and DB. Logger tapping undo after a second yellow expects both cards removed but only the Red goes. Not data-corrupting (Yellow stays, which is correct), but confusing UX. Fix: when `undoLastEvent` removes a Red Card whose `detail` is `'Red Card (Second Yellow)'`, also remove the preceding Yellow Card for the same player. Scope: `match-state-manager.ts` + a second DELETE call in `handleUndo`. Filed: 2026-06-25. **Status:** OPEN
+
 - **BUG-069** _(LOW — Stats)_: PENALTY + GOAL double-count risk on `shotsOnTarget`. **Status:** WONT FIX — CLOSED 2026-06-25. Convention established: PENALTY = scored penalty in normal play (increments `penaltiesScored` + `shotsOnTarget`). GOAL should not be separately logged for the same penalty kick. BACKLOG-104 (outcome tracking) will make this explicit via distinct event types.
 
-- **BUG-070** _(LOW — Logger UX)_: Sub-IN modal opens empty with no explanation when no lineup has been published. `getAvailableBench` returns `[]` when `teamLineup` is null — correct behaviour but no feedback to logger. Fix: add empty-state message at the call site in `showSubInModal` render. One-liner. Filed: 2026-06-25. **Status:** OPEN
+- ~~**BUG-070**~~ _(LOW — Logger UX)_: Sub-IN modal opened empty with no explanation when no lineup published. **Status:** RESOLVED — 2026-06-25 (commit `2cc6398`). Added `emptyMessage` prop to `PlayerSelectionModal`; sub-IN call site passes `'No lineup published for this team'` vs `'No available substitutes'` depending on whether `lineups[selectedTeam]` is null.
 
-- **BUG-071** _(CRITICAL — Data Integrity)_: `DELETE` and `PATCH` on `/api/matches/[id]/events/[eventId]` have zero auth — no `getAuthUser`, no role check. Any unauthenticated HTTP request with a known `eventId` can delete or modify any match event. Must be gated with logger OR admin auth before undo button ships. `src/app/api/matches/[id]/events/[eventId]/route.ts`. Filed: 2026-06-25. **Status:** OPEN
+**Evidence:**
+- Commit: `2cc6398`
+- Verified by: tsc clean; prop wired at call site and consumed in modal render
+- Observed result: modal opens showing correct context-specific message instead of blank list
+- Pending items: visual confirm on staging
+
+- ~~**BUG-071**~~ _(CRITICAL — Data Integrity)_: `DELETE` and `PATCH` on `/api/matches/[id]/events/[eventId]` had zero auth. **Status:** RESOLVED — 2026-06-25 (commit `da8d9ce`). Auth gate added: `getAuthUser` + logger/admin role check + logger assignment check on both handlers. Score revert in DELETE also fixed to handle PENALTY and OWN GOAL correctly (previously only reverted GOAL).
+
+**Evidence:**
+- Commit: `da8d9ce`
+- Verified by: tsc clean on modified files; auth pattern mirrors parent `DELETE /events` route exactly
+- Observed result: unauthenticated DELETE/PATCH → 401; non-logger/admin role → 403; logger not assigned to match → 403
+- Pending items: live test via undo button (wiring in next step)
 
 - **BACKLOG-104** _(MEDIUM — Stats / Logger UX)_: Penalty outcome tracking. Current state: `PENALTY` = scored only. Need `PENALTY MISSED` (increments `shotsOffTarget`) and `PENALTY SAVED` (increments `shotsOnTarget` for taker + `saves` for keeper). No schema changes needed — columns exist. Requires new event type strings and new cases in `updatePlayerStats` + logger UI penalty flow (3 outcome buttons instead of 1). Eliminates any future double-count risk. Filed: 2026-06-25. **Status:** OPEN
 
-- **BACKLOG-105** _(HIGH — Data Integrity)_: Penalty shootout score isolation. PENALTY_SHOOTOUT period currently writes to `home_score`/`away_score` and `footballPlayerStats` — both wrong. Shootout score is separate from match score (display as "2-2 (4-3 pens)"). Shootout events should not write to career stats. **Interim guard needed immediately** (before any match goes to shootout): in `src/app/api/matches/[id]/events/route.ts`, skip score increment and `updatePlayerStats` when `match.currentPeriod === 'PENALTY_SHOOTOUT'`. Full implementation: separate `shootout_home`/`shootout_away` columns on matches, distinct `PEN_SCORED`/`PEN_MISSED`/`PEN_SAVED` event types, shootout score display on public page. Filed: 2026-06-25. **Status:** OPEN — interim guard is next-session priority
+- **BACKLOG-105** _(HIGH — Data Integrity)_: Penalty shootout score isolation. PENALTY_SHOOTOUT period currently writes to `home_score`/`away_score` and `footballPlayerStats` — both wrong. Shootout score is separate from match score (display as "2-2 (4-3 pens)"). Shootout events should not write to career stats. **Interim guard SHIPPED** (`da8d9ce`, 2026-06-25): `isPenaltyShootout` flag in `POST /api/matches/[id]/events/route.ts` — skips score increment and `updatePlayerStats` when `match.currentPeriod === 'PENALTY_SHOOTOUT'`. Full implementation still open: separate `shootout_home`/`shootout_away` columns on matches, distinct `PEN_SCORED`/`PEN_MISSED`/`PEN_SAVED` event types, shootout score display on public page. **Status:** SHIPPED (interim guard) — full implementation OPEN
 
 - **BUG-044b** _(MEDIUM)_: Logger dashboard stats show "-" (total events, logged matches). Root cause: dashboard fetches `/api/auth/me` which is admin-auth only — logger JWTs are not recognised. Fix: create `/api/loggers/me` endpoint that reads the logger session and returns their stats, or wire to existing `/api/loggers/[id]`. Filed: 2026-06-19.
 
@@ -4318,3 +4332,87 @@ ALTER TABLE matches ADD COLUMN is_test INTEGER DEFAULT 0;
 - Combine schema migration with any other pending `matches` table ALTER in the same session
 - Do not add console logging as a substitute — observability during a test is already covered by the FootballLogger live feed and network tab; the real gap is post-test cleanup and stat contamination
 - Related: `src/app/api/matches/[id]/events/route.ts`, `src/app/admin/matches/`, BACKLOG-104
+
+---
+
+### BACKLOG-106 — Per-Match Player Stat Rows (Replace Mutable Increment Model)
+
+**Status:** OPEN
+**Priority:** High
+**Filed:** 2026-06-25
+**Supersedes scope of:** BACKLOG-019 (post-match pipeline) — which is too broad to be actionable. This item is the concrete, scoped piece that keeps getting deferred inside BACKLOG-019.
+
+#### Problem
+
+`footballPlayerStats` is a flat mutable aggregate. Every goal, card, or assist fires a direct `++` increment in `updatePlayerStats`. This model has three structural failures:
+
+1. **No rollback path.** Delete an event → score reverts, stat doesn't (BUG-060). The only fix is a manual decrement script. That's what Session 29 required.
+2. **No per-match traceability.** `player.goals = 7` — you cannot tell which matches those came from, which match to subtract from, or whether any came from test matches.
+3. **Cascade delete is impossible.** Deleting a match leaves orphaned stat rows. There is no FK path from `footballPlayerStats` to `matches`.
+
+BUG-060 (stat decrement on delete) is the immediate symptom. The correct fix is not a decrement mirror — it's removing the mutable model entirely.
+
+#### Solution — `match_player_stats` table
+
+One row per player per match. Written atomically when a match ends (or updated per event). Season aggregate = `SUM()` across rows. This is how every real sports platform tracks stats.
+
+**Schema:**
+```sql
+CREATE TABLE match_player_stats (
+  id TEXT PRIMARY KEY,
+  match_id TEXT NOT NULL REFERENCES matches(id) ON DELETE CASCADE,
+  player_id TEXT NOT NULL REFERENCES players(id),
+  team_id TEXT NOT NULL,
+  season TEXT NOT NULL,
+  sport TEXT NOT NULL,
+
+  -- Football columns (null for non-football)
+  goals INTEGER DEFAULT 0,
+  assists INTEGER DEFAULT 0,
+  yellow_cards INTEGER DEFAULT 0,
+  red_cards INTEGER DEFAULT 0,
+  saves INTEGER DEFAULT 0,
+  shots_on_target INTEGER DEFAULT 0,
+  shots_off_target INTEGER DEFAULT 0,
+  fouls_committed INTEGER DEFAULT 0,
+  own_goals INTEGER DEFAULT 0,
+  penalties_scored INTEGER DEFAULT 0,
+  minutes_played INTEGER DEFAULT 0,
+
+  created_at INTEGER,
+  updated_at INTEGER,
+
+  UNIQUE(match_id, player_id)
+);
+```
+
+**How it replaces the current model:**
+
+| Current | New |
+|---------|-----|
+| `footballPlayerStats.goals++` on each GOAL event | Upsert `match_player_stats` row for this match — `goals++` |
+| `player.goals` = flat lifetime total | `SELECT SUM(goals) FROM match_player_stats WHERE player_id=X AND season='2025'` |
+| Delete event → manual stat decrement script | Delete event → recompute `match_player_stats` row from `match_events` for that match |
+| Delete match → orphaned stats forever | Delete match → `match_player_stats` rows cascade deleted automatically |
+| No per-match breakdown | `match_player_stats` IS the per-match breakdown |
+
+#### Why this fixes BUG-060 cleanly
+
+On event delete: instead of decrementing a global counter (fragile, can go negative), recompute the `match_player_stats` row by re-running a `COUNT()` aggregation over `match_events` for that `(match_id, player_id)`. Idempotent. Can never corrupt.
+
+#### Implementation order
+
+1. **Schema** — create `match_player_stats` table on staging. Add FK `REFERENCES matches(id) ON DELETE CASCADE`.
+2. **Write path** — replace `updatePlayerStats` increment calls with `upsert` into `match_player_stats`. Same switch logic, different target table.
+3. **Recompute helper** — `recomputeMatchPlayerStats(matchId, playerId)` — runs `COUNT()` group over `match_events`, overwrites the row. Call this on event delete instead of decrement.
+4. **Read path** — `footballPlayerStats` season aggregate becomes `SELECT SUM(...) FROM match_player_stats WHERE player_id=X AND season=Y AND sport='Football'`.
+5. **Backfill** — for historical matches: derive `match_player_stats` rows from existing `match_events` using the same aggregation. One-time script. Replaces the current dirty `footballPlayerStats` data.
+6. **Drop old table** — once read path is confirmed correct, `footballPlayerStats` can be retired.
+
+#### Notes
+
+- Do NOT implement step 6 (drop old table) until leaderboards and player profile pages are confirmed reading from the new path.
+- Step 5 (backfill) must run after BUG-011 (718 goals anomaly / duplicate stat rows) is audited — do not backfill from dirty source data.
+- BACKLOG-019 remains open for the automation hook (match → FINISHED triggers the recompute). This item only covers the table structure and write/read path.
+- `match_player_stats` rows cascading on match delete also fixes the test match contamination problem (BACKLOG-105) — once `is_test` matches are deleted, their stat rows go with them automatically.
+- Related: BUG-060, BUG-011, BACKLOG-019, BACKLOG-105, TD-011 (`season` hardcoded)

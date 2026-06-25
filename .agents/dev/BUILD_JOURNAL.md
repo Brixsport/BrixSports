@@ -154,6 +154,61 @@
 
 ---
 
+### Session 32c — 2026-06-25
+
+**Focus:** Close the full 32b carry-over list: auth gate on event delete/patch route, shootout stat guard, BUG-070 empty bench message, wire undo button to DB. Session assessment + backlog hygiene.
+
+**Built / Fixed:**
+
+- **BUG-071 RESOLVED** (`da8d9ce`) — `src/app/api/matches/[id]/events/[eventId]/route.ts`
+  - Both PATCH and DELETE had zero auth. Added `getAuthUser` + logger/admin role check + logger assignment check to both handlers. Pattern mirrors parent `DELETE /events` route exactly.
+  - Bonus: DELETE was only reverting GOAL score. Fixed to handle PENALTY and OWN GOAL with correct inversion logic (OWN GOAL: `teamId` is conceding team → revert opponent's score, not `teamId` team's score).
+
+- **BACKLOG-105 interim guard SHIPPED** (`da8d9ce`) — `src/app/api/matches/[id]/events/route.ts`
+  - `isPenaltyShootout = match.currentPeriod === 'PENALTY_SHOOTOUT'` added. Score increment and `updatePlayerStats` both skipped when flag is true. Prevents shootout events corrupting match score and career stats until full BACKLOG-105 implementation.
+
+- **BUG-070 RESOLVED** (`2cc6398`) — `src/components/FootballLogger.tsx`
+  - `emptyMessage` prop added to `PlayerSelectionModal`. Sub-IN call site passes `'No lineup published for this team'` vs `'No available substitutes'` based on `lineups[selectedTeam]` being null. Previously opened blank with no feedback.
+
+- **Undo button SHIPPED** (`07a046a`) — `src/components/FootballLogger.tsx`
+  - `handleUndo` rewritten as async. Previously: local state pop + WS broadcast only — no DB call.
+  - Now: `DELETE /api/matches/${match.id}/events/${eventToUndo.id}` first. `manager.undoLastEvent()` only called after confirmed 200. On failure: alert shown, local state unchanged. `isUndoing` loading state disables button during request.
+  - Temp ID timing note: if `confirmEvent` hasn't fired yet when undo is tapped, `eventToUndo.id` is still `temp_XXX`. DELETE returns 404. Alert fires, nothing changes. Logger retries once `confirmEvent` completes.
+
+- **BACKLOG-106 filed** — `match_player_stats` table spec. Standalone scope cut from BACKLOG-019. One table, one write path change, one recompute helper on delete. BUG-060 cross-referenced to this item instead of BACKLOG-019.
+
+- **BUG-072 filed** — Second Yellow undo removes only the auto Red Card, not the triggering Yellow. Low priority, documented for future handling.
+
+- **Session rule established** — No new feature work until BUG-062 (lineup refresh), fresh match verify (TD-010 SECOND_HALF + undo + sub picker), and BUG-054 (OWN GOAL undo parent path) are done.
+
+**State manager read findings:**
+- `undoLastEvent` removes by array position (last event), not by ID. Safe for Option A (immediate undo after logging). Temp→server ID swap race is non-corrupting: 404 → alert → logger retries.
+- Second Yellow auto-inserts Red Card via `recordEvent`. `undoLastEvent` removes only the Red Card. Yellow stays. Correct data, confusing UX. Filed BUG-072.
+- `Penalty Saved` / `Penalty Missed` already exist as `FootballEventType` and are handled in `calculateMatchStats`. BACKLOG-104 (logger UI + `updatePlayerStats` cases) is the only remaining work when that ships.
+
+**Bugs filed this session:**
+- BUG-072 (second yellow undo removes Red only)
+- BACKLOG-106 (per-match stat rows — replaces mutable increment model)
+
+**Session assessment:**
+- Live match readiness: ~68% staging, ~52% prod
+- Bug hygiene score: 6/10 — filing quality high, return/closure velocity low
+- Key risks: BUG-062 (lineup wipes on refresh), TD-010 SECOND_HALF unverified, BUG-060 (stat orphan on undo)
+
+**Deferred:**
+- BUG-062 (lineup wipes on logger refresh) — must fix before first live match
+- Fresh match staging test — TD-010 SECOND_HALF + undo + sub picker + BUG-063 homepage + LiveStats
+- BUG-054 (OWN GOAL undo direction on parent DELETE path)
+- BUG-060 (stat decrement on event delete) — immediate follow-up after undo is live-verified
+
+**Next session:**
+1. BUG-062 — trace root cause first (viewState not persisted vs period rehydration path), then fix
+2. Fresh staging match — 8-point test: TD-010 SECOND_HALF refresh, undo button live, sub picker pools, BUG-063 labels, LiveStats numbers, sub cap gate. Each SHIPPED item becomes RESOLVED only on this test.
+3. BUG-054 — OWN GOAL undo score inversion on parent `DELETE /events` handler
+4. BUG-060 — stat decrement mirror in DELETE handler (unblocked now that undo is wired)
+
+---
+
 ### Session 32b — 2026-06-25
 
 **Focus:** Complete BUG-067 (sub picker correctness), fix BUG-066 (shots stat), run prod migrations, file/resolve cosmetic BUG-068, scope undo events work, document penalty shootout business logic.
