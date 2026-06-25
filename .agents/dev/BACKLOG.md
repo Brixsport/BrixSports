@@ -88,13 +88,21 @@ BUG-001 through BUG-029, AUDIT-001/002 (partial), BACKLOG-065 — all resolved S
 
 - **BUG-055** _(MEDIUM — Data Integrity)_: `isScoringEvent` condition in `POST /api/matches/[id]/events` includes `|| value` — any event with a truthy `value` field triggers a score increment (defaulting to 1 point). Future events with structured `value` payloads (substitution jersey number, stat multiplier, etc.) will silently increment the score. Fix: make scoring condition type-explicit — remove `|| value`, use `['GOAL','PENALTY','OWN GOAL'].includes(upperType)` only. `src/app/api/matches/[id]/events/route.ts` line 147. Filed: 2026-06-19.
 
-- **~~BUG-076~~** _(HIGH — Logger Flow / Data Integrity)_: Match status permanently stuck on `LIVE` after normal match end. Root cause: `handleFinalize` (which PATCHes `status: 'FINISHED'`) is guarded by `currentPeriod !== 'FINISHED'`. When a logger taps "End 2nd Half" → confirms the modal → `handlePeriodEndConfirm` transitions `currentPeriod` to `'FINISHED'` — this re-render immediately hides the End Match button, making `handleFinalize` unreachable. Every match with different scores ends with `status: LIVE` / `currentPeriod: FINISHED` in the DB. **Fix SHIPPED** (`src/components/FootballLogger.tsx`, 2026-06-25, session 33): (1) `handlePeriodEndConfirm` now detects `nextPeriod === 'FINISHED' && homeScore !== awayScore` and folds `status: 'FINISHED'` into the same PATCH. (2) End Match button guard relaxed from `currentPeriod !== 'FINISHED' && ...` to `currentPeriod !== 'NOT_STARTED'` — keeps it visible at FINISHED as a fallback for ET/Penalties paths. **Status:** SHIPPED — needs live match verification to RESOLVE.
+- **~~BUG-076~~** _(HIGH — Logger Flow / Data Integrity)_: Match status permanently stuck on `LIVE` after normal match end. Fix: `handlePeriodEndConfirm` folds `status: FINISHED` into period-end PATCH when `nextPeriod === 'FINISHED' && homeScore !== awayScore`. End Match button guard relaxed so it stays visible as fallback for ET/Penalties. **Status:** UNVERIFIED — test match (Kuld3e6xsjLj9amJg4cHx, 2026-06-25) went to ET then PK at 0-0; decisive-score path (`handlePeriodEndConfirm` with different scores) never triggered. Needs a fresh match that ends with different scores at 90' to verify.
 
 **Evidence:**
-- Commit: (pending)
-- Verified by: code trace — KIN vs JOG test match confirmed `status: LIVE` / `currentPeriod: FINISHED` in DB after normal end. HAR showed 5 match PATCHes; none carried `status: FINISHED`. Fix merges the finalize into the period-end PATCH for the decisive whistle.
-- Observed result: every match ending with different scores was permanently LIVE
-- Pending items: live match test — confirm `status: FINISHED` written on next test match end
+- Commit: (pending — session 33)
+- Verified by: not yet — test match was always level, went to PK
+- Observed result: `handleFinalize` (End Match button) correctly wrote `status: FINISHED` via PK path — confirmed in DB (`status: FINISHED`, match `Kuld3e6xsjLj9amJg4cHx`). `handlePeriodEndConfirm` decisive path untested.
+- Pending items: fresh match ending decisively at 90' — verify `status: FINISHED` + `currentPeriod: FINISHED` written in single PATCH via `handlePeriodEndConfirm`
+
+- **BUG-078** _(MEDIUM — Logger Flow)_: `handleFinalize` (End Match button) PATCHed `status: FINISHED` but omitted `currentPeriod: FINISHED`. Result: `current_period` stays at whatever period the match was in when End was tapped (e.g. `PENALTY_SHOOTOUT`) — public page shows `PK` instead of `FT` after match end. Fix: added `currentPeriod: 'FINISHED'` to `handleFinalize` PATCH body. `src/components/FootballLogger.tsx`. Filed and fixed 2026-06-25, session 33B. **Status:** SHIPPED — `91bd33d`. Pending: verify on next match end that public page shows `FT`.
+
+**Evidence:**
+- Commit: `91bd33d`
+- Verified by: DB query — match `Kuld3e6xsjLj9amJg4cHx` showed `status: FINISHED`, `current_period: PENALTY_SHOOTOUT` after End Match tapped at PK. Public page displayed `PK` badge.
+- Observed result: `current_period` stuck at `PENALTY_SHOOTOUT` despite `status: FINISHED`
+- Pending items: next match end — confirm `current_period: FINISHED` in DB, public page shows `FT`
 
 ### Logger Flow
 
@@ -176,9 +184,9 @@ BUG-001 through BUG-029, AUDIT-001/002 (partial), BACKLOG-065 — all resolved S
 
 **Evidence:**
 - Commit: `da8d9ce`
-- Verified by: tsc clean on modified files; auth pattern mirrors parent `DELETE /events` route exactly
-- Observed result: unauthenticated DELETE/PATCH → 401; non-logger/admin role → 403; logger not assigned to match → 403
-- Pending items: live test via undo button (wiring in next step)
+- Verified by: live match DB query — match `Kuld3e6xsjLj9amJg4cHx`, 2026-06-25
+- Observed result (GOAL undo): home_score 1→0 in DB; Goal + Assist events deleted from match_events ✅. Observed result (OWN GOAL undo): busa-kings player OG → home_score 1→0 in DB; correct team's score decremented (opponent of conceding team, not conceding team) ✅
+- Pending items: none — live DB evidence confirms both GOAL and OWN GOAL undo paths correct via `[eventId]` DELETE route. Note: BUG-054 (OWN GOAL inversion on parent `DELETE /events` route) is a separate code path, still open.
 
 - **BACKLOG-104** _(MEDIUM — Stats / Logger UX)_: Penalty outcome tracking. Current state: `PENALTY` = scored only. Need `PENALTY MISSED` (increments `shotsOffTarget`) and `PENALTY SAVED` (increments `shotsOnTarget` for taker + `saves` for keeper). No schema changes needed — columns exist. Requires new event type strings and new cases in `updatePlayerStats` + logger UI penalty flow (3 outcome buttons instead of 1). Eliminates any future double-count risk. Filed: 2026-06-25. **Status:** OPEN
 
