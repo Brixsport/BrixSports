@@ -234,6 +234,24 @@ export default function MatchDetailPage() {
     const { match, events, timeTracking, eyePoints } = matchData;
     const isLive = match.status === 'LIVE' || match.status === 'HALF_TIME';
 
+    // Period label — WS period (live) takes priority; DB currentPeriod is the fallback
+    // for initial page load and when no logger is connected.
+    const displayPeriod = matchTime?.period ?? match.currentPeriod ?? match.status;
+
+    const ACTIVE_PLAY_PERIODS = ['FIRST_HALF', 'SECOND_HALF', 'EXTRA_TIME_1', 'EXTRA_TIME_2', 'PENALTY_SHOOTOUT'];
+    const PERIOD_LABELS: Record<string, string> = {
+        FIRST_HALF: '1ST HALF',
+        HALF_TIME: 'HT',
+        SECOND_HALF: '2ND HALF',
+        EXTRA_TIME_1: 'ET1',
+        EXTRA_TIME_2: 'ET2',
+        PENALTY_SHOOTOUT: 'PK',
+        FINISHED: 'FT',
+    };
+
+    const getPeriodLabel = (period: string) =>
+        PERIOD_LABELS[period] ?? period.replace(/_/g, ' ');
+
     return (
         <div className="min-h-screen bg-[#050505] text-white">
             {/* Sticky Header - Slides up/down based on scroll direction */}
@@ -302,13 +320,16 @@ export default function MatchDetailPage() {
                                 <div className="text-4xl font-black">{match.awayScore}</div>
                             </div>
                             <div className="text-sm text-white/60 mt-1 uppercase font-bold tracking-wider">
-                                {['LIVE', 'FIRST_HALF', 'SECOND_HALF', 'EXTRA_TIME_1', 'EXTRA_TIME_2'].includes(match.status) ? (
-                                    <span className="flex items-center gap-1 justify-center">
+                                {ACTIVE_PLAY_PERIODS.includes(displayPeriod) ? (
+                                    <span className="flex items-center gap-1.5 justify-center">
                                         <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse" />
-                                        {match.minute}'{match.extraTime > 0 ? `+${match.extraTime}` : ''}
+                                        <span className="text-red-400">{getPeriodLabel(displayPeriod)}</span>
+                                        {match.minute != null && (
+                                            <span className="text-white/60">{match.minute}'{match.extraTime > 0 ? `+${match.extraTime}` : ''}</span>
+                                        )}
                                     </span>
                                 ) : (
-                                    match.status.replace('_', ' ')
+                                    getPeriodLabel(displayPeriod)
                                 )}
                             </div>
                         </div>
@@ -502,7 +523,7 @@ export default function MatchDetailPage() {
                                             </div>
                                             <div className="bg-white/5 rounded-xl p-4">
                                                 <div className="text-sm text-white/40 mb-1">Status</div>
-                                                <div className="font-bold capitalize">{match.status.replace('_', ' ')}</div>
+                                                <div className="font-bold capitalize">{getPeriodLabel(displayPeriod)}</div>
                                             </div>
                                         </div>
                                     </div>
