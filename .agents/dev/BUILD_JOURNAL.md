@@ -106,6 +106,48 @@
 
 ---
 
+### Session 31 — 2026-06-25
+
+**Focus:** Verify TD-010 API gap, ship BACKLOG-044 Phase B (match config on mount, timer ceiling, sub cap), fix BUG-063 (period label on public match page).
+
+**Built / Fixed:**
+
+- **TD-010 API gap — confirmed closed (no code change needed)**
+  - Read `src/app/api/loggers/[id]/route.ts` — `assignedMatches` comes from `getLoggerMatches(id)` which uses `match: matches` (full row select in `match-logger-helpers.ts`). `current_period` flows through automatically. No omission to fix.
+  - Also confirmed: the old test match showing `NOT_STARTED` after Session 30 was expected — the match was started and transitioned *before* `b66eb95` deployed and *before* the migration ran, so those transitions never wrote `current_period`. Migration defaulted all existing rows to `NOT_STARTED`. Not a bug.
+
+- **BACKLOG-044 Phase B — SHIPPED (`64b0974`)** — `src/components/FootballLogger.tsx` — 26 insertions
+  - Added `useState<number | null>(null)` for `maxSubstitutions` (~line 116)
+  - After `MatchStateManager` init on mount: `GET /api/matches/[id]/config` → applies `config.halfDuration` via `updateConfig` + `setHalfDuration`; stores `config.maxSubstitutions`. Alert on failure, falls back to hardcoded default.
+  - Sub cap gate in `handleSubIn`: reads `matchState?.stats?.substitutions[teamIndex]`, blocks with `alert()` if at cap; skipped if `maxSubstitutions === null`.
+  - Task 4 Amendment (lock toggle after match starts) was pre-existing — `isLocked = currentPeriod !== 'NOT_STARTED'` already in place at line 1791.
+  - **Live verification (partial):** period `HALF_TIME` written correctly ✅, `halfDuration: 35` loaded from config ✅, toggle locked in `HALF_TIME` ✅. Sub cap gate NOT YET TESTED — pending next live match.
+
+- **BUG-063 — SHIPPED (`ea4a1d5`)** — `src/app/matches/[id]/page.tsx` — 26 insertions, 5 deletions
+  - Root cause traced: `match.status` DB column is always `LIVE` — it never holds `FIRST_HALF`/`HALF_TIME` etc. WS path (`match:time:update` with `period`) already updates local `match.status` in React state. `LiveMatchStatus` component already handles period labels via WS. The gap was: initial page load with no WS → `matchTime` is null → no period label shown, just `LIVE`.
+  - Also: MatchStateManager fully read — confirmed `broadcastTimeUpdate()` is a DOM CustomEvent (local only). The WS emit is in `FootballLogger`'s `useEffect` watching `matchState` (line 450). Public page has no direct connection to MatchStateManager.
+  - Fix: `displayPeriod = matchTime?.period ?? match.currentPeriod ?? match.status`. Score header now shows period badge (1ST HALF / HT / 2ND HALF) + minute for active play; HT/FT label for stopped play. Overview status card updated. `MatchCard` unchanged (already uses `LiveMatchStatus` via WS).
+  - WS disconnection: `useMatchTimer` holds last value in `useState` — frozen until page refresh. On fresh load with no WS, `match.currentPeriod` (TD-010) is the fallback.
+
+- **Backlog/journal filed:**
+  - BUG-063 updated to SHIPPED
+  - BACKLOG-102 filed (live viewer clock — `MM:SS` on detail page via WS, `MM'` on cards via poll)
+  - BACKLOG-044 Phase B status updated to SHIPPED/conditionally done
+
+**Deferred:**
+- TD-010 + Phase B full verification — fresh test match required (period survival on refresh + sub cap gate)
+- Prod migration for TD-010 — after fresh match test passes
+- BACKLOG-102 (live viewer clock) — not started
+- BUG-060 (stat decrement on event DELETE)
+- BUG-062 (lineup wipes on logger refresh)
+
+**Next session:**
+1. Spin fresh test match on staging — verify `currentPeriod` survives hard refresh (TD-010) and sub cap gate blocks past limit (Phase B). Both checks close in one session.
+2. If both pass: run prod migration for TD-010.
+3. Then BUG-063 live verification on the same match.
+
+---
+
 ### Session 29 — 2026-06-24
 
 **Focus:** Commit and verify BUG-058b fix, enforce RESOLVED lifecycle rules, trace and fix Timeline 500, triage test match pollution, elevate TD-010 to pre-match-day blocker.

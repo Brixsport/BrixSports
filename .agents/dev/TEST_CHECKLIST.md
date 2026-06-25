@@ -6,6 +6,66 @@ what fails with a one-line description.
 
 ---
 
+## ⚠️ PENDING VERIFICATION — Next Fresh Test Match (Session 31)
+
+> All three checks run on the same fresh test match. Do not use a pre-existing match — the old test match (`AIr6gMTlUscTNHzYTL8fI`) predates the TD-010 migration and will always show `NOT_STARTED`. Spin a new one.
+
+### TD-010 — Period survival on hard refresh
+**What it proves:** `currentPeriod` is written to DB on each transition and seeds `MatchStateManager` correctly on remount.
+
+- [ ] Create a fresh match, assign a logger, start it via "▶ Start Match"
+- [ ] PATCH fires → confirm `matches.current_period = 'FIRST_HALF'` in DB (`dev/verify-td010.mjs` or MCP query)
+- [ ] Hard refresh the logger tab (Ctrl+Shift+R / Cmd+Shift+R on mobile)
+- [ ] ✅ Logger shows `FIRST_HALF` period and clock continues from ~correct minute — NOT reset to `NOT_STARTED` at 0:00
+- [ ] Tap "⏸ End 1st Half" → confirm DB `current_period = 'HALF_TIME'`
+- [ ] Hard refresh again → ✅ Logger shows `HALF_TIME`, not `NOT_STARTED`
+
+**Closes:** TD-010 (moves from SHIPPED → RESOLVED with DB query as evidence)
+
+---
+
+### BACKLOG-044 Phase B — Sub cap gate
+**What it proves:** `maxSubstitutions` from `/api/matches/[id]/config` is loaded on mount and enforced in `handleSubIn`.
+
+- [ ] Confirm the match's competition has `maxSubstitutions` set (check via `/api/matches/[id]/config` in Network tab — look for `config.maxSubstitutions`)
+- [ ] Log substitutions up to the cap (e.g. 5 for football) for one team
+- [ ] Attempt a 6th substitution for that same team
+- [ ] ✅ Alert fires: "Maximum substitutions reached for this team (N)" — event is NOT logged
+- [ ] ✅ Opposing team can still substitute (cap is per-team, not per-match)
+- [ ] If `maxSubstitutions` is `null` (competition has no cap set) — subs work without any block
+
+**Closes:** BACKLOG-044 Phase B (moves from SHIPPED → RESOLVED)
+
+---
+
+### BUG-063 — Period label on public match detail page
+**What it proves:** `displayPeriod = matchTime?.period ?? match.currentPeriod` renders correctly in all three states.
+
+**Test A — Page load before WS tick (DB fallback path):**
+- [ ] Match is LIVE, in `FIRST_HALF` (confirmed in DB)
+- [ ] Open `/matches/[id]` in a fresh incognito tab (no WS established yet)
+- [ ] ✅ Score header shows `1ST HALF · N'` — NOT blank, NOT `LIVE`
+- [ ] ✅ Overview Status card shows `1ST HALF` — NOT `LIVE`
+
+**Test B — Active play (WS live path):**
+- [ ] Stay on the page, let WS connect (check DevTools → WS frames or console)
+- [ ] Logger clocks ticking — after first `match:time:update` fires
+- [ ] ✅ Score header shows `● 1ST HALF · 33'` format (period badge + minute)
+- [ ] Minute increments without page refresh
+
+**Test C — Half time:**
+- [ ] Logger taps "⏸ End 1st Half" → period transitions to `HALF_TIME`
+- [ ] ✅ Score header shows `HT` — NOT `HALF TIME` or `LIVE`
+- [ ] ✅ No minute shown during `HALF_TIME` (no active clock)
+- [ ] Open a NEW incognito tab mid-HT → ✅ loads showing `HT` from DB `currentPeriod`
+
+**Test D — Overview Status card:**
+- [ ] Overview tab → Status card shows `1ST HALF` / `HT` / `2ND HALF` appropriately — never raw `LIVE`
+
+**Closes:** BUG-063 (moves from SHIPPED → RESOLVED with observed result noted)
+
+---
+
 ## Critical Flows (must pass before every prod merge)
 
 ### Flow A — Match Creation
@@ -323,6 +383,13 @@ what fails with a one-line description.
 - [ ] Score displays correctly
 - [ ] Timeline tab shows events
 - [ ] No Rules of Hooks errors in console
+
+#### Period label (BUG-063 — shipped `ea4a1d5`, pending live verification)
+> Full test steps in the ⚠️ PENDING VERIFICATION section at the top of this file.
+- [ ] Page load (no WS): score header shows `1ST HALF · N'` not blank or `LIVE`
+- [ ] During active play (WS live): score header shows `● 1ST HALF · 33'`
+- [ ] Half time: score header shows `HT`, no minute
+- [ ] Overview Status card: shows period label, not raw `LIVE`
 
 ### Teams
 - [ ] /teams loads team list
