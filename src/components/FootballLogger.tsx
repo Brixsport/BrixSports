@@ -886,12 +886,21 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
         // Complete the transition to next period
         stateManager.current.completePeriodTransition(nextPeriod as any);
 
-        // Persist period to DB — non-blocking, failure does not affect logger UI
+        // When the period reaches FINISHED and scores differ, finalize the match in the same
+        // PATCH — the "End Match" button is hidden once currentPeriod === 'FINISHED' so
+        // handleFinalize would be unreachable after this transition (BUG-076).
+        // When scores are equal we leave status as LIVE so the ET/Penalties flow can continue.
+        const isFinalWhistle = nextPeriod === 'FINISHED' && homeScore !== awayScore;
+
         fetch(`/api/matches/${match.id}`, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ currentPeriod: nextPeriod }),
-        }).catch((e) => console.error('[TD-010] Failed to persist currentPeriod:', e));
+            body: JSON.stringify(
+                isFinalWhistle
+                    ? { currentPeriod: nextPeriod, status: 'FINISHED', homeScore, awayScore, stats: matchState?.stats }
+                    : { currentPeriod: nextPeriod }
+            ),
+        }).catch((e) => console.error('[TD-010] Failed to persist period/status:', e));
 
         // Close modal and reset state
         setShowPeriodEndModal(false);
@@ -1511,7 +1520,7 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                         </>
                     )}
 
-                    {currentPeriod !== 'FINISHED' && currentPeriod !== 'NOT_STARTED' && (
+                    {currentPeriod !== 'NOT_STARTED' && (
                         <button onClick={handleFinalize} disabled={isSaving}
                             className="py-2.5 px-4 bg-white/5 border border-white/10 text-white/60 font-bold uppercase tracking-widest rounded-xl text-xs active:scale-95 transition-transform">
                             {isSaving ? '...' : '🏁 End'}
