@@ -6,15 +6,20 @@
 
 BUG-050/051/052/057 RESOLVED. BUG-047 RESOLVED. Flow B confirmed live (Session 28).
 
-**Session 31 state (2026-06-25):**
+**Session 32 state (2026-06-25):**
 
 | Item | Status |
 |------|--------|
 | BACKLOG-058 (offline drain) | ✅ RESOLVED |
 | BUG-061 (away roster) | ✅ RESOLVED |
-| TD-010 (period persistence) | Code done (`b66eb95`). `getLoggerMatches` confirmed full-row select — `current_period` flows through automatically. Needs fresh match test to close. |
-| BACKLOG-044 Phase B (config mount, timer ceiling, sub cap) | Code done (`64b0974`). Config load ✅ timer ceiling ✅ toggle lock ✅. Sub cap gate + period survival need fresh match test to close. |
-| BUG-063 (HALF_TIME on public page) | Closes with TD-010 verification — separate fix still needed (wire `current_period` into public API + render) |
+| KIN vs COLNAS friendly cleanup | ✅ DONE — stats rolled back, match deleted (`7faaab9`) |
+| Match stats zero / LiveStats shape mismatch | ✅ SHIPPED (`7faaab9`) |
+| Friendly guard on updatePlayerStats | ✅ SHIPPED (`7faaab9`) |
+| ownGoals + penaltiesScored columns | ✅ SHIPPED (`7faaab9`) — migration applied to staging |
+| BACKLOG-103 (notification preferences) | ✅ FILED |
+| TD-010 (period persistence) | Code done (`b66eb95`). Needs fresh match test to close. |
+| BACKLOG-044 Phase B (config mount, timer ceiling, sub cap) | Code done (`64b0974`). Sub cap gate + period survival need fresh match test to close. |
+| BUG-063 (HALF_TIME on public page) | Fix SHIPPED (`ea4a1d5`). Needs fresh match verification to RESOLVE. |
 
 **Both pending verifications happen on the same fresh test match. One session, two checks, then TD-010 + Phase B close together.**
 
@@ -4171,3 +4176,31 @@ Show minute only: `33'` — alongside the period badge (H1, H2, HT, PK). Update 
 - Logger session must be active for clock to tick on public page — when no logger is connected, hide the clock display (do not show stale `0'`)
 - `match-state-manager.ts` already has `getFormattedTime()` — use that output for the WS payload
 - Related: BUG-063 (period label), BACKLOG-096 (WS event pipeline), BACKLOG-044 (match config / half duration)
+
+---
+
+### BACKLOG-103 — User-Selectable Push Notification Preferences
+
+**Status:** OPEN
+**Priority:** Low
+**Filed:** 2026-06-25
+
+#### Problem
+
+Push notifications currently fire for every `GOAL`, `RED_CARD`, `YELLOW_CARD`, `HALF_TIME`, and `MATCH_END` event with no user control. Users may only care about goals, or may want all events, or only events involving their followed team.
+
+#### Desired behaviour
+
+User can configure per-notification-type preferences in their profile or notification settings:
+- Goals only
+- Goals + Red Cards
+- All events (current default)
+- Match start / end only
+
+Preferences stored per user (or per followed team) and respected in `match-notification-service.ts` before dispatching.
+
+#### Notes
+
+- Friendly matches currently send notifications (intentional — all matches count as live events)
+- Do not implement until notification infrastructure is stable and user count justifies the complexity
+- Related: `src/lib/notifications/match-notification-service.ts`, `src/app/api/notifications/match-event/route.ts`
