@@ -86,6 +86,7 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
     const [isSaving, setIsSaving] = useState(false);
     const [isStartingMatch, setIsStartingMatch] = useState(false);
     const [showSettingsModal, setShowSettingsModal] = useState(false);
+    const [pendingSubbedOff, setPendingSubbedOff] = useState<Set<string>>(new Set());
     const getPlayerTeam = (player?: Player | null) =>
         player ? (getPrimaryTeam(player as Player & Record<string, unknown>) as Team | null) : null;
 
@@ -242,8 +243,14 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
         const subEvents = (matchState?.events ?? []).filter(
             (e: any) => e.type === 'Substitution' && e.teamId === teamId
         );
-        // Players who went OFF — exclude from picker
-        const subbedOffIds = new Set(subEvents.filter((e: any) => e.playerId).map((e: any) => e.playerId));
+        // Players who went OFF — exclude from picker.
+        // Also include playerComingOut (in-progress sub, not yet in matchState.events)
+        // and pendingSubbedOff (confirmed subs whose matchState update hasn't propagated yet).
+        const subbedOffIds = new Set([
+            ...subEvents.filter((e: any) => e.playerId).map((e: any) => e.playerId),
+            ...(playerComingOut ? [playerComingOut] : []),
+            ...pendingSubbedOff,
+        ]);
         // Players who came ON mid-match — include even if not in the original lineup/bench list
         const subbedOnIds = new Set(subEvents.filter((e: any) => e.relatedPlayerId).map((e: any) => e.relatedPlayerId));
         const subbedOnPlayers = roster.filter(p => subbedOnIds.has(p.id) && !subbedOffIds.has(p.id));
@@ -767,7 +774,11 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                 return;
             }
         }
-        confirmEvent('Substitution', playerComingOut, playerInId);
+        // Add to pendingSubbedOff immediately — matchState.events may not reflect this
+        // sub until the async state manager update propagates, causing a timing gap.
+        const outgoingId = playerComingOut;
+        setPendingSubbedOff(prev => new Set([...prev, outgoingId]));
+        confirmEvent('Substitution', outgoingId, playerInId);
         setShowSubInModal(false);
         setPlayerComingOut(null);
     };
