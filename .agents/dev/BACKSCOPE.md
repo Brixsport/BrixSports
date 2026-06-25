@@ -165,3 +165,24 @@ Grep for `BACKSCOPED: 2026-06-08` to find all comment-out markers in source.
 
 **Reinstate when:** Phase 7 engagement sprint — requires admin poll creation tool first
 **Risk if reinstated early:** Components render empty states or error silently, no polls exist in DB
+
+---
+
+## User-Selectable Push Notification Preferences — BACKLOG-103
+
+**Backscoped:** 2026-06-25
+**Backlog ref:** BACKLOG-103
+**Current state:** NOT BUILT — push notifications fire for all event types (GOAL, RED_CARD, YELLOW_CARD, HALF_TIME, MATCH_END) with no user control. Friendly matches also send notifications (intentional for now).
+
+**What exists in code:**
+- `src/app/api/notifications/match-event/route.ts` — dispatches notifications, no preference check
+- `src/lib/notifications/match-notification-service.ts` — sends to all subscribers unconditionally
+
+**What's missing to build this:**
+- User preference model (per event type: goals only / all / match start+end only)
+- DB table or column to store preferences per user (or per followed team)
+- Filter logic in `match-notification-service.ts` before dispatch
+- UI in profile/settings for user to configure preferences
+
+**Reinstate when:** Notification infrastructure is stable, user count justifies the complexity, and engagement phase begins
+**Risk if reinstated early:** Preference model adds complexity to an already-volatile notification pipeline
