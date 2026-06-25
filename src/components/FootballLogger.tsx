@@ -86,7 +86,6 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
     const [isSaving, setIsSaving] = useState(false);
     const [isStartingMatch, setIsStartingMatch] = useState(false);
     const [showSettingsModal, setShowSettingsModal] = useState(false);
-    const [pendingSubbedOff, setPendingSubbedOff] = useState<Set<string>>(new Set());
     const getPlayerTeam = (player?: Player | null) =>
         player ? (getPrimaryTeam(player as Player & Record<string, unknown>) as Team | null) : null;
 
@@ -234,27 +233,25 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
         }
     };
 
-    // Helper to get only players from the published lineup
-    const getActiveRoster = (team: 'home' | 'away') => {
-        const roster = team === 'home' ? homePlayers : awayPlayers;
-        const teamId = team === 'home' ? match.homeTeamId : match.awayTeamId;
-        const teamLineup = lineups[team];
-
+    // Derive sub event sets for a team — shared by both pool functions
+    const getSubSets = (teamId: string) => {
         const subEvents = (matchState?.events ?? []).filter(
             (e: any) => e.type === 'Substitution' && e.teamId === teamId
         );
-        // Players who went OFF — exclude from picker.
-        // Also include playerComingOut (in-progress sub, not yet in matchState.events)
-        // and pendingSubbedOff (confirmed subs whose matchState update hasn't propagated yet).
-        const subbedOffIds = new Set([
-            ...subEvents.filter((e: any) => e.playerId).map((e: any) => e.playerId),
-            ...(playerComingOut ? [playerComingOut] : []),
-            ...pendingSubbedOff,
-        ]);
-        // Players who came ON mid-match — include even if not in the original lineup/bench list
+        const subbedOffIds = new Set(subEvents.filter((e: any) => e.playerId).map((e: any) => e.playerId));
         const subbedOnIds = new Set(subEvents.filter((e: any) => e.relatedPlayerId).map((e: any) => e.relatedPlayerId));
-        const subbedOnPlayers = roster.filter(p => subbedOnIds.has(p.id) && !subbedOffIds.has(p.id));
+        return { subbedOffIds, subbedOnIds };
+    };
 
+    // Players currently on the pitch: starters - subbed off + subbed on
+    // Used by: normal event picker, sub-OUT picker, assist picker, penalty modal
+    const getOnPitchPlayers = (team: 'home' | 'away') => {
+        const roster = team === 'home' ? homePlayers : awayPlayers;
+        const teamId = team === 'home' ? match.homeTeamId : match.awayTeamId;
+        const teamLineup = lineups[team];
+        const { subbedOffIds, subbedOnIds } = getSubSets(teamId);
+
+        const subbedOnPlayers = roster.filter(p => subbedOnIds.has(p.id) && !subbedOffIds.has(p.id));
         const addSubbedOn = (base: typeof roster) => [
             ...base,
             ...subbedOnPlayers.filter(p => !base.find(b => b.id === p.id)),
@@ -262,18 +259,39 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
 
         if (!teamLineup) return addSubbedOn(roster.filter(p => !subbedOffIds.has(p.id)));
 
-        const starterList = teamLineup.starters || teamLineup.players || [];
-        const subList = teamLineup.substitutes || [];
+        const starterIds = new Set(
+            (teamLineup.starters || teamLineup.players || [])
+                .map((p: any) => p.playerId || p.id || p)
+                .filter(Boolean)
+        );
 
-        const lineupIds = new Set([
-            ...starterList.map((p: any) => p.playerId || p.id || p),
-            ...subList.map((p: any) => p.playerId || p.id || p)
-        ].filter(Boolean));
-
-        if (lineupIds.size > 0) {
-            return addSubbedOn(roster.filter(p => lineupIds.has(p.id) && !subbedOffIds.has(p.id)));
+        if (starterIds.size > 0) {
+            return addSubbedOn(roster.filter(p => starterIds.has(p.id) && !subbedOffIds.has(p.id)));
         }
         return addSubbedOn(roster.filter(p => !subbedOffIds.has(p.id)));
+    };
+
+    // Players available to come on: bench - already subbed on - playerComingOut
+    // Used by: sub-IN picker only
+    const getAvailableBench = (team: 'home' | 'away') => {
+        const roster = team === 'home' ? homePlayers : awayPlayers;
+        const teamId = team === 'home' ? match.homeTeamId : match.awayTeamId;
+        const teamLineup = lineups[team];
+        const { subbedOnIds } = getSubSets(teamId);
+
+        if (!teamLineup) return [];
+
+        const benchIds = new Set(
+            (teamLineup.substitutes || [])
+                .map((p: any) => p.playerId || p.id || p)
+                .filter(Boolean)
+        );
+
+        return roster.filter(p =>
+            benchIds.has(p.id) &&
+            !subbedOnIds.has(p.id) &&
+            p.id !== playerComingOut
+        );
     };
 
     // Initial Load & Manager Setup
@@ -774,11 +792,7 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                 return;
             }
         }
-        // Add to pendingSubbedOff immediately — matchState.events may not reflect this
-        // sub until the async state manager update propagates, causing a timing gap.
-        const outgoingId = playerComingOut;
-        setPendingSubbedOff(prev => new Set([...prev, outgoingId]));
-        confirmEvent('Substitution', outgoingId, playerInId);
+        confirmEvent('Substitution', playerComingOut, playerInId);
         setShowSubInModal(false);
         setPlayerComingOut(null);
     };
@@ -1626,7 +1640,7 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
 
             {showPlayerModal && (
                 <PlayerSelectionModal
-                    players={getActiveRoster(selectedTeam)}
+                    players={getOnPitchPlayers(selectedTeam)}
                     onSelect={handlePlayerSelect}
                     onClose={() => setShowPlayerModal(false)}
                     title={`Select Player for ${pendingEvent?.type}`}
@@ -1640,7 +1654,7 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
             {
                 showAssistModal && (
                     <PlayerSelectionModal
-                        players={getActiveRoster(selectedTeam).filter(p => p.id !== selectedEventPlayer)}
+                        players={getOnPitchPlayers(selectedTeam).filter(p => p.id !== selectedEventPlayer)}
                         onSelect={handleAssistSelect}
                         onClose={() => { setShowAssistModal(false); handleAssistSelect(null); }}
                         title="Select Assist (Optional)"
@@ -1654,7 +1668,7 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
             {
                 showSubInModal && (
                     <PlayerSelectionModal
-                        players={getActiveRoster(selectedTeam)}
+                        players={getAvailableBench(selectedTeam)}
                         onSelect={handleSubIn}
                         onClose={() => setShowSubInModal(false)}
                         title="Select Player Coming IN"
@@ -1669,8 +1683,8 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                 showPenaltyModal && (
                     <PenaltySequenceModal
                         attackingTeam={selectedTeam}
-                        homePlayers={getActiveRoster('home').filter((p: Player) => !redCardedPlayerIds.has(p.id))}
-                        awayPlayers={getActiveRoster('away').filter((p: Player) => !redCardedPlayerIds.has(p.id))}
+                        homePlayers={getOnPitchPlayers('home').filter((p: Player) => !redCardedPlayerIds.has(p.id))}
+                        awayPlayers={getOnPitchPlayers('away').filter((p: Player) => !redCardedPlayerIds.has(p.id))}
                         homeLineup={lineups.home}
                         awayLineup={lineups.away}
                         onClose={() => setShowPenaltyModal(false)}
