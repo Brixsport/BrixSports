@@ -106,6 +106,150 @@
 
 ---
 
+### Session 32 — 2026-06-25
+
+**Focus:** Live match pipeline audit, stat fixes, TD-010 completion, BUG-063 homepage card, test match cleanup.
+
+**Built / Fixed:**
+
+- **`src/app/page.tsx`** (BUG-063 homepage) — Two fixes (`024e086`): (1) Football match transform (line 132–149) was an explicit object construction that omitted `currentPeriod` — added `currentPeriod: match.currentPeriod ?? null`. (2) Homepage `LiveMatchStatus` call (line 735) had no `fallbackPeriod` — added `fallbackPeriod={(match as any).currentPeriod ?? undefined}`. Root cause: homepage renders matches inline with its own JSX, does not use `src/components/ui/MatchCard.tsx` at all — the MatchCard fix (056388d) was invisible to the homepage.
+- **`src/components/FootballLogger.tsx`** (sub picker bug) — `getActiveRoster` had no awareness of in-match substitutions. Players who were subbed off stayed in the event player picker permanently. Fix (`024e086`): derive `subbedOffIds` from `matchState.events` where `type === 'Substitution'` for the team (the event's `playerId` is always the player who went OFF), then exclude them at every `getActiveRoster` return path.
+
+- **`src/components/LiveStats.tsx`** — Fixed shape mismatch: API returns `shots: [homeVal, awayVal]` arrays, component was reading flat `stats.homeShots` / `stats.awayShots` keys → all stats showed zero. Added dual-format reader (array-first, flat fallback). Fixed possession `5050%` / `NaN%` — array was passed as a number, `100 - [50,50]` = NaN. (`7faaab9`)
+- **`src/app/api/matches/[id]/route.ts`** — Added `statsEmpty` guard (`Object.keys(stats).length === 0`) so persisted empty stats object `{}` no longer blocks the event-computed stats path. (`7faaab9`)
+- **`src/app/api/matches/[id]/events/route.ts`** — Three changes: (1) friendly guard — `updatePlayerStats` skips when `match.matchType === 'friendly'`; (2) added `OWN GOAL → ownGoals++`, `PENALTY → penaltiesScored++`, `FOUL → foulsCommitted++` cases to the Football switch; (3) these three event types were previously silently ignored — correct stat columns now targeted. (`7faaab9`)
+- **`src/db/schema.ts`** — Added `ownGoals: integer('own_goals').default(0)` and `penaltiesScored: integer('penalties_scored').default(0)` to `footballPlayerStats`. (`7faaab9`)
+- **Migration** — `dev/migrate-football-stats-columns.mjs` applied to staging: `ALTER TABLE football_player_stats ADD COLUMN own_goals INTEGER DEFAULT 0` and `penalties_scored INTEGER DEFAULT 0`.
+- **KIN vs COLNAS friendly cleanup** — `dev/cleanup-kin-colnas-match.mjs --apply`: rolled back friendly-polluted stats for 5 players (Samuel Ademoyegun goals 3→2, Nasirudeen Alabi yellow 3→1 red 1→0, Temidayo Olusesi goals 1→0, Ola-praise Abadoni assists 1→0, Reward Akpoterabor assists 1→0). Match deleted, cascade cleaned events + assignments.
+- **`src/components/FootballLogger.tsx`** (TD-010) — Three inline `onClick` handlers for period transitions were calling `transitionStatus()` only, with no DB PATCH: Start 2nd Half (line 1435), Start Extra Time (line 1443), Start Penalties (line 1447). All three now fire `fetch PATCH /api/matches/${match.id}` with `{ currentPeriod: 'SECOND_HALF' | 'EXTRA_TIME_1' | 'PENALTY_SHOOTOUT' }` fire-and-forget after the state transition. Match Start (`FIRST_HALF`) and period-end transitions (`handlePeriodEndConfirm`) were already correct. (`13aa12b`)
+- **`src/components/LiveMatchStatus.tsx`** (BUG-063) — Added `fallbackPeriod?: string` prop and `PERIOD_LABELS` map. No-WS fallback was hardcoded `"LIVE"` — now shows correct period label (`1ST HALF`, `HT`, `2ND HALF`, `PK`, `FT`) from `currentPeriod` DB value on initial load. (`056388d`)
+- **`src/components/ui/MatchCard.tsx`** (BUG-063) — Added `currentPeriod?: string | null` to props interface. Compact variant passes it as `fallbackPeriod` to `LiveMatchStatus`. Live variant's hardcoded HTML badge (`"LIVE"` text) replaced with `<LiveMatchStatus variant="badge" fallbackPeriod={...} />`. (`056388d`)
+- **Backlog** — Filed BACKLOG-103 (notification preferences) → immediately backscoped/WONT FIX. Filed BACKLOG-104 (friendly stat aggregation filter). Filed BACKLOG-105 (is_test flag on matches).
+
+**Bugs encountered:**
+
+- **Match stats all zero** — `stats` column on `matches` when stored as `'{}'` is truthy, skipped the computed-from-events path. Also `LiveStats` was reading flat key format (`homeShots`) but API returns array format (`shots[0]`). Both required fixes.
+- **Possession `5050%` / `NaN%`** — `stats.possession = [50, 50]` passed to `homeValue` prop rendered as `"5050"` (array toString). `100 - [50,50]` → NaN.
+- **Friendly match writing player stats** — no `matchType` check existed before `updatePlayerStats` call. Required one-liner guard.
+- **TD-010 partial** — Period survived `FIRST_HALF` and `HALF_TIME` refreshes. `SECOND_HALF` didn't persist because Start 2nd Half button had no PATCH — identified as inline onClick with no named handler, called only `transitionStatus()` on the state manager.
+
+**Test results (fresh match run):**
+- TD-010 FIRST_HALF ✅, HALF_TIME ✅, SECOND_HALF ❌ → fixed `13aa12b` — re-verify required
+- BUG-063 HT on public page ✅, detail page period label ✅. Homepage card still showed `LIVE` → fixed `056388d`
+- Phase B timer ceiling ✅ (halfDuration loaded from config). Sub cap INCONCLUSIVE — `maxSubstitutions` null for BUSA League (correct behaviour, no cap set)
+- LiveStats shape fix: Stats tab now shows real numbers — needs re-verification on next test
+
+**Deferred:**
+
+- Fresh match re-verification for TD-010 SECOND_HALF (and ET/PK now covered)
+- Prod migrations: `own_goals + penalties_scored` and `current_period` — both staged, do NOT run prod until fresh match test passes
+- BUG-066 (goal not counting as shot) — filed
+- BUG-062 (lineup wipes on logger refresh) — filed, not started
+- BACKLOG-102 (live clock on public pages) — not started
+
+**Next session:**
+1. Fresh test match on staging — verify TD-010 SECOND_HALF persistence on hard refresh + homepage period label + sub picker exclusion. Use same 8-phase test plan.
+2. If all pass: run both prod migrations (`current_period`, `own_goals + penalties_scored`).
+3. Then BUG-066 (goal → shot stat).
+
+---
+
+### Session 32b — 2026-06-25
+
+**Focus:** Complete BUG-067 (sub picker correctness), fix BUG-066 (shots stat), run prod migrations, file/resolve cosmetic BUG-068, scope undo events work, document penalty shootout business logic.
+
+---
+
+**The Sub Picker Root Cause Chain — Full Trace (read this before touching picker logic again)**
+
+This took the full session to fully diagnose. The bug looked simple ("incoming sub not showing") but had four distinct failure layers:
+
+**Layer 1 — Initial commit `863fce7` (wrong fix)**
+Added `subbedOnIds` to `getActiveRoster` to include players who came ON. Appeared to work because the test showed Omari greyed out with BENCH tag. But the real question — "is Omari in `roster` at all?" — wasn't yet answered. DB confirmed he was (Kings FC affiliation, `player-1767972273154-jdc7gsxyp`). So `addSubbedOn` was finding him. But Omari was declared in the lineup's `substitutes` list, meaning he was already in `lineupIds` → already in `base` → `addSubbedOn` just deduped him. The BENCH tag was cosmetic. He was selectable.
+
+**Layer 2 — Outgoing player still showing during their own sub (Case A)**
+Toheeb was visible in the sub-IN picker while the logger was selecting his replacement. Root cause: `subbedOffIds` is built from `matchState.events` — the Substitution event for Toheeb hasn't fired yet at the moment the sub-IN picker opens. He's `playerComingOut` in React state but not yet excluded. Fix: add `playerComingOut` to `subbedOffIds` directly. `playerComingOut` is React state, always current, set synchronously before `showSubInModal = true`.
+
+**Layer 3 — Outgoing player still showing after confirmed sub (Case B)**
+After Toheeb's sub was confirmed and logged, a NEW third sub attempt still showed Toheeb. Root cause: `matchState` subscription is async. There is a timing gap between `confirmEvent` dispatching to the state manager and `matchState.events` updating in React. When the logger taps the next sub immediately after, `matchState.events` still doesn't include Toheeb's event → `subbedOffIds` misses him. First attempted fix: `pendingSubbedOff` Set, written synchronously in `handleSubIn`. This worked for Case B but broke the normal event picker — `pendingSubbedOff` merged globally, so Toheeb was excluded from goal/card/foul pickers too, shrinking the "active" count after each sub.
+
+**Layer 4 — Data integrity failure (actual root cause)**
+While investigating why the picker count dropped, discovered: Omari (a bench player who came ON) was visible in the sub-OUT picker (who's going off). Sub-OUT picker should show ON-PITCH players only. But `getActiveRoster` was a single function serving both pickers — once you've been "on pitch", you're in the lineup pool, and the pool was: starters + bench filtered by `lineupIds`. Bench players who came on mid-match were both in `lineupIds` (from bench) AND in the on-pitch pool. Result: a logger could select Omari to go OFF even though he was the player who just came ON. This was logged, and for a brief moment Omari appeared twice in the system — once as a sub-on and once as a pending sub-off.
+
+**The correct mental model (final implementation — `13ab3cb`):**
+
+```
+getOnPitchPlayers(team):
+  starterIds (from published lineup) - subbedOffIds + subbedOnPlayers
+  = who is actually on the pitch right now
+
+getAvailableBench(team):
+  benchIds (from published lineup) - subbedOnIds - playerComingOut
+  = who can still come on
+
+Each picker uses only one pool:
+  Normal event / sub-OUT / assist / penalty → getOnPitchPlayers
+  Sub-IN → getAvailableBench
+```
+
+Key insight: the single-function `getActiveRoster` approach fails as soon as player state has multiple dimensions (original position + current on-pitch status). Two functions with explicit semantics is not overengineering — it reflects the reality that the two pickers have genuinely different requirements.
+
+**`pendingSubbedOff` post-mortem:** it was a correct fix for the timing gap (Case B) but applied in the wrong scope. After the rewrite, it became unnecessary because `getAvailableBench` derives from `matchState.events` only — and by the time a second sub is initiated, the first sub's event has propagated. The timing gap that `pendingSubbedOff` was patching only existed because `getActiveRoster` was serving both pickers and the sub-IN picker needed to know about an in-progress sub's outgoing player. With separate pools, that ambiguity is gone.
+
+---
+
+**Built / Fixed:**
+
+- **BUG-067 — RESOLVED** across 3 commits:
+  - `863fce7`: first attempt — `subbedOnIds` in `getActiveRoster`, correctly excluded outgoing player (partial)
+  - `0d30d14`: `playerComingOut` added to exclusion set (Case A fix)
+  - `13ab3cb`: full rewrite — `getOnPitchPlayers` + `getAvailableBench` replacing `getActiveRoster`; `pendingSubbedOff` removed entirely
+  - File: `src/components/FootballLogger.tsx`
+
+- **BUG-066 — RESOLVED** (`9d37967`)
+  - `updatePlayerStats` Football switch now increments `shotsOnTarget` on GOAL and PENALTY. OWN GOAL explicitly excluded (defending player credited with ownGoal, no shot credit — correct per football convention).
+  - File: `src/app/api/matches/[id]/events/route.ts`
+
+- **BUG-068 — SHIPPED (uncommitted)** — cosmetic fix
+  - `PlayerSelectionModal` marked incoming subs as BENCH based on `!starterIds.has(p.id)` — pure lineup check, no awareness of who came on mid-match.
+  - Fix: added `subbedOnPlayerIds?: Set<string>` prop; `isBench = !starterIds.has(p.id) && !subbedOnPlayerIds?.has(p.id)`. Call site passes `getSubSets(...).subbedOnIds` for the normal event / sub-OUT pickers.
+  - File: `src/components/FootballLogger.tsx`
+
+- **Prod migrations applied:**
+  - `current_period TEXT DEFAULT 'NOT_STARTED'` on `matches` — prod confirmed ✓
+  - `own_goals INTEGER DEFAULT 0` on `football_player_stats` — prod confirmed ✓
+  - `penalties_scored INTEGER DEFAULT 0` on `football_player_stats` — prod confirmed ✓
+  - Scripts: `dev/migrate-prod-td010.mjs`, `dev/migrate-prod-football-stats.mjs`
+
+**Bugs filed this session:**
+- BUG-068 (cosmetic — incoming sub styled as BENCH in sub-OUT picker) — SHIPPED, uncommitted
+- BUG-069 (PENALTY + GOAL double-count on shotsOnTarget) — CLOSED by convention (PENALTY = scored, BACKLOG-104 covers outcome variants)
+- BUG-070 (empty bench UX — sub-IN modal shows empty list silently when no lineup published)
+- BACKLOG-104 (penalty outcome tracking: PENALTY MISSED / PENALTY SAVED event types + stat cases)
+- BACKLOG-105 (penalty shootout score isolation: PENALTY_SHOOTOUT period must not write to home/away score or player stats — interim guard needed in events route)
+
+**Decisions made:**
+- PENALTY convention: PENALTY = scored (goal + stat). PENALTY MISSED / PENALTY SAVED are future event types (BACKLOG-104). BUG-069 closed.
+- Penalty shootout events currently corrupt match score and stats (home/away score increments, `penaltiesScored` increments — both wrong). Interim guard (`if currentPeriod === 'PENALTY_SHOOTOUT': skip score + stat writes`) must land before any shootout is played. Full shootout score system is BACKLOG-105.
+- Basketball logger has no mirror of BUG-067 — uses explicit `homeStarters`/`homeSubs` arrays swapped atomically in `handleSubIn`, no async event state.
+- Auth gate on DELETE/PATCH `/api/matches/[id]/events/[eventId]` is zero — no `getAuthUser`, no role check. Must be gated before undo button ships.
+
+**Deferred / pending commits:**
+- BUG-068 cosmetic fix — uncommitted, pending commit in next session with auth gate
+- Auth gate on `[eventId]/route.ts` — not yet written
+- Undo last event button (Option A) — not started, blocked on auth gate
+- BUG-070 (empty bench message) — one-liner, same session as undo
+
+**Next session:**
+1. Commit BUG-068 cosmetic fix (`FootballLogger.tsx` already edited)
+2. Add auth gate (logger OR admin) to DELETE + PATCH on `src/app/api/matches/[id]/events/[eventId]/route.ts`
+3. Add interim PENALTY_SHOOTOUT guard to `src/app/api/matches/[id]/events/route.ts` (skip score + stat writes when `currentPeriod === 'PENALTY_SHOOTOUT'`)
+4. Wire undo last event button (Option A) in `FootballLogger.tsx`
+5. BUG-070 one-liner (empty bench message)
+6. Commit all together, push to staging, verify undo works on a test match
+
+---
+
 ### Session 31 — 2026-06-25
 
 **Focus:** Verify TD-010 API gap, ship BACKLOG-044 Phase B (match config on mount, timer ceiling, sub cap), fix BUG-063 (period label on public match page).

@@ -21,16 +21,21 @@ BUG-050/051/052/057 RESOLVED. BUG-047 RESOLVED. Flow B confirmed live (Session 2
 | BACKLOG-044 Phase B (config mount, timer ceiling, sub cap) | Code done (`64b0974`). Sub cap gate + period survival need fresh match test to close. |
 | BUG-063 (HALF_TIME on public page) | Fix SHIPPED (`ea4a1d5`). Needs fresh match verification to RESOLVE. |
 
-**Both pending verifications happen on the same fresh test match. One session, two checks, then TD-010 + Phase B close together.**
+**Session 32 closed most items. One gate remains before prod migrations.**
 
-**Pre-match-day sequence (locked):**
+**Pre-match-day sequence (updated 2026-06-25):**
 1. ~~BACKLOG-058~~ — RESOLVED ✅
 2. ~~BUG-061 (away roster)~~ — RESOLVED ✅
-3. ~~TD-010 API gap~~ — confirmed no gap (`getLoggerMatches` uses `match: matches` full row select) ✅
-4. **Fresh match test** — start match → transition to FIRST_HALF → hard refresh → confirm period survives. Log subs past cap → confirm gate blocks. Both checks in one session.
-5. Run prod migration for TD-010 (after fresh match test passes)
-6. Fix BUG-063 (wire `current_period` into public match API + render period label)
-7. First real match day
+3. ~~TD-010 API gap~~ — confirmed no gap ✅
+4. ~~TD-010 FIRST_HALF + HALF_TIME~~ — verified live ✅
+5. ~~LiveStats shape fix~~ — SHIPPED `7faaab9` — re-verify on next test
+6. ~~BUG-063 detail page~~ — SHIPPED `ea4a1d5` ✅
+7. ~~BUG-063 homepage card~~ — SHIPPED `056388d` — re-verify on next test
+8. **TD-010 SECOND_HALF** — fix SHIPPED `13aa12b`. Fresh match re-verify required.
+9. ~~BUG-063 homepage card~~ — SHIPPED `024e086`. Root cause: homepage has own inline JSX, doesn't use MatchCard.tsx; football transform stripped `currentPeriod`. Both fixed.
+10. ~~Sub picker showing subbed-off players~~ — SHIPPED `024e086`. `getActiveRoster` now derives `subbedOffIds` from `matchState.events` and excludes them.
+11. **Prod migrations** — `current_period` + `own_goals/penalties_scored` — DO NOT RUN until SECOND_HALF verify passes
+12. First real match day
 
 ---
 
@@ -119,6 +124,32 @@ BUG-001 through BUG-029, AUDIT-001/002 (partial), BACKLOG-065 — all resolved S
 - **BUG-064** _(LOW — Mobile UX)_: Match tabs (Score, Timeline, Stats, etc.) scroll horizontally on mobile — `overflow-x` is not clipped. Tabs extend beyond the viewport width instead of wrapping or truncating. Fix: add `overflow-x: hidden` or `overflow-x: auto` with a scroll container on the tab bar. Filed: 2026-06-24. **Status:** OPEN.
 
 - **BUG-065** _(LOW — Logger UX)_: Event counter in the logger header is not displaying correctly. Counter shows wrong value or no value. Not yet root-caused — likely a display logic issue in the header component reading from `recordedEvents` or `matchState.events`. Filed: 2026-06-24. **Status:** OPEN.
+
+- ~~**BUG-066**~~ _(LOW — Stats)_: Goals do not count as shots in player stats. Fix: `updatePlayerStats` Football switch now increments `shotsOnTarget` on GOAL and PENALTY. OWN GOAL excluded (no shot credit — correct). `src/app/api/matches/[id]/events/route.ts`. **Status:** RESOLVED — 2026-06-25 (commit `9d37967`)
+  **Evidence:**
+  - Commit: `9d37967`
+  - Verified by: code review + tsc pass. Live match stat verification pending on next test match.
+  - Observed result: GOAL and PENALTY cases now include `shotsOnTarget++`; OWN GOAL does not
+  - Pending items: historical goals pre-fix have `shotsOnTarget = 0` — no backfill run, stats accurate from this commit forward only
+
+- ~~**BUG-067**~~ _(MEDIUM — Logger UX)_: Sub picker correctness — incoming subs missing from picker, outgoing player visible during and after their own sub, data integrity failure (bench player selectable as sub-out). Full root cause: single `getActiveRoster` function served both pickers with no distinction between "on pitch" and "available bench" pools. Fix: replaced with `getOnPitchPlayers` (starters − subbed off + subbed on) and `getAvailableBench` (bench − already used − playerComingOut). Each picker uses its correct pool. `pendingSubbedOff` workaround removed. `src/components/FootballLogger.tsx`. **Status:** RESOLVED — 2026-06-25 (commits `863fce7`, `0d30d14`, `13ab3cb`)
+  **Evidence:**
+  - Commits: `863fce7` → `0d30d14` → `13ab3cb` (full rewrite)
+  - Verified by: live logger test — 3 substitutions logged, all picker pools correct. Daniel/Toheeb absent from sub-OUT picker after going off ✅. Incoming subs in on-pitch pool ✅. Bench-only players restricted to sub-IN picker ✅.
+  - Observed result: no data integrity failure, correct pools at every step
+  - Pending items: BUG-068 (cosmetic — incoming sub still shows BENCH tag, uncommitted fix in progress)
+
+- **BUG-068** _(LOW — Logger UX cosmetic)_: Players who came ON as mid-match subs are styled with greyed BENCH tag in the sub-OUT picker. `PlayerSelectionModal` determines `isBench` from `!starterIds.has(p.id)` — pure lineup check, no awareness of current on-pitch status. Fix written (uncommitted): added `subbedOnPlayerIds?: Set<string>` prop; `isBench = !starterIds.has(p.id) && !subbedOnPlayerIds?.has(p.id)`. Data is correct — player is selectable. This is cosmetic only. `src/components/FootballLogger.tsx`. **Status:** SHIPPED (uncommitted) — 2026-06-25
+
+- **BUG-069** _(LOW — Stats)_: PENALTY + GOAL double-count risk on `shotsOnTarget`. **Status:** WONT FIX — CLOSED 2026-06-25. Convention established: PENALTY = scored penalty in normal play (increments `penaltiesScored` + `shotsOnTarget`). GOAL should not be separately logged for the same penalty kick. BACKLOG-104 (outcome tracking) will make this explicit via distinct event types.
+
+- **BUG-070** _(LOW — Logger UX)_: Sub-IN modal opens empty with no explanation when no lineup has been published. `getAvailableBench` returns `[]` when `teamLineup` is null — correct behaviour but no feedback to logger. Fix: add empty-state message at the call site in `showSubInModal` render. One-liner. Filed: 2026-06-25. **Status:** OPEN
+
+- **BUG-071** _(CRITICAL — Data Integrity)_: `DELETE` and `PATCH` on `/api/matches/[id]/events/[eventId]` have zero auth — no `getAuthUser`, no role check. Any unauthenticated HTTP request with a known `eventId` can delete or modify any match event. Must be gated with logger OR admin auth before undo button ships. `src/app/api/matches/[id]/events/[eventId]/route.ts`. Filed: 2026-06-25. **Status:** OPEN
+
+- **BACKLOG-104** _(MEDIUM — Stats / Logger UX)_: Penalty outcome tracking. Current state: `PENALTY` = scored only. Need `PENALTY MISSED` (increments `shotsOffTarget`) and `PENALTY SAVED` (increments `shotsOnTarget` for taker + `saves` for keeper). No schema changes needed — columns exist. Requires new event type strings and new cases in `updatePlayerStats` + logger UI penalty flow (3 outcome buttons instead of 1). Eliminates any future double-count risk. Filed: 2026-06-25. **Status:** OPEN
+
+- **BACKLOG-105** _(HIGH — Data Integrity)_: Penalty shootout score isolation. PENALTY_SHOOTOUT period currently writes to `home_score`/`away_score` and `footballPlayerStats` — both wrong. Shootout score is separate from match score (display as "2-2 (4-3 pens)"). Shootout events should not write to career stats. **Interim guard needed immediately** (before any match goes to shootout): in `src/app/api/matches/[id]/events/route.ts`, skip score increment and `updatePlayerStats` when `match.currentPeriod === 'PENALTY_SHOOTOUT'`. Full implementation: separate `shootout_home`/`shootout_away` columns on matches, distinct `PEN_SCORED`/`PEN_MISSED`/`PEN_SAVED` event types, shootout score display on public page. Filed: 2026-06-25. **Status:** OPEN — interim guard is next-session priority
 
 - **BUG-044b** _(MEDIUM)_: Logger dashboard stats show "-" (total events, logged matches). Root cause: dashboard fetches `/api/auth/me` which is admin-auth only — logger JWTs are not recognised. Fix: create `/api/loggers/me` endpoint that reads the logger session and returns their stats, or wire to existing `/api/loggers/[id]`. Filed: 2026-06-19.
 
@@ -4205,3 +4236,85 @@ Preferences stored per user (or per followed team) and respected in `match-notif
 - Friendly matches currently send notifications (intentional — all matches count as live events)
 - Do not implement until notification infrastructure is stable and user count justifies the complexity
 - Related: `src/lib/notifications/match-notification-service.ts`, `src/app/api/notifications/match-event/route.ts`
+
+---
+
+### BACKLOG-104 — Exclude Friendly Matches from Stat Aggregation Queries
+
+**Status:** OPEN
+**Priority:** Medium
+**Filed:** 2026-06-25
+
+#### Problem
+
+Player stats (`football_player_stats`) are stored as running totals, incremented on every logged event. The friendly guard added in `7faaab9` prevents new friendly events from writing stats going forward. However, any stat aggregation query that re-derives totals from `match_events` (leaderboards, season summaries, player profiles) would still include friendly match events unless filtered.
+
+Standard football practice: friendly goals, cards, and assists do not count toward a player's competitive career record.
+
+#### What exists
+
+- `matchType` column on `matches` table — `'competition'` (default) or `'friendly'`
+- Running totals in `football_player_stats` — already guarded at write time
+- No filter on any read/aggregation path yet
+
+#### What needs doing
+
+Any query that joins `match_events → matches` to derive stats must add:
+```sql
+AND m.match_type = 'competition'
+```
+
+Affected files to audit:
+- `src/app/api/competitions/[id]/stats/route.ts` — top scorers, assists, discipline
+- `src/app/api/players/stats/leaders/route.ts` — stat leaders
+- `src/app/api/players/[id]/stats/route.ts` — individual player stats
+- `src/app/api/players/[id]/performance/route.ts` — performance breakdown
+- `src/lib/services/team-stats-calculator.ts` — team aggregates
+
+#### Notes
+
+- Running totals in `football_player_stats` are already correct for new matches (write guard in place)
+- Historical friendly events logged before `7faaab9` may have polluted totals — a backfill audit may be needed after this filter is added
+- Do not implement before leaderboard and stats pages are stable
+
+---
+
+### BACKLOG-105 — is_test Flag on Matches (Test Match Isolation)
+
+**Status:** OPEN
+**Priority:** Medium
+**Filed:** 2026-06-25
+
+#### Problem
+
+Test matches contaminate player stats, leaderboards, and public livescore feeds. Currently, identifying and cleaning up a test match requires manually tracing the match ID, auditing events, decrementing stats by hand, and running a bespoke cleanup script each time. This is fragile and has caused data issues (Sessions 24, 29, 32).
+
+#### Desired solution
+
+Add `is_test` boolean column (default `false`) to `matches` table. Admin sets it at match creation. Once set, the system excludes the match everywhere automatically.
+
+**Schema change:**
+```sql
+ALTER TABLE matches ADD COLUMN is_test INTEGER DEFAULT 0;
+```
+
+**Wire into:**
+1. **Match creation form** (admin) — checkbox: "This is a test match"
+2. **Stats pipeline** — `updatePlayerStats` skips when `match.isTest === true`
+3. **Leaderboard / stat aggregation queries** — `AND m.is_test = 0`
+4. **Public livescore / homepage** — `WHERE is_test = 0` so test matches never appear publicly
+5. **Admin cleanup action** — button on match detail: "Delete test match" → cascade delete with no manual stat rollback needed (stats were never written)
+
+#### Implementation order
+
+1. Schema migration (`ALTER TABLE matches ADD COLUMN is_test INTEGER DEFAULT 0`) — staging first
+2. Update `events/route.ts` — skip `updatePlayerStats` when `isTest`
+3. Update match creation admin form — add checkbox
+4. Update public-facing queries to exclude test matches
+5. Add admin "Delete test match" button
+
+#### Notes
+
+- Combine schema migration with any other pending `matches` table ALTER in the same session
+- Do not add console logging as a substitute — observability during a test is already covered by the FootballLogger live feed and network tab; the real gap is post-test cleanup and stat contamination
+- Related: `src/app/api/matches/[id]/events/route.ts`, `src/app/admin/matches/`, BACKLOG-104

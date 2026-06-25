@@ -1648,6 +1648,7 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                     redCardedPlayerIds={redCardedPlayerIds}
                     teamLineup={lineups[selectedTeam]}
                     filterStartersOnly={pendingEvent?.type !== 'Substitution'}
+                    subbedOnPlayerIds={getSubSets(selectedTeam === 'home' ? match.homeTeamId : match.awayTeamId).subbedOnIds}
                 />
             )}
 
@@ -2278,7 +2279,8 @@ function PlayerSelectionModal({
     redCardedPlayerIds,
     teamLineup,
     filterStartersOnly = false,
-    filterSubsOnly = false
+    filterSubsOnly = false,
+    subbedOnPlayerIds,
 }: any) {
     const starterIds = new Set((teamLineup?.starters || teamLineup?.players || []).map((p: any) => p.playerId || p.id));
 
@@ -2324,9 +2326,9 @@ function PlayerSelectionModal({
                     {filteredPlayers.length > 0 ? (
                         <div className="grid grid-cols-1 gap-1">
                             {filteredPlayers.map((p: Player) => {
-                                // Logic to determine if they are on the bench
+                                // A player is bench-styled unless they're a starter OR they came on mid-match
                                 const isBench = teamLineup
-                                    ? !starterIds.has(p.id)
+                                    ? !starterIds.has(p.id) && !(subbedOnPlayerIds?.has(p.id))
                                     : (p.position?.toLowerCase().includes('sub') || p.position?.toLowerCase().includes('reserve'));
 
                                 return (

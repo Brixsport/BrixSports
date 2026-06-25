@@ -619,3 +619,29 @@ _Note: PATCH MD3 scores and BUSALYMPICS standings recalculation were completed i
 - `PRAGMA table_info(matches)` confirmed: `name=current_period, type=TEXT, default='NOT_STARTED'`
 - 5 sample rows checked — all existing matches defaulted to `NOT_STARTED` as expected
 - Prod: NOT yet run — pending staging verification of period survival on live match
+
+#### TD-010 + football_player_stats — PROD migrations (Session 32b)
+
+2026-06-25 | `dev/migrate-prod-td010.mjs --apply` | PROD (`brixsportv2-brixsports.aws-eu-west-1.turso.io`) | SUCCESS | VERIFIED
+- SQL: `ALTER TABLE matches ADD COLUMN current_period TEXT DEFAULT 'NOT_STARTED'`
+- `PRAGMA table_info(matches)` confirmed: `name=current_period, type=TEXT, dflt_value='NOT_STARTED'`
+- 5 sample rows confirmed: all FINISHED matches defaulted to `NOT_STARTED` (correct — no live match active at migration time)
+- Rows affected: all existing matches defaulted; additive column only, no data mutation
+
+2026-06-25 | `dev/migrate-prod-football-stats.mjs --apply` | PROD (`brixsportv2-brixsports.aws-eu-west-1.turso.io`) | SUCCESS | VERIFIED
+- SQL: `ALTER TABLE football_player_stats ADD COLUMN own_goals INTEGER DEFAULT 0`
+- SQL: `ALTER TABLE football_player_stats ADD COLUMN penalties_scored INTEGER DEFAULT 0`
+- Both columns confirmed present via `PRAGMA table_info(football_player_stats)` post-apply
+- All existing rows defaulted to 0 (correct — additive only, no mutation)
+
+2026-06-25 | `dev/query-omari-olapraise.mjs` | STAGING (read-only) | SUCCESS | VERIFIED
+- Confirmed: Omari Dennis and Ola-praise Abadoni both have active `player_team_affiliations` row to `busa-kings`. Multi-affiliation with college teams also present. BUG-067 root cause trace.
+
+2026-06-25 | `dev/query-sub-events.mjs` | STAGING (read-only) | SUCCESS | VERIFIED
+- Confirmed: `related_player_id` populated on all 5 recent Substitution events. Not the failure point for BUG-067.
+
+2026-06-25 | `dev/query-omari-record.mjs` | STAGING (read-only) | SUCCESS | VERIFIED
+- Omari Dennis: `college=COLNAS, university=Bells, is_external=0`. Both affiliations active (Kings FC + COLNAS team). Clean record — not rejected by `isPlayerEligible`. BUG-067 root cause is picker pool logic, not eligibility data.
+
+2026-06-25 | `dev/query-kings-lineup.mjs` | STAGING (read-only) | SUCCESS | VERIFIED
+- Kings FC lineup confirmed: 11 starters (incl. player-1767972271817-0e46tfrjs), 10 substitutes (incl. player-1767972273154-jdc7gsxyp = Omari, busa-kings-player-17 = Ola-praise). Both incoming subs were in the lineup's `substitutes` list — not missing from data. Root cause confirmed as picker pool logic.
