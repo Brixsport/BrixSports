@@ -971,6 +971,7 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     status: 'FINISHED',
+                    currentPeriod: 'FINISHED',
                     homeScore,
                     awayScore,
                     stats: matchState?.stats
