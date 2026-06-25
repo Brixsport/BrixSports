@@ -1043,7 +1043,7 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
         const starterList = currentLineup ? (currentLineup.starters || currentLineup.players) : null;
 
         if (starterList) {
-            const starterIds = new Set(starterList.map((p: any) => p.id || p));
+            const starterIds = new Set(starterList.map((p: any) => p.playerId || p.id || p));
             starters = allPlayers.filter(p => starterIds.has(p.id));
             subs = allPlayers.filter(p => !starterIds.has(p.id));
         } else {
