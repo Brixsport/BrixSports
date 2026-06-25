@@ -1676,6 +1676,7 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                         redCardedPlayerIds={redCardedPlayerIds}
                         teamLineup={lineups[selectedTeam]}
                         filterSubsOnly={true}
+                        emptyMessage={!lineups[selectedTeam] ? 'No lineup published for this team' : 'No available substitutes'}
                     />
                 )
             }
@@ -2281,6 +2282,7 @@ function PlayerSelectionModal({
     filterStartersOnly = false,
     filterSubsOnly = false,
     subbedOnPlayerIds,
+    emptyMessage = 'No player found',
 }: any) {
     const starterIds = new Set((teamLineup?.starters || teamLineup?.players || []).map((p: any) => p.playerId || p.id));
 
@@ -2356,8 +2358,7 @@ function PlayerSelectionModal({
                         </div>
                     ) : (
                         <div className="text-center py-8 text-white/40">
-                            <div className="text-4xl mb-2">🧤</div>
-                            <div className="font-medium">No player found</div>
+                            <div className="font-medium">{emptyMessage}</div>
                         </div>
                     )}
                 </div>
