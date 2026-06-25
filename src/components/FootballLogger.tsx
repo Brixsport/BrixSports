@@ -1432,7 +1432,7 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                     )}
 
                     {currentPeriod === 'HALF_TIME' && (
-                        <button onClick={() => { stateManager.current?.transitionStatus('SECOND_HALF'); }}
+                        <button onClick={() => { stateManager.current?.transitionStatus('SECOND_HALF'); fetch(`/api/matches/${match.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ currentPeriod: 'SECOND_HALF' }) }).catch(e => console.error('[TD-010] Failed to persist period:', e)); }}
                             className="flex-1 py-3 bg-green-500 text-black font-black uppercase tracking-widest rounded-xl text-sm animate-pulse shadow-lg shadow-green-500/20 active:scale-95 transition-transform">
                             ▶ Start 2nd Half
                         </button>
@@ -1440,11 +1440,11 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
 
                     {currentPeriod === 'FINISHED' && homeScore === awayScore && (
                         <>
-                            <button onClick={() => { if (confirm('Start Extra Time?')) stateManager.current?.transitionStatus('EXTRA_TIME_1'); }}
+                            <button onClick={() => { if (confirm('Start Extra Time?')) { stateManager.current?.transitionStatus('EXTRA_TIME_1'); fetch(`/api/matches/${match.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ currentPeriod: 'EXTRA_TIME_1' }) }).catch(e => console.error('[TD-010] Failed to persist period:', e)); } }}
                                 className="flex-1 py-2.5 bg-amber-500 text-black font-bold uppercase tracking-widest rounded-xl text-xs active:scale-95 transition-transform">
                                 ⏱ Extra Time
                             </button>
-                            <button onClick={() => { if (confirm('Start Penalties?')) stateManager.current?.transitionStatus('PENALTY_SHOOTOUT'); }}
+                            <button onClick={() => { if (confirm('Start Penalties?')) { stateManager.current?.transitionStatus('PENALTY_SHOOTOUT'); fetch(`/api/matches/${match.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ currentPeriod: 'PENALTY_SHOOTOUT' }) }).catch(e => console.error('[TD-010] Failed to persist period:', e)); } }}
                                 className="flex-1 py-2.5 bg-purple-500 text-black font-bold uppercase tracking-widest rounded-xl text-xs active:scale-95 transition-transform">
                                 🎯 Penalties
                             </button>
