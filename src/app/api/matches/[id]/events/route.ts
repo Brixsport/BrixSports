@@ -370,6 +370,7 @@ async function updatePlayerStats(
             switch (eventType.toUpperCase()) {
                 case 'GOAL':
                     updates.goals = (stats?.goals || 0) + 1;
+                    updates.shotsOnTarget = (stats?.shotsOnTarget || 0) + 1;
                     break;
                 case 'ASSIST':
                     updates.assists = (stats?.assists || 0) + 1;
@@ -379,6 +380,7 @@ async function updatePlayerStats(
                     break;
                 case 'PENALTY':
                     updates.penaltiesScored = (stats?.penaltiesScored || 0) + 1;
+                    updates.shotsOnTarget = (stats?.shotsOnTarget || 0) + 1;
                     break;
                 case 'FOUL':
                     updates.foulsCommitted = (stats?.foulsCommitted || 0) + 1;
