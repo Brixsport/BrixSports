@@ -228,6 +228,7 @@ BUG-001 through BUG-029, AUDIT-001/002 (partial), BACKLOG-065 — all resolved S
 - Automated video or AI-based score detection
 - Push notification campaigns
 - Advanced analytics dashboards
+- **BACKLOG-103** — User-selectable push notification preferences (per event type: goals only, all events, match start/end only). Do not implement until notification infra is stable and user count justifies it. See full spec in BACKLOG-103 entry.
 - Role-based access beyond the defined hierarchy
 
 ---
@@ -4181,7 +4182,7 @@ Show minute only: `33'` — alongside the period badge (H1, H2, HT, PK). Update 
 
 ### BACKLOG-103 — User-Selectable Push Notification Preferences
 
-**Status:** OPEN
+**Status:** WONT FIX — consciously deferred to future scope
 **Priority:** Low
 **Filed:** 2026-06-25
 
