@@ -413,6 +413,9 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                 // Lineup Check
                 const currentState = manager.getState();
                 if (currentState.clock.period !== 'NOT_STARTED') {
+                    if (lineupsData.success && lineupsData.lineups) {
+                        setLineups(lineupsData.lineups);
+                    }
                     setViewState('active');
                 } else if (lineupsData.success && lineupsData.lineups && (lineupsData.lineups.home || lineupsData.lineups.away)) {
                     setLineups(lineupsData.lineups || { home: null, away: null });
@@ -1017,11 +1020,12 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
         try {
             const lineupsRes = await fetch(`/api/matches/${match.id}/lineup`);
             const lineupsData = await lineupsRes.json();
+            const isActive = viewState === 'active';
             if (lineupsData.success && lineupsData.lineups && (lineupsData.lineups.home || lineupsData.lineups.away)) {
                 setLineups(lineupsData.lineups || { home: null, away: null });
-                setViewState('confirm_lineup');
+                if (!isActive) setViewState('confirm_lineup');
             } else {
-                setViewState('check_lineup');
+                if (!isActive) setViewState('check_lineup');
             }
         } catch (e) { console.error(e); }
         setIsLoading(false);
