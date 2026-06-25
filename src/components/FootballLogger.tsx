@@ -236,8 +236,17 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
     // Helper to get only players from the published lineup
     const getActiveRoster = (team: 'home' | 'away') => {
         const roster = team === 'home' ? homePlayers : awayPlayers;
+        const teamId = team === 'home' ? match.homeTeamId : match.awayTeamId;
         const teamLineup = lineups[team];
-        if (!teamLineup) return roster;
+
+        // Players who have been subbed OFF this match — exclude from picker
+        const subbedOffIds = new Set(
+            (matchState?.events ?? [])
+                .filter((e: any) => e.type === 'Substitution' && e.teamId === teamId && e.playerId)
+                .map((e: any) => e.playerId)
+        );
+
+        if (!teamLineup) return roster.filter(p => !subbedOffIds.has(p.id));
 
         const starterList = teamLineup.starters || teamLineup.players || [];
         const subList = teamLineup.substitutes || [];
@@ -248,9 +257,9 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
         ].filter(Boolean));
 
         if (lineupIds.size > 0) {
-            return roster.filter(p => lineupIds.has(p.id));
+            return roster.filter(p => lineupIds.has(p.id) && !subbedOffIds.has(p.id));
         }
-        return roster;
+        return roster.filter(p => !subbedOffIds.has(p.id));
     };
 
     // Initial Load & Manager Setup

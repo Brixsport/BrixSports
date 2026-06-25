@@ -136,6 +136,7 @@ export default function Home() {
               homeScore: match.homeScore || 0,
               awayScore: match.awayScore || 0,
               status: match.status,
+              currentPeriod: match.currentPeriod ?? null,
               startTime: match.startTime,
               venue: match.venue,
               competition: match.competition,
@@ -732,7 +733,7 @@ export default function Home() {
                                     )}
 
                                     {match.status === 'LIVE' ? (
-                                      <LiveMatchStatus matchId={match.id} sport={match.sport} />
+                                      <LiveMatchStatus matchId={match.id} sport={match.sport} fallbackPeriod={(match as any).currentPeriod ?? undefined} />
                                     ) : match.status === 'FINISHED' ? (
                                       <span className="text-xs text-white/40 font-bold">FT</span>
                                     ) : (
