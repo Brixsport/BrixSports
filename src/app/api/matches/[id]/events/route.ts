@@ -165,8 +165,8 @@ export async function POST(
                 .where(eq(matches.id, matchId));
         }
 
-        // Update player stats if applicable
-        if (playerId) {
+        // Update player stats for competitive matches only — friendlies do not count
+        if (playerId && match.matchType !== 'friendly') {
             await updatePlayerStats(match.sport, playerId, type, value);
         }
 
@@ -373,6 +373,15 @@ async function updatePlayerStats(
                     break;
                 case 'ASSIST':
                     updates.assists = (stats?.assists || 0) + 1;
+                    break;
+                case 'OWN GOAL':
+                    updates.ownGoals = (stats?.ownGoals || 0) + 1;
+                    break;
+                case 'PENALTY':
+                    updates.penaltiesScored = (stats?.penaltiesScored || 0) + 1;
+                    break;
+                case 'FOUL':
+                    updates.foulsCommitted = (stats?.foulsCommitted || 0) + 1;
                     break;
                 case 'YELLOW CARD':
                     updates.yellowCards = (stats?.yellowCards || 0) + 1;

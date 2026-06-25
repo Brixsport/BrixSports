@@ -58,69 +58,82 @@ export default function LiveStats({ stats, sport, homeTeam, awayTeam }: LiveStat
         );
     };
 
-    const renderFootballStats = () => (
+    const renderFootballStats = () => {
+        // API returns array format: stats.shots = [homeVal, awayVal]
+        const homePossession = Array.isArray(stats.possession) ? stats.possession[0] : (stats.possession ?? 50);
+        const awayPossession = Array.isArray(stats.possession) ? stats.possession[1] : (100 - homePossession);
+        const shots        = Array.isArray(stats.shots)        ? stats.shots        : [stats.homeShots ?? 0,        stats.awayShots ?? 0];
+        const shotsOnTarget= Array.isArray(stats.shotsOnTarget)? stats.shotsOnTarget: [stats.homeShotsOnTarget ?? 0, stats.awayShotsOnTarget ?? 0];
+        const corners      = Array.isArray(stats.corners)      ? stats.corners      : [stats.homeCorners ?? 0,      stats.awayCorners ?? 0];
+        const fouls        = Array.isArray(stats.fouls)        ? stats.fouls        : [stats.homeFouls ?? 0,        stats.awayFouls ?? 0];
+        const yellowCards  = Array.isArray(stats.yellowCards)  ? stats.yellowCards  : [stats.homeYellowCards ?? 0,  stats.awayYellowCards ?? 0];
+        const redCards     = Array.isArray(stats.redCards)     ? stats.redCards     : [stats.homeRedCards ?? 0,     stats.awayRedCards ?? 0];
+        const saves        = Array.isArray(stats.saves)        ? stats.saves        : [stats.homeSaves ?? 0,        stats.awaySaves ?? 0];
+
+        return (
         <div className="space-y-6">
             <StatBar
                 label="Possession"
-                homeValue={stats.possession || 50}
-                awayValue={100 - (stats.possession || 50)}
+                homeValue={homePossession}
+                awayValue={awayPossession}
                 max={100}
                 unit="%"
                 icon={<Activity className="w-4 h-4" />}
             />
             <StatBar
                 label="Shots"
-                homeValue={stats.homeShots || 0}
-                awayValue={stats.awayShots || 0}
-                max={Math.max(stats.homeShots || 0, stats.awayShots || 0, 20)}
+                homeValue={shots[0]}
+                awayValue={shots[1]}
+                max={Math.max(shots[0], shots[1], 20)}
                 icon={<Target className="w-4 h-4" />}
             />
             <StatBar
                 label="Shots on Target"
-                homeValue={stats.homeShotsOnTarget || 0}
-                awayValue={stats.awayShotsOnTarget || 0}
-                max={Math.max(stats.homeShotsOnTarget || 0, stats.awayShotsOnTarget || 0, 10)}
+                homeValue={shotsOnTarget[0]}
+                awayValue={shotsOnTarget[1]}
+                max={Math.max(shotsOnTarget[0], shotsOnTarget[1], 10)}
                 icon={<Target className="w-4 h-4" />}
             />
             <StatBar
                 label="Corners"
-                homeValue={stats.homeCorners || 0}
-                awayValue={stats.awayCorners || 0}
-                max={Math.max(stats.homeCorners || 0, stats.awayCorners || 0, 10)}
+                homeValue={corners[0]}
+                awayValue={corners[1]}
+                max={Math.max(corners[0], corners[1], 10)}
                 icon={<Zap className="w-4 h-4" />}
             />
             <StatBar
                 label="Fouls"
-                homeValue={stats.homeFouls || 0}
-                awayValue={stats.awayFouls || 0}
-                max={Math.max(stats.homeFouls || 0, stats.awayFouls || 0, 20)}
+                homeValue={fouls[0]}
+                awayValue={fouls[1]}
+                max={Math.max(fouls[0], fouls[1], 20)}
                 icon={<Shield className="w-4 h-4" />}
             />
             <StatBar
                 label="Yellow Cards"
-                homeValue={stats.homeYellowCards || 0}
-                awayValue={stats.awayYellowCards || 0}
-                max={Math.max(stats.homeYellowCards || 0, stats.awayYellowCards || 0, 5)}
+                homeValue={yellowCards[0]}
+                awayValue={yellowCards[1]}
+                max={Math.max(yellowCards[0], yellowCards[1], 5)}
                 icon={<div className="w-3 h-4 bg-yellow-500 rounded-sm" />}
             />
-            {(stats.homeRedCards > 0 || stats.awayRedCards > 0) && (
+            {(redCards[0] > 0 || redCards[1] > 0) && (
                 <StatBar
                     label="Red Cards"
-                    homeValue={stats.homeRedCards || 0}
-                    awayValue={stats.awayRedCards || 0}
-                    max={Math.max(stats.homeRedCards || 0, stats.awayRedCards || 0, 2)}
+                    homeValue={redCards[0]}
+                    awayValue={redCards[1]}
+                    max={Math.max(redCards[0], redCards[1], 2)}
                     icon={<div className="w-3 h-4 bg-red-500 rounded-sm" />}
                 />
             )}
             <StatBar
                 label="Saves"
-                homeValue={stats.homeSaves || 0}
-                awayValue={stats.awaySaves || 0}
-                max={Math.max(stats.homeSaves || 0, stats.awaySaves || 0, 10)}
+                homeValue={saves[0]}
+                awayValue={saves[1]}
+                max={Math.max(saves[0], saves[1], 10)}
                 icon={<Shield className="w-4 h-4" />}
             />
         </div>
-    );
+        );
+    };
 
     const renderBasketballStats = () => (
         <div className="space-y-6">

@@ -174,6 +174,8 @@ export const footballPlayerStats = sqliteTable('football_player_stats', {
     clearances: integer('clearances').default(0),
     yellowCards: integer('yellow_cards').default(0),
     redCards: integer('red_cards').default(0),
+    ownGoals: integer('own_goals').default(0),
+    penaltiesScored: integer('penalties_scored').default(0),
     foulsCommitted: integer('fouls_committed').default(0),
     foulsDrawn: integer('fouls_drawn').default(0),
     saves: integer('saves').default(0),

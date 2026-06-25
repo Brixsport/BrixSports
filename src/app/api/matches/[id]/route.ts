@@ -248,7 +248,8 @@ export async function GET(
         // If stats are not available and this is a football match, calculate from events
         const isFootball = !match.match.sport || match.match.sport === 'Football' ||
             (match.match.sport as string) === '5-a-side' || (match.match.sport as string) === 'Five-a-side';
-        if (!stats && isFootball && events.length > 0) {
+        const statsEmpty = !stats || Object.keys(stats).length === 0;
+        if (statsEmpty && isFootball && events.length > 0) {
             const homeIdx = 0; // home = index 0
             const awayIdx = 1; // away = index 1
             const s: number[][] = Array.from({ length: 18 }, () => [0, 0]);
