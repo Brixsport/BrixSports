@@ -360,6 +360,11 @@ self.addEventListener('message', (event) => {
     } else if (event.data && event.data.type === 'CACHE_MATCH_DATA') {
         // Cache match data for offline logging
         cacheMatchData(event.data.match);
+    } else if (event.data && event.data.type === 'DRAIN_MATCH_EVENTS') {
+        // iOS fallback — Background Sync API is not supported on iOS.
+        // FootballLogger posts this message on 'online' and 'visibilitychange'
+        // so the SW drains the queue directly from the page context (BACKLOG-107).
+        event.waitUntil(syncMatchEvents());
     }
 });
 

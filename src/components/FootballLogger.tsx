@@ -172,6 +172,33 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
         return () => navigator.serviceWorker.removeEventListener('message', handleMessage);
     }, []);
 
+    // iOS drain fallback — Background Sync API is a no-op on iOS (BACKLOG-107).
+    // When the page comes online or becomes visible, trigger a drain directly:
+    // Android/desktop: re-register the sync tag (idempotent).
+    // iOS: postMessage DRAIN_MATCH_EVENTS to the SW, which calls syncMatchEvents().
+    useEffect(() => {
+        const triggerDrain = () => {
+            if (!('serviceWorker' in navigator)) return;
+            navigator.serviceWorker.ready.then((reg) => {
+                if ('sync' in reg) {
+                    (reg as ServiceWorkerRegistration & { sync: { register: (tag: string) => Promise<void> } })
+                        .sync.register('sync-match-events').catch(() => {});
+                } else if (navigator.serviceWorker.controller) {
+                    navigator.serviceWorker.controller.postMessage({ type: 'DRAIN_MATCH_EVENTS' });
+                }
+            }).catch(() => {});
+        };
+        const handleVisibility = () => {
+            if (document.visibilityState === 'visible') triggerDrain();
+        };
+        window.addEventListener('online', triggerDrain);
+        document.addEventListener('visibilitychange', handleVisibility);
+        return () => {
+            window.removeEventListener('online', triggerDrain);
+            document.removeEventListener('visibilitychange', handleVisibility);
+        };
+    }, []);
+
     // Ensure localStorage.authToken is populated for the offline queue path.
     // AuthContext wipes localStorage when /api/auth/me returns 401 for logger roles.
     // On mount, refresh via cookie to re-store the token.
