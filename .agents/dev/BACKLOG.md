@@ -127,7 +127,7 @@ BUG-001 through BUG-029, AUDIT-001/002 (partial), BACKLOG-065 — all resolved S
 - Observed result: logger auth now resolves correctly via loggers table; all authenticated logger requests succeed
 - Pending items: none
 
-- **BUG-056** _(LOW)_: 401/403 on event POST (e.g. token expiry mid-match) silently drops the event — logger sees no UI feedback. The server-rejection branch in `FootballLogger.tsx` only `console.error`s. Fix: show a visible alert or toast for 4xx responses on event save — especially 401 (session expired). `src/components/FootballLogger.tsx` line ~594. Filed: 2026-06-19.
+- ~~**BUG-056**~~ _(LOW)_: 401/403 on event POST silently dropped event. **Status:** SHIPPED — commit `5cb6738`, 2026-06-26. Alert added for 401 (session expired), 403 (not authorised), and generic 4xx. `console.error` retained alongside for debugging.
 
 - ~~**BUG-058b**~~ _(CRITICAL — Logger Offline Queue)_: `AuthContext.checkAuth()` runs on every logger page mount. It calls `GET /api/auth/me` with the `authToken` cookie → 401 for logger role → falls back to localStorage token → calls `/api/auth/me` again with `Authorization: Bearer` → still 401 → **calls `localStorage.removeItem('authToken')`** at line 74 of `AuthContext.tsx`. By the time FootballLogger's offline catch block runs `localStorage.getItem('authToken')`, the value is null → hits the `!token` branch → shows "Network error: could not save this event and no session found" alert → **no queue write, event silently lost**. Discovered during BACKLOG-058 Test 2 on staging (Session 28). Fix: (a) `POST /api/auth/refresh` updated to handle logger token payload (`id` not `userId`, `loggers` table not `users`), returns token in response body; (b) FootballLogger `useEffect` on mount calls refresh and re-stores token in localStorage. Files: `src/app/api/auth/refresh/route.ts`, `src/components/FootballLogger.tsx`. **Status:** SHIPPED — commit `1057f22`, 2026-06-24. Pending: BACKLOG-058 Test 2 re-run to confirm queue write now succeeds.
 
@@ -219,7 +219,7 @@ BUG-001 through BUG-029, AUDIT-001/002 (partial), BACKLOG-065 — all resolved S
 
 ### Admin UX
 
-- **BUG-043** _(LOW)_: "Publish Official Lineups" button silently disabled when no captain is set. Users with 11/11 starters see a button that does nothing — no tooltip, no hint. Both teams need a captain via "Set Captain" before publish enables. Fix: add disabled-state tooltip or inline validation message listing unmet conditions. No code fix needed for functionality. Filed: 2026-06-19.
+- ~~**BUG-043**~~ _(LOW)_: Publish Lineups button silently disabled when captain not set. **Status:** SHIPPED — commit `5cb6738`, 2026-06-26. Inline amber message "Set a captain for both teams before publishing." shown below button when `!homeCaptain || !awayCaptain`.
 
 - **BUG-048** _(LOW)_: Cross-team player in departmental lineup shows blank name on logger confirm screen even after BUG-042 fix. Root cause: BUG-042 resolves `playerId` against the team's eligible-players list — a player from another club won't be in that list. Fallback hits `jerseyName` from the stub, which is `null` if admin didn't fill it. Data entry gap, not a code regression. Mitigation: warn at publish time if any starter stub has `jerseyName: null`. Filed: 2026-06-19.
 
