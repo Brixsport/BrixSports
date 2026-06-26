@@ -1916,3 +1916,31 @@ All `emit(...)` calls in FootballLogger are fire-and-forget with no crash on fai
 **Next session:**
 1. Ship BUG-056 (alert on 4xx event POST) + BACKLOG-094 (Eye Point derive) + BUG-043 (tooltip) — all code-only, no match needed
 2. Run the full 11-phase staging test match — first live run with all SHIPPED items since Session 30
+
+---
+
+### Session 33E — 2026-06-26
+
+**Focus:** Three code-only pre-test-match fixes (BUG-056, BUG-043, BACKLOG-094 scoped down). No match needed for any of them.
+
+**Built / Fixed:**
+
+- **BUG-056 SHIPPED** (`5cb6738`) — `src/components/FootballLogger.tsx` lines 713–718
+  - Server rejection branch (`else` after `if (res.ok)`) previously only `console.error`'d. Logger had zero UI feedback when a 4xx dropped an event mid-match.
+  - Fix: 401 → `alert('Session expired — please log in again to continue logging.')`, 403 → `alert('Not authorised to log events for this match. Contact admin.')`, generic 4xx → `alert('Event failed to save (${res.status}) — check connection and retry.')`. `console.error` retained alongside for debugging.
+  - Scope note: only the online POST path is affected. Offline queue path (catch block) already had its own alerts — untouched.
+
+- **BUG-043 SHIPPED** (`5cb6738`) — `src/app/admin/match-lineups/page.tsx` lines 635–645
+  - Publish Official Lineups button disabled silently when `!homeCaptain || !awayCaptain`. Admin with 11/11 starters saw a greyed button with no explanation.
+  - Fix: wrapper `div` changed from `justify-center` to `flex-col items-center gap-2`. Amber `<p className="text-xs text-amber-400 mt-1">Set a captain for both teams before publishing.</p>` rendered conditionally below button when either captain unset.
+
+- **BACKLOG-094 scoped out** — BACKLOG.md note updated. Eye Point Awards panel on public Timeline was described as "derive from events client-side." Investigation revealed `isEyePoint` is a per-event flag tied to player rating bonuses — award panel on public match page is not a meaningful feature and was explicitly deferred by Richard. No code change.
+
+**Deferred:**
+- Full 11-phase staging test match — 14 SHIPPED items still pending verification
+- Prod migrations (`current_period`, `own_goals`, `penalties_scored`) — gated behind test match
+
+**Next session:**
+1. Run the full 14-checkpoint staging test match (mapped in session 33E conversation — use the one-shot run order)
+2. For every phase that passes: DB query → evidence block → SHIPPED → RESOLVED in BACKLOG.md
+3. If all pass: run three prod migration statements from TEST_CHECKLIST.md POST-TEST GATE
