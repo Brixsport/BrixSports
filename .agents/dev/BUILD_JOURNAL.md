@@ -1878,3 +1878,41 @@ All `emit(...)` calls in FootballLogger are fire-and-forget with no crash on fai
 1. Run 8-point staging match test — verify all SHIPPED items above, resolve or mark UNVERIFIED
 2. If test passes: run prod migrations (`current_period`, `own_goals`, `penalties_scored`)
 3. Backlog hygiene pass — close all SHIPPED entries that pass the test
+
+---
+
+### Session 33D — 2026-06-26
+
+**Focus:** Pre-test-match sweep — small self-contained bug fixes, dashboard stats wiring, UX polish. No match needed to verify most items.
+
+**Built / Fixed:**
+
+- **BUG-044b SHIPPED** (`4be7f8d`) — `src/app/api/loggers/me/route.ts` + `src/app/logger/page.tsx`
+  - Old `/api/loggers/me` read `x-logger-id` from a header/query param with zero JWT auth and returned only the profile — no stats.
+  - Rewrite: `getAuthUser(request)` → 403 if not logger role. Queries `loggers` table by `authUser.id`. Returns `stats: { totalEvents, loggedMatches }` via `count()` on `match_events WHERE loggerId = id` and `matchLoggerAssignments WHERE loggerId = id`.
+  - Dashboard in `logger/page.tsx`: new `loggerStats` state, `useEffect` calls `/api/loggers/me` on login, populates "Total Events" and "Logged Matches" cells (previously hardcoded `"-"`).
+
+- **BUG-045 SHIPPED** (`4be7f8d`) — `src/app/logger/page.tsx` line 374
+  - `{new Date(match.startTime).toLocaleTimeString(...)}` with no guard produced `"INVALID DATE"` when `startTime` is null.
+  - Fix: null + `isNaN(new Date(...).getTime())` guard, falls back to `'Time TBC'`.
+
+- **BUG-064 SHIPPED** (`905d30a`) — `src/app/matches/[id]/page.tsx` line 352
+  - Tab bar had `overflow-x-auto` but no `scrollbar-hide` — scrollbar chrome bled into layout on mobile.
+  - Fix: added `scrollbar-hide` (project-wide custom utility in `globals.css`, used in 10+ other places). One token change.
+
+- **BUG-065 SHIPPED** (`905d30a`) — `src/components/FootballLogger.tsx`
+  - No event counter existed in the logger header — the count was only used for undo button disabled state, never displayed.
+  - Fix: counter pill added just before the undo button showing `recordedEvents.length` (large number) + `"Evts"` label. Updates live via `matchState?.events ?? []` subscription.
+
+- **TEST_CHECKLIST.md updated** (`db363ac`) — Phases 8 and 9 added covering BUG-044b/045 (Phase 8, no match needed) and BUG-065/064 (Phase 9). Existing Phase 8 → Phase 10, iOS → Phase 11.
+
+**Deferred:**
+- BUG-056 (LOW): 401 mid-match silently drops event — alert on 4xx in FootballLogger — recommended for next session before test match
+- BACKLOG-094 (MEDIUM): Eye Point Awards panel always empty — client-side derive from `events.filter(e => e.isEyePoint)` — 2 lines
+- BUG-043 (LOW): Publish Lineups button silently disabled with no hint — tooltip only
+
+**Sub cap gate clarification:** `maxSubstitutions` is set on the competition in `/admin/competitions` → Match Settings. Per-match override for sub cap not yet in the match creation UI.
+
+**Next session:**
+1. Ship BUG-056 (alert on 4xx event POST) + BACKLOG-094 (Eye Point derive) + BUG-043 (tooltip) — all code-only, no match needed
+2. Run the full 11-phase staging test match — first live run with all SHIPPED items since Session 30
