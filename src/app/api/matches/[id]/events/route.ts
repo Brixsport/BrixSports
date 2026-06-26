@@ -148,7 +148,7 @@ export async function POST(
 
         const upperType = type.toUpperCase();
         const isOwnGoal = upperType === 'OWN GOAL';
-        const isScoringEvent = upperType === 'GOAL' || upperType === 'PENALTY' || isOwnGoal || value;
+        const isScoringEvent = upperType === 'GOAL' || upperType === 'PENALTY' || isOwnGoal;
 
         if (isScoringEvent && !isPenaltyShootout) {
             const currentHomeScore = match.homeScore || 0;
