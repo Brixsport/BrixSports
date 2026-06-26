@@ -258,31 +258,46 @@ export async function DELETE(
             );
         }
 
+        // Fetch match before deleting — needed for score revert and stat decrement guards
+        const match = await db
+            .select()
+            .from(matches)
+            .where(eq(matches.id, matchId))
+            .get();
+
+        if (!match) {
+            return NextResponse.json({ error: 'Match not found' }, { status: 404 });
+        }
+
         // Delete the event
         await db.delete(matchEvents).where(eq(matchEvents.id, eventId));
 
-        // Revert score if it was a scoring event
-        if (event.value || event.type.toUpperCase() === 'GOAL') {
-            const match = await db
-                .select()
-                .from(matches)
-                .where(eq(matches.id, matchId))
-                .get();
+        // Revert score — GOAL, PENALTY, OWN GOAL (BUG-054)
+        const upperType = event.type.toUpperCase();
+        const isOwnGoal = upperType === 'OWN GOAL';
+        const isScoringEvent = upperType === 'GOAL' || upperType === 'PENALTY' || isOwnGoal;
 
-            if (match) {
-                const parsedValue = event.value ? JSON.parse(event.value) : 1;
-                const points = typeof parsedValue === 'number' ? parsedValue : 1;
-                const isHomeTeam = event.teamId === match.homeTeamId;
+        if (isScoringEvent) {
+            // OWN GOAL: teamId is the conceding team — the opponent was credited. Revert opponent.
+            const isHomeTeam = isOwnGoal
+                ? event.teamId !== match.homeTeamId
+                : event.teamId === match.homeTeamId;
 
-                await db
-                    .update(matches)
-                    .set({
-                        homeScore: isHomeTeam ? Math.max(0, (match.homeScore || 0) - points) : match.homeScore,
-                        awayScore: !isHomeTeam ? Math.max(0, (match.awayScore || 0) - points) : match.awayScore,
-                        updatedAt: new Date(),
-                    })
-                    .where(eq(matches.id, matchId));
-            }
+            await db
+                .update(matches)
+                .set({
+                    homeScore: isHomeTeam ? Math.max(0, (match.homeScore || 0) - 1) : (match.homeScore || 0),
+                    awayScore: !isHomeTeam ? Math.max(0, (match.awayScore || 0) - 1) : (match.awayScore || 0),
+                    updatedAt: new Date(),
+                })
+                .where(eq(matches.id, matchId));
+        }
+
+        // Decrement player stats — mirrors updatePlayerStats in reverse (BUG-060)
+        // Same guards as POST: skip friendlies and penalty shootout events
+        const isPenaltyShootout = match.currentPeriod === 'PENALTY_SHOOTOUT';
+        if (event.playerId && match.matchType !== 'friendly' && !isPenaltyShootout) {
+            await decrementPlayerStats(match.sport, event.playerId, event.type);
         }
 
         return NextResponse.json({ message: 'Event deleted successfully' });
@@ -419,5 +434,118 @@ async function updatePlayerStats(
     } catch (error) {
         console.error('Error updating player stats:', error);
         // Don't throw - event should still be logged
+    }
+}
+
+// Mirror of updatePlayerStats — subtracts one stat count per event type (BUG-060)
+// Math.max(0, x) floor prevents stats going negative from out-of-order deletes.
+async function decrementPlayerStats(
+    sport: string,
+    playerId: string,
+    eventType: string
+) {
+    try {
+        const { basketballPlayerStats, footballPlayerStats } = await import('@/db/schema');
+
+        if (sport === 'Basketball') {
+            const stats = await db
+                .select()
+                .from(basketballPlayerStats)
+                .where(eq(basketballPlayerStats.playerId, playerId))
+                .get();
+
+            if (!stats) return;
+
+            const updates: any = {};
+
+            switch (eventType) {
+                case 'Field Goal':
+                    updates.fieldGoalsMade = Math.max(0, (stats.fieldGoalsMade || 0) - 1);
+                    updates.totalPoints = Math.max(0, (stats.totalPoints || 0) - 2);
+                    break;
+                case 'Three Pointer':
+                    updates.threePointersMade = Math.max(0, (stats.threePointersMade || 0) - 1);
+                    updates.totalPoints = Math.max(0, (stats.totalPoints || 0) - 3);
+                    break;
+                case 'Free Throw':
+                    updates.freeThrowsMade = Math.max(0, (stats.freeThrowsMade || 0) - 1);
+                    updates.totalPoints = Math.max(0, (stats.totalPoints || 0) - 1);
+                    break;
+                case 'Rebound':
+                    updates.totalRebounds = Math.max(0, (stats.totalRebounds || 0) - 1);
+                    break;
+                case 'Assist':
+                    updates.assists = Math.max(0, (stats.assists || 0) - 1);
+                    break;
+                case 'Steal':
+                    updates.steals = Math.max(0, (stats.steals || 0) - 1);
+                    break;
+                case 'Block':
+                    updates.blocks = Math.max(0, (stats.blocks || 0) - 1);
+                    break;
+                case 'Turnover':
+                    updates.turnovers = Math.max(0, (stats.turnovers || 0) - 1);
+                    break;
+                case 'Foul':
+                    updates.personalFouls = Math.max(0, (stats.personalFouls || 0) - 1);
+                    break;
+            }
+
+            if (Object.keys(updates).length > 0) {
+                await db
+                    .update(basketballPlayerStats)
+                    .set(updates)
+                    .where(eq(basketballPlayerStats.playerId, playerId));
+            }
+        } else if (sport === 'Football') {
+            const stats = await db
+                .select()
+                .from(footballPlayerStats)
+                .where(eq(footballPlayerStats.playerId, playerId))
+                .get();
+
+            if (!stats) return;
+
+            const updates: any = {};
+
+            switch (eventType.toUpperCase()) {
+                case 'GOAL':
+                    updates.goals = Math.max(0, (stats.goals || 0) - 1);
+                    updates.shotsOnTarget = Math.max(0, (stats.shotsOnTarget || 0) - 1);
+                    break;
+                case 'ASSIST':
+                    updates.assists = Math.max(0, (stats.assists || 0) - 1);
+                    break;
+                case 'OWN GOAL':
+                    updates.ownGoals = Math.max(0, (stats.ownGoals || 0) - 1);
+                    break;
+                case 'PENALTY':
+                    updates.penaltiesScored = Math.max(0, (stats.penaltiesScored || 0) - 1);
+                    updates.shotsOnTarget = Math.max(0, (stats.shotsOnTarget || 0) - 1);
+                    break;
+                case 'FOUL':
+                    updates.foulsCommitted = Math.max(0, (stats.foulsCommitted || 0) - 1);
+                    break;
+                case 'YELLOW CARD':
+                    updates.yellowCards = Math.max(0, (stats.yellowCards || 0) - 1);
+                    break;
+                case 'RED CARD':
+                    updates.redCards = Math.max(0, (stats.redCards || 0) - 1);
+                    break;
+                case 'SAVE':
+                    updates.saves = Math.max(0, (stats.saves || 0) - 1);
+                    break;
+            }
+
+            if (Object.keys(updates).length > 0) {
+                await db
+                    .update(footballPlayerStats)
+                    .set(updates)
+                    .where(eq(footballPlayerStats.playerId, playerId));
+            }
+        }
+    } catch (error) {
+        console.error('Error decrementing player stats:', error);
+        // Don't throw — event deletion already succeeded
     }
 }
