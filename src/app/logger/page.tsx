@@ -24,6 +24,7 @@ export default function LoggerPage() {
   const [assignedMatches, setAssignedMatches] = useState<Match[]>([]);
   const [teams, setTeams] = useState<any[]>([]);
   const [players, setPlayers] = useState<any[]>([]);
+  const [loggerStats, setLoggerStats] = useState<{ totalEvents: number; loggedMatches: number } | null>(null);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -88,6 +89,15 @@ export default function LoggerPage() {
       setSelectedMatchId(savedId);
     }
   }, [assignedMatches]);
+
+  // Fetch logger stats from /api/loggers/me when logged in
+  useEffect(() => {
+    if (!isLoggedIn) return;
+    fetch('/api/loggers/me', { credentials: 'include' })
+      .then(r => r.ok ? r.json() : null)
+      .then(data => { if (data?.stats) setLoggerStats(data.stats); })
+      .catch(() => {});
+  }, [isLoggedIn]);
 
   // Fetch teams when logged in
   useEffect(() => {
@@ -301,11 +311,11 @@ export default function LoggerPage() {
           <div className="grid grid-cols-3 gap-3 md:gap-4">
             <div className="bg-white/5 border border-white/10 rounded-xl p-3 text-center">
               <p className="text-[9px] font-black uppercase tracking-widest text-white/40 mb-1">Total Events</p>
-              <p className="text-lg md:text-xl font-display italic text-white">-</p>
+              <p className="text-lg md:text-xl font-display italic text-white">{loggerStats ? loggerStats.totalEvents : '-'}</p>
             </div>
             <div className="bg-white/5 border border-white/10 rounded-xl p-3 text-center">
               <p className="text-[9px] font-black uppercase tracking-widest text-white/40 mb-1">Logged Matches</p>
-              <p className="text-lg md:text-xl font-display italic text-white">-</p>
+              <p className="text-lg md:text-xl font-display italic text-white">{loggerStats ? loggerStats.loggedMatches : '-'}</p>
             </div>
             <div className="bg-white/5 border border-white/10 rounded-xl p-3 text-center">
               <p className="text-[9px] font-black uppercase tracking-widest text-white/40 mb-1">Active Since</p>
@@ -371,7 +381,9 @@ export default function LoggerPage() {
                 <div className="flex items-center justify-between text-[10px] font-black uppercase tracking-widest text-white/40">
                   <span className="flex items-center gap-2">
                     <ClockIcon size={12} />
-                    {new Date(match.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    {match.startTime && !isNaN(new Date(match.startTime).getTime())
+                      ? new Date(match.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                      : 'Time TBC'}
                   </span>
                   {isLoggable ? (
                     <div className="flex items-center gap-1 group-hover:text-primary transition-colors">

@@ -213,9 +213,9 @@ BUG-001 through BUG-029, AUDIT-001/002 (partial), BACKLOG-065 — all resolved S
 
 - **BACKLOG-105** _(HIGH — Data Integrity)_: Penalty shootout score isolation. PENALTY_SHOOTOUT period currently writes to `home_score`/`away_score` and `footballPlayerStats` — both wrong. Shootout score is separate from match score (display as "2-2 (4-3 pens)"). Shootout events should not write to career stats. **Interim guard SHIPPED** (`da8d9ce`, 2026-06-25): `isPenaltyShootout` flag in `POST /api/matches/[id]/events/route.ts` — skips score increment and `updatePlayerStats` when `match.currentPeriod === 'PENALTY_SHOOTOUT'`. Full implementation still open: separate `shootout_home`/`shootout_away` columns on matches, distinct `PEN_SCORED`/`PEN_MISSED`/`PEN_SAVED` event types, shootout score display on public page. **Status:** SHIPPED (interim guard) — full implementation OPEN
 
-- **BUG-044b** _(MEDIUM)_: Logger dashboard stats show "-" (total events, logged matches). Root cause: dashboard fetches `/api/auth/me` which is admin-auth only — logger JWTs are not recognised. Fix: create `/api/loggers/me` endpoint that reads the logger session and returns their stats, or wire to existing `/api/loggers/[id]`. Filed: 2026-06-19.
+- ~~**BUG-044b**~~ _(MEDIUM)_: Logger dashboard stats show "-" (total events, logged matches). Fix: rewrote `/api/loggers/me` to use `getAuthUser` + logger role gate. Returns `stats: { totalEvents, loggedMatches }` via `count()` on `match_events` and `matchLoggerAssignments`. Dashboard now calls `/api/loggers/me` on login and populates both cells. `src/app/api/loggers/me/route.ts`, `src/app/logger/page.tsx`. **Status:** SHIPPED — pending live logger session verify.
 
-- **BUG-045** _(MEDIUM)_: Logger match card shows "INVALID DATE". `startTime` on the match is null or in an unparseable format. Fix: null/invalid guard on the date display — fall back to "Date TBC". Filed: 2026-06-19.
+- ~~**BUG-045**~~ _(MEDIUM)_: Logger match card shows "INVALID DATE". Fix: null/invalid guard at `logger/page.tsx` line 374 — falls back to `'Time TBC'` if `startTime` is null or not a valid date. `src/app/logger/page.tsx`. **Status:** SHIPPED — pending verify on a match with null startTime.
 
 ### Admin UX
 
