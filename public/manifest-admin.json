@@ -4,7 +4,7 @@
     "short_name": "Brix Admin",
     "description": "Admin and logger dashboard for Brixsport",
     "start_url": "/admin?source=pwa",
-    "scope": "/admin/",
+    "scope": "/",
     "display": "standalone",
     "background_color": "#050505",
     "theme_color": "#ef4444",
