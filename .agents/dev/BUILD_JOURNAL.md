@@ -1817,3 +1817,64 @@ All `emit(...)` calls in FootballLogger are fire-and-forget with no crash on fai
 2. Fix BACKLOG-107 — `online`/`visibilitychange` drain handler in FootballLogger.tsx for iOS
 3. Run fresh staging match test (8-point checklist) to RESOLVE all SHIPPED items
 4. If staging test passes: run prod migrations (`current_period`, `own_goals`, `penalties_scored`)
+
+---
+
+### Session 33C — 2026-06-26
+
+**Focus:** Pre-match-day soft blocker sweep — close all fixable bugs before the 8-point staging test match.
+
+**Built / Fixed:**
+
+- **BACKLOG-107 SHIPPED** (`dfad1f6`) — `src/components/FootballLogger.tsx` + `public/sw-admin.js`
+  - iOS has no Background Sync API — `sync.register('sync-match-events')` is a no-op on iPhone.
+  - Fix: new `useEffect` in FootballLogger with `window.addEventListener('online', triggerDrain)` + `document.addEventListener('visibilitychange', handler)`.
+  - `triggerDrain`: tries Background Sync tag re-register first (Android/desktop); falls back to `navigator.serviceWorker.controller.postMessage({ type: 'DRAIN_MATCH_EVENTS' })` when SyncManager absent (iOS).
+  - `sw-admin.js` message handler extended: `DRAIN_MATCH_EVENTS` case calls `syncMatchEvents()` directly.
+  - Cleanup on unmount. No new tsc errors.
+
+- **BUG-075 SHIPPED** (`5866ab4`) — `public/manifest-admin.json`
+  - `scope: "/admin/"` blocked `start_url: "/admin?source=pwa"` and the Logger shortcut at `/logger` — both outside the scope. Fix: `scope: "/"` covers all routes the PWA uses.
+  - One character change. Console warning eliminated, iOS Home Screen install unblocked.
+
+- **BUG-054 + BUG-060 SHIPPED** (`3bbad31`) — `src/app/api/matches/[id]/events/route.ts`
+  - **BUG-054**: Parent `DELETE /events` scoring condition was `event.value || type === 'GOAL'` — missed PENALTY and OWN GOAL entirely. OWN GOAL also used wrong team direction (decremented conceding team's score, not opponent's). Fix: mirrored the [eventId] route pattern exactly — `isScoringEvent = GOAL || PENALTY || OWN GOAL`; OWN GOAL inverts `isHomeTeam` (`teamId !== homeTeamId`).
+  - **BUG-060**: DELETE never called `updatePlayerStats` in reverse. Ghost stats accumulated on every undo. Fix: added `decrementPlayerStats()` function (mirror of `updatePlayerStats` with `Math.max(0, x - 1)` floor on all fields). Called after event delete with same guards as POST: skip friendlies (`matchType !== 'friendly'`) and penalty shootout (`currentPeriod === 'PENALTY_SHOOTOUT'`). Match now fetched before delete (not inside score-revert if-block) so guards are available for both paths. Covers all 8 football cases and 9 basketball cases.
+
+- **BUG-055 SHIPPED** (`43583c1`) — `src/app/api/matches/[id]/events/route.ts`
+  - `isScoringEvent = upperType === 'GOAL' || upperType === 'PENALTY' || isOwnGoal || value` — `|| value` caused any event with a truthy `value` field to silently increment the score. One token removed. Type-explicit scoring only.
+
+- **BUG-053 SHIPPED** (`7d90e05`) — `src/app/api/loggers/auth/route.ts`
+  - No brute-force protection on logger login. Fix: module-level `loginAttempts: Map<string, { count, resetAt }>`. IP from `x-forwarded-for` (leftmost, handles proxy chains). 5 failures in 15 min → 429. Increments on both failure branches (logger not found + wrong password). Clears on success. Resets on Vercel cold start — documented in comment as MVP gate, not full prod solution.
+
+- **BUG-073 confirmed already correct** — `${relatedName} IN for ${outName}` reads `{inPlayer} IN for {outPlayer}`. `relatedPlayerId = playerInId` (coming ON); `playerId = playerComingOut` (going OFF). String was never wrong at current HEAD.
+
+- **BUG-068 confirmed already committed** — `subbedOnPlayerIds` prop wired at line 1711, consumed at line 2344, `isBench` override at line 2393. Landed in `31fc5a3`.
+
+**Bugs filed this session:** none
+
+**Deferred:**
+- 8-point staging match test — all SHIPPED items below remain unverified
+- Backlog hygiene pass (BUG-073 RESOLVED with no code change, BUG-075/107/053/054/055/060 SHIPPED → need closing after test)
+
+**All items SHIPPED but not yet RESOLVED (require fresh staging match):**
+
+| Item | Commit | What to verify |
+|------|--------|----------------|
+| TD-010 (period persistence) | `b66eb95`, `13aa12b` | SECOND_HALF survives hard refresh |
+| BACKLOG-044 Phase B | `64b0974` | Timer ceiling from config, sub cap gate |
+| BUG-063 (period labels public page) | `ea4a1d5`, `056388d`, `024e086` | Correct label at each period on public page + homepage |
+| BUG-062 (logger refresh fast path) | `3a3ea3c`, `37712ba` | Hard refresh mid-match resumes active logger view |
+| BUG-077 (starters pre-selected in edit modal) | `d96db0a` | Edit modal opens with correct starters highlighted |
+| BUG-078 (currentPeriod FINISHED on End Match) | `91bd33d` | Public page shows FT after End Match |
+| BUG-076 (status stuck LIVE) | `60aa93d` | UNVERIFIED — needs match ending decisively at 90' |
+| BACKLOG-107 (iOS drain) | `dfad1f6` | Queue drains on tab resume + reconnect on iPhone |
+| BUG-075 (manifest scope) | `5866ab4` | Console warning gone, iOS install works |
+| BUG-054/060 (undo correctness) | `3bbad31` | OWN GOAL undo reverts correct team; stat row decrements |
+| BUG-055 (|| value scoring) | `43583c1` | Non-scoring events with value field don't touch score |
+| BUG-053 (rate limit) | `7d90e05` | 5 bad logins → 429 on 6th attempt |
+
+**Next session:**
+1. Run 8-point staging match test — verify all SHIPPED items above, resolve or mark UNVERIFIED
+2. If test passes: run prod migrations (`current_period`, `own_goals`, `penalties_scored`)
+3. Backlog hygiene pass — close all SHIPPED entries that pass the test
