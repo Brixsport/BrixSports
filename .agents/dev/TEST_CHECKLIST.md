@@ -6,63 +6,219 @@ what fails with a one-line description.
 
 ---
 
-## ⚠️ PENDING VERIFICATION — Next Fresh Test Match (Session 31)
+## ⚠️ PENDING VERIFICATION — Fresh Staging Match (Session 34)
 
-> All three checks run on the same fresh test match. Do not use a pre-existing match — the old test match (`AIr6gMTlUscTNHzYTL8fI`) predates the TD-010 migration and will always show `NOT_STARTED`. Spin a new one.
-
-### TD-010 — Period survival on hard refresh
-**What it proves:** `currentPeriod` is written to DB on each transition and seeds `MatchStateManager` correctly on remount.
-
-- [ ] Create a fresh match, assign a logger, start it via "▶ Start Match"
-- [ ] PATCH fires → confirm `matches.current_period = 'FIRST_HALF'` in DB (`dev/verify-td010.mjs` or MCP query)
-- [ ] Hard refresh the logger tab (Ctrl+Shift+R / Cmd+Shift+R on mobile)
-- [ ] ✅ Logger shows `FIRST_HALF` period and clock continues from ~correct minute — NOT reset to `NOT_STARTED` at 0:00
-- [ ] Tap "⏸ End 1st Half" → confirm DB `current_period = 'HALF_TIME'`
-- [ ] Hard refresh again → ✅ Logger shows `HALF_TIME`, not `NOT_STARTED`
-
-**Closes:** TD-010 (moves from SHIPPED → RESOLVED with DB query as evidence)
+> Run all phases on a **single fresh test match** created after the current `dev` branch is deployed to staging. Do not reuse any existing match ID. Have a DB query script or MCP ready for evidence. Evidence = DB query output, not UI observation.
 
 ---
 
-### BACKLOG-044 Phase B — Sub cap gate
-**What it proves:** `maxSubstitutions` from `/api/matches/[id]/config` is loaded on mount and enforced in `handleSubIn`.
+### PHASE 1 — Logger mount + match selection (BUG-062)
 
-- [ ] Confirm the match's competition has `maxSubstitutions` set (check via `/api/matches/[id]/config` in Network tab — look for `config.maxSubstitutions`)
-- [ ] Log substitutions up to the cap (e.g. 5 for football) for one team
-- [ ] Attempt a 6th substitution for that same team
-- [ ] ✅ Alert fires: "Maximum substitutions reached for this team (N)" — event is NOT logged
-- [ ] ✅ Opposing team can still substitute (cap is per-team, not per-match)
-- [ ] If `maxSubstitutions` is `null` (competition has no cap set) — subs work without any block
+**What it proves:** `selectedMatchId` persists across refresh; fast path skips confirm screen when match already started.
 
-**Closes:** BACKLOG-044 Phase B (moves from SHIPPED → RESOLVED)
+- [ ] Open logger page, tap the test match — land on lineup confirm screen (match is NOT_STARTED, expected)
+- [ ] Hard refresh **before** starting — expected: returns to match selection list (fast path not triggered, match hasn't started)
+- [ ] Proceed to Phase 2, then come back and hard refresh **after** start
+- [ ] ✅ After Start Match: hard refresh → logger resumes directly in active logging view (confirm screen NOT shown)
+
+**Closes:** BUG-062
 
 ---
 
-### BUG-063 — Period label on public match detail page
-**What it proves:** `displayPeriod = matchTime?.period ?? match.currentPeriod` renders correctly in all three states.
+### PHASE 2 — Start match + FIRST_HALF persistence (TD-010)
 
-**Test A — Page load before WS tick (DB fallback path):**
-- [ ] Match is LIVE, in `FIRST_HALF` (confirmed in DB)
-- [ ] Open `/matches/[id]` in a fresh incognito tab (no WS established yet)
-- [ ] ✅ Score header shows `1ST HALF · N'` — NOT blank, NOT `LIVE`
-- [ ] ✅ Overview Status card shows `1ST HALF` — NOT `LIVE`
+**What it proves:** `current_period` is written to DB on Start Match and seeds `MatchStateManager` on remount.
 
-**Test B — Active play (WS live path):**
-- [ ] Stay on the page, let WS connect (check DevTools → WS frames or console)
-- [ ] Logger clocks ticking — after first `match:time:update` fires
-- [ ] ✅ Score header shows `● 1ST HALF · 33'` format (period badge + minute)
-- [ ] Minute increments without page refresh
+- [ ] Tap "▶ Start Match" → Network tab: PATCH `/api/matches/[id]` returns 200
+- [ ] DB check: `SELECT current_period FROM matches WHERE id = '<id>'` → `FIRST_HALF`
+- [ ] Hard refresh logger tab
+- [ ] ✅ Logger shows `FIRST_HALF`, clock running — NOT `NOT_STARTED` at 0:00
 
-**Test C — Half time:**
-- [ ] Logger taps "⏸ End 1st Half" → period transitions to `HALF_TIME`
-- [ ] ✅ Score header shows `HT` — NOT `HALF TIME` or `LIVE`
-- [ ] ✅ No minute shown during `HALF_TIME` (no active clock)
-- [ ] Open a NEW incognito tab mid-HT → ✅ loads showing `HT` from DB `currentPeriod`
+**Closes:** TD-010 (FIRST_HALF path)
 
-**Test D — Overview Status card:**
-- [ ] Overview tab → Status card shows `1ST HALF` / `HT` / `2ND HALF` appropriately — never raw `LIVE`
+---
 
-**Closes:** BUG-063 (moves from SHIPPED → RESOLVED with observed result noted)
+### PHASE 3 — Lineup edit modal (BUG-077)
+
+**What it proves:** `handleEditLineup` builds `starterIds` from `p.playerId` correctly — starters pre-highlighted.
+
+- [ ] While in FIRST_HALF, tap the lineup edit button for either team
+- [ ] ✅ Published starters show highlighted (primary colour) — NOT all greyed as SUB
+
+**Closes:** BUG-077
+
+---
+
+### PHASE 4 — Event logging + undo (BUG-054, BUG-060, BUG-055, BUG-067, BUG-068)
+
+**BUG-055 — non-scoring events don't touch score**
+- [ ] Log a FOUL → DB check: `home_score` / `away_score` unchanged
+- [ ] Log a YELLOW CARD → DB check: score unchanged
+
+**BUG-054 + BUG-060 — GOAL undo (score + stat)**
+- [ ] Log a GOAL for a named home team player
+- [ ] DB before undo: `home_score` +1, player's `goals` +1 in `football_player_stats`
+- [ ] Tap undo
+- [ ] DB after undo: `home_score` back to prior value, player's `goals` back to prior value
+- [ ] ✅ No ghost stat — both score and stat decremented
+
+**BUG-054 + BUG-060 — OWN GOAL undo (correct team + stat)**
+- [ ] Log an OWN GOAL for a home team player (should credit away team)
+- [ ] DB before undo: `away_score` +1 (NOT `home_score`), player's `own_goals` +1
+- [ ] Tap undo
+- [ ] DB after undo: `away_score` back to prior, player's `own_goals` decremented
+- [ ] ✅ Opponent's score was reverted — not the conceding team's
+
+**BUG-067 + BUG-068 — sub picker pools + BENCH tag**
+- [ ] Log a substitution: starter goes OFF, bench player comes ON
+- [ ] Open sub-OUT picker for a second sub attempt
+- [ ] ✅ Previously subbed-off player is absent from sub-OUT picker
+- [ ] ✅ Incoming sub from previous sub does NOT show BENCH tag in sub-OUT picker
+- [ ] Sub-IN picker does NOT include already-used subs
+
+---
+
+### PHASE 5 — Period transitions (TD-010 continued, BUG-063)
+
+**HALF_TIME**
+- [ ] Tap "⏸ End 1st Half" → PATCH fires → DB: `current_period = HALF_TIME`
+- [ ] Hard refresh → ✅ logger shows HALF_TIME, not NOT_STARTED
+- [ ] Public page (incognito): score header shows `HT` — not `LIVE`
+
+**SECOND_HALF ← critical unverified path**
+- [ ] Tap "▶ Start 2nd Half" → Network tab: PATCH returns 200
+- [ ] DB check immediately: `current_period = SECOND_HALF`
+- [ ] Hard refresh logger tab
+- [ ] ✅ Logger resumes in active view at SECOND_HALF — NOT reset to NOT_STARTED
+- [ ] Public page: score header shows `2ND HALF`
+
+**Closes:** TD-010 (SECOND_HALF path — the one that was failing)
+
+**BACKLOG-044 Phase B — timer ceiling**
+- [ ] Confirm match clock stops at configured half duration (e.g. 45:00)
+- [ ] Clock does not count past the ceiling
+
+**Sub cap gate (if competition has maxSubstitutions set)**
+- [ ] Log subs up to the cap for one team → attempt one more
+- [ ] ✅ Alert: "Maximum substitutions reached for this team (N)" — no event logged
+- [ ] Opposing team can still substitute
+
+---
+
+### PHASE 6 — End match + final state (BUG-076, BUG-078, BUG-063)
+
+**BUG-076 — decisive match (different scores at 90')**
+- [ ] Ensure home score ≠ away score at end of 2nd half before tapping End
+- [ ] Tap "⏸ End 2nd Half" and confirm the modal
+- [ ] DB check: `status = FINISHED`, `current_period = FINISHED` in a single PATCH
+- [ ] ✅ Public page: shows `FT` badge — not `LIVE`, not `2ND HALF`
+
+**BUG-078 — End Match button fallback (if scores level / PK path)**
+- [ ] If match went to PK or ended level, tap "🏁 End Match" button manually
+- [ ] DB check: `current_period = FINISHED` (not stuck at `PENALTY_SHOOTOUT` or `SECOND_HALF`)
+- [ ] ✅ Public page: shows `FT`
+
+**BUG-063 — all period labels on public page**
+- [ ] Retrospectively confirm correct label was shown at each phase during the match:
+  - FIRST_HALF → `1ST HALF` ✅/❌
+  - HALF_TIME → `HT` ✅/❌
+  - SECOND_HALF → `2ND HALF` ✅/❌
+  - FINISHED → `FT` ✅/❌
+- [ ] Homepage match card: showed correct period label during match, `FT` after finish
+- [ ] Public page on initial load (no WS yet): showed `1ST HALF · N'` not blank or `LIVE`
+
+**Closes:** BUG-076, BUG-078, BUG-063
+
+---
+
+### PHASE 7 — LiveStats (shape fix `7faaab9`)
+
+- [ ] Open Stats tab on public match detail page while match is LIVE
+- [ ] ✅ Shots, possession, fouls show real numbers — not 0 / `NaN%` / `5050%`
+
+---
+
+### PHASE 8 — Logger dashboard stats + match card date (BUG-044b, BUG-045)
+
+> Can run independently, no live match needed.
+
+**BUG-044b — Logger dashboard stats**
+- [ ] Log in as a logger on `/logger`
+- [ ] ✅ "Total Events" cell shows a real number (not `"-"`)
+- [ ] ✅ "Logged Matches" cell shows a real number (not `"-"`)
+- [ ] DevTools → Network: confirm `GET /api/loggers/me` returns 200 with `stats.totalEvents` and `stats.loggedMatches` fields
+- [ ] DevTools: confirm `GET /api/loggers/me` does NOT return 401 (old endpoint used header auth — would have 401'd)
+
+**BUG-045 — INVALID DATE guard**
+- [ ] On the logger match list, check any match whose `startTime` is null or malformed
+- [ ] ✅ Card shows `"Time TBC"` — not `"INVALID DATE"`
+- [ ] ✅ Matches with valid `startTime` still render the correct time (regression check)
+
+**Closes:** BUG-044b, BUG-045
+
+---
+
+### PHASE 9 — Event counter + tab overflow (BUG-065, BUG-064)
+
+> BUG-065 requires a live match. BUG-064 can be checked on any match detail page on mobile.
+
+**BUG-065 — Event counter in logger header**
+- [ ] During a live match session, log 3 events
+- [ ] ✅ Counter pill in the compact header shows `3` (not `0`, not blank)
+- [ ] Log an undo → ✅ counter decrements to `2`
+- [ ] Counter updates in real time without page refresh
+
+**BUG-064 — Mobile tab overflow**
+- [ ] Open any match detail page (`/matches/[id]`) on a mobile device or narrow viewport (≤ 390px)
+- [ ] ✅ Tab bar (Overview / Timeline / Stats / Lineups / H2H) scrolls horizontally — no visible scrollbar chrome
+- [ ] ✅ No tab content bleeds past the viewport edge
+- [ ] Tapping a tab in the overflowed area still activates it correctly
+
+**Closes:** BUG-065, BUG-064
+
+---
+
+### PHASE 10 — Auth rate limit (BUG-053)
+
+> Can run independently, no match needed.
+
+- [ ] Attempt logger login with wrong password 5 times from the same IP/device
+- [ ] ✅ 6th attempt returns 429: `"Too many login attempts. Try again in 15 minutes."`
+- [ ] Successful login on a fresh device/IP still works (confirm not globally blocked)
+
+**Closes:** BUG-053
+
+---
+
+### PHASE 11 — iOS (run if iPhone available, BACKLOG-107, BUG-075)
+
+**BACKLOG-107 — online/visibilitychange drain fallback**
+- [ ] On iPhone Safari: log into logger, navigate to the test match
+- [ ] Switch to Airplane Mode
+- [ ] Log one event — confirm no crash, orange queued badge appears
+- [ ] Switch Airplane Mode off — stay on the same tab (do NOT refresh)
+- [ ] ✅ Within a few seconds: queued badge resets to 0 without any manual action
+- [ ] DB check: event appears in `match_events`
+
+**BUG-075 — manifest scope**
+- [ ] On iPhone Safari: tap Share → "Add to Home Screen" option is present
+- [ ] No `Manifest: property 'scope' ignored` warning in Safari console
+- [ ] ✅ PWA installs and opens to `/admin` correctly from Home Screen
+
+**Closes:** BACKLOG-107, BUG-075
+
+---
+
+### POST-TEST GATE
+
+All phases passed → run prod migrations:
+- [ ] `ALTER TABLE matches ADD COLUMN current_period TEXT DEFAULT 'NOT_STARTED'` — **already on staging, apply to prod**
+- [ ] `ALTER TABLE football_player_stats ADD COLUMN own_goals INTEGER DEFAULT 0` — **apply to prod**
+- [ ] `ALTER TABLE football_player_stats ADD COLUMN penalties_scored INTEGER DEFAULT 0` — **apply to prod**
+
+Then update BACKLOG.md: move each passing SHIPPED item to RESOLVED, attach DB evidence block. Items that couldn't be tested → UNVERIFIED.
+
+---
 
 ---
 
