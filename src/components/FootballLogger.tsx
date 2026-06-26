@@ -1342,6 +1342,10 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                         </div>
                     </div>
                     <div className="flex items-center gap-1.5 shrink-0">
+                        <div className="px-2 py-1 bg-white/5 rounded-lg border border-white/10 shrink-0 text-center min-w-[36px]">
+                            <span className="text-[10px] font-black tabular-nums text-white/70">{recordedEvents.length}</span>
+                            <span className="text-[8px] font-black uppercase tracking-tighter text-white/30 block leading-none">Evts</span>
+                        </div>
                         <button
                             onClick={handleUndo}
                             disabled={!canLogEvents || recordedEvents.length === 0 || isUndoing}

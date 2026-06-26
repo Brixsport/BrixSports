@@ -349,7 +349,7 @@ export default function MatchDetailPage() {
                     </div>
 
                     {/* Tabs */}
-                    <div className="flex gap-2 border-t border-white/10 overflow-x-auto mt-4">
+                    <div className="flex gap-2 border-t border-white/10 overflow-x-auto scrollbar-hide mt-4">
                         <button
                             onClick={() => setActiveTab('overview')}
                             className={`px-6 py-3 font-medium transition-all relative whitespace-nowrap ${activeTab === 'overview'
