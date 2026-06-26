@@ -714,7 +714,14 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                     // Server rejection (4xx/5xx) — real error, not a connectivity issue.
                     // Do NOT queue: the server received and rejected the event.
                     const errBody = await res.json().catch(() => ({}));
-                    console.error('[FootballLogger] Event POST rejected by server:', res.status, errBody);
+                    if (res.status === 401) {
+                        alert('Session expired — please log in again to continue logging.');
+                    } else if (res.status === 403) {
+                        alert('Not authorised to log events for this match. Contact admin.');
+                    } else {
+                        alert(`Event failed to save (${res.status}) — check connection and retry.`);
+                    }
+                    console.error('[FootballLogger] Event POST rejected:', res.status, errBody);
                 }
             } catch (e) {
                 // Network failure — server never received the event. Queue for background sync.

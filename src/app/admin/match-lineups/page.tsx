@@ -633,7 +633,7 @@ export default function AdminMatchLineupsPage() {
                         )}
 
                         {/* Publish Button */}
-                        <div className="flex justify-center">
+                        <div className="flex flex-col items-center gap-2">
                             <button
                                 onClick={publishLineups}
                                 disabled={saving || homeStarters.length !== playersPerSide || awayStarters.length !== playersPerSide || !homeCaptain || !awayCaptain || (user?.role !== 'admin' && selectedMatch.status !== 'UPCOMING') || (user?.role !== 'admin' && ((homeLineupStatus?.publishedByRole === 'admin' && !homeLineupStatus?.unlocked) || (awayLineupStatus?.publishedByRole === 'admin' && !awayLineupStatus?.unlocked)))}
@@ -642,6 +642,11 @@ export default function AdminMatchLineupsPage() {
                                 <Save size={20} />
                                 {saving ? 'Publishing...' : (homeLineupStatus?.status === 'published' || awayLineupStatus?.status === 'published') ? 'Update Lineups' : 'Publish Official Lineups'}
                             </button>
+                            {(!homeCaptain || !awayCaptain) && (
+                                <p className="text-xs text-amber-400 mt-1">
+                                    Set a captain for both teams before publishing.
+                                </p>
+                            )}
                         </div>
                     </div>
                 )}
