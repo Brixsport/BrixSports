@@ -1944,3 +1944,44 @@ All `emit(...)` calls in FootballLogger are fire-and-forget with no crash on fai
 1. Run the full 14-checkpoint staging test match (mapped in session 33E conversation — use the one-shot run order)
 2. For every phase that passes: DB query → evidence block → SHIPPED → RESOLVED in BACKLOG.md
 3. If all pass: run three prod migration statements from TEST_CHECKLIST.md POST-TEST GATE
+
+---
+
+### Session 34 — 2026-06-27
+
+**Focus:** Run the deferred 14-checkpoint staging test match; resolve all SHIPPED items; pre-match admin bug sweep; prod migration confirmation.
+
+**Built / Fixed:**
+
+- **BUG-079 (two-part fix)** — `src/app/admin/competitions/page.tsx`
+  - Part 1 (`0d916c2`): `GET /api/competitions/[id]/match-settings` returns `{ settings: [...] }` (array). `handleEditClick` read `data.settings` as a plain object — all fields `undefined`, form always showed defaults. Fix: `Array.isArray(data.settings) ? data.settings[0] : data.settings`.
+  - Part 2 (`e5e2b84`): Modal mounts before async fetch resolves — `useState` initialises from `undefined` → defaults, ignores prop update. Fix: `useEffect` in `CompetitionModal` syncs `matchSettings` + `playersOption` whenever `initialMatchSettings` prop changes.
+
+- **BACKLOG-107 / BACKLOG-108 / BACKLOG-109 / BACKLOG-110 filed** — rolling subs test coverage, optional match start time/venue, event timestamps showing regulation ceiling instead of real stoppage minute.
+
+- **Competition match settings wired into Create Match override panel** (`src/app/admin/matches/page.tsx`) — when competition selected, fetches match-settings and shows inherited values summary + updates INHERIT button labels with inherited value (e.g. "inherit (on)").
+
+- **Test match cleanup** — `dev/cleanup-jog-kings-test-match.mjs` — deleted Joga-Bonito vs Kings FC test match (`Kuld3e6xsjLj9amJg4cHx`): 15 events, 2 logger assignments, 1 yellow card stat decremented, match row deleted.
+
+- **Staging test match (14 phases)** — all passed except Phase 6 partial:
+  - Phases 1–5, 7–14: ✅ RESOLVED — TD-010, BUG-062/063/065/076/077/078, BUG-044b/045/053/054/055/060, BACKLOG-044 Phase B
+  - Phase 6: ⚠️ PARTIAL — subbed-on player missing from general event picker after sub (shows 10 not 11), even after hard refresh. BACKLOG-106 confirmed as the fix path.
+  - Phase 11: ✅ PASS — clock face (`getFormattedTime()`) reads `absoluteMinute` raw, no clamp. Clock keeps ticking past ceiling correctly.
+
+**Bugs encountered:**
+
+- Competition sport settings appeared to not save — DB write was correct; both the array→object read shape mismatch AND the async-mount useState initialisation were independently causing the form to show stale defaults. Needed two commits to fully fix.
+
+**Resolved:** BUG-079 (two commits). 14 test match items closed to RESOLVED (see BACKLOG.md). Prod migrations confirmed live on `brixsportv2-brixsports.aws-eu-west-1.turso.io`.
+
+**HAR audit:** 50 failures = 20× 401 `/api/auth/me` (AuthContext on logger page, no cookie — expected, harmless) + 30× WS status 0 (BUG-074, staging WS → prod Railway which was down). Zero unexpected API errors.
+
+**Deferred:**
+- BACKLOG-106 (subbed-on player missing from general event picker) — pre-match-day blocker
+- BACKLOG-110 (event timestamps show 45' not 47' during stoppage) — displayMinute Math.min clamp
+- BACKLOG-109 (optional start time/venue on match creation)
+- BACKLOG-108 (rolling subs test coverage — separate match required)
+- Commit of competition match settings wiring in Create Match modal (pending Richard review)
+
+**Next session:**
+1. Fix BACKLOG-106 — `getOnPitchPlayers` must rehydrate subbed-on players from DB events on mount, not just localStorage. After fix, run a sub scenario to verify 11 players shown in general picker after substitution.
