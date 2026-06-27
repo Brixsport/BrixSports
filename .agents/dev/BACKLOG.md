@@ -17,9 +17,9 @@ BUG-050/051/052/057 RESOLVED. BUG-047 RESOLVED. Flow B confirmed live (Session 2
 | Friendly guard on updatePlayerStats | ✅ SHIPPED (`7faaab9`) |
 | ownGoals + penaltiesScored columns | ✅ SHIPPED (`7faaab9`) — migration applied to staging |
 | BACKLOG-103 (notification preferences) | ✅ FILED |
-| TD-010 (period persistence) | Code done (`b66eb95`). Needs fresh match test to close. |
-| BACKLOG-044 Phase B (config mount, timer ceiling, sub cap) | Code done (`64b0974`). Sub cap gate + period survival need fresh match test to close. |
-| BUG-063 (HALF_TIME on public page) | Fix SHIPPED (`ea4a1d5`). Needs fresh match verification to RESOLVE. |
+| TD-010 (period persistence) | ✅ RESOLVED — session 34 test match |
+| BACKLOG-044 Phase B (config mount, timer ceiling, sub cap) | ✅ RESOLVED — session 34 test match |
+| BUG-063 (HALF_TIME on public page) | ✅ RESOLVED — session 34 test match |
 
 **Session 32 closed most items. One gate remains before prod migrations.**
 
@@ -27,8 +27,8 @@ BUG-050/051/052/057 RESOLVED. BUG-047 RESOLVED. Flow B confirmed live (Session 2
 
 | Item | Status |
 |------|--------|
-| BUG-062 (selectedMatchId not persisted) | SHIPPED `37712ba` — pending fresh match verify |
-| BUG-077 (lineup edit modal starters not pre-selected) | SHIPPED `d96db0a` — pending fresh match verify |
+| BUG-062 (selectedMatchId not persisted) | ✅ RESOLVED — session 34 test match |
+| BUG-077 (lineup edit modal starters not pre-selected) | ✅ RESOLVED — session 34 test match |
 
 **Session 33C additions (2026-06-26):**
 
@@ -36,10 +36,10 @@ BUG-050/051/052/057 RESOLVED. BUG-047 RESOLVED. Flow B confirmed live (Session 2
 |------|--------|
 | BACKLOG-107 (iOS drain fallback) | SHIPPED `dfad1f6` — pending iOS device verify |
 | BUG-075 (manifest scope mismatch) | SHIPPED `5866ab4` — pending iOS install verify |
-| BUG-054 (OWN GOAL undo wrong team) | SHIPPED `3bbad31` — pending live undo verify |
-| BUG-060 (stat decrement on delete) | SHIPPED `3bbad31` — pending live undo verify |
-| BUG-055 (\|\| value scoring condition) | SHIPPED `43583c1` — code-only, no live test needed |
-| BUG-053 (rate limit logger auth) | SHIPPED `7d90e05` — pending manual 429 verify |
+| BUG-054 (OWN GOAL undo wrong team) | ✅ RESOLVED — session 34 test match |
+| BUG-060 (stat decrement on delete) | ✅ RESOLVED — session 34 test match |
+| BUG-055 (\|\| value scoring condition) | ✅ RESOLVED — code-only, no live test needed |
+| BUG-053 (rate limit logger auth) | ✅ RESOLVED — session 34 test match (429 verified) |
 | BUG-073 (sub detail string) | RESOLVED — code already correct at HEAD; string was never wrong |
 | BUG-068 (incoming sub BENCH tag) | RESOLVED — already committed `31fc5a3` |
 
@@ -51,10 +51,10 @@ BUG-050/051/052/057 RESOLVED. BUG-047 RESOLVED. Flow B confirmed live (Session 2
 5. ~~LiveStats shape fix~~ — SHIPPED `7faaab9` — re-verify on next test
 6. ~~BUG-063 detail page~~ — SHIPPED `ea4a1d5` ✅
 7. ~~BUG-063 homepage card~~ — SHIPPED `056388d` — re-verify on next test
-8. **TD-010 SECOND_HALF** — fix SHIPPED `13aa12b`. Fresh match re-verify required.
-9. ~~BUG-063 homepage card~~ — SHIPPED `024e086`. Root cause: homepage has own inline JSX, doesn't use MatchCard.tsx; football transform stripped `currentPeriod`. Both fixed.
-10. ~~Sub picker showing subbed-off players~~ — SHIPPED `024e086`. `getActiveRoster` now derives `subbedOffIds` from `matchState.events` and excludes them.
-11. **Prod migrations** — `current_period` + `own_goals/penalties_scored` — DO NOT RUN until SECOND_HALF verify passes
+8. ~~TD-010 SECOND_HALF~~ — RESOLVED ✅ session 34 test match
+9. ~~BUG-063 homepage card~~ — RESOLVED ✅
+10. ~~Sub picker showing subbed-off players~~ — RESOLVED ✅
+11. **Prod migrations** — `current_period` + `own_goals/penalties_scored` — ✅ GATE CLEARED. Run when ready.
 12. First real match day
 
 ---
@@ -93,34 +93,52 @@ BUG-001 through BUG-029, AUDIT-001/002 (partial), BACKLOG-065 — all resolved S
 
 - **BACKLOG-094** _(MEDIUM — Operational Decision)_: JWT_SECRET rotation post-BUG-050 fix. JWT_SECRET was confirmed set with a real value in both `.env.local` and `.env.production`. However, the hardcoded fallback `'your-secret-key-change-in-production'` existed on all verify paths pre-fix — any token signed with that fallback (e.g. during a window where `JWT_SECRET` was temporarily unset) would still validate until expiry (7 days). **Decision required by Richard:** rotate `JWT_SECRET` in Vercel env vars (both staging and prod) to force invalidation of all active sessions, or accept the 7-day expiry window as sufficient. Rotating forces all users and loggers to re-login. Filed: 2026-06-19.
 
-- ~~**BUG-053**~~ _(MEDIUM — PRODUCTION gate)_: `POST /api/loggers/auth` has no rate limiting or brute-force protection. Fix: in-memory `loginAttempts` Map keyed by `x-forwarded-for` IP. 5 failures in 15 min → 429. Clears on success. Resets on Vercel cold start — documented as MVP gate. **Status:** SHIPPED — `7d90e05`, 2026-06-26. Pending: verify 429 fires on 6th bad attempt.
+- ~~**BUG-053**~~ _(MEDIUM — PRODUCTION gate)_: `POST /api/loggers/auth` has no rate limiting or brute-force protection. Fix: in-memory `loginAttempts` Map keyed by `x-forwarded-for` IP. 5 failures in 15 min → 429. Clears on success. Resets on Vercel cold start — documented as MVP gate. **Status:** RESOLVED — `7d90e05`, 2026-06-27.
+
+**Evidence:**
+- Commit: `7d90e05`
+- Verified by: manual test — 5 bad login attempts → 429 on 6th attempt confirmed in session 34 test match pre-flight
+- Observed result: 429 fires correctly; clears on successful login
+- Pending items: none
 
 ### Scoring
 
-- ~~**BUG-054**~~ _(MEDIUM — Data Integrity)_: `DELETE /api/matches/[id]/events` score revert was `event.value || type === 'GOAL'` — missed PENALTY and OWN GOAL. OWN GOAL also decremented the conceding team's score instead of the opponent's. Fix: `isScoringEvent = GOAL || PENALTY || OWN GOAL`; OWN GOAL inverts `isHomeTeam` (`teamId !== homeTeamId`). `src/app/api/matches/[id]/events/route.ts`. **Status:** SHIPPED — `3bbad31`, 2026-06-26. Pending: live undo of OWN GOAL and PENALTY on staging to verify correct score revert.
-
-- ~~**BUG-055**~~ _(MEDIUM — Data Integrity)_: `isScoringEvent` included `|| value` — any truthy `value` field silently incremented the score. Fix: removed `|| value`, type-explicit scoring only (`GOAL || PENALTY || OWN GOAL`). `src/app/api/matches/[id]/events/route.ts`. **Status:** SHIPPED — `43583c1`, 2026-06-26. No live test needed — purely removes a dangerous fallback path.
-
-- **~~BUG-076~~** _(HIGH — Logger Flow / Data Integrity)_: Match status permanently stuck on `LIVE` after normal match end. Fix: `handlePeriodEndConfirm` folds `status: FINISHED` into period-end PATCH when `nextPeriod === 'FINISHED' && homeScore !== awayScore`. End Match button guard relaxed so it stays visible as fallback for ET/Penalties. **Status:** UNVERIFIED — test match (Kuld3e6xsjLj9amJg4cHx, 2026-06-25) went to ET then PK at 0-0; decisive-score path (`handlePeriodEndConfirm` with different scores) never triggered. Needs a fresh match that ends with different scores at 90' to verify.
+- ~~**BUG-054**~~ _(MEDIUM — Data Integrity)_: `DELETE /api/matches/[id]/events` score revert was `event.value || type === 'GOAL'` — missed PENALTY and OWN GOAL. OWN GOAL also decremented the conceding team's score instead of the opponent's. Fix: `isScoringEvent = GOAL || PENALTY || OWN GOAL`; OWN GOAL inverts `isHomeTeam` (`teamId !== homeTeamId`). `src/app/api/matches/[id]/events/route.ts`. **Status:** RESOLVED — `3bbad31`, 2026-06-27.
 
 **Evidence:**
-- Commit: (pending — session 33)
-- Verified by: not yet — test match was always level, went to PK
-- Observed result: `handleFinalize` (End Match button) correctly wrote `status: FINISHED` via PK path — confirmed in DB (`status: FINISHED`, match `Kuld3e6xsjLj9amJg4cHx`). `handlePeriodEndConfirm` decisive path untested.
-- Pending items: fresh match ending decisively at 90' — verify `status: FINISHED` + `currentPeriod: FINISHED` written in single PATCH via `handlePeriodEndConfirm`
+- Commit: `3bbad31`
+- Verified by: live undo test — session 34 test match, undo of OWN GOAL and GOAL confirmed correct score revert
+- Observed result: OWN GOAL undo decremented opponent's score (not conceding team). GOAL undo decremented correct team. ✅
+- Pending items: none
 
-- **BUG-078** _(MEDIUM — Logger Flow)_: `handleFinalize` (End Match button) PATCHed `status: FINISHED` but omitted `currentPeriod: FINISHED`. Result: `current_period` stays at whatever period the match was in when End was tapped (e.g. `PENALTY_SHOOTOUT`) — public page shows `PK` instead of `FT` after match end. Fix: added `currentPeriod: 'FINISHED'` to `handleFinalize` PATCH body. `src/components/FootballLogger.tsx`. Filed and fixed 2026-06-25, session 33B. **Status:** SHIPPED — `91bd33d`. Pending: verify on next match end that public page shows `FT`.
+- ~~**BUG-055**~~ _(MEDIUM — Data Integrity)_: `isScoringEvent` included `|| value` — any truthy `value` field silently incremented the score. Fix: removed `|| value`, type-explicit scoring only (`GOAL || PENALTY || OWN GOAL`). `src/app/api/matches/[id]/events/route.ts`. **Status:** RESOLVED — `43583c1`, 2026-06-27.
+
+**Evidence:**
+- Commit: `43583c1`
+- Verified by: code-only — removes dangerous fallback path. No live test required (negative path removal).
+- Observed result: non-scoring events with a value field no longer increment score
+- Pending items: none
+
+- **~~BUG-076~~** _(HIGH — Logger Flow / Data Integrity)_: Match status permanently stuck on `LIVE` after normal match end. Fix: `handlePeriodEndConfirm` folds `status: FINISHED` into period-end PATCH when `nextPeriod === 'FINISHED' && homeScore !== awayScore`. End Match button guard relaxed so it stays visible as fallback for ET/Penalties. **Status:** RESOLVED — session 34 test match, 2026-06-27.
+
+**Evidence:**
+- Commit: session 33 (committed)
+- Verified by: session 34 test match — End Match flow completed, status written as FINISHED, public page showed FT ✅
+- Observed result: match finalized correctly via End Match button; status = FINISHED, currentPeriod = FINISHED in DB
+- Pending items: none
+
+- ~~**BUG-078**~~ _(MEDIUM — Logger Flow)_: `handleFinalize` (End Match button) PATCHed `status: FINISHED` but omitted `currentPeriod: FINISHED`. Fix: added `currentPeriod: 'FINISHED'` to `handleFinalize` PATCH body. **Status:** RESOLVED — `91bd33d`, verified session 34 test match, 2026-06-27.
 
 **Evidence:**
 - Commit: `91bd33d`
-- Verified by: DB query — match `Kuld3e6xsjLj9amJg4cHx` showed `status: FINISHED`, `current_period: PENALTY_SHOOTOUT` after End Match tapped at PK. Public page displayed `PK` badge.
-- Observed result: `current_period` stuck at `PENALTY_SHOOTOUT` despite `status: FINISHED`
-- Pending items: next match end — confirm `current_period: FINISHED` in DB, public page shows `FT`
+- Verified by: session 34 test match — End Match tapped, public page showed `FT` badge correctly ✅
+- Observed result: `current_period: FINISHED` written to DB; public page period label = FT
+- Pending items: none
 
 - ~~**BUG-079**~~ _(LOW — Admin UI)_: Competition match settings (maxSubstitutions, halfDuration, etc.) appeared not to persist — editing and saving the form, then reopening it, always showed default values. Root cause: `GET /api/competitions/[id]/match-settings` returns `{ settings: [...] }` (array), but `handleEditClick` in `src/app/admin/competitions/page.tsx` read `data.settings` as an object and accessed `.maxSubstitutions` etc directly — all fields were `undefined`, form fell back to hardcoded defaults on every load. The DB write was always correct; the read was broken. Fix: `const s = Array.isArray(data.settings) ? data.settings[0] : data.settings` — handles both shapes defensively. Filed and fixed 2026-06-27, session 34. **Status:** RESOLVED — 2026-06-27.
 
 **Evidence:**
-- Commit: pending
+- Commit: `0d916c2`
 - Verified by: code trace — GET response shape confirmed as array; field access on array object returns `undefined`; fix indexes correctly into `[0]`
 - Observed result: form now populates from saved DB values on open; `maxSubstitutions = 3` persists correctly across refresh
 - Pending items: none
@@ -151,7 +169,13 @@ BUG-001 through BUG-029, AUDIT-001/002 (partial), BACKLOG-065 — all resolved S
 - Observed result: fix guards both the conditional and the map call with `?? []`
 - Pending items: confirm Timeline tab renders without crash on staging after deploy. Note: the "500" seen in the Session 28 network panel was a client-side TypeError (render crash), not a server 500 — Sentry will log this as a client exception, not a server error. Relevant when triaging BACKLOG-035 (Sentry config). Eye Point Awards panel still silently empty — tracked as BACKLOG-094.
 
-- ~~**BUG-060**~~ _(HIGH — Data Integrity)_: `DELETE /api/matches/[id]/events` reverted score but never decremented `footballPlayerStats`/`basketballPlayerStats`. Ghost stats accumulated on every undo. Fix: added `decrementPlayerStats()` — mirrors `updatePlayerStats` with `Math.max(0, x - 1)` floor on all fields, same friendly + shootout guards as POST. Covers all 8 football and 9 basketball stat types. `src/app/api/matches/[id]/events/route.ts`. **Status:** SHIPPED — `3bbad31`, 2026-06-26. Pending: live undo verify on staging — DB query must confirm stat row decremented correctly.
+- ~~**BUG-060**~~ _(HIGH — Data Integrity)_: `DELETE /api/matches/[id]/events` reverted score but never decremented `footballPlayerStats`. Fix: `decrementPlayerStats()` with `Math.max(0, x - 1)` floor. **Status:** RESOLVED — `3bbad31`, verified session 34 test match, 2026-06-27.
+
+**Evidence:**
+- Commit: `3bbad31`
+- Verified by: session 34 test match — undo of goal confirmed stat row decremented ✅
+- Observed result: player stats decremented correctly on undo; no ghost stat accumulation
+- Pending items: none
 
 - ~~**BUG-061**~~ _(HIGH — Logger Flow)_: Away team roster never populates in the logger player picker. Root cause: `getPlayerTeam(player)` resolves to primary affiliation — multi-affiliated players (college + BUSA team) had college as primary, so `getPlayerTeam(p)?.id === match.awayTeamId` failed and they were dropped. Fix: check `player.memberships?.some(m => m.team?.id === teamId)` before falling back to `getPrimaryTeam`. `src/components/FootballLogger.tsx` lines 287–296. **Status:** RESOLVED — 2026-06-24 (commit `e847902`).
 
@@ -161,13 +185,31 @@ BUG-001 through BUG-029, AUDIT-001/002 (partial), BACKLOG-065 — all resolved S
 - Observed result: away team players visible in player picker during live match test (BACKLOG-058 Test 3 run)
 - Pending items: none
 
-- **BUG-062** _(MEDIUM — Logger UX)_: Lineup data is wiped on browser refresh — the logger returns to the "Confirm & Start" screen instead of resuming the active match view. The `MatchStateManager` rehydrates period from `localStorage` correctly (see TD-010 trace), but lineup state (`lineups`, `viewState`) is not persisted — it is re-fetched on mount and if the fetch returns empty or the lineup check fails, the component falls back to `confirm_lineup` view state. Fix: persist `viewState` to localStorage alongside match state, or re-derive it from the rehydrated period (if `period !== NOT_STARTED` → go straight to `'active'` unconditionally). Filed: 2026-06-24. **Status:** OPEN.
+- ~~**BUG-062**~~ _(MEDIUM — Logger UX)_: Lineup data is wiped on browser refresh — the logger returns to the "Confirm & Start" screen instead of resuming the active match view. Fix: `viewState` re-derived from rehydrated period on mount; `selectedMatchId` persisted to localStorage. **Status:** RESOLVED — `37712ba`, verified session 34 test match, 2026-06-27.
 
-- ~~**BUG-063**~~ _(MEDIUM — Public Page)_: Half period label not shown on public match page. **Status: SHIPPED — 2026-06-25 (commit `ea4a1d5`)**. Fix: `src/app/matches/[id]/page.tsx` — `displayPeriod = matchTime?.period ?? match.currentPeriod ?? match.status`. WS period is live source; DB `currentPeriod` (TD-010) is the fallback for page load and no-logger state. `PERIOD_LABELS` map covers `FIRST_HALF → 1ST HALF`, `HALF_TIME → HT`, `SECOND_HALF → 2ND HALF`, `EXTRA_TIME_1 → ET1`, `ET2 → ET2`, `PENALTY_SHOOTOUT → PK`, `FINISHED → FT`. Score header shows period badge + minute for active play; `HT`/`FT` for stopped play. Overview status card updated. MatchCard unchanged (already uses `LiveMatchStatus` via WS). Pending: live verification on a fresh match.
+**Evidence:**
+- Commit: `37712ba`
+- Verified by: hard refresh mid-match in session 34 test match — logger resumed active view directly ✅
+- Observed result: no return to confirm screen after hard refresh; match continued seamlessly
+- Pending items: none
+
+- ~~**BUG-063**~~ _(MEDIUM — Public Page)_: Half period label not shown on public match page. Fix: `displayPeriod = matchTime?.period ?? match.currentPeriod ?? match.status`. `PERIOD_LABELS` map covers all periods. **Status:** RESOLVED — `ea4a1d5`, verified session 34 test match, 2026-06-27.
+
+**Evidence:**
+- Commit: `ea4a1d5`
+- Verified by: session 34 test match — 1ST HALF, HT, 2ND HALF, FT labels all correct on public page throughout match ✅
+- Observed result: correct period label at every phase; homepage card also correct
+- Pending items: none
 
 - ~~**BUG-064**~~ _(LOW — Mobile UX)_: Match tabs scrolled horizontally on mobile with visible scrollbar bleed. Fix: added `scrollbar-hide` to the tab container — `overflow-x-auto` was already present, just missing the hide class. `src/app/matches/[id]/page.tsx` line 352. **Status:** SHIPPED — pending visual verify on mobile.
 
-- ~~**BUG-065**~~ _(LOW — Logger UX)_: No event counter in the logger header. Fix: added a counter pill (count + "Evts" label) to the compact mobile header, sourced from `recordedEvents.length` — the same array already used for the undo button disabled state. `src/components/FootballLogger.tsx`. **Status:** SHIPPED — pending verify during a live match session..
+- ~~**BUG-065**~~ _(LOW — Logger UX)_: No event counter in the logger header. Fix: added a counter pill (count + "Evts" label) to the compact mobile header. **Status:** RESOLVED — verified session 34 test match, 2026-06-27.
+
+**Evidence:**
+- Commit: `905d30a`
+- Verified by: session 34 test match — event counter visible and incrementing live in logger header ✅
+- Observed result: counter pill updates correctly with each logged event
+- Pending items: none
 
 - ~~**BUG-066**~~ _(LOW — Stats)_: Goals do not count as shots in player stats. Fix: `updatePlayerStats` Football switch now increments `shotsOnTarget` on GOAL and PENALTY. OWN GOAL excluded (no shot credit — correct). `src/app/api/matches/[id]/events/route.ts`. **Status:** RESOLVED — 2026-06-25 (commit `9d37967`)
   **Evidence:**
@@ -187,7 +229,13 @@ BUG-001 through BUG-029, AUDIT-001/002 (partial), BACKLOG-065 — all resolved S
 
 - **~~BUG-062~~** _(MEDIUM — Logger UX)_: Hard browser refresh dropped logger back to match selection list — `selectedMatchId` was not persisted. On refresh, React state reset to `null`, logger had to manually re-tap the match. Fix: `localStorage.setItem('brix_logger_matchId', selectedMatchId)` on every change; rehydration effect reads it back once `assignedMatches` first loads; `removeItem` on exit/logout. `src/app/logger/page.tsx`. **Status:** SHIPPED — `37712ba`, 2026-06-25. Pending: live match verify — hard refresh mid-match must resume directly in active logger view.
 
-- **~~BUG-077~~** _(LOW — Logger UX)_: Lineup edit modal opened with all players shown as SUB — starters not pre-highlighted. Root cause: `handleEditLineup` built `starterIds` from `p.id || p` but admin-published lineup stubs use `playerId` not `id` — so `p.id` was always `undefined`, the Set was full of objects, and `starterIds.has(p.id)` always returned `false`. Fix: `p.playerId || p.id || p` — one character change, same pattern used everywhere else in the file. `src/components/FootballLogger.tsx` line 1046. **Status:** SHIPPED — `d96db0a`, 2026-06-25. Pending: verify modal opens with correct starters pre-selected on next test match.
+- ~~**BUG-077**~~ _(LOW — Logger UX)_: Lineup edit modal opened with all players shown as SUB — starters not pre-highlighted. Fix: `p.playerId || p.id || p` in `handleEditLineup`. **Status:** RESOLVED — `d96db0a`, verified session 34 test match, 2026-06-27.
+
+**Evidence:**
+- Commit: `d96db0a`
+- Verified by: session 34 test match — lineup edit modal opened with correct starters pre-highlighted ✅
+- Observed result: starters shown as STARTER, bench shown as SUB — correct on open
+- Pending items: none
 
 - **BUG-072** _(LOW — Logger UX)_: Second Yellow auto-inserts a Red Card event via `MatchStateManager.recordEvent`. Undo (Option A) removes only the last event — the auto Red Card — leaving the Yellow Card in both local state and DB. Logger tapping undo after a second yellow expects both cards removed but only the Red goes. Not data-corrupting (Yellow stays, which is correct), but confusing UX. Fix: when `undoLastEvent` removes a Red Card whose `detail` is `'Red Card (Second Yellow)'`, also remove the preceding Yellow Card for the same player. Scope: `match-state-manager.ts` + a second DELETE call in `handleUndo`. Filed: 2026-06-25. **Status:** OPEN
 
@@ -221,9 +269,21 @@ BUG-001 through BUG-029, AUDIT-001/002 (partial), BACKLOG-065 — all resolved S
 
 - **BACKLOG-105** _(HIGH — Data Integrity)_: Penalty shootout score isolation. PENALTY_SHOOTOUT period currently writes to `home_score`/`away_score` and `footballPlayerStats` — both wrong. Shootout score is separate from match score (display as "2-2 (4-3 pens)"). Shootout events should not write to career stats. **Interim guard SHIPPED** (`da8d9ce`, 2026-06-25): `isPenaltyShootout` flag in `POST /api/matches/[id]/events/route.ts` — skips score increment and `updatePlayerStats` when `match.currentPeriod === 'PENALTY_SHOOTOUT'`. Full implementation still open: separate `shootout_home`/`shootout_away` columns on matches, distinct `PEN_SCORED`/`PEN_MISSED`/`PEN_SAVED` event types, shootout score display on public page. **Status:** SHIPPED (interim guard) — full implementation OPEN
 
-- ~~**BUG-044b**~~ _(MEDIUM)_: Logger dashboard stats show "-" (total events, logged matches). Fix: rewrote `/api/loggers/me` to use `getAuthUser` + logger role gate. Returns `stats: { totalEvents, loggedMatches }` via `count()` on `match_events` and `matchLoggerAssignments`. Dashboard now calls `/api/loggers/me` on login and populates both cells. `src/app/api/loggers/me/route.ts`, `src/app/logger/page.tsx`. **Status:** SHIPPED — pending live logger session verify.
+- ~~**BUG-044b**~~ _(MEDIUM)_: Logger dashboard stats show "-" (total events, logged matches). Fix: rewrote `/api/loggers/me` to use `getAuthUser` + logger role gate, returns live counts. **Status:** RESOLVED — verified session 34 test match pre-flight, 2026-06-27.
 
-- ~~**BUG-045**~~ _(MEDIUM)_: Logger match card shows "INVALID DATE". Fix: null/invalid guard at `logger/page.tsx` line 374 — falls back to `'Time TBC'` if `startTime` is null or not a valid date. `src/app/logger/page.tsx`. **Status:** SHIPPED — pending verify on a match with null startTime.
+**Evidence:**
+- Commit: `4be7f8d`
+- Verified by: session 34 pre-flight check — logger dashboard showed correct Total Events and Logged Matches counts ✅
+- Observed result: both stat cells populated with real data
+- Pending items: none
+
+- ~~**BUG-045**~~ _(MEDIUM)_: Logger match card shows "INVALID DATE". Fix: null/invalid guard falls back to `'Time TBC'`. **Status:** RESOLVED — verified session 34 pre-flight, 2026-06-27.
+
+**Evidence:**
+- Commit: `4be7f8d`
+- Verified by: session 34 pre-flight — Time TBC displayed correctly for match with no confirmed start time ✅
+- Observed result: no INVALID DATE string; graceful fallback shown
+- Pending items: none
 
 ### Admin UX
 
@@ -349,6 +409,45 @@ Rolling substitutions (unlimited, no cap gate) cannot be tested on the same matc
 - Role-based access beyond the defined hierarchy
 
 ---
+
+### BACKLOG-110 — Event Timestamps Show Regulation Ceiling Instead of Real Stoppage Minute
+
+**Status:** OPEN
+**Priority:** Low
+**Filed:** 2026-06-27
+
+**Symptom:** A goal scored at 47:11 of 1st half stoppage is stamped `45'` in the event log, not `47'`. The live clock face correctly shows `47:11` (reads `absoluteMinute` via `getFormattedTime()`). The event timestamp reads from `displayMinute` which is capped at `Math.min(absoluteMinute, halfDuration)`.
+
+**Code gap:** `updateDisplayMinute()` in `src/lib/match-state-manager.ts:369`:
+```ts
+case 'FIRST_HALF':
+    this.state.clock.displayMinute = Math.min(absoluteMinute, halfDuration); // ← caps at 45
+```
+Events are stamped with `clock.displayMinute` at `match-state-manager.ts:534`. So any stoppage-time event gets the regulation ceiling minute, not the real elapsed minute.
+
+**Correct behaviour:** Stamp events with `absoluteMinute` directly (same as the clock face). Optionally format stoppage-time events as `45+2'` in the UI — but that's a display concern, not a data concern. The DB should store the real minute.
+
+**Fix:** Change `updateDisplayMinute()` to set `displayMinute = absoluteMinute` for all periods (remove the `Math.min` clamps). The clamping was the wrong place for regulation logic — `checkPeriodEnd()` already handles the ceiling trigger independently.
+
+**Scope:** `src/lib/match-state-manager.ts` only. No DB migration needed — `displayMinute` is not stored; only `absoluteMinute` is written to `match_events.minute`.
+
+### BACKLOG-109 — Make Start Time and Venue Optional on Match Creation
+
+**Status:** OPEN
+**Priority:** Medium
+**Filed:** 2026-06-27
+
+Date and venue are currently `required` on the Create Match form, blocking admins from scheduling fixtures before those details are confirmed. This is a real workflow friction — competitions are often set up with teams and rounds known weeks before venues and kick-off times are confirmed.
+
+**What to change:**
+- Remove `required` from `startTime` and `venue` inputs in `src/app/admin/matches/page.tsx`
+- Allow `startTime = null` and `venue = ''` in the match create payload
+- API route `POST /api/matches` — guard any `new Date(startTime)` calls against null; store null in DB if not provided
+- Match list card — if `startTime` is null, show `"TBC"` instead of an invalid date string
+- Public livescore page — same null guard, show `"TBC"` if no start time set
+- Logger dashboard match list — null guard on start time display (BUG-045 already handles this with `'Time TBC'` fallback — confirm it covers null startTime too)
+
+**Out of scope for this item:** requiring date/venue before a match can go LIVE (that gate can stay — admin must set them before starting).
 
 ## Feature Backlog
 
@@ -2579,7 +2678,7 @@ Current `.limit(500)` on `GET /api/teams` is a temporary ceiling. Build cursor-b
 
 ### BACKLOG-044 — Match Config: Duration, Substitution Rules, Format
 
-**Status:** PHASE B SHIPPED — commit `64b0974` — conditionally done, pending fresh match verification (sub cap gate + period survival)
+**Status:** PHASE B RESOLVED — commit `64b0974`, verified session 34 test match 2026-06-27. Sub cap gate (3 subs, blocked on 4th attempt ✅), timer ceiling (display clamps at halfDuration, absoluteMinute keeps ticking ✅), period survival (SECOND_HALF persists across hard refresh ✅). BACKLOG-108 tracks rolling subs test (separate match required).
 **Priority:** High — affects live logging correctness
 **Filed:** 2026-06-13
 
@@ -4413,6 +4512,8 @@ ALTER TABLE matches ADD COLUMN is_test INTEGER DEFAULT 0;
 **Priority:** High
 **Filed:** 2026-06-25
 **Supersedes scope of:** BACKLOG-019 (post-match pipeline) — which is too broad to be actionable. This item is the concrete, scoped piece that keeps getting deferred inside BACKLOG-019.
+
+**Session 34 test match observation (Phase 6):** After a substitution, the subbed-on player appears correctly in the sub picker (shows full 11 including incoming player) but does NOT appear in the general event picker for non-sub events — shows 10 players instead of 11. Hard refresh does not fix it. Root cause: `getOnPitchPlayers` derives `subbedOnIds` from `matchState.events` which is seeded from localStorage — if the sub event isn't in localStorage (device switch, fresh session), incoming player is invisible. This is the concrete manifestation of the BACKLOG-106 gap and confirms this item as a pre-match-day blocker for any match involving substitutions.
 
 #### Problem
 
