@@ -79,6 +79,13 @@ function AdminMatchesPageContent() {
 
     const [competitionTeams, setCompetitionTeams] = useState<Team[]>([]);
     const [isFetchingTeams, setIsFetchingTeams] = useState(false);
+    const [competitionMatchSettings, setCompetitionMatchSettings] = useState<{
+        halfDuration?: number | null;
+        maxSubstitutions?: number | null;
+        extraTimeEnabled?: boolean;
+        penaltiesEnabled?: boolean;
+        allowDraws?: boolean;
+    } | null>(null);
 
     const [formData, setFormData] = useState({
         sport: 'Football',
@@ -129,8 +136,16 @@ function AdminMatchesPageContent() {
     useEffect(() => {
         if (formData.competitionId) {
             fetchCompetitionTeams(formData.competitionId);
+            fetch(`/api/competitions/${formData.competitionId}/match-settings`)
+                .then(r => r.ok ? r.json() : null)
+                .then(data => {
+                    const s = Array.isArray(data?.settings) ? data.settings[0] : data?.settings;
+                    setCompetitionMatchSettings(s ?? null);
+                })
+                .catch(() => setCompetitionMatchSettings(null));
         } else {
             setCompetitionTeams([]);
+            setCompetitionMatchSettings(null);
         }
     }, [formData.competitionId]);
 
@@ -711,13 +726,23 @@ function AdminMatchesPageContent() {
                                 {showMatchOverrides && (
                                     <div className="px-5 pb-5 border-t border-white/10 pt-4 space-y-3">
                                         <p className="text-[10px] text-white/30 uppercase tracking-widest">Untouched toggles inherit from competition match settings. Toggle only what differs for this specific fixture.</p>
+                                        {competitionMatchSettings && (
+                                            <div className="bg-white/5 rounded-lg px-4 py-3 text-[10px] font-bold text-white/40 uppercase tracking-widest space-y-1">
+                                                <p className="text-white/20">Inheriting from competition:</p>
+                                                <p>Half Duration: <span className="text-white/60">{competitionMatchSettings.halfDuration ?? 45} min</span></p>
+                                                <p>Subs: <span className="text-white/60">{competitionMatchSettings.maxSubstitutions == null ? 'Unlimited' : competitionMatchSettings.maxSubstitutions}</span></p>
+                                                <p>Extra Time: <span className="text-white/60">{competitionMatchSettings.extraTimeEnabled ? 'ON' : 'OFF'}</span></p>
+                                                <p>Penalties: <span className="text-white/60">{competitionMatchSettings.penaltiesEnabled ? 'ON' : 'OFF'}</span></p>
+                                                <p>Allow Draws: <span className="text-white/60">{competitionMatchSettings.allowDraws ? 'ON' : 'OFF'}</span></p>
+                                            </div>
+                                        )}
                                         {(
                                             [
-                                                { key: 'extraTimeEnabledOverride', label: 'Extra Time' },
-                                                { key: 'penaltiesEnabledOverride', label: 'Penalties' },
-                                                { key: 'allowDrawsOverride', label: 'Allow Draws' },
+                                                { key: 'extraTimeEnabledOverride', label: 'Extra Time', inherited: competitionMatchSettings?.extraTimeEnabled },
+                                                { key: 'penaltiesEnabledOverride', label: 'Penalties', inherited: competitionMatchSettings?.penaltiesEnabled },
+                                                { key: 'allowDrawsOverride', label: 'Allow Draws', inherited: competitionMatchSettings?.allowDraws },
                                             ] as const
-                                        ).map(({ key, label }) => {
+                                        ).map(({ key, label, inherited }) => {
                                             const val = formData[key];
                                             return (
                                                 <div key={key} className="flex items-center gap-4">
@@ -736,7 +761,9 @@ function AdminMatchesPageContent() {
                                                                         : 'border-white/10 text-white/30 hover:border-white/30'
                                                                 }`}
                                                             >
-                                                                {opt}
+                                                                {opt === 'inherit' && inherited !== undefined
+                                                                    ? `inherit (${inherited ? 'on' : 'off'})`
+                                                                    : opt}
                                                             </button>
                                                         ))}
                                                     </div>
