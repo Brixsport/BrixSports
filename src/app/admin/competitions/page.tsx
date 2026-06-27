@@ -556,7 +556,7 @@ function AdminCompetitionsPageContent() {
             const res = await fetch(`/api/competitions/${comp.id}/match-settings`);
             if (res.ok) {
                 const data = await res.json();
-                const s = data.settings;
+                const s = Array.isArray(data.settings) ? data.settings[0] : data.settings;
                 if (s) {
                     setEditingMatchSettings({
                         halfDuration: s.halfDuration ?? 45,

@@ -117,6 +117,14 @@ BUG-001 through BUG-029, AUDIT-001/002 (partial), BACKLOG-065 — all resolved S
 - Observed result: `current_period` stuck at `PENALTY_SHOOTOUT` despite `status: FINISHED`
 - Pending items: next match end — confirm `current_period: FINISHED` in DB, public page shows `FT`
 
+- ~~**BUG-079**~~ _(LOW — Admin UI)_: Competition match settings (maxSubstitutions, halfDuration, etc.) appeared not to persist — editing and saving the form, then reopening it, always showed default values. Root cause: `GET /api/competitions/[id]/match-settings` returns `{ settings: [...] }` (array), but `handleEditClick` in `src/app/admin/competitions/page.tsx` read `data.settings` as an object and accessed `.maxSubstitutions` etc directly — all fields were `undefined`, form fell back to hardcoded defaults on every load. The DB write was always correct; the read was broken. Fix: `const s = Array.isArray(data.settings) ? data.settings[0] : data.settings` — handles both shapes defensively. Filed and fixed 2026-06-27, session 34. **Status:** RESOLVED — 2026-06-27.
+
+**Evidence:**
+- Commit: pending
+- Verified by: code trace — GET response shape confirmed as array; field access on array object returns `undefined`; fix indexes correctly into `[0]`
+- Observed result: form now populates from saved DB values on open; `maxSubstitutions = 3` persists correctly across refresh
+- Pending items: none
+
 ### Logger Flow
 
 - **BUG-057** _(CRITICAL — Auth)_: `getAuthUser()` in `src/lib/auth.ts` does not support logger sessions. Logger JWTs carry `{ id, email, role }` but `verifyAuth` casts to `AuthUser` which expects `{ userId, email, role }` — so `authData.userId` is `undefined`. `getAuthUser` then queries the `users` table with `undefined`, returns no row, returns `null`. Every handler that calls `getAuthUser` (PATCH `/api/matches/[id]`, POST `/api/matches/[id]/events`, etc.) returns 401 for ALL logger requests despite a valid `authToken` cookie. Root cause discovered during Session 28 smoke test — logger could log in successfully (`POST /api/loggers/auth` returned 200, cookie set) but every subsequent authenticated call returned 401. Fix: (a) `verifyAuth` normalises `decoded.userId ?? decoded.id` so logger tokens resolve correctly; (b) `getAuthUser` branches on `role === 'logger'` and queries the `loggers` table instead of `users`. `src/lib/auth.ts`. **Status:** RESOLVED — 2026-06-22.
@@ -314,6 +322,22 @@ BUG-001 through BUG-029, AUDIT-001/002 (partial), BACKLOG-065 — all resolved S
 - ~~**TD-008**~~: `useLiveStandings.ts` — `teamLogo: string` type was wrong (should be `string | null`); `|| '❓'` emoji fallback masked null values causing `TeamLogo` to receive a literal emoji string. RESOLVED 2026-06-16 — type fixed to `string | null`, fallback changed to `null`. Commit `bb0a1ed`.
 
 ## Descoped Features (Future Work)
+
+### BACKLOG-108 — Rolling Subs: End-to-End Test Coverage
+
+**Status:** OPEN
+**Priority:** Low
+**Filed:** 2026-06-27
+
+Rolling substitutions (unlimited, no cap gate) cannot be tested on the same match as the sub cap gate (BACKLOG-044 Phase B). The two modes are mutually exclusive per competition config.
+
+**What to test when filing:**
+- Rolling subs checkbox enabled in competition Match Settings → sub cap input hidden/disabled
+- Logger can make unlimited substitutions without hitting a gate
+- `maxSubstitutions = null` stored in DB; sub cap gate code path skipped entirely
+- Subbed-out player re-entry if `allowSubbedOutReentry` is also enabled
+
+**Gate:** Requires a dedicated test match on a competition configured with rolling subs. Schedule after the standard-sub test match passes.
 
 - Payment, sponsorship, or financial processing
 - Social features (comments, reactions, follows, DMs)
