@@ -84,6 +84,15 @@ function CompetitionModal({ mode, initialData, initialMatchSettings, onSubmit, o
             : 7
     );
 
+    useEffect(() => {
+        if (!initialMatchSettings) return;
+        setMatchSettings(initialMatchSettings);
+        setPlayersOption(derivePlayersOption(initialMatchSettings.playersPerSide ?? 11));
+        if (initialMatchSettings.playersPerSide && initialMatchSettings.playersPerSide !== 11 && initialMatchSettings.playersPerSide !== 5) {
+            setPlayersCustom(initialMatchSettings.playersPerSide);
+        }
+    }, [initialMatchSettings]);
+
     const setMs = (patch: Partial<MatchSettingsForm>) => setMatchSettings(prev => ({ ...prev, ...patch }));
 
     const handlePlayersOption = (opt: '11' | '5' | 'custom') => {
