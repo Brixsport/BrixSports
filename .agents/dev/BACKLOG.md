@@ -537,6 +537,44 @@ BUG-001 through BUG-029, AUDIT-001/002 (partial), BACKLOG-065 — all resolved S
 
 ---
 
+### BACKLOG-118 — Logger Cookie Bleeds into Viewer-App Routes (Dual-Account UX Broken)
+
+**Status:** OPEN
+**Priority:** Medium
+**Filed:** 2026-06-29
+**Depends on:** BACKLOG-117 (SSO) for full resolution
+
+#### Problem
+
+`authToken` cookie is not path-scoped. A logger who logged into `/logger` has their logger JWT active across all routes on the domain, including the viewer app. `getAuthUser` returns a logger identity (ID from `loggers` table) on every route — including viewer-facing endpoints that expect a `users` table ID.
+
+**Affected routes and symptoms:**
+
+| Route | Symptom |
+|---|---|
+| `GET/POST/DELETE/PATCH /api/users/follows` | Logger ID ≠ users.id → 403. **Fixed** with email bridge in `1a98902`. |
+| `GET/POST/DELETE /api/users/favorites` | Uses `authUser.id` directly → logger ID has no `userFavorites` rows → empty result or silent no-op on write |
+| `POST/DELETE /api/teams/[id]/follow` | Uses `authUser.id` → follow/unfollow writes against logger ID → orphan row or silent miss |
+| `GET /api/notifications` | Uses `authUser.id` for favorites join → logger ID → empty notifications list |
+| `POST /api/notifications/subscribe` | Takes `userId` from body, no ownership check → not a bleed issue but a separate auth gap |
+
+#### Fix applied (follows only — `1a98902`)
+
+`resolveUserId()` helper: if `authUser.role === 'logger'`, queries `users` table by `authUser.email`, returns the fan account ID if found. Falls back to logger ID if no fan account exists (→ 403, correct).
+
+**Risk / assumption:** email must match exactly between `loggers` and `users` tables. An admin who creates a logger account with someone else's email would bridge access incorrectly. Low risk in practice (admin controls logger creation).
+
+#### Remaining work
+
+Apply the same `resolveUserId` pattern to:
+- `src/app/api/users/favorites/route.ts` — GET/POST/DELETE handlers
+- `src/app/api/teams/[id]/follow/route.ts` — POST/DELETE handlers
+- `src/app/api/notifications/route.ts` — GET handler
+
+Long-term: BACKLOG-117 (SSO) eliminates this class of bug entirely by unifying identity into one table.
+
+---
+
 ### BACKLOG-108 — Rolling Subs: End-to-End Test Coverage
 
 **Status:** OPEN
