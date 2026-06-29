@@ -133,3 +133,28 @@ Background Sync on Android has a per-origin quota. If many sync tags are registe
 |----|-------------|----------|
 | BACKLOG-107 | Online/visibilitychange drain fallback (iOS Background Sync alternative) | HIGH — pre-match blocker |
 | BUG-075 | `manifest-admin.json` scope mismatch blocks iOS install | MEDIUM |
+
+---
+
+## Architecture Decision — PWA Consolidation (logged 2026-06-29)
+
+**Current state (post session 35):** Three manifests.
+- `manifest-user.json` → Viewer PWA (`/`, fans, livescores)
+- `manifest-admin.json` → Admin PWA (`/admin`, admins only)
+- `manifest-logger.json` → Logger PWA (`/logger`, loggers only) ← created session 35 to fix BUG-075
+
+**Proposed: merge admin + logger into one "Staff PWA"**
+
+Arguments for:
+- `sw-admin.js` is already shared between admin and logger — no change to SW
+- One install link to send to staff, one icon on home screen, one manifest to maintain
+- Role-aware redirect already exists — admin lands `/admin`, logger lands `/logger` after auth
+- Simpler to support: one app identity, one set of icons/names to update
+
+Arguments against / caveats:
+- On iOS, `start_url` is the cold-launch URL with no JS intercept before render. Setting `start_url: "/login"` (cleanest) means the login screen renders first, then redirect fires after auth. Slight flash but acceptable. Setting `start_url: "/admin"` means loggers see an admin flash before redirect — worse.
+- Two manifests created a clean separation of PWA identity for future where admin and logger may diverge further (e.g. different theme colors, different shortcuts)
+
+**Decision: defer the merge.** `manifest-logger.json` was just created to fix a real launch-URL bug. Don't immediately revert. Merge as a deliberate cleanup task in a future PWA pass.
+
+**When merging:** create `manifest-staff.json`, `start_url: "/login"`, `scope: "/"`, `name: "BrixSports Staff"`. Update both `admin/layout.tsx` and `logger/layout.tsx` to reference it. Delete `manifest-admin.json` and `manifest-logger.json`. The auth redirect flow handles role routing from there.

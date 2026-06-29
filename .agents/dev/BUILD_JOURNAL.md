@@ -1985,3 +1985,36 @@ All `emit(...)` calls in FootballLogger are fire-and-forget with no crash on fai
 
 **Next session:**
 1. Fix BACKLOG-106 — `getOnPitchPlayers` must rehydrate subbed-on players from DB events on mount, not just localStorage. After fix, run a sub scenario to verify 11 players shown in general picker after substitution.
+
+---
+
+### Session 35 — 2026-06-29
+
+**Focus:** Fix BACKLOG-106 (subbed-on player missing from general event picker), BUG-080 (no polling fallback on public match page), BUG-075 (logger PWA manifest), test checklist cleanup.
+
+**Built / Fixed:**
+
+- **BACKLOG-106 — two-part fix:**
+  - Part 1 (`eb60ec8`): `PlayerSelectionModal` had `filterStartersOnly=true` for every non-sub event. Filter at line 2402 excluded any player not in `starterIds` (original lineup starters). Subbed-on players are never starters — stripped from the general event and assist pickers even though `getOnPitchPlayers` correctly included them. Fix: `filterStartersOnly && !starterIds.has(p.id) && !subbedOnPlayerIds?.has(p.id)` — one line covers all event types (fouls, shots, cards, everything). Assist modal also wired with `subbedOnPlayerIds` — same gap. Red card exclusion fires before this guard — correct.
+  - Part 2 (`8e26b84`): Fresh session path (tab close, device switch, AuthContext wipe) — `matchState.events` empty on mount, `subbedOnIds = []`, subbed-on player invisible. Fix: after `MatchStateManager` init, if `clock.period !== NOT_STARTED && events.length === 0`, fetch `GET /api/matches/[id]/events`, map DB rows to `MatchEvent` shape (null snapshots, `minute → absoluteMinute`), call `mergeExternalEvents`. Known gap: DB seed skipped if localStorage has any events (guard is `events.length === 0`) — partial cache won't rehydrate missing events.
+
+- **BUG-080 — polling fallback + toast** (`d186621`, `ef8f9d8`, `064c603`): `/matches/[id]` had no fallback when WS disconnected — page froze on stale data. Fix: `useEffect` polls `GET /api/matches/[id]` via existing `fetchMatchData()` every 10s when `isConnected === false && isLive`. Interval clears on reconnect or unmount. Disconnect fires amber toast once ("Live updates paused — refreshing automatically"), reconnect fires green toast once. `disconnectToastFired` ref prevents toast spam if WS flaps. Live dot stays green — polling is silent fallback. `ToastContainer` + `useToast` wired into match detail page.
+
+- **BUG-075 — logger PWA manifest** (`a76e429`): Logger layout referenced `manifest-admin.json` (start_url `/admin?source=pwa`). A logger installing from `/logger` would launch into `/admin` — inaccessible. Created `public/manifest-logger.json` with `start_url: "/logger?source=pwa"` and `scope: "/logger"`. Logger layout updated. Admin manifest untouched. Scope note: API fetch calls are scope-immune; logger has no deep-links outside `/logger` so scope is safe.
+
+- **TEST_CHECKLIST.md** (`a76e429`): Session 34 phases 1–5, 7–11, 14 ticked RESOLVED. New phases added: Phase 6 BACKLOG-106 three-scenario test (same session / tab close reopen / hard refresh), Phase 12 BUG-080 polling test, Phase 13 BUG-075 iOS install verify. Post-test migration gate removed (already applied session 34). Known Broken section updated.
+
+**Bugs encountered:** None new this session.
+
+**Resolved:** BACKLOG-106 (both paths), BUG-080, BUG-075 — all SHIPPED. Move to RESOLVED after Railway is up and Phase 6/12/13 pass on staging.
+
+**Deferred:**
+- Railway WS infra — pay $5 hobby plan or Render/Fly.io free tier. Blocking RESOLVED status on BUG-080 and BACKLOG-106.
+- BUG-072 (LOW) — second yellow undo leaves Yellow Card; fix: `undoLastEvent` detects `Red Card (Second Yellow)` and cascades to preceding Yellow for same player
+- BACKLOG-104 (MEDIUM) — penalty missed/saved outcomes; no schema change; 3 outcome buttons in logger UI
+- BACKLOG-105 — full penalty shootout; separate score columns, PEN_SCORED/MISSED/SAVED event types, public display
+
+**Next session:**
+1. Railway decision first — get WS back up
+2. Run Phase 6 (three BACKLOG-106 scenarios), Phase 12 (BUG-080 polling), Phase 13 (BUG-075 iOS install) to close all three to RESOLVED
+3. Then BUG-072 (second yellow undo cascade) — small scope, one session
