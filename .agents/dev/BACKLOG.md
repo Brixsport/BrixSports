@@ -4622,15 +4622,15 @@ On event delete: instead of decrementing a global counter (fragile, can go negat
 
 ### BACKLOG-111 — Stat Reversion on Event Undo
 
-**Status:** OPEN
+**Status:** SHIPPED — `f44edfa`, Session 36. Pending live verification.
 **Priority:** Low
 **Filed:** 2026-06-29
 
-**Context:** The DELETE `/api/matches/[id]/events/[eventId]` handler reverts match score for scoring events but does NOT decrement `footballPlayerStats` (e.g. `yellowCards`, `redCards`, `fouls`, `saves`). This gap applies to all event types, not just second yellows.
+**Context:** The DELETE `/api/matches/[id]/events/[eventId]` handler reverts match score for scoring events but did NOT decrement `footballPlayerStats`. Root cause confirmed via call chain trace: `decrementPlayerStats` existed in `events/route.ts` (collection route) but was never reachable from `[eventId]/route.ts` (the route FootballLogger actually calls) — classic false-RESOLVED gap.
 
-**Why deferred:** Decrement logic must mirror the increment logic exactly — including floor guards (`Math.max(0, x - 1)`), friendly match exclusion guard, and shootout event guard. All three must apply symmetrically. Bundling into BUG-072 introduced edge case risk; filed separately for a contained, single-concern fix.
+**Fix:** Self-contained `revertPlayerStat(sport, playerId, eventType)` function added to `[eventId]/route.ts`. Switch covers: GOAL, ASSIST, OWN GOAL, PENALTY, PENALTY MISSED, PENALTY SAVED, FOUL, YELLOW CARD, RED CARD, SAVE. All with `Math.max(0, x-1)` floor. Guards: `matchType !== 'friendly'` and `!isPenaltyShootout`. Match fetch moved unconditional; null-guarded on both score-revert and stat-revert paths. `PENALTY SAVED` also reverts keeper `saves--` via `event.relatedPlayerId` (null-checked).
 
-**Scope:** `src/app/api/matches/[id]/events/[eventId]/route.ts` — add a `revertPlayerStats(event)` call in the DELETE handler, mirroring the `updatePlayerStats` switch used in POST. Same guards: `isPenaltyShootout`, friendly match flag (once BACKLOG-104 lands), floor at 0.
+**Scope:** `src/app/api/matches/[id]/events/[eventId]/route.ts` only.
 
 **Related:** BUG-072 (second yellow undo cascade — SHIPPED), BACKLOG-104 (penalty outcomes), BACKLOG-106 (stat recompute via match_player_stats)
 
