@@ -237,7 +237,7 @@ BUG-001 through BUG-029, AUDIT-001/002 (partial), BACKLOG-065 — all resolved S
 - Observed result: starters shown as STARTER, bench shown as SUB — correct on open
 - Pending items: none
 
-- **BUG-072** _(LOW — Logger UX)_: Second Yellow auto-inserts a Red Card event via `MatchStateManager.recordEvent`. Undo (Option A) removes only the last event — the auto Red Card — leaving the Yellow Card in both local state and DB. Logger tapping undo after a second yellow expects both cards removed but only the Red goes. Not data-corrupting (Yellow stays, which is correct), but confusing UX. Fix: when `undoLastEvent` removes a Red Card whose `detail` is `'Red Card (Second Yellow)'`, also remove the preceding Yellow Card for the same player. Scope: `match-state-manager.ts` + a second DELETE call in `handleUndo`. Filed: 2026-06-25. **Status:** OPEN
+- ~~**BUG-072**~~ _(LOW — Logger UX)_: Second Yellow auto-inserts a Red Card event via `MatchStateManager.recordEvent`. Undo (Option A) removes only the last event — the auto Red Card — leaving the Yellow Card in both local state and DB. Logger tapping undo after a second yellow expects both cards removed but only the Red goes. Fix: `handleUndo` in `FootballLogger.tsx` detects `detail === 'Red Card (Second Yellow)'`, finds the preceding Yellow Card for the same player, issues a second DELETE to DB, then calls `undoLastEvent()` twice (Red gone, Yellow is now last). Scope: `src/components/FootballLogger.tsx` only. Filed: 2026-06-25. **Status:** SHIPPED — Session 36
 
 - **BUG-069** _(LOW — Stats)_: PENALTY + GOAL double-count risk on `shotsOnTarget`. **Status:** WONT FIX — CLOSED 2026-06-25. Convention established: PENALTY = scored penalty in normal play (increments `penaltiesScored` + `shotsOnTarget`). GOAL should not be separately logged for the same penalty kick. BACKLOG-104 (outcome tracking) will make this explicit via distinct event types.
 
@@ -4603,3 +4603,19 @@ On event delete: instead of decrementing a global counter (fragile, can go negat
 - BACKLOG-019 remains open for the automation hook (match → FINISHED triggers the recompute). This item only covers the table structure and write/read path.
 - `match_player_stats` rows cascading on match delete also fixes the test match contamination problem (BACKLOG-105) — once `is_test` matches are deleted, their stat rows go with them automatically.
 - Related: BUG-060, BUG-011, BACKLOG-019, BACKLOG-105, TD-011 (`season` hardcoded)
+
+---
+
+### BACKLOG-111 — Stat Reversion on Event Undo
+
+**Status:** OPEN
+**Priority:** Low
+**Filed:** 2026-06-29
+
+**Context:** The DELETE `/api/matches/[id]/events/[eventId]` handler reverts match score for scoring events but does NOT decrement `footballPlayerStats` (e.g. `yellowCards`, `redCards`, `fouls`, `saves`). This gap applies to all event types, not just second yellows.
+
+**Why deferred:** Decrement logic must mirror the increment logic exactly — including floor guards (`Math.max(0, x - 1)`), friendly match exclusion guard, and shootout event guard. All three must apply symmetrically. Bundling into BUG-072 introduced edge case risk; filed separately for a contained, single-concern fix.
+
+**Scope:** `src/app/api/matches/[id]/events/[eventId]/route.ts` — add a `revertPlayerStats(event)` call in the DELETE handler, mirroring the `updatePlayerStats` switch used in POST. Same guards: `isPenaltyShootout`, friendly match flag (once BACKLOG-104 lands), floor at 0.
+
+**Related:** BUG-072 (second yellow undo cascade — SHIPPED), BACKLOG-104 (penalty outcomes), BACKLOG-106 (stat recompute via match_player_stats)

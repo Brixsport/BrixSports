@@ -997,9 +997,22 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
         if (currentEvents.length === 0) return;
 
         const eventToUndo = currentEvents[currentEvents.length - 1];
+        const isSecondYellow = eventToUndo.detail === 'Red Card (Second Yellow)';
+
+        // For second yellow: find the Yellow Card for the same player that triggered it
+        let precedingYellow: typeof currentEvents[0] | null = null;
+        if (isSecondYellow && eventToUndo.playerId) {
+            for (let i = currentEvents.length - 2; i >= 0; i--) {
+                if (currentEvents[i].playerId === eventToUndo.playerId && currentEvents[i].type === 'Yellow Card') {
+                    precedingYellow = currentEvents[i];
+                    break;
+                }
+            }
+        }
 
         setIsUndoing(true);
         try {
+            // Delete the Red Card (or any last event) from DB
             const res = await fetch(`/api/matches/${match.id}/events/${eventToUndo.id}`, {
                 method: 'DELETE',
                 credentials: 'include',
@@ -1011,8 +1024,26 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                 return;
             }
 
-            // DB delete confirmed — now update local state and broadcast
-            manager.undoLastEvent();
+            // Second yellow: also delete the Yellow Card that triggered it
+            if (isSecondYellow && precedingYellow) {
+                const yellowRes = await fetch(`/api/matches/${match.id}/events/${precedingYellow.id}`, {
+                    method: 'DELETE',
+                    credentials: 'include',
+                });
+                if (!yellowRes.ok) {
+                    const data = await yellowRes.json().catch(() => ({}));
+                    // Red is already gone from DB — remove it from local state before surfacing error
+                    manager.undoLastEvent();
+                    alert(`Red card removed but yellow card could not be undone: ${data.error || yellowRes.status}`);
+                    return;
+                }
+            }
+
+            // DB deletes confirmed — update local state
+            manager.undoLastEvent(); // removes Red Card
+            if (isSecondYellow && precedingYellow) {
+                manager.undoLastEvent(); // Yellow Card is now last — remove it too
+            }
 
             if (isSocketConnected) {
                 const fullState = manager.getState();
