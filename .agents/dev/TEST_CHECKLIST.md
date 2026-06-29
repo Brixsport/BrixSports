@@ -49,15 +49,15 @@ Check off what passes. Evidence = DB query output, not UI observation.
 
 ---
 
-### PHASE 6 — Sub picker pools (BUG-067) ✅ RESOLVED session 34 / BACKLOG-106 SHIPPED session 35
+### PHASE 6 — Sub picker pools (BUG-067) ✅ RESOLVED session 34 / BACKLOG-106 ✅ RESOLVED session 38
 
 - [x] Subbed-off player absent from sub-OUT picker
-- [ ] **NEW — BACKLOG-106 scenario A (same session):** Log a sub → immediately open general event picker (fouls, goals, cards) → ✅ subbed-on player visible, shows 11 not 10
-- [ ] **NEW — BACKLOG-106 scenario B (tab close):** Log a sub → close tab entirely → reopen logger → open general event picker → ✅ shows 11 (DB seed path)
-- [ ] **NEW — BACKLOG-106 scenario C (hard refresh):** Log a sub → hard refresh → open general event picker → ✅ shows 11 (localStorage path)
-- [ ] **Assist picker:** After a goal, open assist picker → ✅ subbed-on player visible
+- [x] **BACKLOG-106 scenario A (same session):** Log a sub → immediately open general event picker (fouls, goals, cards) → ✅ subbed-on player visible, shows 11 not 10
+- [x] **BACKLOG-106 scenario B (tab close):** Log a sub → close tab entirely → reopen logger → open general event picker → ✅ shows 11 (DB seed path)
+- [x] **BACKLOG-106 scenario C (hard refresh):** Log a sub → hard refresh → open general event picker → ✅ shows 11 (localStorage path)
+- [x] **Assist picker:** After a goal, open assist picker → ✅ subbed-on player visible
 
-**Closes:** BACKLOG-106 (all 3 scenarios must pass)
+**Closes:** BACKLOG-106 — all 3 scenarios + assist picker PASSED in session 38 live test match sim.
 
 ---
 
@@ -95,10 +95,19 @@ Check off what passes. Evidence = DB query output, not UI observation.
 
 ---
 
-### PHASE 12 — Public page polling fallback (BUG-080) SHIPPED session 35
+### PHASE 12 — Public page polling fallback (BUG-080) IN PROGRESS — fixes implemented, not yet deployed
 
 > Requires Railway WS to be confirmed DOWN to test the fallback path properly.
 > Can simulate by setting `NEXT_PUBLIC_WS_URL` to a dead URL on staging.
+
+**Session 38 issues found (Railway was UP during this test):**
+- Page was doing full refresh on each poll (setLoading=true) — causes visible spinner every 10s → FIXED (silent polling)
+- WS reconnected but "Live" button stayed grey — FIXED (reconnect sync triggers silent fetch)
+- Event duplicates appearing (temp ID vs permanent ID from dual broadcast paths) — FIXED (combo dedup by type+minute+playerId+teamId)
+- Player names blank on WS events (playerSnapshot vs player shape) — FIXED in LiveMatchTimeline.tsx
+- Amber toast not firing — needs deploy + Railway down test to verify
+
+Fixes in working tree (`src/app/matches/[id]/page.tsx`, `src/components/LiveMatchTimeline.tsx`) — NOT YET COMMITTED.
 
 - [ ] Open `/matches/[id]` for a LIVE match while WS is confirmed disconnected
 - [ ] Score header still shows green "Live" dot
@@ -106,6 +115,7 @@ Check off what passes. Evidence = DB query output, not UI observation.
 - [ ] Amber toast fires once: *"Live updates paused — refreshing automatically"* — auto-dismisses
 - [ ] WS reconnects → green toast fires once: *"Live updates restored"* — auto-dismisses
 - [ ] No toast spam if WS flaps rapidly (amber fires once per disconnect cycle, not per flap)
+- [ ] No duplicate events in timeline during normal WS operation
 
 **Closes:** BUG-080
 

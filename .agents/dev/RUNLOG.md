@@ -645,3 +645,19 @@ _Note: PATCH MD3 scores and BUSALYMPICS standings recalculation were completed i
 
 2026-06-25 | `dev/query-kings-lineup.mjs` | STAGING (read-only) | SUCCESS | VERIFIED
 - Kings FC lineup confirmed: 11 starters (incl. player-1767972271817-0e46tfrjs), 10 substitutes (incl. player-1767972273154-jdc7gsxyp = Omari, busa-kings-player-17 = Ola-praise). Both incoming subs were in the lineup's `substitutes` list — not missing from data. Root cause confirmed as picker pool logic.
+
+2026-06-29 | `dev/audit-jog-kings-s38.mjs` | STAGING (read-only) | SUCCESS | VERIFIED
+- Match: EOWw93XEolhP83o1LOJGl (Joga-Bonito vs Kings FC, FINISHED, 1-0, 11 events)
+- Script errored on missing `player_match_stats` / `match_lineups` tables (tables do not exist in schema — skipped)
+- Stat entries found: 5 players (Justin Onyeka, Samuel Olapite, McAnthony Uzowuru, Japheth Oseiegbu, Michael Oguntola)
+- Event count: 11 events to delete; 1 logger assignment to remove
+
+2026-06-29 | `dev/cleanup-jog-kings-s38.mjs` | STAGING (write) | SUCCESS | VERIFIED
+- Reverted stats for 5 players (goals, assists, fouls, saves, shotsOnTarget/Off zeroed)
+- Deleted 11 match events for match EOWw93XEolhP83o1LOJGl
+- Deleted logger assignment for the match
+- Reset match status to PENDING, score 0-0, period NOT_STARTED
+
+2026-06-29 | `dev/delete-match-s38.mjs` | STAGING (write) | SUCCESS | VERIFIED
+- Deleted match row EOWw93XEolhP83o1LOJGl (events and logger assignment already cleared by cleanup script)
+- DB clean — no orphan rows

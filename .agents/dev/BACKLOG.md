@@ -279,7 +279,27 @@ BUG-001 through BUG-029, AUDIT-001/002 (partial), BACKLOG-065 — all resolved S
 
 - **BUG-074** _(MEDIUM — Staging Config)_: `NEXT_PUBLIC_WS_URL` points to the production Railway URL on the staging Vercel environment. Session 34 note: Railway WS server was confirmed down during test match — 30× status 0 in HAR, all to `brixsports-production.up.railway.app`. This is also why the public live clock was frozen during the test match — no WS = no real-time updates, and there is no HTTP polling fallback (see BUG-080). Fix: bring Railway WS back up; optionally set staging to its own WS instance. Filed: 2026-06-25. **Status:** OPEN
 
-- **BUG-080** _(HIGH — Public Page / CLAUDE.md violation)_: No HTTP polling fallback when WebSocket is disconnected. Public match page (`/matches/[id]`) uses `useWebSocket` exclusively for real-time updates — clock, score, events. When WS fails (max 5 reconnect attempts), the page freezes on stale data indefinitely. CLAUDE.md mandates: *"Live update mechanism must have a fallback if the channel drops. Viewer must see stale data clearly on failure, not a crash."* This is confirmed violated — page shows no stale indicator and no recovery. Fix: when `isConnected === false && isLive`, poll `GET /api/matches/[id]` every 10s and merge response into display state. Show a "live updates paused — reconnecting" banner when WS is down. Confirmed via session 34 test match — public clock and score were frozen throughout because Railway was down. Filed: 2026-06-27. **Status:** SHIPPED — session 35. Pending Railway WS restoration + test match verification before RESOLVED. Known behavior: displayed minute jumps in ~10s increments when polling (clock not ticked between polls) — amber "Updating" banner sets correct expectation.
+- **BUG-080** _(HIGH — Public Page / CLAUDE.md violation)_: No HTTP polling fallback when WebSocket is disconnected. Public match page (`/matches/[id]`) uses `useWebSocket` exclusively for real-time updates — clock, score, events. When WS fails (max 5 reconnect attempts), the page freezes on stale data indefinitely. CLAUDE.md mandates: *"Live update mechanism must have a fallback if the channel drops. Viewer must see stale data clearly on failure, not a crash."* This is confirmed violated — page shows no stale indicator and no recovery. Fix: when `isConnected === false && isLive`, poll `GET /api/matches/[id]` every 10s and merge response into display state. Show a "live updates paused — reconnecting" banner when WS is down. Confirmed via session 34 test match — public clock and score were frozen throughout because Railway was down. Filed: 2026-06-27. **Status:** IN PROGRESS — session 38. Root cause confirmed, fixes implemented in working tree (not yet committed). Issues found in session 38 sim: (1) full-spinner on every poll (setLoading called during silent refresh) → fixed to silent poll; (2) WS reconnect didn't trigger state sync → fixed via `prevConnectedForSync` ref; (3) duplicate events from dual broadcast (temp ID vs DB ID) → fixed with combo dedup (type+minute+playerId+teamId); (4) player names blank on WS events (playerSnapshot vs player shape) → fixed in LiveMatchTimeline.tsx with fallback chain. Amber toast path not yet verified with Railway down. Pending: commit working tree changes + deploy to staging + Railway-down test. Known behavior: displayed minute jumps in ~10s increments when polling (clock not ticked between polls) — amber "Updating" banner sets correct expectation. **Reconnect mechanism note:** actual code counts `connect_error` events and calls `sharedSocket?.disconnect()` at attempt 5 — NOT the Socket.IO `reconnect_failed` event. Any fix must handle the `connect_error` count path, not add a `reconnect_failed` listener. **NOTIF-12 (accepted risk):** offline notification queuing — notifications fired during a WS/server outage are lost; no retry queue exists. Accepted at MVP with a handful of viewers. Production-level concern to revisit at scale.
+
+- **BUG-081** _(CRITICAL — Security)_: `GET /api/users/follows` has no `getAuthUser()` call. Any caller can read any user's follow list by passing a `userId` query param — no authentication required. Fix: add `getAuthUser(request)` guard at top of GET handler; verify `authUser.id === userId` before returning follows. Filed: 2026-06-29. **Status:** OPEN
+
+- **BUG-082** _(CRITICAL — Security)_: `POST /api/users/follows`, `PATCH /api/users/follows`, and `DELETE /api/users/follows` have no `getAuthUser()` call. Any unauthenticated request can create, update preferences for, or delete any user's follows by supplying an arbitrary `userId` in the body/query params. Fix: add `getAuthUser(request)` guard to all three handlers; verify `authUser.id === userId` before writing. Filed: 2026-06-29. **Status:** OPEN
+
+- **BUG-083** _(HIGH — Logger UX / Display)_: `LiveMatchTimeline` switch-case mismatch for Yellow Card icon. Handler calls `type.toUpperCase()` which produces `'YELLOW CARD'` (with space), but the switch case label is `'YELLOW_CARD'` (underscore) — they never match. Yellow Card events fall through to the default case and display with default styling (no yellow card icon/colour). Same bug would affect any multi-word event type that uses underscores in its case label. Fix: normalize `type.toUpperCase().replace(/\s+/g, '_')` before the switch. Filed: 2026-06-29. **Status:** OPEN
+
+- **BUG-084** _(HIGH — Notifications)_: No push subscription enrollment UI exists in the viewer app. `PushService.subscribe(userId)` is fully implemented and functional — it calls `pushManager.subscribe()` and POSTs to `/api/notifications/subscribe` — but it is called from nowhere in the codebase. The diagnostics endpoint (`/api/notifications/diagnose`) confirms `pushSubscriptions` table is always empty. Fix: wire an "Enable Notifications" button (in SettingsOverlay or alongside the team favorites action) that calls `PushService.subscribe(userId)`. Filed: 2026-06-29. **Status:** OPEN
+
+- **BUG-085** _(HIGH — Notifications)_: `EventDrivenNotifier` dedup key is broken. Key is constructed as `` `${matchId}_${event.id}_${Date.now()}` `` — the `Date.now()` suffix makes every key unique, so `sentNotifications.has(notificationKey)` never matches. Every notification fires unconditionally with no dedup protection, even on retries. Fix: remove `_${Date.now()}` from key construction. Key should be `${matchId}_${event.id}` (or include `eventType` for period events). Filed: 2026-06-29. **Status:** OPEN
+
+- **BUG-086** _(MEDIUM — Notifications)_: `EventDrivenNotifier` logs `✅ Notification sent` on `response.ok`, regardless of actual `sentCount` in the server response. If the audience query returns 0 users (always the case in current state — BUG-084), the API returns `{ success: true, sentCount: 0 }`. The notifier reads `response.ok = true` and logs success — no actual push was sent. Fix: check `data.sentCount > 0` before logging success; log a distinct warning when `sentCount === 0`. Filed: 2026-06-29. **Status:** OPEN
+
+- **BUG-087** _(MEDIUM — Notifications)_: Viewer favorites fetch races with viewer auth initialization. `GET /api/notifications` queries `userFavorites` immediately on auth — if the viewer's session hasn't resolved yet at first render, `user.id` may be stale or the query may run before favorites are set, producing an empty audience even when favorites exist. Related to the unauthenticated favorites write in BUG-082 — if follows were written without auth, `userId` may not match any `users.id` row. Filed: 2026-06-29. **Status:** OPEN
+
+- **BUG-088** _(MEDIUM — Notifications)_: `GET /api/notifications` returns fabricated notification objects (constructed in-memory from DB queries, no notifications table) and has two data correctness issues: (1) `unreadCount: 0` is hardcoded — always shows zero unread; (2) events query uses `eq(matchEvents.type, 'GOAL')` (uppercase) but events are stored as `'Goal'` (title case) — this filter always returns zero rows regardless of whether goal events exist. PATCH mark-as-read writes nothing (`// Mock success for now`). Filed: 2026-06-29. **Status:** OPEN
+
+- **BUG-089** _(MEDIUM — WebSocket)_: Subscribe storm — 3–5× `match:subscribe` emitted per WS connect. Multiple hooks (`useMatchEvents`, `useMatchStatus`, `useMatchViewers`, `useMatchTimer`, `useLineupUpdates`) each independently call `useMatchSubscription`. Every connect triggers all of them simultaneously. On Railway, each subscribe creates a separate room join. Fix: deduplicate at the `useMatchSubscription` level using a module-level Set keyed by `socketId + matchId` — skip emit if already subscribed on current connection. Filed: 2026-06-29. **Status:** OPEN
+
+- **BUG-090** _(LOW — WebSocket)_: Socket emits attempted on a `CLOSING` socket. `useMatchSubscription` reads `socket.readyState` before emitting, but the `isConnected` dep-array trigger can fire in the same tick as a disconnect — `readyState` may transition from OPEN to CLOSING between the dep-array check and the emit. Not confirmed as causing dropped events but creates unnecessary warnings. Filed: 2026-06-29. **Status:** OPEN
 
 - ~~**BUG-073**~~ _(LOW — Data)_: Substitution `detail` string direction — filed as inverted during KIN vs JOG test match analysis. Confirmed at HEAD: `confirmEvent('Substitution', playerComingOut, playerInId)` → `relatedName` = incoming, `outName` = outgoing → string reads `{inPlayer} IN for {outPlayer}`. Code was never wrong. DB events from the KIN vs JOG test match (deleted) reflected an older state. **Status:** RESOLVED — no code change needed, 2026-06-26.
 
@@ -476,6 +496,36 @@ BUG-001 through BUG-029, AUDIT-001/002 (partial), BACKLOG-065 — all resolved S
 - ~~**TD-008**~~: `useLiveStandings.ts` — `teamLogo: string` type was wrong (should be `string | null`); `|| '❓'` emoji fallback masked null values causing `TeamLogo` to receive a literal emoji string. RESOLVED 2026-06-16 — type fixed to `string | null`, fallback changed to `null`. Commit `bb0a1ed`.
 
 ## Descoped Features (Future Work)
+
+### BACKLOG-114 — Yellow Card Excluded from Push Notification Triggers
+
+**Status:** OPEN
+**Priority:** Low — product decision required
+**Filed:** 2026-06-29
+
+`notifiableEvents` in `match-state-manager.ts:981` is `['Goal', 'Penalty', 'Penalty Saved', 'Penalty Missed', 'Red Card']`. Yellow Card is not included — no push fires on a booking. This is an intentional omission (Yellow Cards are frequent, low-drama events vs Red Cards which materially affect the match) but was never explicitly documented as a product decision. File here to force a decision when notification infra is stable. Suggested resolution: keep Yellow Card excluded for MVP, revisit once BACKLOG-103 (user-selectable preferences) is built — users can opt in if they want bookings.
+
+---
+
+### BACKLOG-115 — Missing `.limit()` on `userFavorites` Query in Notification Audience Build
+
+**Status:** OPEN
+**Priority:** Medium — CLAUDE.md architecture rule violation
+**Filed:** 2026-06-29
+
+`sendMatchEventNotification()` in `src/lib/notifications/match-notification-service.ts:86` queries `userFavorites` without a `.limit()` clause. CLAUDE.md mandates every list endpoint must have a `.limit()`. At MVP scale this is harmless, but at any meaningful user count this runs a full-table scan on every notifiable event. Fix: add `.limit(500)` (or a configurable cap) to the `userFavorites` query in `sendMatchEventNotification`. File alongside BACKLOG-116 and resolve together.
+
+---
+
+### BACKLOG-116 — Notification Audience Preference Inconsistency
+
+**Status:** OPEN
+**Priority:** Medium
+**Filed:** 2026-06-29
+
+`sendMatchEventNotification()` in `match-notification-service.ts` queries `userFollows` with `notificationsEnabled = true` filter but queries `userFavorites` with no `notificationsEnabled` filter (the column may not exist on `userFavorites`). Users who have disabled notifications in their follows preferences may still receive pushes if they have the team in favorites. The two tables have divergent semantics for notification opt-out. Fix: audit `userFavorites` schema for a notification preference column; add one if absent; apply consistent filter across both audience queries.
+
+---
 
 ### BACKLOG-108 — Rolling Subs: End-to-End Test Coverage
 
@@ -4617,7 +4667,12 @@ Two bugs, both fixed:
 
 **Known gap:** DB seed is skipped if localStorage has any events (guard is `events.length === 0`). A partial cache won't rehydrate missing events. Not a blocker — sub-visibility fix is the in-session line change.
 
-**Status:** SHIPPED — session 35. Pending Phase 6 re-run (3 scenarios) before marking RESOLVED.
+**Status:** RESOLVED — 2026-06-29 (session 38 live test match sim)
+
+**Evidence:**
+- Verified by: live test match sim session 38 — all 3 scenarios run manually by user
+- Observed result: Scenario A (same session), B (tab close / reopen), C (hard refresh) all showed subbed-on player in general event picker — 11 players correct. Assist picker also confirmed.
+- Pending items: broader stat model refactor (per-match stat rows) remains open as separate future work
 
 **Session 34 test match observation (Phase 6):** After a substitution, the subbed-on player appears correctly in the sub picker (shows full 11 including incoming player) but does NOT appear in the general event picker for non-sub events — shows 10 players instead of 11. Hard refresh does not fix it. Root cause: `getOnPitchPlayers` derives `subbedOnIds` from `matchState.events` which is seeded from localStorage — if the sub event isn't in localStorage (device switch, fresh session), incoming player is invisible. This is the concrete manifestation of the BACKLOG-106 gap and confirms this item as a pre-match-day blocker for any match involving substitutions.
 

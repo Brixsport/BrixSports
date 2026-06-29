@@ -2138,3 +2138,139 @@ All `emit(...)` calls in FootballLogger are fire-and-forget with no crash on fai
 4. BUG-011 Path A audit in parallel or after sim
 
 **ARCHITECTURE CORRECTION (same session):** BACKLOG-105 mental model had a career stats leak risk. Original plan reused `'Penalty'`/`'Penalty Missed'`/`'Penalty Saved'` event types during shootout, relying solely on `isPenaltyShootout` guard to block stat writes. Rule confirmed: shootout goals/saves do not count toward career stats (FIFA standard). Corrected design uses distinct `'PEN_SCORED'`/`'PEN_MISSED'`/`'PEN_SAVED'` types — `updatePlayerStats` switch has no case for these → `default: return` → zero stat writes, no guard needed, no leakage possible. ShootoutModal promoted from BACKLOG-113 deferred item into core BACKLOG-105 scope — 10+ rapid kicks during live match require simplified UI (team → taker → outcome), not the full PenaltySequenceModal. File delta updated to 8 files (new `ShootoutModal.tsx` component). BACKLOG-113 absorbed.
+
+---
+
+### Session 38 — 2026-06-29
+
+**Focus:** Last test match cleanup + notification system audit and full wire-up
+
+**Built / Fixed:**
+
+- **Test match cleanup (`EOWw93XEolhP83o1LOJGl`):** Audited last Joga-Bonito vs Kings FC test match (FINISHED, 1-0, 11 events). Reverted 5 player stat entries (Justin Onyeka goals/shotsOnTarget, Samuel Olapite assists, McAnthony Uzowuru fouls×2, Japheth Oseiegbu saves, Michael Oguntola shotsOffTarget). Match fully deleted from DB. Scripts: `dev/audit-jog-kings-s38.mjs`, `dev/cleanup-jog-kings-s38.mjs`, `dev/delete-match-s38.mjs`.
+
+- **BUG fix — `homeTeamId`/`awayTeamId` in notification payload (`8b95d35`):** `event-driven-notifier.ts` was setting both `homeTeamId` and `awayTeamId` to `event.teamId` (the scoring team only). Away team subscribers never received push notifications. Root cause: notifier is a window singleton initialized via side-effect import with zero match context — it only receives match data through `MATCH_NOTIFICATION_TRIGGER` CustomEvent payload. Fix: `match-state-manager.ts` `triggerNotification()` now includes `homeTeamId: this.state.homeTeamId` and `awayTeamId: this.state.awayTeamId` in the dispatch detail. Notifier reads them from event detail instead of duplicating `event.teamId`. Also fixed `teamName` being set to `event.playerSnapshot?.teamId` (an ID) instead of `event.playerSnapshot?.name`.
+
+- **MATCH_START / HALF_TIME / MATCH_END push triggers wired (`a9fed4b`):** All three period transition notifications were defined in `match-notification-service.ts` but never dispatched. Fix: `transitionStatus()` in `match-state-manager.ts` now calls `triggerPeriodNotification(to)` after every period change. Only `FIRST_HALF` → `MATCH_START`, `HALF_TIME` → `HALF_TIME`, `FINISHED` → `MATCH_END` produce a dispatch — all other periods (`SECOND_HALF`, `EXTRA_TIME_*`, `PENALTY_SHOOTOUT`, `ABANDONED`) fall through to `null` and return early. Notifier updated with `handlePeriodEvent()` that handles the `periodEventType` shape alongside existing match event shape — same queue, same retry pipeline.
+
+**Architecture note (singleton pattern):** `EventDrivenNotifier` has no constructor context. All match data must flow through `MATCH_NOTIFICATION_TRIGGER` CustomEvent `detail`. Any future match context the notifier needs must be added to the dispatch payload, not the instantiation call.
+
+**Full notification status post this session:**
+- Goal / Penalty scored → ✅ both teams notified
+- Red Card → ✅ both teams notified  
+- Penalty Saved / Missed → ✅ both teams notified
+- MATCH_START → ✅ wired (`a9fed4b`)
+- HALF_TIME → ✅ wired (`a9fed4b`)
+- MATCH_END → ✅ wired (`a9fed4b`)
+
+**Permission prompt path for verification:** SettingsOverlay as a viewer account (not PushNotificationDebugger). Must also follow one of the two test teams to receive event pushes.
+
+**Deferred:**
+- Test sim run (Phases 6/12/13/15/16/17) — Railway is up, fresh match needed from admin
+- BACKLOG-105 (full penalty shootout) — next dedicated session
+- BUG-011 Path A audit
+
+**Next session:**
+1. Create fresh test match in admin → assign logger → run Phases 6/12/13/15/16/17
+2. Verify push fires via SettingsOverlay subscription on a viewer account following one of the teams
+3. BACKLOG-105 build if sim completes cleanly
+
+---
+
+### Session 38C (Wrap) — 2026-06-29
+
+**Focus:** HAR + console log audit of live HT staging match; full WS + notification system failure-mode audit; bug filing and fix ordering.
+
+**No code committed this session — audit and triage only.**
+
+**HAR Ground Truth (viewer + logger, 2026-06-29 HT match):**
+
+- Viewer HAR: 1142 entries, 33 WS connections.
+  - WS[9]–[18]: 10 successful connections. 3× `match:subscribe` per connect confirmed (subscribe storm — BUG-089).
+  - WS[19]–[28]: 10× `Unexpected response code: 404` from 14:30–14:32 — Railway ~2m40s restart window. Both viewer and logger exhausted 5 reconnect attempts and required page reload.
+  - WS[29]+: Recovery 14:37.
+- Logger HAR: 1103 entries, 18 WS connections.
+  - ~100+ `PATCH /api/matches/.../loggers` calls — all 200 except 2 during Railway window. Route is healthy; prior "missing route" note was a false finding.
+  - 24 events logged (all 201). `status=0` events at 10:55 and 11:00 → reappeared as 201 = SW offline queue drain confirmed working.
+  - `GET /api/auth/me` returns 401 for logger — expected by design (cookie-based, logger uses localStorage).
+  - `PATCH /matches/.../{"currentPeriod":"HALF_TIME"}` → 200 confirmed.
+
+**False findings from session 38 summary corrected:**
+1. "PATCH /loggers 404 = missing route" — DISPROVED. ~100 successful PATCH calls; 2 failures during Railway outage only.
+2. "Logger auth/me 401 = bug" — EXPECTED. Logger tokens in localStorage, not cookies. Design by intent.
+3. "Room rejoin on reconnect missing" — DISPROVED. `useMatchSubscription` has `isConnected` in dep array → auto-resubscribes. Always was correct.
+4. "reconnect_failed event" — WRONG. Actual code in `useWebSocket.tsx:95–103` counts `connect_error` events manually and calls `sharedSocket?.disconnect()` at attempt 5. Socket.IO `reconnect_failed` event is never listened to. Any fix must target the `connect_error` count path.
+
+**Notification system full trace:**
+Complete pipeline: logger event → `MATCH_NOTIFICATION_TRIGGER` CustomEvent → `EventDrivenNotifier` → `POST /api/notifications/match-event` → audience query (userFollows + userFavorites + users.favoriteTeamId) → `webpush.sendNotification()` → browser SW push handler → notification display.
+
+Pipeline is structurally complete. Delivers zero notifications in practice because `pushSubscriptions` table is always empty — no enrollment UI exists (BUG-084).
+
+Additional breaks in the pipeline even if a subscription existed:
+- Dedup key includes `Date.now()` → dedup never works (BUG-085)
+- `sentCount=0` logged as success (BUG-086)
+- `GET /api/notifications` event query uses `'GOAL'` (uppercase) but events stored as `'Goal'` (title case) → always 0 rows (BUG-088)
+- `PATCH /api/users/follows` / GET / POST / DELETE have no auth guard (BUG-081, BUG-082)
+- `userFavorites` query no `.limit()` (BACKLOG-115)
+
+**Bugs filed this session:** BUG-081 through BUG-090
+**Backlog items filed:** BACKLOG-114, BACKLOG-115, BACKLOG-116
+**Accepted risks:** NOTIF-12 — offline notification queuing is a production-level concern; accepted at MVP with handful of viewers. No action item.
+
+**Fix order established:**
+1. BUG-081/082 — auth guards on `/api/users/follows` (CRITICAL security, 4 handlers, ~4 lines each)
+2. BUG-083 — normalize type before switch in LiveMatchTimeline (`type.toUpperCase().replace(/\s+/g, '_')`)
+3. BUG-080 — reconnect CTA: add `reconnectFailed` boolean to SocketContext, persistent "tap to retry" banner
+4. BUG-084 — push enrollment UI: "Enable Notifications" button in SettingsOverlay
+5. BUG-085 — remove `_${Date.now()}` from notifier dedup key
+6. BUG-089 — subscribe storm dedup: module-level Set, skip emit if already subscribed on current socket ID
+7. BUG-086/087/088 — notifier observability, favorites race, GET fabrication / type casing
+8. BUG-074 — staging Railway URL (existing)
+9. BACKLOG-105 — penalty shootout full implementation
+
+**Next session:**
+1. Commit uncommitted working tree (`page.tsx`, `LiveMatchTimeline.tsx`, agent files)
+2. Fix BUG-081/082 (4 auth guards on `/api/users/follows` GET/POST/PATCH/DELETE)
+3. Fix BUG-083 (normalize type string before switch in `LiveMatchTimeline.tsx`)
+4. Deploy to staging, verify with Railway up: Phase 12 (silent poll + amber toast), Phase 15 (second yellow cascade)
+5. If Railway stable: BUG-084 push enrollment UI
+
+---
+
+### Session 38 — 2026-06-29 (continued)
+
+**Focus:** Public viewer page WS/polling fixes, player name fallback, event dedup, period labels
+
+**Built / In Progress (NOT committed — carrying to next session):**
+
+- **Silent polling (IN PROGRESS — `src/app/matches/[id]/page.tsx`):** `fetchMatchData` now accepts `silent = false` param. Polling interval and reconnect calls pass `silent=true` — no `setLoading(true)` during background refreshes. Eliminates full-page spinner every 10s during WS outage.
+
+- **Reconnect sync (IN PROGRESS — `src/app/matches/[id]/page.tsx`):** New `useEffect` watches `isConnected` false→true transition and calls `fetchMatchData(true)` once — pulls missed events from DB silently on WS restore.
+
+- **Event dedup fix (IN PROGRESS — `src/app/matches/[id]/page.tsx`):** `latestEvent` dedup now checks `type + minute + playerId + teamId` combo in addition to `id`. Fixes duplicate timeline entries caused by dual broadcast paths — logger `event:log` carries temp state-manager ID, API POST broadcast carries permanent DB ID, both arrived as separate `event:new` signals and both passed the old `id`-only check.
+
+- **Player name fallback in LiveMatchTimeline (IN PROGRESS — `src/components/LiveMatchTimeline.tsx`):** All player name reads now fall back through `event.player?.name → event.playerSnapshot?.name → event.playerSnapshot?.jerseyName`. DB-fetched events carry nested `player` object; WS events from `match-state-manager` carry `playerSnapshot` instead — mismatch caused blank names on real-time events before hard refresh. Added `playerSnapshot` and `playerId`/`teamId` to `Event` interface.
+
+- **Period labels updated (IN PROGRESS — `src/app/matches/[id]/page.tsx`):** `1ST HALF → H1`, `2ND HALF → H2`, added `SUSPENDED → SUSP`. `NOT_STARTED`, `PENDING`, `UPCOMING` intentionally not mapped — viewer shows start date for those states, not a period badge. `POSTPONED` label deferred (status not yet wired).
+
+**Root cause notes logged this session:**
+- Dual broadcast paths (logger `event:log` + API `broadcastMatchEvent`) produce two `event:new` signals per event with different IDs — dedup by ID alone is insufficient
+- `LiveMatchTimeline` uses `event.player?.name` (DB shape) but WS events carry `event.playerSnapshot?.name` (state manager shape) — both shapes must be handled client-side
+- `fetchMatchData(setLoading=true)` during 10s polling caused full content replacement — viewer experience broken on WS failure
+
+**Phase 15 (second yellow cascade) — Railway WS was down during test (404). Red Card writes to DB correctly but broadcast fails on both paths (socket not connected + Railway HTTP endpoint down). Shows on hard refresh, not real-time. NOT a logic regression. Needs Railway up to close as RESOLVED.**
+
+**Deferred to next session:**
+- Commit all above changes after final review
+- Phase 15 re-verify with Railway up
+- WS reconnect after `reconnect_failed` — manual retry CTA (persistent button after exhausted retries, not a toast)
+- Amber toast investigation (may not fire if `isConnected` never transitions true→false during session)
+- Phase 16, 17 full verification
+- BACKLOG-105 (penalty shootout)
+
+**Next session:**
+1. Deploy current uncommitted changes to staging
+2. Re-run Phase 12 (polling — verify silent, no refresh, amber toast fires)
+3. Re-run Phase 15 with Railway up
+4. Commit + close SHIPPED items to RESOLVED with DB evidence
+5. BACKLOG-105 if time allows
