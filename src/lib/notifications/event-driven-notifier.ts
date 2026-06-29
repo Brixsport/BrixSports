@@ -14,6 +14,8 @@ import { MatchEvent } from '@/lib/match-state-manager';
 
 interface NotificationQueueItem {
     matchId: string;
+    homeTeamId: string;
+    awayTeamId: string;
     event: MatchEvent;
     score: { home: number; away: number };
     attempts: number;
@@ -102,10 +104,12 @@ export class EventDrivenNotifier {
 
     private async handleEvent(detail: {
         matchId: string;
+        homeTeamId: string;
+        awayTeamId: string;
         event: MatchEvent;
         score: { home: number; away: number };
     }): Promise<void> {
-        const { matchId, event, score } = detail;
+        const { matchId, homeTeamId, awayTeamId, event, score } = detail;
 
         // Generate deduplication key (includes timestamp for cleanup)
         const notificationKey = `${matchId}_${event.id}_${Date.now()}`;
@@ -123,6 +127,8 @@ export class EventDrivenNotifier {
         // Add to queue
         this.queue.push({
             matchId,
+            homeTeamId,
+            awayTeamId,
             event,
             score,
             attempts: 0,
@@ -190,7 +196,7 @@ export class EventDrivenNotifier {
     }
 
     private async sendNotification(item: NotificationQueueItem): Promise<void> {
-        const { matchId, event, score } = item;
+        const { matchId, homeTeamId, awayTeamId, event, score } = item;
 
         item.attempts++;
         item.lastAttempt = Date.now();
@@ -206,11 +212,11 @@ export class EventDrivenNotifier {
 
             const payload = {
                 matchId,
-                homeTeamId: event.teamId,
-                awayTeamId: event.teamId,
+                homeTeamId,
+                awayTeamId,
                 eventType: notificationType,
                 playerName: event.playerSnapshot?.name,
-                teamName: event.playerSnapshot?.teamId,
+                teamName: event.playerSnapshot?.name,
                 minute: event.displayMinute,
                 homeScore: score.home,
                 awayScore: score.away,
@@ -264,10 +270,12 @@ export class EventDrivenNotifier {
      */
     triggerNotification(
         matchId: string,
+        homeTeamId: string,
+        awayTeamId: string,
         event: MatchEvent,
         score: { home: number; away: number }
     ): void {
-        this.handleEvent({ matchId, event, score });
+        this.handleEvent({ matchId, homeTeamId, awayTeamId, event, score });
     }
 
     /**

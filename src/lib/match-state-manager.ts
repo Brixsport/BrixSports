@@ -964,6 +964,8 @@ export class MatchStateManager {
         window.dispatchEvent(new CustomEvent('MATCH_NOTIFICATION_TRIGGER', {
             detail: {
                 matchId: this.state.matchId,
+                homeTeamId: this.state.homeTeamId,
+                awayTeamId: this.state.awayTeamId,
                 event,
                 score: this.state.score,
             }
