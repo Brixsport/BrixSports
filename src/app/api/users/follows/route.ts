@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
 import { userFollows, competitions, teams, players } from '@/db/schema';
 import { eq, and, sql } from 'drizzle-orm';
+import { getAuthUser } from '@/lib/auth';
 
 /**
  * GET user's follows
@@ -14,6 +15,11 @@ import { eq, and, sql } from 'drizzle-orm';
  */
 export async function GET(request: NextRequest) {
     try {
+        const authUser = await getAuthUser(request);
+        if (!authUser) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+
         const { searchParams } = new URL(request.url);
         const userId = searchParams.get('userId');
         const type = searchParams.get('type'); // 'team' | 'player' | 'competition'
@@ -23,6 +29,10 @@ export async function GET(request: NextRequest) {
                 { error: 'User ID is required' },
                 { status: 400 }
             );
+        }
+
+        if (authUser.id !== userId && authUser.role !== 'admin') {
+            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
         }
 
         // Build query
@@ -94,6 +104,11 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
     try {
+        const authUser = await getAuthUser(request);
+        if (!authUser) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+
         const body = await request.json();
         const { userId, followType, followId, notificationsEnabled = true } = body;
 
@@ -102,6 +117,10 @@ export async function POST(request: NextRequest) {
                 { error: 'Missing required fields' },
                 { status: 400 }
             );
+        }
+
+        if (authUser.id !== userId && authUser.role !== 'admin') {
+            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
         }
 
         // Check if already following
@@ -161,6 +180,11 @@ export async function POST(request: NextRequest) {
  */
 export async function DELETE(request: NextRequest) {
     try {
+        const authUser = await getAuthUser(request);
+        if (!authUser) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+
         const { searchParams } = new URL(request.url);
         const userId = searchParams.get('userId');
         const followType = searchParams.get('type');
@@ -171,6 +195,10 @@ export async function DELETE(request: NextRequest) {
                 { error: 'Missing required parameters' },
                 { status: 400 }
             );
+        }
+
+        if (authUser.id !== userId && authUser.role !== 'admin') {
+            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
         }
 
         // Delete follow
@@ -211,6 +239,11 @@ export async function DELETE(request: NextRequest) {
  */
 export async function PATCH(request: NextRequest) {
     try {
+        const authUser = await getAuthUser(request);
+        if (!authUser) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+
         const body = await request.json();
         const { userId, followType, followId, notificationsEnabled } = body;
 
@@ -219,6 +252,10 @@ export async function PATCH(request: NextRequest) {
                 { error: 'Missing required fields' },
                 { status: 400 }
             );
+        }
+
+        if (authUser.id !== userId && authUser.role !== 'admin') {
+            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
         }
 
         // Update notification preference
