@@ -57,6 +57,10 @@ export default function LiveMatchTimeline({ events, homeTeam, awayTeam, eyePoint
                 return <ArrowRightLeft className="w-5 h-5" />;
             case 'SAVE':
                 return <Shield className="w-5 h-5" />;
+            case 'PENALTY SAVED':
+                return <Shield className="w-5 h-5 text-amber-400" />;
+            case 'PENALTY MISSED':
+                return <Activity className="w-5 h-5 text-red-400" />;
             case 'EYE_POINT':
                 return <Eye className="w-5 h-5 text-purple-500" />;
             case 'FIELD_GOAL':
@@ -88,6 +92,10 @@ export default function LiveMatchTimeline({ events, homeTeam, awayTeam, eyePoint
                 return `${baseStyle} border-green-500/20 hover:border-green-500/40`;
             case 'EYE_POINT':
                 return `${baseStyle} border-purple-500/20 hover:border-purple-500/40`;
+            case 'PENALTY SAVED':
+                return `${baseStyle} border-amber-500/20 hover:border-amber-500/40`;
+            case 'PENALTY MISSED':
+                return `${baseStyle} border-red-500/20 hover:border-red-500/40`;
             default:
                 return baseStyle;
         }

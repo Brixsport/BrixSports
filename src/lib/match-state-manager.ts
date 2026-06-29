@@ -956,7 +956,7 @@ export class MatchStateManager {
     }
 
     private triggerNotification(event: MatchEvent): void {
-        const notifiableEvents: FootballEventType[] = ['Goal', 'Penalty', 'Red Card'];
+        const notifiableEvents: FootballEventType[] = ['Goal', 'Penalty', 'Penalty Saved', 'Penalty Missed', 'Red Card'];
         console.log('[MatchStateManager] triggerNotification called for:', event.type, 'Notifiable:', notifiableEvents.includes(event.type));
         if (!notifiableEvents.includes(event.type)) return;
 

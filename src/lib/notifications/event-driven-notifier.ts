@@ -137,7 +137,7 @@ export class EventDrivenNotifier {
         this.processQueue();
     }
 
-    private getNotificationType(eventType: string): 'GOAL' | 'RED_CARD' | 'YELLOW_CARD' | null {
+    private getNotificationType(eventType: string): 'GOAL' | 'RED_CARD' | 'YELLOW_CARD' | 'PENALTY_SAVED' | 'PENALTY_MISSED' | null {
         switch (eventType) {
             case 'Goal':
             case 'Penalty':
@@ -146,6 +146,10 @@ export class EventDrivenNotifier {
                 return 'RED_CARD';
             case 'Yellow Card':
                 return 'YELLOW_CARD';
+            case 'Penalty Saved':
+                return 'PENALTY_SAVED';
+            case 'Penalty Missed':
+                return 'PENALTY_MISSED';
             default:
                 return null;
         }

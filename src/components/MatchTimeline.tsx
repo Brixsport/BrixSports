@@ -41,6 +41,10 @@ export function MatchTimeline({ events, homeTeam, awayTeam, sport, showFilters =
                 return <ArrowRightLeft className="w-5 h-5" />;
             case 'SAVE':
                 return <Shield className="w-5 h-5" />;
+            case 'PENALTY SAVED':
+                return <Shield className="w-5 h-5 text-amber-400" />;
+            case 'PENALTY MISSED':
+                return <Activity className="w-5 h-5 text-red-400" />;
             case 'EYE_POINT':
                 return <Eye className="w-5 h-5 text-purple-500" />;
             case 'FIELD_GOAL':
@@ -73,6 +77,10 @@ export function MatchTimeline({ events, homeTeam, awayTeam, sport, showFilters =
                 return 'bg-purple-500/20 border-purple-500/50 text-purple-500';
             case 'SAVE':
                 return 'bg-cyan-500/20 border-cyan-500/50 text-cyan-500';
+            case 'PENALTY SAVED':
+                return 'bg-amber-500/20 border-amber-500/50 text-amber-400';
+            case 'PENALTY MISSED':
+                return 'bg-red-500/20 border-red-500/50 text-red-400';
             case 'ASSIST':
                 return 'bg-orange-500/20 border-orange-500/50 text-orange-500';
             default:

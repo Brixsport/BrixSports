@@ -922,11 +922,19 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
         // 2. Send Push Notifications for key discipline and scoring events
         const isGoalEvent = type === 'Goal' || type === 'Penalty' || type === 'Own Goal';
         const isCardEvent = type === 'Yellow Card' || type === 'Red Card';
-        if (isGoalEvent || isCardEvent) {
+        const isPenaltyOutcome = type === 'Penalty Saved' || type === 'Penalty Missed';
+        if (isGoalEvent || isCardEvent || isPenaltyOutcome) {
             const currentState = manager.getState();
             const notifEventType = (type === 'Goal' || type === 'Penalty' || type === 'Own Goal') ? 'GOAL' :
-                type === 'Red Card' ? 'RED_CARD' : 'YELLOW_CARD';
-            const playerName = playerSnapshot?.name || 'Unknown Player';
+                type === 'Red Card' ? 'RED_CARD' :
+                type === 'Penalty Saved' ? 'PENALTY_SAVED' :
+                type === 'Penalty Missed' ? 'PENALTY_MISSED' :
+                'YELLOW_CARD';
+            // For Penalty Saved: show keeper name as headline (relatedPlayerId is keeper)
+            const relatedSnapshot = relatedPlayerId ? manager.createPlayerSnapshot(relatedPlayerId) : null;
+            const playerName = type === 'Penalty Saved'
+                ? (relatedSnapshot?.name || playerSnapshot?.name || 'Unknown')
+                : (playerSnapshot?.name || 'Unknown Player');
             const teamName = selectedTeam === 'home' ? (homeTeam?.name || 'Home') : (awayTeam?.name || 'Away');
 
             fetch('/api/notifications/match-event', {
@@ -1683,8 +1691,8 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                         </div>
                         <div className="grid grid-cols-3 gap-4">
                             <EventButton type="Penalty" icon="⚽" label="Scored" onClick={() => handleEventClick('Penalty', true)} />
-                            <EventButton type="Penalty Missed" icon="❌" label="Missed" onClick={() => handleEventClick('Shot off Target')} />
-                            <EventButton type="Save" icon="🧤" label="Saved" onClick={() => handleEventClick('Save')} />
+                            <EventButton type="Penalty Missed" icon="❌" label="Missed" onClick={() => handleEventClick('Penalty Missed')} />
+                            <EventButton type="Penalty Saved" icon="🧤" label="Saved" onClick={() => handleEventClick('Penalty Saved')} />
                         </div>
                     </div>
                 ) : (
@@ -1830,18 +1838,10 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                         homeLineup={lineups.home}
                         awayLineup={lineups.away}
                         onClose={() => setShowPenaltyModal(false)}
-                        onSubmit={(takerId, foulerId, outcome) => {
-                            const attackingTeamId = selectedTeam === 'home' ? match.homeTeamId : match.awayTeamId;
-                            const defendingTeamId = selectedTeam === 'home' ? match.awayTeamId : match.homeTeamId;
-
+                        onSubmit={(takerId, foulerId, outcome, keeperId) => {
                             // 1. Log the Foul/Concession for the defender
                             if (foulerId) {
-                                // We record this from the perspective of the defending team
-                                // Note: confirmEvent uses selectedTeam, so we need to be careful or update confirmEvent
-                                // For simplicity here, we'll just log it
                                 const defendingTeamType = selectedTeam === 'home' ? 'away' : 'home';
-
-                                // Temporarily switch team to defending team to log its foul
                                 const originalTeam = selectedTeam;
                                 setSelectedTeam(defendingTeamType);
                                 confirmEvent('Foul', foulerId, null);
@@ -1849,12 +1849,13 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                             }
 
                             // 2. Log the Penalty outcome for the taker
+                            // Penalty Saved: relatedPlayerId = keeperId (null if keeper was skipped)
                             setTimeout(() => {
                                 const validTakerId = takerId || 'TEAM';
                                 if (outcome === 'Scored') {
                                     confirmEvent('Penalty', validTakerId, null);
                                 } else if (outcome === 'Saved') {
-                                    confirmEvent('Penalty Saved', validTakerId, null);
+                                    confirmEvent('Penalty Saved', validTakerId, keeperId);
                                 } else {
                                     confirmEvent('Penalty Missed', validTakerId, null);
                                 }
@@ -2246,12 +2247,13 @@ function PenaltySequenceModal({
     homeLineup: any,
     awayLineup: any,
     onClose: () => void,
-    onSubmit: (takerId: string | null, foulerId: string | null, outcome: 'Scored' | 'Saved' | 'Missed') => void
+    onSubmit: (takerId: string | null, foulerId: string | null, outcome: 'Scored' | 'Saved' | 'Missed', keeperId: string | null) => void
 }) {
     const [step, setStep] = useState(1);
     const [takerId, setTakerId] = useState<string | null>(null);
     const [foulerId, setFoulerId] = useState<string | null>(null);
     const [outcome, setOutcome] = useState<'Scored' | 'Saved' | 'Missed' | null>(null);
+    const [keeperId, setKeeperId] = useState<string | null>(null);
 
     const attackers = attackingTeam === 'home' ? homePlayers : awayPlayers;
     const defenders = attackingTeam === 'home' ? awayPlayers : homePlayers;
@@ -2363,9 +2365,41 @@ function PenaltySequenceModal({
                                 </button>
                             </div>
 
+                            {outcome === 'Saved' && (
+                                <div className="w-full mt-2 space-y-2">
+                                    <p className="text-[10px] font-black uppercase tracking-widest text-white/40 text-center">Goalkeeper? (optional)</p>
+                                    <div className="grid grid-cols-1 gap-2 max-h-40 overflow-y-auto">
+                                        <button
+                                            onClick={() => setKeeperId(null)}
+                                            className={`p-2.5 rounded-xl text-xs font-bold text-center transition-all ${keeperId === null ? 'bg-white/10 border border-white/20 text-white' : 'bg-white/5 border border-white/5 text-white/30'}`}
+                                        >
+                                            Skip / Unknown
+                                        </button>
+                                        {defenders.filter(p => {
+                                            const pos = (p.position || '').toLowerCase();
+                                            const lineupPos = ((defenderLineup?.starters || defenderLineup?.players || []).find((lp: any) => (lp.playerId || lp.id) === p.id)?.position || '').toLowerCase();
+                                            return pos.includes('gk') || pos.includes('goalkeeper') || pos.includes('keeper') || pos === 'g' || lineupPos.includes('gk') || lineupPos.includes('goalkeeper');
+                                        }).concat(defenders.filter(p => {
+                                            const pos = (p.position || '').toLowerCase();
+                                            const lineupPos = ((defenderLineup?.starters || defenderLineup?.players || []).find((lp: any) => (lp.playerId || lp.id) === p.id)?.position || '').toLowerCase();
+                                            return !(pos.includes('gk') || pos.includes('goalkeeper') || pos.includes('keeper') || pos === 'g' || lineupPos.includes('gk') || lineupPos.includes('goalkeeper'));
+                                        })).slice(0, 5).map((p: Player) => (
+                                            <button
+                                                key={p.id}
+                                                onClick={() => setKeeperId(p.id)}
+                                                className={`p-2.5 text-left rounded-xl flex items-center gap-2 text-xs transition-all ${keeperId === p.id ? 'bg-amber-500/20 border border-amber-500/40 text-amber-300' : 'bg-white/5 border border-white/5 text-white/60 hover:bg-white/10'}`}
+                                            >
+                                                <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black ${keeperId === p.id ? 'bg-amber-500/30 text-amber-300' : 'bg-white/10 text-white/40'}`}>{p.number}</div>
+                                                <span className="font-bold">{p.name}</span>
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
                             {outcome && (
                                 <button
-                                    onClick={() => onSubmit(takerId, foulerId, outcome)}
+                                    onClick={() => onSubmit(takerId, foulerId, outcome, outcome === 'Saved' ? keeperId : null)}
                                     className="w-full mt-4 py-4 bg-primary text-black font-black uppercase tracking-widest rounded-xl hover:scale-105 transition-transform shadow-lg shadow-primary/20"
                                 >
                                     Confirm & Log

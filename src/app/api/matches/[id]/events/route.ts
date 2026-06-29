@@ -174,6 +174,11 @@ export async function POST(
             await updatePlayerStats(match.sport, playerId, type, value);
         }
 
+        // Penalty Saved: credit the keeper's saves stat via relatedPlayerId (null-check — keeper is optional)
+        if (upperType === 'PENALTY SAVED' && relatedPlayerId && match.matchType !== 'friendly' && !isPenaltyShootout) {
+            await updatePlayerStats(match.sport, relatedPlayerId, 'Save', value);
+        }
+
         // Auto-calculate ratings after event (for live matches)
         if (match.status === 'LIVE') {
             try {
@@ -401,6 +406,12 @@ async function updatePlayerStats(
                     updates.penaltiesScored = (stats?.penaltiesScored || 0) + 1;
                     updates.shotsOnTarget = (stats?.shotsOnTarget || 0) + 1;
                     break;
+                case 'PENALTY MISSED':
+                    updates.shotsOffTarget = (stats?.shotsOffTarget || 0) + 1;
+                    break;
+                case 'PENALTY SAVED':
+                    updates.shotsOnTarget = (stats?.shotsOnTarget || 0) + 1;
+                    break;
                 case 'FOUL':
                     updates.foulsCommitted = (stats?.foulsCommitted || 0) + 1;
                     break;
@@ -521,6 +532,12 @@ async function decrementPlayerStats(
                     break;
                 case 'PENALTY':
                     updates.penaltiesScored = Math.max(0, (stats.penaltiesScored || 0) - 1);
+                    updates.shotsOnTarget = Math.max(0, (stats.shotsOnTarget || 0) - 1);
+                    break;
+                case 'PENALTY MISSED':
+                    updates.shotsOffTarget = Math.max(0, (stats.shotsOffTarget || 0) - 1);
+                    break;
+                case 'PENALTY SAVED':
                     updates.shotsOnTarget = Math.max(0, (stats.shotsOnTarget || 0) - 1);
                     break;
                 case 'FOUL':

@@ -30,7 +30,7 @@ interface MatchEventNotification {
     matchId: string;
     homeTeamId: string;
     awayTeamId: string;
-    eventType: 'MATCH_START' | 'GOAL' | 'RED_CARD' | 'YELLOW_CARD' | 'LINEUP_AVAILABLE' | 'MATCH_END' | 'HALF_TIME';
+    eventType: 'MATCH_START' | 'GOAL' | 'RED_CARD' | 'YELLOW_CARD' | 'LINEUP_AVAILABLE' | 'MATCH_END' | 'HALF_TIME' | 'PENALTY_SAVED' | 'PENALTY_MISSED';
     playerName?: string;
     teamName?: string;
     minute?: number;
@@ -262,6 +262,30 @@ function createNotificationPayload(event: MatchEventNotification): NotificationP
             return {
                 title: '🟨 Yellow Card',
                 body: `${event.playerName} has been booked (${event.minute}')`,
+                icon: '/icons/icon-192x192.png',
+                badge: '/icons/icon-192x192.png',
+                data: { ...baseData, playerName: event.playerName, minute: event.minute },
+                actions: baseActions,
+            };
+
+        case 'PENALTY_SAVED':
+            return {
+                title: '🧤 Penalty Saved!',
+                body: event.playerName
+                    ? `${event.playerName} denies from the spot! Still ${event.homeScore}-${event.awayScore} (${event.minute}')`
+                    : `Penalty saved! Still ${event.homeScore}-${event.awayScore} (${event.minute}')`,
+                icon: '/icons/icon-192x192.png',
+                badge: '/icons/icon-192x192.png',
+                data: { ...baseData, playerName: event.playerName, minute: event.minute },
+                actions: baseActions,
+            };
+
+        case 'PENALTY_MISSED':
+            return {
+                title: '❌ Penalty Missed!',
+                body: event.playerName
+                    ? `${event.playerName} fails to score from the spot. Still ${event.homeScore}-${event.awayScore} (${event.minute}')`
+                    : `Penalty missed! Still ${event.homeScore}-${event.awayScore} (${event.minute}')`,
                 icon: '/icons/icon-192x192.png',
                 badge: '/icons/icon-192x192.png',
                 data: { ...baseData, playerName: event.playerName, minute: event.minute },

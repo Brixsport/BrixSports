@@ -38,6 +38,8 @@ export async function POST(request: NextRequest) {
             'LINEUP_AVAILABLE',
             'MATCH_END',
             'HALF_TIME',
+            'PENALTY_SAVED',
+            'PENALTY_MISSED',
         ];
 
         if (!validEventTypes.includes(eventType)) {
