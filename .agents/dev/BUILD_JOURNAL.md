@@ -2071,3 +2071,32 @@ All `emit(...)` calls in FootballLogger are fire-and-forget with no crash on fai
 1. Commit the pending backlog update if not done (BACKLOG-111 SHIPPED)
 2. Decide: Railway restoration + staging verification of BACKLOG-106/BUG-080/BUG-075/BUG-072/BACKLOG-104/BACKLOG-111, OR start BACKLOG-105 session
 3. If Railway is up: run verification scenarios before touching any new code
+
+---
+
+### Session 37 — 2026-06-29
+
+**Focus:** Bug triage — dead code cleanup (BUG-054), bench tag regression in PenaltySequenceModal (BUG-068), stale backlog audit (BUG-030, BUG-031)
+
+**Built / Fixed:**
+
+- **BUG-054 parent route deleted** (`6c73835`): `DELETE /api/matches/[id]/events` (collection route) took `?eventId` query param — the old undo pattern superseded when `[eventId]/route.ts` was built. Grep confirmed nothing in the UI ever called it. Handler (lines 209–316) and its exclusive `decrementPlayerStats` helper (lines 451–568, ~228 lines total) removed from `events/route.ts`. All top-level imports remain used by GET/POST handlers — zero orphaned imports. The helper used only dynamic `await import('@/db/schema')` inside the function body, leaving no top-level footprint.
+
+- **BUG-068 PenaltySequenceModal fix** (`6c73835`): `PenaltySequenceModal` received correct `homePlayers`/`awayPlayers` via `getOnPitchPlayers` (which includes subbed-on players) but determined "on pitch vs bench" using `attackerStarterIds`/`defenderStarterIds` derived from `lineup.starters` only. Subbed-on players appeared in the list but rendered with the BENCH tag and greyed styling. Fix: added `homeSubbedOnIds`/`awaySubbedOnIds` props (`Set<string>` from `getSubSets(teamId).subbedOnIds`), derived `attackerSubbedOnIds`/`defenderSubbedOnIds` inside modal, built union sets `attackerOnPitchIds = new Set([...attackerStarterIds, ...attackerSubbedOnIds])` and same for defender side. All 6 render sites (3× defender, 3× attacker) updated to use `OnPitchIds`. Step 3 (keeper picker) had no `starterIds` checks — clean. Note: `PlayerSelectionModal` was fixed for the same root cause in BACKLOG-106 (session 35); `PenaltySequenceModal` was a missed second instance.
+
+- **BUG-030 / BUG-031 closed as stale** (`6c97c03`): Both bugs (competitions/[id] 404, raw logo string in standings) were already resolved in the codebase — redirect exists at `competitions/[id]/page.tsx`, `<TeamLogo>` used at all 5 sites in `standings/page.tsx`. Backlog entries closed.
+
+**Bugs encountered:** None new.
+
+**Resolved:** BUG-054 (dead code deleted), BUG-068 (PenaltySequenceModal — both known instances now fixed), BUG-030/031 (stale closure).
+
+**Deferred:**
+- Railway WS restoration — blocks RESOLVED status on BACKLOG-106, BUG-080, BUG-075, BUG-072, BACKLOG-104, BACKLOG-111
+- BACKLOG-105 (full penalty shootout) — dedicated session, pre-prod blocker before knockout matches
+- BUG-046 (black screen on /matches/[id] from admin) — needs Network tab reproduction first
+- BUG-011 (718 goals / playerStats corruption) — data surgery, needs Railway
+
+**Next session:**
+1. Railway decision — restore ($5/mo) or switch to Render/Fly.io free tier
+2. Once Railway up: run verification phases 6/12/13 to close BACKLOG-106, BUG-080, BUG-075, BUG-072, BACKLOG-104, BACKLOG-111 to RESOLVED
+3. Then BACKLOG-105 (penalty shootout) — dedicated session

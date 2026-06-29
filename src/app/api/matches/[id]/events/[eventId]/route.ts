@@ -6,61 +6,66 @@ import { getAuthUser } from '@/lib/auth';
 
 // Reverts one stat increment for a player when an event is deleted.
 // Mirrors updatePlayerStats in events/route.ts — same guards must apply at call site.
+// Does NOT throw — event deletion already succeeded by the time this runs.
 async function revertPlayerStat(sport: string, playerId: string, eventType: string): Promise<void> {
     if (sport !== 'Football') return;
+    try {
+        const stats = await db
+            .select()
+            .from(footballPlayerStats)
+            .where(eq(footballPlayerStats.playerId, playerId))
+            .get();
 
-    const stats = await db
-        .select()
-        .from(footballPlayerStats)
-        .where(eq(footballPlayerStats.playerId, playerId))
-        .get();
+        if (!stats) return;
 
-    if (!stats) return;
+        const updates: Partial<typeof stats> = {};
 
-    const updates: Partial<typeof stats> = {};
+        switch (eventType.toUpperCase()) {
+            case 'GOAL':
+                updates.goals = Math.max(0, (stats.goals || 0) - 1);
+                updates.shotsOnTarget = Math.max(0, (stats.shotsOnTarget || 0) - 1);
+                break;
+            case 'ASSIST':
+                updates.assists = Math.max(0, (stats.assists || 0) - 1);
+                break;
+            case 'OWN GOAL':
+                updates.ownGoals = Math.max(0, (stats.ownGoals || 0) - 1);
+                break;
+            case 'PENALTY':
+                updates.penaltiesScored = Math.max(0, (stats.penaltiesScored || 0) - 1);
+                updates.shotsOnTarget = Math.max(0, (stats.shotsOnTarget || 0) - 1);
+                break;
+            case 'PENALTY MISSED':
+                updates.shotsOffTarget = Math.max(0, (stats.shotsOffTarget || 0) - 1);
+                break;
+            case 'PENALTY SAVED':
+                updates.shotsOnTarget = Math.max(0, (stats.shotsOnTarget || 0) - 1);
+                break;
+            case 'FOUL':
+                updates.foulsCommitted = Math.max(0, (stats.foulsCommitted || 0) - 1);
+                break;
+            case 'YELLOW CARD':
+                updates.yellowCards = Math.max(0, (stats.yellowCards || 0) - 1);
+                break;
+            case 'RED CARD':
+                updates.redCards = Math.max(0, (stats.redCards || 0) - 1);
+                break;
+            case 'SAVE':
+                updates.saves = Math.max(0, (stats.saves || 0) - 1);
+                break;
+            default:
+                return;
+        }
 
-    switch (eventType.toUpperCase()) {
-        case 'GOAL':
-            updates.goals = Math.max(0, (stats.goals || 0) - 1);
-            updates.shotsOnTarget = Math.max(0, (stats.shotsOnTarget || 0) - 1);
-            break;
-        case 'ASSIST':
-            updates.assists = Math.max(0, (stats.assists || 0) - 1);
-            break;
-        case 'OWN GOAL':
-            updates.ownGoals = Math.max(0, (stats.ownGoals || 0) - 1);
-            break;
-        case 'PENALTY':
-            updates.penaltiesScored = Math.max(0, (stats.penaltiesScored || 0) - 1);
-            updates.shotsOnTarget = Math.max(0, (stats.shotsOnTarget || 0) - 1);
-            break;
-        case 'PENALTY MISSED':
-            updates.shotsOffTarget = Math.max(0, (stats.shotsOffTarget || 0) - 1);
-            break;
-        case 'PENALTY SAVED':
-            updates.shotsOnTarget = Math.max(0, (stats.shotsOnTarget || 0) - 1);
-            break;
-        case 'FOUL':
-            updates.foulsCommitted = Math.max(0, (stats.foulsCommitted || 0) - 1);
-            break;
-        case 'YELLOW CARD':
-            updates.yellowCards = Math.max(0, (stats.yellowCards || 0) - 1);
-            break;
-        case 'RED CARD':
-            updates.redCards = Math.max(0, (stats.redCards || 0) - 1);
-            break;
-        case 'SAVE':
-            updates.saves = Math.max(0, (stats.saves || 0) - 1);
-            break;
-        default:
-            return;
-    }
-
-    if (Object.keys(updates).length > 0) {
-        await db
-            .update(footballPlayerStats)
-            .set(updates)
-            .where(eq(footballPlayerStats.playerId, playerId));
+        if (Object.keys(updates).length > 0) {
+            await db
+                .update(footballPlayerStats)
+                .set(updates)
+                .where(eq(footballPlayerStats.playerId, playerId));
+        }
+    } catch (error) {
+        console.error('[revertPlayerStat] stat reversion failed — event already deleted:', error);
+        // Do not rethrow. Event deletion succeeded. Stat drift is recoverable; a false 500 is not.
     }
 }
 

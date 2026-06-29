@@ -1063,6 +1063,19 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                     lineups: fullState.lineups,
                     teamRatings: fullState.teamRatings,
                 });
+                // Second yellow: broadcast Yellow Card removal separately so public
+                // viewers see both cards removed from their timeline.
+                if (isSecondYellow && precedingYellow) {
+                    const stateAfterBoth = manager.getState();
+                    emit('event:undo', {
+                        matchId: match.id,
+                        eventId: precedingYellow.id,
+                        score: stateAfterBoth.score,
+                        stats: stateAfterBoth.stats,
+                        lineups: stateAfterBoth.lineups,
+                        teamRatings: stateAfterBoth.teamRatings,
+                    });
+                }
             }
         } catch {
             alert('Network error — could not undo event. Try again.');
