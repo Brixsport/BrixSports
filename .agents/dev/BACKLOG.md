@@ -257,7 +257,21 @@ BUG-001 through BUG-029, AUDIT-001/002 (partial), BACKLOG-065 — all resolved S
 - Observed result (GOAL undo): home_score 1→0 in DB; Goal + Assist events deleted from match_events ✅. Observed result (OWN GOAL undo): busa-kings player OG → home_score 1→0 in DB; correct team's score decremented (opponent of conceding team, not conceding team) ✅
 - Pending items: none — live DB evidence confirms both GOAL and OWN GOAL undo paths correct via `[eventId]` DELETE route. Note: BUG-054 (OWN GOAL inversion on parent `DELETE /events` route) is a separate code path, still open.
 
-- **BACKLOG-104** _(MEDIUM — Stats / Logger UX)_: Penalty outcome tracking. Current state: `PENALTY` = scored only. Need `PENALTY MISSED` (increments `shotsOffTarget`) and `PENALTY SAVED` (increments `shotsOnTarget` for taker + `saves` for keeper). No schema changes needed — columns exist. Requires new event type strings and new cases in `updatePlayerStats` + logger UI penalty flow (3 outcome buttons instead of 1). Eliminates any future double-count risk. Filed: 2026-06-25. **Status:** OPEN
+- **BACKLOG-104** _(MEDIUM — Stats / Logger UX)_: Penalty outcome tracking. Current state: `PENALTY` = scored only. Architected Session 36. **Status:** IN PROGRESS — Session 36
+
+  **Finalized design:**
+  - `'Penalty'` = scored (no rename — backward compat, no migration)
+  - `'Penalty Missed'` and `'Penalty Saved'` already exist in `FootballEventType` union — never wired up until now
+  - Logger UX: `PenaltySequenceModal` gains a Step 2 — outcome picker (Scored / Missed / Saved). If Saved: keeper picker expands inline below outcome buttons (optional, skip allowed)
+  - `playerId` = taker on all three types. `relatedPlayerId` = keeper on `Penalty Saved` (null if skipped)
+  - Stats: Scored → `penaltiesScored++`, `shotsOnTarget++`. Missed → `shotsOffTarget++`. Saved → `shotsOnTarget++` (taker) + `saves++` (keeper, only if `relatedPlayerId` non-null — explicit null-check required)
+  - No `penaltiesMissed`/`penaltiesFaced` column added — accepted MVP gap, flagged under BACKLOG-111 scope
+  - All three outcomes are notifiable events → push + WS. Keeper is headline actor in `Penalty Saved` feed display and push body
+  - PENALTY_SHOOTOUT buttons also fixed here (currently mapped to wrong types: `Shot off Target`, `Save`)
+
+  **Files:** `match-state-manager.ts`, `FootballLogger.tsx`, `event-driven-notifier.ts`, `match-notification-service.ts`, `/api/notifications/match-event/route.ts`, `/api/matches/[id]/events/route.ts`, public livescore event feed component
+
+  **Push notification types added:** `PENALTY_SAVED`, `PENALTY_MISSED`
 
 - ~~**BACKLOG-107**~~ _(HIGH — PWA / iOS)_: Offline queue drain fallback for iOS. Background Sync API (`sync.register`) is not supported on iOS — the SW drain never fires on iPhone. Fix: `window.addEventListener('online', triggerDrain)` + `document.addEventListener('visibilitychange', handler)` in `FootballLogger.tsx`. `triggerDrain` re-registers the sync tag on Android/desktop; on iOS (no SyncManager) falls back to `navigator.serviceWorker.controller.postMessage({ type: 'DRAIN_MATCH_EVENTS' })`. `sw-admin.js` message handler extended to handle `DRAIN_MATCH_EVENTS` → calls `syncMatchEvents()` directly. Filed: 2026-06-25. **Status:** SHIPPED — `dfad1f6`, 2026-06-26. Pending: verify on iOS device — queue drains on tab resume and on reconnect.
 
@@ -4619,3 +4633,36 @@ On event delete: instead of decrementing a global counter (fragile, can go negat
 **Scope:** `src/app/api/matches/[id]/events/[eventId]/route.ts` — add a `revertPlayerStats(event)` call in the DELETE handler, mirroring the `updatePlayerStats` switch used in POST. Same guards: `isPenaltyShootout`, friendly match flag (once BACKLOG-104 lands), floor at 0.
 
 **Related:** BUG-072 (second yellow undo cascade — SHIPPED), BACKLOG-104 (penalty outcomes), BACKLOG-106 (stat recompute via match_player_stats)
+
+---
+
+### BACKLOG-112 — Goal Disallowed / Overturned Event
+
+**Status:** OPEN
+**Priority:** Low — Undo covers the workaround at MVP
+**Filed:** 2026-06-29
+
+**Context:** Architected Session 36. A goal that is later cancelled by the referee (offside flag, VAR decision) is fundamentally different from a logger mistake:
+
+| | Undo | Goal Disallowed |
+|---|---|---|
+| What happened | Logger error — goal never occurred | Referee gave the goal, then reversed it |
+| History | Event deleted entirely from DB and feed | Original goal stays; disallowed event added |
+| Public feed | Event disappears | "~~⚽ 72' Kwame Mensah~~" + "🚫 72' Goal disallowed (offside)" |
+| Score | Reverted | Reverted |
+| Push | None | "🚫 Goal Disallowed!" push to subscribers |
+
+**Workaround (current):** Logger uses Undo. Score reverts correctly. Match feed loses the narrative of the overturned goal. Acceptable at MVP where VAR/offside reversals are rare.
+
+**Full implementation (when needed):**
+- New event type `'Goal Disallowed'` in `FootballEventType`
+- Logger UI: "Disallow Goal" button appears after a goal is logged (or accessible via event list). Optionally pick reason: Offside / Foul in build-up / Other
+- `detail` field stores the original goal event ID for linkage
+- `POST /api/matches/[id]/events` for `Goal Disallowed` → score decrement (same logic as DELETE score revert), no stat change
+- Public feed renders original goal with strikethrough, `Goal Disallowed` row below it
+- Push notification type: `GOAL_DISALLOWED` → "🚫 Goal Disallowed! [Reason] — Still X-Y (min')"
+- WS broadcast: `event:new` with type `Goal Disallowed` → public page re-renders feed and score
+
+**Stat decision:** Do not revert taker's goal stat — the goal was credited at time of play. Consistent with how most competitions handle it (the stat belongs to the period of play, not the final scoreline). Revisit per competition rules if needed.
+
+**Related:** BACKLOG-104 (penalty outcomes), BACKLOG-111 (stat reversion on undo), BACKLOG-105 (shootout)

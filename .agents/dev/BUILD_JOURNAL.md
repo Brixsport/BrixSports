@@ -2018,3 +2018,24 @@ All `emit(...)` calls in FootballLogger are fire-and-forget with no crash on fai
 1. Railway decision first — get WS back up
 2. Run Phase 6 (three BACKLOG-106 scenarios), Phase 12 (BUG-080 polling), Phase 13 (BUG-075 iOS install) to close all three to RESOLVED
 3. Then BUG-072 (second yellow undo cascade) — small scope, one session
+
+---
+
+### Session 36 — 2026-06-29
+
+**Focus:** BUG-072 (second yellow undo cascade), BACKLOG-104 (penalty outcomes), BACKLOG-111 (file), BACKLOG-112 (file)
+
+**Built / Fixed:**
+
+- **BUG-072 — SHIPPED** (`238e4ec`): `handleUndo` in `FootballLogger.tsx` detects `detail === 'Red Card (Second Yellow)'`, finds the preceding Yellow Card for the same player, issues a second DELETE to DB, calls `undoLastEvent()` twice. Partial failure case handled — if Yellow delete fails after Red is deleted, Red is removed from local state before surfacing the alert. No changes to `match-state-manager.ts`.
+
+- **BACKLOG-111 — Filed**: Stat reversion on undo (all event types). Deferred from BUG-072 — decrement logic must mirror POST increment exactly including floor guards, friendly match guard, shootout guard. Scope: `DELETE /api/matches/[id]/events/[eventId]` handler. Build after BACKLOG-104 lands (so PENALTY MISSED/SAVED cases are included).
+
+- **BACKLOG-104 — Architected, IN PROGRESS**: Penalty outcome tracking — full system design confirmed. Three-outcome flow (Scored/Missed/Saved), PenaltySequenceModal Step 2, keeper picker inline-optional, push notifications (PENALTY_SAVED, PENALTY_MISSED), WS broadcast for all three outcomes, stats mapping with explicit null-check on relatedPlayerId. 7 files. No schema change. Build next.
+
+- **BACKLOG-112 — Filed**: Goal Disallowed / Overturned. Mental model documented — distinct from Undo (keeps match narrative, score reverts, push fires). Workaround: Undo covers MVP. Full build deferred until VAR/offside overturns become common.
+
+**Deferred:**
+- BACKLOG-104 implementation (next in session)
+- BACKLOG-105 (full penalty shootout) — dedicated session, pre-prod blocker before first knockout match
+- BACKLOG-106, BUG-080, BUG-075 — awaiting Railway WS to verify SHIPPED status
