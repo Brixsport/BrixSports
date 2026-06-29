@@ -1837,6 +1837,8 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                         awayPlayers={getOnPitchPlayers('away').filter((p: Player) => !redCardedPlayerIds.has(p.id))}
                         homeLineup={lineups.home}
                         awayLineup={lineups.away}
+                        homeSubbedOnIds={getSubSets(match.homeTeamId).subbedOnIds}
+                        awaySubbedOnIds={getSubSets(match.awayTeamId).subbedOnIds}
                         onClose={() => setShowPenaltyModal(false)}
                         onSubmit={(takerId, foulerId, outcome, keeperId) => {
                             // 1. Log the Foul/Concession for the defender
@@ -2238,6 +2240,8 @@ function PenaltySequenceModal({
     awayPlayers,
     homeLineup,
     awayLineup,
+    homeSubbedOnIds,
+    awaySubbedOnIds,
     onClose,
     onSubmit
 }: {
@@ -2246,6 +2250,8 @@ function PenaltySequenceModal({
     awayPlayers: Player[],
     homeLineup: any,
     awayLineup: any,
+    homeSubbedOnIds: Set<string>,
+    awaySubbedOnIds: Set<string>,
     onClose: () => void,
     onSubmit: (takerId: string | null, foulerId: string | null, outcome: 'Scored' | 'Saved' | 'Missed', keeperId: string | null) => void
 }) {
@@ -2259,9 +2265,13 @@ function PenaltySequenceModal({
     const defenders = attackingTeam === 'home' ? awayPlayers : homePlayers;
     const attackerLineup = attackingTeam === 'home' ? homeLineup : awayLineup;
     const defenderLineup = attackingTeam === 'home' ? awayLineup : homeLineup;
+    const attackerSubbedOnIds = attackingTeam === 'home' ? homeSubbedOnIds : awaySubbedOnIds;
+    const defenderSubbedOnIds = attackingTeam === 'home' ? awaySubbedOnIds : homeSubbedOnIds;
 
     const attackerStarterIds = new Set((attackerLineup?.starters || attackerLineup?.players || []).map((p: any) => p.playerId || p.id));
     const defenderStarterIds = new Set((defenderLineup?.starters || defenderLineup?.players || []).map((p: any) => p.playerId || p.id));
+    const attackerOnPitchIds = new Set([...attackerStarterIds, ...attackerSubbedOnIds]);
+    const defenderOnPitchIds = new Set([...defenderStarterIds, ...defenderSubbedOnIds]);
 
     return (
         <div className="fixed inset-0 bg-black/95 backdrop-blur-md z-50 flex items-center justify-center p-4 overflow-y-auto">
@@ -2289,14 +2299,14 @@ function PenaltySequenceModal({
                                     <button
                                         key={p.id}
                                         onClick={() => { setFoulerId(p.id); setStep(2); }}
-                                        className={`p-3 text-left hover:bg-white/5 bg-black/20 border rounded-xl flex items-center gap-3 ${defenderStarterIds.has(p.id) ? 'border-primary/20' : 'border-white/5 opacity-60'}`}
+                                        className={`p-3 text-left hover:bg-white/5 bg-black/20 border rounded-xl flex items-center gap-3 ${defenderOnPitchIds.has(p.id) ? 'border-primary/20' : 'border-white/5 opacity-60'}`}
                                     >
-                                        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-black ${defenderStarterIds.has(p.id) ? 'bg-primary/20 text-primary' : 'bg-white/10 text-white/40'}`}>
+                                        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-black ${defenderOnPitchIds.has(p.id) ? 'bg-primary/20 text-primary' : 'bg-white/10 text-white/40'}`}>
                                             {p.number}
                                         </div>
                                         <div>
                                             <div className="font-bold text-sm">{p.name}</div>
-                                            <div className="text-[10px] text-white/40">{p.position} {!defenderStarterIds.has(p.id) && '(Bench)'}</div>
+                                            <div className="text-[10px] text-white/40">{p.position} {!defenderOnPitchIds.has(p.id) && '(Bench)'}</div>
                                         </div>
                                     </button>
                                 ))}
@@ -2308,7 +2318,7 @@ function PenaltySequenceModal({
                         <div className="space-y-4">
                             <h4 className="text-sm font-bold text-center mb-4">Who is taking the penalty?</h4>
                             <div className="grid grid-cols-1 gap-2">
-                                {attackers.filter(p => attackerStarterIds.has(p.id)).map((p: Player) => (
+                                {attackers.filter(p => attackerOnPitchIds.has(p.id)).map((p: Player) => (
                                     <button
                                         key={p.id}
                                         onClick={() => { setTakerId(p.id); setStep(3); }}
@@ -2321,11 +2331,11 @@ function PenaltySequenceModal({
                                         </div>
                                     </button>
                                 ))}
-                                {attackers.filter(p => !attackerStarterIds.has(p.id)).length > 0 && (
+                                {attackers.filter(p => !attackerOnPitchIds.has(p.id)).length > 0 && (
                                     <div className="py-2">
                                         <p className="text-[9px] font-black uppercase tracking-widest text-white/20 mb-2">Players on Bench</p>
                                         <div className="grid grid-cols-1 gap-2 opacity-40">
-                                            {attackers.filter(p => !attackerStarterIds.has(p.id)).map(p => (
+                                            {attackers.filter(p => !attackerOnPitchIds.has(p.id)).map(p => (
                                                 <div key={p.id} className="p-2 bg-black/20 border border-white/5 rounded-lg flex items-center gap-3 grayscale">
                                                     <div className="w-6 h-6 bg-white/5 rounded-full flex items-center justify-center text-[10px] font-bold">{p.number}</div>
                                                     <div className="text-xs font-bold">{p.name}</div>
