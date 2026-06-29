@@ -8,7 +8,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
 import { userFollows, teams } from '@/db/schema';
 import { eq, and } from 'drizzle-orm';
-import { getAuthUser } from '@/lib/auth';
+import { getAuthUser, resolveEffectiveUserId } from '@/lib/auth';
 
 /**
  * Follow a team
@@ -31,6 +31,8 @@ export async function POST(
             );
         }
 
+        const effectiveId = await resolveEffectiveUserId(user);
+
         // Check if team exists
         const team = await db
             .select()
@@ -51,7 +53,7 @@ export async function POST(
             .from(userFollows)
             .where(
                 and(
-                    eq(userFollows.userId, user.id),
+                    eq(userFollows.userId, effectiveId),
                     eq(userFollows.followType, 'team'),
                     eq(userFollows.followId, teamId)
                 )
@@ -79,7 +81,7 @@ export async function POST(
 
         await db.insert(userFollows).values({
             id: followId,
-            userId: user.id,
+            userId: effectiveId,
             followType: 'team',
             followId: teamId,
             notificationsEnabled: true,
@@ -120,12 +122,14 @@ export async function DELETE(
             );
         }
 
+        const effectiveId = await resolveEffectiveUserId(user);
+
         // Delete follow
         await db
             .delete(userFollows)
             .where(
                 and(
-                    eq(userFollows.userId, user.id),
+                    eq(userFollows.userId, effectiveId),
                     eq(userFollows.followType, 'team'),
                     eq(userFollows.followId, teamId)
                 )
@@ -165,13 +169,15 @@ export async function GET(
             });
         }
 
+        const effectiveId = await resolveEffectiveUserId(user);
+
         // Check if following
         const follow = await db
             .select()
             .from(userFollows)
             .where(
                 and(
-                    eq(userFollows.userId, user.id),
+                    eq(userFollows.userId, effectiveId),
                     eq(userFollows.followType, 'team'),
                     eq(userFollows.followId, teamId)
                 )

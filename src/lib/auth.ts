@@ -137,6 +137,28 @@ export async function getAuthUser(request: NextRequest): Promise<AuthenticatedUs
 }
 
 /**
+ * Resolve the effective users-table ID for a given authenticated user.
+ *
+ * Loggers have their own identity in the `loggers` table. When a logger
+ * cookie is active on a viewer-app route that queries `userFavorites` or
+ * `userFollows` (both keyed to `users.id`), the logger's own ID won't match
+ * any row. If the logger also has a fan account with the same email in the
+ * `users` table, this function returns that fan account's ID so the request
+ * resolves correctly. Falls back to the original ID if no match is found.
+ *
+ * See BACKLOG-117 (SSO) for the long-term fix.
+ */
+export async function resolveEffectiveUserId(authUser: Pick<AuthenticatedUser, 'id' | 'email' | 'role'>): Promise<string> {
+    if (authUser.role !== 'logger') return authUser.id;
+    const [fanAccount] = await db
+        .select({ id: users.id })
+        .from(users)
+        .where(eq(users.email, authUser.email))
+        .limit(1);
+    return fanAccount?.id ?? authUser.id;
+}
+
+/**
  * Check if user has required role
  * @param user - Authenticated user
  * @param allowedRoles - Array of allowed roles

@@ -7,7 +7,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
 import { userFavorites, teams, players, matches } from '@/db/schema';
 import { eq, and } from 'drizzle-orm';
-import { getAuthUser } from '@/lib/auth';
+import { getAuthUser, resolveEffectiveUserId } from '@/lib/auth';
 
 /**
  * GET user's favorites
@@ -24,6 +24,7 @@ export async function GET(request: NextRequest) {
             );
         }
 
+        const effectiveId = await resolveEffectiveUserId(user);
         const { searchParams } = new URL(request.url);
         const type = searchParams.get('type'); // 'team' | 'player' | 'match' | 'competition'
 
@@ -36,7 +37,7 @@ export async function GET(request: NextRequest) {
                 .from(userFavorites)
                 .where(
                     and(
-                        eq(userFavorites.userId, user.id),
+                        eq(userFavorites.userId, effectiveId),
                         eq(userFavorites.favoriteType, type)
                     )
                 );
@@ -44,7 +45,7 @@ export async function GET(request: NextRequest) {
             favoritesData = await db
                 .select()
                 .from(userFavorites)
-                .where(eq(userFavorites.userId, user.id));
+                .where(eq(userFavorites.userId, effectiveId));
         }
 
         const favorites = favoritesData;
@@ -119,6 +120,7 @@ export async function POST(request: NextRequest) {
             );
         }
 
+        const effectiveId = await resolveEffectiveUserId(user);
         const body = await request.json();
         const { favoriteType, favoriteId } = body;
 
@@ -135,7 +137,7 @@ export async function POST(request: NextRequest) {
             .from(userFavorites)
             .where(
                 and(
-                    eq(userFavorites.userId, user.id),
+                    eq(userFavorites.userId, effectiveId),
                     eq(userFavorites.favoriteType, favoriteType),
                     eq(userFavorites.favoriteId, favoriteId)
                 )
@@ -153,7 +155,7 @@ export async function POST(request: NextRequest) {
 
         await db.insert(userFavorites).values({
             id: favoriteIdStr,
-            userId: user.id,
+            userId: effectiveId,
             favoriteType,
             favoriteId,
         });
@@ -186,6 +188,7 @@ export async function DELETE(request: NextRequest) {
             );
         }
 
+        const effectiveId = await resolveEffectiveUserId(user);
         const { searchParams } = new URL(request.url);
         const favoriteType = searchParams.get('type');
         const favoriteId = searchParams.get('id');
@@ -202,7 +205,7 @@ export async function DELETE(request: NextRequest) {
             .delete(userFavorites)
             .where(
                 and(
-                    eq(userFavorites.userId, user.id),
+                    eq(userFavorites.userId, effectiveId),
                     eq(userFavorites.favoriteType, favoriteType),
                     eq(userFavorites.favoriteId, favoriteId)
                 )
