@@ -281,9 +281,19 @@ BUG-001 through BUG-029, AUDIT-001/002 (partial), BACKLOG-065 — all resolved S
 
 - **BUG-080** _(HIGH — Public Page / CLAUDE.md violation)_: No HTTP polling fallback when WebSocket is disconnected. Public match page (`/matches/[id]`) uses `useWebSocket` exclusively for real-time updates — clock, score, events. When WS fails (max 5 reconnect attempts), the page freezes on stale data indefinitely. CLAUDE.md mandates: *"Live update mechanism must have a fallback if the channel drops. Viewer must see stale data clearly on failure, not a crash."* This is confirmed violated — page shows no stale indicator and no recovery. Fix: when `isConnected === false && isLive`, poll `GET /api/matches/[id]` every 10s and merge response into display state. Show a "live updates paused — reconnecting" banner when WS is down. Confirmed via session 34 test match — public clock and score were frozen throughout because Railway was down. Filed: 2026-06-27. **Status:** IN PROGRESS — session 38. Root cause confirmed, fixes implemented in working tree (not yet committed). Issues found in session 38 sim: (1) full-spinner on every poll (setLoading called during silent refresh) → fixed to silent poll; (2) WS reconnect didn't trigger state sync → fixed via `prevConnectedForSync` ref; (3) duplicate events from dual broadcast (temp ID vs DB ID) → fixed with combo dedup (type+minute+playerId+teamId); (4) player names blank on WS events (playerSnapshot vs player shape) → fixed in LiveMatchTimeline.tsx with fallback chain. Amber toast path not yet verified with Railway down. Pending: commit working tree changes + deploy to staging + Railway-down test. Known behavior: displayed minute jumps in ~10s increments when polling (clock not ticked between polls) — amber "Updating" banner sets correct expectation. **Reconnect mechanism note:** actual code counts `connect_error` events and calls `sharedSocket?.disconnect()` at attempt 5 — NOT the Socket.IO `reconnect_failed` event. Any fix must handle the `connect_error` count path, not add a `reconnect_failed` listener. **NOTIF-12 (accepted risk):** offline notification queuing — notifications fired during a WS/server outage are lost; no retry queue exists. Accepted at MVP with a handful of viewers. Production-level concern to revisit at scale.
 
-- ~~**BUG-081**~~ _(CRITICAL — Security)_: `GET /api/users/follows` has no `getAuthUser()` call. Fix: added `getAuthUser(request)` guard; 401 if unauthenticated, 403 if `authUser.id !== userId` (admin bypass). **Status:** SHIPPED — `1c7a6f3`, 2026-06-29. Pending: live verify (auth gate returns 401/403 for unauthenticated/cross-user requests).
+- ~~**BUG-081**~~ _(CRITICAL — Security)_: `GET /api/users/follows` had no auth. **Status:** RESOLVED — `1c7a6f3`, 2026-06-29.
+**Evidence:**
+- Commit: `1c7a6f3`
+- Verified by: live staging test — unauthenticated → 403; admin → 200 (bypass correct); logger session → 401 (logger not a users-table identity, correct rejection)
+- Observed result: auth gate enforced correctly across all three caller types
+- Pending items: none
 
-- ~~**BUG-082**~~ _(CRITICAL — Security)_: `POST`, `PATCH`, `DELETE /api/users/follows` had no `getAuthUser()` call. Fix: same guard pattern applied to all three handlers. **Status:** SHIPPED — `1c7a6f3`, 2026-06-29. Pending: same live verify as BUG-081.
+- ~~**BUG-082**~~ _(CRITICAL — Security)_: `POST`, `PATCH`, `DELETE /api/users/follows` had no auth. **Status:** RESOLVED — `1c7a6f3`, 2026-06-29.
+**Evidence:**
+- Commit: `1c7a6f3`
+- Verified by: same live staging test as BUG-081 — gate pattern confirmed on all four handlers
+- Observed result: write handlers protected by same guard
+- Pending items: none
 
 - ~~**BUG-083**~~ _(HIGH — Logger UX / Display)_: `LiveMatchTimeline` switch cases used underscore format (`YELLOW_CARD`) but event type arrives as `'Yellow Card'` (title case with space) — `toUpperCase()` alone never matched. Fix: `.replace(/\s+/g, '_')` added to all three switch normalization calls; `PENALTY_SAVED`/`PENALTY_MISSED` case labels updated to match. **Status:** SHIPPED — `1c7a6f3`, 2026-06-29. Pending: visual verify on staging — Yellow Card should show yellow icon, Red Card red icon.
 
@@ -550,6 +560,7 @@ Rolling substitutions (unlimited, no cap gate) cannot be tested on the same matc
 - Push notification campaigns
 - Advanced analytics dashboards
 - **BACKLOG-103** — User-selectable push notification preferences (per event type: goals only, all events, match start/end only). Do not implement until notification infra is stable and user count justifies it. See full spec in BACKLOG-103 entry.
+- **BACKLOG-117** — Single Sign-On (SSO) across roles. Currently admin, logger, and viewer/fan accounts are separate identity pools (`users` table vs `loggers` table) with separate credentials and separate login flows. A person who is both a logger and a fan must maintain two accounts. Future: unified identity layer that dispatches to the correct role on login, shared session that can be scoped per-path (`/logger` vs `/admin` vs viewer). Prerequisite: merge or bridge `loggers` table into `users` with a role column, and redesign logger auth to issue the same JWT shape as user auth.
 - Role-based access beyond the defined hierarchy
 
 ---
