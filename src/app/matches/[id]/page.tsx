@@ -284,17 +284,10 @@ export default function MatchDetailPage() {
 
                         <div className="flex items-center gap-3">
                             {isLive && !match.livestreamEnabled && (
-                                isConnected ? (
-                                    <div className="flex items-center gap-2 text-sm text-green-500">
-                                        <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-                                        Live
-                                    </div>
-                                ) : (
-                                    <div className="flex items-center gap-2 text-sm text-amber-400">
-                                        <span className="w-2 h-2 bg-amber-400 rounded-full animate-pulse" />
-                                        Updating
-                                    </div>
-                                )
+                                <div className="flex items-center gap-2 text-sm text-green-500">
+                                    <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+                                    Live
+                                </div>
                             )}
 
                             <button
