@@ -2100,3 +2100,41 @@ All `emit(...)` calls in FootballLogger are fire-and-forget with no crash on fai
 1. Railway decision — restore ($5/mo) or switch to Render/Fly.io free tier
 2. Once Railway up: run verification phases 6/12/13 to close BACKLOG-106, BUG-080, BUG-075, BUG-072, BACKLOG-104, BACKLOG-111 to RESOLVED
 3. Then BACKLOG-105 (penalty shootout) — dedicated session
+
+---
+
+### Session 37 (continued) — 2026-06-29
+
+**Focus:** /code-review + /feature audit on sessions 33–37 output; critical fix triage; BACKLOG-105 architecture
+
+**Built / Fixed:**
+
+- **`revertPlayerStat` try/catch + Sentry** (`6feb3e5`, `1924f26`): BACKLOG-111 introduced `revertPlayerStat` in `[eventId]/route.ts` without a try/catch — if the stat DB write failed after event deletion, the outer catch block returned 500. Event was already deleted. Logger saw a false failure and might retry a now-missing event. Root cause: the original `decrementPlayerStats` had `// Don't throw` guard explicitly; the rewrite dropped it. Fix: wrap entire function body in try/catch. Added `Sentry.captureException(error, { extra: { playerId, eventType, sport } })` in the catch — `console.error` alone only reaches Vercel function logs, not Sentry dashboard. Sentry confirmed wired: `@sentry/nextjs@10.56.0` in package.json, `sentry.server.config.ts` reads `SENTRY_DSN`, `global-error.tsx` already calls `captureException`. Sentry import added to `[eventId]/route.ts`.
+
+- **Second yellow WS broadcast fix** (`6feb3e5`): `handleUndo` in `FootballLogger.tsx` emitted one `event:undo` WS signal for the Red Card deletion only. Yellow Card removal was local-state-only — public viewers saw the Yellow Card persist on the live timeline until next WS message. Fix: after both DB deletes confirm and `undoLastEvent()` is called twice, emit a second `event:undo` with `precedingYellow.id` and updated state.
+
+- **isPenaltyShootout guard — non-issue confirmed**: Review flagged this as a potential gap (career stats written during shootout for Penalty Missed/Saved types). Reading `events/route.ts:173` confirmed the guard `!isPenaltyShootout` already gates ALL `updatePlayerStats` calls including new types. No fix needed.
+
+- **TEST_CHECKLIST phases 15/16/17** (`1924f26`): BUG-072, BACKLOG-104, BACKLOG-111 had no verification phases — only listed as "OPEN/LOW" in Known Broken. Added Phase 15 (second yellow cascade), Phase 16 (penalty outcomes), Phase 17 (stat reversion), each with exact DB check steps. All 6 SHIPPED items now have test phases (6/12/13/15/16/17).
+
+- **BACKLOG-105 architecture finalised** (no code this session — Railway gate + sim timing): 7-file scope confirmed. Key decisions: SQL atomic increment (`COALESCE + 1`, eliminates read-modify-write race), SQL direct migration (db:push blocked by BACKLOG-040), `match:score:updated` WS payload extended with optional `shootoutHomeScore?`/`shootoutAwayScore?` (backward compatible — existing listeners ignore absent fields), separate `shootoutScore` state on public page. Event types unchanged — `period` column differentiates shootout events at query time. BACKLOG-113 filed (simplified shootout modal UX, ~40 lines, deferred).
+
+- **BUG-011 decision framework documented**: Path A (read-only audit, `dev/audit-player-stats.mjs`) must run before any backfill. Backfilling BUSA match events without auditing first recreates BUG-011 exactly — that's how it was originally created.
+
+**Bugs encountered:** None new.
+
+**Resolved this session:** `revertPlayerStat` critical gap (false 500 + silent stat drift), second yellow WS broadcast gap, Sentry capture gap.
+
+**Deferred:**
+- BACKLOG-105 full build — Railway must be up first; build + verify in same session as the 6 SHIPPED items
+- BUG-011 Path A audit — one read-only session, no writes until after sim closes SHIPPED items
+- BACKLOG-113 (simplified shootout modal) — deferred until after first live shootout feedback
+- Two-logger conflict — operational workaround doc not yet written
+
+**Next session:**
+1. Railway decision — restore or switch to Render/Fly.io
+2. Once Railway up: BACKLOG-105 build (7 files, SQL direct migration staging first)
+3. Sim run — Phases 6/12/13/15/16/17 + BACKLOG-105 verification — close all 7 to RESOLVED
+4. BUG-011 Path A audit in parallel or after sim
+
+**ARCHITECTURE CORRECTION (same session):** BACKLOG-105 mental model had a career stats leak risk. Original plan reused `'Penalty'`/`'Penalty Missed'`/`'Penalty Saved'` event types during shootout, relying solely on `isPenaltyShootout` guard to block stat writes. Rule confirmed: shootout goals/saves do not count toward career stats (FIFA standard). Corrected design uses distinct `'PEN_SCORED'`/`'PEN_MISSED'`/`'PEN_SAVED'` types — `updatePlayerStats` switch has no case for these → `default: return` → zero stat writes, no guard needed, no leakage possible. ShootoutModal promoted from BACKLOG-113 deferred item into core BACKLOG-105 scope — 10+ rapid kicks during live match require simplified UI (team → taker → outcome), not the full PenaltySequenceModal. File delta updated to 8 files (new `ShootoutModal.tsx` component). BACKLOG-113 absorbed.

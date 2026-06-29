@@ -283,7 +283,85 @@ BUG-001 through BUG-029, AUDIT-001/002 (partial), BACKLOG-065 — all resolved S
 
 - ~~**BUG-073**~~ _(LOW — Data)_: Substitution `detail` string direction — filed as inverted during KIN vs JOG test match analysis. Confirmed at HEAD: `confirmEvent('Substitution', playerComingOut, playerInId)` → `relatedName` = incoming, `outName` = outgoing → string reads `{inPlayer} IN for {outPlayer}`. Code was never wrong. DB events from the KIN vs JOG test match (deleted) reflected an older state. **Status:** RESOLVED — no code change needed, 2026-06-26.
 
-- **BACKLOG-105** _(HIGH — Data Integrity)_: Penalty shootout score isolation. PENALTY_SHOOTOUT period currently writes to `home_score`/`away_score` and `footballPlayerStats` — both wrong. Shootout score is separate from match score (display as "2-2 (4-3 pens)"). Shootout events should not write to career stats. **Interim guard SHIPPED** (`da8d9ce`, 2026-06-25): `isPenaltyShootout` flag in `POST /api/matches/[id]/events/route.ts` — skips score increment and `updatePlayerStats` when `match.currentPeriod === 'PENALTY_SHOOTOUT'`. Full implementation still open: separate `shootout_home`/`shootout_away` columns on matches, distinct `PEN_SCORED`/`PEN_MISSED`/`PEN_SAVED` event types, shootout score display on public page. **Status:** SHIPPED (interim guard) — full implementation OPEN
+- **BACKLOG-105** _(HIGH — Data Integrity)_: Penalty shootout score isolation. Full implementation. **Status:** SHIPPED (interim guard `da8d9ce`) — full implementation OPEN, build next session after Railway up.
+
+  **Rules (confirmed):** Each team takes alternating kicks from the spot. Five kicks each, different players each time. Most scored = winner. Sudden death if level after 5. Shootout goals are NOT recorded in the match score — official result stays as the ET score (e.g. 1-1). Shootout goals do NOT count toward a player's career scoring tally. This is standard football convention (FIFA/CAF/UEFA).
+
+  **Architecture — corrected and finalised (session 37, 2026-06-29):**
+
+  **Event types — distinct, not reused:**
+  Use `'PEN_SCORED'`, `'PEN_MISSED'`, `'PEN_SAVED'` (not `'Penalty'`/`'Penalty Missed'`/`'Penalty Saved'`). The regular penalty types write career stats in `updatePlayerStats`. Using distinct types means the switch has no matching case → `default: return` → zero stat writes. No guard needed. No leakage possible. The `isPenaltyShootout` guard on the existing path stays unchanged as a belt-and-suspenders.
+
+  **Stat writes — none:**
+  Shootout kicks write ZERO player stats. Not goals, not saves, not shots on/off target. Career records are untouched. This is why distinct event types are required — `PEN_SCORED` simply has no case in `updatePlayerStats`.
+
+  **Score routing:**
+  `PEN_SCORED` → increment `shootout_home_score` or `shootout_away_score` using SQL atomic (`COALESCE(col, 0) + 1`), never read-modify-write. Main `home_score`/`away_score` untouched.
+  `PEN_MISSED` / `PEN_SAVED` → no score change, no stat change.
+
+  **Undo during shootout:**
+  `DELETE /events/[eventId]` for a `PEN_SCORED` event → decrement `shootout_home_score` or `shootout_away_score`. No stat revert (nothing was written). `revertPlayerStat` skips on `PEN_*` types (no case in switch).
+
+  **Flow:**
+  ```
+  PENALTY_SHOOTOUT period entered
+    ↓
+  Logger sees dedicated ShootoutModal (not regular event grid)
+    ↓
+  Each kick: pick team → pick taker → Scored / Missed / Saved
+    ↓
+  Event logged as PEN_SCORED / PEN_MISSED / PEN_SAVED
+    ↓
+  PEN_SCORED only: shootout_home_score or shootout_away_score + 1 (SQL atomic)
+    ↓
+  NO writes to footballPlayerStats
+    ↓
+  Public page: "1 – 1" main score + "(4 – 3 pens)" below
+    ↓
+  Match ends → currentPeriod = FINISHED
+  ```
+
+  **Logger UX — ShootoutModal (part of BACKLOG-105, not deferred):**
+  Simplified 3-step modal. During a 10+ kick shootout under time pressure, the full `PenaltySequenceModal` (fouler picker → taker → outcome) is wrong UX. ShootoutModal:
+  - Step 1: Which team is shooting? (Home / Away toggle)
+  - Step 2: Pick taker from that team's on-pitch players
+  - Step 3: PEN_SCORED / PEN_MISSED / PEN_SAVED + optional keeper if Saved
+  No fouler picker. No PenaltySequenceModal reuse. ~80 lines, self-contained component.
+
+  **WS broadcast:**
+  `match:score:updated` payload extended with optional `shootoutHomeScore?` / `shootoutAwayScore?`. Backward compatible — existing listeners ignore absent fields. `useWebSocket.tsx` `handleScoreUpdate` extended to hydrate separate `shootoutScore` state when present. Public page reads both `score` and `shootoutScore` for display.
+
+  **Migration — SQL direct only (db:push blocked by BACKLOG-040):**
+  ```sql
+  ALTER TABLE matches ADD COLUMN shootout_home_score INTEGER DEFAULT 0;
+  ALTER TABLE matches ADD COLUMN shootout_away_score INTEGER DEFAULT 0;
+  ```
+  Staging first, log in RUNLOG, then prod. Schema.ts updated to match.
+
+  **File delta (8 files):**
+  | File | Change |
+  |---|---|
+  | `src/db/schema.ts` | Add `shootoutHomeScore`, `shootoutAwayScore` columns |
+  | `src/app/api/matches/[id]/events/route.ts` | PEN_SCORED → shootout score write (SQL atomic) |
+  | `src/app/api/matches/[id]/events/[eventId]/route.ts` | PEN_SCORED undo → shootout score revert |
+  | `src/lib/match-state-manager.ts` | `shootoutScore` state + WS payload extension |
+  | `src/hooks/useWebSocket.tsx` | `handleScoreUpdate` handles optional shootout fields |
+  | `src/components/FootballLogger.tsx` | ShootoutModal trigger during PENALTY_SHOOTOUT period |
+  | `src/components/ShootoutModal.tsx` | New component — 3-step simplified shootout logger |
+  | `src/app/matches/[id]/page.tsx` | "(X-Y pens)" display when `shootoutScore` set |
+
+  **Early termination — known gap, MVP handling documented:**
+  Shootouts end as soon as the result is mathematically decided (e.g. Team A leads 3-1 after 4 kicks each — Team B cannot win even if they score their remaining kick). The system has no auto-detection for this. MVP handling: logger manually taps "End Match" when the shootout is decided, same as they do at FT. The `ShootoutModal` stays open until the logger closes it. Do not build auto-termination detection at this scope. This is a known intentional gap — not a missing feature.
+
+  **Validation against FIFA Laws of the Game (session 37):**
+  All architecture decisions validated against FIFA Laws and SofaScore/Flashscore display standards:
+  - `PEN_SCORED`/`PEN_MISSED`/`PEN_SAVED` distinct types — correct, no career stat writes ✅
+  - Shootout score separate from match score — official result stays ET score ✅
+  - No `footballPlayerStats` writes during shootout — FIFA convention, non-negotiable ✅
+  - ShootoutModal: team → taker → outcome (no fouler picker) — correct for shootout context ✅
+  - Early termination: logger-manual at MVP ✅
+
+  **BACKLOG-113 absorbed into this item** — simplified modal is part of the build, not a future UX improvement.
 
 - ~~**BUG-044b**~~ _(MEDIUM)_: Logger dashboard stats show "-" (total events, logged matches). Fix: rewrote `/api/loggers/me` to use `getAuthUser` + logger role gate, returns live counts. **Status:** RESOLVED — verified session 34 test match pre-flight, 2026-06-27.
 
@@ -4666,3 +4744,23 @@ On event delete: instead of decrementing a global counter (fragile, can go negat
 **Stat decision:** Do not revert taker's goal stat — the goal was credited at time of play. Consistent with how most competitions handle it (the stat belongs to the period of play, not the final scoreline). Revisit per competition rules if needed.
 
 **Related:** BACKLOG-104 (penalty outcomes), BACKLOG-111 (stat reversion on undo), BACKLOG-105 (shootout)
+
+---
+
+### ~~BACKLOG-113~~ — Simplified Shootout Modal (UX)
+
+**Status:** ABSORBED INTO BACKLOG-105 — 2026-06-29
+**Priority:** N/A
+**Filed:** 2026-06-29
+
+**Context:** During `PENALTY_SHOOTOUT` period, the "Penalty Scored" button opens the full `PenaltySequenceModal` (3 steps: fouler picker → taker picker → outcome). Step 1 (fouler) is irrelevant during a shootout — no foul is committed. Loggers must tap "Unknown / No specific player" to skip it, which adds friction under time pressure.
+
+**Proposed:** A `ShootoutPenaltyModal` (or conditional render inside `PenaltySequenceModal` when `isShootout=true`) with 2 steps only:
+1. Pick taker (attacker list)
+2. Scored / Missed / Saved (+ optional keeper if Saved)
+
+**Why deferred:** Option A (skip Step 1) is acceptable for the first sim and MVP live matches. This becomes a real UX concern once loggers report friction during an actual shootout.
+
+**Scope:** ~40 lines. `FootballLogger.tsx` only — pass `isShootout` prop to `PenaltySequenceModal` and conditionally skip Step 1.
+
+**Related:** BACKLOG-105 (shootout implementation), BACKLOG-104 (penalty outcomes)
