@@ -4,7 +4,7 @@ import { PWAProvider } from '@/components/pwa/PWAProvider';
 export const metadata: Metadata = {
     title: 'Brix Logger | Live Match Logging',
     description: 'Live match event logger for Brixsport',
-    manifest: '/manifest-admin.json',
+    manifest: '/manifest-logger.json',
     icons: {
         icon: [
             { url: '/assests/Logos/BRIX-SPORT-LOGO.png', type: 'image/png' },

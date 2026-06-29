@@ -1,0 +1,46 @@
+{
+    "id": "brix-logger-pwa",
+    "name": "Brixsport Logger",
+    "short_name": "Brix Logger",
+    "description": "Live match event logger for Brixsport",
+    "start_url": "/logger?source=pwa",
+    "scope": "/logger",
+    "display": "standalone",
+    "background_color": "#050505",
+    "theme_color": "#ef4444",
+    "orientation": "portrait-primary",
+    "icons": [
+        {
+            "src": "/assests/Logos/BRIX-SPORT-LOGO.png",
+            "sizes": "192x192",
+            "type": "image/png",
+            "purpose": "any maskable"
+        },
+        {
+            "src": "/assests/Logos/BRIX-SPORT-LOGO.png",
+            "sizes": "512x512",
+            "type": "image/png",
+            "purpose": "any maskable"
+        }
+    ],
+    "categories": [
+        "productivity",
+        "sports"
+    ],
+    "shortcuts": [
+        {
+            "name": "Logger",
+            "short_name": "Logger",
+            "description": "Match logger dashboard",
+            "url": "/logger?source=pwa",
+            "icons": [
+                {
+                    "src": "/assests/Logos/BRIX-SPORT-LOGO.png",
+                    "sizes": "192x192"
+                }
+            ]
+        }
+    ],
+    "prefer_related_applications": false,
+    "related_applications": []
+}
