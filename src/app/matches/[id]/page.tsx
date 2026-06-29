@@ -1,9 +1,11 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useWebSocket, useMatchEvents, useMatchTimer } from '@/hooks/useWebSocket';
+import { useToast } from '@/hooks/useToast';
+import { ToastContainer } from '@/components/admin/Toast';
 import {
     ArrowLeft, Clock, MapPin, Users, TrendingUp, Eye,
     Activity, BarChart3, Share2, Heart, Bell, Trophy, Play
@@ -44,6 +46,8 @@ export default function MatchDetailPage() {
     const { events: liveEvents, latestEvent } = useMatchEvents(matchId);
     const matchTime = useMatchTimer(matchId);
     const { addNotification } = useNotifications();
+    const { toasts, warning, success, removeToast } = useToast();
+    const prevConnected = useRef<boolean | null>(null);
 
     const isUpcoming = matchData?.match?.status === 'UPCOMING';
 
@@ -155,6 +159,19 @@ export default function MatchDetailPage() {
         return () => clearInterval(interval);
     }, [isConnected, matchData?.match?.status]);
 
+    // Fire a one-shot toast when WS connection state changes during a live match
+    useEffect(() => {
+        const isLiveStatus = matchData?.match?.status === 'LIVE' || matchData?.match?.status === 'HALF_TIME';
+        if (!isLiveStatus) return;
+        if (prevConnected.current === null) { prevConnected.current = isConnected; return; }
+        if (prevConnected.current === isConnected) return;
+
+        if (!isConnected) warning('Live updates paused — refreshing automatically');
+        else success('Live updates restored');
+
+        prevConnected.current = isConnected;
+    }, [isConnected, matchData?.match?.status]);
+
     // Listen for score updates
     useEffect(() => {
         const handleScoreUpdate = (data: any) => {
@@ -264,6 +281,7 @@ export default function MatchDetailPage() {
 
     return (
         <div className="min-h-screen bg-[#050505] text-white">
+            <ToastContainer toasts={toasts} onClose={removeToast} />
             {/* Sticky Header - Slides up/down based on scroll direction */}
             <div
                 className="sticky top-0 z-40 bg-gradient-to-b from-[#050505] via-[#050505]/95 to-[#050505]/90 backdrop-blur-xl border-b border-white/10 transition-transform duration-300 ease-out"
