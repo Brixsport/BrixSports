@@ -145,6 +145,16 @@ export default function MatchDetailPage() {
         }
     }, [latestEvent]);
 
+    // BUG-080: HTTP polling fallback when WS is disconnected during a live match.
+    // Polls GET /api/matches/[id] every 10s — merges score, status, and events.
+    useEffect(() => {
+        const isLiveStatus = matchData?.match?.status === 'LIVE' || matchData?.match?.status === 'HALF_TIME';
+        if (isConnected || !isLiveStatus) return;
+
+        const interval = setInterval(fetchMatchData, 10000);
+        return () => clearInterval(interval);
+    }, [isConnected, matchData?.match?.status]);
+
     // Listen for score updates
     useEffect(() => {
         const handleScoreUpdate = (data: any) => {
@@ -273,11 +283,18 @@ export default function MatchDetailPage() {
                         </button>
 
                         <div className="flex items-center gap-3">
-                            {isConnected && isLive && !match.livestreamEnabled && (
-                                <div className="flex items-center gap-2 text-sm text-green-500">
-                                    <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-                                    Live
-                                </div>
+                            {isLive && !match.livestreamEnabled && (
+                                isConnected ? (
+                                    <div className="flex items-center gap-2 text-sm text-green-500">
+                                        <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+                                        Live
+                                    </div>
+                                ) : (
+                                    <div className="flex items-center gap-2 text-sm text-amber-400">
+                                        <span className="w-2 h-2 bg-amber-400 rounded-full animate-pulse" />
+                                        Updating
+                                    </div>
+                                )
                             )}
 
                             <button
