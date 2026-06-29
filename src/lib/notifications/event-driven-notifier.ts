@@ -12,11 +12,15 @@
 
 import { MatchEvent } from '@/lib/match-state-manager';
 
+type PeriodEventType = 'MATCH_START' | 'HALF_TIME' | 'MATCH_END';
+
 interface NotificationQueueItem {
     matchId: string;
     homeTeamId: string;
     awayTeamId: string;
-    event: MatchEvent;
+    // Either a match event (goal, card, etc.) or a period transition
+    event?: MatchEvent;
+    periodEventType?: PeriodEventType;
     score: { home: number; away: number };
     attempts: number;
     lastAttempt: number;
@@ -90,8 +94,13 @@ export class EventDrivenNotifier {
         console.log('[EventDrivenNotifier] Starting event listener...');
 
         window.addEventListener('MATCH_NOTIFICATION_TRIGGER', (event: any) => {
-            console.log('[EventDrivenNotifier] MATCH_NOTIFICATION_TRIGGER received:', event.detail);
-            this.handleEvent(event.detail);
+            const detail = event.detail;
+            console.log('[EventDrivenNotifier] MATCH_NOTIFICATION_TRIGGER received:', detail);
+            if (detail.periodEventType) {
+                this.handlePeriodEvent(detail);
+            } else {
+                this.handleEvent(detail);
+            }
         });
 
         // Cleanup old notifications daily
@@ -101,6 +110,33 @@ export class EventDrivenNotifier {
     }
 
     // ========== NOTIFICATION HANDLING ==========
+
+    private async handlePeriodEvent(detail: {
+        matchId: string;
+        homeTeamId: string;
+        awayTeamId: string;
+        periodEventType: PeriodEventType;
+        score: { home: number; away: number };
+    }): Promise<void> {
+        const { matchId, homeTeamId, awayTeamId, periodEventType, score } = detail;
+
+        const notificationKey = `${matchId}_${periodEventType}_${Date.now()}`;
+        if (this.sentNotifications.has(notificationKey)) return;
+
+        this.queue.push({
+            matchId,
+            homeTeamId,
+            awayTeamId,
+            periodEventType,
+            score,
+            attempts: 0,
+            lastAttempt: 0,
+        });
+
+        this.sentNotifications.add(notificationKey);
+        this.persistSentNotifications();
+        this.processQueue();
+    }
 
     private async handleEvent(detail: {
         matchId: string;
@@ -196,31 +232,45 @@ export class EventDrivenNotifier {
     }
 
     private async sendNotification(item: NotificationQueueItem): Promise<void> {
-        const { matchId, homeTeamId, awayTeamId, event, score } = item;
+        const { matchId, homeTeamId, awayTeamId, event, periodEventType, score } = item;
 
         item.attempts++;
         item.lastAttempt = Date.now();
 
-        console.log(`[EventDrivenNotifier] Sending notification (attempt ${item.attempts}):`, { matchId, eventType: event.type, player: event.playerSnapshot?.name });
+        console.log(`[EventDrivenNotifier] Sending notification (attempt ${item.attempts}):`, { matchId, periodEventType, eventType: event?.type, player: event?.playerSnapshot?.name });
 
         try {
-            const notificationType = this.getNotificationType(event.type);
-            if (!notificationType) {
-                console.log('[EventDrivenNotifier] Not a notifiable event type:', event.type);
+            let payload: Record<string, unknown>;
+
+            if (periodEventType) {
+                payload = {
+                    matchId,
+                    homeTeamId,
+                    awayTeamId,
+                    eventType: periodEventType,
+                    homeScore: score.home,
+                    awayScore: score.away,
+                };
+            } else if (event) {
+                const notificationType = this.getNotificationType(event.type);
+                if (!notificationType) {
+                    console.log('[EventDrivenNotifier] Not a notifiable event type:', event.type);
+                    return;
+                }
+                payload = {
+                    matchId,
+                    homeTeamId,
+                    awayTeamId,
+                    eventType: notificationType,
+                    playerName: event.playerSnapshot?.name,
+                    teamName: event.playerSnapshot?.name,
+                    minute: event.displayMinute,
+                    homeScore: score.home,
+                    awayScore: score.away,
+                };
+            } else {
                 return;
             }
-
-            const payload = {
-                matchId,
-                homeTeamId,
-                awayTeamId,
-                eventType: notificationType,
-                playerName: event.playerSnapshot?.name,
-                teamName: event.playerSnapshot?.name,
-                minute: event.displayMinute,
-                homeScore: score.home,
-                awayScore: score.away,
-            };
             console.log('[EventDrivenNotifier] POST /api/notifications/match-event:', payload);
 
             const response = await fetch('/api/notifications/match-event', {
@@ -230,7 +280,7 @@ export class EventDrivenNotifier {
             });
 
             if (response.ok) {
-                console.log(`[EventDrivenNotifier] ✅ Notification sent for ${event.type} by ${event.playerSnapshot?.name}`);
+                console.log(`[EventDrivenNotifier] ✅ Notification sent for ${periodEventType ?? event?.type} by ${event?.playerSnapshot?.name ?? 'n/a'}`);
 
                 // Remove from queue
                 const index = this.queue.indexOf(item);

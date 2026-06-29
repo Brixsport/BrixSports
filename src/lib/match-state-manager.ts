@@ -467,6 +467,7 @@ export class MatchStateManager {
         this.notifyListeners();
         this.persistState();
         this.broadcastStatusChange(from, to);
+        this.triggerPeriodNotification(to);
     }
 
     /**
@@ -951,6 +952,27 @@ export class MatchStateManager {
                 nextPeriod,
                 clock: this.state.clock,
                 requiresExtraTime: currentPeriod === 'FIRST_HALF' || currentPeriod === 'SECOND_HALF',
+            }
+        }));
+    }
+
+    private triggerPeriodNotification(period: MatchPeriod): void {
+        if (typeof window === 'undefined') return;
+
+        let eventType: 'MATCH_START' | 'HALF_TIME' | 'MATCH_END' | null = null;
+        if (period === 'FIRST_HALF') eventType = 'MATCH_START';
+        else if (period === 'HALF_TIME') eventType = 'HALF_TIME';
+        else if (period === 'FINISHED') eventType = 'MATCH_END';
+
+        if (!eventType) return;
+
+        window.dispatchEvent(new CustomEvent('MATCH_NOTIFICATION_TRIGGER', {
+            detail: {
+                matchId: this.state.matchId,
+                homeTeamId: this.state.homeTeamId,
+                awayTeamId: this.state.awayTeamId,
+                periodEventType: eventType,
+                score: this.state.score,
             }
         }));
     }
