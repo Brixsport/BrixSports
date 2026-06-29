@@ -4515,7 +4515,17 @@ ALTER TABLE matches ADD COLUMN is_test INTEGER DEFAULT 0;
 **Filed:** 2026-06-25
 **Supersedes scope of:** BACKLOG-019 (post-match pipeline) — which is too broad to be actionable. This item is the concrete, scoped piece that keeps getting deferred inside BACKLOG-019.
 
-**Session 35 fix (sub-player visibility — pre-match-day blocker):** `FootballLogger.tsx` now seeds `matchState.events` from DB on mount when the match is in-progress but local event state is empty. After `MatchStateManager` initialises, if `clock.period !== 'NOT_STARTED' && events.length === 0`, fetches `GET /api/matches/[id]/events`, maps DB rows to `MatchEvent` shape (null snapshots, `minute` → `absoluteMinute`), and calls `mergeExternalEvents`. `getOnPitchPlayers` then derives `subbedOnIds` correctly — all 11 on-pitch players visible in the general event picker after any session restart. Status: SHIPPED — session 35.
+**Session 35 fix — SHIPPED `eb60ec8` / `8e26b84`:**
+
+Two bugs, both fixed:
+
+1. **In-session bug (real Phase 6 cause):** `PlayerSelectionModal` had `filterStartersOnly=true` for every non-sub event. The filter at line 2402 excluded any player not in `starterIds` (original lineup). Subbed-on players are never starters → stripped from general/assist picker even though `getOnPitchPlayers` correctly included them. Fix: `filterStartersOnly && !starterIds.has(p.id) && !subbedOnPlayerIds?.has(p.id)` — one line covers all event types. Also wired `subbedOnPlayerIds` into the assist picker which had the same gap. Red card exclusion fires before this guard — correct.
+
+2. **Fresh-session bug (tab close / device switch / AuthContext wipe):** On mount, if `clock.period !== NOT_STARTED && events.length === 0`, fetch `GET /api/matches/[id]/events` and seed via `mergeExternalEvents` so `subbedOnIds` derives correctly with no localStorage.
+
+**Known gap:** DB seed is skipped if localStorage has any events (guard is `events.length === 0`). A partial cache won't rehydrate missing events. Not a blocker — sub-visibility fix is the in-session line change.
+
+**Status:** SHIPPED — session 35. Pending Phase 6 re-run (3 scenarios) before marking RESOLVED.
 
 **Session 34 test match observation (Phase 6):** After a substitution, the subbed-on player appears correctly in the sub picker (shows full 11 including incoming player) but does NOT appear in the general event picker for non-sub events — shows 10 players instead of 11. Hard refresh does not fix it. Root cause: `getOnPitchPlayers` derives `subbedOnIds` from `matchState.events` which is seeded from localStorage — if the sub event isn't in localStorage (device switch, fresh session), incoming player is invisible. This is the concrete manifestation of the BACKLOG-106 gap and confirms this item as a pre-match-day blocker for any match involving substitutions.
 
