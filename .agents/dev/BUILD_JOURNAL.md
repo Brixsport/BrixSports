@@ -2039,3 +2039,35 @@ All `emit(...)` calls in FootballLogger are fire-and-forget with no crash on fai
 - BACKLOG-104 implementation (next in session)
 - BACKLOG-105 (full penalty shootout) — dedicated session, pre-prod blocker before first knockout match
 - BACKLOG-106, BUG-080, BUG-075 — awaiting Railway WS to verify SHIPPED status
+
+---
+
+### Session 36 — 2026-06-29 (continued — implementation)
+
+**Focus:** BUG-072 (second yellow undo cascade), BACKLOG-104 (penalty outcomes), BACKLOG-111 (stat reversion on undo), BACKLOG-112 (file only)
+
+**Built / Fixed:**
+
+- **BUG-072 SHIPPED** (`238e4ec`): `handleUndo` in `FootballLogger.tsx` detects `detail === 'Red Card (Second Yellow)'`, finds the preceding Yellow Card for the same player, issues a second DB DELETE, calls `undoLastEvent()` twice. Partial failure case handled. No changes to `match-state-manager.ts`.
+
+- **BACKLOG-104 SHIPPED** (`10d90d7`): Full penalty outcome system — `Penalty Missed` and `Penalty Saved` (already in `FootballEventType` union, never wired). `PenaltySequenceModal` gains keeper picker inline in Step 3 (GKs floated to top, optional/skippable). `onSubmit` passes `keeperId` as `relatedPlayerId`. Stats: Missed → `shotsOffTarget++`; Saved → `shotsOnTarget++` (taker) + `saves++` (keeper, null-checked). Push notifications: `PENALTY_SAVED` and `PENALTY_MISSED` wired through full pipeline — `event-driven-notifier.ts` → `match-notification-service.ts` → `match-event/route.ts`. Keeper shown as headline in Penalty Saved push. PENALTY_SHOOTOUT buttons fixed (`Shot off Target` → `Penalty Missed`, `Save` → `Penalty Saved`). Event feed icons added in `LiveMatchTimeline.tsx` and `MatchTimeline.tsx` (`PENALTY SAVED` amber 🛡️, `PENALTY MISSED` red ❌). `notifiableEvents` updated. 8 files, no schema change. BACKLOG-105 hand-off: shootout buttons currently emit `'Penalty Missed'`/`'Penalty Saved'` — must be renamed to `PEN_MISSED`/`PEN_SAVED` when BACKLOG-105 lands.
+
+- **BACKLOG-111 SHIPPED** (`f44edfa`): Stat reversion on event undo — `[eventId]/route.ts` DELETE handler had no stat revert call at all. Root cause: `decrementPlayerStats` existed in `events/route.ts` (collection route) but was never exported or reachable from `[eventId]/route.ts` (the route FootballLogger actually calls). Self-contained `revertPlayerStat` function added directly to `[eventId]/route.ts`. Switch covers: GOAL, ASSIST, OWN GOAL, PENALTY, PENALTY MISSED, PENALTY SAVED, FOUL, YELLOW CARD, RED CARD, SAVE. All with `Math.max(0, x-1)` floor. Guards: `matchType !== 'friendly'`, `!isPenaltyShootout`. Match fetch moved unconditional, null-guarded on both score-revert and stat-revert paths. `PENALTY SAVED` also reverts keeper `saves--` via `event.relatedPlayerId` (null-checked).
+
+- **BACKLOG-112 Filed**: Goal Disallowed / Overturned — full mental model documented (distinct from Undo: keeps match narrative, score reverts, push fires). Workaround: Undo covers MVP. Deferred.
+
+- **BACKLOG-111 filed** (session planning): stat reversion on undo — filed from BUG-072 scope decision.
+
+**Bugs encountered:** None new this session.
+
+**Resolved:** BUG-072, BACKLOG-104, BACKLOG-111 — all SHIPPED. Move to RESOLVED after staging verification.
+
+**Deferred:**
+- BACKLOG-105 (full penalty shootout) — dedicated session, pre-prod blocker before first knockout match. Starting reference: PENALTY_SHOOTOUT button mapping table in session 36 notes.
+- BUG-046 (black screen on /matches/[id] from admin session) — needs reproduction + Network tab capture before any code fix
+- BUG-011 (718 goals / playerStats corruption) — data surgery session, best done with Railway up
+
+**Next session:**
+1. Commit the pending backlog update if not done (BACKLOG-111 SHIPPED)
+2. Decide: Railway restoration + staging verification of BACKLOG-106/BUG-080/BUG-075/BUG-072/BACKLOG-104/BACKLOG-111, OR start BACKLOG-105 session
+3. If Railway is up: run verification scenarios before touching any new code
