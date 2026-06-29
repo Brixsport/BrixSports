@@ -539,7 +539,7 @@ BUG-001 through BUG-029, AUDIT-001/002 (partial), BACKLOG-065 — all resolved S
 
 ### BACKLOG-118 — Logger Cookie Bleeds into Viewer-App Routes (Dual-Account UX Broken)
 
-**Status:** OPEN
+**Status:** SHIPPED — `8f282b0`, 2026-06-29. Pending live verify (logger with fan account can access their favorites/follows/notifications on viewer app).
 **Priority:** Medium
 **Filed:** 2026-06-29
 **Depends on:** BACKLOG-117 (SSO) for full resolution
