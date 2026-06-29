@@ -49,6 +49,7 @@ export default function MatchDetailPage() {
     const { toasts, warning, success, removeToast } = useToast();
     const prevConnected = useRef<boolean | null>(null);
     const disconnectToastFired = useRef(false);
+    const prevConnectedForSync = useRef<boolean | null>(null);
 
     const isUpcoming = matchData?.match?.status === 'UPCOMING';
 
@@ -136,11 +137,17 @@ export default function MatchDetailPage() {
         fetchMatchData();
     }, [matchId]);
 
-    // Update events in real-time
+    // Update events in real-time — dedup by id OR (type+minute+playerId) to handle
+    // temp-ID vs permanent-ID discrepancy from dual broadcast paths.
     useEffect(() => {
         if (matchData && latestEvent) {
-            // Check if event already exists to avoid duplicates
-            const exists = matchData.events.some(e => e.id === latestEvent.id);
+            const exists = matchData.events.some(e =>
+                e.id === latestEvent.id ||
+                (e.type === latestEvent.type &&
+                    e.minute === latestEvent.minute &&
+                    e.playerId === latestEvent.playerId &&
+                    e.teamId === latestEvent.teamId)
+            );
             if (!exists) {
                 setMatchData(prev => ({
                     ...prev!,
@@ -151,14 +158,22 @@ export default function MatchDetailPage() {
     }, [latestEvent]);
 
     // BUG-080: HTTP polling fallback when WS is disconnected during a live match.
-    // Polls GET /api/matches/[id] every 10s — merges score, status, and events.
+    // Silent — does NOT show loading spinner, just merges fresh data into state.
     useEffect(() => {
         const isLiveStatus = matchData?.match?.status === 'LIVE' || matchData?.match?.status === 'HALF_TIME';
         if (isConnected || !isLiveStatus) return;
 
-        const interval = setInterval(fetchMatchData, 10000);
+        const interval = setInterval(() => fetchMatchData(true), 10000);
         return () => clearInterval(interval);
     }, [isConnected, matchData?.match?.status]);
+
+    // On WS reconnect: silently sync missed events from DB once.
+    useEffect(() => {
+        if (prevConnectedForSync.current === false && isConnected) {
+            fetchMatchData(true);
+        }
+        prevConnectedForSync.current = isConnected;
+    }, [isConnected]);
 
     // Fire a one-shot toast when WS disconnects/reconnects during a live match.
     // disconnectToastFired ref prevents toast spam if WS flaps rapidly.
@@ -214,9 +229,9 @@ export default function MatchDetailPage() {
         };
     }, [matchId, matchData, on, off]);
 
-    const fetchMatchData = async () => {
+    const fetchMatchData = async (silent = false) => {
         try {
-            setLoading(true);
+            if (!silent) setLoading(true);
             const response = await fetch(`/api/matches/${matchId}`);
             const data = await response.json();
             setMatchData(data);
@@ -236,7 +251,7 @@ export default function MatchDetailPage() {
         } catch (error) {
             console.error('Error fetching match:', error);
         } finally {
-            setLoading(false);
+            if (!silent) setLoading(false);
         }
     };
 
@@ -273,13 +288,14 @@ export default function MatchDetailPage() {
 
     const ACTIVE_PLAY_PERIODS = ['FIRST_HALF', 'SECOND_HALF', 'EXTRA_TIME_1', 'EXTRA_TIME_2', 'PENALTY_SHOOTOUT'];
     const PERIOD_LABELS: Record<string, string> = {
-        FIRST_HALF: '1ST HALF',
+        FIRST_HALF: 'H1',
         HALF_TIME: 'HT',
-        SECOND_HALF: '2ND HALF',
+        SECOND_HALF: 'H2',
         EXTRA_TIME_1: 'ET1',
         EXTRA_TIME_2: 'ET2',
         PENALTY_SHOOTOUT: 'PK',
         FINISHED: 'FT',
+        SUSPENDED: 'SUSP',
     };
 
     const getPeriodLabel = (period: string) =>

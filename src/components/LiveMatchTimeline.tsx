@@ -19,6 +19,13 @@ interface Event {
         name: string;
         number: number;
     };
+    // WS events from match-state-manager carry playerSnapshot instead of player
+    playerSnapshot?: {
+        id?: string;
+        name?: string;
+        jerseyName?: string;
+        teamId?: string;
+    };
     relatedPlayer?: {
         id: string;
         name: string;
@@ -32,6 +39,8 @@ interface Event {
     detail?: string;
     isEyePoint?: boolean;
     value?: any;
+    playerId?: string;
+    teamId?: string;
 }
 
 interface LiveMatchTimelineProps {
@@ -108,7 +117,7 @@ export default function LiveMatchTimeline({ events, homeTeam, awayTeam, eyePoint
 
     // Advanced Commentary Generators
     const generateGoalCommentary = (event: Event, seed: number) => {
-        const playerName = event.player?.name;
+        const playerName = event.player?.name ?? event.playerSnapshot?.name ?? event.playerSnapshot?.jerseyName;
         const isLateGame = event.minute > 85;
         const isEarlyGame = event.minute < 10;
         const detail = event.detail?.toLowerCase() || '';
@@ -157,7 +166,7 @@ export default function LiveMatchTimeline({ events, homeTeam, awayTeam, eyePoint
     };
 
     const generateBasketballScoreCommentary = (event: Event, seed: number, type: '2pt' | '3pt' | 'ft') => {
-        const playerName = event.player?.name || 'Player';
+        const playerName = event.player?.name ?? event.playerSnapshot?.name ?? event.playerSnapshot?.jerseyName ?? 'Player';
         const isClutch = event.minute > 36; // Late 4th quarter
 
         let templates: string[] = [];
@@ -196,10 +205,9 @@ export default function LiveMatchTimeline({ events, homeTeam, awayTeam, eyePoint
     };
 
     const getEventDescription = (event: Event) => {
-        const playerName = event.player?.name || 'Unknown';
+        const playerName = event.player?.name ?? event.playerSnapshot?.name ?? event.playerSnapshot?.jerseyName ?? 'Unknown';
         const playerNumber = event.player?.number;
-        // Use minute + event.type length as a simple seed for variety
-        const seed = event.minute + (event.type?.length || 0) + (event.player?.name?.length || 0) + (event.detail?.length || 0);
+        const seed = event.minute + (event.type?.length || 0) + (playerName?.length || 0) + (event.detail?.length || 0);
 
         switch (event.type.toUpperCase()) {
             case 'GOAL':
@@ -257,7 +265,7 @@ export default function LiveMatchTimeline({ events, homeTeam, awayTeam, eyePoint
                         <span className="font-bold block mb-1">🔄 Substitution</span>
                         <div className="text-sm grid gap-1">
                             <div className="text-green-400 flex items-center gap-2">
-                                <span className="text-[10px] font-bold bg-green-500/20 px-1 rounded">IN</span> {event.player?.name}
+                                <span className="text-[10px] font-bold bg-green-500/20 px-1 rounded">IN</span> {event.player?.name ?? event.playerSnapshot?.name ?? event.playerSnapshot?.jerseyName}
                             </div>
                             {event.relatedPlayer && (
                                 <div className="text-red-400 flex items-center gap-2">
