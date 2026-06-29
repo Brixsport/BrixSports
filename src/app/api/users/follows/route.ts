@@ -5,9 +5,17 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
-import { userFollows, competitions, teams, players } from '@/db/schema';
+import { userFollows, competitions, teams, players, users } from '@/db/schema';
 import { eq, and, sql } from 'drizzle-orm';
 import { getAuthUser } from '@/lib/auth';
+
+// Loggers may also have a fan account in the users table (same email, different password).
+// When a logger cookie is active on the viewer app, resolve their effective user ID via email.
+async function resolveUserId(authUser: { id: string; email: string; role: string }): Promise<string> {
+    if (authUser.role !== 'logger') return authUser.id;
+    const [fanAccount] = await db.select({ id: users.id }).from(users).where(eq(users.email, authUser.email)).limit(1);
+    return fanAccount?.id ?? authUser.id;
+}
 
 /**
  * GET user's follows
@@ -31,7 +39,8 @@ export async function GET(request: NextRequest) {
             );
         }
 
-        if (authUser.id !== userId && authUser.role !== 'admin') {
+        const effectiveId = await resolveUserId(authUser);
+        if (effectiveId !== userId && authUser.role !== 'admin') {
             return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
         }
 
@@ -119,7 +128,8 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        if (authUser.id !== userId && authUser.role !== 'admin') {
+        const effectiveId = await resolveUserId(authUser);
+        if (effectiveId !== userId && authUser.role !== 'admin') {
             return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
         }
 
@@ -197,7 +207,8 @@ export async function DELETE(request: NextRequest) {
             );
         }
 
-        if (authUser.id !== userId && authUser.role !== 'admin') {
+        const effectiveId = await resolveUserId(authUser);
+        if (effectiveId !== userId && authUser.role !== 'admin') {
             return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
         }
 
@@ -254,7 +265,8 @@ export async function PATCH(request: NextRequest) {
             );
         }
 
-        if (authUser.id !== userId && authUser.role !== 'admin') {
+        const effectiveId = await resolveUserId(authUser);
+        if (effectiveId !== userId && authUser.role !== 'admin') {
             return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
         }
 
