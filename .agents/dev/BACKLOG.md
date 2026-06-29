@@ -223,7 +223,7 @@ BUG-001 through BUG-029, AUDIT-001/002 (partial), BACKLOG-065 — all resolved S
   - Commits: `863fce7` → `0d30d14` → `13ab3cb` (full rewrite)
   - Verified by: live logger test — 3 substitutions logged, all picker pools correct. Daniel/Toheeb absent from sub-OUT picker after going off ✅. Incoming subs in on-pitch pool ✅. Bench-only players restricted to sub-IN picker ✅.
   - Observed result: no data integrity failure, correct pools at every step
-  - Pending items: BUG-068 (cosmetic — incoming sub still shows BENCH tag, uncommitted fix in progress)
+  - Pending items: BUG-068 — PenaltySequenceModal instance of same bench tag bug fixed in `6c73835` (session 37). PlayerSelectionModal instance covered by BACKLOG-106. Both paths now resolved.
 
 - ~~**BUG-068**~~ _(LOW — Logger UX cosmetic)_: Players who came ON as mid-match subs were styled with greyed BENCH tag in the sub-OUT picker. `isBench` derived from `!starterIds.has(p.id)` only — pure lineup check, no awareness of current on-pitch status. Fix: `isBench = !starterIds.has(p.id) && !subbedOnPlayerIds?.has(p.id)` at line 2442. `subbedOnPlayerIds` prop wired at both general event modal (line 1759) and assist modal (line 1773) as part of BACKLOG-106 session 35 work. Subbed-on players now render with primary colour, no BENCH tag. **Status:** RESOLVED — confirmed in code trace 2026-06-29, covered by BACKLOG-106 session 35 commits.
 
@@ -255,7 +255,7 @@ BUG-001 through BUG-029, AUDIT-001/002 (partial), BACKLOG-065 — all resolved S
 - Commit: `da8d9ce`
 - Verified by: live match DB query — match `Kuld3e6xsjLj9amJg4cHx`, 2026-06-25
 - Observed result (GOAL undo): home_score 1→0 in DB; Goal + Assist events deleted from match_events ✅. Observed result (OWN GOAL undo): busa-kings player OG → home_score 1→0 in DB; correct team's score decremented (opponent of conceding team, not conceding team) ✅
-- Pending items: none — live DB evidence confirms both GOAL and OWN GOAL undo paths correct via `[eventId]` DELETE route. Note: BUG-054 (OWN GOAL inversion on parent `DELETE /events` route) is a separate code path, still open.
+- Pending items: none — live DB evidence confirms both GOAL and OWN GOAL undo paths correct via `[eventId]` DELETE route. Note: BUG-054 parent route (`DELETE /events?eventId`) confirmed dead code in session 37 — nothing in the UI ever called it. Handler + `decrementPlayerStats` helper deleted in `6c73835`.
 
 - **BACKLOG-104** _(MEDIUM — Stats / Logger UX)_: Penalty outcome tracking. Current state: `PENALTY` = scored only. Architected Session 36. **Status:** SHIPPED — `10d90d7`, Session 36. Pending live test on staging.
 
