@@ -1,8 +1,68 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
-import { matchEvents, matches, matchLoggerAssignments } from '@/db/schema';
+import { matchEvents, matches, matchLoggerAssignments, footballPlayerStats } from '@/db/schema';
 import { eq, and } from 'drizzle-orm';
 import { getAuthUser } from '@/lib/auth';
+
+// Reverts one stat increment for a player when an event is deleted.
+// Mirrors updatePlayerStats in events/route.ts — same guards must apply at call site.
+async function revertPlayerStat(sport: string, playerId: string, eventType: string): Promise<void> {
+    if (sport !== 'Football') return;
+
+    const stats = await db
+        .select()
+        .from(footballPlayerStats)
+        .where(eq(footballPlayerStats.playerId, playerId))
+        .get();
+
+    if (!stats) return;
+
+    const updates: Partial<typeof stats> = {};
+
+    switch (eventType.toUpperCase()) {
+        case 'GOAL':
+            updates.goals = Math.max(0, (stats.goals || 0) - 1);
+            updates.shotsOnTarget = Math.max(0, (stats.shotsOnTarget || 0) - 1);
+            break;
+        case 'ASSIST':
+            updates.assists = Math.max(0, (stats.assists || 0) - 1);
+            break;
+        case 'OWN GOAL':
+            updates.ownGoals = Math.max(0, (stats.ownGoals || 0) - 1);
+            break;
+        case 'PENALTY':
+            updates.penaltiesScored = Math.max(0, (stats.penaltiesScored || 0) - 1);
+            updates.shotsOnTarget = Math.max(0, (stats.shotsOnTarget || 0) - 1);
+            break;
+        case 'PENALTY MISSED':
+            updates.shotsOffTarget = Math.max(0, (stats.shotsOffTarget || 0) - 1);
+            break;
+        case 'PENALTY SAVED':
+            updates.shotsOnTarget = Math.max(0, (stats.shotsOnTarget || 0) - 1);
+            break;
+        case 'FOUL':
+            updates.foulsCommitted = Math.max(0, (stats.foulsCommitted || 0) - 1);
+            break;
+        case 'YELLOW CARD':
+            updates.yellowCards = Math.max(0, (stats.yellowCards || 0) - 1);
+            break;
+        case 'RED CARD':
+            updates.redCards = Math.max(0, (stats.redCards || 0) - 1);
+            break;
+        case 'SAVE':
+            updates.saves = Math.max(0, (stats.saves || 0) - 1);
+            break;
+        default:
+            return;
+    }
+
+    if (Object.keys(updates).length > 0) {
+        await db
+            .update(footballPlayerStats)
+            .set(updates)
+            .where(eq(footballPlayerStats.playerId, playerId));
+    }
+}
 
 // PATCH /api/matches/[id]/events/[eventId] - Update match event
 export async function PATCH(
@@ -132,35 +192,49 @@ export async function DELETE(
         const isOwnGoal = upperType === 'OWN GOAL';
         const isScoringEvent = upperType === 'GOAL' || upperType === 'PENALTY' || isOwnGoal;
 
+        // Fetch match — needed for score revert, stat guards, and sport
+        const match = await db
+            .select()
+            .from(matches)
+            .where(eq(matches.id, matchId))
+            .get();
+
         // Revert score if scoring event
-        if (isScoringEvent) {
-            const match = await db
-                .select()
-                .from(matches)
-                .where(eq(matches.id, matchId))
-                .get();
+        if (isScoringEvent && match) {
+            // OWN GOAL: teamId is the conceding team — the opponent was credited. Revert opponent.
+            const isHomeTeam = isOwnGoal
+                ? event.teamId !== match.homeTeamId
+                : event.teamId === match.homeTeamId;
 
-            if (match) {
-                // OWN GOAL: teamId is the conceding team — the opponent was credited. Revert opponent.
-                const isHomeTeam = isOwnGoal
-                    ? event.teamId !== match.homeTeamId
-                    : event.teamId === match.homeTeamId;
-
-                await db
-                    .update(matches)
-                    .set({
-                        homeScore: isHomeTeam ? Math.max(0, (match.homeScore || 0) - 1) : (match.homeScore || 0),
-                        awayScore: !isHomeTeam ? Math.max(0, (match.awayScore || 0) - 1) : (match.awayScore || 0),
-                        updatedAt: new Date(),
-                    })
-                    .where(eq(matches.id, matchId));
-            }
+            await db
+                .update(matches)
+                .set({
+                    homeScore: isHomeTeam ? Math.max(0, (match.homeScore || 0) - 1) : (match.homeScore || 0),
+                    awayScore: !isHomeTeam ? Math.max(0, (match.awayScore || 0) - 1) : (match.awayScore || 0),
+                    updatedAt: new Date(),
+                })
+                .where(eq(matches.id, matchId));
         }
 
         // Delete event
         await db
             .delete(matchEvents)
             .where(eq(matchEvents.id, eventId));
+
+        // Revert player stats — same guards as POST: skip friendlies and shootout events
+        if (match) {
+            const isPenaltyShootout = match.currentPeriod === 'PENALTY_SHOOTOUT';
+            const isCompetitive = match.matchType !== 'friendly' && !isPenaltyShootout;
+
+            if (event.playerId && isCompetitive) {
+                await revertPlayerStat(match.sport, event.playerId, event.type);
+            }
+
+            // Penalty Saved: also revert the keeper's saves stat (relatedPlayerId = keeper, may be null)
+            if (upperType === 'PENALTY SAVED' && event.relatedPlayerId && isCompetitive) {
+                await revertPlayerStat(match.sport, event.relatedPlayerId, 'Save');
+            }
+        }
 
         return NextResponse.json({
             success: true,
