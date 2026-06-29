@@ -1770,6 +1770,7 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                         redCardedPlayerIds={redCardedPlayerIds}
                         teamLineup={lineups[selectedTeam]}
                         filterStartersOnly={true}
+                        subbedOnPlayerIds={getSubSets(selectedTeam === 'home' ? match.homeTeamId : match.awayTeamId).subbedOnIds}
                     />
                 )
             }
@@ -2399,7 +2400,7 @@ function PlayerSelectionModal({
         // Always exclude red-carded players
         if (redCardedPlayerIds && redCardedPlayerIds.has(p.id)) return false;
 
-        if (filterStartersOnly && !starterIds.has(p.id)) return false;
+        if (filterStartersOnly && !starterIds.has(p.id) && !subbedOnPlayerIds?.has(p.id)) return false;
         if (filterSubsOnly && starterIds.has(p.id)) return false;
 
         if (filterGoalkeepersOnly) {
