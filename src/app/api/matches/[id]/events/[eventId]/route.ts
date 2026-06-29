@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import * as Sentry from '@sentry/nextjs';
 import { db } from '@/db';
 import { matchEvents, matches, matchLoggerAssignments, footballPlayerStats } from '@/db/schema';
 import { eq, and } from 'drizzle-orm';
@@ -65,6 +66,7 @@ async function revertPlayerStat(sport: string, playerId: string, eventType: stri
         }
     } catch (error) {
         console.error('[revertPlayerStat] stat reversion failed — event already deleted:', error);
+        Sentry.captureException(error, { extra: { playerId, eventType, sport } });
         // Do not rethrow. Event deletion succeeded. Stat drift is recoverable; a false 500 is not.
     }
 }

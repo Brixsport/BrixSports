@@ -222,11 +222,54 @@ Check off what passes. Evidence = DB query output, not UI observation.
 
 ---
 
+### PHASE 15 — Second yellow cascade undo (BUG-072) SHIPPED `238e4ec` + WS fix `6feb3e5`
+
+**Pre-req:** Railway WS up, live match in LIVE period, player with one Yellow Card already logged.
+
+- [ ] Log a second Yellow Card for the same player → confirm Red Card auto-appears in event feed
+- [ ] Tap Undo → confirm **both** Red Card and Yellow Card disappear from logger event feed
+- [ ] Confirm DB: `GET /api/matches/[id]/events` returns neither the Red nor the Yellow for that player
+- [ ] Confirm public page `/matches/[id]`: **both** cards removed from timeline (WS undo broadcast for Yellow now fires separately — verify it clears)
+- [ ] Undo with no preceding Yellow for that player (edge case) → confirm only Red Card is removed, no error
+
+**Closes:** BUG-072
+
+---
+
+### PHASE 16 — Penalty outcomes: Missed / Saved (BACKLOG-104) SHIPPED `10d90d7`
+
+**Pre-req:** Railway WS up, live match in LIVE period, lineup set for both teams.
+
+- [ ] Log a penalty → select **Missed** outcome → confirm `Penalty Missed` event in feed, score unchanged
+- [ ] Log a penalty → select **Saved** outcome → keeper picker appears → select a keeper → confirm `Penalty Saved` event in feed, score unchanged
+- [ ] Log a penalty → select **Saved** → tap "Skip / Unknown" → confirm event logs with no keeper linked (`relatedPlayerId` null in DB)
+- [ ] Confirm push notification fires for Penalty Saved (keeper name as headline) and Penalty Missed
+- [ ] Confirm public timeline shows 🛡️ amber icon for Penalty Saved, ❌ red for Penalty Missed
+- [ ] DB check: taker `shotsOffTarget++` on Missed; taker `shotsOnTarget++` + keeper `saves++` on Saved (if keeper selected)
+- [ ] Log Penalty Saved during PENALTY_SHOOTOUT period → confirm keeper `saves` stat NOT incremented (shootout guard)
+
+**Closes:** BACKLOG-104
+
+---
+
+### PHASE 17 — Stat reversion on event undo (BACKLOG-111) SHIPPED `f44edfa`
+
+**Pre-req:** Railway up, competitive (non-friendly) match, player stats row exists.
+
+- [ ] Log a Goal → note DB `footballPlayerStats.goals` for that player → Undo → confirm `goals` decremented by 1, `shotsOnTarget` decremented by 1
+- [ ] Log an Assist → Undo → confirm `assists` decremented
+- [ ] Log a Penalty Saved (with keeper) → Undo → confirm taker `shotsOnTarget--`, keeper `saves--`
+- [ ] Log a Yellow Card → Undo → confirm `yellowCards--`
+- [ ] Log an event on a **friendly** match → Undo → confirm stats row unchanged (friendly guard)
+- [ ] Simulate a stat DB failure (if possible in staging) → confirm logger still gets 200, event is gone, Sentry logs the error (try/catch guard — fix `6feb3e5`)
+
+**Closes:** BACKLOG-111
+
+---
+
 ## Known Broken / Deferred (do not test)
 
 - Railway WS staging dead — BUG-074 OPEN. Infra decision pending.
 - BACKLOG-105 full penalty shootout — interim guard only, full implementation open
-- BUG-072 second yellow undo UX — LOW, non-blocking
-- BACKLOG-104 penalty outcomes (missed/saved) — OPEN
 - BUG-011 playerStats corruption — do not run any stat backfill until resolved
 - Email sending broken — AWS SES misconfigured (BACKLOG-026)
