@@ -48,6 +48,7 @@ export default function MatchDetailPage() {
     const { addNotification } = useNotifications();
     const { toasts, warning, success, removeToast } = useToast();
     const prevConnected = useRef<boolean | null>(null);
+    const disconnectToastFired = useRef(false);
 
     const isUpcoming = matchData?.match?.status === 'UPCOMING';
 
@@ -159,17 +160,22 @@ export default function MatchDetailPage() {
         return () => clearInterval(interval);
     }, [isConnected, matchData?.match?.status]);
 
-    // Fire a one-shot toast when WS connection state changes during a live match
+    // Fire a one-shot toast when WS disconnects/reconnects during a live match.
+    // disconnectToastFired ref prevents toast spam if WS flaps rapidly.
     useEffect(() => {
         const isLiveStatus = matchData?.match?.status === 'LIVE' || matchData?.match?.status === 'HALF_TIME';
         if (!isLiveStatus) return;
         if (prevConnected.current === null) { prevConnected.current = isConnected; return; }
         if (prevConnected.current === isConnected) return;
-
-        if (!isConnected) warning('Live updates paused — refreshing automatically');
-        else success('Live updates restored');
-
         prevConnected.current = isConnected;
+
+        if (!isConnected && !disconnectToastFired.current) {
+            warning('Live updates paused — refreshing automatically');
+            disconnectToastFired.current = true;
+        } else if (isConnected && disconnectToastFired.current) {
+            success('Live updates restored');
+            disconnectToastFired.current = false;
+        }
     }, [isConnected, matchData?.match?.status]);
 
     // Listen for score updates
