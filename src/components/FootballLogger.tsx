@@ -56,7 +56,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useMultiLogger } from '@/hooks/useMultiLogger';
 import { useWebSocket } from '@/hooks/useWebSocket';
 import { MultiLoggerStatus } from '@/components/MultiLoggerStatus';
-import { getMatchStateManager, MatchStateManager, MatchState, FootballEventType } from '@/lib/match-state-manager';
+import { getMatchStateManager, MatchStateManager, MatchState, FootballEventType, MatchPeriod } from '@/lib/match-state-manager';
 import type { SyncEvent } from '@/lib/multiLogger';
 import { getPrimaryTeam } from '@/lib/player-affiliation-utils';
 import { TeamLogo } from '@/lib/utils/team-logo';
@@ -436,6 +436,43 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                 });
 
                 setMatchState(manager.getState());
+
+                // BACKLOG-106: If match is in-progress but no events in local state (fresh session
+                // after tab close, device switch, or AuthContext wipe), seed from DB so that
+                // subbedOnIds/subbedOffIds derive correctly and all 11 on-pitch players are visible.
+                const stateAfterInit = manager.getState();
+                if (stateAfterInit.clock.period !== 'NOT_STARTED' && stateAfterInit.events.length === 0) {
+                    try {
+                        const eventsRes = await fetch(`/api/matches/${match.id}/events`);
+                        if (eventsRes.ok) {
+                            const { events: dbEvents } = await eventsRes.json();
+                            if (Array.isArray(dbEvents) && dbEvents.length > 0) {
+                                const seeded = dbEvents.map((e: any) => ({
+                                    id: e.id,
+                                    matchId: e.matchId,
+                                    type: e.type as FootballEventType,
+                                    absoluteMinute: e.minute ?? 0,
+                                    displayMinute: e.minute ?? 0,
+                                    second: e.second ?? 0,
+                                    period: (e.period ?? 'FIRST_HALF') as MatchPeriod,
+                                    playerId: e.playerId ?? null,
+                                    playerSnapshot: null,
+                                    relatedPlayerId: e.relatedPlayerId ?? null,
+                                    relatedPlayerSnapshot: null,
+                                    teamId: e.teamId ?? '',
+                                    detail: e.detail ?? '',
+                                    value: e.value != null ? Number(e.value) : undefined,
+                                    createdAt: e.createdAt ? new Date(e.createdAt) : new Date(),
+                                    loggerId: e.loggerId ?? '',
+                                }));
+                                stateManager.current?.mergeExternalEvents(seeded);
+                                setMatchState(manager.getState());
+                            }
+                        }
+                    } catch (e) {
+                        console.error('[BACKLOG-106] Failed to seed events from DB:', e);
+                    }
+                }
 
                 // Lineup Check
                 const currentState = manager.getState();

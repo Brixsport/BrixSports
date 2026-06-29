@@ -263,7 +263,9 @@ BUG-001 through BUG-029, AUDIT-001/002 (partial), BACKLOG-065 — all resolved S
 
 - **BUG-075** _(MEDIUM — PWA)_: `manifest-admin.json` scope mismatch — `start_url` is outside `scope`. Observed in every logger page load: `Manifest: property 'scope' ignored. Start url should be within scope of scope URL.` Blocks correct iOS Home Screen install — the PWA install flow may not activate correctly. Fix: align `start_url` to be a child of `scope` in the manifest. Filed: 2026-06-25. **Status:** OPEN
 
-- **BUG-074** _(MEDIUM — Staging Config)_: `NEXT_PUBLIC_WS_URL` points to the production Railway URL on the staging Vercel environment. Confirmed by HAR: 70 failed WS connections to `wss://brixsports-production.up.railway.app` during the KIN vs JOG test match — zero successful. Staging has never had working real-time updates. Fix: set `NEXT_PUBLIC_WS_URL` to a staging WS instance in Vercel staging env vars, or confirm staging intentionally uses prod WS and document it. Filed: 2026-06-25. **Status:** OPEN
+- **BUG-074** _(MEDIUM — Staging Config)_: `NEXT_PUBLIC_WS_URL` points to the production Railway URL on the staging Vercel environment. Session 34 note: Railway WS server was confirmed down during test match — 30× status 0 in HAR, all to `brixsports-production.up.railway.app`. This is also why the public live clock was frozen during the test match — no WS = no real-time updates, and there is no HTTP polling fallback (see BUG-080). Fix: bring Railway WS back up; optionally set staging to its own WS instance. Filed: 2026-06-25. **Status:** OPEN
+
+- **BUG-080** _(HIGH — Public Page / CLAUDE.md violation)_: No HTTP polling fallback when WebSocket is disconnected. Public match page (`/matches/[id]`) uses `useWebSocket` exclusively for real-time updates — clock, score, events. When WS fails (max 5 reconnect attempts), the page freezes on stale data indefinitely. CLAUDE.md mandates: *"Live update mechanism must have a fallback if the channel drops. Viewer must see stale data clearly on failure, not a crash."* This is confirmed violated — page shows no stale indicator and no recovery. Fix: when `isConnected === false && isLive`, poll `GET /api/matches/[id]` every 10s and merge response into display state. Show a "live updates paused — reconnecting" banner when WS is down. Confirmed via session 34 test match — public clock and score were frozen throughout because Railway was down. Filed: 2026-06-27. **Status:** OPEN
 
 - ~~**BUG-073**~~ _(LOW — Data)_: Substitution `detail` string direction — filed as inverted during KIN vs JOG test match analysis. Confirmed at HEAD: `confirmEvent('Substitution', playerComingOut, playerInId)` → `relatedName` = incoming, `outName` = outgoing → string reads `{inPlayer} IN for {outPlayer}`. Code was never wrong. DB events from the KIN vs JOG test match (deleted) reflected an older state. **Status:** RESOLVED — no code change needed, 2026-06-26.
 
@@ -4508,10 +4510,12 @@ ALTER TABLE matches ADD COLUMN is_test INTEGER DEFAULT 0;
 
 ### BACKLOG-106 — Per-Match Player Stat Rows (Replace Mutable Increment Model)
 
-**Status:** OPEN
+**Status:** OPEN (sub-player visibility fix SHIPPED — see below; broader stat model refactor remains open)
 **Priority:** High
 **Filed:** 2026-06-25
 **Supersedes scope of:** BACKLOG-019 (post-match pipeline) — which is too broad to be actionable. This item is the concrete, scoped piece that keeps getting deferred inside BACKLOG-019.
+
+**Session 35 fix (sub-player visibility — pre-match-day blocker):** `FootballLogger.tsx` now seeds `matchState.events` from DB on mount when the match is in-progress but local event state is empty. After `MatchStateManager` initialises, if `clock.period !== 'NOT_STARTED' && events.length === 0`, fetches `GET /api/matches/[id]/events`, maps DB rows to `MatchEvent` shape (null snapshots, `minute` → `absoluteMinute`), and calls `mergeExternalEvents`. `getOnPitchPlayers` then derives `subbedOnIds` correctly — all 11 on-pitch players visible in the general event picker after any session restart. Status: SHIPPED — session 35.
 
 **Session 34 test match observation (Phase 6):** After a substitution, the subbed-on player appears correctly in the sub picker (shows full 11 including incoming player) but does NOT appear in the general event picker for non-sub events — shows 10 players instead of 11. Hard refresh does not fix it. Root cause: `getOnPitchPlayers` derives `subbedOnIds` from `matchState.events` which is seeded from localStorage — if the sub event isn't in localStorage (device switch, fresh session), incoming player is invisible. This is the concrete manifestation of the BACKLOG-106 gap and confirms this item as a pre-match-day blocker for any match involving substitutions.
 
