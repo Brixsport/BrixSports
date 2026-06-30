@@ -97,9 +97,24 @@ function getOrCreateSocket(): Socket | null {
         if (reconnectAttempts <= 3) {
             console.warn(`[WS] Connection error (attempt ${reconnectAttempts}/5):`, error.message);
         } else if (reconnectAttempts === 5) {
-            console.warn('[WS] Max reconnection attempts reached. Real-time features disabled.');
-            sharedSocket?.disconnect();
+            // Do NOT call disconnect() — it permanently kills Socket.IO's reconnection loop.
+            console.warn('[WS] Max reconnection attempts reached. Waiting for server...');
         }
+    });
+
+    sharedSocket.on('reconnect_failed', () => {
+        // Socket.IO exhausted all retries. Start a manual 30 s retry loop so the page
+        // recovers when the server returns without needing a hard refresh.
+        console.warn('[WS] reconnect_failed — starting manual retry loop (30 s)');
+        const retryInterval = setInterval(() => {
+            if (sharedSocket?.connected) {
+                clearInterval(retryInterval);
+                return;
+            }
+            console.log('[WS] Manual retry attempt');
+            reconnectAttempts = 0;
+            sharedSocket?.connect();
+        }, 30000);
     });
 
     return sharedSocket;
@@ -308,6 +323,7 @@ export function useTeamStats(matchId: string) {
  */
 export function useMatchTimer(matchId: string) {
     const [time, setTime] = useState<{ minute: number; extraTime: number; half: number; period?: string } | null>(null);
+    const [isStale, setIsStale] = useState(false);
     const { socket } = useMatchSubscription(matchId);
 
     useEffect(() => {
@@ -316,19 +332,27 @@ export function useMatchTimer(matchId: string) {
         const handleTimeUpdate = (data: { matchId: string; minute: number; extraTime: number; half: number; period?: string }) => {
             if (data.matchId === matchId) {
                 setTime({ minute: data.minute, extraTime: data.extraTime, half: data.half, period: data.period });
+                setIsStale(false);
             }
         };
 
+        // Mark stale on disconnect but preserve last-known minute — do not null it.
+        // LiveMatchStatus renders the frozen minute with a dimmed indicator instead
+        // of dropping to the bare DB period label on every transient hiccup.
+        const handleDisconnect = () => setIsStale(true);
+
         socket.on('match:time:updated', handleTimeUpdate);
         socket.on('match:time:update', handleTimeUpdate);
+        socket.on('disconnect', handleDisconnect);
 
         return () => {
             socket.off('match:time:updated', handleTimeUpdate);
             socket.off('match:time:update', handleTimeUpdate);
+            socket.off('disconnect', handleDisconnect);
         };
     }, [socket, matchId]);
 
-    return time;
+    return { time, isStale };
 }
 
 /**

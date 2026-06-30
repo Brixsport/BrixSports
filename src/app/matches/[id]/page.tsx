@@ -21,6 +21,10 @@ import { HeadToHeadComparison } from '@/components/HeadToHead';
 import { LivestreamView } from '@/components/livestream/LivestreamView';
 import { useNotifications } from '@/components/Notifications';
 
+// All status values that represent an in-progress match (WS timer overwrites match.status
+// with period values like 'SECOND_HALF', so isLive must cover the full set).
+const LIVE_STATES = new Set(['LIVE', 'HALF_TIME', 'FIRST_HALF', 'SECOND_HALF', 'EXTRA_TIME_1', 'EXTRA_TIME_2', 'PENALTY_SHOOTOUT']);
+
 interface MatchData {
     match: any;
     events: any[];
@@ -44,7 +48,7 @@ export default function MatchDetailPage() {
 
     const { isConnected, on, off } = useWebSocket({ matchId, autoConnect: true });
     const { events: liveEvents, latestEvent } = useMatchEvents(matchId);
-    const matchTime = useMatchTimer(matchId);
+    const { time: matchTime } = useMatchTimer(matchId);
     const { addNotification } = useNotifications();
     const { toasts, warning, success, removeToast } = useToast();
     const prevConnected = useRef<boolean | null>(null);
@@ -160,7 +164,7 @@ export default function MatchDetailPage() {
     // BUG-080: HTTP polling fallback when WS is disconnected during a live match.
     // Silent — does NOT show loading spinner, just merges fresh data into state.
     useEffect(() => {
-        const isLiveStatus = matchData?.match?.status === 'LIVE' || matchData?.match?.status === 'HALF_TIME';
+        const isLiveStatus = LIVE_STATES.has(matchData?.match?.status ?? '');
         if (isConnected || !isLiveStatus) return;
 
         const interval = setInterval(() => fetchMatchData(true), 10000);
@@ -178,7 +182,7 @@ export default function MatchDetailPage() {
     // Fire a one-shot toast when WS disconnects/reconnects during a live match.
     // disconnectToastFired ref prevents toast spam if WS flaps rapidly.
     useEffect(() => {
-        const isLiveStatus = matchData?.match?.status === 'LIVE' || matchData?.match?.status === 'HALF_TIME';
+        const isLiveStatus = LIVE_STATES.has(matchData?.match?.status ?? '');
         if (!isLiveStatus) return;
         if (prevConnected.current === null) { prevConnected.current = isConnected; return; }
         if (prevConnected.current === isConnected) return;
@@ -280,9 +284,6 @@ export default function MatchDetailPage() {
     }
 
     const { match, events, timeTracking, eyePoints } = matchData;
-    // WS timer effect overwrites match.status with matchTime.period (e.g. 'SECOND_HALF'),
-    // so isLive must cover all live-ish period values, not just 'LIVE' and 'HALF_TIME'.
-    const LIVE_STATES = new Set(['LIVE', 'HALF_TIME', 'FIRST_HALF', 'SECOND_HALF', 'EXTRA_TIME_1', 'EXTRA_TIME_2', 'PENALTY_SHOOTOUT']);
     const isLive = LIVE_STATES.has(match.status);
 
     // Period label — WS period (live) takes priority; DB currentPeriod is the fallback
