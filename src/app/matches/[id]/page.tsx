@@ -280,22 +280,42 @@ export default function MatchDetailPage() {
     }
 
     const { match, events, timeTracking, eyePoints } = matchData;
-    const isLive = match.status === 'LIVE' || match.status === 'HALF_TIME';
+    // WS timer effect overwrites match.status with matchTime.period (e.g. 'SECOND_HALF'),
+    // so isLive must cover all live-ish period values, not just 'LIVE' and 'HALF_TIME'.
+    const LIVE_STATES = new Set(['LIVE', 'HALF_TIME', 'FIRST_HALF', 'SECOND_HALF', 'EXTRA_TIME_1', 'EXTRA_TIME_2', 'PENALTY_SHOOTOUT']);
+    const isLive = LIVE_STATES.has(match.status);
 
     // Period label — WS period (live) takes priority; DB currentPeriod is the fallback
     // for initial page load and when no logger is connected.
     const displayPeriod = matchTime?.period ?? match.currentPeriod ?? match.status;
 
-    const ACTIVE_PLAY_PERIODS = ['FIRST_HALF', 'SECOND_HALF', 'EXTRA_TIME_1', 'EXTRA_TIME_2', 'PENALTY_SHOOTOUT'];
+    const ACTIVE_PLAY_PERIODS = ['FIRST_HALF', 'SECOND_HALF', 'EXTRA_TIME_1', 'EXTRA_TIME_2'];
     const PERIOD_LABELS: Record<string, string> = {
-        FIRST_HALF: 'H1',
+        // H1/H2 labels commented out — clock alone carries active play display (2026-06-30)
+        // FIRST_HALF: 'H1',
+        // SECOND_HALF: 'H2',
         HALF_TIME: 'HT',
-        SECOND_HALF: 'H2',
-        EXTRA_TIME_1: 'ET1',
-        EXTRA_TIME_2: 'ET2',
+        EXTRA_TIME_1: 'ET',
+        EXTRA_TIME_2: 'ET',
         PENALTY_SHOOTOUT: 'PK',
         FINISHED: 'FT',
         SUSPENDED: 'SUSP',
+    };
+
+    // Full labels for the overview status card
+    const PERIOD_LABELS_FULL: Record<string, string> = {
+        FIRST_HALF: '1st Half',
+        HALF_TIME: 'Half Time',
+        SECOND_HALF: '2nd Half',
+        EXTRA_TIME_1: 'Extra Time',
+        EXTRA_TIME_2: 'Extra Time',
+        PENALTY_SHOOTOUT: 'Penalties',
+        FINISHED: 'Full Time',
+        LIVE: 'Live',
+        PENDING: 'Pending',
+        UPCOMING: 'Upcoming',
+        CANCELLED: 'Cancelled',
+        SUSPENDED: 'Suspended',
     };
 
     const getPeriodLabel = (period: string) =>
@@ -365,12 +385,17 @@ export default function MatchDetailPage() {
                             <div className="text-sm text-white/60 mt-1 uppercase font-bold tracking-wider">
                                 {isLive ? (
                                     <span className="flex items-center gap-1.5 justify-center">
-                                        {ACTIVE_PLAY_PERIODS.includes(displayPeriod) && (
-                                            <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse" />
-                                        )}
-                                        <span className="text-red-400">{getPeriodLabel(displayPeriod)}</span>
-                                        {ACTIVE_PLAY_PERIODS.includes(displayPeriod) && match.minute != null && (
-                                            <span className="text-red-400">{match.minute}'{match.extraTime > 0 ? `+${match.extraTime}` : ''}</span>
+                                        <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse" />
+                                        {ACTIVE_PLAY_PERIODS.includes(displayPeriod) ? (
+                                            // Active play — clock only, no H1/H2 label
+                                            (matchTime?.minute ?? match.minute) != null ? (
+                                                <span className="text-red-400">
+                                                    {matchTime?.minute ?? match.minute}'{(matchTime?.extraTime ?? match.extraTime ?? 0) > 0 ? `+${matchTime?.extraTime ?? match.extraTime}` : ''}
+                                                </span>
+                                            ) : null
+                                        ) : (
+                                            // HT / PK — label only, no clock
+                                            <span className="text-red-400">{getPeriodLabel(displayPeriod)}</span>
                                         )}
                                     </span>
                                 ) : (
@@ -568,7 +593,7 @@ export default function MatchDetailPage() {
                                             </div>
                                             <div className="bg-white/5 rounded-xl p-4">
                                                 <div className="text-sm text-white/40 mb-1">Status</div>
-                                                <div className="font-bold capitalize">{getPeriodLabel(displayPeriod)}</div>
+                                                <div className="font-bold capitalize">{PERIOD_LABELS_FULL[displayPeriod] ?? getPeriodLabel(displayPeriod)}</div>
                                             </div>
                                         </div>
                                     </div>
