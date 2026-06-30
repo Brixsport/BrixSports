@@ -82,6 +82,10 @@ export async function getAuthUser(request: NextRequest): Promise<AuthenticatedUs
         }
 
         // Logger sessions are stored in the loggers table, not users.
+        // However a user account may also carry role='logger' in the users table
+        // (e.g. a field operator who also has a fan account, and logged in via the
+        // viewer login path). Try the loggers table first; fall back to users if
+        // not found there so the session resolves correctly in both cases.
         if (authData.role === 'logger') {
             const loggerResult = await db
                 .select()
@@ -90,20 +94,22 @@ export async function getAuthUser(request: NextRequest): Promise<AuthenticatedUs
                 .limit(1);
 
             const logger = loggerResult[0];
-            if (!logger) return null;
 
-            return {
-                id: logger.id,
-                email: logger.email ?? '',
-                name: logger.name,
-                role: 'logger',
-                avatar: null,
-                coverImage: null,
-                bio: null,
-                favoriteTeamId: null,
-                createdAt: logger.createdAt,
-                updatedAt: null,
-            };
+            if (logger) {
+                return {
+                    id: logger.id,
+                    email: logger.email ?? '',
+                    name: logger.name,
+                    role: 'logger',
+                    avatar: null,
+                    coverImage: null,
+                    bio: null,
+                    favoriteTeamId: null,
+                    createdAt: logger.createdAt,
+                    updatedAt: null,
+                };
+            }
+            // Not in loggers table — fall through to users table lookup below.
         }
 
         const userResult = await db
