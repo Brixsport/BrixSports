@@ -311,6 +311,8 @@ BUG-001 through BUG-029, AUDIT-001/002 (partial), BACKLOG-065 — all resolved S
 
 - **BACKLOG-119** _(UX — Match Detail Page)_: Remove green "Live" dot from header; colour clock and period label red during live match. Active play (H1/H2/ET/PK): pulsing red dot + red period label + red minute. Half Time: red "HT" label only, no dot, no clock. FT/Pending: neutral. Commit `f9c6764`. **Status:** SHIPPED `f9c6764` — pending visual verify alongside BUG-083 and BUG-080.
 
+- **BUG-092** _(HIGH — Real-time / Viewer UX)_: Undone events stay visible on the public Timeline tab until hard refresh. Root cause: `handleUndo` in `FootballLogger.tsx` sends `DELETE /api/matches/[id]/events/[eventId]` which removes the event from DB, but the WS server only broadcasts `match:event:new` — there is no `match:event:deleted` broadcast. The viewer page's `useMatchEvents` hook accumulates events via WS and has no mechanism to receive deletions. Fix: (a) in the event DELETE handler (`src/app/api/matches/[id]/events/[eventId]/route.ts`), after confirmed DB delete, emit `match:event:deleted` with `{ matchId, eventId }` via the WS server; (b) `useMatchEvents` in `useWebSocket.tsx` listens for `match:event:deleted` and filters the deleted event out of local state. Observed live: double-yellow undo removed the Red Card from DB correctly but Red Card and original Yellow both remained on viewer Timeline until page reload. Filed: 2026-06-30. **Status:** OPEN
+
 - **BUG-091** _(MEDIUM — Viewer UX)_: Favourite/heart button on match detail page turns red (optimistic UI) but no write is confirmed. The button is likely calling `POST /api/users/favorites` or `POST /api/teams/[id]/follow` — both routes are listed under BACKLOG-118 remaining work as not yet having `resolveEffectiveUserId` applied. For a viewer-only user (no logger cookie), the failure is likely a silent 401/403 with no UI feedback — the heart state is never rolled back on error. Fix: (a) apply `resolveEffectiveUserId` to `src/app/api/users/favorites/route.ts` and `src/app/api/teams/[id]/follow/route.ts` (BACKLOG-118 remaining work); (b) add error rollback to the heart button — if the API call fails, revert the optimistic toggle and show a toast. Filed: 2026-06-30. **Status:** OPEN
 
 - **BUG-090** _(LOW — WebSocket)_: Socket emits attempted on a `CLOSING` socket. `useMatchSubscription` reads `socket.readyState` before emitting, but the `isConnected` dep-array trigger can fire in the same tick as a disconnect — `readyState` may transition from OPEN to CLOSING between the dep-array check and the emit. Not confirmed as causing dropped events but creates unnecessary warnings. Filed: 2026-06-29. **Status:** OPEN
@@ -4828,36 +4830,50 @@ On event delete: instead of decrementing a global counter (fragile, can go negat
 
 ---
 
-### BACKLOG-112 — Goal Disallowed / Overturned Event
+### BACKLOG-112 — Overturned / Disallowed Decisions
 
 **Status:** OPEN
 **Priority:** Low — Undo covers the workaround at MVP
 **Filed:** 2026-06-29
+**Updated:** 2026-06-30 — expanded from goal-only to all overturned decision types
 
-**Context:** Architected Session 36. A goal that is later cancelled by the referee (offside flag, VAR decision) is fundamentally different from a logger mistake:
+**Core distinction — Undo vs Overturn:**
 
-| | Undo | Goal Disallowed |
+| | Undo | Overturn |
 |---|---|---|
-| What happened | Logger error — goal never occurred | Referee gave the goal, then reversed it |
-| History | Event deleted entirely from DB and feed | Original goal stays; disallowed event added |
-| Public feed | Event disappears | "~~⚽ 72' Kwame Mensah~~" + "🚫 72' Goal disallowed (offside)" |
-| Score | Reverted | Reverted |
-| Push | None | "🚫 Goal Disallowed!" push to subscribers |
+| What happened | Logger error — event never occurred | Referee gave the decision, then reversed it |
+| Match history | Event deleted entirely from DB and feed | Original event stays; overturn event added below it |
+| Public feed | Event disappears | Original with strikethrough + overturn row |
+| Score/stat revert | Yes | Yes (score) / No (stats — credited at time of play) |
+| Push | None | Overturn-specific push to subscribers |
 
-**Workaround (current):** Logger uses Undo. Score reverts correctly. Match feed loses the narrative of the overturned goal. Acceptable at MVP where VAR/offside reversals are rare.
+**Decision types and overturn events needed:**
 
-**Full implementation (when needed):**
-- New event type `'Goal Disallowed'` in `FootballEventType`
-- Logger UI: "Disallow Goal" button appears after a goal is logged (or accessible via event list). Optionally pick reason: Offside / Foul in build-up / Other
-- `detail` field stores the original goal event ID for linkage
-- `POST /api/matches/[id]/events` for `Goal Disallowed` → score decrement (same logic as DELETE score revert), no stat change
-- Public feed renders original goal with strikethrough, `Goal Disallowed` row below it
-- Push notification type: `GOAL_DISALLOWED` → "🚫 Goal Disallowed! [Reason] — Still X-Y (min')"
-- WS broadcast: `event:new` with type `Goal Disallowed` → public page re-renders feed and score
+| Original event | Overturn event | Score effect | Stat effect |
+|---|---|---|---|
+| `Goal` | `Goal Disallowed` | −1 to scoring team | None — goal credited at time of play |
+| `Penalty` (scored) | `Penalty Disallowed` | −1 to scoring team | None |
+| `Yellow Card` | `Yellow Card Rescinded` | None | None |
+| `Red Card` | `Red Card Rescinded` | None — player returns to pitch | None |
+| `Red Card (Second Yellow)` | `Red Card Rescinded` | None | None |
 
-**Stat decision:** Do not revert taker's goal stat — the goal was credited at time of play. Consistent with how most competitions handle it (the stat belongs to the period of play, not the final scoreline). Revisit per competition rules if needed.
+**Logger UX (when built):**
+- "Overturn Decision" button in the live event feed, visible on the most recent event of each overturnable type
+- Tapping opens a confirm modal: "Overturn [event] by [player]? This keeps the original in the feed and adds a disallowed/rescinded row."
+- Optional reason field (Offside / Foul in build-up / VAR / Other)
+- `detail` field on the overturn event stores the original event ID for linkage
 
-**Related:** BACKLOG-104 (penalty outcomes), BACKLOG-111 (stat reversion on undo), BACKLOG-105 (shootout)
+**Public feed rendering:**
+- Original event row gains a strikethrough style and muted colour when an overturn event exists for it
+- Overturn event renders immediately below: "🚫 72' Goal Disallowed (offside)" / "🟡↩ 55' Yellow Card Rescinded"
+
+**Push notification types to add:** `GOAL_DISALLOWED`, `PENALTY_DISALLOWED`, `CARD_RESCINDED`
+
+**Workaround (current):** Logger uses Undo. Score reverts. Feed loses the narrative — the overturned event disappears entirely rather than being visibly cancelled. Acceptable at MVP; overturned decisions are rare in BUSA League matches.
+
+**Note on BUG-092:** Until BUG-092 (undo not removing events from viewer Timeline in real-time) is fixed, even the current Undo workaround leaves ghost events on the public feed until hard refresh. Fix BUG-092 first — it makes Undo reliable. BACKLOG-112 is the proper overturned-decision feature built on top.
+
+**Related:** BACKLOG-104 (penalty outcomes), BACKLOG-111 (stat reversion on undo), BACKLOG-105 (shootout), BUG-092
 
 ---
 
