@@ -2274,3 +2274,58 @@ Additional breaks in the pipeline even if a subscription existed:
 3. Re-run Phase 15 with Railway up
 4. Commit + close SHIPPED items to RESOLVED with DB evidence
 5. BACKLOG-105 if time allows
+
+---
+
+### Session 38C — 2026-06-30
+
+**Focus:** Fix BUG-081/082 (no auth on follows route), BUG-083 (Yellow Card icon never renders), systemic logger cookie bleed (BACKLOG-118), root-cause auth bug for logger-role users in users table.
+
+**Built / Fixed:**
+
+- **BUG-081/082 RESOLVED — `src/app/api/users/follows/route.ts`** (commits `1a98902`, `8f282b0`)
+  - All 4 handlers (GET/POST/DELETE/PATCH) now call `getAuthUser` + 401 guard
+  - GET: returns only the requesting user's follows (ownership enforced via `resolveEffectiveUserId`)
+  - POST/DELETE/PATCH: `effectiveId !== userId && role !== 'admin'` → 403
+  - Used `resolveEffectiveUserId()` for ownership checks so logger-with-fan-account resolves to their `users` table ID
+
+- **BUG-083 SHIPPED (visual verify pending) — `src/components/LiveMatchTimeline.tsx`**
+  - Root cause: `type.toUpperCase()` on `'Yellow Card'` produces `'YELLOW CARD'` (space preserved); switch cases use underscores (`'YELLOW_CARD'`). No case ever matched.
+  - Fix: all 3 switch normalizations changed to `type.toUpperCase().replace(/\s+/g, '_')` — in `getEventIcon()`, `getEventColor()`, `getEventDescription()`
+  - Case labels `'PENALTY SAVED'`/`'PENALTY MISSED'` updated to `'PENALTY_SAVED'`/`'PENALTY_MISSED'`
+
+- **BACKLOG-118 — Logger cookie bleed fix — 4 routes patched** (commits `8f282b0`, `ec15246`)
+  - Root cause: `authToken` cookie set with `path: '/'` → bleeds into all viewer-app routes. Logger's JWT carries their `loggers` table ID, not a `users` table ID — so DB queries for `userFavorites`/`userFollows` keyed to `users.id` always return empty (400 no match, not 401).
+  - `resolveEffectiveUserId(authUser)` helper added to `src/lib/auth.ts`: if `role !== 'logger'` → return `authUser.id`; if logger → look up fan account in `users` by email, return that ID (fallback to original ID)
+  - Applied to: `follows/route.ts`, `favorites/route.ts`, `teams/[id]/follow/route.ts`, `notifications/route.ts`
+
+- **Auth fallback fix — `src/lib/auth.ts`** (commit `0ea32be`)
+  - Root cause: `users` table has some accounts with `role='logger'` (users who also work as loggers and registered via the viewer login path). `getAuthUser()` branches on `role === 'logger'` and queries the `loggers` table — ID not found there → returns null → 401.
+  - Fix: if `loggers` table lookup misses, fall through to `users` table lookup instead of returning null. Logger-role users in the users table now resolve correctly.
+
+- **BACKLOG-117 filed** — SSO as the long-term fix for the dual-identity problem (logger account + fan account with same email → one unified account). Descoped to future work.
+- **BACKLOG-118 filed + updated to SHIPPED** — logger cookie bleed: root cause, affected routes, fix approach, pending items all documented.
+
+**Commits:**
+| Hash | Scope | Description |
+|------|-------|-------------|
+| `1a98902` | `fix(auth)` | BUG-081/082 — auth guards on follows route + logger email bridge |
+| `8f282b0` | `fix(auth)` | Logger cookie bleed — resolveEffectiveUserId across all viewer-app user-scoped routes |
+| `0ea32be` | `fix(auth)` | getAuthUser fallback: logger-role user in users table falls through to users table lookup |
+| `ec15246` | `chore(backlog)` | BACKLOG-118 → SHIPPED; BUG-081/082 → RESOLVED; BACKLOG-117 filed |
+
+**Bugs encountered:**
+- Logger with `role='logger'` in `users` table (registered via viewer path) gets `getAuthUser` returning null — `loggers` table branch runs but ID isn't there, no fallback. Fix: `if (logger) return ...; // else fall through`. Confirmed by decoding JWT payload (role='logger', userId matches users table not loggers table).
+- HAR showed `cookies: []` on the follows request — initially suspected cookie not being sent. Root cause: httpOnly cookies are NEVER shown in HAR exports (browser security). Cookie was present and being sent correctly. SW (`sw-user.js`) was intercepting the console's network fetch but the actual API requests had full cookie access.
+
+**tsc status:** Exit code 1 — all pre-existing errors in `src/db/` scripts and several route files (`admin/news`, `squads`, `ratings`, basketball routes, etc.). Zero new errors introduced this session.
+
+**Deferred:**
+- BACKLOG-118 live verification: retry `fetch('/api/users/follows?userId=...', { credentials: 'include' })` on staging post-`0ea32be` deploy — should now return 200
+- BUG-083 visual verification: open match timeline with Yellow/Red Card events — should show correct coloured icons
+- BUG-080 verification: polling fallback with Railway WS down — explicitly deferred to Session 38D
+
+**Next session (38D):**
+1. Verify BACKLOG-118 live: open staging as logger-with-fan-account → `/api/users/follows` should return 200 with follows
+2. BUG-083 visual check: navigate to match with yellow card events → icon must render (not blank)
+3. BUG-080 verification: kill Railway WS → confirm silent poll every ~10s, amber "Updating" banner appears, reconnect sync fires on restore

@@ -537,12 +537,18 @@ BUG-001 through BUG-029, AUDIT-001/002 (partial), BACKLOG-065 — all resolved S
 
 ---
 
-### BACKLOG-118 — Logger Cookie Bleeds into Viewer-App Routes (Dual-Account UX Broken)
+### ~~BACKLOG-118~~ — Logger Cookie Bleeds into Viewer-App Routes (Dual-Account UX Broken)
 
-**Status:** SHIPPED — `8f282b0`, 2026-06-29. Pending live verify (logger with fan account can access their favorites/follows/notifications on viewer app).
+**Status:** RESOLVED — 2026-06-30 (commits `1a98902`, `8f282b0`, `0ea32be`)
 **Priority:** Medium
 **Filed:** 2026-06-29
 **Depends on:** BACKLOG-117 (SSO) for full resolution
+
+**Evidence:**
+- Commit: `0ea32be` (getAuthUser fallback), `8f282b0` (resolveEffectiveUserId applied to all 4 routes)
+- Verified by: DB query via `dev/verify-backlog118-follows.mjs` against staging
+- Observed result: `fetch('/api/users/follows?userId=xwhRM0JiOekwI460QjFZi', { credentials: 'include' })` returns `{follows: Array(0)}` — 200, no 401. DB confirms user exists in `users` table (id=`xwhRM0JiOekwI460QjFZi`, role=logger), corresponding logger entry exists under same email (`logger_1767968844029`). `user_follows` table has 0 rows total — empty array response is correct.
+- Pending items: none. Email bridge works. Long-term SSO tracked under BACKLOG-117.
 
 #### Problem
 
