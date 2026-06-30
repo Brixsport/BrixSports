@@ -1,6 +1,5 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
-import VisualEditsMessenger from "../visual-edits/VisualEditsMessenger";
 import ErrorReporter from "@/components/ErrorReporter";
 import Script from "next/script";
 import { BottomNav } from "@/components/BottomNav";
@@ -220,23 +219,7 @@ export default function RootLayout({
         />
       </head>
       <body className="antialiased">
-        <Script
-          id="orchids-browser-logs"
-          src="https://slelguoygbfzlpylpxfs.supabase.co/storage/v1/object/public/scripts/orchids-browser-logs.js"
-          strategy="lazyOnload"
-          data-orchids-project-id="014126df-de10-4764-9819-95edd7099944"
-        />
         <ErrorReporter />
-        <Script
-          src="https://slelguoygbfzlpylpxfs.supabase.co/storage/v1/object/public/scripts//route-messenger.js"
-          strategy="lazyOnload"
-          data-target-origin="*"
-          data-message-type="ROUTE_CHANGE"
-          data-include-search-params="true"
-          data-only-in-iframe="true"
-          data-debug="true"
-          data-custom-data='{"appName": "YourApp", "version": "1.0.0", "greeting": "hi"}'
-        />
         <PWAProvider swPath="/sw-user.js">
           <SessionProvider>
             <AuthProvider>
@@ -253,7 +236,6 @@ export default function RootLayout({
             </AuthProvider>
           </SessionProvider>
         </PWAProvider>
-        <VisualEditsMessenger />
       </body>
     </html>
   );
