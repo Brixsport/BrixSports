@@ -323,13 +323,6 @@ export default function MatchDetailPage() {
                         </button>
 
                         <div className="flex items-center gap-3">
-                            {isLive && !match.livestreamEnabled && (
-                                <div className="flex items-center gap-2 text-sm text-green-500">
-                                    <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-                                    Live
-                                </div>
-                            )}
-
                             <button
                                 onClick={() => setIsFavorited(!isFavorited)}
                                 className={`p-2 rounded-lg transition-colors ${isFavorited ? 'bg-red-500/20 text-red-500' : 'bg-white/5 text-white/60 hover:bg-white/10'
@@ -370,12 +363,14 @@ export default function MatchDetailPage() {
                                 <div className="text-4xl font-black">{match.awayScore}</div>
                             </div>
                             <div className="text-sm text-white/60 mt-1 uppercase font-bold tracking-wider">
-                                {ACTIVE_PLAY_PERIODS.includes(displayPeriod) ? (
+                                {isLive ? (
                                     <span className="flex items-center gap-1.5 justify-center">
-                                        <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse" />
+                                        {ACTIVE_PLAY_PERIODS.includes(displayPeriod) && (
+                                            <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse" />
+                                        )}
                                         <span className="text-red-400">{getPeriodLabel(displayPeriod)}</span>
-                                        {match.minute != null && (
-                                            <span className="text-white/60">{match.minute}'{match.extraTime > 0 ? `+${match.extraTime}` : ''}</span>
+                                        {ACTIVE_PLAY_PERIODS.includes(displayPeriod) && match.minute != null && (
+                                            <span className="text-red-400">{match.minute}'{match.extraTime > 0 ? `+${match.extraTime}` : ''}</span>
                                         )}
                                     </span>
                                 ) : (
