@@ -35,10 +35,12 @@ export async function GET(
             .orderBy(asc(matchEvents.minute), asc(matchEvents.second))
             .limit(200);
 
+        const publicEvents = events.map(({ loggerId, loggerName, ...rest }) => rest);
+
         return NextResponse.json({
             matchId,
-            events,
-            total: events.length,
+            events: publicEvents,
+            total: publicEvents.length,
         });
     } catch (error) {
         console.error('Error fetching match events:', error);
