@@ -103,7 +103,8 @@ export async function PATCH(
             }
         }
 
-        const updates = await request.json();
+        const body = await request.json();
+        const { type, minute, second, teamId, playerId, relatedPlayerId, detail, period } = body;
 
         // Verify event exists
         const event = await db
@@ -119,12 +120,18 @@ export async function PATCH(
             );
         }
 
-        // Update event
+        // Update event — explicit allowlist only. matchId, loggerId, createdAt, isEyePoint, id are immutable.
         await db
             .update(matchEvents)
             .set({
-                ...updates,
-                value: updates.value ? JSON.stringify(updates.value) : event.value,
+                ...(type !== undefined && { type }),
+                ...(minute !== undefined && { minute }),
+                ...(second !== undefined && { second }),
+                ...(teamId !== undefined && { teamId }),
+                ...(playerId !== undefined && { playerId }),
+                ...(relatedPlayerId !== undefined && { relatedPlayerId }),
+                ...(detail !== undefined && { detail }),
+                ...(period !== undefined && { period }),
             })
             .where(eq(matchEvents.id, eventId));
 
