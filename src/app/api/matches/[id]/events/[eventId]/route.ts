@@ -21,7 +21,7 @@ async function revertPlayerStat(sport: string, playerId: string, eventType: stri
 
         const updates: Partial<typeof stats> = {};
 
-        switch (eventType.toUpperCase()) {
+        switch (eventType.toUpperCase().replace(/\s+/g, '_')) {
             case 'GOAL':
                 updates.goals = Math.max(0, (stats.goals || 0) - 1);
                 updates.shotsOnTarget = Math.max(0, (stats.shotsOnTarget || 0) - 1);
@@ -29,26 +29,26 @@ async function revertPlayerStat(sport: string, playerId: string, eventType: stri
             case 'ASSIST':
                 updates.assists = Math.max(0, (stats.assists || 0) - 1);
                 break;
-            case 'OWN GOAL':
+            case 'OWN_GOAL':
                 updates.ownGoals = Math.max(0, (stats.ownGoals || 0) - 1);
                 break;
             case 'PENALTY':
                 updates.penaltiesScored = Math.max(0, (stats.penaltiesScored || 0) - 1);
                 updates.shotsOnTarget = Math.max(0, (stats.shotsOnTarget || 0) - 1);
                 break;
-            case 'PENALTY MISSED':
+            case 'PENALTY_MISSED':
                 updates.shotsOffTarget = Math.max(0, (stats.shotsOffTarget || 0) - 1);
                 break;
-            case 'PENALTY SAVED':
+            case 'PENALTY_SAVED':
                 updates.shotsOnTarget = Math.max(0, (stats.shotsOnTarget || 0) - 1);
                 break;
             case 'FOUL':
                 updates.foulsCommitted = Math.max(0, (stats.foulsCommitted || 0) - 1);
                 break;
-            case 'YELLOW CARD':
+            case 'YELLOW_CARD':
                 updates.yellowCards = Math.max(0, (stats.yellowCards || 0) - 1);
                 break;
-            case 'RED CARD':
+            case 'RED_CARD':
                 updates.redCards = Math.max(0, (stats.redCards || 0) - 1);
                 break;
             case 'SAVE':
@@ -202,8 +202,8 @@ export async function DELETE(
             );
         }
 
-        const upperType = event.type.toUpperCase();
-        const isOwnGoal = upperType === 'OWN GOAL';
+        const upperType = event.type.toUpperCase().replace(/\s+/g, '_');
+        const isOwnGoal = upperType === 'OWN_GOAL';
         const isScoringEvent = upperType === 'GOAL' || upperType === 'PENALTY' || isOwnGoal;
 
         // Fetch match — needed for score revert, stat guards, and sport
@@ -213,7 +213,12 @@ export async function DELETE(
             .where(eq(matches.id, matchId))
             .get();
 
-        // Revert score if scoring event
+        // Delete event first — if this fails, score revert must not run
+        await db
+            .delete(matchEvents)
+            .where(eq(matchEvents.id, eventId));
+
+        // Revert score — only runs if delete succeeded above
         if (isScoringEvent && match) {
             // OWN GOAL: teamId is the conceding team — the opponent was credited. Revert opponent.
             const isHomeTeam = isOwnGoal
@@ -230,11 +235,6 @@ export async function DELETE(
                 .where(eq(matches.id, matchId));
         }
 
-        // Delete event
-        await db
-            .delete(matchEvents)
-            .where(eq(matchEvents.id, eventId));
-
         // Revert player stats — same guards as POST: skip friendlies and shootout events
         if (match) {
             const isPenaltyShootout = match.currentPeriod === 'PENALTY_SHOOTOUT';
@@ -245,7 +245,7 @@ export async function DELETE(
             }
 
             // Penalty Saved: also revert the keeper's saves stat (relatedPlayerId = keeper, may be null)
-            if (upperType === 'PENALTY SAVED' && event.relatedPlayerId && isCompetitive) {
+            if (upperType === 'PENALTY_SAVED' && event.relatedPlayerId && isCompetitive) {
                 await revertPlayerStat(match.sport, event.relatedPlayerId, 'Save');
             }
         }
