@@ -35,12 +35,17 @@ export async function GET(
             .orderBy(asc(matchEvents.minute), asc(matchEvents.second))
             .limit(200);
 
-        const publicEvents = events.map(({ loggerId, loggerName, ...rest }) => rest);
+        // Strip logger identity fields from unauthenticated (public) responses — NDPR compliance.
+        // Authenticated callers (logger seeding local state, multi-logger conflict detection) receive full rows.
+        const authUser = await getAuthUser(request).catch(() => null);
+        const responseEvents = authUser
+            ? events
+            : events.map(({ loggerId, loggerName, ...rest }) => rest);
 
         return NextResponse.json({
             matchId,
-            events: publicEvents,
-            total: publicEvents.length,
+            events: responseEvents,
+            total: responseEvents.length,
         });
     } catch (error) {
         console.error('Error fetching match events:', error);
