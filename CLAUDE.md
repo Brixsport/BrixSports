@@ -289,14 +289,14 @@ The following are explicitly invalid as evidence for RESOLVED — they demonstra
 ## Live Event Readiness Checklist
 
 Before any live match deployment:
-- [ ] Match creation → logger assignment → public appearance works end to end
-- [ ] Logger session persists 120+ minutes
-- [ ] Two simultaneous loggers do not conflict or overwrite
-- [ ] Double event submission is prevented or deduplicated
-- [ ] Public page updates within 5 seconds of event save
-- [ ] Match can be cleanly closed and marked FINISHED
-- [ ] Logger interface tested on an actual mobile device
-- [ ] All 🔴 High Volatility features are disabled or hidden from the UI
+- [x] Match creation → logger assignment → public appearance works end to end — RESOLVED session 34 test match (2026-06-27)
+- [ ] Logger session persists 120+ minutes — SHIPPED (auth fixes BUG-057, BUG-058b — `1401ee2`, `1057f22`). **UNVERIFIED** — no sustained 120min logger session test run.
+- [ ] Two simultaneous loggers do not conflict or overwrite — **OPEN** — no dual-logger test ever run. Clock collision risk confirmed (Directive 6). Block before any multi-logger match day.
+- [ ] Double event submission is prevented or deduplicated — SHIPPED (event dedup by id OR type+minute+playerId+teamId in `page.tsx`). **UNVERIFIED** — no double-tap stress test run.
+- [ ] Public page updates within 5 seconds of event save — SHIPPED (BUG-080 polling fallback `74ca73b`). **UNVERIFIED** — Railway-down staging verify still pending.
+- [x] Match can be cleanly closed and marked FINISHED — RESOLVED session 34 test match (2026-06-27). BUG-076 + BUG-078 fixed.
+- [x] Logger interface tested on an actual mobile device — RESOLVED session 34 test match — Richard logged live from mobile.
+- [ ] All 🔴 High Volatility features are disabled or hidden from the UI — **OPEN** — Ads, Lineup Builder, Transfers, User Management, News, and `/api/auth/test` (BUG-003) all accessible. Must gate or hide before any public match day.
 
 ---
 
