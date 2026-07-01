@@ -148,8 +148,8 @@ export async function POST(
         // shootout score is tracked separately (BACKLOG-105). Skip all writes during this period.
         const isPenaltyShootout = match.currentPeriod === 'PENALTY_SHOOTOUT';
 
-        const upperType = type.toUpperCase();
-        const isOwnGoal = upperType === 'OWN GOAL';
+        const upperType = type.toUpperCase().replace(/\s+/g, '_');
+        const isOwnGoal = upperType === 'OWN_GOAL';
         const isScoringEvent = upperType === 'GOAL' || upperType === 'PENALTY' || isOwnGoal;
 
         if (isScoringEvent && !isPenaltyShootout) {
@@ -177,7 +177,7 @@ export async function POST(
         }
 
         // Penalty Saved: credit the keeper's saves stat via relatedPlayerId (null-check — keeper is optional)
-        if (upperType === 'PENALTY SAVED' && relatedPlayerId && match.matchType !== 'friendly' && !isPenaltyShootout) {
+        if (upperType === 'PENALTY_SAVED' && relatedPlayerId && match.matchType !== 'friendly' && !isPenaltyShootout) {
             await updatePlayerStats(match.sport, relatedPlayerId, 'Save', value);
         }
 
@@ -284,7 +284,7 @@ async function updatePlayerStats(
 
             const updates: any = {};
 
-            switch (eventType.toUpperCase()) {
+            switch (eventType.toUpperCase().replace(/\s+/g, '_')) {
                 case 'GOAL':
                     updates.goals = (stats?.goals || 0) + 1;
                     updates.shotsOnTarget = (stats?.shotsOnTarget || 0) + 1;
@@ -292,26 +292,26 @@ async function updatePlayerStats(
                 case 'ASSIST':
                     updates.assists = (stats?.assists || 0) + 1;
                     break;
-                case 'OWN GOAL':
+                case 'OWN_GOAL':
                     updates.ownGoals = (stats?.ownGoals || 0) + 1;
                     break;
                 case 'PENALTY':
                     updates.penaltiesScored = (stats?.penaltiesScored || 0) + 1;
                     updates.shotsOnTarget = (stats?.shotsOnTarget || 0) + 1;
                     break;
-                case 'PENALTY MISSED':
+                case 'PENALTY_MISSED':
                     updates.shotsOffTarget = (stats?.shotsOffTarget || 0) + 1;
                     break;
-                case 'PENALTY SAVED':
+                case 'PENALTY_SAVED':
                     updates.shotsOnTarget = (stats?.shotsOnTarget || 0) + 1;
                     break;
                 case 'FOUL':
                     updates.foulsCommitted = (stats?.foulsCommitted || 0) + 1;
                     break;
-                case 'YELLOW CARD':
+                case 'YELLOW_CARD':
                     updates.yellowCards = (stats?.yellowCards || 0) + 1;
                     break;
-                case 'RED CARD':
+                case 'RED_CARD':
                     updates.redCards = (stats?.redCards || 0) + 1;
                     break;
                 case 'SAVE':
