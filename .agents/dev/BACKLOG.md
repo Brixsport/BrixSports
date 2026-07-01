@@ -277,7 +277,17 @@ BUG-001 through BUG-029, AUDIT-001/002 (partial), BACKLOG-065 — all resolved S
 
 - **BUG-075** _(MEDIUM — PWA)_: Logger layout referenced `manifest-admin.json` whose `start_url` is `/admin?source=pwa` — logger installing the PWA from `/logger` would launch into `/admin` (no access). Root cause: one manifest shared between admin and logger. Fix: created `public/manifest-logger.json` with `start_url: "/logger?source=pwa"` and `scope: "/logger"`. `src/app/logger/layout.tsx` updated to reference `manifest-logger.json`. Admin manifest untouched. Filed: 2026-06-25. **Status:** SHIPPED — session 35. Pending: iOS Home Screen install verify from logger page.
 
-- **BUG-074** _(MEDIUM — Staging Config)_: `NEXT_PUBLIC_WS_URL` points to the production Railway URL on the staging Vercel environment. Session 34 note: Railway WS server was confirmed down during test match — 30× status 0 in HAR, all to `brixsports-production.up.railway.app`. This is also why the public live clock was frozen during the test match — no WS = no real-time updates, and there is no HTTP polling fallback (see BUG-080). Fix: bring Railway WS back up; optionally set staging to its own WS instance. Filed: 2026-06-25. **Status:** OPEN
+- **BUG-074** _(HIGH — Staging / Security)_: Staging and prod share the same Railway WebSocket server instance. Originally filed as "wrong WS URL in staging env vars" — root cause is deeper: there is only one Railway service, so staging and prod are on the same Socket.IO process. Confirmed consequences (2026-07-01):
+  - `io.emit('notification:global')` in `server.js` broadcasts to ALL connected sockets — staging test match goal fired to every prod viewer with the page open
+  - `matchTimes` in-memory Map is shared — a staging clock update for a matchId could overwrite the cached time visible to prod viewers on the same matchId (low probability but possible)
+  - Shared `NEXT_PUBLIC_VAPID_PUBLIC_KEY` + `VAPID_PRIVATE_KEY` across envs meant staging EventDrivenNotifier POSTed to `/api/notifications/match-event` on staging Vercel → hit prod VAPID keys → delivered a real push notification to a real prod subscriber during a staging test match (confirmed live, 2026-07-01). VAPID keys have since been rotated on staging.
+  - `JWT_SECRET` shared across envs — staging-issued JWTs are valid on prod API routes (not fixed yet)
+
+  **Recommended fix (not a patch — proper fix):** Spin a second Railway service scoped to staging. Set `NEXT_PUBLIC_WS_URL` in the staging Vercel project to the staging Railway URL. Both services are independent — staging events stay on staging sockets, prod events stay on prod sockets.
+
+  **Not recommended:** Prefixing room names with env tag (`match:staging:${matchId}`) would isolate room broadcasts but would NOT fix `io.emit()` (notification:global still hits all sockets) and would not fix the shared `matchTimes` Map or VAPID/JWT key sharing. It is a workaround, not a fix.
+
+  Filed: 2026-06-25. Updated: 2026-07-01. **Status:** OPEN
 
 - **BUG-080** _(HIGH — Public Page / CLAUDE.md violation)_: No HTTP polling fallback when WebSocket is disconnected. Public match page (`/matches/[id]`) uses `useWebSocket` exclusively for real-time updates — clock, score, events. When WS fails (max 5 reconnect attempts), the page freezes on stale data indefinitely. CLAUDE.md mandates: *"Live update mechanism must have a fallback if the channel drops. Viewer must see stale data clearly on failure, not a crash."* This is confirmed violated — page shows no stale indicator and no recovery. Fix: when `isConnected === false && isLive`, poll `GET /api/matches/[id]` every 10s and merge response into display state. Show a "live updates paused — reconnecting" banner when WS is down. Confirmed via session 34 test match — public clock and score were frozen throughout because Railway was down. Filed: 2026-06-27. **Status:** SHIPPED — session 38D. Two root causes fixed: (1) `isLiveStatus` check in polling effect (line 163) and toast effect (line 181) used `=== 'LIVE' || === 'HALF_TIME'` — now uses module-level `LIVE_STATES.has()` covering all 7 live-ish period values; (2) `sharedSocket?.disconnect()` called at `connect_error` attempt 5, permanently killing Socket.IO reconnect loop — removed; added `reconnect_failed` listener with 30 s manual retry loop (`socket.connect()`). `LIVE_STATES` moved to module scope so effects and render share the same constant. Pending: Railway-down staging verify (amber toast, polling active, reconnect recovery). **NOTIF-12 (accepted risk):** offline notification queuing — notifications fired during a WS/server outage are lost; no retry queue exists. Accepted at MVP with a handful of viewers. Production-level concern to revisit at scale.
 
@@ -295,9 +305,19 @@ BUG-001 through BUG-029, AUDIT-001/002 (partial), BACKLOG-065 — all resolved S
 - Observed result: write handlers protected by same guard
 - Pending items: none
 
-- ~~**BUG-083**~~ _(HIGH — Logger UX / Display)_: `LiveMatchTimeline` switch cases used underscore format (`YELLOW_CARD`) but event type arrives as `'Yellow Card'` (title case with space) — `toUpperCase()` alone never matched. Fix: `.replace(/\s+/g, '_')` added to all three switch normalization calls; `PENALTY_SAVED`/`PENALTY_MISSED` case labels updated to match. **Status:** SHIPPED — `1c7a6f3`, 2026-06-29. Pending: visual verify on staging — Yellow Card should show yellow icon, Red Card red icon.
+- ~~**BUG-083**~~ _(HIGH — Logger UX / Display)_: `LiveMatchTimeline` switch cases used underscore format (`YELLOW_CARD`) but event type arrives as `'Yellow Card'` (title case with space) — `toUpperCase()` alone never matched. Fix: `.replace(/\s+/g, '_')` added to all three switch normalization calls; `PENALTY_SAVED`/`PENALTY_MISSED` case labels updated to match. `1c7a6f3` (38C) patched `LiveMatchTimeline.tsx` only — `MatchTimeline.tsx` was missed. `efb0081` (38D) completed the fix in `MatchTimeline.tsx` (lines 31, 65, 95) and added `RED_CARD_(SECOND_YELLOW)` case to both switches and the cards filter. **Status:** SHIPPED — `efb0081`, 2026-06-30. Pending: visual verify on staging — Yellow Card yellow icon, Red Card red icon on both MatchTimeline and LiveMatchTimeline. Parity gap remaining: `LiveMatchTimeline.tsx` has no `RED_CARD_(SECOND_YELLOW)` case (lines 63, 98, 248) — needs own scoped directive.
 
-- **BUG-084** _(HIGH — Notifications)_: No push subscription enrollment UI exists in the viewer app. `PushService.subscribe(userId)` is fully implemented and functional — it calls `pushManager.subscribe()` and POSTs to `/api/notifications/subscribe` — but it is called from nowhere in the codebase. The diagnostics endpoint (`/api/notifications/diagnose`) confirms `pushSubscriptions` table is always empty. Fix: wire an "Enable Notifications" button (in SettingsOverlay or alongside the team favorites action) that calls `PushService.subscribe(userId)`. Filed: 2026-06-29. **Status:** OPEN
+- ~~**BUG-084**~~ _(HIGH — Notifications)_: Originally filed as "no push enrollment UI — pushSubscriptions always empty." **INCORRECT — retracted 2026-07-01.** Full code audit confirmed three active enrollment paths:
+  - `src/components/SettingsOverlay.tsx` — subscribe/unsubscribe toggle, calls `pushService.subscribe(user.id)` / `pushService.unsubscribe(user.id)`
+  - `src/components/OnboardingModal.tsx` — enrollment step during first-time onboarding flow
+  - `src/components/NotificationPermission.tsx` — auto-show banner if `Notification.permission === 'default'` and user hasn't dismissed
+  - `src/hooks/useNotificationPrompt.ts` — hook backing the above components
+
+  The `pushSubscriptions` table on prod is NOT empty — confirmed by a real push notification being delivered to a prod subscriber during a staging test match (2026-07-01). The full VAPID pipeline is functional end-to-end on prod.
+
+  The original "always empty" claim was based on the diagnose endpoint output during early sessions when no user had yet completed onboarding. That is no longer the case.
+
+  BUG-085 (dedup key broken) remains open and is the actual notification quality issue. **Status:** RESOLVED — no fix needed, enrollment UI already existed.
 
 - **BUG-085** _(HIGH — Notifications)_: `EventDrivenNotifier` dedup key is broken. Key is constructed as `` `${matchId}_${event.id}_${Date.now()}` `` — the `Date.now()` suffix makes every key unique, so `sentNotifications.has(notificationKey)` never matches. Every notification fires unconditionally with no dedup protection, even on retries. Fix: remove `_${Date.now()}` from key construction. Key should be `${matchId}_${event.id}` (or include `eventType` for period events). Filed: 2026-06-29. **Status:** OPEN
 
@@ -314,6 +334,30 @@ BUG-001 through BUG-029, AUDIT-001/002 (partial), BACKLOG-065 — all resolved S
 - **BUG-092** _(HIGH — Real-time / Viewer UX)_: Undone events stay visible on the public Timeline tab until hard refresh. Root cause: `handleUndo` in `FootballLogger.tsx` sends `DELETE /api/matches/[id]/events/[eventId]` which removes the event from DB, but the WS server only broadcasts `match:event:new` — there is no `match:event:deleted` broadcast. The viewer page's `useMatchEvents` hook accumulates events via WS and has no mechanism to receive deletions. Fix: (a) in the event DELETE handler (`src/app/api/matches/[id]/events/[eventId]/route.ts`), after confirmed DB delete, emit `match:event:deleted` with `{ matchId, eventId }` via the WS server; (b) `useMatchEvents` in `useWebSocket.tsx` listens for `match:event:deleted` and filters the deleted event out of local state. Observed live: double-yellow undo removed the Red Card from DB correctly but Red Card and original Yellow both remained on viewer Timeline until page reload. Filed: 2026-06-30. **Status:** OPEN
 
 - **BUG-091** _(MEDIUM — Viewer UX)_: Favourite/heart button on match detail page turns red (optimistic UI) but no write is confirmed. The button is likely calling `POST /api/users/favorites` or `POST /api/teams/[id]/follow` — both routes are listed under BACKLOG-118 remaining work as not yet having `resolveEffectiveUserId` applied. For a viewer-only user (no logger cookie), the failure is likely a silent 401/403 with no UI feedback — the heart state is never rolled back on error. Fix: (a) apply `resolveEffectiveUserId` to `src/app/api/users/favorites/route.ts` and `src/app/api/teams/[id]/follow/route.ts` (BACKLOG-118 remaining work); (b) add error rollback to the heart button — if the API call fails, revert the optimistic toggle and show a toast. Filed: 2026-06-30. **Status:** OPEN
+
+- ~~**BUG-093**~~ _(MEDIUM — Security / Events API)_: `PATCH /api/matches/[id]/events/[eventId]` spread entire request body into Drizzle `.set()`. Fix: explicit allowlist — only `type`, `minute`, `second`, `teamId`, `playerId`, `relatedPlayerId`, `detail`, `period` mutable. `matchId`, `loggerId`, `createdAt`, `isEyePoint`, `id` immutable. **Status:** RESOLVED — `fafab3a`, 2026-07-01.
+
+**Evidence:**
+- Commit: `fafab3a`
+- Verified by: code review — allowlist replaces open spread; no active UI caller of PATCH `[eventId]` confirmed (grep across all `.ts`/`.tsx` returned zero PATCH calls to `events/${eventId}`)
+- Observed result: immutable fields cannot be overwritten via PATCH body
+- Pending items: none
+
+- ~~**BUG-094**~~ _(HIGH — Data Integrity)_: `DELETE /api/matches/[id]/events/[eventId]` reverted score before deleting event — failed delete left score permanently wrong. Fix: delete event row first; score revert only runs if delete succeeded (throws bypass). **Status:** RESOLVED — `358ee05`, 2026-07-01.
+
+**Evidence:**
+- Commit: `358ee05`
+- Verified by: code trace — `db.delete()` now precedes score revert block; if delete throws, catch returns 500 before revert runs
+- Observed result: score integrity preserved on delete failure path
+- Pending items: live test on staging (undo a goal on a test match, confirm score reverts correctly in correct order)
+
+- ~~**BUG-095**~~ _(HIGH — NDPR / Public API)_: `GET /api/matches/[id]/events` returned raw rows including `loggerId` and `loggerName` to unauthenticated callers. Fix: auth-aware response shaping — unauthenticated callers get fields stripped; authenticated callers (logger seeding local state, multi-logger conflict detection) receive full rows. **Status:** RESOLVED — `4c73aba`, 2026-07-01.
+
+**Evidence:**
+- Commit: `4c73aba` (supersedes intermediate `b6d3112` which stripped unconditionally — broke logger seed path at `FootballLogger.tsx:466` and `useMultiLogger.ts:141`)
+- Verified by: code trace — `getAuthUser(request).catch(() => null)` check gates the strip; confirmed `FootballLogger.tsx:466` reads `e.loggerId` from GET response (would have been broken by unconditional strip)
+- Observed result: public callers cannot retrieve logger identity; authenticated callers retain full event data
+- Pending items: curl verify on staging — unauthenticated GET `/api/matches/[id]/events` must return events without `loggerId`/`loggerName` fields
 
 - **BUG-090** _(LOW — WebSocket)_: Socket emits attempted on a `CLOSING` socket. `useMatchSubscription` reads `socket.readyState` before emitting, but the `isConnected` dep-array trigger can fire in the same tick as a disconnect — `readyState` may transition from OPEN to CLOSING between the dep-array check and the emit. Not confirmed as causing dropped events but creates unnecessary warnings. Filed: 2026-06-29. **Status:** OPEN
 

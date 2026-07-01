@@ -2326,6 +2326,208 @@ Additional breaks in the pipeline even if a subscription existed:
 - BUG-080 verification: polling fallback with Railway WS down — explicitly deferred to Session 38D
 
 **Next session (38D):**
-1. Verify BACKLOG-118 live: open staging as logger-with-fan-account → `/api/users/follows` should return 200 with follows
-2. BUG-083 visual check: navigate to match with yellow card events → icon must render (not blank)
-3. BUG-080 verification: kill Railway WS → confirm silent poll every ~10s, amber "Updating" banner appears, reconnect sync fires on restore
+1. ~~BACKLOG-118 live verify~~ — RESOLVED `a84ddec` (DB confirmed, `user_follows` empty on staging = correct 200)
+2. Diagnose viewer-app UI issue (reported broken at end of 38C — root cause unknown, investigate first)
+3. BUG-083 visual check: navigate to match with yellow card events → icon must render (not blank)
+4. BUG-080 verification: kill Railway WS → confirm silent poll every ~10s, amber "Updating" banner appears, reconnect sync fires on restore
+
+### Session 38D — 2026-06-30
+
+**Focus:** BUG-080 reconnect discipline (two root causes fixed), live clock UX overhaul (isStale indicator, mm:ss), BUG-083 completion on MatchTimeline.tsx, formal read-only verification of 38C claims (Directives 1-5).
+
+**Built / Fixed:**
+
+- **BUG-080 — Reconnect discipline** (`74ca73b`)
+  - Root cause 1: `isLiveStatus` check in polling effect (line 163) and toast effect (line 181) used `=== 'LIVE' || === 'HALF_TIME'`. WS timer effect in `page.tsx` overwrites `match.status` with `matchTime.period` (e.g. `'SECOND_HALF'`) on each tick — so both effects exited early during SECOND_HALF, neither polling nor toast ever fired.
+    Fix: `LIVE_STATES` Set of 7 live-ish period values moved to module scope; both effects now use `LIVE_STATES.has()`.
+  - Root cause 2: `sharedSocket?.disconnect()` was called at `connect_error` attempt 5. This permanently killed Socket.IO internal reconnect loop — on Railway return, nothing retried.
+    Fix: `disconnect()` call removed from `connect_error` handler. Added `reconnect_failed` listener with 30 s manual retry loop (`reconnectAttempts = 0; sharedSocket?.connect()`).
+  - `src/hooks/useWebSocket.tsx` — useMatchTimer return changed from raw time to `{ time, isStale }`. `isStale=true` on disconnect, `false` on next tick. `time` never nulled on disconnect — preserves last-known minute.
+  - `src/components/LiveMatchStatus.tsx` — reads `{ time: matchTime, isStale }`. Stale state: `opacity-50` on badge/default, dot loses `animate-pulse`. Shows frozen clock, never drops to bare DB period label on transient hiccup.
+  - `src/app/matches/[id]/page.tsx` line 51 — `const { time: matchTime } = useMatchTimer(matchId)` (return shape change cascade fix).
+  - Wrong initial fix rejected: `setTime(null)` on disconnect caused `53'` to `2ND HALF` flicker on brief hiccup — UX regression. Corrected to isStale flag.
+
+- **BUG-083 — MatchTimeline.tsx normalization** (`efb0081`)
+  - `1c7a6f3` (38C) patched `LiveMatchTimeline.tsx` only. `MatchTimeline.tsx` was missed — confirmed via grep showing bare `toUpperCase()` at lines 31, 65, 95.
+  - `src/components/MatchTimeline.tsx` lines 31, 65, 95: `.replace(/\s+/g, '_')` added to all three switch normalizations. `PENALTY_SAVED`/`PENALTY_MISSED` case labels corrected. `RED_CARD_(SECOND_YELLOW)` added to icon/color switches and cards filter.
+  - Parity gap identified (NOT fixed this session): `LiveMatchTimeline.tsx` has no `RED_CARD_(SECOND_YELLOW)` case at lines 63, 98, 248. Needs own scoped directive.
+
+- **mm:ss clock (NOT committed — pending live render check)**
+  - Directive 4 (read-only trace): WS server is a pure passthrough. Logger runs `setInterval(tick, 1000)` in `match-state-manager.ts` line 268. `FootballLogger.tsx` line 558 emits `match:time:update` with `second` field in payload. `useMatchTimer` was discarding `second`.
+  - `src/hooks/useWebSocket.tsx` — `useMatchTimer` state type extended to include `second: number`. `handleTimeUpdate` stores `data.second ?? 0`.
+  - `src/components/LiveMatchStatus.tsx` — `clock = \`${minute}:${String(second).padStart(2, '0')}\`` renders in active-play and ET cases.
+  - Scope gap: `page.tsx` line 394 renders its own clock via `matchTime.minute` directly — still bare minute. Deferred.
+
+**Directive 2 — 38C formal verification verdicts:**
+
+| Item | Verdict |
+|---|---|
+| BUG-083 LiveMatchTimeline.tsx | CONFIRMED — commit 1c7a6f3, diff verified |
+| BUG-083 MatchTimeline.tsx | NOT CONFIRMED (unpatched — fixed this session efb0081) |
+| BUG-081/082 auth guards | SHIPPED in code; live-tested by Richard |
+| getAuthUser logger fallback | SHIPPED in code; live-tested by Richard |
+| resolveEffectiveUserId x4 | SHIPPED in code; live-tested by Richard |
+| Scope outside 4 files | CLEAR — transfers/route.ts:176 is audit-only |
+
+**Commits:**
+| Hash | Scope | Description |
+|------|-------|-------------|
+| `74ca73b` | `fix(realtime)` | Preserve last-known clock minute on WS disconnect; BUG-080 reconnect fixes |
+| `efb0081` | `fix(ui)` | BUG-083 complete normalization in MatchTimeline.tsx |
+
+**Bugs encountered:**
+- `LIVE_STATES` initially defined inside component after early returns — effects at 163/181 referenced it before scope. Fixed: moved to module scope.
+- Return shape change `useMatchTimer` cascaded TS errors to `page.tsx` line 51. Fixed: destructured as `const { time: matchTime }`.
+- Known-issues entry 2026-06-29 (line 15) stated `reconnect_failed` is never emitted — was true only because `disconnect()` prevented it from firing. Now obsolete after `disconnect()` was removed. Entry corrected.
+
+**tsc status:** Zero new errors. Pre-existing errors in `src/db/` scripts and several unrelated route files unchanged.
+
+**Uncommitted at wrap:**
+| File | Change | Why held |
+|---|---|---|
+| `src/hooks/useWebSocket.tsx` | `second` stored in useMatchTimer state | mm:ss needs live render check |
+| `src/components/LiveMatchStatus.tsx` | mm:ss clock render | UX change, needs visual verify on staging |
+
+**Deferred:**
+- BUG-080 Railway-down staging verify: amber toast fires, silent poll every 10 s, reconnect recovery on WS restore
+- BACKLOG-119 full visual verify: HT label red, FT neutral
+- BUG-083 staging visual verify: Yellow Card yellow icon, Red Card red icon — both MatchTimeline and LiveMatchTimeline
+- LiveMatchTimeline.tsx `RED_CARD_(SECOND_YELLOW)` parity fix (scoped directive needed)
+- page.tsx line 394 mm:ss (match detail header clock, separate render path from LiveMatchStatus)
+- Formal evidence blocks for BUG-081/082, getAuthUser, resolveEffectiveUserId (Richard confirmed live-tested; BACKLOG still SHIPPED not RESOLVED)
+- BUG-091 (favourite heart optimistic UI — no write confirmed)
+- BUG-092 (undo not clearing viewer timeline — no `match:event:deleted` WS broadcast)
+
+**Next session (38E):**
+1. Commit mm:ss after visual check on staging (home page cards show `53:09` not `53'`)
+2. Fix `page.tsx` line 394 — mm:ss in match detail header clock
+3. Fix `LiveMatchTimeline.tsx` `RED_CARD_(SECOND_YELLOW)` parity
+4. Write formal evidence blocks for BUG-081/082, getAuthUser, resolveEffectiveUserId
+5. BUG-080 Railway-down staging verify
+
+---
+
+### Session 38E (Branch) — 2026-07-01
+
+**Note:** This was a branch/side session — no new features or fixes shipped. Dedicated implementation work resumes in Session 39.
+
+**Focus:** Full system architecture documentation, Eye Point design critique, BrixSports domain positioning, staging CORS fix, notification pipeline audit.
+
+**Built / Fixed:**
+
+- **ARCHITECTURE.md — created** (`.agents/dev/ARCHITECTURE.md`)
+  - Full system architecture document covering all 12 subsystems: infrastructure topology, actor model, database layer, auth architecture, API surface (~110 routes), real-time architecture (5-layer full breakdown with Directive 6 clock risks embedded), PWA/SW, notification pipeline, frontend architecture, Three Critical Flows, and known structural gaps (18 open items).
+  - Generated from full codebase read: `server.js`, `match-state-manager.ts`, `useWebSocket.tsx`, `schema.ts`, `auth.ts`, `notifications/*`, `sw-admin.js`, full API route listing, BACKLOG.md, and BUILD_JOURNAL.md sessions 27–38D.
+
+- **server.js — CORS staging fix** (uncommitted)
+  - Added `'https://staging.brixsports.com'` to the explicit allowlist.
+  - Added `isVercelPreview = origin?.endsWith('.vercel.app')` wildcard check — covers all PR preview deployments automatically without needing per-deploy env vars.
+  - Root cause: Railway WS server CORS allowlist never included staging domain or Vercel preview URLs → WS blocked on staging → Flow B/C untestable on staging. Filed as BUG-074 previously; now patched.
+  - **Needs Railway redeploy to take effect.**
+
+**Design decisions documented:**
+
+**Eye Point Awards — table is redundant**
+- `eye_point_awards` table (in `schema-enhanced.ts`) duplicates data already in `matchEvents`: `matchId`, `playerId`, `loggerId` (awardedBy), `detail` (reason), `createdAt` (timestamp), `isEyePoint: boolean`.
+- Decision: the `isEyePoint` flag on `matchEvents` is the correct model. `WHERE isEyePoint = true AND matchId = X` serves all use cases. The separate table is a second source of truth for the same fact — an integrity risk.
+- Eye Points as a concept are sound — they capture qualitative impact (individual brilliance, carries, key duels) that doesn't map to a discrete event. But under manual logging, they're constrained: a logger can't track granular actions AND flag brilliance simultaneously, so Eye Points are biased toward on-ball moments the logger is already watching. Fine as a rating bonus signal (`+0.5 per eye point`). Not worth schema overhead.
+- Eye Points feed into player ratings. Highest rating → MotM. They are NOT Man of the Match — they influence it.
+
+**BrixSports domain positioning**
+- Domain map: Physical tracking (Second Spectrum/AWS) → Event data providers (Opta/Stats Perform) → Intelligence layer (StatsBomb/Oracle) → Grassroots loggers (Hudl Assist/Fanatix) → Fan-facing livescore (SofaScore/FlashScore).
+- BrixSports sits at the intersection of **grassroots logger + fan-facing livescore**, with an aspirational reach toward a light analytics layer (rating system, Eye Points, player performance tracking).
+- Key architectural moat: **contextual depth over horizontal breadth**. SofaScore is wide/shallow. Opta is infrastructure. BrixSports is deep in one context (BUSA League, Nigerian university sports) — which unlocks things horizontal platforms can't build: fan communities that know these players, push for matches that matter to this specific audience, ratings calibrated to this league.
+- **Manual logging ceiling:** current system captures Tier 1 Opta data (basic match facts — goals, cards, subs, fouls by minute). Everything above (possession chains, pressing intensity, xG, carry progression) requires computer vision or a dedicated per-match analyst with specialised software. The rating system is a good heuristic within this ceiling — but the right future question is "what data can we realistically collect at this tier?" not "how do we improve the formula?"
+- When the core system is locked in: audit the event taxonomy first. Event type strings are currently inconsistent (spaced vs underscored — BUG-083 territory). A canonical, exhaustive taxonomy for Football and Basketball is the foundation everything analytical sits on.
+
+**Notification pipeline — DB confirmed findings (2026-07-01):**
+
+Live prod DB query (`dev/check-push-subscriptions.mjs`) returned:
+
+| # | user_id | provider | created_at |
+|---|---------|----------|------------|
+| 1 | H3pwXW_u3B7XAm0nnD4d1 | Apple Push (iOS Safari) | 1780651633 |
+| 2 | uBM_X1MbuQuzhczxGbgNN | Apple Push (iOS Safari) | 1780578862 |
+| 3 | admin-001 | FCM (Android/Chrome) | 1771813665 |
+
+3 real subscribers on prod. Pipeline is live. BUG-084 ("no enrollment UI, table always empty") was a false finding — retracted. Enrollment UI confirmed in SettingsOverlay, OnboardingModal, and NotificationPermission. BUG-085 (dedup key) is the active issue.
+
+Separately: staging test match fired a real VAPID push to prod subscribers because VAPID keys were shared across environments. Root cause: `notification:global` on shared Railway WS + shared VAPID private key in Vercel env vars. VAPID keys rotated on staging (2026-07-01). Prod rotation pending (no Vercel dashboard access). `JWT_SECRET` generated separately for staging (`openssl rand -hex 32` via Node crypto). Filed as BUG-074 expansion. `.env.example` updated to remove real keys and document per-env key requirement.
+
+**Addendum (2026-07-01):** The notification content was confirmed as "Yanko scored a goal" — player-specific text matching the GOAL VAPID payload template (`${event.playerName} scores! ...`). This rules out the WS toast path (which carries no player name). The recipient was on an **iPad** — confirming it was one of the 2 Apple Push (`web.push.apple.com`) subscribers, not the FCM/Android subscriber (admin-001). VAPID delivery through Apple's push infrastructure confirmed end-to-end.
+
+**Commits:**
+- None this session (architecture doc + CORS fix — CORS needs Railway redeploy before committing is meaningful).
+
+**Deferred (carried from 38D + this session):**
+- Commit `server.js` CORS fix and trigger Railway redeploy
+- Commit mm:ss (`useWebSocket.tsx` + `LiveMatchStatus.tsx`) after visual check
+- Fix `page.tsx` line 394 — mm:ss in match detail header clock
+- Fix `LiveMatchTimeline.tsx` `RED_CARD_(SECOND_YELLOW)` parity
+- Formal evidence blocks for BUG-081/082, getAuthUser, resolveEffectiveUserId
+- BUG-080 Railway-down staging verify (amber toast, silent poll, reconnect recovery)
+- Remove redundant `eye_point_awards` table (or leave in schema-enhanced.ts as non-production — confirm which schema is live first)
+- CRITICAL open: PATCH [eventId] open spread, score-before-delete ordering, loggerId public leak, BUG-085 dedup key, BUG-089 subscribe storm
+
+**Next session (39 — first dedicated implementation session):**
+1. Confirm server.js CORS on Railway — staging WS smoke test
+2. Commit mm:ss after visual check
+3. Fix PATCH [eventId] open spread (CRITICAL security)
+4. Fix score-before-delete in DELETE [eventId] (CRITICAL data integrity)
+5. Strip loggerId from GET /events public response (CRITICAL NDPR)
+
+---
+
+### Session 39 — 2026-07-01
+
+**Focus:** Stability close before backfill break. ARCHITECTURE.md surgical patches, four Tier-0 event-route fixes, session docs, clean working tree.
+
+**Built / Fixed:**
+
+- **ARCHITECTURE.md patches (5)** — `.agents/dev/ARCHITECTURE.md` — commit `0bd7fa8`
+  - Patch 1: JWT rotation note (auth section) — corrected claim: staging/prod use separate `JWT_SECRET`; loggers and admins within an env share one secret (not separate per role — false claim in original directive caught and corrected before execution)
+  - Patch 2: BUG IDs annotated inline on Auth/Security gap table rows (BUG-093, BUG-094, BUG-095, BUG-083)
+  - Patch 3: Two new Real-Time/Clock gap rows (BUG-074 shared Railway WS, no mutation audit trail) — BUG-074 fix description corrected to "dedicated staging Railway service" not env-prefixed room names (rejected approach per Session 38E)
+  - Patch 4: Push enrollment section corrected — stale "not yet built" heading updated, BUG-084 gap table row struck RESOLVED, push subscriptions scale gaps subsection added
+  - Patch 5: Two new Data Integrity gap rows (basketball stats unverified, `fixtures` table relationship undocumented)
+
+- **BUG-093 RESOLVED** — `fafab3a` — `src/app/api/matches/[id]/events/[eventId]/route.ts`
+  - PATCH handler replaced open `...updates` body spread with explicit allowlist: `type`, `minute`, `second`, `teamId`, `playerId`, `relatedPlayerId`, `detail`, `period` only. `matchId`, `loggerId`, `createdAt`, `isEyePoint`, `id` immutable.
+  - No active UI caller of PATCH `[eventId]` exists — zero regression risk confirmed by grep.
+
+- **BUG-094 RESOLVED** — `358ee05` — same file
+  - DELETE handler: `db.delete()` now runs before score revert. If delete throws, catch returns 500 before revert executes. Score integrity preserved on DB failure path.
+  - Bundled in same commit: BUG-083 normalization applied to `revertPlayerStat` switch — `.toUpperCase().replace(/\s+/g, '_')` + underscore case labels.
+
+- **BUG-095 RESOLVED** — `4c73aba` — `src/app/api/matches/[id]/events/route.ts`
+  - Auth-aware `loggerId`/`loggerName` strip. Intermediate commit `b6d3112` (unconditional strip) caught breaking `FootballLogger.tsx:466` logger seed path and `useMultiLogger.ts:141` conflict detection — corrected before push.
+  - Public callers: fields stripped. Authenticated callers: full row returned.
+
+- **BUG-083 (route files) RESOLVED** — `57b5bc8` — `src/app/api/matches/[id]/events/route.ts`
+  - POST scoring and `updatePlayerStats` Football switch: `.toUpperCase().replace(/\s+/g, '_')` normalization applied, case labels converted to underscore form. Basketball switch untouched (different taxonomy, title-case format intentional).
+
+- **server.js CORS fix** — `abdc684`
+  - `staging.brixsports.com` added to allowlist. Vercel preview wildcard (`origin?.endsWith('.vercel.app')`) added. Railway redeploy required to take effect.
+
+- **mm:ss changes REVERTED** — `src/components/LiveMatchStatus.tsx`, `src/hooks/useWebSocket.tsx`
+  - Decision: revert before break. Two visible inconsistencies would have shipped: badge shows `45:32`, header still shows `45'`; polling fallback resets seconds to `00` each 10s cycle. Full mm:ss wiring is a clean one-session job — do it whole after break.
+
+**Session doc commits:**
+- `0bd7fa8` — ARCHITECTURE.md patches + CLAUDE.md readiness checklist update + .env.example key rotation docs + architecture plan doc
+
+**Bugs filed this session:** none (all filing was done in sessions 38C–38E)
+
+**Known issues from this session:**
+- `b6d3112` (intermediate BUG-095 commit) exists in history as a superseded wrong approach — superseded by `4c73aba`. History is slightly noisy but final state is correct.
+- BUG-095 pending: curl verify on staging that unauthenticated GET `/events` strips loggerId correctly.
+- BUG-094 pending: live undo test on staging to confirm score reverts in correct order.
+- server.js CORS requires Railway redeploy — commit is in, effect is pending.
+
+**7 commits ahead of origin/dev at wrap:** `fafab3a`, `358ee05`, `b6d3112`, `57b5bc8`, `4c73aba`, `abdc684`, `0bd7fa8`
+
+**Next session (post-backfill — Session 40):**
+1. Push dev branch to origin
+2. Railway redeploy — confirm staging WS connects (BUG-074 CORS fix live)
+3. Staging smoke test: curl GET `/events` unauthenticated — confirm no loggerId in response (BUG-095 evidence)
+4. Staging undo test — confirm score reverts correctly (BUG-094 evidence)
+5. Full mm:ss live clock wiring — one session, whole feature: `LiveMatchStatus.tsx`, `useWebSocket.tsx`, `page.tsx` header, polling fallback handling, visual verify
