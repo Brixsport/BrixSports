@@ -38,10 +38,13 @@ app.prepare().then(() => {
                     'http://localhost:3001',
                     'http://localhost:3002',
                     'https://brixsports.com',
-                    'https://www.brixsports.com'
+                    'https://www.brixsports.com',
+                    'https://staging.brixsports.com',
                 ].filter(Boolean);
 
-                if (allowedOrigins.includes(origin) || dev) {
+                const isVercelPreview = origin?.endsWith('.vercel.app');
+
+                if (allowedOrigins.includes(origin) || isVercelPreview || dev) {
                     callback(null, true);
                 } else {
                     console.warn(`[Socket.IO] Blocked connection from unauthorized origin: ${origin}`);
