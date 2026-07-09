@@ -1233,22 +1233,26 @@ player stats can be stale or inconsistent after a match ends.
 
 ---
 
-### BACKLOG-018 — Game Event Logsheets (BUSALYMPICS match events)
+### BACKLOG-018 — Game Event Logsheets (BUSALYMPICS + BUSA League match events)
 
-**Status:** IN PROGRESS — 2 of 34 matches complete (MD1 games 1-2, 2026-07-09)
+**Status:** IN PROGRESS — BUSALYMPICS portion COMPLETE (7 of 7 matches, 2026-07-09). 27 BUSA League matches remain, not started.
 **Priority:** Medium
 **Filed:** 2026-06-07
 **Blocked by:** ~~BACKLOG-016~~ — superseded by a dev/ script pipeline instead of a UI flow (see below)
 
-**Progress note (2026-07-09):** MD1 game 1 (COLNAS 2-1 COLMANS, `OPoEtVGUNWKcRSDe4QdSr`) and game 2 (COLENG 2-3 COLENVS, `tyYRU5nlOrqnEXEpvIEC6`) both fully backfilled. Methodology: `dev/parse-match-sheet.mjs` (xlsx → canonical JSON, single-team files or consolidated multi-tab workbooks), `dev/backfill-match-players.mjs` (exact/fuzzy/platform-wide matching, `--self-test` guard), `dev/backfill-run-sheet.mjs` (one-command wrapper), per-match `--dry-run`/`--apply` write scripts with atomic batch commits. Every ambiguous player match got explicit human sign-off — game 2 alone caught 4 real matcher errors (a name shared by two different roster slots resolved via position evidence; a nickname-truncation match the algorithm structurally can't find; a cross-sport name collision; an elimination-logic reassignment).
+**Progress note (2026-07-09, session 40C close):** All 7 BUSALYMPICS football matches fully backfilled and DB-verified — MD1 g1 (COLNAS 2-1 COLMANS), MD1 g2 (COLENG 2-3 COLENVS), MD2 g1 (COLNAS 1-2 COLENG), MD2 g2 (COLMANS 2-1 COLENVS), MD3 g1 (COLNAS 3-1 COLENVS), MD3 g2 (COLMANS 0-1 COLENG), Final (COLNAS 5-0 COLENG). Methodology: `dev/parse-match-sheet.mjs` (xlsx → canonical JSON) → `dev/backfill-match-players.mjs` (exact/fuzzy/platform-wide matching, `--self-test` guard, college-exclusivity guard) → `dev/backfill-run-sheet.mjs` (one-command wrapper) → per-match `--dry-run`/`--apply` write scripts with atomic batch commits. MD3 and the Final had no match sheet, only goal-scorer lists — proved out a lighter "goals-only" write pattern (Goal/Penalty events only, no fabricated stats) that's reusable for any future match with partial data.
 
-**Critical fix mid-pipeline (game 2):** the recompute step was scoped to only the current match's events, which would silently overwrite (not add to) any player's stats from a different already-backfilled match the moment two matches shared a player. Fixed to be genuinely cumulative — recomputes from a player's full event history across the entire `match_events` table, not just the match being processed. This also surfaced and let us fix a real, independent bug: MD1 g1's one-time global stats zero had incidentally wiped stats for all 28 players in the one real, live-logged match already in the DB (Pirates vs Hammers, 154 events) — their event history was untouched, only the stats cache was wrong. Ran the cumulative recompute against all 28 of them directly (`dev/recompute-pirates-hammers.mjs`) rather than leaving it to coincidental future overlap.
+**Critical fixes across the BUSALYMPICS backfill:**
+1. Recompute must be cumulative (full player event history, not the current match's scope) — a scoped recompute silently overwrites rather than adds to prior-match contributions. Also surfaced and fixed an independent live-data bug this caused (MD1 g1's one-time stats zero had wiped the real Pirates-vs-Hammers match's stats).
+2. College affiliation is exclusive (one college per player) but the matcher had no check for it — caused a real dual-college collision (Israel Emmanuel wrongly linked to both COLENG and COLMANS). Fixed with a full trace-and-repoint script, then built `dev/lib/college-guard.mjs` to catch this class of mistake automatically going forward (wired into both the matcher and write-script pre-flight).
+3. Nicknames are per-team-affiliation, not global — three different players (Mayokun, Olusanya, Ayomiposi Alabi) each had a matching nickname written to the wrong affiliation row, causing the matcher to repeatedly fall through to platform-wide search and surface wrong candidates (including one real duplicate player record, deleted). All three fixed additively.
+4. Own Goal events must be attributed to the conceding player's own team and tracked separately from regular goals (`own_goals` stat column) — first exercised in MD2 g2.
 
 **Evidence:**
-- Commit: N/A — data-only backfill, no code changed. Logged in RUNLOG.md 2026-07-09 with full statement counts and post-apply verification for both matches plus the Pirates/Hammers fix.
-- Verified by: post-apply SELECT queries confirming every row count; cross-match cumulative stats hand-verified for 4 overlapping players (e.g. Ezekwe's clearances: prior 8 + this match's 4 = 12, confirmed exact); sanity checks against each match's actual scoreline (2-1, 2-3, 5-0) via summed Goal+Penalty event counts.
-- Observed result: game 1 — 151 events, 7 new players. Game 2 — 109 events, 4 new players, first use of the `Penalty` event type. Pirates/Hammers fix — 28 players recomputed (9 updated, 19 given their first-ever stats row).
-- Pending items: 32 matches remaining. Prod not touched — staging only.
+- Commit: N/A — data-only backfill, no application code changed. Full statement counts and post-apply DB verification for every match logged in `RUNLOG.md` (2026-07-09 entries, session 40B/40C).
+- Verified by: post-apply SELECT queries confirming every row count; cross-match cumulative stats hand-verified against known prior totals for overlapping players across every match; sanity checks against each match's actual scoreline via summed Goal+Penalty(+Own Goal) event counts — all 7 matches matched exactly.
+- Observed result: 7/7 BUSALYMPICS matches applied, zero data integrity issues remaining (Israel Emmanuel collision resolved, all recurring nickname bugs fixed).
+- Pending items: 27 BUSA League matches (different competition within the same 34-match backlog scope) — sheets not yet organized, not started this session.
 
 #### Problem
 
