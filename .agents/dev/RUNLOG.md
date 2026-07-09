@@ -1068,3 +1068,20 @@ FINAL APPLIED STATE (8 statements, single atomic batch):
 - Post-apply DB query confirmed all 5 events and all 3 players' cumulative stats
 
 **ALL 7 BUSALYMPICS FOOTBALL MATCHES NOW FULLY BACKFILLED** (MD1 g1/g2, MD2 g1/g2, MD3 g1/g2, Final). 27 BUSA League matches remain in the original 34-match BACKLOG-018 scope — different competition, not started.
+
+---
+
+2026-07-09 | Post-wrap follow-up audit (Richard's request) — nickname write audit, Final identity re-check, self-test fixtures | STAGING (read-only + one code change) | SUCCESS | VERIFIED
+
+**Nickname audit (all affiliation rows, not just this session's writes):** queried every `player_team_affiliations` row in the DB with a non-empty `nicknames` array. Exactly 4 exist total: Ayomiposi Alabi/COLENVS "Posi", Mayokun/KIN "Mayor" (pre-existing, untouched), Mayokun/COLNAS "Mayor" (this session's fix), Olaoluwa Olusanya/COLENG "Lazzy" (this session's fix). All 4 correctly scoped to the team they're meant to help match on. Complete result, not sampled - closes the audit.
+
+**Final's identity resolution re-checked:** the Final's 3 scorers (Jesse Uno, Samuel Olapite, Tamuno Jumbo) were resolved from known prior-match IDs directly, NOT run through the matcher tool (no sheet existed to invoke it against). Verified after the fact: queried the full 27-player COLNAS roster, confirmed "jesse"/"sammy"/"rogers" each match exactly one candidate with zero ambiguity. Correct outcome, but a real process deviation from "every match runs through the same pipeline" - flagged as a precedent decision still open (see BUILD_JOURNAL "Deferred").
+
+**College-guard scoping for BUSA League club teams:** confirmed via code inspection (not yet exercised against a live write) - `checkCollegeExclusivity`/`assertNoCollegeConflict` only fire when the target team is one of the 4 hardcoded `COLLEGE_TEAM_IDS`. BUSA club team IDs are never in that set, so the guard is structurally inert for club-team LINKs - correct behavior (club affiliation is multi-valued), but genuinely untested against real BUSA League data yet.
+
+**Self-test fixtures added** for the nickname-as-fallback tier (`dev/backfill-match-players.mjs`): MAYOR (COLNAS, EXACT via nickname), LEZZY (COLENG, FUZZY dist=1 - sheet spelling differs from the "Lazzy" nickname, stays fuzzy even post-fix), POSI (COLENVS, EXACT via nickname). Full suite re-run: 14/14 passed (13 fixtures + the college-exclusivity guard case).
+
+**Still open per Richard, before BUSALYMPICS is treated as fully closed / mirrored to prod:**
+- Independent (non-script, by-hand) spot-check of final staging state against the original xlsx/photos - not yet done, must not be CC re-verifying its own writes with more scripts.
+- The "no-sheet match" precedent (always route through the matcher for the paper trail even without a sheet vs. direct-ID shortcut when unambiguous) - not yet decided.
+- No prod mirror until both of the above are resolved.
