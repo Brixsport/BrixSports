@@ -941,3 +941,130 @@ Israel Emmanuel / COLMANS "ISREAL" dual-college-affiliation collision (surfaced 
 - g2 stub: player_rows=0, affil_rows=0, squad_rows=0, stats_rows=0, event_refs=0 - fully gone, no dangling references anywhere.
 
 Closes the last open item from Session 40B. No other player touched.
+
+---
+
+2026-07-09 | dev/lib/college-guard.mjs (new) + dev/backfill-match-players.mjs (wired) | STAGING (read-only) | SUCCESS | VERIFIED
+Built the college-affiliation exclusivity guard Richard asked for after the Israel Emmanuel fix - matcher now hard-flags any LINK recommendation that would give a player a second simultaneous active `affiliation_type='college'` row, instead of relying solely on human review to catch it.
+
+- New shared module `dev/lib/college-guard.mjs`: `checkCollegeExclusivity(client, playerId, targetTeamId)` (query-only, returns conflict descriptor or null) and `assertNoCollegeConflict(...)` (hard-abort variant, for future per-match write scripts' pre-flight step - not yet wired into any write script since no new match write script has been created this session).
+- `backfill-match-players.mjs`: any recommendation starting with `LINK`/`LINK?` targeting one of the 4 college teams now runs the guard against the top candidate before the report is printed. On conflict, recommendation is overridden to `FLAG - DUAL-COLLEGE CONFLICT (do not LINK without manual review)` with the existing/target college named explicitly.
+- Self-test extended: added an 11th regression case using Israel Emmanuel's real post-fix state (active COLENG, no COLMANS) - simulates a LINK to COLMANS and asserts the guard flags it. Full self-test run: 11/11 passed.
+- Smoke-tested against the real MD1 g1 parsed sheet (already-applied match, re-run for verification only, no re-apply): guard immediately surfaced a live, real, previously-undetected issue - see below.
+
+**Real finding, not hypothetical:** re-running the matcher against MD1 g1's COLNAS sheet, row "MAYOR" was flagged as a dual-college conflict against Mayowa Agoyi (`busa-pirates-player-11`, real active COLENG affiliation, unrelated Pirates FC player). Investigated: the actual MD1 g1 write correctly used the real Mayokun (`player-1767972273573-j43tp2rx3`, hardcoded in `RESOLUTIONS`, unaffected) - so MD1 g1's applied data is NOT wrong. Root cause of the flag: Mayokun's "Mayor" nickname (added in the MD1 g1 write script's Step 5) was written to his `busa-kings` (Kings FC) affiliation row, not his COLNAS college affiliation row. `getRoster()` reads `nicknames` scoped to the team being searched, so a COLNAS-scoped search for "MAYOR" now finds zero team-scoped candidates, falls through to the platform-wide fallback, and platform-wide the closest name match is the unrelated Mayowa Agoyi - who the new guard correctly blocks. Confirmed via direct query against both players' live affiliation rows (`dev/query-mayokun.mjs`, `dev/query-mayowa-agoyi.mjs`, both deleted after use, no writes). Does not affect any already-applied event/stat data. Flagged to Richard as a decision rather than fixed unilaterally (out of scope for the guard task).
+
+2026-07-09 | dev/fix-mayokun-colnas-nickname.mjs --apply | STAGING (write) | SUCCESS | VERIFIED
+Richard's call: add "Mayor" to Mayokun's COLNAS affiliation nicknames too (not move it off busa-kings - both rows now carry it). Dry-run confirmed COLNAS affiliation (`K8wIIijwtIyzf1xM-wZYF`) nicknames was `[]`; applied -> `["Mayor"]`; post-apply SELECT confirmed. Kings FC affiliation untouched. Re-ran the matcher against MD1 g1's COLNAS sheet again post-fix: "MAYOR" now resolves `LINK (exact)` to the real Mayokun via team-scoped nickname match - no platform-wide fallback, no dual-college flag. Confirms both the fix and the guard's earlier flag were correct.
+
+2026-07-09 | Audit: every nickname write made across sessions 40/40B/40C for the wrong-affiliation-row pattern | STAGING (read-only, grep + inspection) | SUCCESS | VERIFIED
+Richard asked whether the Mayokun mis-scoped-nickname mistake could exist elsewhere already, given at least 2 other players (Jesse Uno, the new COLMANS "Isreal" stub) had nicknames touched or considered this session. Grepped every dev/*.mjs referencing `nicknames`, inspected each actual write:
+- `backfill-write-md1.mjs`: the ONLY real alias ever written (Mayokun's "Mayor") - already found wrong and already fixed above.
+- `backfill-write-md1g2.mjs` (4 new stubs) and `fix-israel-emmanuel-swap.mjs` (new COLMANS "Isreal" stub): both insert `nicknames = '[]'` for brand-new players - no alias written, no wrong-row risk (nothing to be scoped incorrectly).
+- Jesse Uno (JES): confirmed via prior session's `dev/verify-jes-jesse-uno.mjs` (read-only) - required zero new writes of any kind, no nickname ever set.
+Conclusion: Mayokun's was the only actual nickname-alias write in the entire backfill to date. No other instance of this pattern exists. Nothing further to fix.
+
+---
+
+2026-07-09 | MD2 G1 (COLNAS vs COLENG) player matching + a real duplicate-player catch | STAGING | SUCCESS | VERIFIED
+`node dev/backfill-run-sheet.mjs md2-colnas-vs-coleng "MD2_COLNAS-COLENG .xlsx"` (consolidated workbook, tabs "Colnas"/"COLENG") - parsed clean, 15 + 13 = 28 rows, 0 unresolved names, 0 team-resolution errors.
+
+22 of 28 rows resolved LINK (exact) with no ambiguity, mostly reused from MD1 g1/g2 (same college rosters, second group-stage match). 6 needed human sign-off:
+- DANIEL (COLENG): FLAG - 2 exact candidates (Daniel Tiamiyu / Daniel Ezekwe). Resolved by the same elimination logic as MD1 g2 (row EZEKWE already claims Daniel Ezekwe exactly) -> Daniel Tiamiyu (`busa-kings-player-77`). Confirmed by Richard.
+- MICHEAL (COLENG): fuzzy dist=2 -> Michael Oguntola (`player-1767972272690-bjbpqarn5`), same identity confirmed in MD1 g2. Confirmed.
+- ISREAL (COLENG): fuzzy dist=2 -> Israel Emmanuel (`busa-pirates-player-17`). Verified via direct COLENG roster query (44 players) that no leftover "Isreal" stub exists (correctly deleted by the session 40C fix) and Israel Emmanuel's own COLENG affiliation is real and un-conflicted (target team = his actual college, guard correctly did not flag it). Confirmed.
+- JES (COLNAS): tool default CREATE STUB (same nickname-truncation blind spot as MD1 g1 - fuzzy length-gate excludes "JES" vs "Jesse"). Same real person as MD1 g1: Jesse Uno (`busa-joga-player-30`), already affiliated to COLNAS. Confirmed - LINK, not stub.
+- LEZZY (COLENG): fuzzy dist=1, platform-wide candidate "Lazzy (woods)" (`cbf4241e-018f-4645-b88b-59f6dae31155`, Hammers, no college affiliation). **Richard corrected the initial read:** this is the SAME real person as `busa-hammers-player-97` (Olaoluwa Olusanya, jersey "Woods", already COLENG-affiliated with squad_players in BUSALYMPICS) - a genuine duplicate player record, not two different Hammers players who happen to share a nickname. Queried both directly: `cbf4241e...` had zero events, zero stats, zero squad_players anywhere - only a Hammers club affiliation + a redundant university-only `player_organization_affiliations` row (the real player already has the equivalent, fuller university+college+department set). Corrected resolution: LEZZY -> LINK to `busa-hammers-player-97` directly (already on COLENG, no new affiliation needed for this row at all).
+
+2026-07-09 | dev/delete-lazzy-woods-duplicate.mjs --apply | STAGING (write) | SUCCESS | VERIFIED
+Deleted the confirmed-inert duplicate (`cbf4241e-018f-4645-b88b-59f6dae31155`, "Lazzy (woods)") found while resolving MD2's LEZZY row. Pre-flight used a full `PRAGMA foreign_key_list` scan across every table with an FK to `players` (known-issues.md precedent - never use a hand-written child-table list), not just the two tables anticipated. Scan caught `player_organization_affiliations.player_id: 1 row` in addition to the expected `player_team_affiliations.player_id: 1 row` - both investigated before the script proceeded (the org-affiliation row was a redundant university-only entry, no unique data). Every other FK-linked table (match_events, football_player_stats, squad_players, player_ratings, transfers, fpl_*, etc.) returned 0. Dry-run reviewed, applied: 1 `player_team_affiliations` row + 1 `player_organization_affiliations` row + the `players` row deleted. Post-apply verify: all three counts 0.
+
+2026-07-09 | dev/fix-olusanya-coleng-nickname.mjs --apply | STAGING (write) | SUCCESS | VERIFIED
+Proactive fix (Richard's call, same shape as the Mayokun fix): added "Lazzy" to Olaoluwa Olusanya's (`busa-hammers-player-97`) COLENG affiliation nicknames, alongside his existing jersey_name "Woods". Dry-run confirmed nicknames was `[]`; applied -> `["Lazzy"]`; post-apply SELECT confirmed. Re-ran the matcher against MD2's COLENG sheet: LEZZY now resolves unambiguously to Olusanya (still tier FUZZY dist=1, not EXACT, because the sheet spells it "LEZZY" vs the real nickname "Lazzy" - one-vowel difference - but no more duplicate/ambiguity risk since the duplicate record is already deleted).
+
+2026-07-09 | dev/backfill-write-md2g1.mjs --apply | STAGING (write) | SUCCESS | VERIFIED
+MD2 G1 (COLNAS 1-2 COLENG, matchId a9CtLwotaXyfsfMf2odAM) FULLY BACKFILLED. Third of 34 matches, first with zero new players/affiliations/squad_players (all 28 sheet entries resolved to players already correctly wired from MD1 g1/g2).
+
+Player resolution required human sign-off on 5 of 28 rows (all confirmed by Richard):
+- DANIEL (COLENG): 2 exact candidates, resolved by elimination (EZEKWE already claims Daniel Ezekwe) -> Daniel Tiamiyu (`busa-kings-player-77`), same as MD1 g2.
+- MICHEAL (COLENG): fuzzy dist=2 -> Michael Oguntola (`player-1767972272690-bjbpqarn5`), same as MD1 g2.
+- ISREAL (COLENG): fuzzy dist=2 -> Israel Emmanuel (`busa-pirates-player-17`). Verified via full COLENG roster query (44 players, no leftover stub) that this is his real, un-conflicted college - guard correctly did not flag it.
+- JES (COLNAS): tool default CREATE STUB (nickname-truncation blind spot) -> Jesse Uno (`busa-joga-player-30`), already on COLNAS, same as MD1 g1.
+- LEZZY (COLENG): fuzzy dist=1 -> initially flagged a duplicate player record; Richard corrected to Olaoluwa Olusanya (`busa-hammers-player-97`), already COLENG-affiliated. Duplicate deleted separately (see above).
+
+Substitution pairing for 2 same-minute windows (COLNAS @88' - 3 out/3 in; COLENG @53' - 2 out/2 in) resolved by matching Richard's named pairs against each player's own isSub/minuteIn/minuteOut in the parsed sheet data (not by parsing English word order, which was inconsistent between the two answers) - MAYOR/OMARI, SMART/AZEEZ, REWARD/IK (elimination), SAKA/OSARO, CHRIS/LEZZY (elimination).
+
+FINAL APPLIED STATE (155 statements, single atomic batch):
+- match_events: 127 (Clearance 42, Interception 23, Foul 16, Shot off Target 7, Save 7, Tackle 6, Substitution 6, Yellow Card 5, Shot on Target 5, Assist 5, Goal 3, Red Card 2)
+- Sanity check: Goal+Penalty event count = 3, matches 1-2 final score exactly
+- football_player_stats recomputed CUMULATIVELY for all 28 players; 24/28 had prior history (from MD1 g1/g2) correctly added to, not overwritten - spot-checked Mayokun (prior 1 goal+1 foul -> now 1 goal+3 fouls+2 shots-on-target) and Israel Emmanuel (prior 1 foul -> now 1 foul+1 assist+1 shot-on-target+1 interception) against hand-computed expected totals, both exact
+- Post-apply DB query confirmed all 127 events by type and all 4 spot-checked players' cumulative stats
+
+This is the third match closed end to end, and the first with zero new player-side writes - a good sign the roster is stabilizing as more of each college's players get established from earlier matches.
+
+---
+
+2026-07-09 | MD2 G2 (COLMANS vs COLENVS) player matching + a recurring wrong-basketball-player catch | STAGING | SUCCESS | VERIFIED
+`node dev/backfill-run-sheet.mjs md2-colmans-vs-colenvs "MD2_COLMANS-COLENVS .xlsx"` - parsed clean, 15 + 16 = 31 rows, 0 unresolved names, 0 team-resolution errors. TOMIPE flagged `noData` (jersey #1, on sheet with zero recorded stats) - same convention as prior noData rows, zero events for him this match.
+
+26 of 31 rows resolved LINK (exact) with no ambiguity. 5 needed sign-off:
+- POSI (COLENVS): matcher found an unrelated basketball player (`6Dy8Q0pKw-aOEJ1zx8S_F`, TBK, position Guard) via platform-wide fallback - CONFIRMED via direct query as the exact same wrong match MD1 g2 already caught and rejected once. Real match: Ayomiposi Alabi (`busa-joga-player-24`), already COLENVS-affiliated from MD1 g2 (jersey_name "Puyoo", zero nicknames recorded, so team-scoped search for "POSI" found nothing and fell through to platform-wide every time). Added "Posi" nickname to his COLENVS affiliation (Richard confirmed nicknames are per-affiliation, not a `players.jersey_name` rename, which would have overwritten his real club identity "Puyoo" globally). Re-ran the matcher post-fix: POSI now resolves `LINK (exact)`.
+- SHAPAN, SHARFFHI, ANIMASHAUN: established identities from MD1 g1/g2 (SHARFFHI and ANIMASHAUN are both self-test regression fixtures), reconfirmed by Richard.
+- Gozie, TJ, Wale (COLMANS): CREATE STUB, no candidates at any tier, confirmed new. Sheet records each one's actual position directly (LB/ST/RW), so no inheritance logic needed this time.
+
+Match verified against DB: `nDns_3mSI23jERQJhMNli`, COLMANS(home)/COLENVS(away), 2-1, FINISHED, 0 existing events - matches sheet's own goal tally (MARTINS + GABRIEL's own goal = COLMANS 2, KELLY = COLENVS 1).
+
+Substitution data required two rounds of correction from Richard: COLENVS's 2-for-2 window at 45' (GABRIEL/TIMI out, JERRY/LEKAN in) resolved by elimination once JERRY-GABRIEL was confirmed. COLMANS's sub data was initially incomplete - only 3 of 4 outgoing starters had a recorded minuteOut, and only 1 of 4 incoming subs had a recorded minuteIn (mislabeled - the "75" on the sheet actually belonged to a different pairing). Richard corrected: Gozie/ISREAL and Tisco/PEDRI both at 52' (not 75'), Wale/DAMI at 58', TJ/DOTMAN at 75' (DOTMAN's own minuteOut was never captured on the sheet at all). Final 9 pairs confirmed by cross-referencing names against each player's own isSub/minuteIn/minuteOut fields, not sentence word order.
+
+2026-07-09 | dev/backfill-write-md2g2.mjs --apply | STAGING (write) | SUCCESS | VERIFIED
+MD2 G2 (COLMANS 2-1 COLENVS, matchId nDns_3mSI23jERQJhMNli) FULLY BACKFILLED. Fourth of 34 matches. First match in this backfill with an Own Goal, and the first write script to call `assertNoCollegeConflict()` from `dev/lib/college-guard.mjs` in its pre-flight (zero conflicts found, as expected - all LINKs were pre-existing affiliations).
+
+FINAL APPLIED STATE (273 statements, single atomic batch):
+- New players: 3 (Gozie/LB, TJ/ST, Wale/RW - all with sheet-recorded positions, no inheritance needed)
+- player_team_affiliations: 3, squad_players: 3 (all new stubs, zero gap-LINKs this match)
+- match_events: 234 (Interception 89, Clearance 55, Tackle 21, Foul 19, Shot off Target 16, Substitution 9, Shot on Target 9, Save 7, Yellow Card 4, Goal 2, Assist 2, Own Goal 1) - the largest single-match event count in this backfill so far
+- Own Goal handling: GABRIEL (COLENVS) written as `type: 'Own Goal'`, `teamId: COLENVS` (his own team, the conceding side, matching the live system's established BUG-047/BUG-054 convention). Recompute logic extended to include `own_goals` for the first time (column already existed in schema, unused until now). Post-apply DB check confirmed `goals: 0, own_goals: 1` for GABRIEL - correctly NOT counted as a regular goal.
+- Sanity check: Goal + Own Goal event count = 3, matches 2-1 final score (3 total goals scored across both teams) exactly
+- football_player_stats recomputed CUMULATIVELY for 30 players (27 LINK + 3 new stubs); 23 had prior history correctly carried forward, including Israel Emmanuel's COLMANS stub, Ayomiposi Alabi/POSI, and Olamidotun Salau/DOTMAN
+- Post-apply DB query confirmed all 234 events by type, all 3 new player rows, and both spot-checked players' (busa-joga-player-24, busa-pirates-player-1) cumulative stats
+
+This is the fourth match closed end to end, the first to exercise the college-exclusivity guard's write-time enforcement, and the first to correctly isolate an Own Goal from a regular Goal in the recompute step.
+
+---
+
+2026-07-09 | dev/backfill-write-md3g1.mjs --apply | STAGING (write) | SUCCESS | VERIFIED
+MD3 G1 (COLNAS 3-1 COLENVS, matchId `_9nntLoOZZOZGzja8EQE9`) — GOALS-ONLY BACKFILL. Fifth of 34 matches. Richard had no match sheet for this fixture, only a goal-scorer screenshot (Sammy 24', Kedem 39', Mayor 74' for COLNAS; Blacko(pen) 12' for COLENVS). All 4 scorers were already-established players from MD1/MD2 (no new matching needed).
+
+First script variant in this backfill written for partial data (no sheet). Deliberately writes ONLY Goal/Penalty events - no fouls, cards, clearances, saves, or substitutions, since none of that data exists for this match and none was fabricated.
+
+Caught and fixed a real bug during drafting, before it ran: an early draft computed `shots_on_target` as "existing stored value + this match's delta" instead of as a pure function of full event history (`total('Shot on Target') + total('Goal') + total('Penalty')`, matching every other script in this backfill). The delta-add approach would have violated the established cumulative-recompute invariant (see 2026-07-09 "Recompute logic scoped to..." entry and BUG-060 precedent) - caught and corrected before the dry-run, not after.
+
+FINAL APPLIED STATE (8 statements, single atomic batch):
+- match_events: 4 (Goal 3, Penalty 1)
+- Sanity check: scoring event count = 4, matches 3-1 final score (4 total goals) exactly
+- football_player_stats recomputed CUMULATIVELY: Sammy/Kedem/Mayokun each now 2 goals (1 prior + 1 new), Blacko now 1 penalty (0 prior)
+- Post-apply DB query confirmed all 4 events and all 4 players' cumulative stats
+
+2026-07-09 | dev/backfill-write-md3g2.mjs --apply | STAGING (write) | SUCCESS | VERIFIED
+MD3 G2 (COLMANS 0-1 COLENG, matchId `y3KcCGtHA7N7MybKTHX5K`) — GOALS-ONLY BACKFILL. Sixth of 34 matches. Only known scorer: Effiong (COLENG), no minute recorded - used the established `-1` unknown-minute sentinel (same convention as all null-minute backfill events).
+
+FINAL APPLIED STATE (2 statements, single atomic batch):
+- match_events: 1 (Goal)
+- Sanity check: scoring event count = 1, matches 0-1 final score (1 total goal) exactly
+- football_player_stats recomputed CUMULATIVELY: Effiong now 2 goals (1 prior from MD1 g2 + 1 new), penalties_scored unchanged at 1 (his prior MD1 g2 penalty)
+- Post-apply DB query confirmed the event and Effiong's cumulative stats
+
+Both MD3 games close out the group stage's known-goal-only fixtures. 6 of 34 matches now done (MD1 g1/g2, MD2 g1/g2, MD3 g1/g2).
+
+---
+
+2026-07-09 | dev/backfill-write-final.mjs --apply | STAGING (write) | SUCCESS | VERIFIED
+BUSALYMPICS FINAL (COLNAS 5-0 COLENG, matchId `_lkHo5y1m6ArqvLsi1ixe`) — GOALS-ONLY BACKFILL. Seventh and LAST of the 7 BUSALYMPICS football matches (no MD4 — format goes straight from 3 group-stage match days to the Final). Richard's scorer list: "jesse x3, sammy, rogers" — Jesse Uno x3, Samuel Olapite x1, Tamuno Jumbo x1 = 5, matching the 5-0 score exactly. No minutes given, `-1` sentinel used for all 5. All 3 scorers already COLNAS-affiliated, confirmed via pre-flight before any write.
+
+FINAL APPLIED STATE (8 statements, single atomic batch):
+- match_events: 5 (Goal x5)
+- Sanity check: scoring event count = 5, matches 5-0 final score exactly
+- football_player_stats recomputed CUMULATIVELY: Jesse Uno now 3 goals (0 prior — his first goals in this backfill, previously only recorded for assists/fouls), Samuel Olapite now 3 goals (2 prior from MD1 g1 + MD3 g1, +1 new), Tamuno Jumbo now 1 goal (his first)
+- Post-apply DB query confirmed all 5 events and all 3 players' cumulative stats
+
+**ALL 7 BUSALYMPICS FOOTBALL MATCHES NOW FULLY BACKFILLED** (MD1 g1/g2, MD2 g1/g2, MD3 g1/g2, Final). 27 BUSA League matches remain in the original 34-match BACKLOG-018 scope — different competition, not started.
