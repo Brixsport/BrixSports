@@ -661,3 +661,283 @@ _Note: PATCH MD3 scores and BUSALYMPICS standings recalculation were completed i
 2026-06-29 | `dev/delete-match-s38.mjs` | STAGING (write) | SUCCESS | VERIFIED
 - Deleted match row EOWw93XEolhP83o1LOJGl (events and logger assignment already cleared by cleanup script)
 - DB clean — no orphan rows
+
+2026-07-06 | `dev/query-colnas-colmas-baseline.mjs` | STAGING (read-only) | SUCCESS | VERIFIED
+- Task 2 of backfill trace directive: baseline player rosters for COLNAS (24 players) and COLMAS/COLMANS (17 players) football teams via player_team_affiliations join
+- Purpose: pre-check against BUSALYMPICS MD1 sheet (COLNAS vs COLMAS) before designing name-matching logic
+- Cross-check vs 6 sample sheet names: JAPHETH, BRUNO, MARTINS matched jersey_name exactly. AMEROS vs DB 'Amros' and SHARFHI vs DB 'Sharfhii' are near-misses (transposition/typo) that exact match would NOT catch. TOMIPE matched only via `name` substring since jersey_name is NULL for that row.
+- No writes executed.
+
+2026-07-06 | `dev/check-players-schema.mjs` | STAGING (read-only) | SUCCESS | VERIFIED
+- PRAGMA table_info(players) confirms `nicknames` column does NOT exist on live staging players table
+- Contradicts BACKLOG.md claim that BACKLOG-037 Step 1 (nicknames column) is "complete on both staging and prod DBs" and src/db/schema.ts declaration of the column
+- No writes executed. Migration not run this session — flagging drift only, decision on whether/when to migrate deferred to Richard.
+
+2026-07-06 | `dev/backfill-match-players.mjs` | STAGING (read-only) | SUCCESS | VERIFIED
+- Pilot run: 6 sample MD1 (COLNAS vs COLMAS) sheet names against live rosters
+- Result: 4 exact matches (JAPHETH, BRUNO, TOMIPE, MARTINS), 2 fuzzy matches flagged for review (AMEROS->Amros dist1, SHARFHI->Sharfhii dist1), 0 stub-required
+- Caught and fixed a false-positive bug during dogfooding: unguarded Levenshtein distance let short tokens (e.g. "Uno", 3 chars) fuzzy-match longer sheet names (e.g. "Bruno") purely via deletion, producing a spurious multi-candidate flag. Fixed with a length-gate (+/-1 char) before computing distance.
+- No writes executed.
+
+2026-07-06 | CORRECTION to prior entry | STAGING (read-only) | SUCCESS | VERIFIED
+- Prior entry claiming `nicknames` drift (missing column) was wrong — I checked the `players` table, but `nicknames` is declared on `player_team_affiliations` (per src/db/schema.ts:95 and BACKLOG-041), not `players`. PRAGMA table_info(player_team_affiliations) confirms the column IS present on staging. No drift. BACKLOG-037 Step 1 claim stands correct.
+- Practical implication for backfill matcher: nickname lookups must join through `player_team_affiliations.nicknames` (per-team-affiliation aliases), not a player-level field. `dev/backfill-match-players.mjs` will be updated to read nicknames from that join.
+
+2026-07-06 | `dev/backfill-match-players.mjs` (updated) | STAGING (read-only) | SUCCESS | VERIFIED
+- Wired nicknames lookup correctly via player_team_affiliations.nicknames join (correcting earlier drift misfire). Re-ran pilot — same 6/6 correct results, no regression.
+
+2026-07-06 | `dev/parse-match-sheet.mjs` (new) | LOCAL FILE ONLY, no DB contact | SUCCESS | VERIFIED
+- Built per directive from external planning chat. xlsx -> canonical JSON, no DB reads/writes in this stage.
+- Ran against both real MD1 sheets: `MD1_Colnas_vs_mas .xlsx` (16 rows: 11 starters, 5 subs) and `MD1_Colmas_vs_nas .xlsx` (14 rows: 11 starters, 3 subs)
+- Verified expected edge cases against real file content (not assumed): MAYOR/SAMMY (COLNAS) and ANIMASHAUN (COLMANS) captured as scorers; KANTE captured with noData:true; jersey #2 COLMANS row captured with unresolvedName:true
+- Output: dev/parsed-sheets/md1-colnas-vs-colmas-COLNAS.json, dev/parsed-sheets/md1-colnas-vs-colmas-COLMANS.json
+
+2026-07-06 | `dev/backfill-match-players.mjs` (rewired) | STAGING (read-only) | SUCCESS | VERIFIED
+- Rewired to read parsed JSON files (CLI args) instead of hardcoded SHEET_ENTRIES; teamId now resolved live from teams.short_name (exact then substring fallback) instead of hardcoded IDs
+- Caught and fixed two real bugs during this run: (1) teamSlug "COLMAS" did not match DB short_name "COLMANS" exactly — added substring fallback; (2) exact matches were being diluted into false "multiple candidates" flags by distance-2 fuzzy noise from unrelated players (SMART/OMARI both had this) — fixed by making a single exact match win outright regardless of weaker fuzzy noise, only flagging when 2+ matches exist within the SAME tier
+- Full run: 30 rows (16 COLNAS + 14 COLMANS). Result: 15 LINK (exact), 3 LINK? (fuzzy review: AMEROS->Amros, SHARFHI->Sharfhii, ANIMASHAUN->Animashun), 11 CREATE STUB, 1 UNRESOLVED (jersey #2 COLMANS, no name on sheet), 0 false FLAGs remaining
+- No writes executed anywhere in this pipeline.
+
+2026-07-06 | `dev/backfill-run-sheet.mjs` (new wrapper) | STAGING (read-only), LOCAL FILE writes only | SUCCESS | VERIFIED
+- One-command wrapper chaining parse-match-sheet.mjs (per team) + backfill-match-players.mjs into a single invocation, reducing per-match workflow from 3 manual commands to 1
+- Verified identical output vs the manual 3-step run on MD1 COLNAS/COLMANS. Test artifact JSON files removed after verification.
+- Going forward: node dev/backfill-run-sheet.mjs <matchLabel> <xlsx1> <slug1> <xlsx2> <slug2> is the standard per-match command for the remaining 32 sheets.
+
+2026-07-06 | `dev/backfill-match-players.mjs` (platform-wide fallback + self-test added) | STAGING (read-only) | SUCCESS | VERIFIED
+- Added platform-wide fallback: when team-scoped search finds zero candidates, search all players platform-wide before recommending CREATE STUB. Platform-wide hits are never auto-LINK even if exact — always flagged for human confirmation since it means the player isn't currently affiliated with this team.
+- Found and fixed a real bug in this new code during the same run: platform roster query used LEFT JOIN player_team_affiliations, which duplicated any player with 2+ affiliations into "multiple candidates" false positives (Mayowa Agoyi, Israel Emmanuel, TOJU, Sukunmi SK all affected). Fixed by querying `players` alone for the platform-wide fallback (nicknames omitted from that path only — team-scoped path still has full nicknames support).
+- Added --self-test mode: 10 known-correct fixtures (from real MD1 data) run against live COLNAS/COLMANS rosters, asserting expected tier+player id+candidate-count. All 10 pass. Regression guard against future edits to matching logic.
+- Fixed an unrelated exit crash: process.exit() while libsql async handles were in flight threw a uv_handle assertion. Fixed with client.close() + process.exitCode instead of process.exit().
+- Platform-wide fallback surfaced 5 real reclassifications that team-scoped-only matching had marked CREATE STUB: MAYOR (exact match to Mayowa Agoyi, busa-pirates), TOJU (exact match, already exists), ISREAL (fuzzy match to Israel Emmanuel), CHARLES (2 distinct existing profiles — genuinely ambiguous), IK (2 distinct existing profiles — genuinely ambiguous). None of these would have been caught by team-scoped search alone; all previously would have silently created duplicate stub players.
+- No writes executed.
+
+2026-07-06 | Manual photo cross-check | LOCAL FILES ONLY, no DB contact | FINDING | VERIFIED
+- Viewed the two source photos (MD1Colnas-mans.jpg, MD1Colmans-nas.jpg) of the original paper log sheets, alongside the xlsx transcriptions.
+- COLMANS photo: confirms jersey #2 row is genuinely blank (no name) on the ORIGINAL paper sheet too — not an xlsx transcription loss, not recoverable from the photo. Confirms "KANTE" row 5 has a jersey number (5) on the photo that was dropped in the xlsx (xlsx has null).
+- COLNAS photo: reveals the xlsx dropped the entire NO. column (jersey numbers 1-16 are legible on the photo but transcribed as blank/null in the xlsx for every COLNAS row). Also: row 3's name is smudged/corrected on the paper — legible portion reads "OSE" followed by an obscured/overwritten section, NOT clearly "AMEROS" as the xlsx transcribed it. Real ambiguity, needs Richard's direct call — deferred to AskUserQuestion, not resolved.
+- Implication: xlsx transcription for at least this match has known data loss (dropped NO. column entirely for one team) and at least one likely misread name. Worth spot-checking future sheets' xlsx against their source photos where both exist, not assuming the xlsx is a fully faithful transcription.
+
+2026-07-06 | `dev/query-kings-roster-check.mjs` | STAGING (read-only) | SUCCESS | VERIFIED
+- Checked busa-kings roster (21 players) directly for a player resembling "MAYOR" per Richard's correction that the platform-wide match (Mayowa Agoyi, busa-pirates) was wrong and the real MAYOR is a Kings player.
+- No match found — MAYOR does not exist in the DB under Kings or any other team. Confirmed CREATE STUB is correct, not a link.
+- TOJU also corrected by Richard: real player's identifier is "TJ", distinct from the existing platform "TOJU" profile the matcher found. CREATE STUB confirmed, not a link.
+- Both cases: the platform-wide fallback correctly flagged these as "confirm before linking" rather than auto-linking — the human-review gate caught 2 wrong matches out of 4 platform-wide candidates this run. Validates the no-auto-link-on-platform-wide policy; no code change needed here, the safety mechanism worked as designed.
+
+2026-07-06 | MD1 (COLNAS vs COLMANS) player matching — FULLY RESOLVED | STAGING (read-only so far) | SUCCESS | VERIFIED
+All 30 rows now have a final human-confirmed disposition. Algorithmic note: MAYOR->Mayokun Mayokun (busa-kings, jersey_name "Mayokun") was missed by the matcher entirely because the length-gate (added to fix the Bruno/Uno false-positive) requires candidate/target length within +/-1 char; "Mayor"(5) vs "Mayokun"(7) differs by 2. This is a nickname-compression case, not a typo case (Levenshtein models typos, not shortened nicknames) - a real, accepted blind spot in the matcher, not something to chase by loosening the gate (would reopen the original false-positive bug). Human review is the correct backstop for this class of case, and it worked here.
+
+FINAL MD1 DISPOSITION (30/30 resolved):
+COLNAS: JAPHETH->LINK busa-joga-player-13 | BRUNO->LINK player-1781698762598-o88hdtv23 | AMEROS(OSE)->LINK busa-kings-player-25 | REWARD->LINK busa-kings-player-4 | TEMI->LINK busa-kings-player-21 | ROGERS->LINK busa-pirates-player-6 | MAYOR->LINK player-1767972273573-j43tp2rx3 (corrected, was misdiagnosed as stub) | JES->CREATE STUB | SAMMY->LINK busa-joga-player-45 | ALEX->LINK player-1781698817968-h5y5e0pdr | KEDEM->LINK busa-kings-player-10 | SMART->LINK player-1781698904643-n9xrxznce | CHARLES->LINK 19983528-d8e7-4235-b28c-87906dada6e1 (position CF matched) | AZEEZ->CREATE STUB | IK->CREATE STUB (both candidates rejected) | OMARI->LINK player-1767972273154-jdc7gsxyp
+COLMANS: TOMIPE->LINK busa-pirates-player-1 | SHARFHI->LINK busa-joga-player-88 | MARTINS->LINK busa-kings-player-66 | AKANDE->CREATE STUB | ISREAL->LINK busa-pirates-player-17 | UCHE JR->LINK busa-joga-player-12 | PARKER->CREATE STUB | PEDRI->CREATE STUB | ANIMASHAUN->LINK player-1767972615670-yet6lrue1 | DAMI->LINK player-1781705623045-4l2nixjf7 | DOTMAN->LINK busa-pirates-player-8 | jersey#2(no name)->SKIP (unidentifiable, no synthetic player created, 1 interception stat point dropped) | TOJU->CREATE STUB (existing "TOJU" profile confirmed different person, real jersey name is "TJ") | KANTE->CREATE STUB (noData, no stats to attribute)
+Still no writes executed anywhere. Next phase: build the apply/write script (create stubs + affiliations + insert match_events) — not started yet, needs its own review before running even against staging.
+
+2026-07-06 | Decisions locked before write script | N/A (decision log) | N/A | N/A
+- LINK write behavior CORRECTED: traced src/app/api/teams/[id]/route.ts:85-96, confirmed the public team-detail endpoint builds roster listings from player_team_affiliations (teamId + isActive=true). An affiliation row IS required for roster-page correctness, even though no FK forces it for events/stats. Write script must create/ensure a player_team_affiliations row for every LINK not already affiliated with COLNAS/COLMANS specifically.
+- IK clarified: Richard explicitly chose "Neither / create new stub" — both platform candidates (Sukunmi SK, Ike) explicitly rejected, not a default.
+- MD1 tally reconfirmed by direct recount: 8 CREATE STUB (JES, AZEEZ, IK, AKANDE, PARKER, PEDRI, TOJU, KANTE), 21 LINK, 1 SKIP = 30/30, matches 16+14 row count.
+- COLNAS "missing jersey numbers" finding RETRACTED per Richard: the photo's sequential 1-16 in the NO. column was row index, not jersey numbers (unlike COLMANS's genuinely varied 01/88/66/47... numbers). No real data loss, no recovery needed. KANTE's #5 finding (COLMANS file) is unaffected and still stands.
+- Mayokun nicknames ("Mayor" alias) write: DEFERRED, bundle into the write script rather than a standalone action now.
+- Stats zero-and-recompute timing: DECIDED — one-time upfront, snapshot football_player_stats in full first, then zero event-derived fields globally, before MD1's events get written. Do this before any event insert, not per-match.
+- All 6 items from this critique round now closed. Next: build the write script (snapshot+zero stats, create 8 stub players + affiliations for CREATE STUB rows, create affiliations for LINK rows not already on COLNAS/COLMANS, write "Mayor" nickname, insert MD1 match_events).
+
+2026-07-06 | Read-only pass: jersey-number cross-check + squadPlayers trace | STAGING (read-only) | SUCCESS | VERIFIED
+
+JERSEY NUMBER QUESTION — RESOLVED WITH REAL EVIDENCE (not assumption):
+Viewed MD2/2-1_MD2_colnas-eng.jpg (COLNAS's own sheet for a second match, already available locally). Cross-referenced the 9 players appearing in both MD1 and MD2:
+JAPHETH 1->1, TEMI 5->2, REWARD 4->3, SMART 12->4, ALEX 10->8, KEDEM 11->9, MAYOR 7->10, SAMMY 9->11, OMARI 16->13.
+Only JAPHETH (GK, conventionally listed first) stayed put. Every other player's number changed between matches for the SAME person. Confirms these are row/listing-order indices tied to that day's starting XI + subs order, not fixed squad numbers. COLNAS jersey numbers correctly remain null; no data was lost, prior retraction stands with real verification behind it now (not just a plausible guess).
+Bonus: "Ose" (short for Osemudiamen) appears again at row 5 on the MD2 sheet, independently reinforcing the MD1 row-3 identity resolution (Osemudiamen Amromawhe) via a second, unprompted data point.
+
+SQUADPLAYERS TRACE — GAP CONFIRMED, MUST BE ADDRESSED IN WRITE SCRIPT:
+- BUSALYMPICS (FOOTBALL) competition (9q8LMVqW8KAtF4BJBlyk_) has require_squad=0 (not enforced) but already has 77 squad_players rows total, including 16 for COLNAS and 14 for COLMANS.
+- Cross-referenced our 21 resolved LINK player IDs against these existing squad_players rows. 17 already present. FOUR ARE MISSING: TOMIPE (busa-pirates-player-1), ISREAL (busa-pirates-player-17), UCHE JR (busa-joga-player-12), CHARLES (19983528-d8e7-4235-b28c-87906dada6e1). None of our 8 new CREATE STUB players are in squad_players either (expected, they don't exist yet).
+- Mayokun Mayokun (MAYOR's real identity) is ALREADY in squad_players for COLNAS — independent, pre-existing confirmation of that resolution from whoever built this squad list originally, found by cross-reference rather than assumption.
+- grep confirms squadPlayers/api/squads is consumed by exactly one frontend page: src/app/admin/teams/[id]/page.tsx (admin Squad Selector UI). Not read by any public-facing page. player_team_affiliations (via teams/[id]/route.ts) is the one driving public roster correctness.
+- Verdict: squad_players insert is a should-have (keeps the existing admin Squad Selector list accurate/complete for BUSALYMPICS), not a must-have for public correctness. But since the table is already 90%+ populated for this exact competition/teams, the write script should top up the 4 missing existing-player entries + add all 8 new stub players to squad_players too, to avoid leaving the admin tool showing an incomplete squad after this backfill.
+
+AFFILIATION UNIQUE CONSTRAINT — CONFIRMED SAFE:
+player_team_affiliations has a unique index on (playerId, teamId) only, not on playerId alone (schema.ts:101-102, pta_player_team_unique). Multi-team affiliation for the same player (different teamId per row) is not blocked. Safe to insert a second active affiliation row for players already affiliated elsewhere (e.g. Omari Dennis: busa-kings + COLNAS simultaneously).
+
+Still no writes executed anywhere. Write script scope now confirmed complete:
+1. Snapshot + zero football_player_stats (one-time, upfront)
+2. Create 8 stub players (JES, AZEEZ, IK, AKANDE, PARKER, PEDRI, TOJU, KANTE)
+3. Create player_team_affiliations for all new stubs + the 4 missing existing-player links (TOMIPE, ISREAL, UCHE JR, CHARLES) to COLNAS/COLMANS
+4. Create squad_players for the same set (8 stubs + 4 existing gaps) under BUSALYMPICS FOOTBALL competitionId
+5. Add "Mayor" to Mayokun Mayokun's nicknames
+6. Insert MD1 match_events with null minutes for all resolved players
+Needs a --dry-run mode logging every intended write before any --apply, per standing rule.
+
+2026-07-06 | `dev/test-snapshot-restore-mechanism.mjs` | STAGING (throwaway tables only) | SUCCESS | VERIFIED
+- Tested the actual snapshot->mutate->restore mechanism end-to-end using two throwaway tables (zz_test_snapshot, zz_test_target), never touching the real football_player_stats table's data.
+- Snapshot: CREATE TABLE AS SELECT * FROM football_player_stats (38 rows, matched original count exactly)
+- Mutate: UPDATE test_target SET goals=0, assists=0 (simulated the zero step)
+- Restore: DELETE FROM test_target; INSERT INTO test_target SELECT * FROM snapshot
+- Verification: row count matched (38=38), 0 mismatches across goals/assists/yellow_cards/red_cards/tackles/interceptions comparing restored vs original snapshot
+- PASS. Mechanism confirmed working on this exact Turso/LibSQL setup before being relied on for the real stats-zero step. Both test tables dropped after verification, real table untouched throughout.
+
+2026-07-06 | squad_players per-team gap re-verification | STAGING (read-only) | SUCCESS | VERIFIED
+- Re-ran the check explicitly per (team_id, player_id) pair rather than a flat existence check across the combined 30-row result, per critique's item F.
+- Confirmed same 4 gaps hold under correct per-team scoping: CHARLES (COLNAS), TOMIPE (COLMANS), ISREAL (COLMANS), UCHE JR (COLMANS) are each missing from squad_players specifically under THEIR OWN resolved team_id, not a coincidental cross-team artifact.
+
+2026-07-06 | Final decisions locked before write directive | N/A (decision log) | N/A | N/A
+- squad_players: INSERT for the 4 gap players (CHARLES, TOMIPE, ISREAL, UCHE JR) + all 8 new stubs, under BUSALYMPICS FOOTBALL competitionId (9q8LMVqW8KAtF4BJBlyk_)
+- Event scope: EVERYTHING the sheet captured — goals, assists, cards (+ match_events), substitutions (real minutes), clearances, interceptions, tackles, shots on/off, fouls, saves
+- B/S column resolved: saves (GK rows only), dropped for outfield rows (no schema column for generic "blocks", would misrepresent an outfield player as having made goalkeeper saves)
+- Eye Point / Rating: SKIPPED this session (no clean destination, deferred not lost)
+- players.number for the 8 new stubs: LEFT UNSET, schema default 0 applies. No BUSA-club-number import attempted — confirmed platform-wide fallback already searched all teams and found nothing for any of these 8, so there is no existing number to import (that's precisely what distinguished them from MAYOR/TOJU, who did have existing profiles found elsewhere). Flagged as a known cosmetic gap (multiple "#0" players on same team roster if numbers ever get rendered) — not a data-integrity issue (no unique constraint on number), to be enriched later via admin same as other incomplete fields.
+- Confirmed scope: write script creates full player profiles only for the 8 new stubs. The 4 gap LINK players (CHARLES, TOMIPE, ISREAL, UCHE JR) already have full existing profiles — they only get the missing player_team_affiliations + squad_players rows, no new player row. The other 17 LINK players need no player-table changes at all.
+All decisions now locked (A through F, plus number field). Ready to draft the write directive.
+
+2026-07-06 | Trace: event-vs-direct-write for clearances/tackles/interceptions/shots | READ-ONLY (code trace) | SUCCESS | VERIFIED
+- Traced src/app/api/matches/[id]/events/route.ts updatePlayerStats (the REAL, live, production stat-update switch, post-BUG-083 normalization: .toUpperCase().replace(/\s+/g,'_')). It only handles: GOAL, ASSIST, OWN_GOAL, PENALTY, PENALTY_MISSED, PENALTY_SAVED, FOUL, YELLOW_CARD, RED_CARD, SAVE.
+- NO case exists for TACKLE, INTERCEPTION, CLEARANCE, or generic (non-goal/penalty) SHOT tracking anywhere in the live pipeline. These stats have never been event-derived in production.
+- Found a SEPARATE consumer that DOES reference these types: src/app/api/matches/[id]/ratings/route.ts (auto rating calculator) counts match_events by type == 'Goal', 'Tackle', 'Interception', 'Clearance', 'Save', 'Block', 'Shot' (Title Case, exact string match, NOT normalized).
+- REAL BUG DISCOVERED (unrelated to backfill, pre-existing): the ratings route's exact-match comparison against Title-Case type strings will never match the live pipeline's post-BUG-083 UPPER_SNAKE_CASE storage ('GOAL' != 'Goal', 'SAVE' != 'Save', etc). Any match finished after the BUG-083 fix landed would have its auto-calculated ratings silently return ~0 for every event-derived category. Not fixed here (out of scope for backfill) - recommend filing as a new BACKLOG/BUG entry.
+- RESOLUTION for backfill event scope: create match_events ONLY for types with real live-pipeline precedent (GOAL, ASSIST, FOUL, YELLOW_CARD, RED_CARD, SAVE, SUBSTITUTION) using the EXACT SAME type strings the live pipeline emits - this is genuinely restoring consistency, not inventing new pipeline behavior. Clearances/Interceptions/Tackles/shotsOnTarget/shotsOffTarget get written DIRECTLY to footballPlayerStats as aggregate counts with NO corresponding match_events - there is no existing event-type precedent for these to reuse, and inventing new ones for a one-time historical backfill would be overengineering.
+- Double-count avoidance: since the backfill write script is separate from the live POST /events route (not calling it), the sheet's raw "on"/"off" shot columns get written directly as the complete value for shotsOnTarget/shotsOffTarget - no additional synthetic +1 gets layered on top when a GOAL event is also created for the same player, avoiding an ambiguous double-count risk (unclear whether the sheet's own on/off tally already includes the scoring shot).
+- This resolves the "display-strategy blocks proceeding" concern raised in the planning-chat text: since no event types are being invented that don't already exist in the live product, there's no synthetic-event-clutter risk for any future timeline UI regardless of which display strategy gets chosen later.
+
+2026-07-06 | Empirical check: actual stored event type casing + minute NOT NULL + sentinel precedent | STAGING (read-only) | SUCCESS | VERIFIED
+- CORRECTION (major): queried real stored match_events.type values directly. ALL 17 distinct types in live data are Title-Case-with-spaces: Goal, Save, Foul, Substitution, Clearance, Interception, Tackle, Block, Shot on Target, Shot off Target, Shot, Corner, Offside, Throw In, Free Kick, Goal Kick, Catch. ZERO are UPPER_SNAKE_CASE.
+- This DISPROVES my own prior-turn claim (that live storage uses UPPER_SNAKE_CASE post-BUG-083, and that the ratings route's Title-Case exact-match was a mismatch bug). I had conflated the internal .toUpperCase().replace(/\s+/g,'_') normalization used ONLY inside updatePlayerStats's switch-statement comparison logic with the actual persisted `type` column value - the switch normalizes for reliable comparison, it does not rewrite what gets stored. The ratings route's Title-Case exact-match is CORRECT, not broken. NOT FILING the bug I proposed last turn - it was wrong. No BACKLOG entry added.
+- SECOND CORRECTION: Clearance (20 real rows), Interception (36), Tackle (1), Shot on Target (4), Shot off Target (10), Block (5) are ALL real, already-used, empirically-confirmed live event types with real historical volume - contrary to my prior claim that these "have no live pipeline precedent." I had only checked the narrow updatePlayerStats switch (which handles footballPlayerStats side-effects for a subset of types) and wrongly concluded that meant these types are never logged as real events at all. They are - just not aggregated into footballPlayerStats via that specific switch. Reverses the G recommendation toward Option 1 (create real match_events using these exact type strings), not Option 2 (direct-write only).
+- No 'Assist' type exists anywhere in live data - confirms assists are represented via a related_player_id field on the Goal event, never as a standalone event type, consistent with the planning-chat's suggestion.
+- H CONFIRMED as a real blocker: PRAGMA table_info(match_events) confirms minute is INTEGER NOT NULL, dflt_value=null. Checked for existing sentinel precedent: only 4 rows exist with minute=0, ALL clustered in a single unrelated match (8Mek2CA7KPlnk1EQ647jx: Catch, Goal, 2x Substitution) - looks like genuine kickoff-moment events in that specific match, not an established "unknown minute" convention. minute=0 should NOT be silently reused for backfilled null-minute events without an explicit decision, since any consumer treating minute=0 as "kickoff" would misread every backfilled event as literally happening in minute zero.
+
+2026-07-06 | FINAL decision: minute sentinel | N/A (decision log) | N/A | N/A
+- match_events.minute sentinel for backfilled events with no real minute data: -1 (out-of-range, unambiguous, filterable). period left null for these rows.
+- Assist pairing resolved: write assist count directly to footballPlayerStats.assists for JES and ALEX (real sheet data), relatedPlayerId left null on both Goal events (MAYOR, SAMMY) since pairing cannot be determined from the sheet.
+- ALL decisions now locked for MD1 write script: A (squad_players insert yes), B (6 steps incl. squad_players), C (everything the sheet captured), D (Eye Point skipped), E (snapshot-restore proven working), F (squadPlayers gaps verified per-team), number field (default 0, no import), G (real match_events for Clearance/Interception/Tackle/Shot using exact live-precedented Title-Case type strings, footballPlayerStats derived from these events via recompute), H (minute=-1 sentinel), I (event type casing = Title-Case-with-space, matches empirically confirmed live convention), assist pairing (direct count, no relatedPlayerId).
+- Ready to draft the write directive with --dry-run mode required before --apply, per standing rule.
+
+2026-07-06 | MD1 substitution pairings — FULLY RESOLVED via Richard's domain knowledge | N/A (decision log) | N/A | N/A
+- SAMMY out for CHARLES @65 (confirms the "orphaned" CHARLES-in with no matching out-partner from the sheet's minute data alone - SAMMY's real out-minute wasn't captured on the sheet, this was known information not derivable from the parsed data)
+- OMARI in for MAYOR @89 (resolves one of the two ambiguous same-minute pairs)
+- ROGERS out for IK @89 (resolved by elimination, the only remaining pair once OMARI-MAYOR was confirmed)
+- Final COLNAS substitution set (all 5, all with confirmed related_player_id): SMART in for BRUNO @45, CHARLES in for SAMMY @65, AZEEZ in for ALEX @75, OMARI in for MAYOR @89, IK in for ROGERS @89
+- COLMANS: zero minute in/out data recorded - no Substitution events for COLMANS this match
+
+2026-07-06 | dev/parse-match-sheet.mjs + dev/backfill-run-sheet.mjs updated for consolidated workbook format | LOCAL FILE ONLY, STAGING (read-only for matcher) | SUCCESS | VERIFIED
+- Richard provided a new consolidated format: one xlsx workbook with one tab per team (tab name = team slug), replacing the two-separate-files format used for MD1 originally. Expected to be the standard format for remaining 33 matches.
+- Updated parse-match-sheet.mjs: when called without an explicit teamSlug arg, loops over every sheet in the workbook and parses each one using its own sheet/tab name as the teamSlug. Legacy single-team-file mode (explicit teamSlug arg) still supported unchanged for backward compatibility.
+- Updated backfill-run-sheet.mjs: now accepts either a single consolidated xlsx path (auto-discovers per-team parsed output via directory listing) or the legacy (xlsx, slug) pairs syntax.
+- Verified: parsed the actual MD1_COLNAS_vs_COLMANS.xlsx consolidated file, confirmed output is byte-for-byte identical (JSON.stringify equality check) to the original two-separate-file parse for both teams' player arrays.
+- Verified full one-command pipeline (dev/backfill-run-sheet.mjs <label> <consolidated.xlsx>) runs end-to-end against the new format with no errors.
+- Going forward, standard command for a consolidated-format match sheet: node dev/backfill-run-sheet.mjs <matchLabel> <consolidatedXlsxPath>
+
+2026-07-06 | dev/update-college-team-logos.mjs --apply | STAGING (write) | SUCCESS | VERIFIED
+- Updated teams.logo for COLNAS, COLENG, COLMANS, COLENVS from broken placeholder path (/assets/Logos/placeholder.png - typo mismatch, folder doesn't exist) to real logo files copied into public/assests/Logos/college/{colnas,coleng,colmans,colenvs}.png
+- Source files: C:\Users\Wise\Downloads\BRIXSPORT\Intercollege\Logos\{COLCOMP,COLENG,COLMANS,COLENVS}.png (COLCOMP.png confirmed by Richard to be COLNAS's logo, filename mismatch only)
+- Verified via SELECT: all 4 rows now show correct new paths
+- BUG-096 filed separately: 6 code files reference /assets/Logos/BRIX-SPORT-LOGO.png (correct spelling) which doesn't exist - real folder is /assests/Logos/ (typo). Site-wide SEO/OG image bug, found incidentally, not fixed (deferred per Richard - filed, not fixed this session)
+- Prod NOT updated yet - staging only per migration convention, prod update pending
+
+2026-07-06 | dev/update-college-team-logos.mjs --prod --apply | PROD (brixsportv2-brixsports.aws-eu-west-1.turso.io) | SUCCESS | VERIFIED
+- Code: hotfix/college-team-logos branch (cherry-pick of 088cc4a from dev), PR #10, merged to main (23421e6). Confirmed via git log origin/main before proceeding.
+- DB: same script reused with new --prod flag (loads .env.production instead of .env.local) rather than writing a separate prod script - reduces drift risk between staging/prod logic. Dry-run confirmed prod had the same broken placeholder state as staging did, before applying.
+- Updated teams.logo for COLNAS, COLENG, COLMANS, COLENVS on PROD to /assests/Logos/college/{slug}.png. Verified via SELECT post-write - all 4 rows correct.
+- Both branches (fix/college-team-logos on dev, hotfix/college-team-logos on main) cleaned up - deleted locally and on origin after confirming merge via git log/branch --merged, not assumed.
+- Recoverable mid-task error: accidentally attempted to pop an unrelated pre-existing stash (stash@{1}, "On main: Audit-001 api/event auth", not mine) instead of the intended one (stash@{0}, session 40 doc updates), causing a merge conflict in src/app/api/events/route.ts. Caught immediately, restored the file to clean HEAD state via `git checkout HEAD -- <file>`, confirmed both stashes remained intact and untouched, then correctly popped stash@{0} by explicit index. No data lost, unrelated stash left exactly as found.
+- College team logos now live and correct on both staging and prod.
+
+2026-07-06 | Corrections before write script, caught by Richard | N/A (decision log) | N/A | N/A
+- JES reclassified: NOT a stub. Matches existing player "Jesse Uno" (busa-joga-player-30, jersey_name "Zico", position CAM) - missed by the matcher for the same reason MAYOR/Mayokun was (length-gated fuzzy: "jes"(3) vs "jesse"(5) exceeds the +/-1 char gate, a nickname-truncation case not a typo case). Confirmed already fully affiliated to COLNAS (player_team_affiliations AND squad_players both present) - zero new writes needed, treat as plain LINK exact.
+- Revised CREATE STUB list: 7, not 8 (removed JES). Final: AZEEZ, IK, AKANDE, PARKER, PEDRI, TOJU, KANTE.
+- Revised gap-LINK affiliation list: unchanged at 4 (CHARLES->COLNAS, TOMIPE/ISREAL/UCHE JR->COLMANS). JES was never part of this list once confirmed already affiliated.
+- Position inheritance for stubs with no recorded position: AZEEZ inherits 'AM' from ALEX (whom he substituted for @75), IK inherits 'DM' from ROGERS (whom he substituted for @89). TOJU and KANTE have no substitution pairing available (COLMANS recorded zero minute data) - fall back to '' per the confirmed NOT NULL/no-default constraint on players.position, matching 20 existing real players using this same empty-string convention.
+- players.position confirmed NOT NULL, no default (PRAGMA table_info) - directive's original "position: null" spec for 4 stub players would have failed on insert. Fixed to '' (2 inherited, 2 fallback) before any write executes.
+
+2026-07-06 | Correction: shotsOnTarget must include goal-implied shots | N/A (decision log) | N/A | N/A
+- Richard caught: a GOAL is definitionally a shot on target, matching the live pipeline's own confirmed convention (events/route.ts case 'GOAL': also increments shotsOnTarget). My earlier plan (write raw sheet "on" value directly, no goal side-effect) would have left MAYOR/SAMMY/ANIMASHAUN at shotsOnTarget=0 despite each scoring, since none of the 3 scorers have any raw "on" value recorded on the sheet (checked - no overlap risk, sheet's on/off columns track non-scoring attempts only for these 3).
+- Fix for Step 7 recompute: shotsOnTarget = count('Shot on Target' events) + count('Goal' events) for that player, matching the live system's exact side-effect logic. No new event type needed - Goal events already exist, this is purely a recompute-logic correction. Affects MAYOR (0->1), SAMMY (0->1), ANIMASHAUN (0->1).
+
+2026-07-09 | dev/backfill-write-md1.mjs --apply | STAGING (write) | SUCCESS | VERIFIED
+MD1 (COLNAS 2-1 COLMANS, matchId OPoEtVGUNWKcRSDe4QdSr) FULLY BACKFILLED.
+
+First --apply attempt FAILED and rolled back cleanly (SQLITE_CONSTRAINT: UNIQUE player_team_affiliations.player_id/team_id). Root cause: conflated the earlier squad_players gap-check (correctly found CHARLES/TOMIPE/ISREAL/UCHE JR all missing from squad_players) with player_team_affiliations existence, which was never separately re-verified for TOMIPE/UCHE JR. Re-verified both tables independently per candidate:
+  CHARLES: affiliation MISSING, squad MISSING
+  TOMIPE: affiliation EXISTS, squad MISSING
+  ISREAL: affiliation MISSING, squad MISSING
+  UCHE JR: affiliation EXISTS, squad MISSING
+Fixed script to generate two independent insert lists (needsAffiliation vs needsSquad flags) instead of one combined list. Confirmed batch is atomic (client.batch(..., 'write')) - first failed attempt left zero trace (no snapshot table, 0 events, stats untouched) before the fix was applied and re-run succeeded.
+
+FINAL APPLIED STATE (209 statements, single atomic batch, committed successfully):
+- Snapshot: football_player_stats_snapshot_pre_md1_20260709, 38 rows (matches pre-zero count exactly)
+- New players: 7 (Azeez/AM, Ik/DM - both position-inherited from the starter they substituted for; Akande/CB, Parker/DM, Pedri/CM - from sheet; Toju/'', Kante/'' - no pairing data, empty string per NOT NULL constraint)
+- player_team_affiliations: 9 (7 stubs + CHARLES + ISREAL - corrected from originally-planned 11)
+- squad_players: 11 (7 stubs + CHARLES + TOMIPE + ISREAL + UCHE JR)
+- Mayokun nicknames: [] -> ["Mayor"], verified post-write
+- match_events: 151 total (Clearance 59, Interception 44, Shot off Target 11, Tackle 9, Foul 8, Substitution 5, Shot on Target 5, Save 4, Goal 3, Assist 2, Yellow Card 1)
+- football_player_stats recomputed for 28 players who appear in any MD1 event, uniformly from events (no special cases, including Assist)
+- Sanity check passed: MAYOR (Mayokun) = goals=1, fouls_committed=1, shots_on_target=1 (0 raw + 1 goal-implied, per the goal-always-implies-shot-on-target fix)
+- KANTE: player row created, 0 events (noData preserved correctly)
+- Jersey #2 (COLMANS, unresolved name): confirmed absent everywhere - no player, no event, no stat. 1 clearance data point from the sheet permanently not captured, by design.
+- Platform-wide: 29 other players now show zero event-derived stats as the expected, intentional consequence of Step 1's global zero - will recompute correctly as their own matches get backfilled in later sessions.
+
+This closes MD1 end to end: player resolution -> xlsx parsing -> matching -> human sign-off on every ambiguous case -> write. First of 34 matches. Pipeline (parser, matcher, self-test, write script pattern) is now reusable for MD2 onward.
+
+2026-07-09 | MD1 Game 2 (COLENG 2-3 COLENVS, tyYRU5nlOrqnEXEpvIEC6) — player matching started | STAGING (read-only) | IN PROGRESS
+- Fixed a real bug in dev/parse-match-sheet.mjs: consolidated workbook mode used raw sheet/tab names as teamSlug without trimming. This workbook's COLENG tab is literally named "COLENG " (trailing space), which failed team resolution entirely and even leaked into the output filename. Fixed: teamSlug = sheetName.trim() in consolidated mode. Re-ran cleanly after the fix.
+- Real catch, not a duplicate: sheet has TWO "Enoch" entries in one match - row 0 (starter, GK, yellow card) and row 13 "ENOCH (SAKA)" (sub, LW, on at 69'). These are different roster slots, not the same person twice. Checked the DB's existing "Enoch" (jersey_name "Saka") position: RW - matches the wide-attacker sub (row 13, LW) far better than the starting GK (row 0). Matcher had auto-assigned the exact name match to row 0 (first-encountered), which the position evidence contradicts. Richard confirmed: row 13 (sub, LW) = Saka (LINK), row 0 (starter GK) = a different, new player (CREATE STUB).
+- DANIEL (COLENG) flagged as 2 exact candidates (Daniel Tiamiyu, Daniel Ezekwe). Row "EZEKWE" already independently exact-matched Daniel Ezekwe - confirmed by Richard as the Pirates player, correct. By elimination, DANIEL = Daniel Tiamiyu (busa-kings-player-77).
+- Still open: EMEKA (fuzzy dist=2 to Victor Ememe, who is ALSO already exactly claimed by row "EMEME" - same elimination-logic red flag as Daniel/Ezekwe, needs the same scrutiny), MICHEAL (fuzzy dist=2, Michael Oguntola), ISREAL/COLENG (fuzzy dist=2, Israel Emmanuel - note this is COLENG not COLMANS, a different context from MD1's ISREAL), SHAPAN (fuzzy dist=1, low-risk typo), POSI (platform-wide exact, not on this team, needs confirm), CEPHAS + FORTUNE (COLENVS, CREATE STUB, no candidate found at all).
+
+2026-07-09 | MD1 Game 2 — remaining ambiguous rows resolved | N/A (decision log) | N/A | N/A
+- EMEKA: confirmed different person (elimination logic held - Ememe already claimed by row EMEME) -> CREATE STUB
+- MICHEAL: confirmed -> LINK to Michael Oguntola (player-1767972272690-bjbpqarn5)
+- ISREAL (COLENG): confirmed different person, different team context (not the same Israel as MD1's COLMANS match) -> CREATE STUB
+- POSI (COLENVS): confirmed different person - the platform-wide candidate found is a Kings/Joga player, not this COLENVS one -> CREATE STUB
+- Notable session pattern: this match surfaced 2 real "matcher grabbed the wrong/already-claimed identity" cases (ENOCH row-swap, EMEKA vs already-claimed EMEME) that the elimination-logic discipline caught before either could have created a wrong link or a missed split. Still open: SHAPAN (dist=1, low-risk, pending simple accept), CEPHAS + FORTUNE (COLENVS, CREATE STUB, no candidate found, no ambiguity).
+
+2026-07-09 | MD1 Game 2 — two stub reclassifications, both verified before accepting | N/A (decision log) | N/A | N/A
+- EMEKA reclassified: NOT a stub. Matches Chukwuemeka Uduchukwu (busa-kings-player-5, jersey_name "Chukwuemeka", CB) - same nickname-truncation blind spot as MAYOR/Mayokun and JES/Jesse Uno (fuzzy length-gate excludes "Emeka"(5) vs "Chukwuemeka"(11), diff of 6, far beyond +/-1). CONFIRMED not just by name: he is already affiliated with COLENG specifically - exactly this match's team. Zero new affiliation/squad_players writes needed, same shape as Jesse Uno.
+- POSI reclassified: NOT the platform-wide candidate the matcher found (which turned out to be a BASKETBALL player, position "Guard", only affiliated with TBK - a pure name coincidence across sports, correctly rejected). The REAL match is "Ayomiposi Alabi" (busa-joga-player-24, jersey_name "Puyoo"), found via direct roster search on Joga-Bonito per Richard's identification ("the joga ayomiposi", distinct from "Ayomiposi Peters" at Kings, MD1's MARTINS). This player is NOT currently affiliated with COLENVS - genuine gap-LINK, needs new affiliation + squad_players, same treatment as CHARLES/ISREAL in MD1.
+- Updated MD1 Game 2 tally: 26 LINK (was 24), 4 CREATE STUB (was 6: removed EMEKA, POSI - remaining stubs are ENOCH/GK-starter, ISREAL/COLENG, CEPHAS, FORTUNE), 0 SKIP.
+- Gap-LINK (needs new affiliation): POSI only. EMEKA needs no new writes (already on COLENG).
+
+2026-07-09 | dev/recompute-pirates-hammers.mjs --apply | STAGING (write) | SUCCESS | VERIFIED
+Real, live data integrity fix — NOT part of the college backfill. MD1 g1's global one-time zero (2026-07-09) had wiped football_player_stats for every player platform-wide, including the 28 real players in the one live-logged match already in the DB (Pirates vs Hammers, 8Mek2CA7KPlnk1EQ647jx, 154 events, Pirates 5-0). The zero only touched the stats cache, never the underlying match_events, so this was a correctness bug on real public data, not a backfill artifact — discovered when MD1 g2's cumulative recompute correctly restored 4 of these 28 players (Jerry, Blacko, Ezekwe, Eniola) simply by them appearing in both matches. Ran the same cumulative recompute logic against all 28 distinct players in the Pirates/Hammers match directly, not waiting for further coincidental overlap.
+- 28 players recomputed: 9 had an existing (zeroed) football_player_stats row -> UPDATE; 19 had NO row at all (never seeded) -> INSERT, first stats they've ever had.
+- Sanity check: sum of goals across all 28 = 5, matches Pirates 5-0 Hammers exactly (Francis Abbey, Abdul-jabbaar Bello, Taiwo Olaofeoguntunde, Daniel Ezekwe, Mayowa Agoyi - 1 each).
+- Post-apply SELECT confirms all 28 rows present with correct values.
+- This closes a live, public-facing data bug, independent of the college backfill's own correctness.
+
+2026-07-09 | dev/backfill-write-md1g2.mjs --apply | STAGING (write) | SUCCESS | VERIFIED
+MD1 Game 2 (COLENG 2-3 COLENVS, matchId tyYRU5nlOrqnEXEpvIEC6) FULLY BACKFILLED. Second of 34 matches.
+
+Preceded by dev/recompute-pirates-hammers.mjs --apply (see entry above) to fix the live-match stats bug before this match's cumulative recompute could touch any overlapping players.
+
+FINAL APPLIED STATE (151 statements, single atomic batch, committed successfully):
+- Snapshot/zero: correctly SKIPPED (one-time only, already done before MD1 g1 - re-running would have wiped g1's stats)
+- New players: 4 (Enoch/GK - different person from Enoch(SAKA); Isreal/LW - different person from MD1 g1's ISREAL; Cephas/CB; Fortune/'')
+- player_team_affiliations: 4 (all new stubs, zero gap-LINKs this match - all 26 LINK players pre-flight-verified already affiliated)
+- squad_players: 4
+- match_events: 109 (Interception 34, Clearance 30, Shot off Target 10, Substitution 8, Yellow Card 5, Tackle 5, Shot on Target 4, Foul 4, Goal 3, Save 2, Penalty 2, Assist 2)
+- Penalty type introduced for the first time (MICHEAL, EFFIONG) - separate from Goal, increments penaltiesScored not goals, matching the live schema's own PENALTY case exactly
+- football_player_stats recomputed CUMULATIVELY (fixed this session - queries each player's full event history across ALL matches, not scoped to just this one, before writing). 4 players' cumulative totals verified by hand against prior + this-match contributions: Jerry (goals 0+1=1), Blacko (clearances 0+2=2, interceptions 2+4=6), Ezekwe (clearances 8+4=12), Eniola (clearances 2+1=3) - all exact matches.
+- Sanity check: this match's own Goal+Penalty event count = 5, matches 2-3 final score exactly.
+- Real matcher-catch corrections this match: ENOCH split into two different people (GK starter vs LW sub "Saka", position evidence contradicted the matcher's first-pick), EMEKA/EMEKA-elimination-logic reclassified from CREATE STUB to LINK (Chukwuemeka Uduchukwu, already on COLENG), POSI reclassified from CREATE STUB to LINK (Ayomiposi Alabi on Joga, not the basketball-playing platform-wide match or Ayomiposi Peters), ISREAL correctly kept as CREATE STUB (different person, different team context from MD1 g1's ISREAL), DANIEL resolved by elimination (Ezekwe already claimed separately).
+- Real bug fixed mid-build: consolidated workbook tab name "COLENG " had a trailing space, breaking team resolution and leaking into output filenames. Fixed at the parser level (trim sheet-derived teamSlug).
+
+This is the second match closed end to end with the full pipeline, and the first to prove the cumulative recompute fix matters in practice (not hypothetical) - it both protected this match's correctness AND surfaced+fixed a live data integrity bug on the one real match in the DB.
+
+---
+
+## Session 40C — 2026-07-09
+
+2026-07-09 | dev/fix-israel-emmanuel-swap.mjs --apply | STAGING (write) | SUCCESS | VERIFIED
+Israel Emmanuel / COLMANS "ISREAL" dual-college-affiliation collision (surfaced end of Session 40B) - fully resolved. Dry-run reviewed first, matched the confirmed trace exactly (5 g1 events, 1 g2 event, 1 substitution reference), then applied as a single atomic batch (14 statements).
+
+- New real player created for the actual COLMANS "Isreal" (id `cuLj5e05N6IXn-qR7sY_g`, jersey 34, CB, College of Management Sciences).
+- MD1 g1's 5 events (4 Clearance, 1 Interception) re-pointed from Israel Emmanuel (`busa-pirates-player-17`) to the new stub.
+- Israel's wrong COLMANS affiliation + squad_players row deleted; new stub given its own COLMANS affiliation + squad_players (BUSALYMPICS). Israel's COLENG and Pirates FC affiliations confirmed untouched throughout.
+- MD1 g2's 1 event (Foul) + the substitution row's `related_player_id`/`detail` ("Enoch IN for Isreal" -> "Enoch IN for Israel Emmanuel") re-pointed from the redundant g2 stub (`ClqNXQiORuTQE54v5gqKU`) to Israel Emmanuel.
+- Redundant g2 stub fully deleted: players, affiliation, squad_players, football_player_stats - all 4 rows removed and confirmed 0/0/0/0/0 (including event_refs) post-apply.
+- Cumulative recompute run for both final IDs.
+
+**Post-apply verification (DB query results, not UI/HTTP):**
+- New stub: 1 affiliation (COLMANS only) confirmed via SELECT. Stats: clearances=4, interceptions=1, everything else 0 - matches g1's contribution exactly.
+- Israel Emmanuel: 2 affiliations confirmed (PIR/team, COLENG/college) - no COLMANS row. match_events: 1 row (Foul, g2 match) - zero g1 events remain. football_player_stats: fouls_committed=1, everything else 0.
+- g2 stub: player_rows=0, affil_rows=0, squad_rows=0, stats_rows=0, event_refs=0 - fully gone, no dangling references anywhere.
+
+Closes the last open item from Session 40B. No other player touched.

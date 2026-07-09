@@ -60,7 +60,7 @@ BrixSports is a live sports scoring platform for university sports (BUSA League 
 │  ┌──────────────────────────────────┐                           │
 │  │   Vercel (Next.js)               │                           │
 │  │   - App Router (SSR + API routes)│                           │
-│  │   - Edge middleware (auth check) │◄──── Turso DB (LibSQL)   │
+│  │   - Edge middleware (auth check) │◄──── Turso DB (LibSQL)    │
 │  │   - Serverless functions         │      (prod instance)      │
 │  └──────────────┬───────────────────┘                           │
 │                 │ NEXT_PUBLIC_WS_URL                            │
@@ -72,10 +72,10 @@ BrixSports is a live sports scoring platform for university sports (BUSA League 
 │  │   - Socket.IO mounted at         │                           │
 │  │     /api/socket                  │                           │
 │  │   - In-memory matchTimes Map     │                           │
-│  │   - In-memory room management   │                           │
+│  │   - In-memory room management    │                           │
 │  └──────────────────────────────────┘                           │
 │                                                                 │
-│  STAGING: staging.brixsports.com (same Railway WS — BUG-074)   │
+│  STAGING: staging.brixsports.com (same Railway WS — BUG-074)    │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -566,6 +566,7 @@ Viewer opens SettingsOverlay
 
 Current schema tracks: endpoint, auth key, p256dh key, userId.
 Missing fields needed before multi-campus scale:
+
 - `platform` (TEXT: 'apns'|'fcm'|'mozilla') — derived from endpoint URL at subscribe time; enables platform-specific delivery debugging without parsing endpoint URLs
 - `isActive` (BOOLEAN, default true) — soft-delete on 410/404 response rather than hard delete; preserves subscription churn history for audience debugging
 - `lastUsedAt` (TIMESTAMP) — updated on every successful delivery; enables proactive pruning of stale subscriptions without waiting for a 410
@@ -713,47 +714,47 @@ Ordered by operational risk to a live match day.
 
 ### Real-Time / Clock
 
-| Gap                                     | Risk                                                  | Location                            | Status |
-| --------------------------------------- | ----------------------------------------------------- | ----------------------------------- | ------ |
-| No delta cap in `tick()`                | Phone sleep → clock jump → all viewers see wrong time | `match-state-manager.ts:293`        | OPEN   |
-| SUSPENDED period doesn't stop clock     | Referee stoppage → clock keeps running                | `match-state-manager.ts:423` switch | OPEN   |
-| Dual logger sessions → dual clocks      | Viewer jitter on second-by-second display             | No server-side enforcement          | OPEN   |
-| `isStale` binary — no escalation        | 3s hiccup looks same as 5min outage                   | `useWebSocket.tsx:342`              | OPEN   |
-| Subscribe storm (BUG-089)               | 3-5× match:subscribe per WS connect                   | `useWebSocket.tsx:209`              | OPEN   |
-| Retry interval leaks on remount         | Second interval stacks alongside first                | `useWebSocket.tsx:109`              | OPEN   |
-| `PENALTY_SHOOTOUT` period label missing | Shows clock instead of 'PK'                           | `LiveMatchStatus.tsx:64`            | OPEN   |
-| Staging and prod share Railway WS server (BUG-074) | Staging test events broadcast to prod viewers if matchId collides — fix is a dedicated staging Railway service (env-prefixed rooms are insufficient: `io.emit` global broadcasts bypass them) | `server.js` CORS allowlist + room join logic | OPEN   |
-| No mutation audit trail for `matches` table        | Admin score/status corrections leave no record of previous value, actor, or timestamp | `matches` table — no history table equivalent | OPEN   |
+| Gap                                                | Risk                                                                                                                                                                                          | Location                                      | Status |
+| -------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------- | ------ |
+| No delta cap in `tick()`                           | Phone sleep → clock jump → all viewers see wrong time                                                                                                                                         | `match-state-manager.ts:293`                  | OPEN   |
+| SUSPENDED period doesn't stop clock                | Referee stoppage → clock keeps running                                                                                                                                                        | `match-state-manager.ts:423` switch           | OPEN   |
+| Dual logger sessions → dual clocks                 | Viewer jitter on second-by-second display                                                                                                                                                     | No server-side enforcement                    | OPEN   |
+| `isStale` binary — no escalation                   | 3s hiccup looks same as 5min outage                                                                                                                                                           | `useWebSocket.tsx:342`                        | OPEN   |
+| Subscribe storm (BUG-089)                          | 3-5× match:subscribe per WS connect                                                                                                                                                           | `useWebSocket.tsx:209`                        | OPEN   |
+| Retry interval leaks on remount                    | Second interval stacks alongside first                                                                                                                                                        | `useWebSocket.tsx:109`                        | OPEN   |
+| `PENALTY_SHOOTOUT` period label missing            | Shows clock instead of 'PK'                                                                                                                                                                   | `LiveMatchStatus.tsx:64`                      | OPEN   |
+| Staging and prod share Railway WS server (BUG-074) | Staging test events broadcast to prod viewers if matchId collides — fix is a dedicated staging Railway service (env-prefixed rooms are insufficient: `io.emit` global broadcasts bypass them) | `server.js` CORS allowlist + room join logic  | OPEN   |
+| No mutation audit trail for `matches` table        | Admin score/status corrections leave no record of previous value, actor, or timestamp                                                                                                         | `matches` table — no history table equivalent | OPEN   |
 
 ### Notifications
 
-| Gap                                            | Risk                                                 | Location                           | Status |
-| ---------------------------------------------- | ---------------------------------------------------- | ---------------------------------- | ------ |
+| Gap                                            | Risk                                                 | Location                           | Status                                                                                         |
+| ---------------------------------------------- | ---------------------------------------------------- | ---------------------------------- | ---------------------------------------------------------------------------------------------- |
 | ~~No push enrollment UI (BUG-084)~~            | ~~Zero push notifications ever delivered~~           | ~~`SettingsOverlay` — missing~~    | RESOLVED — enrollment UI confirmed in SettingsOverlay, OnboardingModal, NotificationPermission |
-| Dedup key broken (BUG-085)                     | Every event fires unconditionally, including retries | `event-driven-notifier.ts:151,123` | OPEN   |
-| `GET /api/notifications` type casing (BUG-088) | Goal events never appear in notification list        | `notifications/route.ts`           | OPEN   |
-| `userFavorites` no `.limit()` (BACKLOG-115)    | Full table scan on every notifiable event            | `match-notification-service.ts:86` | OPEN   |
+| Dedup key broken (BUG-085)                     | Every event fires unconditionally, including retries | `event-driven-notifier.ts:151,123` | OPEN                                                                                           |
+| `GET /api/notifications` type casing (BUG-088) | Goal events never appear in notification list        | `notifications/route.ts`           | OPEN                                                                                           |
+| `userFavorites` no `.limit()` (BACKLOG-115)    | Full table scan on every notifiable event            | `match-notification-service.ts:86` | OPEN                                                                                           |
 
 ### Auth / Security
 
-| Gap                                                | Risk                                               | Location                        | Status |
-| -------------------------------------------------- | -------------------------------------------------- | ------------------------------- | ------ |
-| `resolveEffectiveUserId` no try/catch              | DB timeout → uncaught 500                          | `auth.ts:159`                   | OPEN   |
-| PATCH `[eventId]` body spread (BUG-093)            | Any field overwritable by authenticated user       | `events/[eventId]/route.ts:125` | OPEN   |
-| Score revert before event delete (BUG-094)         | Delete fails → score permanently wrong             | `events/[eventId]/route.ts:216` | OPEN   |
-| `loggerId` in public events GET (BUG-095)          | Logger identity exposed to unauthenticated callers | `events/route.ts:38`            | OPEN   |
-| Event type string mismatch (BUG-083)               | OWN GOAL may not match → score not credited        | Multiple route files            | OPEN   |
+| Gap                                        | Risk                                               | Location                        | Status |
+| ------------------------------------------ | -------------------------------------------------- | ------------------------------- | ------ |
+| `resolveEffectiveUserId` no try/catch      | DB timeout → uncaught 500                          | `auth.ts:159`                   | OPEN   |
+| PATCH `[eventId]` body spread (BUG-093)    | Any field overwritable by authenticated user       | `events/[eventId]/route.ts:125` | OPEN   |
+| Score revert before event delete (BUG-094) | Delete fails → score permanently wrong             | `events/[eventId]/route.ts:216` | OPEN   |
+| `loggerId` in public events GET (BUG-095)  | Logger identity exposed to unauthenticated callers | `events/route.ts:38`            | OPEN   |
+| Event type string mismatch (BUG-083)       | OWN GOAL may not match → score not credited        | Multiple route files            | OPEN   |
 
 ### Data Integrity
 
-| Gap                                                 | Risk                                 | Location                               | Status |
-| --------------------------------------------------- | ------------------------------------ | -------------------------------------- | ------ |
-| BUG-011 playerStats corruption (718 goals/133 apps) | Historical stats unreliable          | `footballPlayerStats`                  | OPEN   |
-| BACKLOG-105 — penalty shootout full implementation  | Shootout goals corrupt match score   | `events/route.ts` (interim guard only) | OPEN   |
-| TD-011 — `season: '2024'` hardcoded                 | Stats written to wrong season bucket | `events/route.ts:271,328`              | OPEN   |
-| BACKLOG-094 — eyePoints never returned from API     | Eye Point Awards panel always empty  | `matches/[id]/route.ts`                | OPEN   |
-| Basketball stats write path unverified              | `basketballPlayerStats` has 0 rows in DB — stat-write branch in `updatePlayerStats()` may be broken or untested | `events/route.ts` basketball branch | UNVERIFIED |
-| `fixtures` table relationship to `matches` undocumented | Both tables exist in schema; Three Critical Flows only reference `matches` — `fixtures` purpose unclear, ambiguity must be resolved before multi-competition expansion | `src/db/schema.ts` | OPEN   |
+| Gap                                                     | Risk                                                                                                                                                                   | Location                               | Status     |
+| ------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- | ---------- |
+| BUG-011 playerStats corruption (718 goals/133 apps)     | Historical stats unreliable                                                                                                                                            | `footballPlayerStats`                  | OPEN       |
+| BACKLOG-105 — penalty shootout full implementation      | Shootout goals corrupt match score                                                                                                                                     | `events/route.ts` (interim guard only) | OPEN       |
+| TD-011 — `season: '2024'` hardcoded                     | Stats written to wrong season bucket                                                                                                                                   | `events/route.ts:271,328`              | OPEN       |
+| BACKLOG-094 — eyePoints never returned from API         | Eye Point Awards panel always empty                                                                                                                                    | `matches/[id]/route.ts`                | OPEN       |
+| Basketball stats write path unverified                  | `basketballPlayerStats` has 0 rows in DB — stat-write branch in `updatePlayerStats()` may be broken or untested                                                        | `events/route.ts` basketball branch    | UNVERIFIED |
+| `fixtures` table relationship to `matches` undocumented | Both tables exist in schema; Three Critical Flows only reference `matches` — `fixtures` purpose unclear, ambiguity must be resolved before multi-competition expansion | `src/db/schema.ts`                     | OPEN       |
 
 ---
 

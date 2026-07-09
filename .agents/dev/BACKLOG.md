@@ -443,6 +443,10 @@ BUG-001 through BUG-029, AUDIT-001/002 (partial), BACKLOG-065 — all resolved S
 
   **BACKLOG-113 absorbed into this item** — simplified modal is part of the build, not a future UX improvement.
 
+- **BACKLOG-120** _(LOW — Public UX)_: Penalty shootout result not displayed on match card or match detail page. When a match ends 0-0 (or any score) and goes to a shootout, the UI shows only the regulation score — no "(X-Y pens)" line anywhere. The shootout result currently lives in `matches.stats` as a JSON blob (`stats.penaltyShootout.homeScore` / `stats.penaltyShootout.awayScore`) with a human-readable `notes` string, but nothing in the frontend reads it for display. Confirmed affected surfaces: match card (`src/components/ui/MatchCard.tsx`), match detail score header (`src/app/matches/[id]/page.tsx`), homepage match cards (`src/app/page.tsx`). The fix is UI-only — read `stats?.penaltyShootout` where it exists and render `({homeScore}-{awayScore} pens)` below the regulation score on FINISHED matches. **This is independent of BACKLOG-105** (which covers logging shootout events during a live match via PEN_SCORED/PEN_MISSED/PEN_SAVED types and dedicated DB columns). This item requires no schema change — only reading the existing JSON blob that's already present. Known live case: `busa-match-final-2026` (Kings vs Joga, 0-0, Kings won 4-3 on penalties) — currently shows 0-0 with no shootout context visible to any viewer. Filed: 2026-07-01. **Status:** OPEN
+
+  **Relationship to BACKLOG-105:** BACKLOG-105 builds the proper structured shootout logging pipeline (event types, dedicated columns, ShootoutModal). Once BACKLOG-105 ships, this item should be updated to read from `shootout_home_score`/`shootout_away_score` columns instead of the JSON blob. Until then, reading the blob is the correct interim approach. Do not block this fix on BACKLOG-105.
+
 - ~~**BUG-044b**~~ _(MEDIUM)_: Logger dashboard stats show "-" (total events, logged matches). Fix: rewrote `/api/loggers/me` to use `getAuthUser` + logger role gate, returns live counts. **Status:** RESOLVED — verified session 34 test match pre-flight, 2026-06-27.
 
 **Evidence:**
@@ -484,9 +488,20 @@ BUG-001 through BUG-029, AUDIT-001/002 (partial), BACKLOG-065 — all resolved S
 
 - **BUG-046** _(MEDIUM)_: `/matches/[id]` shows full black screen with spinner indefinitely from admin browser session (non-incognito). No console errors visible. Likely SW serving a stale cached shell after deploy, or data fetch hanging with no error state. Needs reproduction + Network tab capture to confirm. Related: BUG-026. Filed: 2026-06-19.
 
+- **BUG-096** _(LOW — SEO/Meta)_: Platform's own logo (`BRIX-SPORT-LOGO.png`) 404s for Open Graph / SEO meta images site-wide. The real file lives at `public/assests/Logos/BRIX-SPORT-LOGO.png` (note: `assests`, the repo's actual — misspelled — folder name, matching every other team logo path already in use, e.g. `/assests/Logos/football/kings-fc.jpg`). But 6 files reference the correctly-spelled `/assets/Logos/BRIX-SPORT-LOGO.png`, which does not exist: `src/app/layout.tsx` (3 refs), `src/app/page.tsx`, `src/components/seo/PageSEO.tsx`, `src/lib/utils/aeo.ts`. Any OG/social-share preview or SEO structured-data image referencing this path is currently broken. Found incidentally while fixing the 4 college team logo paths (same session) — same root-cause typo mismatch, much larger blast radius (site-wide meta images vs 4 team records). Fix is mechanical: update the 6 references to `/assests/Logos/...` to match the real folder, or rename the folder and update the ~20 existing team logo DB rows to match (larger, riskier change — not recommended). Filed: 2026-07-06.
+
+- **BUG-097** _(CRITICAL — Data Integrity, BUSALYMPICS backfill)_: `busa-pirates-player-17` (Israel Emmanuel) currently holds two simultaneous active `player_team_affiliations` rows with `affiliation_type='college'` — a real, pre-existing COLENG affiliation (predates this backfill session) AND an erroneous COLMANS affiliation created by MD1 g1's write (`OPoEtVGUNWKcRSDe4QdSr`), which wrongly platform-wide-matched him to a COLMANS "ISREAL" sheet entry that is actually a different person. Separately, MD1 g2 (`tyYRU5nlOrqnEXEpvIEC6`) then needed the real Israel Emmanuel and instead created a brand-new, redundant stub (`ClqNXQiORuTQE54v5gqKU`, "Isreal"/COLENG) rather than linking to him. Root cause: the matching/affiliation-insert pipeline checks for duplicate (playerId, teamId) rows but never checked whether a NEW college affiliation would conflict with an EXISTING one — club-team affiliation is legitimately multi-valued, college affiliation is not, and nothing distinguished the two categories. Full read-only trace completed (2026-07-09): confirmed contained to this one player (58-player collision scan across both matches, platform-wide scan — zero other hits), confirmed no contamination of his real Pirates/Hammers stats (he has zero events in that match, an earlier assumption to the contrary was wrong). Fix script written (`dev/fix-israel-emmanuel-swap.mjs`, `--dry-run`/`--apply`, 6 tasks) but **not yet run** — session ended before execution. **Status:** OPEN — fix scripted, dry-run pending. First task for session 40C.
+- **Systemic follow-up (not yet built):** the matcher needs a standing guard for all remaining 32 matches — before adding any `affiliation_type='college'` row, check for an existing active college affiliation to a DIFFERENT team and hard-flag the conflict rather than silently writing. Club-team multi-affiliation must remain unaffected.
+
 ### Data Integrity
 
-- **BUG-011** _(HIGH)_: `playerStats` data corruption — 718 goals vs 133 appearances (~5.4 goals/game). Root cause: duplicate backfill runs with differing `startTime` formats bypass the duplicate match check. No writes made. Needs dedup audit of all `matchEvents` before any data correction. Do not run any backfill or score correction until resolved. Blocks: BUG-047 score correction (if needed on prod).
+- ~~**BUG-011**~~ _(HIGH — Data Integrity)_: `playerStats` corruption — 718 goals vs 133 appearances originally observed. **Status:** RESOLVED — WONT FIX (condition no longer exists) — 2026-07-01.
+
+**Evidence:**
+- Verified by: Session 40 two-DB audit (`dev/audit-step1-3.mjs`) — SELECT queries against both staging and prod
+- Observed result: staging `total_goals = 31`, `stat_rows = 38`; prod `total_goals = 28`, `stat_rows = 31`. Max goals per player = 5 (Samuel Olapite). No anomaly on either DB.
+- Root cause of original figure: Sessions 27/29/32 cleanup scripts deleted polluted test match events and rolled back associated stats. The 718-goal figure was a point-in-time read from a very early prod state (Session 3–4, 2026-06-04) before any cleanup ran. That data no longer exists.
+- Pending items: none. The zero-and-recompute plan for the backfill session still applies — stats are seeded directly (not event-derived) so double-counting risk on insert is real regardless. But there is no legacy corruption to untangle first.
 
 - **BUG-033** _(MEDIUM — Part 1 done / Part 2 open)_: Squad tab player pool does not filter by sport.
   - **Part 1 (data) — RESOLVED staging 2026-06-17. ⚠️ PROD CLEANUP UNVERIFIED:** 5 basketball players' wrong football college affiliations deleted staging. Basketball college teams created for COLENG/COLNAS. Still needed: run same cleanup on prod.
@@ -1220,10 +1235,20 @@ player stats can be stale or inconsistent after a match ends.
 
 ### BACKLOG-018 — Game Event Logsheets (BUSALYMPICS match events)
 
-**Status:** OPEN
+**Status:** IN PROGRESS — 2 of 34 matches complete (MD1 games 1-2, 2026-07-09)
 **Priority:** Medium
 **Filed:** 2026-06-07
-**Blocked by:** BACKLOG-016 (Roster Builder — player name mapping UI needed first)
+**Blocked by:** ~~BACKLOG-016~~ — superseded by a dev/ script pipeline instead of a UI flow (see below)
+
+**Progress note (2026-07-09):** MD1 game 1 (COLNAS 2-1 COLMANS, `OPoEtVGUNWKcRSDe4QdSr`) and game 2 (COLENG 2-3 COLENVS, `tyYRU5nlOrqnEXEpvIEC6`) both fully backfilled. Methodology: `dev/parse-match-sheet.mjs` (xlsx → canonical JSON, single-team files or consolidated multi-tab workbooks), `dev/backfill-match-players.mjs` (exact/fuzzy/platform-wide matching, `--self-test` guard), `dev/backfill-run-sheet.mjs` (one-command wrapper), per-match `--dry-run`/`--apply` write scripts with atomic batch commits. Every ambiguous player match got explicit human sign-off — game 2 alone caught 4 real matcher errors (a name shared by two different roster slots resolved via position evidence; a nickname-truncation match the algorithm structurally can't find; a cross-sport name collision; an elimination-logic reassignment).
+
+**Critical fix mid-pipeline (game 2):** the recompute step was scoped to only the current match's events, which would silently overwrite (not add to) any player's stats from a different already-backfilled match the moment two matches shared a player. Fixed to be genuinely cumulative — recomputes from a player's full event history across the entire `match_events` table, not just the match being processed. This also surfaced and let us fix a real, independent bug: MD1 g1's one-time global stats zero had incidentally wiped stats for all 28 players in the one real, live-logged match already in the DB (Pirates vs Hammers, 154 events) — their event history was untouched, only the stats cache was wrong. Ran the cumulative recompute against all 28 of them directly (`dev/recompute-pirates-hammers.mjs`) rather than leaving it to coincidental future overlap.
+
+**Evidence:**
+- Commit: N/A — data-only backfill, no code changed. Logged in RUNLOG.md 2026-07-09 with full statement counts and post-apply verification for both matches plus the Pirates/Hammers fix.
+- Verified by: post-apply SELECT queries confirming every row count; cross-match cumulative stats hand-verified for 4 overlapping players (e.g. Ezekwe's clearances: prior 8 + this match's 4 = 12, confirmed exact); sanity checks against each match's actual scoreline (2-1, 2-3, 5-0) via summed Goal+Penalty event counts.
+- Observed result: game 1 — 151 events, 7 new players. Game 2 — 109 events, 4 new players, first use of the `Penalty` event type. Pirates/Hammers fix — 28 players recomputed (9 updated, 19 given their first-ever stats row).
+- Pending items: 32 matches remaining. Prod not touched — staging only.
 
 #### Problem
 

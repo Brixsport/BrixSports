@@ -2531,3 +2531,130 @@ Separately: staging test match fired a real VAPID push to prod subscribers becau
 3. Staging smoke test: curl GET `/events` unauthenticated — confirm no loggerId in response (BUG-095 evidence)
 4. Staging undo test — confirm score reverts correctly (BUG-094 evidence)
 5. Full mm:ss live clock wiring — one session, whole feature: `LiveMatchStatus.tsx`, `useWebSocket.tsx`, `page.tsx` header, polling fallback handling, visual verify
+
+---
+
+### Session 40 — 2026-07-01
+
+**Focus:** Backfill break session — pre-backfill audit, DB state triage, test match cleanup, backlog corrections. No feature code written. All operations read-only except the test match deletion.
+
+**Built / Changed (scripts only — dev/, gitignored):**
+
+- `dev/backfill-audit.mjs` — 8-query pre-backfill audit: match status counts, BUSA League match coverage, top goals (BUG-011 check), event type distribution, stat coverage, basketball stats
+- `dev/backfill-phase0-fix-live-match.mjs` — set stuck LIVE match `av0tf8B0r78LV65KSGgKA` to FINISHED (superseded — match deleted same session)
+- `dev/backfill-phase1-roster-lookup.mjs` — team roster lookup by jersey number for all BUSA football teams. Found most teams (Allianz, Cruise, Deadline, La Fabrica, Legacy, Quantum, Santos, Westbridge, Wolves) have 0 players in the DB — player stubs required before events can be attributed.
+- `dev/cleanup-jog-kings-av0tf8.mjs` — full delete of test match `av0tf8B0r78LV65KSGgKA` (Joga vs Kings 2-0): 2 stat reverts (Samuel Olapite goal, Justin Onyeka goal), 33 events deleted, 1 logger assignment deleted, match row deleted. Verified: match row absent, 0 remaining events.
+- `dev/audit-step1-3.mjs` — two-DB (staging + prod) row count comparison, 718-goals check, historical match triage (27 BUSA League + 7 BUSALYMPICS + 1 final)
+- `dev/audit-step3b.mjs` — full 34-match table (27 BUSA League + 7 BUSALYMPICS), sorted and formatted
+
+**Key findings this session:**
+
+- **BUG-011 (718 goals) does not exist on either DB.** Staging: total_goals=31, max per player=5. Prod: total_goals=28. The original figure was a point-in-time read from Session 3–4 (2026-06-04) before any cleanup scripts ran. Closed WONT FIX with DB evidence.
+- **Staging vs prod parity:** All tables identical except `football_player_stats` (staging 38 rows, prod 31 — 7 orphan rows from test match cleanup on staging only).
+- **34 matches need event backfill:** 27 BUSA League (`busa-match-1` → `busa-match-27`), 7 BUSALYMPICS Football. `busa-match-final-2026` excluded (legitimate 0-0 + shootout handled separately).
+- **busa-match-final-2026 trace:** Shootout result (Kings 4-3) exists only in `matches.stats` JSON blob. No `shootout_home_score`/`shootout_away_score` columns exist (BACKLOG-105 not built). `eyePointAwards` table never migrated — doesn't exist in live DB. `player_ratings.is_motm` is the actual MOTM mechanism — 0 rows for the final. PEN_SCORED/MISSED/SAVED types: zero implementation anywhere.
+- **Shootout score not displayed anywhere in the UI** — match card, detail page, homepage all show regulation score only. `stats.penaltyShootout` is never read for display. Filed as BACKLOG-120.
+- **ARCHITECTURE.md drift confirmed:** claims `shootout_home_score`/`shootout_away_score` columns exist on `matches` — they don't. Claims `eyePointAwards` is a real table — it isn't. Fix at next session wrap.
+
+**Decisions made:**
+
+- No synthetic minutes for historical events — UI will show "timeline not available" for historical matches instead of fake clock data
+- Stats zero-and-recompute approach confirmed: snapshot seeded stats, zero event-derived fields, insert events, recompute from events, verify
+- `busa-match-final-2026` excluded from 34-match backfill — BACKLOG-105 handles it properly when built
+- Do not build BACKLOG-105 in a data backfill session (same rule as "don't mix fixtures work into backfill")
+- Path A for missing players: create minimal stubs (jersey number → player entity) from match sheets, enrich names via admin later
+
+**Backlog updates:**
+
+- BUG-011 closed WONT FIX with DB evidence
+- BACKLOG-120 filed: shootout score "(X-Y pens)" not rendered on any match card/page
+
+**Deferred:**
+
+- 7 session-39 commits still not pushed to origin/dev (`fafab3a`, `358ee05`, `b6d3112`, `57b5bc8`, `4c73aba`, `abdc684`, `0bd7fa8`) — push at start of next code session
+- BUG-094 staging undo verify (score revert order)
+- BUG-095 curl verify (loggerId stripped from public GET /events)
+- ARCHITECTURE.md drift fix (shootout columns, eyePointAwards)
+- Actual backfill events — blocked on Richard providing match sheets (all 34)
+
+**Next session (40B):**
+1. Richard pastes all match sheets → extract jersey numbers per team → generate player stub creation script
+2. Run player stubs dry-run, confirm, apply on staging
+3. Encode event data objects from sheets (goals, assists, cards per match)
+4. Phase 3: snapshot + zero seeded stats on staging
+5. Phase 4: insert events with null minutes into match_events
+6. Phase 5: recompute football_player_stats from events
+7. Verify totals against known scores
+
+---
+
+### Session 40B — 2026-07-09
+
+**Focus:** BUSALYMPICS historical backfill execution (BACKLOG-018) — first two live matches fully written to staging, plus an unplanned college-logo hotfix and a critical data-integrity discovery/trace mid-backfill.
+
+**Built:**
+
+- **Backfill pipeline (reusable for remaining 32 matches):**
+  - `dev/parse-match-sheet.mjs` — xlsx → canonical JSON. Supports single-team files AND consolidated multi-tab workbooks (one tab per team, tab name = team slug, auto-trimmed).
+  - `dev/backfill-match-players.mjs` — exact/fuzzy/platform-wide player matching against live rosters. `--self-test` mode (10 fixtures) as a pre-flight regression gate.
+  - `dev/backfill-run-sheet.mjs` — one-command wrapper (parse + match) for either input shape.
+  - Per-match `dev/backfill-write-*.mjs` scripts — `--dry-run`/`--apply`, single atomic `client.batch(..., 'write')` commit.
+
+- **MD1 game 1 (COLNAS 2-1 COLMANS, `OPoEtVGUNWKcRSDe4QdSr`) — APPLIED.** 7 new players, 9 affiliations, 11 squad_players, 151 match_events, stats recomputed for 28 players. Full row-by-row human sign-off on every ambiguous match (MAYOR→Mayokun, TOJU/CHARLES corrections, jersey #2 confirmed unrecoverable and skipped).
+
+- **MD1 game 2 (COLENG 2-3 COLENVS, `tyYRU5nlOrqnEXEpvIEC6`) — APPLIED.** 4 new players, 4 affiliations, 4 squad_players, 109 match_events (first use of `'Penalty'` event type, separate from `'Goal'`, matching the live schema's own treatment). Real matcher-catches: ENOCH split into two different people via position evidence (GK starter vs LW sub "Saka"), EMEKA/POSI reclassified from CREATE STUB to LINK via elimination logic and direct roster checks, ISREAL kept as CREATE STUB (turned out wrong — see below).
+
+- **Critical fix: recompute made cumulative, not match-scoped.** Original Step 7 (MD1 g1) counted only the current match's events — would silently overwrite (not add to) a player's stats the moment they appeared in a second backfilled match. Fixed in g2's write script: recompute always queries a player's FULL `match_events` history before writing. This surfaced a real, independent bug: MD1 g1's one-time global stats zero had wiped `football_player_stats` for all 28 players in the one real, live-logged match already in the DB (Pirates vs Hammers, `8Mek2CA7KPlnk1EQ647jx`, 154 events) — their event history was untouched, only the stats cache was wrong. Fixed directly via `dev/recompute-pirates-hammers.mjs --apply` (9 UPDATE, 19 first-ever INSERT). Sanity-checked against the real 5-0 scoreline.
+
+- **College team logos (unplanned, mid-session):** 4 real logo files (COLNAS/COLENG/COLMANS/COLENVS) were sitting in Downloads, never committed. Copied into `public/assests/Logos/college/`, `teams.logo` updated on staging then prod via `dev/update-college-team-logos.mjs`. Shipped via proper branches: `fix/college-team-logos` → PR #9 → `dev`; cherry-picked via `hotfix/college-team-logos` → PR #10 → `main` (main was ~150 commits behind dev — full promotion was correctly out of scope, cherry-pick was the right call). Both branches deleted post-merge, both confirmed via `git log`. BUG-096 filed (not fixed): 6 code files reference `/assets/Logos/...` (correct spelling) but the real folder is `/assests/Logos/` (typo) — breaks OG/SEO images site-wide, separate from this fix.
+
+**Bugs encountered (root cause, not just "fixed"):**
+
+- **Consolidated workbook tab name had a trailing space** (`"COLENG "`) — broke team resolution and leaked into output filenames. Root cause: `parse-match-sheet.mjs` used raw `wb.SheetNames` entries as teamSlug without trimming. Fixed: `.trim()` at the source.
+- **`players.position` is `NOT NULL` with no default** — MD1 g1's original write plan specified `position: null` for 4 stub players (TOJU, KANTE, AZEEZ, IK), which would have failed the insert outright. Caught via `PRAGMA table_info` before writing, not after a failed insert. Fixed: `''` (empty string), matching 20 existing real players already using that exact convention.
+- **First `--apply` attempt on MD1 g1 failed and rolled back** — conflated the `squad_players` gap-check (correctly found CHARLES/TOMIPE/ISREAL/UCHE JR missing) with `player_team_affiliations` existence, never separately re-verified for TOMIPE/UCHE JR (who already had affiliations). `client.batch(..., 'write')` confirmed genuinely atomic — zero partial writes on the failed attempt. Fixed by re-verifying both tables independently per candidate before the second attempt.
+- **CRITICAL, still open — Israel Emmanuel / COLMANS "ISREAL" dual-college collision.** `busa-pirates-player-17` (Israel Emmanuel) has a real, pre-existing COLENG affiliation (predates this session). MD1 g1's platform-wide matcher wrongly linked him to a "COLMANS" ISREAL sheet entry that is actually a different person, giving him two simultaneous active `affiliation_type='college'` rows — an invariant nothing in the matcher or the affiliation-insert step ever checked (club multi-affiliation is legitimate; dual-college is not, confirmed by a platform-wide scan finding zero other cases). Separately, MD1 g2 then needed the *real* Israel Emmanuel and instead created a brand-new stub (`ClqNXQiORuTQE54v5gqKU`) rather than linking to him. Full read-only trace completed and confirmed: contained to this one player, no wider collision across either match, no contamination of his real Pirates/Hammers data (he was never one of those 28 players — that assumption in an earlier planning pass was wrong). Fix script (`dev/fix-israel-emmanuel-swap.mjs`, 6 tasks: new real stub for COLMANS, re-point g1's 5 events + g2's 1 event + a substitution's `related_player_id`, move the wrong affiliation, delete the redundant g2 stub, cumulative recompute for both final IDs) is written but **`--dry-run` has not yet been run** — session ended before execution.
+
+**Deferred / still open:**
+
+- **Israel Emmanuel fix — not yet dry-run, not applied.** First task for next session.
+- 32 of 34 BUSALYMPICS matches remaining (MD2 photos already sitting in the source folder for COLNAS, per earlier note).
+- Prod not touched by the backfill itself (staging only, by design) — college logos are the only prod write this session.
+- `.agents/dev/*.md` (ARCHITECTURE, BACKLOG, BUILD_JOURNAL, RUNLOG) still uncommitted — carried the entire session, never staged. Should be committed at the start of 40C before more work piles on top.
+- BUG-096 (site-wide SEO/OG image path typo) — filed, not fixed, explicitly deferred.
+- ARCHITECTURE.md drift (shootout columns, eyePointAwards) — still open from session 39, untouched this session.
+
+**Scope creep / rejected:** None rejected outright — the college-logo work and the Pirates/Hammers fix were both flagged as out-of-scope-but-clearly-necessary before proceeding, not silently absorbed. The site-wide SEO logo bug (BUG-096) was explicitly filed-not-fixed on request to keep the branch scoped.
+
+**Next session (40C) — exact first task:**
+1. Run `node dev/fix-israel-emmanuel-swap.mjs` (dry-run), review output carefully against the trace findings already confirmed (5 g1 events, 1 g2 event + 1 substitution reference, exact affiliation/squad_players row IDs).
+2. On confirmation, `--apply`, then run the full post-apply verification block (new stub correctly COLMANS-only, Israel Emmanuel COLENG+Pirates-only with correct g2-only events, g2 stub fully deleted with zero remaining references, both players' stats recomputed correctly, no other player touched).
+3. Commit the 4 uncommitted `.agents/dev/*.md` files (session 40 + 40B accumulated changes) before starting new work.
+4. Resume backfill with MD1's remaining fixtures (or next match day) using the now-proven pipeline.
+
+---
+
+### Session 40C — 2026-07-09
+
+**Focus:** Close out the Israel Emmanuel dual-college-affiliation collision carried over from Session 40B, before resuming the backfill.
+
+**Built / Fixed:**
+
+- **Israel Emmanuel / COLMANS "Isreal" collision — RESOLVED** (`dev/fix-israel-emmanuel-swap.mjs --apply`)
+  - Dry-run reviewed first — matched the confirmed trace exactly (5 g1 events, 1 g2 event, 1 substitution reference), no drift from what was found in Session 40B.
+  - Applied as a single atomic batch (14 statements). New real COLMANS "Isreal" stub created; MD1 g1's 5 events re-pointed to it; Israel's wrong COLMANS affiliation + squad_players row deleted and replaced with the new stub's own; MD1 g2's 1 event + the substitution's `related_player_id`/`detail` re-pointed to Israel Emmanuel; redundant g2 stub (player, affiliation, squad_players, stats — 4 rows) deleted; both final IDs recomputed cumulatively.
+  - Full DB-query verification post-apply (not UI/HTTP): new stub has exactly 1 COLMANS affiliation and stats matching g1's contribution (4 clearances, 1 interception); Israel Emmanuel has exactly 2 affiliations (COLENG + Pirates FC, no COLMANS) and stats matching only his real g2 contribution (1 foul); g2 stub confirmed fully gone (0 rows across players/affiliations/squad_players/stats/event_refs).
+  - See `RUNLOG.md` Session 40C for the full evidence block.
+
+**Decision pending (raised by Richard, not yet resolved):** whether the player-matcher should get a hard exclusivity guard — reject/flag any LINK that would create a second active `affiliation_type='college'` row for a player — before processing more match sheets, given this collision cost a full read-trace-fix-recompute cycle. See [[project_backfill_college_exclusivity_guard]].
+
+**Deferred:**
+
+- 32 of 34 BUSALYMPICS matches remaining.
+- `.agents/dev/*.md` doc updates (session 40, 40B, 40C) — to be committed immediately after this entry.
+- BUG-096 (site-wide SEO/OG image path typo) — still filed, not fixed.
+- ARCHITECTURE.md drift (shootout columns, eyePointAwards) — still open from session 39.
+
+**Next session:**
+1. Resolve the exclusivity-guard decision above before touching more sheets.
+2. Resume backfill with MD1's remaining fixtures (or next match day) using the proven pipeline.
