@@ -2675,13 +2675,60 @@ Separately: staging test match fired a real VAPID push to prod subscribers becau
 
 **ALL 7 BUSALYMPICS FOOTBALL MATCHES NOW FULLY BACKFILLED.** MD1 g1/g2, MD2 g1/g2, MD3 g1/g2, Final — every one applied and DB-verified this session (40C). This closes the BUSALYMPICS half of BACKLOG-018.
 
+**Post-wrap follow-up (Richard's request, before treating BUSALYMPICS as fully closed):**
+
+- **Nickname write audit — ran clean.** Every non-empty `nicknames` array in the DB (4 total) correctly scoped to the right team affiliation. No further instances of the Mayokun/Olusanya bug shape exist.
+- **Self-test suite extended** for the nickname-as-fallback tier (MAYOR/LEZZY/POSI fixtures) and, separately, for club-team correctness ahead of BUSA League.
+- **Real bug found and fixed:** `checkCollegeExclusivity` never verified the TARGET team was itself a college team — it would have wrongly blocked a legitimate club-team LINK for any player who already has a college affiliation (a normal, common case). The matcher's calling code masked this by coincidence; `assertNoCollegeConflict` (the write-script hard-abort variant) had no such protection and would have broken the first BUSA League write script to use it. Caught via a real-data regression test (Olamidotun Salau, who genuinely holds both an active COLMANS and Pirates FC affiliation) built specifically because Richard asked to verify the guard empirically rather than trust the code-level reasoning — same "test against real data" throughline as the rest of this session. Fixed in `dev/lib/college-guard.mjs`: the college-team gate now lives inside the shared function, not the caller. Self-test: 16/16 pass. Never fired incorrectly in production — purely latent, closed before BUSA League could trigger it.
+- **Final's identity resolution re-verified** (all 3 scorers matched exactly one COLNAS roster candidate each, zero ambiguity) but flagged as a real process deviation — it used known IDs directly rather than routing through the matcher, since no sheet existed. **Decision made:** future no-sheet matches must always route through `backfill-match-players.mjs` via a throwaway JSON, even with nothing to parse against — full pipeline parity, no exceptions going forward.
+- **Independent by-hand verification — dispatched, not yet closed.** Generated `dev/staging-verification-dump.md` (raw DB state, sheet-shaped columns, no correctness framing) for Richard to compare against the physical sheets/photos directly. Result of that comparison is still pending — BUSALYMPICS should not be treated as fully verified until it comes back clean.
+
 **Deferred:**
 
 - 27 BUSA League matches remain in the original 34-match BACKLOG-018 scope — a different competition, not yet started. No sheets or scorer data gathered for these yet.
-- `.agents/dev/*.md` doc updates (session 40 through 40C) — still uncommitted. Richard has declined to commit mid-session multiple times in favor of continuing the backfill; commit when he's ready, not proactively mid-flow.
+- Richard's by-hand comparison against `dev/staging-verification-dump.md` — pending, blocks calling BUSALYMPICS fully closed / any prod mirror.
+- `.agents/dev/*.md` doc updates — mostly committed this session (guard build, BUSALYMPICS completion, wrap); this final follow-up round is uncommitted as of session end, Richard's call on timing.
 - BUG-096 (site-wide SEO/OG image path typo) — still filed, not fixed.
 - ARCHITECTURE.md drift (shootout columns, eyePointAwards) — still open from session 39.
 
 **Next session:**
-1. Start the BUSA League backfill (27 matches) — same pipeline, sheets or goal-scorer-only as available.
-2. Commit accumulated `.agents/dev/*.md` doc changes when Richard is ready — this is a natural checkpoint given BUSALYMPICS just closed out entirely.
+1. Check whether Richard's by-hand verification of `dev/staging-verification-dump.md` surfaced anything — resolve before touching BUSA League if so.
+2. Start the BUSA League backfill (27 matches) — same pipeline (now confirmed safe against real club-team data), sheets or goal-scorer-only as available, always through the matcher per the no-sheet precedent.
+3. Commit any remaining uncommitted doc changes.
+
+---
+
+### Session 41 — 2026-07-11
+
+**Focus:** BUSA League Football (BACKLOG-018's second half, 27 matches) — FA data reconciliation, group/knockout structure discovery, match schedule verification, and player roster backfill. First real session on this competition since it was flagged "not started" at the end of session 40C.
+
+**Built / Discovered:**
+
+- **FA PDF reconciliation pipeline** (`dev/parse-fa-match-reports.mjs`) — parsed 26 FA match report PDFs (goals + cards only, no full stat lines, confirmed lighter than BUSALYMPICS as expected). Found and fixed two real parser bugs (PDF page-break markers leaking into text, one file using tabs instead of spaces between words) before trusting any output. Cross-referenced all 26 against the 27 `busa-match-*` DB rows: **23 of 27 already FA-confirmed correct, zero real corruption found** in the portion FA covered — directly contradicts the original "previous developer mixed things up" fear for that slice.
+- **Blaze FC / Deadline FC resolved** — Richard confirmed Blaze FC was swapped for Deadline FC pre-season and never played; FA data independently corroborates (Deadline appears, Blaze never does).
+- **Full BUSA League structure mapped**: group-knockout format, 4 groups of 4 (A: Joga/Wolves/Westbridge/Prime, B: Kings/Hammers/Santos/Cruise, C: Allianz/Legacy/Agenda/La Fabrica, D: Pirates/Underrated/Quantum/Deadline — DB's own `round` field already had this right, letters B/C initially given backwards in the source draw list, corrected against the DB's existing live convention), 3 group-stage gameweeks, Quarterfinals → Semifinals → 3rd Place → Final.
+- **Major discovery: the "one real live-logged match" from session 40B/40C's stats-corruption fix (`8Mek2CA7KPlnk1EQ647jx`, Pirates 5-0 Hammers, 154 events) is BUSA League's 3rd-Place Playoff**, not an unrelated stray match — closes a loose thread from two sessions ago.
+- **Both semifinals identified and score-confirmed** (Joga-Bonito 1-0 Hammers FC, Kings FC 2-0 Pirates FC) via three independent sources: FA reports (present in the original 26-file batch, initially miscategorized mid-session as "no FA source" before being caught and corrected), Richard's direct confirmation, and full team logsheets. **Both held out of the `matches` table** — Task 0 trace found `approval_status` has no real server-side visibility gate on either `/api/matches` or `/api/matches/[id]` (field is stripped from the response, but the row itself is never filtered out), so a placeholder/NULL-score row would be fully public immediately. Real dates for both still unsourced.
+- **`competition_team_entries` group-seed applied** — table had zero rows for this competition (only 4 platform-wide, all BUSALYMPICS) before this session; 16 rows inserted (dry-run reviewed first), `group_draw_complete` deliberately left `false`.
+- **Canonical schedule document built** (`dev/busa-league-canonical-schedule.md`) — full 32-match structure with FA-verification-basis tagged per row (FA-CONFIRMED / DB-only-bracket-confirmed / pending / missing), cross-checked against 3 uploaded schedule graphics. Surfaced: Deadline-Quantum's date (previously fully unsourced) now known from the GW3 image; Kings-Cruise's date is off by 1 day (unfixed); Pirates-Deadline's apparent "date anomaly" turned out to be a real, legitimate mid-season reschedule due to logistics, not an error.
+- **Full match-level logsheet + FA cross-check for 7 matches** (Cruise-Hammers, Hammers-Santos, Kings-Santos, Legacy-La Fabrica, Pirates-Quantum, Underrated-Deadline, Final) — goal-scorer jersey numbers matched FA almost perfectly across the board; card data was the weak spot (logsheets consistently under-capture relative to FA in several matches). One real, confirmed card-jersey correction (La Fabrica's second card is #27 per the logsheet, not FA's #30 — no such player #30 exists).
+- **Kings v Cruise 15-0 — confirmed accurate.** The FA PDF's own goal-scorer list mislabeled all 18 goals under "Cruise FC" instead of Kings — a document error, not a score error. Scorer attribution will need to flip when events get built for this match.
+- **Kings v Pirates SF (Lone Sheets logsheet) had a 3rd, extra goal (Akinbode) not corroborated by either independent source (FA, Richard)** — resolved as a logsheet error, not a hidden second goal for someone else (every scorer had exactly 1 goal recorded, not 2 — ruled out a misattributed brace).
+- **85 new player stubs created** across the previously-unbackfilled club rosters (Cruise, Santos, La Fabrica, Legacy, Underrated, Prime, Deadline) plus 1 Kings player — see RUNLOG.md for the full verification pipeline (163 → 85 candidates, 5 successive passes each catching real duplicates the last one missed).
+
+**Real bugs/lessons this session:**
+
+- **`competition_team_entries` INSERT vs UPDATE trap** — same shape as the established "mirror scripts must insert, not just update" pattern: all 16 UPDATE attempts silently returned `rowsAffected: 0` before the real gap (zero existing rows, not just missing `group_name`) was caught.
+- **`start_time` has no real "TBC" mechanism anywhere** — NOT NULL at the DB level, no explicit server validation (relies on the DB constraint alone, would 500 raw), and the admin form's `required` isn't decorative — the edit-save handler crashes on `new Date('').toISOString()` if bypassed. Directly informed the decision to hold both semifinals out of the DB rather than invent a placeholder date.
+- **Built several ad-hoc duplicate-detection scripts for player identity instead of extending the already-proven `backfill-match-players.mjs` matcher** — cost real time (same bug class — jersey_name-only matches, unassigned-pool records — recurred 3+ times before a proper cross-validation pass against the established tool caught it). Fixed going forward: added a `--json` export flag to the matcher itself so its recommendations are consumable programmatically, rather than re-deriving matching logic ad-hoc. Self-test re-run (16/16) after each edit before trusting it against real data.
+- **Club-exclusivity is real and distinct from college-exclusivity** — a player can't be on two different club teams at once (only transfers from QF onward are possible per Richard), but club + college simultaneously is fine (see Abdul-jabbaar Bello / busa-pirates-player-9, confirmed both Pirates FC and COLNAS). Several "cross-team fuzzy match" noise candidates this session were resolved correctly by applying this rule rather than trusting the matcher's raw fuzzy suggestion.
+- **Cross-sport false matches recur** — Storm/Titans (basketball) players kept surfacing as fuzzy candidates for football sheet names (Jabbar, OLA, Ebuka, SALIM, PAUL) — same shape as the original Jabbar miss, now a recognized pattern to check for explicitly (does the candidate's team play the same sport?) before accepting any cross-team suggestion.
+
+**Deferred to next session (41B):**
+
+- SUPRA and EZECHI (Hammers, jersey-slot collisions with existing players) — still unconfirmed, not created, not linked.
+- Semifinal dates (Joga-Hammers, Kings-Pirates) and Deadline-Quantum's score — all three matches still held out of the DB pending source data.
+- QF4 (busa-match-27, Joga v Underrated) still PENDING FA VERIFICATION — LONE SHEETS' UNDERRATED tab is likely this match's Underrated side (card evidence points away from it being the already-covered Pirates-Underrated group match), but the Joga-side sheet was never found.
+- Kings-Cruise date correction (off by 1 day) not yet applied.
+- Match events (goals/cards as `match_events` rows) not yet built for any of the 7 fully-verified matches or the ~16 FA-only group matches — this was the explicit next step before the player-identity work took over the rest of the session.
+- Lineup-completeness assessment done ("both teams complete" rule applied): only Final, Hammers-Santos, Kings-Santos, and Legacy-La Fabrica qualify for a full lineup record; the other 6 matches can still get events logged, just not a complete XI.
