@@ -265,7 +265,7 @@ export async function GET(
             relatedProfiles.push(...relatedPlayers);
         }
 
-        const { email: _email, ...playerPublic } = player;
+        const { email: _email, profileId: _profileId, ...playerPublic } = player;
         const playerPayload = isAdmin ? player : playerPublic;
 
         return NextResponse.json({
@@ -275,8 +275,8 @@ export async function GET(
                     ...team,
                     sport: playerSport,
                 },
-                memberships,
-                organizationAffiliations,
+                // memberships and organizationAffiliations are admin-only (CLAUDE.md banned public fields)
+                ...(isAdmin ? { memberships, organizationAffiliations } : {}),
                 relatedProfiles,
             },
             stats: seasonStats,

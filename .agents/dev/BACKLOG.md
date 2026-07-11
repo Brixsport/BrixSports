@@ -359,6 +359,8 @@ BUG-001 through BUG-029, AUDIT-001/002 (partial), BACKLOG-065 — all resolved S
 - Observed result: public callers cannot retrieve logger identity; authenticated callers retain full event data
 - Pending items: curl verify on staging — unauthenticated GET `/api/matches/[id]/events` must return events without `loggerId`/`loggerName` fields
 
+- **BUG-098** _(CRITICAL — NDPR / Public API)_: `GET /api/players/[id]` returns `profileId`, `memberships`, and `organizationAffiliations` to unauthenticated callers — three of the nine fields explicitly banned from public responses in CLAUDE.md. `getAuthUser(request).catch(() => null)` at `src/app/api/players/[id]/route.ts:24` is optional and only gates a couple of extra fields for admins; it does not gate the request. At line 268, only `email` is destructured out of the player row (`const { email: _email, ...playerPublic } = player`) — `profileId` rides along unstripped for every caller. `memberships` (line 278) and `organizationAffiliations` (line 279) are returned raw with no admin/public branch at all. Found 2026-07-11 while reviewing a directive to write a real (non-null) `profile_id` value for the first time on this platform (BACKLOG-120 / Abdul-jabbaar Bello ↔ Storm "Jabbar" link) — previously harmless because `profile_id` was null on all 309 players, so the leak carried no information; the moment any row gets a real value, this becomes a live, unauthenticated, cross-referenceable identity leak. Fix: shape an explicit public DTO for this route (same pattern as BUG-095) — strip `profileId`, `memberships`, `organizationAffiliations` for unauthenticated/non-admin callers; `relatedProfiles` (which is derived FROM `profileId` and is the intended public "Multi-Sport Athlete" feature) should stay, since team/sport/name for a linked profile is meant to be public — only the raw `profileId` field and the other two banned fields need stripping. `src/app/api/players/[id]/route.ts`. **Status:** OPEN. Filed: 2026-07-11.
+
 - **BUG-090** _(LOW — WebSocket)_: Socket emits attempted on a `CLOSING` socket. `useMatchSubscription` reads `socket.readyState` before emitting, but the `isConnected` dep-array trigger can fire in the same tick as a disconnect — `readyState` may transition from OPEN to CLOSING between the dep-array check and the emit. Not confirmed as causing dropped events but creates unnecessary warnings. Filed: 2026-06-29. **Status:** OPEN
 
 - ~~**BUG-073**~~ _(LOW — Data)_: Substitution `detail` string direction — filed as inverted during KIN vs JOG test match analysis. Confirmed at HEAD: `confirmEvent('Substitution', playerComingOut, playerInId)` → `relatedName` = incoming, `outName` = outgoing → string reads `{inPlayer} IN for {outPlayer}`. Code was never wrong. DB events from the KIN vs JOG test match (deleted) reflected an older state. **Status:** RESOLVED — no code change needed, 2026-06-26.
@@ -661,6 +663,26 @@ Rolling substitutions (unlimited, no cap gate) cannot be tested on the same matc
 - Subbed-out player re-entry if `allowSubbedOutReentry` is also enabled
 
 **Gate:** Requires a dedicated test match on a competition configured with rolling subs. Schedule after the standard-sub test match passes.
+
+---
+
+### BACKLOG-120 — Admin-Facing "Link Player Profiles" Action (Multi-Sport Identity)
+
+**Status:** OPEN
+**Priority:** Medium
+**Filed:** 2026-07-11
+
+`profile_id`'s only live write path (`getPlayerProfileId` in `src/db/utils/player-profile.ts`, wired through `bulk-register`) links two player rows by matching on `email`. This is structurally unreachable for nearly every player on the platform: `create-individual` and competition-approval both hardcode `profileId: null` outright, and every backfill-created player (BUSALYMPICS' 7, BUSA League's 84+) has `email: null` since they're transcribed from paper sheets, not registration forms. The read side (`GET /api/players/[id]` → `relatedProfiles`) and the "Multi-Sport Athlete" UI card (`src/app/players/[id]/page.tsx`) are fully built and correct — they've just never had real data to render, because the one write trigger essentially never fires in practice.
+
+Confirmed via a real case this session: Abdul-jabbaar Bello (football, `busa-pirates-player-9`) and Storm's "Jabbar" (basketball, `DRSlwyUmV-Bgff6JMnt0r`) are the same real person, per Richard — handled as a one-off manual `profile_id` write rather than blocked on this backlog item. Given multi-sport athletes are confirmed common (not rare) for college-age athletes on this platform, this won't be the last case.
+
+**Fix:** A real admin-facing "link these two player profiles" action, independent of email matching — e.g. an admin picks player A and player B from search, confirms, and the system either reuses an existing `profile_id` (if either row already has one) or generates a fresh one via `nanoid()` and writes it to both rows.
+
+**Not urgent** — no other pending case is blocked on this; it exists to make the next multi-sport link a UI action instead of a manual directive.
+
+**Related:** `src/db/utils/player-profile.ts`, `src/app/api/players/[id]/route.ts` (relatedProfiles read), `src/app/players/[id]/page.tsx` (Multi-Sport Athlete card)
+
+---
 
 - Payment, sponsorship, or financial processing
 - Social features (comments, reactions, follows, DMs)
