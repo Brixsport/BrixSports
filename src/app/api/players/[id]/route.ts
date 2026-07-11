@@ -87,11 +87,14 @@ export async function GET(
             .orderBy(desc(matches.startTime))
             .limit(50);
 
+        // Event type strings are stored Title Case ("Goal", "Yellow Card") — normalize before comparing
+        const normalizeType = (t: string) => t.toUpperCase().replace(/\s+/g, '_');
+
         // Calculate player statistics
-        const goals = playerEvents.filter(e => e.event.type === 'GOAL').length;
-        const assists = playerEvents.filter(e => e.event.type === 'ASSIST').length;
-        const yellowCards = playerEvents.filter(e => e.event.type === 'YELLOW_CARD').length;
-        const redCards = playerEvents.filter(e => e.event.type === 'RED_CARD').length;
+        const goals = playerEvents.filter(e => normalizeType(e.event.type) === 'GOAL').length;
+        const assists = playerEvents.filter(e => normalizeType(e.event.type) === 'ASSIST').length;
+        const yellowCards = playerEvents.filter(e => normalizeType(e.event.type) === 'YELLOW_CARD').length;
+        const redCards = playerEvents.filter(e => normalizeType(e.event.type) === 'RED_CARD').length;
 
         // Get matches the player participated in
         const primaryTeamId = team?.id || player.teamId;
@@ -109,15 +112,20 @@ export async function GET(
                 .limit(10)
             : [];
 
-        // Get recent form (last 5 matches with events)
-        const recentMatchesWithEvents = playerEvents
-            .slice(0, 5)
-            .map(pe => ({
-                match: pe.match,
-                events: playerEvents
-                    .filter(e => e.match?.id === pe.match?.id)
-                    .map(e => e.event),
-            }));
+        // Get recent form (last 5 distinct matches, each with its own events sorted chronologically)
+        const seenMatchIds = new Set<string>();
+        const recentMatchesWithEvents: { match: typeof playerEvents[number]['match']; events: typeof playerEvents[number]['event'][] }[] = [];
+        for (const pe of playerEvents) {
+            const matchId = pe.match?.id;
+            if (!matchId || seenMatchIds.has(matchId)) continue;
+            seenMatchIds.add(matchId);
+            const eventsForMatch = playerEvents
+                .filter(e => e.match?.id === matchId)
+                .map(e => e.event)
+                .sort((a, b) => (a.minute ?? 0) - (b.minute ?? 0) || (a.second ?? 0) - (b.second ?? 0));
+            recentMatchesWithEvents.push({ match: pe.match, events: eventsForMatch });
+            if (recentMatchesWithEvents.length >= 5) break;
+        }
 
         // Get player stats from specialized tables or generic table
         // Determine sport from team or matches
@@ -232,12 +240,12 @@ export async function GET(
 
         // Group events by type for timeline
         const eventsByType = {
-            goals: playerEvents.filter(e => e.event.type === 'GOAL'),
-            assists: playerEvents.filter(e => e.event.type === 'ASSIST'),
-            cards: playerEvents.filter(e =>
-                e.event.type === 'YELLOW_CARD' ||
-                e.event.type === 'RED_CARD'
-            ),
+            goals: playerEvents.filter(e => normalizeType(e.event.type) === 'GOAL'),
+            assists: playerEvents.filter(e => normalizeType(e.event.type) === 'ASSIST'),
+            cards: playerEvents.filter(e => {
+                const t = normalizeType(e.event.type);
+                return t === 'YELLOW_CARD' || t === 'RED_CARD';
+            }),
         };
 
         // Check for related profiles (Multi-sport)
