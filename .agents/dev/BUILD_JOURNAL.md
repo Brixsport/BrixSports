@@ -2804,7 +2804,8 @@ Real bugs/lessons from the remaining 6 matches:
 - 23 remaining matches: 17 group-stage (including busa-match-1), 4 QF (QF1-3 bracket-confirmed, QF4 pending FA verification), 2 SF (both blocked — no `matches` row, no sourced date; Joga-Hammers has parsed sheets ready, Kings-Pirates only has "Lone Sheets" files, unassessed).
 - 3 unassessed "Lone Sheets" parsed files (`busa-lonesheets-KINGS/PIRATES/UNDERRATED`) — never opened this session, unclear which remaining match(es) they cover.
 - Kings-Cruise date correction (off by 1 day) — still not applied, carried from session 41.
-- busa-match-13's genuinely ambiguous deferred substitution windows and busa-match-15/-10/-14's group-swap windows — resolvable only with named-pair source data, same as the BUSALYMPICS precedent.
 - Deadline-Quantum's score still unsourced.
+
+**Correction to an earlier draft of this entry:** the "genuinely ambiguous substitution windows" listed as deferred were actually resolved later the same session — Richard supplied real pairing data (direction determined by each player's own minuteIn/minuteOut, not word order) for busa-match-15, -12, -14, -10, written via `dev/backfill-write-deferred-substitutions.mjs` (18 events), plus SUPRA's stub closed busa-match-13's last pair. All 25 Substitution events across the 5 affected matches are confirmed live in the DB (13:2, 15:5, 10:4, 12:5, 14:9) — nothing is actually deferred here. Zero open substitution gaps remain in any of the 8 completed matches.
 
 **Next session — exact first task:** decide scope for the 17 remaining group-stage matches (busa-match-1 first, since it's the one already explicitly named as a starting point) — likely FA-only goals+cards given lighter available data, same identity-resolution + FA/graphic cross-check rigor established this session, and wire the college-guard into the write script's pre-flight from the start this time rather than verifying retroactively.
