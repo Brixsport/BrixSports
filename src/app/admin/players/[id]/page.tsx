@@ -70,16 +70,17 @@ interface OrgAffiliation {
     };
 }
 
-interface MatchEvent {
-    id: string;
-    type: string;
-    minute: number | null;
-    match?: {
+interface RecentMatch {
+    match: {
         id: string;
-        homeTeam?: { name: string };
-        awayTeam?: { name: string };
-        competition?: string;
+        homeScore: number | null;
+        awayScore: number | null;
+        competition: string;
+        startTime: string;
+        homeTeam?: { name: string; shortName: string } | null;
+        awayTeam?: { name: string; shortName: string } | null;
     } | null;
+    events: { id: string; type: string; minute: number | null }[];
 }
 
 export default function PlayerDetailPage() {
@@ -89,7 +90,7 @@ export default function PlayerDetailPage() {
     const playerId = params.id as string;
 
     const [player, setPlayer] = useState<Player | null>(null);
-    const [allEvents, setAllEvents] = useState<MatchEvent[]>([]);
+    const [recentMatches, setRecentMatches] = useState<RecentMatch[]>([]);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [editMode, setEditMode] = useState(false);
@@ -123,7 +124,7 @@ export default function PlayerDetailPage() {
             const data = await res.json();
             setPlayer(data.player);
             setForm(data.player);
-            setAllEvents(data.allEvents ?? []);
+            setRecentMatches(data.recentMatches ?? []);
         } catch {
             setErrorMsg('Failed to load player');
         } finally {
@@ -424,23 +425,33 @@ export default function PlayerDetailPage() {
                     <h2 className="text-[10px] font-black uppercase tracking-[0.3em] text-white/30 mb-6 flex items-center gap-2">
                         <Activity size={14} /> Recent Match Events
                     </h2>
-                    {allEvents.length === 0 ? (
+                    {recentMatches.length === 0 ? (
                         <p className="text-white/30 text-sm font-bold">No match events recorded.</p>
                     ) : (
-                        <div className="space-y-2">
-                            {allEvents.slice(0, 5).map((ev, i) => {
-                                const matchName = ev.match?.homeTeam && ev.match?.awayTeam
-                                    ? `${ev.match.homeTeam.name} vs ${ev.match.awayTeam.name}`
-                                    : ev.match?.competition ?? 'Unknown match';
+                        <div className="space-y-4">
+                            {recentMatches.map((rm, i) => {
+                                const m = rm.match;
+                                const matchName = m?.homeTeam && m?.awayTeam
+                                    ? `${m.homeTeam.shortName ?? m.homeTeam.name} vs ${m.awayTeam.shortName ?? m.awayTeam.name}`
+                                    : m?.competition ?? 'Unknown match';
                                 return (
-                                    <div key={ev.id ?? i} className="flex items-center gap-4 p-3 bg-white/[0.03] border border-white/5 rounded-xl">
-                                        <span className="px-2 py-0.5 bg-primary/20 text-primary text-[9px] font-black rounded uppercase italic shrink-0">
-                                            {ev.type}
-                                        </span>
-                                        <span className="text-sm font-bold flex-1 min-w-0 truncate">{matchName}</span>
-                                        <span className="text-white/30 text-xs font-bold shrink-0">
-                                            {ev.minute != null ? `${ev.minute}'` : '—'}
-                                        </span>
+                                    <div key={m?.id ?? i} className="p-4 bg-white/[0.03] border border-white/5 rounded-xl">
+                                        <div className="flex items-center justify-between gap-2 mb-2">
+                                            <span className="text-sm font-bold truncate">{matchName}</span>
+                                            {m && (
+                                                <span className="text-white/50 text-xs font-bold shrink-0">{m.homeScore} - {m.awayScore}</span>
+                                            )}
+                                        </div>
+                                        <div className="flex gap-2 flex-wrap">
+                                            {rm.events.map(ev => (
+                                                <span
+                                                    key={ev.id}
+                                                    className="px-2 py-0.5 bg-primary/20 text-primary text-[9px] font-black rounded uppercase italic"
+                                                >
+                                                    {ev.type} {ev.minute != null && ev.minute >= 0 ? `${ev.minute}'` : ''}
+                                                </span>
+                                            ))}
+                                        </div>
                                     </div>
                                 );
                             })}

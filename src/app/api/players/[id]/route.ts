@@ -6,7 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
 import { players, teams, matchEvents, matches, playerStats, basketballPlayerStats, footballPlayerStats, playerTeamAffiliations, playerOrganizationAffiliations, organizations } from '@/db/schema';
-import { eq, desc, and, sql, ne } from 'drizzle-orm';
+import { eq, desc, and, sql, ne, inArray } from 'drizzle-orm';
 import { getAuthUser } from '@/lib/auth';
 import { enrichPlayersWithAffiliations, syncPlayerOrganizationAffiliations } from '@/lib/player-data';
 
@@ -159,6 +159,22 @@ export async function GET(
             recentMatchesWithEvents.push({ match: pe.match, events: eventsForMatch });
             if (recentMatchesWithEvents.length >= 5) break;
         }
+
+        // Resolve home/away team names for the recent-matches cards (admin and
+        // public "recent performances" both need real team names, not just IDs)
+        const recentTeamIds = [...new Set(recentMatchesWithEvents.flatMap(m => [m.match?.homeTeamId, m.match?.awayTeamId]).filter((id): id is string => !!id))];
+        const recentTeams = recentTeamIds.length > 0
+            ? await db.select({ id: teams.id, name: teams.name, shortName: teams.shortName }).from(teams).where(inArray(teams.id, recentTeamIds))
+            : [];
+        const teamById = new Map(recentTeams.map(t => [t.id, t]));
+        const recentMatchesWithTeams = recentMatchesWithEvents.map(m => ({
+            ...m,
+            match: m.match ? {
+                ...m.match,
+                homeTeam: m.match.homeTeamId ? teamById.get(m.match.homeTeamId) ?? null : null,
+                awayTeam: m.match.awayTeamId ? teamById.get(m.match.awayTeamId) ?? null : null,
+            } : m.match,
+        }));
 
         // Get player stats from specialized tables or generic table
         // Determine sport from team or matches
@@ -322,7 +338,7 @@ export async function GET(
             },
             stats: seasonStats,
             competitionStats,
-            recentMatches: recentMatchesWithEvents,
+            recentMatches: recentMatchesWithTeams,
             events: eventsByType,
             allEvents: playerEvents.slice(0, 20).map(pe => ({
                 ...pe.event,
