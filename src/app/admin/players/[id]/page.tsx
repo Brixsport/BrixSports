@@ -91,6 +91,7 @@ export default function PlayerDetailPage() {
 
     const [player, setPlayer] = useState<Player | null>(null);
     const [recentMatches, setRecentMatches] = useState<RecentMatch[]>([]);
+    const [expandedEventGroups, setExpandedEventGroups] = useState<Set<string>>(new Set());
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [editMode, setEditMode] = useState(false);
@@ -176,6 +177,25 @@ export default function PlayerDetailPage() {
         setForm(player ?? {});
         setEditMode(false);
         setErrorMsg('');
+    };
+
+    const toggleEventGroup = (key: string) => {
+        setExpandedEventGroups(prev => {
+            const next = new Set(prev);
+            if (next.has(key)) next.delete(key);
+            else next.add(key);
+            return next;
+        });
+    };
+
+    const groupEventsByType = (events: RecentMatch['events']) => {
+        const groups = new Map<string, { type: string; minutes: (number | null)[] }>();
+        for (const ev of events) {
+            const g = groups.get(ev.type) ?? { type: ev.type, minutes: [] };
+            g.minutes.push(ev.minute != null && ev.minute >= 0 ? ev.minute : null);
+            groups.set(ev.type, g);
+        }
+        return [...groups.values()];
     };
 
     const field = (label: string, key: keyof Player, type: 'text' | 'number' = 'text') => {
@@ -443,14 +463,26 @@ export default function PlayerDetailPage() {
                                             )}
                                         </div>
                                         <div className="flex gap-2 flex-wrap">
-                                            {rm.events.map(ev => (
-                                                <span
-                                                    key={ev.id}
-                                                    className="px-2 py-0.5 bg-primary/20 text-primary text-[9px] font-black rounded uppercase italic"
-                                                >
-                                                    {ev.type} {ev.minute != null && ev.minute >= 0 ? `${ev.minute}'` : ''}
-                                                </span>
-                                            ))}
+                                            {groupEventsByType(rm.events).map(g => {
+                                                const groupKey = `${m?.id ?? i}-${g.type}`;
+                                                const isExpanded = expandedEventGroups.has(groupKey);
+                                                const timedMinutes = g.minutes.filter((min): min is number => min != null);
+                                                return (
+                                                    <button
+                                                        key={groupKey}
+                                                        type="button"
+                                                        onClick={() => toggleEventGroup(groupKey)}
+                                                        className="px-2 py-0.5 bg-primary/20 text-primary text-[9px] font-black rounded uppercase italic hover:bg-primary/30 transition-colors cursor-pointer"
+                                                    >
+                                                        {g.type} ×{g.minutes.length}
+                                                        {isExpanded && (
+                                                            <span className="ml-1 normal-case font-bold text-primary/70">
+                                                                ({timedMinutes.length > 0 ? timedMinutes.map(min => `${min}'`).join(', ') : 'no time data'})
+                                                            </span>
+                                                        )}
+                                                    </button>
+                                                );
+                                            })}
                                         </div>
                                     </div>
                                 );
