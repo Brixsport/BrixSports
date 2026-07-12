@@ -76,10 +76,43 @@ export async function GET(
         }
 
         // Get player's match events (goals, assists, cards, etc.)
+        // Projection is deliberately narrow: excludes heavy unused match blobs
+        // (lineups, stats) and fields banned from public responses in CLAUDE.md
+        // (loggerId, approvalStatus, managerNotes, approvedBy) - nothing on
+        // /players/[id] or the admin player page reads any of these.
         const playerEvents = await db
             .select({
-                event: matchEvents,
-                match: matches,
+                event: {
+                    id: matchEvents.id,
+                    matchId: matchEvents.matchId,
+                    type: matchEvents.type,
+                    minute: matchEvents.minute,
+                    second: matchEvents.second,
+                    period: matchEvents.period,
+                    teamId: matchEvents.teamId,
+                    playerId: matchEvents.playerId,
+                    relatedPlayerId: matchEvents.relatedPlayerId,
+                    detail: matchEvents.detail,
+                    isEyePoint: matchEvents.isEyePoint,
+                    value: matchEvents.value,
+                    createdAt: matchEvents.createdAt,
+                },
+                match: {
+                    id: matches.id,
+                    sport: matches.sport,
+                    homeTeamId: matches.homeTeamId,
+                    awayTeamId: matches.awayTeamId,
+                    homeScore: matches.homeScore,
+                    awayScore: matches.awayScore,
+                    status: matches.status,
+                    startTime: matches.startTime,
+                    venue: matches.venue,
+                    competition: matches.competition,
+                    competitionId: matches.competitionId,
+                    round: matches.round,
+                    matchday: matches.matchday,
+                    groupName: matches.groupName,
+                },
             })
             .from(matchEvents)
             .leftJoin(matches, eq(matchEvents.matchId, matches.id))
