@@ -477,7 +477,7 @@ export default function PlayerDetailPage() {
                                                         {g.type} ×{g.minutes.length}
                                                         {isExpanded && (
                                                             <span className="ml-1 normal-case font-bold text-primary/70">
-                                                                ({timedMinutes.length > 0 ? timedMinutes.map(min => `${min}'`).join(', ') : 'no time data'})
+                                                                ({timedMinutes.length > 0 ? timedMinutes.map(min => `${min}'`).join(', ') : '—'})
                                                             </span>
                                                         )}
                                                     </button>
