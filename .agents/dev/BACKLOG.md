@@ -405,6 +405,10 @@ BUG-001 through BUG-029, AUDIT-001/002 (partial), BACKLOG-065 — all resolved S
 - Observed result: "PIR vs HAM" shows `GOAL ×1, INTERCEPTION ×2, SUBSTITUTION ×1, SHOT ON TARGET ×1, SHOT ×1` (5 badges, was 6 raw events); "PIR vs QUA" shows `GOAL ×1, SHOT ON TARGET ×1, SHOT OFF TARGET ×4, YELLOW CARD ×1, SUBSTITUTION ×1` (5 badges, was 8 raw events) — grouping confirmed correct on real data for both a timed and an untimed match.
 - Pending items: none.
 
+- ~~**BUG-103**~~ _(UX — Public Match Detail Page)_: Two issues found while reviewing a backfilled BUSALYMPICS match on staging (`a9CtLwotaXyfsfMf2odAM`, COLNAS 1-2 COLENG). (1) `LiveMatchTimeline.tsx` rendered the raw `-1` "minute unknown" backfill sentinel as a literal `-1'` next to every goals-only-backfill event — same sentinel BACKLOG-121 already handles correctly on the admin page, never ported to this public consumer. Richard's call: don't just relabel the minute, hide the Timeline tab entirely for any match containing unknown-minute events (`"Timeline not available"`, no further explanation — same convention as `MatchLineups.tsx`'s existing empty state, deliberately terse per Richard's direct instruction, not the fuller "will be displayed here" phrasing `MatchLineups` uses). (2) The match header had no red-card indicator next to team names at all — confirmed via direct code read (no such logic existed in `src/app/matches/[id]/page.tsx` before this fix). Ported the existing dot-indicator pattern from `MatchOverlay.tsx:771-909` (small red bars next to the team name, one per red card, filtered by `event.type === 'Red Card' && event.teamId === match.home/awayTeamId`). Real red cards for this specific match verified against `match_events` directly (both real, correctly-attributed players — one a dual-affiliated COLNAS/Kings-FC athlete, not a data bug). `src/components/LiveMatchTimeline.tsx`, `src/app/matches/[id]/page.tsx`. **Status:** SHIPPED — pending staging verification (local sandbox browser preview unavailable this session).
+
+- **BUG-104** _(LOW — Dead Code, found while fixing BUG-103)_: `MatchOverlay.tsx`'s red-card dot indicator (the exact pattern just ported to the match detail page for BUG-103) has never actually fired in production. Its only real caller is the homepage (`src/app/page.tsx`), which hardcodes `events: []` in all 4 of its match-transform maps (lines ~106, 148, 216, 256) before setting `selectedMatch` — same shape as the already-documented known-issues.md entry ("round field not passed through page.tsx transform maps: when a page manually constructs match objects from API data, every field used downstream must be explicitly included"). `homeRedCardsCount`/`awayRedCardsCount` always evaluate to 0 from this entry point. Not fixed — filed for a future session; needs the same fix shape as the `round` bug (either populate `events` in all 4 transform maps, or switch the overlay's data source to the raw `/api/matches` response). **Status:** OPEN — Filed 2026-07-13.
+
 - **BUG-090** _(LOW — WebSocket)_: Socket emits attempted on a `CLOSING` socket. `useMatchSubscription` reads `socket.readyState` before emitting, but the `isConnected` dep-array trigger can fire in the same tick as a disconnect — `readyState` may transition from OPEN to CLOSING between the dep-array check and the emit. Not confirmed as causing dropped events but creates unnecessary warnings. Filed: 2026-06-29. **Status:** OPEN
 
 - ~~**BUG-073**~~ _(LOW — Data)_: Substitution `detail` string direction — filed as inverted during KIN vs JOG test match analysis. Confirmed at HEAD: `confirmEvent('Substitution', playerComingOut, playerInId)` → `relatedName` = incoming, `outName` = outgoing → string reads `{inPlayer} IN for {outPlayer}`. Code was never wrong. DB events from the KIN vs JOG test match (deleted) reflected an older state. **Status:** RESOLVED — no code change needed, 2026-06-26.
@@ -600,7 +604,8 @@ BUG-001 through BUG-029, AUDIT-001/002 (partial), BACKLOG-065 — all resolved S
 - **TD-010** _(CRITICAL — PRE-LIVE-MATCH BLOCKER)_: **Status: SHIPPED — commit `b66eb95`, 2026-06-24. Pending clean verification.**
   - Column added (`current_period TEXT DEFAULT 'NOT_STARTED'`), staging migration applied, PATCH writes confirmed, `getLoggerMatches` selects `match: matches` (full row) — `current_period` flows through automatically. No code gaps remain.
   - **Why period still showed NOT_STARTED on the test match:** the test match (`AIr6gMTlUscTNHzYTL8fI`) was started and transitioned to 2ND HALF *before* `b66eb95` deployed and *before* the migration ran. Those transitions never wrote `current_period` — the column didn't exist yet. Migration defaulted all existing rows to `NOT_STARTED`. Hard refresh read `NOT_STARTED` from DB → seed fell through → correct behaviour given the history, not a bug.
-  - **Verification required:** spin a fresh test match *after* `b66eb95` is deployed. Start match → transition to `FIRST_HALF` → hard refresh → must show `FIRST_HALF`. That is the real TD-010 test. The existing test match is a write-off for this purpose.
+  - **2026-07-13 note:** Richard screenshotted `_lkHo5y1m6ArqvLsi1ixe` (BUSALYMPICS Final, COLNAS 5-0 COLENG) on staging showing "Full Time" correctly instead of "NOT STARTED." This confirms **BUG-100**'s fix (the 66-row historical backfill of `current_period` for FINISHED matches) is live — it is not TD-010's own verification criterion, since it's a backfilled historical match, not a fresh live-transition test.
+  - **Verification required (still open):** spin a fresh test match *after* `b66eb95` is deployed. Start match → transition to `FIRST_HALF` → hard refresh → must show `FIRST_HALF`. That is the real TD-010 test, requires an actual live/test match window.
   - Prod migration: NOT yet run — pending staging clean-test verification.
 
 - **TD-011** _(LOW)_: `updatePlayerStats` in `src/app/api/matches/[id]/events/route.ts` has `season: '2024'` hardcoded on insert (lines ~357, ~396). Will silently write to the wrong season bucket from 2025 onward. Fix: derive season from match `startTime` or pass as a match field. Filed: 2026-06-19.
@@ -1302,6 +1307,8 @@ player stats can be stale or inconsistent after a match ends.
 ### BACKLOG-018 — Game Event Logsheets (BUSALYMPICS + BUSA League match events)
 
 **Status:** IN PROGRESS — BUSALYMPICS portion COMPLETE (7 of 7 matches, 2026-07-09). BUSA League: 8 matches now APPLIED, DB-verified, and fully reconciled against FA reports + real result graphics (2026-07-11, session 41B) — busa-match-13, -16, -15, -10, -12, -14, -final-2026, -11. 758 total match_events written. Zero deferred items remain across all 8. A full platform-wide collision audit of all 84 session-41 stub players (2026-07-11) closed clean — 1 real merge found and applied (Abdulazeez Jolaoye ↔ his own unlinked COLNAS identity), 2 false alarms investigated and closed (Charles, Peter — both ruled out by active-club-affiliation-to-different-clubs). **23 matches remain in the full 32-match structure: 17 group-stage (including busa-match-1, still fully untouched), 4 QF (QF1-3 bracket-confirmed, QF4 pending FA verification), 2 SF (both blocked — no `matches` row exists for either, no sourced date; Joga-Hammers has parsed sheets ready, Kings-Pirates only has unassessed "Lone Sheets" files).** 3rd Place excluded from remaining count — already live-logged.
+
+**Progress note (2026-07-12, session 41D):** Investigated building a "date TBC" mechanism to unblock both held-out semifinals without a sourced date. Scoped, not built — a real fix requires `matches.start_time` to go from `NOT NULL` to nullable (a full SQLite table-rebuild migration, since other tables FK-reference `matches.id`) plus display-layer handling across **42 files** that call `new Date()`/`format()` directly on `startTime` — a platform-wide convention change, not a two-file tweak. Deferred rather than rush a partial version or use a fabricated placeholder date. Joga-Hammers' parsed sheet needs no rework once a real date surfaces or TBC ships — write is a single continuous pass whenever unblocked.
 
 **Progress note (2026-07-11, session 41B):** First real match_events write for BUSA League. busa-match-13 (Cruise FC vs Hammers, 2-2) applied: **93 events** (full BUSALYMPICS-parity stat capture — Goal/Assist/Shot on-off Target/Save/Clearance/Interception/Tackle/Foul/Yellow/Red/Substitution), 24 players touched, cumulative recompute applied to all. Cruise's own goal is a known, accepted gap (sheet coverage 0% for Cruise per the canonical schedule doc — not fabricated). Surfaced and fixed 4 real bugs along the way: (1) two more duplicate-player-with-real-events cases in the Hammers roster ("Sancho"/"Speedy"/"Spectrum", same shape as Lazzy Woods/Mayokun — merged into their real players via dry-run/apply scripts, all DB-verified, see RUNLOG.md); (2) a 4th recurrence of the nickname-scoped-to-wrong-affiliation bug (Olaoluwa Olusanya's "Lazzy" nickname was only on his COLENG row, not his busa-hammers club row — fixed additively); (3) a jersey-number data-entry error (Timi recorded as busa-hammers #5 in the DB, but every logsheet consistently shows #18 — corrected, #18 was free); (4) **the write script's own Substitution events were initially wrong** — built as unpaired IN/OUT events instead of the established single-paired convention, and didn't account for BUSA League's 35-minute-half format (full time = 70', not 90) treating 9 "played to the end" players as fabricated substitutions. Caught and fixed before commit by cross-checking `dev/backfill-write-md1g2.mjs`'s actual convention — corrected to 1 real Substitution event (104→93 total). Scope decision: full-stat capture (not just goals/cards) chosen over the narrower scope the identity-resolution script was originally built for — this multiplies the identity-resolution burden per match (18 unresolved names surfaced vs 1 for goals/cards-only), so remaining matches are being done one at a time with sign-off, same rhythm as the BUSALYMPICS sessions. See BUILD_JOURNAL.md Session 41B and known-issues.md for full detail.
 
@@ -3784,21 +3791,16 @@ Directly affects all DB queries in BrixSports.
 
 ---
 
-#### Item C — Upgrade swiper (CRITICAL prototype pollution)
+#### ~~Item C — Upgrade swiper (CRITICAL prototype pollution)~~
 
-**Priority:** CRITICAL
-**Current:** `^12.0.3`
-**Fix:** `12.1.2`
+**Status:** RESOLVED — 2026-07-13
+**Priority:** ~~CRITICAL~~ — closed
 
-Alert: Prototype pollution in swiper `>= 6.5.1, < 12.1.2`.
-Already on `^12.x` — just needs a patch bump.
-
-**Steps:**
-1. `npm update swiper`
-2. Verify swiper still renders correctly in any page using it (search for `swiper` usage in src/)
-3. Commit and deploy
-
-**Risk:** Low — patch bump within same major version.
+**Evidence:**
+- Commit: (this session)
+- Verified by: repo-wide grep for `swiper` (all extensions, excluding `node_modules`/`package-lock.json`) — zero import sites found anywhere in the codebase. Package was installed but never wired to any component.
+- Observed result: removed via `npm uninstall swiper` instead of patch-bumping a dead dependency. `npm audit` critical count dropped from 1 to 0 (66 → 40 total vulnerabilities). `tsc --noEmit` shows zero new errors — all remaining errors are pre-existing and unrelated (`src/db/*` scripts, `BottomNav.tsx`, `MatchOverlay.tsx`, `mobile-image-upload.tsx`).
+- Pending items: none.
 
 ---
 

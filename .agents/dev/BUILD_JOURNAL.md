@@ -2832,3 +2832,20 @@ Real bugs/lessons from the remaining 6 matches:
 **Deferred:** none of tonight's fixes are deferred — all 8 items (BUG-098 through BACKLOG-121) reached RESOLVED with real evidence. GitHub's Dependabot flag (66 vulnerabilities, 1 critical) noted but not investigated — pre-existing, unrelated to this session.
 
 **Next session — exact first task:** resume BACKLOG-018 — start with `busa-match-1` (explicitly the planned starting point from session 41, still untouched), or pivot to sourcing the Joga-Hammers semifinal sheets if Richard has them ready. 23 of 32 BUSA League matches remain (17 group-stage including busa-match-1, 4 QF — QF1-3 bracket-confirmed, QF4 pending FA verification, 2 SF both blocked on missing dates).
+
+### Session 41D — 2026-07-12
+
+**Focus:** Post-wrap continuation of 41C — investigate building a "date TBC" mechanism to unblock both held-out semifinals (Joga-Hammers, Kings-Pirates), since their results are already known even without a confirmed date.
+
+**Discovered, not built:**
+
+- Scoped what a real `start_time` TBC mechanism would require: schema change (`matches.start_time` would need to go from `NOT NULL` to nullable — SQLite can't drop a column constraint via `ALTER TABLE` directly, would need a full table-rebuild migration since other tables FK-reference `matches.id`), plus display-layer handling. Traced actual blast radius before committing to build it: **42 files** call `new Date(...)`/`format(...)` directly on `startTime` — this is a platform-wide date-formatting convention change, not a two-file admin-form tweak.
+- Given the size mismatch between the original ask ("just fix the two semifinals") and the real scope (42 call sites), decided to defer building TBC entirely rather than do a partial/rushed version. **Richard's call**: no fabricated placeholder date either — holding both semifinals out of the `matches` table remains correct until a real date is sourced or TBC gets its own dedicated session.
+- Joga-Hammers' parsed sheet data needs no rework — it's fully ready, purely blocked on the date. Whenever a real date surfaces (or TBC ships), the match row + all events can be written in one continuous pass with zero redo.
+
+**Deferred to next session:**
+
+- TBC mechanism itself — full scope (42 files) noted above, not started.
+- Both semifinals — still held out, still blocked on date (Kings-Pirates additionally has unassessed "Lone Sheets" files on top of the date issue).
+
+**Next session — exact first task:** resume BACKLOG-018 backfilling, starting with `busa-match-1` (still fully untouched, the explicit planned starting point since session 41).
