@@ -1,0 +1,144 @@
+# BrixSports — System Criticality Map
+**Status:** REFERENCE — update when the feature set or priorities shift
+**Drafted:** 2026-06-30, planning chat
+**Purpose:** A standing reference for what tier of importance each part of the system sits at, so future scope/priority decisions ("is this worth a session" / "does this beat X in line") have a fixed frame to check against instead of being re-litigated each time. This sits above BACKLOG.md — BACKLOG tracks individual items, this file tracks which *systems* those items belong to and why some systems outrank others structurally, not just by current bug severity.
+
+---
+
+## The Core Premise
+
+BrixSports is a multi-sport, multi-campus live sports platform. BUSA League at Bells University is the first pilot — not the full scope. The platform is designed for any university sport (football, basketball, and beyond) across any campus that onboards. Every architectural decision should be evaluated against this: does it work for sport X at university Y, or does it only work for BUSA League football?
+
+The product's actual value, stripped to its essence: **a live match is happening right now, and people who can't be there want to know what's happening as it happens, accurately.** Everything else in the platform either feeds that moment, extends its value after the fact, or supports the people who make that moment possible. Nothing else is the product. This ordering follows from that.
+
+---
+
+## TIER 0 — The Core (the thing being sold, full stop)
+
+### Real-time match infrastructure (logger → DB → WS → viewer)
+This is not a feature among features — it's the spine everything else attaches to. If this is wrong, nothing else the platform does matters, because the one promise being made to a viewer ("this is what's happening right now, accurately") is broken. This tier includes:
+- Event logging (Flow B: logger → `POST /events` → DB → broadcast)
+- Live score accuracy and update latency
+- The live match clock (see `LIVE_CLOCK_V2_ARCHITECTURE.md` — this is why that design got a full session)
+- WS connection resilience (reconnect, single-writer enforcement, degraded-state signaling)
+- Match status/period lifecycle (UPCOMING → LIVE → HALF_TIME → FINISHED and all the period sub-states)
+
+**Why Tier 0 and not Tier 1:** every other tier is reachable, useful, or meaningful only *because* this tier is trustworthy. Player stats are derived from event logs this tier produces. Standings are derived from match results this tier produces. Notifications are triggered by events this tier produces. Nothing downstream can be more correct than this tier is.
+
+**Standing rule:** any open bug or gap in this tier outranks any item in any other tier, regardless of that other item's own severity label. A MEDIUM bug in Tier 0 (e.g., the clock jump risk, before this session's design work) is a higher real priority than a HIGH bug in Tier 2, because Tier 0 failures are visible to every single viewer of a match simultaneously and erode trust in the core promise, while Tier 2 failures are typically scoped to one user or one flow.
+
+**Known Tier 0 structural gaps (beyond individual bugs):**
+- **BUG-074 — staging and prod share the same Railway WS server.** Room namespacing is `match:{matchId}` only — no environment prefix. A staging test match with a colliding ID broadcasts events to prod viewers. Fix: environment-prefixed rooms (`staging:match:{id}` vs `match:{id}`). Live risk on every staging session until resolved.
+- **No mutation audit trail for `matches` table.** Score, status, and period are admin-PATCHable with no record of previous values, actor, or timestamp. `system_settings_history` already proves the pattern works — match data mutations need the same treatment. Without it, a direct admin score correction during a live match is invisible and unrecoverable.
+- **WS reconnection uses flat 30s retry, not exponential backoff with jitter.** Industry standard for production mobile WS clients is exponential backoff (`base * 2^attempt`, capped at 30s) with ±50% jitter. The current flat 30s means all viewers and the logger reconnect simultaneously after a Railway restart — a thundering herd against a single Railway instance with no load balancer. Jitter spreads reconnect load over time and is a small code change with high resilience impact.
+- **Logger WS emits are unauthenticated at the socket level.** Railway WS server is a pure passthrough with no token validation on connection. Viewer sockets correctly unauthenticated (public scores). Logger sockets — which emit `match:time:update` and `event:log` — should require a valid logger JWT at handshake time. This is also a prerequisite for single-writer enforcement (see `LIVE_CLOCK_V2_ARCHITECTURE.md §5`) — you cannot validate an assignment without knowing who the socket belongs to.
+
+---
+
+## TIER 1 — Direct extensions of the core moment
+
+These exist *because* a live match is happening — they don't have independent value without Tier 0 being solid, but they're close enough to the live moment that viewers experience them as part of "watching the match," not as a separate product.
+
+- **Match event timeline display** (the icon/color/description rendering viewers actually see — this is where BUG-083 lived; a wrong icon during a live match is a Tier 1 visible-trust issue, not a cosmetic one)
+- **Lineup/squad display for the match in progress**
+- **Live notifications** (goal, card, period-transition pushes) — these are *about* Tier 0 events, delivered in near-real-time; currently non-functional end-to-end (NOTIF-1/enrollment gap), which is a Tier 1 gap, not Tier 0, because the match itself is still correctly logged and viewable even with zero notifications delivered — notifications are a convenience layer on top of a working core, not the core itself
+- **Offline queue / PWA resilience for the logger** — this protects Tier 0's input side specifically (a logger who loses connectivity shouldn't lose events), so it's closely coupled to Tier 0 even though structurally it's infrastructure, not the live data itself
+
+---
+
+## TIER 2 — Match-derived, persists after the match ends
+
+Things that are *built from* Tier 0/1 data but have their own value independent of any single match being live right now. A viewer can use these features with zero live matches happening.
+
+- **Player stats** (`footballPlayerStats`, goals/assists/cards aggregated from match events)
+- **Standings** (competition tables derived from match results)
+- **Match history / past results**
+- **Player profiles, comparison tools**
+- **Team profiles**
+- **Transfers**
+- **Competition structure** (brackets, group stages, fixtures)
+
+**Why below Tier 1:** these are correct only if Tier 0 was correct when the data was generated — they have no independent accuracy mechanism, they inherit Tier 0's correctness (or its bugs — see BUG-011, the 718-goals corruption, which is a Tier 2 *symptom* of historical Tier 0/pipeline issues). Bugs here matter, but a stats display bug affects someone checking a leaderboard; a clock bug affects someone watching a goal happen.
+
+**Known Tier 2 structural gaps:**
+- **Basketball stats write path unverified.** `basketballPlayerStats` has 0 rows in DB despite basketball teams existing on staging and `BasketballLogger.tsx` existing. Either no basketball match has ever been logged through the system, or the stat-write branch is silently broken. Must be verified before basketball is presented as a working feature to a second university.
+- **`fixtures` table vs `matches` table — undocumented relationship.** Both exist in the schema. The Three Critical Flows only reference `matches`. Whether `fixtures` is unused, a duplicate, or a separate scheduling layer that feeds `matches` is not documented anywhere. Needs resolution before multi-competition expansion to avoid building on an ambiguous data model.
+- **Event type taxonomy is not canonical or exhaustive.** Event types are stored as free-text strings (e.g. `'Yellow Card'`, `'OWN GOAL'`, `'Penalty Saved'`) with inconsistent casing and spacing across files — the BUG-083 normalization fix (`.replace(/\s+/g,'_')`) is a workaround, not a solution. Before any analytics layer (rating refinement, stat breakdowns, cross-sport queries) is built on top, the event taxonomy needs to be a locked TypeScript enum with canonical values, exhaustive for both football and basketball. Changing this retroactively requires a DB migration across all `match_events` rows — the cost rises with every match logged. This is a pre-scale prerequisite, not a current blocker.
+
+---
+
+## TIER 3 — Platform/account layer
+
+Necessary for the product to function as a multi-user system, but not where the product's actual value is demonstrated. A new visitor evaluates BrixSports by watching a live match, not by reviewing the login flow.
+
+- **Auth** (logger auth, viewer auth, admin auth) — necessary, currently has real gaps (the logger/fan-account ID collision found in session 38C is a good example: a real bug, but its blast radius is "one user's follows list briefly broken," not "the platform's core promise is broken")
+- **User profiles, favorites, follows**
+- **Admin management surfaces** (match creation, team/player management, competition admin)
+- **News, advertisements, transfers admin**
+
+**Note on auth specifically:** auth bugs can occasionally jump tiers temporarily — an auth bug that blocks *loggers specifically* from logging events is functionally a Tier 0 incident (it stops the core moment from being captured), even though "auth" as a system sits at Tier 3. Classify by blast radius on the actual incident, not by which system the bug code lives in.
+
+**Known Tier 3 structural gaps:**
+- **Team Manager role has no permission boundary.** Listed in the actor model with its own row, but `role='team_manager'` is never checked in any route handler — all admin routes check `role === 'admin'` only. A team manager account today has full super-admin access. This is acceptable for a single-university pilot with one admin; it becomes a real access-control failure the moment multiple universities onboard and need scoped permissions.
+- **No rate limiting on public endpoints.** Only `POST /api/loggers/auth` has a rate limit. `GET /api/matches`, `GET /api/events`, `GET /api/players` are unbounded. A WhatsApp-shared match link during a live final can produce a sudden traffic spike with no protection layer. Needs addressing before multi-campus public launches.
+
+---
+
+## TIER 4 — Engagement / growth layer (explicitly backscoped, correctly)
+
+Features that would deepen engagement *if* the core product were fully solid, but add no value and active risk (broken UX, empty states, false promises) if built before Tier 0-2 are solid. This is exactly why BACKSCOPE.md exists and why these are correctly hidden, not deleted:
+
+- FPL / Fantasy league
+- Match predictions
+- Polls
+- Scout reports
+- NESA registration
+
+**Standing rule:** nothing in Tier 4 gets session time while any Tier 0 item is open, full stop. This isn't a severity judgment on these features — it's sequencing logic. A polished prediction feature sitting on top of an unreliable live clock actively hurts the product, because it invites engagement with data the user has no reason to trust yet.
+
+---
+
+## How This Maps to Current Open Work (as of 2026-06-30)
+
+| Item | Tier | Why |
+|---|---|---|
+| Live Clock v2 (this session's design doc) | 0 | Core trust signal, visible to every viewer simultaneously |
+| WS-1 `reconnect_failed` persistent recovery | 0 | Viewer loses the live feed entirely with no recovery path |
+| Single-writer logger enforcement | 0 | Corrupts the core data stream itself |
+| BUG-074 staging/prod WS room collision | 0 | Every staging test is a live risk to prod viewer WS state |
+| WS reconnect exponential backoff + jitter | 0 | Thundering herd on Railway restart; flat 30s retry is not production-standard |
+| Logger WS socket auth at handshake | 0 | Prerequisite for single-writer enforcement; logger emits currently unauthenticated at socket level |
+| Event-route security findings (open spread injection, score-revert ordering, loggerId leak, type-string mismatch) | **0** | These touch the event write/delete path directly — a torn write or silently-uncredited score *is* a Tier 0 correctness failure, not a generic security finding; the security framing undersold how urgent these actually are |
+| BUG-083 icon/color normalization (both files) | 1 | Visible during live viewing, but doesn't break the underlying data |
+| NOTIF-1 push enrollment UI | 1 | Convenience layer; match is still correctly logged/viewable without it |
+| Push subscriptions table — `platform`, `isActive`, `lastUsedAt`, `deviceLabel` fields | 1 | Missing fields make push delivery debugging and stale-subscription pruning impossible at scale; acceptable now, blocking before multi-campus |
+| BUG-011 (718 goals corruption) | 2 | Stats display issue, historical, not affecting any live match right now |
+| Basketball stats write path verification | 2 | Unverified functionality for an advertised sport — must confirm before second university onboards |
+| `fixtures` vs `matches` table relationship | 2 | Undocumented ambiguity in the data model — resolve before multi-competition expansion |
+| Event type taxonomy canonical enum | 2 | Current free-text strings with inconsistent casing are a pre-scale prerequisite to fix before any analytics layer is built on top |
+| Logger/fan-account auth fix (session 38C) | 3 | Real bug, narrow blast radius |
+| JWT secret rotation (staging vs prod) | ✅ RESOLVED | Secrets rotated and separated — 2026-07-01 |
+| Team Manager role enforcement | 3 | No permission boundary today; becomes a real access-control failure at multi-university scale |
+| Rate limiting on public endpoints | 3 | Not a current-scale risk; pre-multi-campus checklist item |
+| Match mutation audit trail | 3 | No record of admin score/status corrections; important for trust at scale |
+| Observability / Sentry installation | 3 | Unconfirmed — if absent, zero error tracking on a live-data-accuracy platform |
+| BACKLOG-105 full penalty shootout | 0 (situational) | Currently low urgency (no shootout scheduled), but becomes a Tier 0 blocker the moment a knockout match is confirmed |
+| FPL, Predictions, Polls, Scouts (backscoped) | 4 | Correctly hidden, correctly deferred |
+
+This table should be updated whenever a new significant bug or feature is identified — the point isn't to track everything (BACKLOG.md does that), it's to make tier placement an explicit, quick judgment call that the project's own framing logic already supports.
+
+---
+
+## Locked Decisions (do not relitigate)
+
+These were explicitly decided in planning sessions and are not open questions.
+
+| Decision | What | Why |
+|---|---|---|
+| Platform model | Google Drive not Shopify — one DB, all universities, scoped by affiliation | Cross-university discoverability is a feature, not a security concern |
+| Logger device as time authority | Logger is the 90% authority; viewer is 10% presentational interpolation only | No server-side clock introduced — WS server stays a passthrough |
+| PWA reliability contract | Platform guarantees correct clock behavior on modern Android + Chrome, screen on. iOS logger is supported but clock correctness during screen-lock cannot be guaranteed at the platform level | Accepted limitation, not a gap to code around |
+| Domain positioning | Grassroots logger + fan-facing livescore with a light analytics lean — contextual depth (campus-specific) is the moat, not analytical sophistication | Building analytics depth before contextual depth is the wrong direction |
+| Event taxonomy fix | Canonical TypeScript enum required before any analytics layer is built on top of event data | BUG-083 `.replace()` fix is a workaround; free-text event strings are the root problem |
+| WS reconnection strategy | Exponential backoff with jitter, not flat retry intervals | Flat retry causes thundering herd on Railway restart — confirmed failure mode from HAR |
+| Single-writer enforcement | Must ship before or together with Live Clock v2 smoothing model | Two competing clock sources makes the smoothing model actively worse than today's jitter |
