@@ -1314,14 +1314,16 @@ player stats can be stale or inconsistent after a match ends.
 ### BACKLOG-122 — Stats Tab Shows Misleading "0" for Categories Never Tracked in Goals-Only Backfills
 
 **Status:** OPEN
-**Priority:** Low
+**Priority:** Low → **worth re-rating, see 2026-07-13 update below**
 **Filed:** 2026-07-13
 
 **Problem:** `GET /api/matches/[id]` computes public Stats-tab values from `match_events` (`src/app/api/matches/[id]/route.ts:252-304`) by incrementing counters per event type — but goals-only backfilled matches (busa-match-1 through -9ish, no full team logsheet) only ever wrote `Goal`/`Assist`/`Yellow Card`/`Red Card` events. Categories like shots on/off target, corners, fouls, saves, interceptions, clearances, and possession will always compute to a literal `0 - 0` for these matches — reading as "zero fouls happened" rather than "this data was never captured." More misleading than BUG-103's Timeline glitch, since a stats number carries an appearance of precision a garbled minute didn't.
 
-**Proposed fix (not yet built):** Keep goals/assists/cards visible on the Stats tab (real data), but suppress or caveat the categories that were never tracked for goals-only matches, rather than showing a false `0 - 0`. Needs a way to distinguish "goals-only backfill" matches from "full stat capture" matches (e.g. checking whether any of the full-stat event types exist in `match_events` for that match) before deciding what to render.
+**Update, 2026-07-13 (session 42) — real example is worse than the filed "0-0" framing.** Observed live on staging: `busa-match-16` (Hammers 6-0 Santos) Stats tab shows **100% - 0% possession**, **26 - 0 shots**, **10 - 0 shots on target**, **1 - 0 saves** — not neutral zeros, a confidently one-sided reading. Root cause confirmed in the same code (`route.ts:281-285`): possession is computed as `homeAttackingEvents / totalAttackingEvents` (shots + corners + free kicks), and `shots`/`saves`/`fouls` are raw event counts. Hammers had a fully-logged sheet (real shot/foul/save events); Santos' side has almost nothing beyond one card — so the formula isn't hitting the "0-0, no data" case this entry describes, it's producing a fabricated-looking blowout stat line from asymmetric sheet coverage. This reads as real analysis, not a gap, which is a more misleading failure mode than the one originally filed. Worth re-rating priority above Low given how confidently wrong this looks to a public viewer, once BACKLOG-018 sequencing allows it.
 
-**Deferred:** Richard's call — file now, return to it after the BUSA League backfill (BACKLOG-018) is further along.
+**Proposed fix (not yet built):** Keep goals/assists/cards visible on the Stats tab (real data), but suppress or caveat the categories that were never tracked for goals-only matches, rather than showing a false `0 - 0` (or, per the 2026-07-13 finding, a false lopsided percentage). Needs a way to distinguish "goals-only backfill" matches from "full stat capture" matches (e.g. checking whether any of the full-stat event types exist in `match_events` for that match) before deciding what to render.
+
+**Deferred:** Richard's call — file now, return to it after the BUSA League backfill (BACKLOG-018) is further along. As of 2026-07-13, backfill is past the halfway point (17 of 32).
 
 ---
 
