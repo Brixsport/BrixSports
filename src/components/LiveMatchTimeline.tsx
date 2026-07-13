@@ -368,6 +368,7 @@ export default function LiveMatchTimeline({ events, homeTeam, awayTeam, eyePoint
             <div className="text-center py-20">
                 <Clock className="w-16 h-16 text-white/20 mx-auto mb-4" />
                 <h3 className="text-xl font-semibold text-white/60 mb-2">Timeline not available</h3>
+                <p className="text-white/40">Match timeline will be displayed here once available</p>
             </div>
         );
     }
