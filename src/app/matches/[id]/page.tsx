@@ -286,6 +286,11 @@ export default function MatchDetailPage() {
     const { match, events, timeTracking, eyePoints } = matchData;
     const isLive = LIVE_STATES.has(match.status);
 
+    // Red card indicators next to team names — same pattern as MatchOverlay.tsx,
+    // never ported to this full detail page header.
+    const homeRedCardsCount = (events || []).filter(e => e.type === 'Red Card' && e.teamId === match.homeTeamId).length;
+    const awayRedCardsCount = (events || []).filter(e => e.type === 'Red Card' && e.teamId === match.awayTeamId).length;
+
     // Period label — WS period (live) takes priority; DB currentPeriod is the fallback
     // for initial page load and when no logger is connected.
     const displayPeriod = matchTime?.period ?? match.currentPeriod ?? match.status;
@@ -371,7 +376,16 @@ export default function MatchDetailPage() {
                                 className="w-12 h-12 object-contain"
                             />
                             <div className="hidden sm:block">
-                                <div className="font-bold text-lg">{match.homeTeam.name}</div>
+                                <div className="font-bold text-lg flex items-center gap-1.5">
+                                    {match.homeTeam.name}
+                                    {homeRedCardsCount > 0 && (
+                                        <span className="flex gap-0.5">
+                                            {Array.from({ length: homeRedCardsCount }).map((_, i) => (
+                                                <div key={i} className="w-1.5 h-2.5 bg-red-600 rounded-[1px] shadow-[0_0_5px_rgba(220,38,38,0.5)]" />
+                                            ))}
+                                        </span>
+                                    )}
+                                </div>
                                 <div className="text-sm text-white/60">{match.homeTeam.shortName}</div>
                             </div>
                         </div>
@@ -408,7 +422,16 @@ export default function MatchDetailPage() {
                         {/* Away Team */}
                         <div className="flex items-center gap-3 flex-1 justify-end">
                             <div className="hidden sm:block text-right">
-                                <div className="font-bold text-lg">{match.awayTeam.name}</div>
+                                <div className="font-bold text-lg flex items-center justify-end gap-1.5">
+                                    {awayRedCardsCount > 0 && (
+                                        <span className="flex gap-0.5">
+                                            {Array.from({ length: awayRedCardsCount }).map((_, i) => (
+                                                <div key={i} className="w-1.5 h-2.5 bg-red-600 rounded-[1px] shadow-[0_0_5px_rgba(220,38,38,0.5)]" />
+                                            ))}
+                                        </span>
+                                    )}
+                                    {match.awayTeam.name}
+                                </div>
                                 <div className="text-sm text-white/60">{match.awayTeam.shortName}</div>
                             </div>
                             <img

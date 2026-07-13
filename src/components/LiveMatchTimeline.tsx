@@ -357,6 +357,21 @@ export default function LiveMatchTimeline({ events, homeTeam, awayTeam, eyePoint
         );
     }
 
+    // -1 is the established "minute unknown" sentinel written by goals-only
+    // backfill scripts (no full logsheet available for the match). If any
+    // event carries it, the match's timing data isn't trustworthy enough to
+    // present as a real minute-by-minute timeline — hide it entirely rather
+    // than show a partial/misleading order.
+    const hasUnknownMinuteEvents = events.some(e => e.minute == null || e.minute < 0);
+    if (hasUnknownMinuteEvents) {
+        return (
+            <div className="text-center py-20">
+                <Clock className="w-16 h-16 text-white/20 mx-auto mb-4" />
+                <h3 className="text-xl font-semibold text-white/60 mb-2">Timeline not available</h3>
+            </div>
+        );
+    }
+
     return (
         <div className="space-y-8">
             {Object.entries(groupedEvents).map(([period, periodEvents]) => (
@@ -389,18 +404,27 @@ export default function LiveMatchTimeline({ events, homeTeam, awayTeam, eyePoint
                                         <div className="text-sm font-bold text-primary">
                                             {(() => {
                                                 const min = event.minute;
+                                                // -1 is the established "minute unknown" sentinel written by
+                                                // goals-only backfill scripts (no full logsheet available).
+                                                if (min == null || min < 0) return '—';
+
                                                 const p = event.period;
                                                 const isFootball = sport?.toLowerCase() === 'football' || sport?.toLowerCase() === '5-a-side' || sport?.toLowerCase() === 'five-a-side';
 
+                                                let label = String(min);
                                                 if (isFootball && p) {
-                                                    if (p === 'FIRST_HALF' && min > 45) return `45+${min - 45}`;
-                                                    if (p === 'SECOND_HALF' && min > 90) return `90+${min - 90}`;
-                                                    if (p === 'EXTRA_TIME_1' && min > 105) return `105+${min - 105}`;
-                                                    if (p === 'EXTRA_TIME_2' && min > 120) return `120+${min - 120}`;
+                                                    if (p === 'FIRST_HALF' && min > 45) label = `45+${min - 45}`;
+                                                    else if (p === 'SECOND_HALF' && min > 90) label = `90+${min - 90}`;
+                                                    else if (p === 'EXTRA_TIME_1' && min > 105) label = `105+${min - 105}`;
+                                                    else if (p === 'EXTRA_TIME_2' && min > 120) label = `120+${min - 120}`;
                                                 }
-                                                return min;
-                                            })()}'
-                                            {event.second ? <span className="text-xs">:{event.second}</span> : ''}
+                                                return (
+                                                    <>
+                                                        {label}'
+                                                        {event.second ? <span className="text-xs">:{event.second}</span> : ''}
+                                                    </>
+                                                );
+                                            })()}
                                         </div>
                                     </div>
 
