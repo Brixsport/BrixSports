@@ -32,7 +32,9 @@ export async function middleware(request: NextRequest) {
     if (env.isStaging) {
         const isStagingExempt =
             pathname.startsWith('/api/auth/') ||
-            pathname === '/login';
+            pathname.startsWith('/api/loggers/auth') ||
+            pathname === '/login' ||
+            pathname === '/logger';
 
         if (!isStagingExempt) {
             const token = request.cookies.get('authToken')?.value;
