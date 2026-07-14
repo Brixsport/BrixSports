@@ -171,6 +171,22 @@ export default function MatchDetailPage() {
         return () => clearInterval(interval);
     }, [isConnected, matchData?.match?.status]);
 
+    // BUG-108: low-frequency reconciliation poll, runs even while WS IS connected —
+    // catches any event whose live broadcast never fired (offline-queue sync via the
+    // Service Worker, or a REST write that landed while the logger's own socket happened
+    // to be down). POST /api/matches/[id]/events never emits itself; the broadcast is
+    // purely client-side from the logger's own tab, so a perfectly healthy viewer
+    // connection is no guarantee every DB-persisted event was ever pushed. Slower than
+    // BUG-080's disconnect-only poll above (25s vs 10s) since this is a defense-in-depth
+    // check, not the primary recovery path — the two never run simultaneously.
+    useEffect(() => {
+        const isLiveStatus = LIVE_STATES.has(matchData?.match?.status ?? '');
+        if (!isConnected || !isLiveStatus) return;
+
+        const interval = setInterval(() => fetchMatchData(true), 25000);
+        return () => clearInterval(interval);
+    }, [isConnected, matchData?.match?.status]);
+
     // On WS reconnect: silently sync missed events from DB once.
     useEffect(() => {
         if (prevConnectedForSync.current === false && isConnected) {
@@ -238,7 +254,22 @@ export default function MatchDetailPage() {
             if (!silent) setLoading(true);
             const response = await fetch(`/api/matches/${matchId}`);
             const data = await response.json();
-            setMatchData(data);
+            if (silent) {
+                // BUG-113: diff/merge instead of a wholesale replace on every silent poll —
+                // reuses existing event objects' references when their id is unchanged, so
+                // the Timeline doesn't visibly flicker/remount on every tick. Only genuinely
+                // new events (by id) get a fresh object reference, which is what should
+                // trigger their own enter animation. Same idea as the WS event:new handler
+                // above, just applied to a full-list refresh instead of a single append.
+                setMatchData(prev => {
+                    if (!prev) return data;
+                    const prevEventsById = new Map(prev.events.map((e: any) => [e.id, e]));
+                    const mergedEvents = data.events.map((e: any) => prevEventsById.get(e.id) ?? e);
+                    return { ...data, events: mergedEvents };
+                });
+            } else {
+                setMatchData(data);
+            }
 
             // Fetch head-to-head data
             if (data.match?.homeTeam && data.match?.awayTeam) {
