@@ -56,7 +56,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useMultiLogger } from '@/hooks/useMultiLogger';
 import { useWebSocket } from '@/hooks/useWebSocket';
 import { MultiLoggerStatus } from '@/components/MultiLoggerStatus';
-import { getMatchStateManager, MatchStateManager, MatchState, FootballEventType, MatchPeriod } from '@/lib/match-state-manager';
+import { getMatchStateManager, destroyMatchStateManager, MatchStateManager, MatchState, FootballEventType, MatchPeriod } from '@/lib/match-state-manager';
 import type { SyncEvent } from '@/lib/multiLogger';
 import { getPrimaryTeam } from '@/lib/player-affiliation-utils';
 import { TeamLogo } from '@/lib/utils/team-logo';
@@ -401,6 +401,14 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                 const seedPeriod: SeedPeriod = VALID_PERIODS.includes(match.currentPeriod as SeedPeriod)
                     ? (match.currentPeriod as SeedPeriod)
                     : 'NOT_STARTED';
+                // BUG-115: getMatchStateManager is a module-level singleton keyed by matchId —
+                // if a manager instance already exists in memory (e.g. survived a re-auth that
+                // didn't fully unmount this component), it's returned as-is and the DB seed
+                // above is silently ignored, regardless of how stale the in-memory state is.
+                // Destroying first guarantees every mount of this component gets a manager
+                // freshly seeded from the DB, never a stale cached one. No other call site
+                // in the codebase reads this registry, so nothing relies on it persisting.
+                destroyMatchStateManager(match.id);
                 const manager = getMatchStateManager(match.id, {
                     homeTeamId: match.homeTeamId,
                     awayTeamId: match.awayTeamId,
