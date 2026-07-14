@@ -2839,6 +2839,43 @@ Real bugs/lessons from the remaining 6 matches:
 
 **Discovered, not built:**
 
+---
+
+### Session 42 — 2026-07-13
+
+**Focus:** Started as a Live Clock v2 design review (Tier 0), pivoted through an auth-security find, then a large BUSA League GW2 backfill push, and closed with the first real live-match test run this project has done since session 34 — which ended up being the most consequential part of the session.
+
+**Built/Changed:**
+- `src/app/api/loggers/route.ts`, `src/app/api/loggers/[id]/route.ts` — added `getAuthUser` + `role === 'admin' || 'logger_manager'` gates to all 4 handlers (GET/POST/PATCH/DELETE), fixed an unreliable `password: undefined` leak with explicit destructure-exclude, added a `role` allowlist on POST/PATCH excluding `'admin'` (BUG-107).
+- `src/lib/match-logger-helpers.ts` (`getLoggerMatches`) — narrowed a full-row `matches` spread (including `stats`/`lineups` blobs) to 9 named columns; same fix applied to the inline join in `route.ts`'s `GET /api/loggers`.
+- `~/.claude/skills/grill-me/SKILL.md`, `~/.claude/skills/grill-with-docs/SKILL.md` — two new user-level skills, adapted from Pocock's originals for this multi-project, Claude-Code-native setup (not the Antigravity assumptions of the source material).
+- ~20 `dev/*.mjs` backfill/fix scripts (gitignored) — busa-match-8/9/17 writes, GW2 roster identity fixes, the O.C/Chris merge, Smart's Westbridge reassignment.
+- `CLAUDE.md`'s Live Event Readiness Checklist — the "public page updates within 5s" line updated from `UNVERIFIED` to `REGRESSION CONFIRMED`.
+
+**Bugs encountered and resolved:**
+- **BUG-107** (CRITICAL) — `/api/loggers` collection routes had zero auth of any kind (never got the sweep `/api/admin/*` routes got, since the path doesn't match that prefix). Found while verifying BUG-106. Fixed and live-verified on staging (unauthenticated calls now 401, admin PATCH incl. password change still works, response correctly excludes `password`).
+- **BUG-106** (CRITICAL, fixed in a prior session's commit `1a1a1a9`) — confirmed resolved via a real staging login test this session.
+- A duplicate-player merge (Underrated's "Chris" → "O.C") initially hit a clean `FOREIGN KEY` rollback — root cause: only reassigned `match_events.player_id`, missed `related_player_id` (a second, separate FK column on the same table). Fixed, and the general lesson (check every FK-bearing column before deleting/merging a parent row, not just the obvious one) is now in `known-issues.md`.
+
+**Bugs found, still OPEN (the session's main finding — from a real live match test on staging, logger driven from Richard's own mobile device, Claude watching independently via browser + direct DB queries):**
+- **BUG-108** (CRITICAL) — the DB write and the live WS broadcast for a match event are two fully independent, uncoordinated actions (`POST /api/matches/[id]/events` never emits; the broadcast is client-side only, from the logger's own tab). Any event that reaches the DB via a path with no open logger socket — confirmed for the offline-queue/Service-Worker-replay path — can never trigger a live push, only a refresh reveals it.
+- **BUG-109** (CRITICAL) — the actual root cause of this whole session's original "clock freezes, no recovery" investigation. The `matches` table has no `minute` column at all; the public clock number exists exclusively as long as a live WS tick keeps arriving, with zero DB-persisted fallback. Reproduced live two ways: a frozen stale number (existing tab, no live tick) and a fully blank clock (fresh page load, no live tick yet either). Supersedes the "ship the trimmed subset" clock decision reached earlier the same session — none of those three fixes touch this.
+- **BUG-110** (LOW) — a multi-logger heartbeat PATCH 404'd once during testing; route handler exists, likely a deployment-transient artifact from the `NEXT_PUBLIC_ENV` toggle-and-redeploy cycle done for BUG-107 verification, not independently root-caused.
+- **BUG-111** (HIGH) — no persistent stale/degraded indicator on the public page once WS drops; the one-shot disconnect toast (already correctly built) fades and nothing else signals degraded state for the rest of an outage.
+- **BUG-112** (MEDIUM) — the logger's prominent connection pill is driven by `isSocketConnected` alone, showing "Offline" (implying data loss) even when general connectivity is fine and writes are still succeeding via REST.
+- **BUG-113** (MEDIUM) — the public page's 10s polling fallback does a full wholesale state replace every tick instead of a surgical diff/merge like the WS handler already does, causing a visible flicker.
+- **BUG-114** (CRITICAL) — an already-open tab that was live through a full Railway server restart does not reliably auto-recover, observed getting stuck indefinitely with zero further reconnection activity. Root cause narrowed but not fully confirmed: found and fixed-in-diagnosis (not yet in code) a real logging gap in `useWebSocket.tsx` (`reconnectAttempts === 5` instead of `>= 5`) that makes it impossible to tell from the console alone whether Socket.IO's `reconnect_failed` ever actually fires past the 5th attempt.
+- **BUG-074** (already OPEN, accepted risk) — reconfirmed live, not just inferred: the Railway service killed during this test was labeled `production` in its own dashboard, the same shared instance already documented as serving both environments. This test window took down real-time delivery for prod too, safely only because no prod match was live.
+
+**BACKLOG-018 (BUSA League backfill):** GW2 fully closed this session (busa-match-8, -9, plus Deadline's missing cards on -17). 20 of 32 matches now event-backfilled. 11 remain: 6 group-stage (18/19/20/21/22/23), 4 QF (24-27), and Deadline-Quantum (not yet in the `matches` table at all — score never sourced). Also did a real-CSV-backed roster cleanup across 6 GW2 teams (Allianz, Agenda, Westbridge, Quantum, Prime, La Fabrica) — see `known-issues.md` for the process lesson this surfaced (a DB/platform-wide search finding nothing does not mean nothing exists — the real team-sheet CSVs at `C:\Users\Wise\Downloads\BRIXSPORT\BUSA LEAGUE\teamsheet\` must be checked before stubbing).
+
+**Deferred / explicitly not built this session:**
+- The full Live Clock v2 smoothing model (seq counter, timestamp projection, catch-up multiplier) — held as likely oversized even before the live test, and now clearly not the actual priority given BUG-109 is upstream of everything that model assumes.
+- Fixes for BUG-108/109/110/111/112/113/114 themselves — all filed with root-cause detail, none built yet.
+- The `/matches` list/card page not showing a match as "live" — flagged by Richard mid-test, explicitly deferred, not investigated.
+
+**Next session:** Genuinely open, not prescribed here — the real Tier 0 backlog now includes BUG-108/109/111/112/113/114 (event/clock architecture) alongside the pre-existing BUG-074 (shared Railway instance) and the still-unstarted single-writer/WS-auth work from the Live Clock v2 design doc, plus 11 remaining BUSA League matches (Tier 2) still open in BACKLOG-018. Whichever gets picked up first is a call for the next session to make, not one settled here.
+
 - Scoped what a real `start_time` TBC mechanism would require: schema change (`matches.start_time` would need to go from `NOT NULL` to nullable — SQLite can't drop a column constraint via `ALTER TABLE` directly, would need a full table-rebuild migration since other tables FK-reference `matches.id`), plus display-layer handling. Traced actual blast radius before committing to build it: **42 files** call `new Date(...)`/`format(...)` directly on `startTime` — this is a platform-wide date-formatting convention change, not a two-file admin-form tweak.
 - Given the size mismatch between the original ask ("just fix the two semifinals") and the real scope (42 call sites), decided to defer building TBC entirely rather than do a partial/rushed version. **Richard's call**: no fabricated placeholder date either — holding both semifinals out of the `matches` table remains correct until a real date is sourced or TBC gets its own dedicated session.
 - Joga-Hammers' parsed sheet data needs no rework — it's fully ready, purely blocked on the date. Whenever a real date surfaces (or TBC ships), the match row + all events can be written in one continuous pass with zero redo.
