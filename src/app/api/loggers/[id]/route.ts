@@ -11,18 +11,22 @@ import { getAuthUser } from '@/lib/auth';
 // endpoint can never mint a logger row whose role claim reads as a platform admin.
 const ALLOWED_LOGGER_ROLES = ['logger', 'logger_manager'];
 
-// GET /api/loggers/[id] - Get a specific logger (admin/logger_manager only)
+// GET /api/loggers/[id] - Get a specific logger (admin/logger_manager, or the logger's own record)
 export async function GET(
     request: NextRequest,
     { params }: { params: Promise<{ id: string }> }
 ) {
     try {
         const authUser = await getAuthUser(request);
-        if (!authUser || (authUser.role !== 'admin' && authUser.role !== 'logger_manager')) {
+        const { id } = await params;
+        // BUG-117: this route is how src/app/logger/page.tsx fetches the current
+        // logger's own assigned matches (fetchAssignedMatches(loggerId), self ID) —
+        // BUG-107's admin/logger_manager-only gate locked plain 'logger' accounts out
+        // of their own record, breaking the logger dashboard's assigned-matches list.
+        const isSelf = authUser?.role === 'logger' && authUser.id === id;
+        if (!authUser || (!isSelf && authUser.role !== 'admin' && authUser.role !== 'logger_manager')) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
-
-        const { id } = await params;
 
         const [logger] = await db
             .select()
