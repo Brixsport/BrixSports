@@ -99,6 +99,14 @@ function getOrCreateSocket(): Socket | null {
         } else if (reconnectAttempts === 5) {
             // Do NOT call disconnect() — it permanently kills Socket.IO's reconnection loop.
             console.warn('[WS] Max reconnection attempts reached. Waiting for server...');
+        } else {
+            // BUG-114: attempt 4, and every attempt after 5 (including retries triggered by
+            // the manual 30s loop below calling connect() again), previously fell through
+            // both branches above and were silently unlogged forever — made it impossible
+            // to tell from the console whether Socket.IO's reconnection engine was still
+            // trying or had genuinely given up. Log unconditionally so that ambiguity
+            // can't recur in the next investigation.
+            console.warn(`[WS] Connection error (attempt ${reconnectAttempts}):`, error.message);
         }
     });
 
