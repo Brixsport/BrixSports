@@ -514,6 +514,31 @@ export async function PATCH(
         }
         if (body.status !== undefined) updateData.status = body.status;
         if (body.currentPeriod !== undefined) updateData.currentPeriod = body.currentPeriod;
+        // BUG-109: periodic DB checkpoint of the live clock — assigned logger or admin only
+        // (already gated above), same integer-guard pattern as score. null clears the value
+        // (e.g. on FINISHED) without requiring a separate code path.
+        if (body.minute !== undefined) {
+            if (body.minute !== null) {
+                const m = Number(body.minute);
+                if (!Number.isInteger(m) || m < 0 || m > 200) {
+                    return NextResponse.json({ error: 'Invalid minute' }, { status: 422 });
+                }
+                updateData.minute = m;
+            } else {
+                updateData.minute = null;
+            }
+        }
+        if (body.extraTime !== undefined) {
+            if (body.extraTime !== null) {
+                const e = Number(body.extraTime);
+                if (!Number.isInteger(e) || e < 0 || e > 60) {
+                    return NextResponse.json({ error: 'Invalid extraTime' }, { status: 422 });
+                }
+                updateData.extraTime = e;
+            } else {
+                updateData.extraTime = null;
+            }
+        }
         if (body.loggerId !== undefined) updateData.loggerId = body.loggerId;
         if (body.stats) updateData.stats = JSON.stringify(body.stats);
         if (body.lineups) updateData.lineups = JSON.stringify(body.lineups);

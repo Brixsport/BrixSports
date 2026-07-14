@@ -75,6 +75,9 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
     // ========== STATE MANAGEMENT ==========
     const stateManager = useRef<MatchStateManager | null>(null);
     const [matchState, setMatchState] = useState<MatchState | null>(null);
+    // BUG-109: last wall-clock time a clock checkpoint was persisted to the DB —
+    // throttles the PATCH separately from the per-tick WS emit.
+    const lastClockCheckpointAt = useRef<number>(0);
 
     // UI Local State
     const [selectedTeam, setSelectedTeam] = useState<'home' | 'away'>('home');
@@ -557,6 +560,22 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
         // Remote Sync
         if (isSocketConnected) {
             emit('match:time:update', payload);
+        }
+
+        // BUG-109: periodic DB checkpoint, throttled separately from the per-tick WS emit
+        // above — this is the durable fallback a fresh page load / dead socket reads from.
+        // Not gated on isSocketConnected: the DB write is the point precisely when the
+        // live channel isn't reaching viewers.
+        if (period !== 'NOT_STARTED') {
+            const now = Date.now();
+            if (now - lastClockCheckpointAt.current >= 15000) {
+                lastClockCheckpointAt.current = now;
+                fetch(`/api/matches/${match.id}`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ minute: payload.minute, extraTime: payload.extraTime }),
+                }).catch((e) => console.error('[BUG-109] Failed to persist clock checkpoint:', e));
+            }
         }
     }, [matchState, isSocketConnected, emit, match.id]);
 

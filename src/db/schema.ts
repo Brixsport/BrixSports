@@ -338,6 +338,8 @@ export const matches = sqliteTable('matches', {
     allowDrawsOverride: integer('allowDrawsOverride', { mode: 'boolean' }),
     extraTimeEnabledOverride: integer('extraTimeEnabledOverride', { mode: 'boolean' }),
     currentPeriod: text('current_period').default('NOT_STARTED'),
+    minute: integer('minute'),
+    extraTime: integer('extra_time'),
     createdAt: integer('created_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
     updatedAt: integer('updated_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
 });

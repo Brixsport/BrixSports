@@ -48,7 +48,7 @@ export default function MatchDetailPage() {
 
     const { isConnected, on, off } = useWebSocket({ matchId, autoConnect: true });
     const { events: liveEvents, latestEvent } = useMatchEvents(matchId);
-    const { time: matchTime } = useMatchTimer(matchId);
+    const { time: matchTime, isStale: isMatchTimeStale } = useMatchTimer(matchId);
     const { addNotification } = useNotifications();
     const { toasts, warning, success, removeToast } = useToast();
     const prevConnected = useRef<boolean | null>(null);
@@ -291,9 +291,15 @@ export default function MatchDetailPage() {
     const homeRedCardsCount = (events || []).filter(e => e.type === 'Red Card' && e.teamId === match.homeTeamId).length;
     const awayRedCardsCount = (events || []).filter(e => e.type === 'Red Card' && e.teamId === match.awayTeamId).length;
 
-    // Period label — WS period (live) takes priority; DB currentPeriod is the fallback
-    // for initial page load and when no logger is connected.
-    const displayPeriod = matchTime?.period ?? match.currentPeriod ?? match.status;
+    // Period/clock — WS value takes priority, but only while it's actually fresh.
+    // BUG-109: once useMatchTimer marks the WS value stale (socket disconnected), it
+    // never gets nulled out — so without this gate a frozen matchTime would win over
+    // ?? forever, even after the 10s polling fallback (BUG-080) refreshes match.* with
+    // a newer DB-persisted checkpoint. DB fields (match.minute/extraTime/currentPeriod)
+    // are the fallback for initial page load, no logger connected, and any stale WS value.
+    const displayPeriod = (!isMatchTimeStale && matchTime?.period) ? matchTime.period : (match.currentPeriod ?? match.status);
+    const liveMinute = (!isMatchTimeStale && matchTime?.minute != null) ? matchTime.minute : match.minute;
+    const liveExtraTime = (!isMatchTimeStale && matchTime?.extraTime != null) ? matchTime.extraTime : match.extraTime;
 
     const ACTIVE_PLAY_PERIODS = ['FIRST_HALF', 'SECOND_HALF', 'EXTRA_TIME_1', 'EXTRA_TIME_2'];
     const PERIOD_LABELS: Record<string, string> = {
@@ -403,9 +409,9 @@ export default function MatchDetailPage() {
                                         <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse" />
                                         {ACTIVE_PLAY_PERIODS.includes(displayPeriod) ? (
                                             // Active play — clock only, no H1/H2 label
-                                            (matchTime?.minute ?? match.minute) != null ? (
+                                            liveMinute != null ? (
                                                 <span className="text-red-400">
-                                                    {matchTime?.minute ?? match.minute}'{(matchTime?.extraTime ?? match.extraTime ?? 0) > 0 ? `+${matchTime?.extraTime ?? match.extraTime}` : ''}
+                                                    {liveMinute}'{(liveExtraTime ?? 0) > 0 ? `+${liveExtraTime}` : ''}
                                                 </span>
                                             ) : null
                                         ) : (
