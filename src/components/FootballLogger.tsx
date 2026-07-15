@@ -398,6 +398,9 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                 // (DB value wins over localStorage via initial?.clock spread in initializeState)
                 const VALID_PERIODS = ['NOT_STARTED','FIRST_HALF','HALF_TIME','SECOND_HALF','EXTRA_TIME_1','EXTRA_TIME_2','PENALTY_SHOOTOUT','FINISHED'] as const;
                 type SeedPeriod = typeof VALID_PERIODS[number];
+                // Same set matches/[id]/page.tsx uses for "should the clock be ticking" —
+                // kept local here rather than shared, both files' copies are tiny and static.
+                const ACTIVE_PLAY_PERIODS: readonly SeedPeriod[] = ['FIRST_HALF', 'SECOND_HALF', 'EXTRA_TIME_1', 'EXTRA_TIME_2'];
                 const seedPeriod: SeedPeriod = VALID_PERIODS.includes(match.currentPeriod as SeedPeriod)
                     ? (match.currentPeriod as SeedPeriod)
                     : 'NOT_STARTED';
@@ -417,7 +420,22 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                         home: match.homeScore || 0,
                         away: match.awayScore || 0
                     },
-                    clock: { period: seedPeriod } as import('@/lib/match-state-manager').MatchClock,
+                    // BUG-118 follow-up: this only ever seeded `period` — `absoluteMinute`
+                    // was never read from the DB at all, so initializeState's baseClock fell
+                    // through to its own default (0) or a stale localStorage value regardless
+                    // of BUG-118's fix adding match.minute to the assigned-matches projection.
+                    // match.minute is the BUG-109 checkpoint value — the closest real elapsed
+                    // time available for a match resumed via this path.
+                    // isRunning was also never seeded — every refresh mid-match came back
+                    // paused (constructor only auto-starts the clock when isRunning is
+                    // already true), needing a manual "Start" press even mid-second-half.
+                    // Auto-resume only for periods where the clock should actually be
+                    // ticking; HALF_TIME/PENALTY_SHOOTOUT/FINISHED/SUSPENDED stay paused.
+                    clock: {
+                        period: seedPeriod,
+                        ...(match.minute != null ? { absoluteMinute: match.minute } : {}),
+                        isRunning: ACTIVE_PLAY_PERIODS.includes(seedPeriod),
+                    } as import('@/lib/match-state-manager').MatchClock,
                 });
 
                 manager.registerPlayers(hPlayers, 'home');
