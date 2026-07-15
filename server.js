@@ -67,48 +67,68 @@ app.prepare().then(() => {
     io.on('connection', (socket) => {
         console.log(`[Socket.IO] Client connected: ${socket.id}`);
 
+        // BUG-074: staging and prod share this single Railway instance — a staging test
+        // match with a colliding ID would otherwise broadcast straight to prod viewers.
+        // Environment is determined per-connection (there's no single process-wide env
+        // var that could tell them apart, since one process serves both) from the Origin
+        // header the browser sends automatically during the WS handshake — no client
+        // code change needed, can't drift out of sync with what a client "declares".
+        // Unrecognized/missing origins default to 'prod' (the far more common real case;
+        // the harmful direction this bug describes is staging leaking into prod, not the
+        // reverse, so an unmatched origin landing in prod's namespace is the safe default).
+        const origin = socket.handshake.headers.origin || '';
+        const env = (origin.includes('staging.brixsports.com') || origin.includes('brixsports-staging.vercel.app'))
+            ? 'staging'
+            : 'prod';
+        const room = (name) => `${env}:${name}`;
+        // Every socket joins its own environment's broadcast room, replacing the old
+        // true-global io.emit('notification:global', ...) calls below — those previously
+        // reached every connected socket regardless of environment.
+        socket.join(env);
+
         // Match Room Management
         socket.on('match:subscribe', ({ matchId }) => {
-            console.log(`[Socket.IO] Client ${socket.id} subscribing to Match ${matchId}`);
-            socket.join(`match:${matchId}`);
-            console.log(`[Socket.IO] Client ${socket.id} joined room match:${matchId}`);
-            console.log(`[Socket.IO] Client ${socket.id} subscribed to match ${matchId}`);
+            console.log(`[Socket.IO] Client ${socket.id} subscribing to Match ${matchId} (${env})`);
+            socket.join(room(`match:${matchId}`));
+            console.log(`[Socket.IO] Client ${socket.id} joined room ${room(`match:${matchId}`)}`);
             socket.emit('match:subscribed', { matchId });
 
             // Send cached time if available
-            if (matchTimes.has(matchId)) {
-                socket.emit('match:time:updated', matchTimes.get(matchId));
+            const cacheKey = room(matchId);
+            if (matchTimes.has(cacheKey)) {
+                socket.emit('match:time:updated', matchTimes.get(cacheKey));
             }
 
             // Broadcast new viewer count
-            const roomSize = io.sockets.adapter.rooms.get(`match:${matchId}`)?.size || 0;
-            io.to(`match:${matchId}`).emit('match:viewers', { matchId, count: roomSize });
+            const roomSize = io.sockets.adapter.rooms.get(room(`match:${matchId}`))?.size || 0;
+            io.to(room(`match:${matchId}`)).emit('match:viewers', { matchId, count: roomSize });
         });
 
         // Unsubscribe from match
         socket.on('match:unsubscribe', ({ matchId }) => {
-            socket.leave(`match:${matchId}`);
-            console.log(`[Socket.IO] Client ${socket.id} unsubscribed from match ${matchId}`);
+            socket.leave(room(`match:${matchId}`));
+            console.log(`[Socket.IO] Client ${socket.id} unsubscribed from match ${matchId} (${env})`);
             socket.emit('match:unsubscribed', { matchId });
 
             // Broadcast new viewer count
-            const roomSize = io.sockets.adapter.rooms.get(`match:${matchId}`)?.size || 0;
-            io.to(`match:${matchId}`).emit('match:viewers', { matchId, count: roomSize });
+            const roomSize = io.sockets.adapter.rooms.get(room(`match:${matchId}`))?.size || 0;
+            io.to(room(`match:${matchId}`)).emit('match:viewers', { matchId, count: roomSize });
         });
 
         // Log event (from logger)
         socket.on('event:log', async (data) => {
             try {
-                console.log(`[Socket.IO] Event logging request received for Match ${data.matchId}:`, data);
+                console.log(`[Socket.IO] Event logging request received for Match ${data.matchId} (${env}):`, data);
 
                 // Broadcast to all subscribers of this match
-                io.to(`match:${data.matchId}`).emit('event:new', {
+                io.to(room(`match:${data.matchId}`)).emit('event:new', {
                     ...data,
                     timestamp: new Date().toISOString(),
                 });
-                console.log(`[Socket.IO] Broadcasted event:new to room match:${data.matchId}`);
+                console.log(`[Socket.IO] Broadcasted event:new to room ${room(`match:${data.matchId}`)}`);
 
-                // GLOBAL NOTIFICATION: Broadcast important events to EVERYONE connected
+                // Broadcast important events to everyone in this environment (was a true
+                // global io.emit — scoped to env now, see comment at top of connection handler)
                 if (data.type === 'Goal') {
                     try {
                         const { matches, teams } = await import('./src/db/schema');
@@ -118,7 +138,7 @@ app.prepare().then(() => {
                             const homeTeam = await db.select().from(teams).where(eq(teams.id, matchRecord.homeTeamId)).get();
                             const awayTeam = await db.select().from(teams).where(eq(teams.id, matchRecord.awayTeamId)).get();
 
-                            io.emit('notification:global', {
+                            io.to(env).emit('notification:global', {
                                 type: 'GOAL',
                                 matchId: data.matchId,
                                 message: `${data.detail || 'Goal!'} for ${data.teamId === matchRecord.homeTeamId ? (homeTeam?.name || 'Home') : (awayTeam?.name || 'Away')}`,
@@ -127,7 +147,7 @@ app.prepare().then(() => {
                         }
                     } catch (err) {
                         console.error('Error fetching data for global notification:', err);
-                        io.emit('notification:global', {
+                        io.to(env).emit('notification:global', {
                             type: 'GOAL',
                             matchId: data.matchId,
                             message: `GOAL! ${data.detail || ''}`,
@@ -135,7 +155,7 @@ app.prepare().then(() => {
                         });
                     }
                 } else if (data.type === 'Yellow Card' || data.type === 'Red Card') {
-                    io.emit('notification:global', {
+                    io.to(env).emit('notification:global', {
                         playerId: data.event?.playerId,
                         playerName: data.detail,
                         teamId: data.teamId,
@@ -160,8 +180,8 @@ app.prepare().then(() => {
         // Undo last event
         socket.on('event:undo', (data) => {
             try {
-                console.log(`[Socket.IO] Undo event request received for Match ${data.matchId}:`, data);
-                io.to(`match:${data.matchId}`).emit('event:deleted', {
+                console.log(`[Socket.IO] Undo event request received for Match ${data.matchId} (${env}):`, data);
+                io.to(room(`match:${data.matchId}`)).emit('event:deleted', {
                     matchId: data.matchId,
                     eventId: data.eventId,
                     score: data.score,
@@ -170,7 +190,7 @@ app.prepare().then(() => {
                     teamRatings: data.teamRatings,
                     timestamp: new Date().toISOString(),
                 });
-                console.log(`[Socket.IO] Broadcasted event:deleted to room match:${data.matchId}`);
+                console.log(`[Socket.IO] Broadcasted event:deleted to room ${room(`match:${data.matchId}`)}`);
             } catch (error) {
                 console.error(`[Socket.IO] Error undoing event:`, error);
             }
@@ -178,43 +198,43 @@ app.prepare().then(() => {
 
         // Update match score
         socket.on('match:score:update', (data) => {
-            console.log(`[Socket.IO] Score update received for Match ${data.matchId}:`, data);
-            io.to(`match:${data.matchId}`).emit('match:score:updated', data);
-            console.log(`[Socket.IO] Broadcasted match:score:updated to room match:${data.matchId}`);
+            console.log(`[Socket.IO] Score update received for Match ${data.matchId} (${env}):`, data);
+            io.to(room(`match:${data.matchId}`)).emit('match:score:updated', data);
+            console.log(`[Socket.IO] Broadcasted match:score:updated to room ${room(`match:${data.matchId}`)}`);
         });
 
         // Update player rating
         socket.on('rating:update', (data) => {
             console.log(`[Socket.IO] Rating update:`, data);
-            io.to(`match:${data.matchId}`).emit('rating:updated', data);
+            io.to(room(`match:${data.matchId}`)).emit('rating:updated', data);
         });
 
         // Update team statistics
         socket.on('stats:update', (data) => {
             console.log(`[Socket.IO] Stats update:`, data);
-            io.to(`match:${data.matchId}`).emit('stats:updated', data);
+            io.to(room(`match:${data.matchId}`)).emit('stats:updated', data);
         });
 
         // Eye Point awarded
         socket.on('eyepoint:award', (data) => {
             console.log(`[Socket.IO] Eye Point awarded:`, data);
-            io.to(`match:${data.matchId}`).emit('eyepoint:awarded', data);
+            io.to(room(`match:${data.matchId}`)).emit('eyepoint:awarded', data);
         });
 
         // Substitution event
         socket.on('substitution:log', (data) => {
             console.log(`[Socket.IO] Substitution:`, data);
-            io.to(`match:${data.matchId}`).emit('substitution:logged', data);
+            io.to(room(`match:${data.matchId}`)).emit('substitution:logged', data);
         });
 
         // Match status change
         socket.on('match:status:change', (data) => {
             console.log(`[Socket.IO] Match status change:`, data);
-            io.to(`match:${data.matchId}`).emit('match:status:changed', data);
+            io.to(room(`match:${data.matchId}`)).emit('match:status:changed', data);
 
             // Global notification for Kick-off and Full-time
             if (data.status === 'LIVE' || data.status === 'FIRST_HALF') {
-                io.emit('notification:global', {
+                io.to(env).emit('notification:global', {
                     type: 'MATCH_START',
                     matchId: data.matchId,
                     homeTeamId: data.homeTeamId,
@@ -224,7 +244,7 @@ app.prepare().then(() => {
                     message: `KICK-OFF! ${data.homeTeam || 'Home'} vs ${data.awayTeam || 'Away'} has started!`
                 });
             } else if (data.status === 'FINISHED') {
-                io.emit('notification:global', {
+                io.to(env).emit('notification:global', {
                     type: 'MATCH_END',
                     matchId: data.matchId,
                     homeTeamId: data.homeTeamId,
@@ -238,7 +258,8 @@ app.prepare().then(() => {
 
         // Match time update
         socket.on('match:time:update', (data) => {
-            const prevTime = matchTimes.get(data.matchId);
+            const cacheKey = room(data.matchId);
+            const prevTime = matchTimes.get(cacheKey);
 
             // Period Change Notification
             if (prevTime && prevTime.period !== data.period) {
@@ -254,7 +275,7 @@ app.prepare().then(() => {
                 }
 
                 if (msg) {
-                    io.emit('notification:global', {
+                    io.to(env).emit('notification:global', {
                         type: 'PERIOD_CHANGE',
                         period: data.period,
                         matchId: data.matchId,
@@ -263,18 +284,18 @@ app.prepare().then(() => {
                 }
             }
 
-            matchTimes.set(data.matchId, data);
-            io.to(`match:${data.matchId}`).emit('match:time:updated', data);
+            matchTimes.set(cacheKey, data);
+            io.to(room(`match:${data.matchId}`)).emit('match:time:updated', data);
         });
 
         // Match lineup update
         socket.on('match:lineup:update', (data) => {
             console.log(`[Socket.IO] Lineup update:`, data);
-            io.to(`match:${data.matchId}`).emit('match:lineup:updated', data);
+            io.to(room(`match:${data.matchId}`)).emit('match:lineup:updated', data);
 
             // Global notification for Lineup publication
             if (data.status === 'published') {
-                io.emit('notification:global', {
+                io.to(env).emit('notification:global', {
                     type: 'LINEUP_PUBLISHED',
                     matchId: data.matchId,
                     homeTeamId: data.homeTeamId,
@@ -288,39 +309,39 @@ app.prepare().then(() => {
 
         // Chat: Join Room
         socket.on('chat:join', ({ matchId }) => {
-            socket.join(`chat:${matchId}`);
-            console.log(`[Socket.IO] Client ${socket.id} joined chat for match ${matchId}`);
+            socket.join(room(`chat:${matchId}`));
+            console.log(`[Socket.IO] Client ${socket.id} joined chat for match ${matchId} (${env})`);
         });
 
         // Chat: Leave Room
         socket.on('chat:leave', ({ matchId }) => {
-            socket.leave(`chat:${matchId}`);
-            console.log(`[Socket.IO] Client ${socket.id} left chat for match ${matchId}`);
+            socket.leave(room(`chat:${matchId}`));
+            console.log(`[Socket.IO] Client ${socket.id} left chat for match ${matchId} (${env})`);
         });
 
         // Chat: Message
         socket.on('chat:message', (data) => {
             // data should include: matchId, userId, userName, message, timestamp
             console.log(`[Socket.IO] Chat message in match ${data.matchId}:`, data.message);
-            io.to(`chat:${data.matchId}`).emit('chat:message', data);
+            io.to(room(`chat:${data.matchId}`)).emit('chat:message', data);
         });
 
         // Admin: Subscribe to Logger Updates
         socket.on('admin:subscribe', () => {
-            socket.join('admin:loggers');
-            console.log(`[Socket.IO] Client ${socket.id} subscribed to admin:loggers`);
+            socket.join(room('admin:loggers'));
+            console.log(`[Socket.IO] Client ${socket.id} subscribed to ${room('admin:loggers')}`);
         });
 
         // Admin: Subscribe to Livestream Updates
         socket.on('admin:livestream:subscribe', () => {
-            socket.join('admin:livestreams');
-            console.log(`[Socket.IO] Client ${socket.id} subscribed to admin:livestreams`);
+            socket.join(room('admin:livestreams'));
+            console.log(`[Socket.IO] Client ${socket.id} subscribed to ${room('admin:livestreams')}`);
         });
 
         // Logger: Status Update (broadcast to admin)
         socket.on('logger:status:update', (data) => {
             // data: loggerId, status, isAvailable, etc.
-            io.to('admin:loggers').emit('logger:updated', data);
+            io.to(room('admin:loggers')).emit('logger:updated', data);
         });
 
         // Poll: New Vote
@@ -328,7 +349,7 @@ app.prepare().then(() => {
             // data: matchId, optionId
             console.log(`[Socket.IO] New vote in match ${data.matchId}`);
             // Broadcast to update charts for everyone
-            io.to(`match:${data.matchId}`).emit('poll:updated', data);
+            io.to(room(`match:${data.matchId}`)).emit('poll:updated', data);
         });
 
         // Prediction: New Submission
@@ -336,7 +357,7 @@ app.prepare().then(() => {
             // data: matchId
             console.log(`[Socket.IO] New prediction in match ${data.matchId}`);
             // Broadcast to update stats for everyone
-            io.to(`match:${data.matchId}`).emit('prediction:updated', data);
+            io.to(room(`match:${data.matchId}`)).emit('prediction:updated', data);
         });
 
         // Ping/Pong for connection health
