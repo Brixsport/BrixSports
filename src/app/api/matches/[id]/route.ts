@@ -3,7 +3,7 @@
  * Fetch detailed match information with events, lineups, stats, and more
  */
 
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse, after } from 'next/server';
 import { db } from '@/db';
 import { matches, teams, matchEvents, players, bracketNodes, teamForm, headToHead } from '@/db/schema';
 import { eq, desc, sql } from 'drizzle-orm';
@@ -573,7 +573,9 @@ export async function PATCH(
         // when running the local custom server.js; dead code on Vercel's serverless
         // deployment, same class of gap as BUG-108. broadcastToMatch (src/lib/socket.ts)
         // handles both cases correctly (local global.io, or HTTP /broadcast on Railway).
-        broadcastToMatch(matchId, 'match:updated', { matchId, ...updateData });
+        // after() rather than a bare fire-and-forget call — see events/route.ts's POST
+        // handler for why (traced root cause of BUG-108/116's multi-second broadcast delay).
+        after(() => broadcastToMatch(matchId, 'match:updated', { matchId, ...updateData }));
 
         return NextResponse.json({
             success: true,

@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse, after } from 'next/server';
 import { db } from '@/db';
 import { matchEvents, matches, matchLoggerAssignments } from '@/db/schema';
 import { eq, asc, and } from 'drizzle-orm';
@@ -155,9 +155,15 @@ export async function POST(
         // own socket, which any write path with no live socket (offline-queue sync, or
         // any future write path) could never trigger. broadcastMatchEvent (src/lib/socket.ts)
         // already existed, fully built and already exercised by the chat feature — it was
-        // just never called from here. Safe to fire-and-forget: it swallows its own errors
-        // and never throws, so a broadcast failure can't fail event creation.
-        broadcastMatchEvent(matchId, newEvent);
+        // just never called from here.
+        // after() (not a bare fire-and-forget call): a plain unawaited promise has no
+        // guaranteed completion once this function returns its response on Vercel's
+        // serverless runtime -- traced as the root cause of BUG-108/116's observed
+        // multi-second (up to 42s) broadcast latency. after() keeps the invocation
+        // alive until the broadcast settles, without delaying the response itself.
+        // broadcast()'s own try/catch already swallows failures, so this can't fail
+        // event creation.
+        after(() => broadcastMatchEvent(matchId, newEvent));
 
         // Update match score for scoring events
         // Penalty shootout events must NOT write to match score or player stats —
@@ -188,7 +194,7 @@ export async function POST(
                 })
                 .where(eq(matches.id, matchId));
 
-            broadcastScoreUpdate(matchId, newHomeScore, newAwayScore);
+            after(() => broadcastScoreUpdate(matchId, newHomeScore, newAwayScore));
         }
 
         // Update player stats for competitive matches only — friendlies and shootout events do not count

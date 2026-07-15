@@ -79,17 +79,22 @@ async function broadcast(room: string | null, event: string, data: any): Promise
 }
 
 /**
- * Broadcast an event to a specific match room
+ * Broadcast an event to a specific match room.
+ * Returns the underlying promise (rather than firing-and-forgetting it) so
+ * callers on Vercel can hand it to next/server's after() -- an unresolved,
+ * un-awaited promise has no guaranteed completion once a serverless function
+ * returns its response, which is the root cause traced for BUG-108/116's
+ * multi-second (up to 42s observed) broadcast delivery latency.
  */
-export function broadcastToMatch(matchId: string, event: string, data: any): void {
-    broadcast(`match:${matchId}`, event, data);
+export function broadcastToMatch(matchId: string, event: string, data: any): Promise<void> {
+    return broadcast(`match:${matchId}`, event, data);
 }
 
 /**
  * Broadcast a match event (goal, card, etc.)
  */
-export function broadcastMatchEvent(matchId: string, event: any): void {
-    broadcastToMatch(matchId, 'event:new', {
+export function broadcastMatchEvent(matchId: string, event: any): Promise<void> {
+    return broadcastToMatch(matchId, 'event:new', {
         matchId,
         event,
     });
@@ -98,8 +103,8 @@ export function broadcastMatchEvent(matchId: string, event: any): void {
 /**
  * Broadcast a score update
  */
-export function broadcastScoreUpdate(matchId: string, homeScore: number, awayScore: number): void {
-    broadcastToMatch(matchId, 'match:score:updated', {
+export function broadcastScoreUpdate(matchId: string, homeScore: number, awayScore: number): Promise<void> {
+    return broadcastToMatch(matchId, 'match:score:updated', {
         matchId,
         homeScore,
         awayScore,
@@ -109,8 +114,8 @@ export function broadcastScoreUpdate(matchId: string, homeScore: number, awaySco
 /**
  * Broadcast a rating update
  */
-export function broadcastRatingUpdate(matchId: string, playerId: string, rating: number): void {
-    broadcastToMatch(matchId, 'rating:updated', {
+export function broadcastRatingUpdate(matchId: string, playerId: string, rating: number): Promise<void> {
+    return broadcastToMatch(matchId, 'rating:updated', {
         matchId,
         playerId,
         rating,
@@ -120,8 +125,8 @@ export function broadcastRatingUpdate(matchId: string, playerId: string, rating:
 /**
  * Broadcast stats update
  */
-export function broadcastStatsUpdate(matchId: string, teamId: string, stats: any): void {
-    broadcastToMatch(matchId, 'stats:updated', {
+export function broadcastStatsUpdate(matchId: string, teamId: string, stats: any): Promise<void> {
+    return broadcastToMatch(matchId, 'stats:updated', {
         matchId,
         teamId,
         stats,
@@ -131,8 +136,8 @@ export function broadcastStatsUpdate(matchId: string, teamId: string, stats: any
 /**
  * Broadcast match status change
  */
-export function broadcastMatchStatus(matchId: string, status: string): void {
-    broadcastToMatch(matchId, 'match:status:changed', {
+export function broadcastMatchStatus(matchId: string, status: string): Promise<void> {
+    return broadcastToMatch(matchId, 'match:status:changed', {
         matchId,
         status,
     });
@@ -141,8 +146,8 @@ export function broadcastMatchStatus(matchId: string, status: string): void {
 /**
  * Broadcast event deletion
  */
-export function broadcastEventDeleted(matchId: string, eventId: string): void {
-    broadcastToMatch(matchId, 'event:deleted', {
+export function broadcastEventDeleted(matchId: string, eventId: string): Promise<void> {
+    return broadcastToMatch(matchId, 'event:deleted', {
         matchId,
         eventId,
     });

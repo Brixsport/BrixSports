@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse, after } from 'next/server';
 import * as Sentry from '@sentry/nextjs';
 import { db } from '@/db';
 import { matchEvents, matches, matchLoggerAssignments, footballPlayerStats } from '@/db/schema';
@@ -220,8 +220,10 @@ export async function DELETE(
             .where(eq(matchEvents.id, eventId));
 
         // BUG-108/BUG-116: broadcast the deletion now that it's actually committed — same
-        // gap as the POST route, same pre-built fix (src/lib/socket.ts).
-        broadcastEventDeleted(matchId, eventId);
+        // gap as the POST route, same pre-built fix (src/lib/socket.ts). Wrapped in
+        // after() rather than a bare fire-and-forget call — see events/route.ts's POST
+        // handler for why (traced root cause of the observed multi-second broadcast delay).
+        after(() => broadcastEventDeleted(matchId, eventId));
 
         // Revert score — only runs if delete succeeded above
         if (isScoringEvent && match) {
@@ -241,7 +243,7 @@ export async function DELETE(
                 })
                 .where(eq(matches.id, matchId));
 
-            broadcastScoreUpdate(matchId, newHomeScore, newAwayScore);
+            after(() => broadcastScoreUpdate(matchId, newHomeScore, newAwayScore));
         }
 
         // Revert player stats — same guards as POST: skip friendlies and shootout events
