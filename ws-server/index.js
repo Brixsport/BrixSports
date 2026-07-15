@@ -67,14 +67,21 @@ const httpServer = http.createServer((req, res) => {
         req.on('data', chunk => { body += chunk; });
         req.on('end', () => {
             try {
-                const { room, event, data } = JSON.parse(body);
+                const { room, event, data, env } = JSON.parse(body);
+                // BUG-074: this endpoint is the one entry point into this shared
+                // Railway instance that has no browser Origin header to read env from
+                // (server-to-server call from Vercel) — the caller (src/lib/socket.ts)
+                // sends env explicitly instead. Same defensive default as the socket
+                // connection handler below: unrecognized/missing values land in 'prod'.
+                const scopedEnv = env === 'staging' ? 'staging' : 'prod';
                 if (room && event) {
-                    io.to(room).emit(event, { ...data, timestamp: Date.now() });
-                    console.log(`[Broadcast API] ${event} → ${room}`);
+                    const scopedRoom = `${scopedEnv}:${room}`;
+                    io.to(scopedRoom).emit(event, { ...data, timestamp: Date.now() });
+                    console.log(`[Broadcast API] ${event} → ${scopedRoom}`);
                 } else if (event) {
-                    // Global broadcast
-                    io.emit(event, { ...data, timestamp: Date.now() });
-                    console.log(`[Broadcast API] ${event} → global`);
+                    // Global broadcast — scoped to the caller's environment, not truly global
+                    io.to(scopedEnv).emit(event, { ...data, timestamp: Date.now() });
+                    console.log(`[Broadcast API] ${event} → ${scopedEnv} (global)`);
                 }
                 res.writeHead(200, { 'Content-Type': 'application/json' });
                 res.end(JSON.stringify({ success: true }));
@@ -132,28 +139,43 @@ const matchTimes = new Map();
 io.on('connection', (socket) => {
     console.log(`[WS] Connected: ${socket.id}`);
 
+    // BUG-074: staging and prod share this single Railway instance — a staging test
+    // match with a colliding ID would otherwise broadcast straight to prod viewers.
+    // Ported from server.js's fix (session 43) — env is determined per-connection from
+    // the Origin header the browser sends automatically during the WS handshake, no
+    // client code change needed. Unrecognized/missing origins default to 'prod' (the
+    // harmful direction is staging leaking into prod, not the reverse, so an unmatched
+    // origin landing in prod's namespace is the safe default).
+    const origin = socket.handshake.headers.origin || '';
+    const env = (origin.includes('staging.brixsports.com') || origin.includes('brixsports-staging.vercel.app'))
+        ? 'staging'
+        : 'prod';
+    const room = (name) => `${env}:${name}`;
+    socket.join(env);
+
     // ── Match Subscription ──────────────────────────────────────
     socket.on('match:subscribe', ({ matchId }) => {
-        socket.join(`match:${matchId}`);
-        console.log(`[WS] ${socket.id} → match:${matchId}`);
+        socket.join(room(`match:${matchId}`));
+        console.log(`[WS] ${socket.id} → ${room(`match:${matchId}`)}`);
         socket.emit('match:subscribed', { matchId });
 
         // Send cached time if available
-        if (matchTimes.has(matchId)) {
-            socket.emit('match:time:updated', matchTimes.get(matchId));
+        const cacheKey = room(matchId);
+        if (matchTimes.has(cacheKey)) {
+            socket.emit('match:time:updated', matchTimes.get(cacheKey));
         }
 
         // Broadcast viewer count
-        const roomSize = io.sockets.adapter.rooms.get(`match:${matchId}`)?.size || 0;
-        io.to(`match:${matchId}`).emit('match:viewers', { matchId, count: roomSize });
+        const roomSize = io.sockets.adapter.rooms.get(room(`match:${matchId}`))?.size || 0;
+        io.to(room(`match:${matchId}`)).emit('match:viewers', { matchId, count: roomSize });
     });
 
     socket.on('match:unsubscribe', ({ matchId }) => {
-        socket.leave(`match:${matchId}`);
+        socket.leave(room(`match:${matchId}`));
         socket.emit('match:unsubscribed', { matchId });
 
-        const roomSize = io.sockets.adapter.rooms.get(`match:${matchId}`)?.size || 0;
-        io.to(`match:${matchId}`).emit('match:viewers', { matchId, count: roomSize });
+        const roomSize = io.sockets.adapter.rooms.get(room(`match:${matchId}`))?.size || 0;
+        io.to(room(`match:${matchId}`)).emit('match:viewers', { matchId, count: roomSize });
     });
 
     // ── Event Logging (from Logger client) ──────────────────────
@@ -162,14 +184,15 @@ io.on('connection', (socket) => {
             console.log(`[WS] Event logged: ${data.type} in match ${data.matchId}`);
 
             // Broadcast to all subscribers of this match
-            io.to(`match:${data.matchId}`).emit('event:new', {
+            io.to(room(`match:${data.matchId}`)).emit('event:new', {
                 ...data,
                 timestamp: Date.now(),
             });
 
-            // Global goal notification
+            // Global goal notification — scoped to this connection's environment,
+            // not truly global (BUG-074), so a staging test goal never pages prod viewers
             if (data.type === 'Goal' || data.type === 'GOAL') {
-                io.emit('notification:global', {
+                io.to(env).emit('notification:global', {
                     type: 'GOAL',
                     matchId: data.matchId,
                     detail: data.detail,
@@ -192,7 +215,7 @@ io.on('connection', (socket) => {
     // ── Event Deletion ──────────────────────────────────────────
     socket.on('event:delete', (data) => {
         console.log(`[WS] Event deleted: ${data.eventId} in match ${data.matchId}`);
-        io.to(`match:${data.matchId}`).emit('event:deleted', {
+        io.to(room(`match:${data.matchId}`)).emit('event:deleted', {
             matchId: data.matchId,
             eventId: data.eventId,
         });
@@ -201,85 +224,90 @@ io.on('connection', (socket) => {
     // ── Score Updates ───────────────────────────────────────────
     socket.on('match:score:update', (data) => {
         console.log(`[WS] Score: ${data.homeScore}-${data.awayScore} in ${data.matchId}`);
-        io.to(`match:${data.matchId}`).emit('match:score:updated', data);
+        io.to(room(`match:${data.matchId}`)).emit('match:score:updated', data);
     });
 
     // ── Player Rating Updates ───────────────────────────────────
     socket.on('rating:update', (data) => {
-        io.to(`match:${data.matchId}`).emit('rating:updated', data);
+        io.to(room(`match:${data.matchId}`)).emit('rating:updated', data);
     });
 
     // ── Team Stats Updates ──────────────────────────────────────
     socket.on('stats:update', (data) => {
-        io.to(`match:${data.matchId}`).emit('stats:updated', data);
+        io.to(room(`match:${data.matchId}`)).emit('stats:updated', data);
     });
 
     // ── Eye Point ───────────────────────────────────────────────
     socket.on('eyepoint:award', (data) => {
-        io.to(`match:${data.matchId}`).emit('eyepoint:awarded', data);
+        io.to(room(`match:${data.matchId}`)).emit('eyepoint:awarded', data);
     });
 
     // ── Substitution ────────────────────────────────────────────
     socket.on('substitution:log', (data) => {
-        io.to(`match:${data.matchId}`).emit('substitution:logged', data);
+        io.to(room(`match:${data.matchId}`)).emit('substitution:logged', data);
     });
 
     // ── Match Status ────────────────────────────────────────────
     socket.on('match:status:change', (data) => {
         console.log(`[WS] Status: ${data.status} for ${data.matchId}`);
-        io.to(`match:${data.matchId}`).emit('match:status:changed', data);
+        io.to(room(`match:${data.matchId}`)).emit('match:status:changed', data);
     });
 
     // ── Match Time ──────────────────────────────────────────────
     socket.on('match:time:update', (data) => {
-        matchTimes.set(data.matchId, data);
-        io.to(`match:${data.matchId}`).emit('match:time:updated', data);
+        matchTimes.set(room(data.matchId), data);
+        io.to(room(`match:${data.matchId}`)).emit('match:time:updated', data);
     });
 
     // ── Lineup Updates ──────────────────────────────────────────
     socket.on('match:lineup:update', (data) => {
         console.log(`[WS] Lineup update for ${data.matchId}`);
-        io.to(`match:${data.matchId}`).emit('match:lineup:updated', data);
+        io.to(room(`match:${data.matchId}`)).emit('match:lineup:updated', data);
     });
 
     // ── Match General Update ────────────────────────────────────
     socket.on('match:update', (data) => {
-        io.to(`match:${data.matchId}`).emit('match:updated', data);
+        io.to(room(`match:${data.matchId}`)).emit('match:updated', data);
     });
 
     // ── Live Chat ───────────────────────────────────────────────
     socket.on('chat:join', ({ matchId }) => {
-        socket.join(`chat:${matchId}`);
+        socket.join(room(`chat:${matchId}`));
     });
 
     socket.on('chat:leave', ({ matchId }) => {
-        socket.leave(`chat:${matchId}`);
+        socket.leave(room(`chat:${matchId}`));
     });
 
     socket.on('chat:message', (data) => {
-        io.to(`chat:${data.matchId}`).emit('chat:message', data);
+        io.to(room(`chat:${data.matchId}`)).emit('chat:message', data);
     });
 
     // ── Competition / Standings ─────────────────────────────────
     socket.on('join-competition', (competitionId) => {
-        socket.join(`competition:${competitionId}`);
-        console.log(`[WS] ${socket.id} → competition:${competitionId}`);
+        socket.join(room(`competition:${competitionId}`));
+        console.log(`[WS] ${socket.id} → ${room(`competition:${competitionId}`)}`);
     });
 
     socket.on('leave-competition', (competitionId) => {
-        socket.leave(`competition:${competitionId}`);
+        socket.leave(room(`competition:${competitionId}`));
     });
 
     // ── Admin Channels ──────────────────────────────────────────
     socket.on('admin:subscribe', () => {
-        socket.join('admin:loggers');
+        socket.join(room('admin:loggers'));
     });
 
     socket.on('admin:livestream:subscribe', () => {
-        socket.join('admin:livestreams');
+        socket.join(room('admin:livestreams'));
     });
 
     // ── Infrastructure Monitoring ───────────────────────────────
+    // Deliberately NOT env-scoped (BUG-074's room() helper is not applied here):
+    // this reports the health of the single physical Railway process itself
+    // (uptime, memory, io.engine.clientsCount), which is already shared across
+    // staging and prod by construction — scoping the room wouldn't scope the
+    // underlying data, since clientsCount counts every connected socket regardless.
     socket.on('admin:infrastructure:subscribe', () => {
         socket.join('admin:infrastructure');
         console.log(`[WS] ${socket.id} subscribed to infrastructure updates`);
@@ -299,24 +327,24 @@ io.on('connection', (socket) => {
     });
 
     socket.on('logger:status:update', (data) => {
-        io.to('admin:loggers').emit('logger:updated', data);
+        io.to(room('admin:loggers')).emit('logger:updated', data);
     });
 
     // ── Multi-Logger Real-time Sync ─────────────────────────────
     // Tracks which loggers are active in each match room
     socket.on('logger:join', ({ matchId, loggerId, loggerName }) => {
-        const room = `logger:${matchId}`;
-        socket.join(room);
+        const loggerRoom = room(`logger:${matchId}`);
+        socket.join(loggerRoom);
         // Store logger info on the socket for disconnect handling
         socket.data.loggerInfo = { matchId, loggerId, loggerName };
 
         console.log(`[WS] Logger ${loggerName} (${loggerId}) joined match ${matchId}`);
 
         // Notify others in the room
-        socket.to(room).emit('logger-joined', { loggerId, loggerName });
+        socket.to(loggerRoom).emit('logger-joined', { loggerId, loggerName });
 
         // Send back the list of active loggers in this room
-        const roomSockets = io.sockets.adapter.rooms.get(room);
+        const roomSockets = io.sockets.adapter.rooms.get(loggerRoom);
         const loggers = [];
         if (roomSockets) {
             for (const socketId of roomSockets) {
@@ -333,26 +361,26 @@ io.on('connection', (socket) => {
     });
 
     socket.on('logger:leave', ({ matchId, loggerId }) => {
-        const room = `logger:${matchId}`;
-        socket.leave(room);
+        const loggerRoom = room(`logger:${matchId}`);
+        socket.leave(loggerRoom);
         console.log(`[WS] Logger ${loggerId} left match ${matchId}`);
-        socket.to(room).emit('logger-left', { loggerId });
+        socket.to(loggerRoom).emit('logger-left', { loggerId });
         socket.data.loggerInfo = null;
     });
 
     socket.on('logger:broadcast-event', ({ matchId, event }) => {
-        const room = `logger:${matchId}`;
+        const loggerRoom = room(`logger:${matchId}`);
         // Broadcast to all other loggers in this match room (not the sender)
-        socket.to(room).emit('logger:event', event);
+        socket.to(loggerRoom).emit('logger:event', event);
     });
 
     // ── Polls & Predictions ─────────────────────────────────────
     socket.on('poll:vote', (data) => {
-        io.to(`match:${data.matchId}`).emit('poll:updated', data);
+        io.to(room(`match:${data.matchId}`)).emit('poll:updated', data);
     });
 
     socket.on('prediction:submit', (data) => {
-        io.to(`match:${data.matchId}`).emit('prediction:updated', data);
+        io.to(room(`match:${data.matchId}`)).emit('prediction:updated', data);
     });
 
     // ── Heartbeat ───────────────────────────────────────────────
@@ -367,8 +395,7 @@ io.on('connection', (socket) => {
         // Clean up logger room if this socket was a logger
         if (socket.data.loggerInfo) {
             const { matchId, loggerId } = socket.data.loggerInfo;
-            const room = `logger:${matchId}`;
-            socket.to(room).emit('logger-left', { loggerId });
+            socket.to(room(`logger:${matchId}`)).emit('logger-left', { loggerId });
             console.log(`[WS] Logger ${loggerId} disconnected from match ${matchId}`);
         }
     });

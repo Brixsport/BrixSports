@@ -6,6 +6,7 @@
  */
 
 import { Server as SocketIOServer } from 'socket.io';
+import { env as appEnv } from './env';
 
 // Extend global namespace to include io
 declare global {
@@ -50,13 +51,26 @@ async function broadcast(room: string | null, event: string, data: any): Promise
 
     try {
         const broadcastUrl = wsServerUrl.replace(/\/+$/, '') + '/broadcast';
+        // BUG-074: ws-server/index.js shares one Railway instance across staging and
+        // prod, with no browser Origin header on this server-to-server call to read
+        // env from — tell it explicitly so it can room-scope the broadcast the same
+        // way it scopes browser socket connections. Deliberately NOT appEnv.isStaging:
+        // NEXT_PUBLIC_ENV is currently kept off 'staging' on the staging deployment
+        // on purpose, to bypass middleware.ts's staging-wide JWT gate — so it can't be
+        // trusted here. Match on the deployment's own URL instead, using the exact same
+        // hostname patterns the socket connection handlers already check on the
+        // incoming browser Origin, so both sides always agree on the room name. Same
+        // default-to-'prod' direction as the rest of BUG-074's fix either way.
+        const wsEnv = (appEnv.appUrl.includes('staging.brixsports.com') || appEnv.appUrl.includes('brixsports-staging.vercel.app'))
+            ? 'staging'
+            : 'prod';
         await fetch(broadcastUrl, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 'x-api-key': apiKey,
             },
-            body: JSON.stringify({ room, event, data }),
+            body: JSON.stringify({ room, event, data, env: wsEnv }),
         });
     } catch (error) {
         // Don't crash API routes if WS broadcast fails
