@@ -4,6 +4,7 @@ import { db } from '@/db';
 import { matchEvents, matches, matchLoggerAssignments, footballPlayerStats } from '@/db/schema';
 import { eq, and } from 'drizzle-orm';
 import { getAuthUser } from '@/lib/auth';
+import { broadcastEventDeleted, broadcastScoreUpdate } from '@/lib/socket';
 
 // Reverts one stat increment for a player when an event is deleted.
 // Mirrors updatePlayerStats in events/route.ts — same guards must apply at call site.
@@ -218,21 +219,29 @@ export async function DELETE(
             .delete(matchEvents)
             .where(eq(matchEvents.id, eventId));
 
+        // BUG-108/BUG-116: broadcast the deletion now that it's actually committed — same
+        // gap as the POST route, same pre-built fix (src/lib/socket.ts).
+        broadcastEventDeleted(matchId, eventId);
+
         // Revert score — only runs if delete succeeded above
         if (isScoringEvent && match) {
             // OWN GOAL: teamId is the conceding team — the opponent was credited. Revert opponent.
             const isHomeTeam = isOwnGoal
                 ? event.teamId !== match.homeTeamId
                 : event.teamId === match.homeTeamId;
+            const newHomeScore = isHomeTeam ? Math.max(0, (match.homeScore || 0) - 1) : (match.homeScore || 0);
+            const newAwayScore = !isHomeTeam ? Math.max(0, (match.awayScore || 0) - 1) : (match.awayScore || 0);
 
             await db
                 .update(matches)
                 .set({
-                    homeScore: isHomeTeam ? Math.max(0, (match.homeScore || 0) - 1) : (match.homeScore || 0),
-                    awayScore: !isHomeTeam ? Math.max(0, (match.awayScore || 0) - 1) : (match.awayScore || 0),
+                    homeScore: newHomeScore,
+                    awayScore: newAwayScore,
                     updatedAt: new Date(),
                 })
                 .where(eq(matches.id, matchId));
+
+            broadcastScoreUpdate(matchId, newHomeScore, newAwayScore);
         }
 
         // Revert player stats — same guards as POST: skip friendlies and shootout events

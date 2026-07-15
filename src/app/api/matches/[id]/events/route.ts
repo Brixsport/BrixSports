@@ -4,6 +4,7 @@ import { matchEvents, matches, matchLoggerAssignments } from '@/db/schema';
 import { eq, asc, and } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { getAuthUser } from '@/lib/auth';
+import { broadcastMatchEvent, broadcastScoreUpdate } from '@/lib/socket';
 
 // GET /api/matches/[id]/events - Get all events for a match
 export async function GET(
@@ -148,6 +149,16 @@ export async function POST(
 
         await db.insert(matchEvents).values(newEvent);
 
+        // BUG-108/BUG-116: broadcast to live viewers now that the DB write has actually
+        // succeeded — previously nothing here ever broadcast at all; the only push a
+        // viewer got was client-side, from the logger's own open tab emitting over its
+        // own socket, which any write path with no live socket (offline-queue sync, or
+        // any future write path) could never trigger. broadcastMatchEvent (src/lib/socket.ts)
+        // already existed, fully built and already exercised by the chat feature — it was
+        // just never called from here. Safe to fire-and-forget: it swallows its own errors
+        // and never throws, so a broadcast failure can't fail event creation.
+        broadcastMatchEvent(matchId, newEvent);
+
         // Update match score for scoring events
         // Penalty shootout events must NOT write to match score or player stats —
         // shootout score is tracked separately (BACKLOG-105). Skip all writes during this period.
@@ -165,15 +176,19 @@ export async function POST(
             const isHomeTeam = isOwnGoal
                 ? teamId !== match.homeTeamId
                 : teamId === match.homeTeamId;
+            const newHomeScore = isHomeTeam ? currentHomeScore + points : currentHomeScore;
+            const newAwayScore = !isHomeTeam ? currentAwayScore + points : currentAwayScore;
 
             await db
                 .update(matches)
                 .set({
-                    homeScore: isHomeTeam ? currentHomeScore + points : currentHomeScore,
-                    awayScore: !isHomeTeam ? currentAwayScore + points : currentAwayScore,
+                    homeScore: newHomeScore,
+                    awayScore: newAwayScore,
                     updatedAt: new Date(),
                 })
                 .where(eq(matches.id, matchId));
+
+            broadcastScoreUpdate(matchId, newHomeScore, newAwayScore);
         }
 
         // Update player stats for competitive matches only — friendlies and shootout events do not count
