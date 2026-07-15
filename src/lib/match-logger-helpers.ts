@@ -52,6 +52,15 @@ export async function getLoggerMatches(loggerId: string) {
                 status: matches.status,
                 startTime: matches.startTime,
                 competition: matches.competition,
+                // BUG-118: currentPeriod/minute/extraTime were missing from this narrowed
+                // projection — FootballLogger.tsx seeds its MatchStateManager's clock from
+                // this exact match object on mount, and defaults to NOT_STARTED whenever
+                // currentPeriod is undefined. Without these, re-entering an in-progress
+                // match via the assigned-matches list always looked like a fresh match,
+                // regardless of the real DB state.
+                currentPeriod: matches.currentPeriod,
+                minute: matches.minute,
+                extraTime: matches.extraTime,
             },
         })
         .from(matchLoggerAssignments)
