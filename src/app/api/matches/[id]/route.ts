@@ -10,6 +10,7 @@ import { eq, desc, sql } from 'drizzle-orm';
 import { playerRatings } from '@/db/schema-ratings';
 import { getAuthUser } from '@/lib/auth';
 import { isLoggerAssigned } from '@/lib/match-logger-helpers';
+import { broadcastToMatch } from '@/lib/socket';
 
 export async function GET(
     request: NextRequest,
@@ -568,13 +569,11 @@ export async function PATCH(
             .set(updateData)
             .where(eq(matches.id, matchId));
 
-        // Broadcast update via Socket.IO
-        if (typeof global !== 'undefined' && (global as any).io) {
-            (global as any).io.to(`match:${matchId}`).emit('match:updated', {
-                matchId,
-                ...updateData,
-            });
-        }
+        // Broadcast update via Socket.IO — was a raw `global.io` check, only ever true
+        // when running the local custom server.js; dead code on Vercel's serverless
+        // deployment, same class of gap as BUG-108. broadcastToMatch (src/lib/socket.ts)
+        // handles both cases correctly (local global.io, or HTTP /broadcast on Railway).
+        broadcastToMatch(matchId, 'match:updated', { matchId, ...updateData });
 
         return NextResponse.json({
             success: true,
