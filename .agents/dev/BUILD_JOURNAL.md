@@ -2951,3 +2951,30 @@ Also found and fixed a genuinely new bug via this same rigor: **BACKLOG-122** fi
 - BUG-074's real fix (in `ws-server/index.js`, the correct file) — not yet started.
 
 **Next session — exact first task:** check the Railway dashboard's `ws-server` service Variables tab directly — does `WS_API_KEY` exist there at all, and does it match what Vercel has configured? If missing/mismatched, add/fix it and redeploy, then redo the live broadcast test exactly as this session ran it (`dev/gen-logger-test-token.mjs` + a raw `POST /api/matches/[id]/events`, watch a connected viewer tab for the event arriving within a few seconds, no refresh). Only move BUG-108/116 to `RESOLVED` once that's confirmed. After that, port BUG-074's environment-scoping fix (`server.js`'s version is a correct, ready-to-copy reference) to `ws-server/index.js`.
+
+**Post-wrap continuation, same session, 2026-07-15 — `WS_API_KEY` confirmed missing, added, still not fully working.** Direct `POST /broadcast` to Railway (bypassing the app entirely) with the local `.env.local` key value: `401` before, `200` after Richard added `WS_API_KEY` to the Railway `ws-server` service — confirms that half of the root cause directly, not just inferred from the "0 Variables" dashboard view. But redoing the full live test (real app route + connected viewer tab) still didn't deliver the event. Narrowed further: the direct test only proves Railway accepts the *local file's* key value — the real app's broadcast call runs on **Vercel's own configured `WS_API_KEY`**, which was never directly confirmed to match. `.env.example` updated to document `WS_SERVER_URL`/`WS_API_KEY` (previously undocumented entirely) so this doesn't recur for a future environment setup.
+**Next session — exact first task (updated):** compare Vercel's staging project's actual `WS_API_KEY` (dashboard, not the local `.env.local` file) against what's now in Railway's `ws-server` service — fix + redeploy Vercel if they differ. Then redo both: (1) the isolated direct `POST /broadcast` curl test as a quick sanity check, (2) the full live test (logger token + real API route + connected viewer tab, checking the Timeline within a few seconds). Only step 2 succeeding closes BUG-108/116 — step 1 alone already proved insufficient once.
+
+---
+
+### Session 44 — 2026-07-15
+
+**Focus:** Close out BUG-108/116 (live broadcast never reaching connected viewers) — the single open thread carried from session 43.
+
+**Found and fixed:**
+- **`WS_API_KEY` was a dead end.** Richard confirmed Vercel's staging value and Railway's `ws-server` value were byte-identical — ruling out the key as the cause session 43 suspected. Two fresh live-app tests (`dev/test-live-broadcast-post.mjs`, real `POST /api/matches/[id]/events` on staging + a connected viewer tab watching independently) both still failed to deliver live: DB writes succeeded (`201`) both times, but the viewer never logged a WS push, only picking events up later via the existing 25s reconciliation poll.
+- **Real root cause: `src/lib/socket.ts:43`** — `process.env.NEXT_PUBLIC_WS_URL || process.env.WS_SERVER_URL`. Vercel's `NEXT_PUBLIC_WS_URL` was missing its `https://` scheme (bare `brixsports-production-8fa3.up.railway.app`), so the server-side `fetch(broadcastUrl, ...)` threw on the malformed URL on every call — caught by the surrounding `try/catch` (`console.warn`, server-side only), invisible to every test run this session or last, including the direct curl sanity checks (those bypassed the app entirely and never exercised this code path). `WS_SERVER_URL` had the correct scheme the whole time but was never used, since the code prefers `NEXT_PUBLIC_WS_URL` when both are set.
+- **Fix**: Richard added the missing `https://` to `NEXT_PUBLIC_WS_URL` on Vercel's staging dashboard and redeployed. No code change required.
+- **Live-tested end-to-end after the fix**: fresh viewer tab, fresh WS connection, real event posted via the app's own API route — console logged `[WS] New event received for Match G4er-Gc0_E1xo8_BgvyIQ` four times, Timeline updated with the new event with zero reload. First confirmed live broadcast delivery this project has ever produced.
+- **BUG-108 and BUG-116 both moved to RESOLVED** (same fix closes both — see `BACKLOG.md` for full evidence blocks). Test events cleaned up from the DB afterward (`dev/cleanup-broadcast-test-event.mjs`, confirmed 0 rows remaining).
+
+**Caveat, noted honestly rather than glossed over:** delivery latency in this test was ~7–17 seconds, not CLAUDE.md's stated <5s target. Not blocking BUG-108/116's resolution (the question was whether the broadcast fires at all, not its exact latency), but flagged as a real follow-up — cause not yet investigated (candidates: Railway cold path, Socket.IO room-emit delay, something else).
+
+**Process note:** an early retest used an artificial `minute: 199` test event with no `period` set, which landed in a mislabeled "Extra Time" timeline bucket separate from the real second-half events — flagged by Richard as looking like a chronological-ordering bug. Traced to `LiveMatchTimeline.tsx`'s period-grouping fallback (`minute > 90` → "Extra Time" when no explicit `period` is set) — an artifact of the synthetic test data, not a real bug. Later retests set an explicit `period` to avoid this.
+
+**Deferred:**
+- Live broadcast latency (7–17s observed, target <5s) — not yet investigated.
+- BUG-074's real fix (environment-scoping the actually-deployed `ws-server/index.js`, not root `server.js`) — still open, untouched this session.
+- BACKLOG-018 (BUSA League backfill, 11 matches remaining) — untouched this session, Tier 2, still behind Tier 0 real-time work per the standing prioritization rule.
+
+**Next session — exact first task:** genuinely open. Candidates: investigate the 7–17s broadcast latency, port BUG-074's fix to `ws-server/index.js`, or resume BACKLOG-018's remaining 11 BUSA League matches.
