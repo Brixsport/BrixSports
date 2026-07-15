@@ -110,7 +110,16 @@ function getOrCreateSocket(): Socket | null {
         }
     });
 
-    sharedSocket.on('reconnect_failed', () => {
+    // BUG-114 real root cause: reconnection lifecycle events (reconnect, reconnect_attempt,
+    // reconnect_error, reconnect_failed) are emitted by the Manager (socket.io), never
+    // re-relayed to the Socket instance itself in socket.io-client v4 — unlike connect_error,
+    // which IS re-relayed to the socket for convenience (why that one always logged
+    // correctly while this one never fired, confirmed live across multiple session-43
+    // Railway-kill tests: connect_error reached attempt 6+, reconnect_failed never once
+    // logged). `sharedSocket.on('reconnect_failed', ...)` was listening on the wrong
+    // object and could never fire — this is why the manual retry loop below never engaged,
+    // not a server-side session-handling mystery as originally suspected.
+    sharedSocket.io.on('reconnect_failed', () => {
         // Socket.IO exhausted all retries. Start a manual 30 s retry loop so the page
         // recovers when the server returns without needing a hard refresh.
         console.warn('[WS] reconnect_failed — starting manual retry loop (30 s)');
