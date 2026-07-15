@@ -1494,10 +1494,16 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                         >
                             {isUndoing ? <span className="text-[10px]">...</span> : <Undo2 size={16} />}
                         </button>
+                        {/* BUG-112: this badge used to be driven entirely by isSocketConnected,
+                            showing "Offline" (implying data loss) whenever just the WS dropped —
+                            even though events still save fine via REST (confirmed, BUG-108).
+                            isConnected (useMultiLogger, real REST reachability) now drives the
+                            actual "offline" framing; a WS-only drop shows a separate, honest
+                            "Sync Paused" state instead of implying anything isn't being saved. */}
                         <div className="flex items-center gap-1.5 px-2 py-1 bg-white/5 rounded-lg border border-white/10 shrink-0">
-                            <span className={`w-1.5 h-1.5 rounded-full ${isSocketConnected ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.5)]' : 'bg-red-500 animate-pulse'}`} />
+                            <span className={`w-1.5 h-1.5 rounded-full ${!isConnected ? 'bg-red-500 animate-pulse' : isSocketConnected ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.5)]' : 'bg-yellow-500 animate-pulse'}`} />
                             <span className="text-[8px] font-black uppercase tracking-tighter opacity-60">
-                                {isSocketConnected ? 'Live Sync' : 'Offline'}
+                                {!isConnected ? 'Offline' : isSocketConnected ? 'Live Sync' : 'Sync Paused'}
                             </span>
                         </div>
                         {queuedOfflineCount > 0 && (
