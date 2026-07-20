@@ -38,6 +38,7 @@ let stableFallback: SocketContextValue | null = null;
 
 let sharedSocket: Socket | null = null;
 let connectionCount = 0;
+let manualRetryLoopActive = false; // guards against a second parallel post-exhaustion retry loop
 
 function getOrCreateSocket(): Socket | null {
     if (sharedSocket?.connected || sharedSocket?.active) {
@@ -130,18 +131,49 @@ function getOrCreateSocket(): Socket | null {
     // object and could never fire — this is why the manual retry loop below never engaged,
     // not a server-side session-handling mystery as originally suspected.
     sharedSocket.io.on('reconnect_failed', () => {
-        // Socket.IO exhausted all retries. Start a manual 30 s retry loop so the page
-        // recovers when the server returns without needing a hard refresh.
-        console.warn('[WS] reconnect_failed — starting manual retry loop (30 s)');
-        const retryInterval = setInterval(() => {
-            if (sharedSocket?.connected) {
-                clearInterval(retryInterval);
-                return;
-            }
-            console.log('[WS] Manual retry attempt');
-            reconnectAttempts = 0;
-            sharedSocket?.connect();
-        }, 30000);
+        // Socket.IO exhausted its own 5 built-in attempts (which already use
+        // exponential backoff + jitter internally via the library's own defaults --
+        // confirmed in node_modules/socket.io-client: randomizationFactor defaults
+        // to 0.5, backoff base 2000ms capped at reconnectionDelayMax=10000ms). Past
+        // that cap, Socket.IO gives up entirely -- this manual loop is what actually
+        // recovers the page once the server returns, without needing a hard refresh.
+        //
+        // It used to retry every flat 30s with zero growth and zero jitter: every
+        // client that disconnected around the same moment (a single Railway restart
+        // affects everyone connected at once, by construction) would retry in exact
+        // lockstep, forever -- a thundering herd against one Railway instance with no
+        // load balancer. Now exponential (base 10s, factor 1.5, capped at 60s) with
+        // ±50% jitter (matching Socket.IO's own default), same shape as the library's
+        // own backoff, just extended past its hard attempt limit.
+        if (manualRetryLoopActive) return; // guard: don't stack a second parallel loop
+        manualRetryLoopActive = true;
+        console.warn('[WS] reconnect_failed — starting manual retry loop (exponential backoff + jitter)');
+
+        let manualAttempt = 0;
+        const BASE_MS = 10000;
+        const MAX_MS = 60000;
+        const FACTOR = 1.5;
+        const JITTER_RATIO = 0.5;
+
+        const scheduleRetry = () => {
+            const raw = Math.min(BASE_MS * Math.pow(FACTOR, manualAttempt), MAX_MS);
+            const jitter = raw * JITTER_RATIO * (Math.random() * 2 - 1); // ± JITTER_RATIO
+            const delay = Math.max(1000, Math.round(raw + jitter));
+
+            setTimeout(() => {
+                if (sharedSocket?.connected) {
+                    manualRetryLoopActive = false;
+                    return;
+                }
+                manualAttempt++;
+                console.log(`[WS] Manual retry attempt ${manualAttempt} (this delay was ~${Math.round(delay / 1000)}s)`);
+                reconnectAttempts = 0;
+                sharedSocket?.connect();
+                scheduleRetry();
+            }, delay);
+        };
+
+        scheduleRetry();
     });
 
     return sharedSocket;
