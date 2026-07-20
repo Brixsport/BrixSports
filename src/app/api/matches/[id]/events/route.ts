@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse, after } from 'next/server';
 import { db } from '@/db';
 import { matchEvents, matches, matchLoggerAssignments } from '@/db/schema';
-import { eq, asc, and } from 'drizzle-orm';
+import { eq, asc, and, sql } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { getAuthUser } from '@/lib/auth';
 import { broadcastMatchEvent, broadcastScoreUpdate } from '@/lib/socket';
@@ -147,7 +147,53 @@ export async function POST(
             createdAt: new Date(),
         };
 
-        await db.insert(matchEvents).values(newEvent);
+        // Penalty shootout events must NOT write to match score or player stats —
+        // shootout score is tracked separately (BACKLOG-105). Skip all writes during this period.
+        const isPenaltyShootout = match.currentPeriod === 'PENALTY_SHOOTOUT';
+
+        const upperType = type.toUpperCase().replace(/\s+/g, '_');
+        const isOwnGoal = upperType === 'OWN_GOAL';
+        const isScoringEvent = upperType === 'GOAL' || upperType === 'PENALTY' || isOwnGoal;
+
+        // BUG-121: event insert + score update used to be two separate, independently
+        // committed statements with no enclosing transaction — a failure after the
+        // insert left a saved event with no score reflection, and a client retry on
+        // that failure would insert a second, duplicate event row. The score update
+        // itself also used to read the score into a JS variable, compute +points, and
+        // write that computed value back — a classic read-modify-write race: two
+        // scoring events for the same match in overlapping requests could both read
+        // the same starting score and the second write would silently clobber the
+        // first's intent. Both fixed together: the insert and the score update now
+        // share one transaction, and the score update is a single atomic SQL
+        // increment (`col = col + points`), not a JS-computed value — closes the race
+        // regardless of how many concurrent writers there are, not just the common case.
+        let newHomeScore: number | undefined;
+        let newAwayScore: number | undefined;
+
+        await db.transaction(async (tx) => {
+            await tx.insert(matchEvents).values(newEvent);
+
+            if (isScoringEvent && !isPenaltyShootout) {
+                const points = typeof value === 'number' ? value : 1;
+                // Own goal: teamId is the player's team (who conceded) — credit the opposing team
+                const isHomeTeam = isOwnGoal
+                    ? teamId !== match.homeTeamId
+                    : teamId === match.homeTeamId;
+
+                const [updated] = isHomeTeam
+                    ? await tx.update(matches)
+                        .set({ homeScore: sql`${matches.homeScore} + ${points}`, updatedAt: new Date() })
+                        .where(eq(matches.id, matchId))
+                        .returning({ homeScore: matches.homeScore, awayScore: matches.awayScore })
+                    : await tx.update(matches)
+                        .set({ awayScore: sql`${matches.awayScore} + ${points}`, updatedAt: new Date() })
+                        .where(eq(matches.id, matchId))
+                        .returning({ homeScore: matches.homeScore, awayScore: matches.awayScore });
+
+                newHomeScore = updated.homeScore ?? 0;
+                newAwayScore = updated.awayScore ?? 0;
+            }
+        });
 
         // BUG-108/BUG-116: broadcast to live viewers now that the DB write has actually
         // succeeded — previously nothing here ever broadcast at all; the only push a
@@ -165,36 +211,8 @@ export async function POST(
         // event creation.
         after(() => broadcastMatchEvent(matchId, newEvent));
 
-        // Update match score for scoring events
-        // Penalty shootout events must NOT write to match score or player stats —
-        // shootout score is tracked separately (BACKLOG-105). Skip all writes during this period.
-        const isPenaltyShootout = match.currentPeriod === 'PENALTY_SHOOTOUT';
-
-        const upperType = type.toUpperCase().replace(/\s+/g, '_');
-        const isOwnGoal = upperType === 'OWN_GOAL';
-        const isScoringEvent = upperType === 'GOAL' || upperType === 'PENALTY' || isOwnGoal;
-
-        if (isScoringEvent && !isPenaltyShootout) {
-            const currentHomeScore = match.homeScore || 0;
-            const currentAwayScore = match.awayScore || 0;
-            const points = typeof value === 'number' ? value : 1;
-            // Own goal: teamId is the player's team (who conceded) — credit the opposing team
-            const isHomeTeam = isOwnGoal
-                ? teamId !== match.homeTeamId
-                : teamId === match.homeTeamId;
-            const newHomeScore = isHomeTeam ? currentHomeScore + points : currentHomeScore;
-            const newAwayScore = !isHomeTeam ? currentAwayScore + points : currentAwayScore;
-
-            await db
-                .update(matches)
-                .set({
-                    homeScore: newHomeScore,
-                    awayScore: newAwayScore,
-                    updatedAt: new Date(),
-                })
-                .where(eq(matches.id, matchId));
-
-            after(() => broadcastScoreUpdate(matchId, newHomeScore, newAwayScore));
+        if (newHomeScore !== undefined && newAwayScore !== undefined) {
+            after(() => broadcastScoreUpdate(matchId, newHomeScore!, newAwayScore!));
         }
 
         // Update player stats for competitive matches only — friendlies and shootout events do not count

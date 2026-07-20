@@ -2,7 +2,7 @@ import { NextRequest, NextResponse, after } from 'next/server';
 import * as Sentry from '@sentry/nextjs';
 import { db } from '@/db';
 import { matchEvents, matches, matchLoggerAssignments, footballPlayerStats } from '@/db/schema';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, sql } from 'drizzle-orm';
 import { getAuthUser } from '@/lib/auth';
 import { broadcastEventDeleted, broadcastScoreUpdate } from '@/lib/socket';
 
@@ -214,10 +214,40 @@ export async function DELETE(
             .where(eq(matches.id, matchId))
             .get();
 
-        // Delete event first — if this fails, score revert must not run
-        await db
-            .delete(matchEvents)
-            .where(eq(matchEvents.id, eventId));
+        // BUG-121: delete + score revert used to be two separate, independently
+        // committed statements with no enclosing transaction, and the revert itself
+        // read the score into a JS variable and wrote back a computed value — the
+        // same read-modify-write race as the POST route's score update, mirrored
+        // here for deletes. Both fixed together: delete + revert now share one
+        // transaction, and the revert is an atomic SQL decrement (MAX(col - 1, 0),
+        // same floor-at-zero clamp as before, now enforced by SQLite's MAX()
+        // instead of Math.max() in application code) rather than a JS-computed value.
+        let newHomeScore: number | undefined;
+        let newAwayScore: number | undefined;
+
+        await db.transaction(async (tx) => {
+            await tx.delete(matchEvents).where(eq(matchEvents.id, eventId));
+
+            if (isScoringEvent && match) {
+                // OWN GOAL: teamId is the conceding team — the opponent was credited. Revert opponent.
+                const isHomeTeam = isOwnGoal
+                    ? event.teamId !== match.homeTeamId
+                    : event.teamId === match.homeTeamId;
+
+                const [updated] = isHomeTeam
+                    ? await tx.update(matches)
+                        .set({ homeScore: sql`MAX(${matches.homeScore} - 1, 0)`, updatedAt: new Date() })
+                        .where(eq(matches.id, matchId))
+                        .returning({ homeScore: matches.homeScore, awayScore: matches.awayScore })
+                    : await tx.update(matches)
+                        .set({ awayScore: sql`MAX(${matches.awayScore} - 1, 0)`, updatedAt: new Date() })
+                        .where(eq(matches.id, matchId))
+                        .returning({ homeScore: matches.homeScore, awayScore: matches.awayScore });
+
+                newHomeScore = updated.homeScore ?? 0;
+                newAwayScore = updated.awayScore ?? 0;
+            }
+        });
 
         // BUG-108/BUG-116: broadcast the deletion now that it's actually committed — same
         // gap as the POST route, same pre-built fix (src/lib/socket.ts). Wrapped in
@@ -225,25 +255,8 @@ export async function DELETE(
         // handler for why (traced root cause of the observed multi-second broadcast delay).
         after(() => broadcastEventDeleted(matchId, eventId));
 
-        // Revert score — only runs if delete succeeded above
-        if (isScoringEvent && match) {
-            // OWN GOAL: teamId is the conceding team — the opponent was credited. Revert opponent.
-            const isHomeTeam = isOwnGoal
-                ? event.teamId !== match.homeTeamId
-                : event.teamId === match.homeTeamId;
-            const newHomeScore = isHomeTeam ? Math.max(0, (match.homeScore || 0) - 1) : (match.homeScore || 0);
-            const newAwayScore = !isHomeTeam ? Math.max(0, (match.awayScore || 0) - 1) : (match.awayScore || 0);
-
-            await db
-                .update(matches)
-                .set({
-                    homeScore: newHomeScore,
-                    awayScore: newAwayScore,
-                    updatedAt: new Date(),
-                })
-                .where(eq(matches.id, matchId));
-
-            after(() => broadcastScoreUpdate(matchId, newHomeScore, newAwayScore));
+        if (newHomeScore !== undefined && newAwayScore !== undefined) {
+            after(() => broadcastScoreUpdate(matchId, newHomeScore!, newAwayScore!));
         }
 
         // Revert player stats — same guards as POST: skip friendlies and shootout events
