@@ -9,8 +9,13 @@
 require('dotenv').config();
 const http = require('http');
 const { Server } = require('socket.io');
+const jwt = require('jsonwebtoken');
 
 const PORT = parseInt(process.env.PORT || '3001', 10);
+
+if (!process.env.JWT_SECRET_STAGING || !process.env.JWT_SECRET_PROD) {
+    console.warn('[WS Auth] WARNING: JWT_SECRET_STAGING and/or JWT_SECRET_PROD not set — logger sockets for the affected environment(s) will connect as unauthenticated viewers, all logger-only actions rejected for real loggers.');
+}
 
 // ─── HTTP Server ────────────────────────────────────────────────
 // Also provides a simple REST API so Vercel API routes can trigger broadcasts
@@ -132,6 +137,68 @@ const io = new Server(httpServer, {
     pingTimeout: 20000,
 });
 
+// BUG-074: staging and prod share this single Railway instance. Env is
+// determined per-connection from the Origin header the browser sends
+// automatically during the WS handshake, no client code change needed.
+// Unrecognized/missing origins default to 'prod' (the harmful direction is
+// staging leaking into prod, not the reverse, so an unmatched origin
+// landing in prod's namespace is the safe default). Shared by the auth
+// middleware below and the connection handler, so both always agree.
+function getEnvFromOrigin(socket) {
+    const origin = socket.handshake.headers.origin || '';
+    return (origin.includes('staging.brixsports.com') || origin.includes('brixsports-staging.vercel.app'))
+        ? 'staging'
+        : 'prod';
+}
+
+// ─── Logger Socket Authentication ──────────────────────────────
+// Viewer sockets are correctly unauthenticated (public scores) -- this only
+// tags whether a connection is a genuine logged-in logger. Per-match
+// assignment authorization already happens at the REST layer
+// (POST /api/matches/[id]/events checks matchLoggerAssignments) -- this
+// middleware answers a narrower question: is the thing emitting event:log/
+// match:time:update/etc. a real logger at all, not an arbitrary WS client.
+// No token -> anonymous viewer, allowed through. Invalid/expired token ->
+// same, degrades to viewer rather than rejecting the connection outright,
+// so a logger whose token expires mid-match doesn't get their whole tab
+// disconnected -- they just lose logger privileges until they refresh.
+//
+// Staging and prod sign logger JWTs with DIFFERENT secrets (CLAUDE.md:
+// "JWT_SECRET and CRON_SECRET are different per environment") -- but this
+// is one shared Railway instance serving both. A single hardcoded secret
+// here could only ever verify one environment's tokens; the other
+// environment's real loggers would silently fail this check. Select the
+// right secret using the same Origin-based env detection BUG-074 already
+// established, rather than trying to guess or accepting either blindly.
+const JWT_SECRETS = {
+    staging: process.env.JWT_SECRET_STAGING,
+    prod: process.env.JWT_SECRET_PROD,
+};
+
+io.use((socket, next) => {
+    const token = socket.handshake.auth?.token;
+    if (!token) {
+        socket.data.isLogger = false;
+        return next();
+    }
+    const env = getEnvFromOrigin(socket);
+    const secret = JWT_SECRETS[env];
+    if (!secret) {
+        console.warn(`[WS Auth] No JWT secret configured for env=${env} (JWT_SECRET_${env.toUpperCase()} unset) -- treating connection as unauthenticated`);
+        socket.data.isLogger = false;
+        return next();
+    }
+    try {
+        const payload = jwt.verify(token, secret);
+        socket.data.isLogger = payload.role === 'logger' || payload.role === 'admin';
+        socket.data.loggerId = payload.id;
+    } catch (err) {
+        console.warn(`[WS Auth] Rejected token at handshake (${socket.id}, env=${env}): ${err.message}`);
+        socket.data.isLogger = false;
+    }
+    next();
+});
+
 // ─── In-Memory State ───────────────────────────────────────────
 const matchTimes = new Map();
 
@@ -141,17 +208,22 @@ io.on('connection', (socket) => {
 
     // BUG-074: staging and prod share this single Railway instance — a staging test
     // match with a colliding ID would otherwise broadcast straight to prod viewers.
-    // Ported from server.js's fix (session 43) — env is determined per-connection from
-    // the Origin header the browser sends automatically during the WS handshake, no
-    // client code change needed. Unrecognized/missing origins default to 'prod' (the
-    // harmful direction is staging leaking into prod, not the reverse, so an unmatched
-    // origin landing in prod's namespace is the safe default).
-    const origin = socket.handshake.headers.origin || '';
-    const env = (origin.includes('staging.brixsports.com') || origin.includes('brixsports-staging.vercel.app'))
-        ? 'staging'
-        : 'prod';
+    // getEnvFromOrigin() defined above, shared with the auth middleware so both
+    // always agree on which environment a given connection belongs to.
+    const env = getEnvFromOrigin(socket);
     const room = (name) => `${env}:${name}`;
     socket.join(env);
+
+    // Gate for logger-only actions (event mutation/broadcast triggers) --
+    // does not apply to read-only subscribe actions, which stay open to
+    // any viewer. See the io.use() middleware above for how isLogger is set.
+    const requireLogger = (handler) => (data) => {
+        if (!socket.data.isLogger) {
+            socket.emit('error', { message: 'Unauthorized: logger authentication required', type: 'auth:required' });
+            return;
+        }
+        return handler(data);
+    };
 
     // ── Match Subscription ──────────────────────────────────────
     socket.on('match:subscribe', ({ matchId }) => {
@@ -179,7 +251,7 @@ io.on('connection', (socket) => {
     });
 
     // ── Event Logging (from Logger client) ──────────────────────
-    socket.on('event:log', (data) => {
+    socket.on('event:log', requireLogger((data) => {
         try {
             console.log(`[WS] Event logged: ${data.type} in match ${data.matchId}`);
 
@@ -210,65 +282,65 @@ io.on('connection', (socket) => {
             console.error('[WS] Error logging event:', error);
             socket.emit('error', { message: error.message, type: 'event:log:error' });
         }
-    });
+    }));
 
     // ── Event Deletion ──────────────────────────────────────────
-    socket.on('event:delete', (data) => {
+    socket.on('event:delete', requireLogger((data) => {
         console.log(`[WS] Event deleted: ${data.eventId} in match ${data.matchId}`);
         io.to(room(`match:${data.matchId}`)).emit('event:deleted', {
             matchId: data.matchId,
             eventId: data.eventId,
         });
-    });
+    }));
 
     // ── Score Updates ───────────────────────────────────────────
-    socket.on('match:score:update', (data) => {
+    socket.on('match:score:update', requireLogger((data) => {
         console.log(`[WS] Score: ${data.homeScore}-${data.awayScore} in ${data.matchId}`);
         io.to(room(`match:${data.matchId}`)).emit('match:score:updated', data);
-    });
+    }));
 
     // ── Player Rating Updates ───────────────────────────────────
-    socket.on('rating:update', (data) => {
+    socket.on('rating:update', requireLogger((data) => {
         io.to(room(`match:${data.matchId}`)).emit('rating:updated', data);
-    });
+    }));
 
     // ── Team Stats Updates ──────────────────────────────────────
-    socket.on('stats:update', (data) => {
+    socket.on('stats:update', requireLogger((data) => {
         io.to(room(`match:${data.matchId}`)).emit('stats:updated', data);
-    });
+    }));
 
     // ── Eye Point ───────────────────────────────────────────────
-    socket.on('eyepoint:award', (data) => {
+    socket.on('eyepoint:award', requireLogger((data) => {
         io.to(room(`match:${data.matchId}`)).emit('eyepoint:awarded', data);
-    });
+    }));
 
     // ── Substitution ────────────────────────────────────────────
-    socket.on('substitution:log', (data) => {
+    socket.on('substitution:log', requireLogger((data) => {
         io.to(room(`match:${data.matchId}`)).emit('substitution:logged', data);
-    });
+    }));
 
     // ── Match Status ────────────────────────────────────────────
-    socket.on('match:status:change', (data) => {
+    socket.on('match:status:change', requireLogger((data) => {
         console.log(`[WS] Status: ${data.status} for ${data.matchId}`);
         io.to(room(`match:${data.matchId}`)).emit('match:status:changed', data);
-    });
+    }));
 
     // ── Match Time ──────────────────────────────────────────────
-    socket.on('match:time:update', (data) => {
+    socket.on('match:time:update', requireLogger((data) => {
         matchTimes.set(room(data.matchId), data);
         io.to(room(`match:${data.matchId}`)).emit('match:time:updated', data);
-    });
+    }));
 
     // ── Lineup Updates ──────────────────────────────────────────
-    socket.on('match:lineup:update', (data) => {
+    socket.on('match:lineup:update', requireLogger((data) => {
         console.log(`[WS] Lineup update for ${data.matchId}`);
         io.to(room(`match:${data.matchId}`)).emit('match:lineup:updated', data);
-    });
+    }));
 
     // ── Match General Update ────────────────────────────────────
-    socket.on('match:update', (data) => {
+    socket.on('match:update', requireLogger((data) => {
         io.to(room(`match:${data.matchId}`)).emit('match:updated', data);
-    });
+    }));
 
     // ── Live Chat ───────────────────────────────────────────────
     socket.on('chat:join', ({ matchId }) => {
@@ -326,13 +398,13 @@ io.on('connection', (socket) => {
         console.log(`[WS] ${socket.id} unsubscribed from infrastructure updates`);
     });
 
-    socket.on('logger:status:update', (data) => {
+    socket.on('logger:status:update', requireLogger((data) => {
         io.to(room('admin:loggers')).emit('logger:updated', data);
-    });
+    }));
 
     // ── Multi-Logger Real-time Sync ─────────────────────────────
     // Tracks which loggers are active in each match room
-    socket.on('logger:join', ({ matchId, loggerId, loggerName }) => {
+    socket.on('logger:join', requireLogger(({ matchId, loggerId, loggerName }) => {
         const loggerRoom = room(`logger:${matchId}`);
         socket.join(loggerRoom);
         // Store logger info on the socket for disconnect handling
@@ -358,21 +430,21 @@ io.on('connection', (socket) => {
             }
         }
         socket.emit('sync-response', { loggers });
-    });
+    }));
 
-    socket.on('logger:leave', ({ matchId, loggerId }) => {
+    socket.on('logger:leave', requireLogger(({ matchId, loggerId }) => {
         const loggerRoom = room(`logger:${matchId}`);
         socket.leave(loggerRoom);
         console.log(`[WS] Logger ${loggerId} left match ${matchId}`);
         socket.to(loggerRoom).emit('logger-left', { loggerId });
         socket.data.loggerInfo = null;
-    });
+    }));
 
-    socket.on('logger:broadcast-event', ({ matchId, event }) => {
+    socket.on('logger:broadcast-event', requireLogger(({ matchId, event }) => {
         const loggerRoom = room(`logger:${matchId}`);
         // Broadcast to all other loggers in this match room (not the sender)
         socket.to(loggerRoom).emit('logger:event', event);
-    });
+    }));
 
     // ── Polls & Predictions ─────────────────────────────────────
     socket.on('poll:vote', (data) => {

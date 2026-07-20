@@ -79,6 +79,16 @@ function getOrCreateSocket(): Socket | null {
         reconnectionDelay: 2000,
         reconnectionDelayMax: 10000,
         timeout: 10000,
+        // Logger WS socket auth: a function (not a static object) so it re-reads
+        // localStorage on every (re)connection attempt, not just the first one --
+        // covers a logger reconnecting after a network blip. Viewers have no
+        // token, connect anonymously, exactly as before. Known gap, not solved
+        // here: if this shared connection was already established anonymously
+        // (e.g. browsing the public site) and the user THEN logs in as a logger
+        // without a page reload, the existing connection won't pick up the new
+        // token until its next reconnect -- narrow edge case, not the common
+        // path (loggers navigate straight to /logger).
+        auth: (cb) => cb({ token: localStorage.getItem('authToken') || undefined }),
     });
 
     let reconnectAttempts = 0;
