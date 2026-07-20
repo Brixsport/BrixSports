@@ -491,3 +491,34 @@ Key files reviewed:
 ---
 
 *Produced by BACKLOG-020 Block 6 automated sweep. Next step: file new bugs from §9, execute backscoping from §11.*
+
+---
+
+## 15. Gaps Confirmed to Predate This Handoff
+
+This audit (2026-06-08) is the record of the codebase as received. The entries below are gaps confirmed, through later use and testing, to have already existed in that delivered codebase — not issues introduced afterward. Kept separate from the sections above, which stay as originally written.
+
+### Security items from §9/§12 — resolved status, checked directly against code
+
+| # | Item | Status |
+|---|---|---|
+| 1 | `PATCH /api/matches/[id]` no auth | Fixed |
+| 2 | `POST /api/competitions` no auth | Fixed |
+| 3 | `/api/notifications/debug`, `/api/email/test` exposed, no auth | Fixed — routes removed |
+| 4 | `GET /api/matches/[id]` leaked `approvalStatus`/`managerNotes`/`loggerId` | Fixed — explicit DTO stripping |
+| 5 | `GET /api/admin/infrastructure`, `GET /api/analytics/system` no handler-level auth | Not reverified — recheck before treating as fixed |
+| 7 | `next-auth` dual-auth-system (BACKLOG-009) | Still open |
+
+The delivered codebase's other, non-Top-10 gaps went considerably further than this audit's first pass could show. Additional auth/data-exposure bugs later confirmed present at handoff, not introduced after: zero auth on `/api/users/follows`; an unallowlisted `.set()` body spread on the event PATCH route; a `loggerId` leak on a route this audit didn't check; banned-field leaks and payload bloat on `/api/players/[id]`, including in nested objects a first pass at the same route missed; zero auth on the entire `/api/loggers` collection. A static route/schema sweep catches the class of bug visible in the code itself; it does not catch the class only visible by tracing full handler logic or exercising the route live — both classes were present at handoff.
+
+### Real-time/WS infrastructure — present at handoff, not visible to this audit's method
+
+§1 recorded one specific gap: Flow C (public livescore) had no polling/WS fallback, viewer had to manually refresh. Correct, but it was read off `/live/page.tsx` once — not a trace of the real-time architecture underneath. The following were all confirmed, later, to have already been true of the delivered codebase; none are regressions from work done after this audit:
+
+- The DB write for a match event and the live broadcast of that event were entirely uncoordinated — no code path connected them. Any event reaching the DB via a route with no open logger socket could never trigger a live push.
+- The public match clock had no database-persisted value at all. The live number existed only as long as a WebSocket tick kept arriving — no fallback, no recovery, by construction.
+- The client's Socket.IO reconnection-recovery listener was registered on the wrong object (`socket.on(...)` instead of the Manager, `socket.io.on(...)`) — a listener that had never once fired, for this codebase's entire history up to the point it was found.
+- Staging and production ran on the same shared Railway WebSocket instance, with no environment separation on broadcast rooms — a staging test event has always been capable of reaching real production viewers.
+- Broadcast calls were unawaited ("fire and forget") inside serverless API route handlers, with no guaranteed completion once a response was sent — producing live-delivery delays of tens of seconds with no error anywhere.
+
+None of these are visible by reading route code in isolation — they only surface by tracing the actual write→broadcast→client path end to end, or by running a real live match against the deployed system with a real client and a real network. This audit's method (static code/schema sweep) was correct for what it covers; it was not, and could not have been, a substitute for that.
