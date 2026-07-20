@@ -186,3 +186,24 @@ Grep for `BACKSCOPED: 2026-06-08` to find all comment-out markers in source.
 
 **Reinstate when:** Notification infrastructure is stable, user count justifies the complexity, and engagement phase begins
 **Risk if reinstated early:** Preference model adds complexity to an already-volatile notification pipeline
+
+---
+
+## Admin-Designated Primary Logger UI — single-writer enforcement (BUG-120/criticality map §5)
+
+**Backscoped:** 2026-07-15 (session 44)
+**Backlog ref:** BACKLOG (single-writer enforcement, `SYSTEM_CRITICALITY_MAP.md` §5, `LIVE_CLOCK_V2_ARCHITECTURE.md` §5)
+**Current state:** NOT BUILT — never had UI, never had backend enforcement logic. Considered and explicitly not chosen as the mechanism for resolving which logger's `match:time:update` broadcasts win when two loggers are on the same match.
+
+**What this would have been:** an admin-facing control letting an admin explicitly designate exactly one logger as `role: 'primary'` for a given match (promoting one auto-demotes any existing primary), with the WS server enforcing that only the primary's `match:time:update` emits get relayed to viewers. The schema already has the field this needs (`matchLoggerAssignments.role`, defaults `'primary'`) — but both write paths that create assignments (`POST /api/matches/[id]/assign-logger`, the admin UI's `assignLogger()`) hardcode `role: 'primary'` unconditionally, so today every simultaneously-active logger on a match has the same role value — it doesn't actually distinguish anyone.
+
+**Why not chosen:** single-writer enforcement was scoped to solve a narrow, real problem (two loggers' clocks flickering against each other) with the smallest correct mechanism — a session-based "first logger to emit `match:time:update` for this match wins, until they disconnect" rule needs zero new UI, zero new admin workflow, and zero decision burden on the admin during a live match (the scenario this is meant to protect is already stressful; requiring an admin to notice two loggers connected and manually pick one adds a step that a live match day realistically won't have spare attention for). The admin-UI version is more correct in the sense of being an explicit, auditable decision, but it's real additional scope — new endpoint/UI, promotion/demotion logic, and a real design question about what happens to the demoted logger's own local clock display — for a problem the simpler rule already resolves adequately.
+
+**What's missing to reinstate:**
+- Admin UI control (match management page) to view current primary logger and reassign it
+- Backend enforcement: promoting one assignment to primary must atomically demote any other `active`+`primary` row for the same match (currently nothing prevents two simultaneous primaries)
+- Decision on what the demoted logger's own client should show/do
+- `ws-server` (or the REST callback it uses) needs to read the *current* primary at whatever cadence keeps it correct if an admin changes it mid-match, not just once at connect time
+
+**Reinstate when:** the session-based tie-break rule proves insufficient in real multi-logger use (e.g. a real need to let an admin deliberately override which logger has the clock, not just accept whoever connected first)
+**Risk if reinstated early:** scope/complexity not justified by a problem that hasn't been observed yet — the simpler rule is unverified in real multi-logger conditions too (no dual-logger test has ever been run on this platform), so building the more complex version first would be solving a problem before confirming the simple version doesn't already handle it

@@ -202,6 +202,52 @@ io.use((socket, next) => {
 // ─── In-Memory State ───────────────────────────────────────────
 const matchTimes = new Map();
 
+// ─── Single-Writer Enforcement (clock authority) ────────────────
+// Only one logger's match:time:update per match gets relayed to viewers,
+// to stop two loggers' independently-ticking clocks from flickering
+// against each other (SYSTEM_CRITICALITY_MAP.md §5 /
+// LIVE_CLOCK_V2_ARCHITECTURE.md §5). Two layers:
+// (1) is this socket a logger genuinely ASSIGNED to THIS match, not just
+//     any authenticated logger (BUG-120's JWT check proved "real logger,"
+//     not "assigned to this match") -- checked once per (socket, matchId)
+//     pair via the internal Vercel endpoint, cached, not a per-emit DB hit.
+// (2) among assigned loggers, whoever's match:time:update arrives first
+//     for a match becomes that match's clock authority for as long as
+//     they stay connected -- a session-based tie-break, not an
+//     admin-designated "primary" role (see BACKSCOPE.md for why the
+//     admin-UI version wasn't built: the schema's role='primary' field
+//     exists but nothing ever assigns anything else, so every assignment
+//     already looks the same today -- fixing that was a separate,
+//     bigger feature, not needed for this specific flicker problem).
+const clockAuthority = new Map(); // matchId -> socketId
+const assignmentCache = new Map(); // `${socketId}:${matchId}` -> boolean
+
+const APP_URLS = {
+    staging: 'https://brixsports-staging.vercel.app',
+    prod: 'https://brixsports.com',
+};
+
+async function isAssignedLogger(socket, matchId) {
+    const cacheKey = `${socket.id}:${matchId}`;
+    if (assignmentCache.has(cacheKey)) return assignmentCache.get(cacheKey);
+
+    const env = getEnvFromOrigin(socket);
+    const appUrl = APP_URLS[env];
+    try {
+        const res = await fetch(
+            `${appUrl}/api/internal/logger-assignment-check?matchId=${encodeURIComponent(matchId)}&loggerId=${encodeURIComponent(socket.data.loggerId)}`,
+            { headers: { 'x-api-key': process.env.WS_API_KEY } }
+        );
+        const data = await res.json();
+        assignmentCache.set(cacheKey, !!data.assigned);
+        return !!data.assigned;
+    } catch (err) {
+        console.warn(`[Single-Writer] Assignment check failed for logger ${socket.data.loggerId} on match ${matchId}: ${err.message}`);
+        assignmentCache.set(cacheKey, false);
+        return false;
+    }
+}
+
 // ─── Socket.IO Event Handlers ──────────────────────────────────
 io.on('connection', (socket) => {
     console.log(`[WS] Connected: ${socket.id}`);
@@ -326,9 +372,35 @@ io.on('connection', (socket) => {
     }));
 
     // ── Match Time ──────────────────────────────────────────────
-    socket.on('match:time:update', requireLogger((data) => {
-        matchTimes.set(room(data.matchId), data);
-        io.to(room(`match:${data.matchId}`)).emit('match:time:updated', data);
+    // Single-writer enforcement lives only here -- it's specifically the
+    // clock-flicker problem, not a general logger-mutation gate. event:log
+    // and everything else stay as requireLogger() alone (BUG-120).
+    socket.on('match:time:update', requireLogger(async (data) => {
+        const { matchId } = data;
+
+        const assigned = await isAssignedLogger(socket, matchId);
+        if (!assigned) {
+            socket.emit('error', { message: 'Not assigned to this match', type: 'clock:not-assigned' });
+            return;
+        }
+
+        const currentAuthority = clockAuthority.get(matchId);
+        if (!currentAuthority) {
+            clockAuthority.set(matchId, socket.id);
+        } else if (currentAuthority !== socket.id) {
+            // Another logger already claimed this match's clock this session --
+            // drop the emit, one-time notice back to the sender so they're not
+            // left guessing why their clock isn't propagating (per the design
+            // doc's own suggestion).
+            socket.emit('clock:authority:denied', {
+                matchId,
+                message: "Another session is currently controlling this match's clock",
+            });
+            return;
+        }
+
+        matchTimes.set(room(matchId), data);
+        io.to(room(`match:${matchId}`)).emit('match:time:updated', data);
     }));
 
     // ── Lineup Updates ──────────────────────────────────────────
@@ -469,6 +541,19 @@ io.on('connection', (socket) => {
             const { matchId, loggerId } = socket.data.loggerInfo;
             socket.to(room(`logger:${matchId}`)).emit('logger-left', { loggerId });
             console.log(`[WS] Logger ${loggerId} disconnected from match ${matchId}`);
+        }
+
+        // Single-writer: release clock authority for any match this socket
+        // held, so the next logger to emit match:time:update becomes the
+        // new authority instead of that match's clock staying stuck silent.
+        for (const [matchId, authoritySocketId] of clockAuthority.entries()) {
+            if (authoritySocketId === socket.id) {
+                clockAuthority.delete(matchId);
+                console.log(`[Single-Writer] Released clock authority for match ${matchId} (${socket.id} disconnected)`);
+            }
+        }
+        for (const key of assignmentCache.keys()) {
+            if (key.startsWith(`${socket.id}:`)) assignmentCache.delete(key);
         }
     });
 

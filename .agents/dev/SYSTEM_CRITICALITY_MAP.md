@@ -104,7 +104,7 @@ Features that would deepen engagement *if* the core product were fully solid, bu
 |---|---|---|
 | Live Clock v2 (this session's design doc) | 0 | Core trust signal, visible to every viewer simultaneously |
 | WS-1 `reconnect_failed` persistent recovery | 0 | Viewer loses the live feed entirely with no recovery path |
-| Single-writer logger enforcement | 0 | Corrupts the core data stream itself |
+| Single-writer logger enforcement | 0 | BUG-122, session 44 — shipped locally, pending live dual-logger verification. See `BACKLOG.md` BUG-122. |
 | BUG-074 staging/prod WS room collision | 0 | Every staging test is a live risk to prod viewer WS state |
 | WS reconnect exponential backoff + jitter | 0 | Thundering herd on Railway restart; flat 30s retry is not production-standard |
 | Logger WS socket auth at handshake | ✅ RESOLVED | BUG-120, session 44 — live-verified against real deployed infrastructure. Was a prerequisite for single-writer enforcement — now unblocked. |
