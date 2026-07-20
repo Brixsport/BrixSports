@@ -41,6 +41,7 @@
 - TD-011: `season: '2024'` hardcoded in `updatePlayerStats`
 
 **Deferred:**
+
 - BUG-047 live smoke test (Penalty + OG through real logger UI) — still SHIPPED, not RESOLVED
 - BACKLOG-058 full test checklist (Tests 1–4) — still SHIPPED, not RESOLVED
 - BACKLOG-044 Phase B (timer ceiling, sub counter) — not started; blocked by smoke tests
@@ -83,15 +84,18 @@
   - BUG-065 OPEN: Event counter display broken in logger header
 
 **TD-010 — fully correct, pending clean verification:**
+
 - Staging migration applied ✓, DB PATCH writes confirmed ✓ (`current_period: FIRST_HALF` in DB after Start Match)
 - `getLoggerMatches` (match-logger-helpers.ts) uses `match: matches` — full row select — `current_period` flows through automatically ✓ No code gaps.
-- **Why period still showed NOT_STARTED on the test match:** match `AIr6gMTlUscTNHzYTL8fI` was started and transitioned to 2ND HALF *before* `b66eb95` deployed and *before* the migration ran. Those transitions never wrote `current_period`. Migration defaulted all existing rows to `NOT_STARTED`. Hard refresh read the default → seed fell through → correct given the history, not a bug in the implementation.
+- **Why period still showed NOT_STARTED on the test match:** match `AIr6gMTlUscTNHzYTL8fI` was started and transitioned to 2ND HALF _before_ `b66eb95` deployed and _before_ the migration ran. Those transitions never wrote `current_period`. Migration defaulted all existing rows to `NOT_STARTED`. Hard refresh read the default → seed fell through → correct given the history, not a bug in the implementation.
 - **Real verification:** spin a fresh test match after `b66eb95` is deployed, start it, transition to FIRST_HALF, hard refresh → must show FIRST_HALF. Existing match is a write-off for TD-010 testing purposes.
 
 **Bugs filed this session:**
+
 - BUG-061 (RESOLVED), BUG-062, BUG-063, BUG-064, BUG-065
 
 **Deferred:**
+
 - `GET /api/loggers/[id]` fix — add `current_period` to assignedMatches select
 - Prod migration for TD-010 (pending staging period-survival verification)
 - BACKLOG-044 Phase B (blocked on TD-010 full verification)
@@ -99,6 +103,7 @@
 - BUG-062 (lineup wipes on refresh)
 
 **Next session:**
+
 1. Read `src/app/api/loggers/[id]/route.ts` — confirm `current_period` is in assignedMatches response. If missing, add it. This is the final piece of TD-010.
 2. Verify period survives refresh on staging after fix
 3. Run prod migration
@@ -134,6 +139,7 @@
 - **TD-010 partial** — Period survived `FIRST_HALF` and `HALF_TIME` refreshes. `SECOND_HALF` didn't persist because Start 2nd Half button had no PATCH — identified as inline onClick with no named handler, called only `transitionStatus()` on the state manager.
 
 **Test results (fresh match run):**
+
 - TD-010 FIRST_HALF ✅, HALF_TIME ✅, SECOND_HALF ❌ → fixed `13aa12b` — re-verify required
 - BUG-063 HT on public page ✅, detail page period label ✅. Homepage card still showed `LIVE` → fixed `056388d`
 - Phase B timer ceiling ✅ (halfDuration loaded from config). Sub cap INCONCLUSIVE — `maxSubstitutions` null for BUSA League (correct behaviour, no cap set)
@@ -148,6 +154,7 @@
 - BACKLOG-102 (live clock on public pages) — not started
 
 **Next session:**
+
 1. Fresh test match on staging — verify TD-010 SECOND_HALF persistence on hard refresh + homepage period label + sub picker exclusion. Use same 8-phase test plan.
 2. If all pass: run both prod migrations (`current_period`, `own_goals + penalties_scored`).
 3. Then BUG-066 (goal → shot stat).
@@ -182,26 +189,31 @@
 - **Session rule established** — No new feature work until BUG-062 (lineup refresh), fresh match verify (TD-010 SECOND_HALF + undo + sub picker), and BUG-054 (OWN GOAL undo parent path) are done.
 
 **State manager read findings:**
+
 - `undoLastEvent` removes by array position (last event), not by ID. Safe for Option A (immediate undo after logging). Temp→server ID swap race is non-corrupting: 404 → alert → logger retries.
 - Second Yellow auto-inserts Red Card via `recordEvent`. `undoLastEvent` removes only the Red Card. Yellow stays. Correct data, confusing UX. Filed BUG-072.
 - `Penalty Saved` / `Penalty Missed` already exist as `FootballEventType` and are handled in `calculateMatchStats`. BACKLOG-104 (logger UI + `updatePlayerStats` cases) is the only remaining work when that ships.
 
 **Bugs filed this session:**
+
 - BUG-072 (second yellow undo removes Red only)
 - BACKLOG-106 (per-match stat rows — replaces mutable increment model)
 
 **Session assessment:**
+
 - Live match readiness: ~68% staging, ~52% prod
 - Bug hygiene score: 6/10 — filing quality high, return/closure velocity low
 - Key risks: BUG-062 (lineup wipes on refresh), TD-010 SECOND_HALF unverified, BUG-060 (stat orphan on undo)
 
 **Deferred:**
+
 - BUG-062 (lineup wipes on logger refresh) — must fix before first live match
 - Fresh match staging test — TD-010 SECOND_HALF + undo + sub picker + BUG-063 homepage + LiveStats
 - BUG-054 (OWN GOAL undo direction on parent DELETE path)
 - BUG-060 (stat decrement on event delete) — immediate follow-up after undo is live-verified
 
 **Next session:**
+
 1. BUG-062 — trace root cause first (viewState not persisted vs period rehydration path), then fix
 2. Fresh staging match — 8-point test: TD-010 SECOND_HALF refresh, undo button live, sub picker pools, BUG-063 labels, LiveStats numbers, sub cap gate. Each SHIPPED item becomes RESOLVED only on this test.
 3. BUG-054 — OWN GOAL undo score inversion on parent `DELETE /events` handler
@@ -277,6 +289,7 @@ Key insight: the single-function `getActiveRoster` approach fails as soon as pla
   - Scripts: `dev/migrate-prod-td010.mjs`, `dev/migrate-prod-football-stats.mjs`
 
 **Bugs filed this session:**
+
 - BUG-068 (cosmetic — incoming sub styled as BENCH in sub-OUT picker) — SHIPPED, uncommitted
 - BUG-069 (PENALTY + GOAL double-count on shotsOnTarget) — CLOSED by convention (PENALTY = scored, BACKLOG-104 covers outcome variants)
 - BUG-070 (empty bench UX — sub-IN modal shows empty list silently when no lineup published)
@@ -284,18 +297,21 @@ Key insight: the single-function `getActiveRoster` approach fails as soon as pla
 - BACKLOG-105 (penalty shootout score isolation: PENALTY_SHOOTOUT period must not write to home/away score or player stats — interim guard needed in events route)
 
 **Decisions made:**
+
 - PENALTY convention: PENALTY = scored (goal + stat). PENALTY MISSED / PENALTY SAVED are future event types (BACKLOG-104). BUG-069 closed.
 - Penalty shootout events currently corrupt match score and stats (home/away score increments, `penaltiesScored` increments — both wrong). Interim guard (`if currentPeriod === 'PENALTY_SHOOTOUT': skip score + stat writes`) must land before any shootout is played. Full shootout score system is BACKLOG-105.
 - Basketball logger has no mirror of BUG-067 — uses explicit `homeStarters`/`homeSubs` arrays swapped atomically in `handleSubIn`, no async event state.
 - Auth gate on DELETE/PATCH `/api/matches/[id]/events/[eventId]` is zero — no `getAuthUser`, no role check. Must be gated before undo button ships.
 
 **Deferred / pending commits:**
+
 - BUG-068 cosmetic fix — uncommitted, pending commit in next session with auth gate
 - Auth gate on `[eventId]/route.ts` — not yet written
 - Undo last event button (Option A) — not started, blocked on auth gate
 - BUG-070 (empty bench message) — one-liner, same session as undo
 
 **Next session:**
+
 1. Commit BUG-068 cosmetic fix (`FootballLogger.tsx` already edited)
 2. Add auth gate (logger OR admin) to DELETE + PATCH on `src/app/api/matches/[id]/events/[eventId]/route.ts`
 3. Add interim PENALTY_SHOOTOUT guard to `src/app/api/matches/[id]/events/route.ts` (skip score + stat writes when `currentPeriod === 'PENALTY_SHOOTOUT'`)
@@ -313,7 +329,7 @@ Key insight: the single-function `getActiveRoster` approach fails as soon as pla
 
 - **TD-010 API gap — confirmed closed (no code change needed)**
   - Read `src/app/api/loggers/[id]/route.ts` — `assignedMatches` comes from `getLoggerMatches(id)` which uses `match: matches` (full row select in `match-logger-helpers.ts`). `current_period` flows through automatically. No omission to fix.
-  - Also confirmed: the old test match showing `NOT_STARTED` after Session 30 was expected — the match was started and transitioned *before* `b66eb95` deployed and *before* the migration ran, so those transitions never wrote `current_period`. Migration defaulted all existing rows to `NOT_STARTED`. Not a bug.
+  - Also confirmed: the old test match showing `NOT_STARTED` after Session 30 was expected — the match was started and transitioned _before_ `b66eb95` deployed and _before_ the migration ran, so those transitions never wrote `current_period`. Migration defaulted all existing rows to `NOT_STARTED`. Not a bug.
 
 - **BACKLOG-044 Phase B — SHIPPED (`64b0974`)** — `src/components/FootballLogger.tsx` — 26 insertions
   - Added `useState<number | null>(null)` for `maxSubstitutions` (~line 116)
@@ -334,6 +350,7 @@ Key insight: the single-function `getActiveRoster` approach fails as soon as pla
   - BACKLOG-044 Phase B status updated to SHIPPED/conditionally done
 
 **Deferred:**
+
 - TD-010 + Phase B full verification — fresh test match required (period survival on refresh + sub cap gate)
 - Prod migration for TD-010 — after fresh match test passes
 - BACKLOG-102 (live viewer clock) — not started
@@ -341,6 +358,7 @@ Key insight: the single-function `getActiveRoster` approach fails as soon as pla
 - BUG-062 (lineup wipes on logger refresh)
 
 **Next session:**
+
 1. Spin fresh test match on staging — verify `currentPeriod` survives hard refresh (TD-010) and sub cap gate blocks past limit (Phase B). Both checks close in one session.
 2. If both pass: run prod migration for TD-010.
 3. Then BUG-063 live verification on the same match.
@@ -379,17 +397,20 @@ Key insight: the single-function `getActiveRoster` approach fails as soon as pla
   - BACKLOG-044 Phase B explicitly blocked on TD-010. Both must land together before first match day.
 
 **Bugs filed this session:**
+
 - **BUG-059** — Timeline tab TypeError on `eyePoints.length` (RESOLVED, `8c56f67`)
 - **BUG-060** — `DELETE /api/matches/[id]/events` reverts score but not `footballPlayerStats` — ghost stat on deleted goal. Same class as BUG-011 from delete direction.
 - **BACKLOG-094** — Eye Point Awards panel silently never renders (API doesn't return `eyePoints` array)
 
 **Test match triage:**
+
 - Match `LFkN14uB90brGn2E8sW1N` status: FINISHED (finalise PATCH went through). Score: 3-3 (DB confirmed).
 - Dirty stat rows: Emmanuel Adeyanju (+1 goal, +1 assist), Benjamin Adenuga (+1 goal), Justin (+1 goal, no stats row — write never fired), Tisco Jr (+1 assist, no-op).
 - Own Goals, Penalties, Fouls: zero stat impact — `updatePlayerStats` switch has no case for these types. Confirmed gap.
 - Cleanup script written: `dev/cleanup-test-match.mjs`. Dry-run output verified. **Run `--apply` to execute — not yet done.**
 
 **Stat pipeline gaps confirmed:**
+
 - Football stats written on event POST: Goal, Assist, Yellow Card, Red Card, Save only.
 - Penalty (scores match, not player), Own Goal (scores match, not player), Foul — no stat write.
 - Stats are mutable increments — no rollback on event DELETE. `footballPlayerStats` orphans on event undo.
@@ -397,6 +418,7 @@ Key insight: the single-function `getActiveRoster` approach fails as soon as pla
 - Ratings: fire-and-forget background fetch on POST, non-blocking.
 
 **Deferred:**
+
 - ~~`dev/cleanup-test-match.mjs --apply`~~ — DONE (run Session 29, see RUNLOG Session 29)
 - BACKLOG-058 Tests 1–4 re-run on staging (BUG-058b now deployed; Test 3 drain fix now landed — re-run required)
 - TD-010 implementation
@@ -405,6 +427,7 @@ Key insight: the single-function `getActiveRoster` approach fails as soon as pla
 - BUG-060 fix (stat decrement on event delete)
 
 **Additional fix landed this session (Session 30):**
+
 - **BACKLOG-058 Test 3 drain crash fixed** (`public/sw-admin.js`) — commit `49ce483`
   - Root cause: `db.getAll(storeName)` and `db.delete(storeName, key)` are Dexie.js patterns. `openDB()` returns a raw `IDBDatabase` — neither method exists on that object. Crash: `db.getAll is not a function` at line 166.
   - Fix: added `idbGetAll(db, storeName)` and `idbDelete(db, storeName, key)` promise helpers using raw IDB transaction → objectStore API. Replaced all 4 Dexie-style calls in both `syncMatchEvents()` and `syncAdminChanges()`.
@@ -425,6 +448,7 @@ Key insight: the single-function `getActiveRoster` approach fails as soon as pla
   - Period survival: same device/browser only. Different phone, cleared storage, or private mode → resets to `NOT_STARTED`
 
 **Bugs filed this session:**
+
 - BUG-061 — Away team roster not populating in player picker (HIGH, pre-match blocker)
 - BUG-062 — Lineup data wipes on browser refresh (MEDIUM)
 - BUG-063 — HALF_TIME not reflected on public page — blocked by TD-010 (MEDIUM)
@@ -432,6 +456,7 @@ Key insight: the single-function `getActiveRoster` approach fails as soon as pla
 - BUG-065 — Event counter in logger header broken (LOW)
 
 **Next session:**
+
 1. Implement TD-010: `currentPeriod` column on `matches` + PATCH on every period transition + mount read in FootballLogger seeding the StateManager
 2. BUG-061 — trace and fix away team roster query
 3. Then BACKLOG-044 Phase B
@@ -463,26 +488,31 @@ Key insight: the single-function `getActiveRoster` approach fails as soon as pla
 Logger logged into staging via `/logger` login page. `POST /api/loggers/auth` returned 200, `authToken` cookie was set (confirmed in DevTools). But every subsequent call — `PATCH /api/matches/[id]`, `POST /api/matches/[id]/events`, `GET /api/auth/me` — returned 401.
 
 Root cause: `getAuthUser()` in `src/lib/auth.ts` is broken for logger sessions.
+
 - Logger JWTs carry `{ id, email, role }`. Admin JWTs carry `{ userId, email, role }`.
 - `verifyAuth` casts to `AuthUser` (has `userId` field) — but the spread doesn't rename `id` → `userId`. So `authData.userId` is `undefined` for all logger tokens.
 - `getAuthUser` queries `users` table with `WHERE id = undefined` → no rows → returns `null` → 401.
 - This means **every logger API call has always returned 401**. Start Match, log events, End Match — all broken.
 
 Fix written in `src/lib/auth.ts` (not yet committed):
+
 1. `verifyAuth`: decode as `{ userId?: string; id?: string; email; role }`, return `userId: decoded.userId ?? decoded.id ?? ''`.
 2. `getAuthUser`: when `authData.role === 'logger'`, query `loggers` table and return a shaped `AuthenticatedUser` with null defaults for user-only fields.
 
 **Also noted:**
+
 - `BUG-044b`: Logger dashboard `GET /api/auth/me` will still return 401 for loggers — that endpoint is admin-auth only. Separate fix needed (`/api/loggers/me` endpoint). Not in scope this session.
 - WebSocket errors on staging (`wss://brixsports-production.up.railway.app`) — pre-existing BACKLOG-027. Not a regression.
 - Staging-wide auth gate in middleware (env.isStaging) correctly exempts `/api/auth/*` but NOT `/api/loggers/*`. Logger login goes through `/api/loggers/auth` which is exempted. OK.
 
 **Deferred:**
+
 - BUG-047 smoke test — blocked on BUG-057 commit + deploy
 - BACKLOG-058 Tests 1–4 — blocked on BUG-057
 - BACKLOG-044 Phase B — blocked on smoke tests
 
 **Next session:**
+
 1. Commit BUG-057 fix (`src/lib/auth.ts`) after tsc clean
 2. Push to `fix/bug-057-logger-auth` branch, PR to dev, merge
 3. Deploy staging → smoke test: logger login → Start Match → log Goal → check score → End Match
@@ -490,6 +520,7 @@ Fix written in `src/lib/auth.ts` (not yet committed):
 5. BACKLOG-044 Phase B only after all smoke tests pass
 
 > **Update (same session):** BUG-057 committed directly to dev (commit `1401ee2`), pushed. Staging deployed. Smoke test run:
+>
 > - Logger login → authToken cookie set ✅
 > - Start Match (PATCH `{ status: "LIVE" }`) → 200 ✅
 > - 9 events posted (Goal ×2, Penalty ×1, Own Goal ×2, Foul ×3, Assist ×1) → all 201 ✅
@@ -505,6 +536,7 @@ Fix written in `src/lib/auth.ts` (not yet committed):
 > **Root cause — BUG-058b:** `AuthContext.tsx` (line 74) runs `checkAuth` on every page mount. It calls `GET /api/auth/me`, which returns 401 for logger sessions (that endpoint is admin-only). On 401, `checkAuth` calls `localStorage.removeItem('authToken')`. By the time FootballLogger's offline `catch` block reads `localStorage.getItem('authToken')`, the token is gone → `!token` guard fires → alert, no queue write.
 >
 > **Fix — two files:**
+>
 > 1. `src/app/api/auth/refresh/route.ts` — updated to handle logger tokens. Normalises `payload.userId ?? payload.id`, branches on `actorRole === 'logger'` to query the `loggers` table, signs new token with `{ id, email, role }` (matching what `/api/loggers/auth` issues), and now returns `token` in the JSON body (previously cookie-only).
 > 2. `src/components/FootballLogger.tsx` — added mount `useEffect` that calls `POST /api/auth/refresh` with `credentials: 'include'`, reads `data.token` from the response body, and writes it back to `localStorage.authToken`. Runs once on mount, silently skips if offline. This ensures the token survives the AuthContext wipe.
 >
@@ -546,6 +578,7 @@ Fix written in `src/lib/auth.ts` (not yet committed):
   The client sends `type: 'Penalty'` or `type: 'Own Goal'`. Neither matches `'GOAL'`. `value` is never included in the payload (confirmed by reading `confirmEvent` in `FootballLogger.tsx` — payload is constructed without a `value` field). So Penalty goals and Own Goals silently saved to DB without incrementing either team's score.
 - **Additional OG bug:** For Own Goal events `teamId` is the player's team (the team that conceded). The previous logic credited that team — the wrong direction.
 - **Fix in `src/app/api/matches/[id]/events/route.ts`:**
+
   ```ts
   const upperType = type.toUpperCase();
   const isOwnGoal = upperType === 'OWN GOAL';
@@ -576,6 +609,7 @@ Fix written in `src/lib/auth.ts` (not yet committed):
 **Event pipeline audit — what fires on `POST /api/matches/[id]/events`**
 
 Full chain confirmed:
+
 1. INSERT event row
 2. UPDATE `matches.homeScore`/`awayScore` (now correctly handles GOAL, PENALTY, OWN GOAL)
 3. `updatePlayerStats(sport, playerId, type, value)` — player stat row updated
@@ -596,18 +630,19 @@ All `emit(...)` calls in FootballLogger are fire-and-forget with no crash on fai
 
 #### Bugs filed this session
 
-| ID | Severity | Description | Status |
-|----|----------|-------------|--------|
-| BUG-042 | LOW | Blank player names on logger confirm screen | RESOLVED `04d49dc` |
-| BUG-043 | LOW | Silent publish button disable (no captain tooltip) | OPEN |
-| BUG-044 | HIGH | Logger auth 401 — no cookie set | RESOLVED `7808a20` |
-| BUG-044b | MEDIUM | Logger `/api/auth/me` → 401 (admin endpoint, not logger) | OPEN |
-| BUG-045 | MEDIUM | "INVALID DATE" on logger match card | OPEN |
-| BUG-046 | MEDIUM | Black spinner on `/matches/[id]` from admin session | OPEN |
-| BUG-047 | HIGH | Penalty/OG events don't update score | RESOLVED this session |
-| BUG-048 | LOW | Cross-team player in dept match: `jerseyName: null` not surfaced at publish | OPEN |
+| ID       | Severity | Description                                                                 | Status                |
+| -------- | -------- | --------------------------------------------------------------------------- | --------------------- |
+| BUG-042  | LOW      | Blank player names on logger confirm screen                                 | RESOLVED `04d49dc`    |
+| BUG-043  | LOW      | Silent publish button disable (no captain tooltip)                          | OPEN                  |
+| BUG-044  | HIGH     | Logger auth 401 — no cookie set                                             | RESOLVED `7808a20`    |
+| BUG-044b | MEDIUM   | Logger `/api/auth/me` → 401 (admin endpoint, not logger)                    | OPEN                  |
+| BUG-045  | MEDIUM   | "INVALID DATE" on logger match card                                         | OPEN                  |
+| BUG-046  | MEDIUM   | Black spinner on `/matches/[id]` from admin session                         | OPEN                  |
+| BUG-047  | HIGH     | Penalty/OG events don't update score                                        | RESOLVED this session |
+| BUG-048  | LOW      | Cross-team player in dept match: `jerseyName: null` not surfaced at publish | OPEN                  |
 
 **Backlog items filed:**
+
 - BACKLOG-095 — data freshness per-zone strategy (logger vs public vs admin)
 - BACKLOG-096 — no server-side WS emit on event save
 - BACKLOG-097 — no standings update on goal (needs audit on FINISHED transition)
@@ -625,11 +660,11 @@ All `emit(...)` calls in FootballLogger are fire-and-forget with no crash on fai
 
 #### Commits this session
 
-| Hash | Scope | Description |
-|------|-------|-------------|
-| `04d49dc` | `fix(logger)` | BUG-042 — resolve player stubs against full roster on confirm screen |
-| `7808a20` | `fix(logger)` | BUG-044 — set authToken cookie in logger auth response; store in localStorage |
-| *(uncommitted)* | `fix(events)` | BUG-047 — Penalty/OG score update logic |
+| Hash            | Scope         | Description                                                                   |
+| --------------- | ------------- | ----------------------------------------------------------------------------- |
+| `04d49dc`       | `fix(logger)` | BUG-042 — resolve player stubs against full roster on confirm screen          |
+| `7808a20`       | `fix(logger)` | BUG-044 — set authToken cookie in logger auth response; store in localStorage |
+| _(uncommitted)_ | `fix(events)` | BUG-047 — Penalty/OG score update logic                                       |
 
 > BUG-047 fix is staged but not yet committed at session end.
 
@@ -680,9 +715,11 @@ All `emit(...)` calls in FootballLogger are fire-and-forget with no crash on fai
 - BACKLOG-066 (college field change auto-manages affiliation) — depends on BACKLOG-049.
 
 **Additional fixes (end of session):**
+
 - `dev/fix-mcanthony-college-prod.mjs` — McAnthony Uzowuru (`busa-joga-player-2`) had `players.college = 'COLENVS'` on prod but `COLENG` on staging and COLENG affiliation on both. Corrected prod college field to `COLENG`. Post-diagnostic confirmed full parity: staging and prod both at 178 total, 110 NULL, COLENG 35, COLNAS 21, COLMANS 7, COLENVS 5, 0 mismatches.
 
 **Continuation (same session):**
+
 - Richard updated college for 13 more players via admin modal on staging — NULL count dropped from 110 → 97, mismatch count rose to 14
 - Built and ran `dev/backfill-college-affiliations-staging.mjs` — deleted 1 wrong row (Sukunmi SK's COLENVS affiliation, college=COLENG), inserted 14 missing affiliation rows (COLENG×8, COLENVS×3, COLMANS×1, COLNAS×2)
 - Verify output: 81 players with college set, 0 remaining mismatches ✓
@@ -698,6 +735,7 @@ All `emit(...)` calls in FootballLogger are fire-and-forget with no crash on fai
 **Focus:** College affiliation backfill (10 existing + 20 new BUSALYMPICS profiles), prod mirror, player profile form fixes, security audit, backlog filing.
 
 **Built:**
+
 - **`dev/backfill-college-affiliations-staging.mjs`** — deletes wrong affiliation rows + inserts missing ones for all 4 colleges. Idempotent. Run: 1 deleted (Sukunmi SK wrong COLENVS row), 14 inserted. Result: 81 players, 0 mismatches staging.
 - **`dev/precheck-busalympics-players.mjs`** — pre-flight name match against DB before creating new profiles. Surfaces existing rows with similar names so they're not duplicated.
 - **`dev/create-busalympics-players.mjs`** — creates 20 new BUSALYMPICS profiles (11 COLENVS, 9 COLMANS) with college + team affiliations. TOJU: COLENVS college + Wolves FC team affiliation.
@@ -706,16 +744,19 @@ All `emit(...)` calls in FootballLogger are fire-and-forget with no crash on fai
 - **`src/app/admin/players/page.tsx`** — removed `required` from Jersey # and Assigned Team. Team select placeholder changed to "No team assigned".
 
 **Bugs encountered:**
+
 - `SQLITE_CONSTRAINT: FOREIGN KEY` — `teamId: ''` not coerced to null. Fix: `body.teamId || null`.
 - `SQLITE_CONSTRAINT: NOT NULL on players.number` — null sent when field empty. Fix: `body.number ?? 0`.
 - `SQLITE_CONSTRAINT: NOT NULL on players.position` — DB column NOT NULL; script fix: pass `''`. API fix: server no longer rejects missing position.
 - `mirror-college-to-prod.mjs` returned `rowsAffected: 0` for all 30 — script does UPDATE not INSERT; new players absent from prod so no rows matched. Built `copy-new-players-to-prod.mjs` to INSERT by explicit ID list.
 
 **Data state after session:**
+
 - Staging: 208 Bells students, 0 college affiliation mismatches
 - Prod: 30 new players inserted, 37 affiliation rows, 0 missing affiliations — full parity with staging
 
 **Deferred:**
+
 - 97 Bells players still `college = NULL` — Richard to set via admin modal
 - `players.number` nullable schema migration (BACKLOG-072)
 - Client-side error feedback on player create form (BACKLOG-071)
@@ -831,18 +872,22 @@ All `emit(...)` calls in FootballLogger are fire-and-forget with no crash on fai
 **Later in Session 18 — BACKLOG-044 Phase A:**
 
 **Schema (`src/db/schema.ts`):**
+
 - `competitionSportSettings`: added 8 columns — `maxSubstitutions` (nullable integer), `allowSubbedOutReentry`, `extraTimeEnabled`, `extraTimeDuration`, `penaltiesEnabled`, `allowDraws`, `pointsForWin`, `pointsForDraw`
 - `matches`: added 3 nullable override columns — `penaltiesEnabledOverride`, `allowDrawsOverride`, `extraTimeEnabledOverride`
 
 **New API routes:**
+
 - `src/app/api/competitions/[id]/match-settings/route.ts` — `GET` (public list), `POST` (admin upsert by competitionId+sport). Upsert pattern: check for existing row, update if found, insert with nanoid if not.
 - `src/app/api/matches/[id]/config/route.ts` — public `GET`. Three-layer merge: match override → competition setting → sport default (hardcoded for football/basketball). Two-query pattern (no `competition` relation on `matchesRelations`).
 
 **Admin UI changes:**
+
 - `src/app/admin/competitions/page.tsx` — added `defaultMatchSettings`, `MatchSettingsForm` type, `saveMatchSettings()` helper (POSTs to `/api/competitions/[id]/match-settings`). Collapsible "Match Settings" section in `CompetitionModal` with duration grid, sub limit (number + unlimited toggle + rolling reentry), extra time, penalties, draws, and points grid.
 - `src/app/admin/matches/page.tsx` — added 3 override fields to `formData`, collapsible "Override Match Settings for This Fixture" with three-way inherit/on/off toggles per field.
 
 **DB migration (staging only):**
+
 - `migrate-sport-settings-columns.mjs` — 11 ALTER TABLE ADD COLUMN statements, run against staging Turso. All succeeded. Script deleted.
 - Prod migration pending (BACKLOG-044-B prerequisite).
 
@@ -881,6 +926,7 @@ All `emit(...)` calls in FootballLogger are fire-and-forget with no crash on fai
 **Resolved:** BUG-025 (loggerId NDPR leak on public matches list), BACKLOG-037 Step 5 (bulk register dedup).
 
 **Deferred:**
+
 - BACKLOG-037 Steps 6-7 (CSV import tab, Squad Selector)
 - BUG-021 (notifications/subscribe no auth)
 - BUG-022 (unbounded queries — competitions, events)
@@ -942,6 +988,7 @@ All `emit(...)` calls in FootballLogger are fire-and-forget with no crash on fai
 **Resolved:** BUG-021, BUG-022 (confirmed pre-existing), BUG-027, BUG-028, BACKLOG-036.
 
 **Deferred:**
+
 - `chore: session 14 wrap` commit (and earlier `feat: BACKLOG-036` + `feat: BACKLOG-037 Step 6`) — commits were declined by user at prompt; code is complete but unstaged
 - BACKLOG-037 Step 7 (Squad Selector)
 - BUG-023 (dead schema file), BUG-024 (duplicate match routes), BUG-026 (PWA CSS)
@@ -980,6 +1027,7 @@ All `emit(...)` calls in FootballLogger are fire-and-forget with no crash on fai
 **Resolved:** BACKLOG-037 Step 7 (Squad Selector API + UI).
 
 **Deferred:**
+
 - BACKLOG-037 Step 7b (role assignment UI — captain/vice_captain/goalkeeper badges)
 - BACKLOG-045 (teams pagination), BACKLOG-046 (player profile edit)
 - BUG-023, BUG-024, BUG-026
@@ -1024,6 +1072,7 @@ All `emit(...)` calls in FootballLogger are fire-and-forget with no crash on fai
 **Resolved:** BACKLOG-053 (both parts) — Roster tab shows competition squad, Squad tab shows affiliation pool.
 
 **Deferred:**
+
 - BUG-026 (PWA CSS cache failure)
 - BACKLOG-044 (match config: duration, sub rules, team size per competition)
 - BACKLOG-045 (teams pagination)
@@ -1059,12 +1108,14 @@ All `emit(...)` calls in FootballLogger are fire-and-forget with no crash on fai
 **Resolved:** BUG-023, BUG-024, BUG-029, BACKLOG-037 Step 7 (tab order/labels), BACKLOG-046.
 
 **Deferred:**
+
 - BACKLOG-053 — Roster tab re-architecture (show squadPlayers, not playerTeamAffiliations)
 - BUG-026 (PWA CSS cache failure)
 - BACKLOG-044 (match config: duration, sub rules)
 - BACKLOG-047 through BACKLOG-052 (filed last session, all OPEN)
 
 **DB changes:**
+
 - `squad_players_team_comp_player_unique` unique index added to `squad_players` on both staging and prod via SQL direct (Session 15 — logged in RUNLOG.md).
 
 **Next session:** Re-architect Roster tab to show `squadPlayers` for the selected competition. Inline edit targets `squadPlayers.squadNumber + position`. Squad tab keeps `playerTeamAffiliations` pool view.
@@ -1111,6 +1162,7 @@ All `emit(...)` calls in FootballLogger are fire-and-forget with no crash on fai
 **Resolved:** BACKLOG-017 (all 3 missing MD3 scores confirmed + patched), BACKLOG-033 (standings written to both DBs).
 
 **Deferred:**
+
 - BACKLOG-037 Steps 5-7 (Bulk Register dedup refinement, CSV import tab, Squad Selector)
 - BACKLOG-036 second pass — 18 files, 40 logo instances still using raw `<img>` instead of TeamLogo
 - BUG-025 (assignedLoggers NDPR leak on public /api/matches list — strip 2 fields, quick fix)
@@ -1143,6 +1195,7 @@ All `emit(...)` calls in FootballLogger are fire-and-forget with no crash on fai
 **Resolved:** Rules of Hooks violation — `useEffect` after conditional return (matches detail page)
 
 **Deferred:**
+
 - Commit + PR for `hotfix/fix-matches-hooks-violation` → `main` (fix applied, not yet committed)
 - BACKLOG-017 — 2 missing MD3 BUSALYMPICS scores (physical records)
 - BACKLOG-033 — standings recalculation (blocked on BACKLOG-017)
@@ -1161,7 +1214,7 @@ All `emit(...)` calls in FootballLogger are fire-and-forget with no crash on fai
 
 - **`dev/pre-prod-check.ts` — `--staging` / `--production` flag** — script now reads `process.argv`. `--production` loads `.env.production`; default (or `--staging`) loads `.env.local`. Header output shows `[STAGING]` or `[PRODUCTION]` label. WORKFLOW.md updated with both command forms.
 
-- **`.agents/dev/BACKSCOPE.md`** — new permanent journal. One entry per backscoped feature: current state, what exists in code, what's missing to reinstate, reinstate-when condition, risk if reinstated early. Covers /fpl/*, /predictions, /scouts, /nesa-registration, /auth/signin, Polls UI.
+- **`.agents/dev/BACKSCOPE.md`** — new permanent journal. One entry per backscoped feature: current state, what exists in code, what's missing to reinstate, reinstate-when condition, risk if reinstated early. Covers /fpl/\*, /predictions, /scouts, /nesa-registration, /auth/signin, Polls UI.
 
 - **`WORKFLOW.md` — fully documented** — added: Hotfix flow (branch/merge/audit procedure, when NOT to use), Partial Feature / Backscope flow (Option A comment-out pattern with exact format, Option B feature-flag path for future), pre-merge checklist updated with `--staging`/`--production` variants, `.env.local` vs `.env.production` rule made explicit.
 
@@ -1183,6 +1236,7 @@ All `emit(...)` calls in FootballLogger are fire-and-forget with no crash on fai
 **Resolved:** BACKLOG-028 (backscope dead nav items)
 
 **Deferred:**
+
 - BACKLOG-017 — 2 missing MD3 BUSALYMPICS scores, awaiting physical records
 - BACKLOG-033 — standings recalculation, blocked on BACKLOG-017
 - BUG-026 — PWA/cache CSS rendering failure on direct URL visits
@@ -1222,6 +1276,7 @@ All `emit(...)` calls in FootballLogger are fire-and-forget with no crash on fai
 **Resolved:** BACKLOG-007, BACKLOG-008 (verified); staging DB parity complete.
 
 **Deferred:**
+
 - Commit + PR `dev → main` (staged, awaiting user go-ahead)
 - BACKLOG-017 (2 MD3 BUSALYMPICS scores) — awaiting physical records
 - BACKLOG-033 (standings recalculation) — blocked on BACKLOG-017
@@ -1240,7 +1295,7 @@ All `emit(...)` calls in FootballLogger are fire-and-forget with no crash on fai
 
 - **`dev/normalise-legacy-match-rounds.ts` (run + deleted):** Backfilled `competitionId` and `round` on 59 legacy matches. First apply failed — competition IDs in directive were placeholder strings, not real DB IDs. Real IDs confirmed via diagnostic query (`xm1OcBFeugKxLDHH6Xi6p` for football, `m-4qhMBvnUP2a-GcU-Rsv` for basketball), map corrected, re-run successful. 59/59 rows written.
 
-- **`dev/strip-competition-suffix.ts` (run + deleted):** Stripped now-redundant suffix from `competition` strings on the same 59 rows (`"BUSA League Football - Final"` → `"BUSA League Football"`). 59/59 rows written. Verified: 0 matches remaining with ` - ` in competition where round is set.
+- **`dev/strip-competition-suffix.ts` (run + deleted):** Stripped now-redundant suffix from `competition` strings on the same 59 rows (`"BUSA League Football - Final"` → `"BUSA League Football"`). 59/59 rows written. Verified: 0 matches remaining with `-` in competition where round is set.
 
 - **BACKLOG-032 display fix — all render paths:**
   - `src/types/index.ts` — added `round?: string | null` to global `Match` interface
@@ -1261,6 +1316,7 @@ All `emit(...)` calls in FootballLogger are fire-and-forget with no crash on fai
 **Resolved:** BACKLOG-032 (full — data + display)
 
 **Deferred:**
+
 - BACKLOG-033 (BUSALYMPICS standings) — blocked on MD3 G1 and MD3 G2 physical scores still unconfirmed
 - BACKLOG-028 (backscope dead nav items) — not started
 - BACKLOG-017 (2 missing BUSALYMPICS match scores) — awaiting physical records
@@ -1577,23 +1633,28 @@ All `emit(...)` calls in FootballLogger are fire-and-forget with no crash on fai
 **Built:**
 
 **Phase 1 — Competition detail audit (read-only):**
+
 - Traced all 8 competition detail tabs. Confirmed: Standings renders real data (logo broken), TopScorers/Assists/Discipline are empty shells, Rules is hardcoded, Matches/Brackets only in split-pane. All 8 APIs already built.
 - Filed BUG-030, BUG-031, BACKLOG-061.
 
 **Phase 2 — BUG-030 fix (commit `3be1731`):**
+
 - `src/app/competitions/[id]/page.tsx` — CREATED. 6-line server component with `redirect('/competitions/${params.id}/standings')`. Fixes 404 on base competition URL.
 
 **Phase 3 — BUG-031 + TD-008 (commit `bb0a1ed`):**
+
 - `src/app/competitions/[id]/standings/page.tsx` — 5 sites where `{team/player.teamLogo}` rendered as a raw string span replaced with `<TeamLogo logo={X} name={Y} size="md" />`. Sites: lines 395 (StandingsRow), 444 (StandingsMobileCard), 561 (TopScorers), 603 (TopAssists), 642 (Disciplinary). `import { TeamLogo }` added.
 - `src/hooks/useLiveStandings.ts` — `teamLogo: string` → `string | null` (line 15). Fallback `|| '❓'` → `|| null` (line 75). Emoji fallback was masking null — `TeamLogo` handles null correctly with initials.
 
 **Phase 4 — BACKLOG-059 SW scope fixes (commit `4977e42`):**
+
 - `src/hooks/usePWA.ts` — Path guard added before `registerServiceWorker()` call. If `swPath.includes('sw-user')` AND current path starts with `/admin` or `/logger`, returns early without registering. Guard lives in the hook, not in `PWAProvider`, so it fires before registration happens (PWAProvider's useEffect ran too late — after usePWA had already registered).
 - `src/lib/notifications/push-service.ts` — Removed `navigator.serviceWorker.register('/sw-user.js')` call (line ~40). Replaced with `getRegistration('/')` — uses the existing registration from `PWAProvider` instead of creating a competing one. Console warn if no registration found.
 - `src/components/pwa/PWAProvider.tsx` — Removed unused `useEffect` import. Dropped `{ registration, isRegistered, error }` destructure (hook result unused after cleanup). Deleted dead suppression useEffect block (30-52) that tried to suppress registration after-the-fact.
 - `public/sw.js` — Confirmed dead (no registrar in `src/`). **Pending manual deletion**: `del public\sw.js` + `git commit`.
 
 **Phase 5 — Player DB normalisation (staging):**
+
 - `dev/fix-player-college-university.mjs` — Written and run against staging. Results:
   - College: `ColEng → COLENG` (2 rows), `Colmans → COLMANS` (1 row), `'' → NULL` (3 rows)
   - University: 178 rows updated (`'Bells University'` + `'Bells University of Technolgy'` → `'Bells University of Technology'`)
@@ -1602,6 +1663,7 @@ All `emit(...)` calls in FootballLogger are fire-and-forget with no crash on fai
 - **Prod run: PENDING.** Must verify on staging first (done), then apply same script against `.env.production`.
 
 **Phase 6 — Player modal + API trace (read-only):**
+
 - `src/app/admin/players/page.tsx` modal fields mapped: Team = `<select>` (line 607, ✅ correct), Position = `<input type="text">` (line 621, should be select), University = `<input type="text">` (line 661, should be locked/read-only), College = `<input type="text">` (line 671, **should be `<select>` with COLENG/COLENVS/COLMANS/COLNAS**), Department = `<input type="text">` (line 681).
 - `src/app/api/players/[id]/route.ts` PATCH handler traced (line 300-415): team change is fully handled — updates both `players.teamId` and `playerTeamAffiliations`. Old affiliations demoted to `isPrimary: false` (never deleted, by design). `syncPlayerOrganizationAffiliations` called after team change. No gap.
 
@@ -1692,6 +1754,7 @@ All `emit(...)` calls in FootballLogger are fire-and-forget with no crash on fai
 **Focus:** Security gate fixes (BUG-034/035), full system read, basketball college data cleanup, backlog filing batch.
 
 **Built / Changed:**
+
 - `src/app/api/matches/[id]/events/route.ts` — POST and DELETE handlers: added `getAuthUser()` before `request.json()`, admin pass-through, logger verified against `matchLoggerAssignments` (active status), `loggerId` now sourced from `authUser.id` not client body. Imports: added `matchLoggerAssignments`, `and`, `getAuthUser`. (BUG-034, commit `0e55cd4`)
 - `src/app/api/squads/route.ts` — POST, DELETE, PATCH handlers: added `getAuthUser()` + `role === 'admin'` gate on all three. GET left public. (BUG-035, commit `0e55cd4`)
 - `src/app/admin/bulk-register/page.tsx` — `maxLength` on shortName input raised from 5 to 12, placeholder updated to `COLENG-B`. (commit `2c1cf5d`)
@@ -1702,10 +1765,12 @@ All `emit(...)` calls in FootballLogger are fire-and-forget with no crash on fai
 - BACKLOG.md: filed BUG-033 Part 1 resolved, BUG-034–041, BACKLOG-075–092
 
 **Bugs encountered:**
+
 - Turso connection drops mid-sequential-INSERT (Windows Node.js assertion error `UV_HANDLE_CLOSING`). Root cause: Windows libuv async handle closed before process.exit() — script data is already committed, it is a process cleanup race. Workaround: run scripts separately, use INSERT OR IGNORE for idempotency.
 - Bash heredoc with apostrophes in content fails shell parsing. Root cause: single-quoted heredoc EOF terminates on any `'` inside the body. Workaround: use Edit tool append pattern instead of heredoc for long text.
 
 **Resolved:**
+
 - BUG-033 Part 1 (data): 5 basketball players wrongly affiliated to football college teams (backfill script had no sport guard). Deleted wrong affiliations on staging + prod. Sport guard added to backfill script.
 - BUG-034 (CRITICAL): `POST /api/matches/[id]/events` had zero auth. Any caller could inject live match events. Fix: `getAuthUser()` + logger assignment check, `loggerId` sourced from session.
 - BUG-035 (MEDIUM): `POST/PATCH/DELETE /api/squads` had zero auth. Fix: admin gate on all three mutations.
@@ -1713,6 +1778,7 @@ All `emit(...)` calls in FootballLogger are fire-and-forget with no crash on fai
 - BACKLOG-076 resolved: 4 basketball college teams created and 5 players wired.
 
 **Deferred:**
+
 - BUG-033 Part 2 (UI): Squad tab pool sport filter — blocked on BACKLOG-068 (multi-sport player audit)
 - BUG-036–039 (polls, user XI, reminders auth gaps) — low attack surface, deprioritised
 - BUG-041 (React error #418 on homepage, TBT 9–16s) — Lighthouse 22/100 performance
@@ -1813,6 +1879,7 @@ All `emit(...)` calls in FootballLogger are fire-and-forget with no crash on fai
 - Fresh staging match test — needed to RESOLVE TD-010 SECOND_HALF, BUG-076, BUG-067, LiveStats. Prod migrations blocked until this passes.
 
 **Next session:**
+
 1. Fix BUG-062 — auto-refetch lineups + skip confirm screen when match already in progress on mount (`currentPeriod !== NOT_STARTED`)
 2. Fix BACKLOG-107 — `online`/`visibilitychange` drain handler in FootballLogger.tsx for iOS
 3. Run fresh staging match test (8-point checklist) to RESOLVE all SHIPPED items
@@ -1854,27 +1921,29 @@ All `emit(...)` calls in FootballLogger are fire-and-forget with no crash on fai
 **Bugs filed this session:** none
 
 **Deferred:**
+
 - 8-point staging match test — all SHIPPED items below remain unverified
 - Backlog hygiene pass (BUG-073 RESOLVED with no code change, BUG-075/107/053/054/055/060 SHIPPED → need closing after test)
 
 **All items SHIPPED but not yet RESOLVED (require fresh staging match):**
 
-| Item | Commit | What to verify |
-|------|--------|----------------|
-| TD-010 (period persistence) | `b66eb95`, `13aa12b` | SECOND_HALF survives hard refresh |
-| BACKLOG-044 Phase B | `64b0974` | Timer ceiling from config, sub cap gate |
-| BUG-063 (period labels public page) | `ea4a1d5`, `056388d`, `024e086` | Correct label at each period on public page + homepage |
-| BUG-062 (logger refresh fast path) | `3a3ea3c`, `37712ba` | Hard refresh mid-match resumes active logger view |
-| BUG-077 (starters pre-selected in edit modal) | `d96db0a` | Edit modal opens with correct starters highlighted |
-| BUG-078 (currentPeriod FINISHED on End Match) | `91bd33d` | Public page shows FT after End Match |
-| BUG-076 (status stuck LIVE) | `60aa93d` | UNVERIFIED — needs match ending decisively at 90' |
-| BACKLOG-107 (iOS drain) | `dfad1f6` | Queue drains on tab resume + reconnect on iPhone |
-| BUG-075 (manifest scope) | `5866ab4` | Console warning gone, iOS install works |
-| BUG-054/060 (undo correctness) | `3bbad31` | OWN GOAL undo reverts correct team; stat row decrements |
-| BUG-055 (|| value scoring) | `43583c1` | Non-scoring events with value field don't touch score |
-| BUG-053 (rate limit) | `7d90e05` | 5 bad logins → 429 on 6th attempt |
+| Item                                          | Commit                          | What to verify                                          |
+| --------------------------------------------- | ------------------------------- | ------------------------------------------------------- | --------- | ----------------------------------------------------- |
+| TD-010 (period persistence)                   | `b66eb95`, `13aa12b`            | SECOND_HALF survives hard refresh                       |
+| BACKLOG-044 Phase B                           | `64b0974`                       | Timer ceiling from config, sub cap gate                 |
+| BUG-063 (period labels public page)           | `ea4a1d5`, `056388d`, `024e086` | Correct label at each period on public page + homepage  |
+| BUG-062 (logger refresh fast path)            | `3a3ea3c`, `37712ba`            | Hard refresh mid-match resumes active logger view       |
+| BUG-077 (starters pre-selected in edit modal) | `d96db0a`                       | Edit modal opens with correct starters highlighted      |
+| BUG-078 (currentPeriod FINISHED on End Match) | `91bd33d`                       | Public page shows FT after End Match                    |
+| BUG-076 (status stuck LIVE)                   | `60aa93d`                       | UNVERIFIED — needs match ending decisively at 90'       |
+| BACKLOG-107 (iOS drain)                       | `dfad1f6`                       | Queue drains on tab resume + reconnect on iPhone        |
+| BUG-075 (manifest scope)                      | `5866ab4`                       | Console warning gone, iOS install works                 |
+| BUG-054/060 (undo correctness)                | `3bbad31`                       | OWN GOAL undo reverts correct team; stat row decrements |
+| BUG-055 (                                     |                                 | value scoring)                                          | `43583c1` | Non-scoring events with value field don't touch score |
+| BUG-053 (rate limit)                          | `7d90e05`                       | 5 bad logins → 429 on 6th attempt                       |
 
 **Next session:**
+
 1. Run 8-point staging match test — verify all SHIPPED items above, resolve or mark UNVERIFIED
 2. If test passes: run prod migrations (`current_period`, `own_goals`, `penalties_scored`)
 3. Backlog hygiene pass — close all SHIPPED entries that pass the test
@@ -1907,6 +1976,7 @@ All `emit(...)` calls in FootballLogger are fire-and-forget with no crash on fai
 - **TEST_CHECKLIST.md updated** (`db363ac`) — Phases 8 and 9 added covering BUG-044b/045 (Phase 8, no match needed) and BUG-065/064 (Phase 9). Existing Phase 8 → Phase 10, iOS → Phase 11.
 
 **Deferred:**
+
 - BUG-056 (LOW): 401 mid-match silently drops event — alert on 4xx in FootballLogger — recommended for next session before test match
 - BACKLOG-094 (MEDIUM): Eye Point Awards panel always empty — client-side derive from `events.filter(e => e.isEyePoint)` — 2 lines
 - BUG-043 (LOW): Publish Lineups button silently disabled with no hint — tooltip only
@@ -1914,6 +1984,7 @@ All `emit(...)` calls in FootballLogger are fire-and-forget with no crash on fai
 **Sub cap gate clarification:** `maxSubstitutions` is set on the competition in `/admin/competitions` → Match Settings. Per-match override for sub cap not yet in the match creation UI.
 
 **Next session:**
+
 1. Ship BUG-056 (alert on 4xx event POST) + BACKLOG-094 (Eye Point derive) + BUG-043 (tooltip) — all code-only, no match needed
 2. Run the full 11-phase staging test match — first live run with all SHIPPED items since Session 30
 
@@ -1937,10 +2008,12 @@ All `emit(...)` calls in FootballLogger are fire-and-forget with no crash on fai
 - **BACKLOG-094 scoped out** — BACKLOG.md note updated. Eye Point Awards panel on public Timeline was described as "derive from events client-side." Investigation revealed `isEyePoint` is a per-event flag tied to player rating bonuses — award panel on public match page is not a meaningful feature and was explicitly deferred by Richard. No code change.
 
 **Deferred:**
+
 - Full 11-phase staging test match — 14 SHIPPED items still pending verification
 - Prod migrations (`current_period`, `own_goals`, `penalties_scored`) — gated behind test match
 
 **Next session:**
+
 1. Run the full 14-checkpoint staging test match (mapped in session 33E conversation — use the one-shot run order)
 2. For every phase that passes: DB query → evidence block → SHIPPED → RESOLVED in BACKLOG.md
 3. If all pass: run three prod migration statements from TEST_CHECKLIST.md POST-TEST GATE
@@ -1977,6 +2050,7 @@ All `emit(...)` calls in FootballLogger are fire-and-forget with no crash on fai
 **HAR audit:** 50 failures = 20× 401 `/api/auth/me` (AuthContext on logger page, no cookie — expected, harmless) + 30× WS status 0 (BUG-074, staging WS → prod Railway which was down). Zero unexpected API errors.
 
 **Deferred:**
+
 - BACKLOG-106 (subbed-on player missing from general event picker) — pre-match-day blocker
 - BACKLOG-110 (event timestamps show 45' not 47' during stoppage) — displayMinute Math.min clamp
 - BACKLOG-109 (optional start time/venue on match creation)
@@ -1984,6 +2058,7 @@ All `emit(...)` calls in FootballLogger are fire-and-forget with no crash on fai
 - Commit of competition match settings wiring in Create Match modal (pending Richard review)
 
 **Next session:**
+
 1. Fix BACKLOG-106 — `getOnPitchPlayers` must rehydrate subbed-on players from DB events on mount, not just localStorage. After fix, run a sub scenario to verify 11 players shown in general picker after substitution.
 
 ---
@@ -2009,12 +2084,14 @@ All `emit(...)` calls in FootballLogger are fire-and-forget with no crash on fai
 **Resolved:** BACKLOG-106 (both paths), BUG-080, BUG-075 — all SHIPPED. Move to RESOLVED after Railway is up and Phase 6/12/13 pass on staging.
 
 **Deferred:**
+
 - Railway WS infra — pay $5 hobby plan or Render/Fly.io free tier. Blocking RESOLVED status on BUG-080 and BACKLOG-106.
 - BUG-072 (LOW) — second yellow undo leaves Yellow Card; fix: `undoLastEvent` detects `Red Card (Second Yellow)` and cascades to preceding Yellow for same player
 - BACKLOG-104 (MEDIUM) — penalty missed/saved outcomes; no schema change; 3 outcome buttons in logger UI
 - BACKLOG-105 — full penalty shootout; separate score columns, PEN_SCORED/MISSED/SAVED event types, public display
 
 **Next session:**
+
 1. Railway decision first — get WS back up
 2. Run Phase 6 (three BACKLOG-106 scenarios), Phase 12 (BUG-080 polling), Phase 13 (BUG-075 iOS install) to close all three to RESOLVED
 3. Then BUG-072 (second yellow undo cascade) — small scope, one session
@@ -2036,6 +2113,7 @@ All `emit(...)` calls in FootballLogger are fire-and-forget with no crash on fai
 - **BACKLOG-112 — Filed**: Goal Disallowed / Overturned. Mental model documented — distinct from Undo (keeps match narrative, score reverts, push fires). Workaround: Undo covers MVP. Full build deferred until VAR/offside overturns become common.
 
 **Deferred:**
+
 - BACKLOG-104 implementation (next in session)
 - BACKLOG-105 (full penalty shootout) — dedicated session, pre-prod blocker before first knockout match
 - BACKLOG-106, BUG-080, BUG-075 — awaiting Railway WS to verify SHIPPED status
@@ -2063,11 +2141,13 @@ All `emit(...)` calls in FootballLogger are fire-and-forget with no crash on fai
 **Resolved:** BUG-072, BACKLOG-104, BACKLOG-111 — all SHIPPED. Move to RESOLVED after staging verification.
 
 **Deferred:**
+
 - BACKLOG-105 (full penalty shootout) — dedicated session, pre-prod blocker before first knockout match. Starting reference: PENALTY_SHOOTOUT button mapping table in session 36 notes.
 - BUG-046 (black screen on /matches/[id] from admin session) — needs reproduction + Network tab capture before any code fix
 - BUG-011 (718 goals / playerStats corruption) — data surgery session, best done with Railway up
 
 **Next session:**
+
 1. Commit the pending backlog update if not done (BACKLOG-111 SHIPPED)
 2. Decide: Railway restoration + staging verification of BACKLOG-106/BUG-080/BUG-075/BUG-072/BACKLOG-104/BACKLOG-111, OR start BACKLOG-105 session
 3. If Railway is up: run verification scenarios before touching any new code
@@ -2091,12 +2171,14 @@ All `emit(...)` calls in FootballLogger are fire-and-forget with no crash on fai
 **Resolved:** BUG-054 (dead code deleted), BUG-068 (PenaltySequenceModal — both known instances now fixed), BUG-030/031 (stale closure).
 
 **Deferred:**
+
 - Railway WS restoration — blocks RESOLVED status on BACKLOG-106, BUG-080, BUG-075, BUG-072, BACKLOG-104, BACKLOG-111
 - BACKLOG-105 (full penalty shootout) — dedicated session, pre-prod blocker before knockout matches
 - BUG-046 (black screen on /matches/[id] from admin) — needs Network tab reproduction first
 - BUG-011 (718 goals / playerStats corruption) — data surgery, needs Railway
 
 **Next session:**
+
 1. Railway decision — restore ($5/mo) or switch to Render/Fly.io free tier
 2. Once Railway up: run verification phases 6/12/13 to close BACKLOG-106, BUG-080, BUG-075, BUG-072, BACKLOG-104, BACKLOG-111 to RESOLVED
 3. Then BACKLOG-105 (penalty shootout) — dedicated session
@@ -2126,12 +2208,14 @@ All `emit(...)` calls in FootballLogger are fire-and-forget with no crash on fai
 **Resolved this session:** `revertPlayerStat` critical gap (false 500 + silent stat drift), second yellow WS broadcast gap, Sentry capture gap.
 
 **Deferred:**
+
 - BACKLOG-105 full build — Railway must be up first; build + verify in same session as the 6 SHIPPED items
 - BUG-011 Path A audit — one read-only session, no writes until after sim closes SHIPPED items
 - BACKLOG-113 (simplified shootout modal) — deferred until after first live shootout feedback
 - Two-logger conflict — operational workaround doc not yet written
 
 **Next session:**
+
 1. Railway decision — restore or switch to Render/Fly.io
 2. Once Railway up: BACKLOG-105 build (7 files, SQL direct migration staging first)
 3. Sim run — Phases 6/12/13/15/16/17 + BACKLOG-105 verification — close all 7 to RESOLVED
@@ -2156,8 +2240,9 @@ All `emit(...)` calls in FootballLogger are fire-and-forget with no crash on fai
 **Architecture note (singleton pattern):** `EventDrivenNotifier` has no constructor context. All match data must flow through `MATCH_NOTIFICATION_TRIGGER` CustomEvent `detail`. Any future match context the notifier needs must be added to the dispatch payload, not the instantiation call.
 
 **Full notification status post this session:**
+
 - Goal / Penalty scored → ✅ both teams notified
-- Red Card → ✅ both teams notified  
+- Red Card → ✅ both teams notified
 - Penalty Saved / Missed → ✅ both teams notified
 - MATCH_START → ✅ wired (`a9fed4b`)
 - HALF_TIME → ✅ wired (`a9fed4b`)
@@ -2166,11 +2251,13 @@ All `emit(...)` calls in FootballLogger are fire-and-forget with no crash on fai
 **Permission prompt path for verification:** SettingsOverlay as a viewer account (not PushNotificationDebugger). Must also follow one of the two test teams to receive event pushes.
 
 **Deferred:**
+
 - Test sim run (Phases 6/12/13/15/16/17) — Railway is up, fresh match needed from admin
 - BACKLOG-105 (full penalty shootout) — next dedicated session
 - BUG-011 Path A audit
 
 **Next session:**
+
 1. Create fresh test match in admin → assign logger → run Phases 6/12/13/15/16/17
 2. Verify push fires via SettingsOverlay subscription on a viewer account following one of the teams
 3. BACKLOG-105 build if sim completes cleanly
@@ -2196,6 +2283,7 @@ All `emit(...)` calls in FootballLogger are fire-and-forget with no crash on fai
   - `PATCH /matches/.../{"currentPeriod":"HALF_TIME"}` → 200 confirmed.
 
 **False findings from session 38 summary corrected:**
+
 1. "PATCH /loggers 404 = missing route" — DISPROVED. ~100 successful PATCH calls; 2 failures during Railway outage only.
 2. "Logger auth/me 401 = bug" — EXPECTED. Logger tokens in localStorage, not cookies. Design by intent.
 3. "Room rejoin on reconnect missing" — DISPROVED. `useMatchSubscription` has `isConnected` in dep array → auto-resubscribes. Always was correct.
@@ -2207,6 +2295,7 @@ Complete pipeline: logger event → `MATCH_NOTIFICATION_TRIGGER` CustomEvent →
 Pipeline is structurally complete. Delivers zero notifications in practice because `pushSubscriptions` table is always empty — no enrollment UI exists (BUG-084).
 
 Additional breaks in the pipeline even if a subscription existed:
+
 - Dedup key includes `Date.now()` → dedup never works (BUG-085)
 - `sentCount=0` logged as success (BUG-086)
 - `GET /api/notifications` event query uses `'GOAL'` (uppercase) but events stored as `'Goal'` (title case) → always 0 rows (BUG-088)
@@ -2218,6 +2307,7 @@ Additional breaks in the pipeline even if a subscription existed:
 **Accepted risks:** NOTIF-12 — offline notification queuing is a production-level concern; accepted at MVP with handful of viewers. No action item.
 
 **Fix order established:**
+
 1. BUG-081/082 — auth guards on `/api/users/follows` (CRITICAL security, 4 handlers, ~4 lines each)
 2. BUG-083 — normalize type before switch in LiveMatchTimeline (`type.toUpperCase().replace(/\s+/g, '_')`)
 3. BUG-080 — reconnect CTA: add `reconnectFailed` boolean to SocketContext, persistent "tap to retry" banner
@@ -2229,6 +2319,7 @@ Additional breaks in the pipeline even if a subscription existed:
 9. BACKLOG-105 — penalty shootout full implementation
 
 **Next session:**
+
 1. Commit uncommitted working tree (`page.tsx`, `LiveMatchTimeline.tsx`, agent files)
 2. Fix BUG-081/082 (4 auth guards on `/api/users/follows` GET/POST/PATCH/DELETE)
 3. Fix BUG-083 (normalize type string before switch in `LiveMatchTimeline.tsx`)
@@ -2254,6 +2345,7 @@ Additional breaks in the pipeline even if a subscription existed:
 - **Period labels updated (IN PROGRESS — `src/app/matches/[id]/page.tsx`):** `1ST HALF → H1`, `2ND HALF → H2`, added `SUSPENDED → SUSP`. `NOT_STARTED`, `PENDING`, `UPCOMING` intentionally not mapped — viewer shows start date for those states, not a period badge. `POSTPONED` label deferred (status not yet wired).
 
 **Root cause notes logged this session:**
+
 - Dual broadcast paths (logger `event:log` + API `broadcastMatchEvent`) produce two `event:new` signals per event with different IDs — dedup by ID alone is insufficient
 - `LiveMatchTimeline` uses `event.player?.name` (DB shape) but WS events carry `event.playerSnapshot?.name` (state manager shape) — both shapes must be handled client-side
 - `fetchMatchData(setLoading=true)` during 10s polling caused full content replacement — viewer experience broken on WS failure
@@ -2261,6 +2353,7 @@ Additional breaks in the pipeline even if a subscription existed:
 **Phase 15 (second yellow cascade) — Railway WS was down during test (404). Red Card writes to DB correctly but broadcast fails on both paths (socket not connected + Railway HTTP endpoint down). Shows on hard refresh, not real-time. NOT a logic regression. Needs Railway up to close as RESOLVED.**
 
 **Deferred to next session:**
+
 - Commit all above changes after final review
 - Phase 15 re-verify with Railway up
 - WS reconnect after `reconnect_failed` — manual retry CTA (persistent button after exhausted retries, not a toast)
@@ -2269,6 +2362,7 @@ Additional breaks in the pipeline even if a subscription existed:
 - BACKLOG-105 (penalty shootout)
 
 **Next session:**
+
 1. Deploy current uncommitted changes to staging
 2. Re-run Phase 12 (polling — verify silent, no refresh, amber toast fires)
 3. Re-run Phase 15 with Railway up
@@ -2315,17 +2409,20 @@ Additional breaks in the pipeline even if a subscription existed:
 | `ec15246` | `chore(backlog)` | BACKLOG-118 → SHIPPED; BUG-081/082 → RESOLVED; BACKLOG-117 filed |
 
 **Bugs encountered:**
+
 - Logger with `role='logger'` in `users` table (registered via viewer path) gets `getAuthUser` returning null — `loggers` table branch runs but ID isn't there, no fallback. Fix: `if (logger) return ...; // else fall through`. Confirmed by decoding JWT payload (role='logger', userId matches users table not loggers table).
 - HAR showed `cookies: []` on the follows request — initially suspected cookie not being sent. Root cause: httpOnly cookies are NEVER shown in HAR exports (browser security). Cookie was present and being sent correctly. SW (`sw-user.js`) was intercepting the console's network fetch but the actual API requests had full cookie access.
 
 **tsc status:** Exit code 1 — all pre-existing errors in `src/db/` scripts and several route files (`admin/news`, `squads`, `ratings`, basketball routes, etc.). Zero new errors introduced this session.
 
 **Deferred:**
+
 - BACKLOG-118 live verification: retry `fetch('/api/users/follows?userId=...', { credentials: 'include' })` on staging post-`0ea32be` deploy — should now return 200
 - BUG-083 visual verification: open match timeline with Yellow/Red Card events — should show correct coloured icons
 - BUG-080 verification: polling fallback with Railway WS down — explicitly deferred to Session 38D
 
 **Next session (38D):**
+
 1. ~~BACKLOG-118 live verify~~ — RESOLVED `a84ddec` (DB confirmed, `user_follows` empty on staging = correct 200)
 2. Diagnose viewer-app UI issue (reported broken at end of 38C — root cause unknown, investigate first)
 3. BUG-083 visual check: navigate to match with yellow card events → icon must render (not blank)
@@ -2360,14 +2457,14 @@ Additional breaks in the pipeline even if a subscription existed:
 
 **Directive 2 — 38C formal verification verdicts:**
 
-| Item | Verdict |
-|---|---|
-| BUG-083 LiveMatchTimeline.tsx | CONFIRMED — commit 1c7a6f3, diff verified |
-| BUG-083 MatchTimeline.tsx | NOT CONFIRMED (unpatched — fixed this session efb0081) |
-| BUG-081/082 auth guards | SHIPPED in code; live-tested by Richard |
-| getAuthUser logger fallback | SHIPPED in code; live-tested by Richard |
-| resolveEffectiveUserId x4 | SHIPPED in code; live-tested by Richard |
-| Scope outside 4 files | CLEAR — transfers/route.ts:176 is audit-only |
+| Item                          | Verdict                                                |
+| ----------------------------- | ------------------------------------------------------ |
+| BUG-083 LiveMatchTimeline.tsx | CONFIRMED — commit 1c7a6f3, diff verified              |
+| BUG-083 MatchTimeline.tsx     | NOT CONFIRMED (unpatched — fixed this session efb0081) |
+| BUG-081/082 auth guards       | SHIPPED in code; live-tested by Richard                |
+| getAuthUser logger fallback   | SHIPPED in code; live-tested by Richard                |
+| resolveEffectiveUserId x4     | SHIPPED in code; live-tested by Richard                |
+| Scope outside 4 files         | CLEAR — transfers/route.ts:176 is audit-only           |
 
 **Commits:**
 | Hash | Scope | Description |
@@ -2376,6 +2473,7 @@ Additional breaks in the pipeline even if a subscription existed:
 | `efb0081` | `fix(ui)` | BUG-083 complete normalization in MatchTimeline.tsx |
 
 **Bugs encountered:**
+
 - `LIVE_STATES` initially defined inside component after early returns — effects at 163/181 referenced it before scope. Fixed: moved to module scope.
 - Return shape change `useMatchTimer` cascaded TS errors to `page.tsx` line 51. Fixed: destructured as `const { time: matchTime }`.
 - Known-issues entry 2026-06-29 (line 15) stated `reconnect_failed` is never emitted — was true only because `disconnect()` prevented it from firing. Now obsolete after `disconnect()` was removed. Entry corrected.
@@ -2389,6 +2487,7 @@ Additional breaks in the pipeline even if a subscription existed:
 | `src/components/LiveMatchStatus.tsx` | mm:ss clock render | UX change, needs visual verify on staging |
 
 **Deferred:**
+
 - BUG-080 Railway-down staging verify: amber toast fires, silent poll every 10 s, reconnect recovery on WS restore
 - BACKLOG-119 full visual verify: HT label red, FT neutral
 - BUG-083 staging visual verify: Yellow Card yellow icon, Red Card red icon — both MatchTimeline and LiveMatchTimeline
@@ -2399,6 +2498,7 @@ Additional breaks in the pipeline even if a subscription existed:
 - BUG-092 (undo not clearing viewer timeline — no `match:event:deleted` WS broadcast)
 
 **Next session (38E):**
+
 1. Commit mm:ss after visual check on staging (home page cards show `53:09` not `53'`)
 2. Fix `page.tsx` line 394 — mm:ss in match detail header clock
 3. Fix `LiveMatchTimeline.tsx` `RED_CARD_(SECOND_YELLOW)` parity
@@ -2428,12 +2528,14 @@ Additional breaks in the pipeline even if a subscription existed:
 **Design decisions documented:**
 
 **Eye Point Awards — table is redundant**
+
 - `eye_point_awards` table (in `schema-enhanced.ts`) duplicates data already in `matchEvents`: `matchId`, `playerId`, `loggerId` (awardedBy), `detail` (reason), `createdAt` (timestamp), `isEyePoint: boolean`.
 - Decision: the `isEyePoint` flag on `matchEvents` is the correct model. `WHERE isEyePoint = true AND matchId = X` serves all use cases. The separate table is a second source of truth for the same fact — an integrity risk.
 - Eye Points as a concept are sound — they capture qualitative impact (individual brilliance, carries, key duels) that doesn't map to a discrete event. But under manual logging, they're constrained: a logger can't track granular actions AND flag brilliance simultaneously, so Eye Points are biased toward on-ball moments the logger is already watching. Fine as a rating bonus signal (`+0.5 per eye point`). Not worth schema overhead.
 - Eye Points feed into player ratings. Highest rating → MotM. They are NOT Man of the Match — they influence it.
 
 **BrixSports domain positioning**
+
 - Domain map: Physical tracking (Second Spectrum/AWS) → Event data providers (Opta/Stats Perform) → Intelligence layer (StatsBomb/Oracle) → Grassroots loggers (Hudl Assist/Fanatix) → Fan-facing livescore (SofaScore/FlashScore).
 - BrixSports sits at the intersection of **grassroots logger + fan-facing livescore**, with an aspirational reach toward a light analytics layer (rating system, Eye Points, player performance tracking).
 - Key architectural moat: **contextual depth over horizontal breadth**. SofaScore is wide/shallow. Opta is infrastructure. BrixSports is deep in one context (BUSA League, Nigerian university sports) — which unlocks things horizontal platforms can't build: fan communities that know these players, push for matches that matter to this specific audience, ratings calibrated to this league.
@@ -2444,11 +2546,11 @@ Additional breaks in the pipeline even if a subscription existed:
 
 Live prod DB query (`dev/check-push-subscriptions.mjs`) returned:
 
-| # | user_id | provider | created_at |
-|---|---------|----------|------------|
-| 1 | H3pwXW_u3B7XAm0nnD4d1 | Apple Push (iOS Safari) | 1780651633 |
-| 2 | uBM_X1MbuQuzhczxGbgNN | Apple Push (iOS Safari) | 1780578862 |
-| 3 | admin-001 | FCM (Android/Chrome) | 1771813665 |
+| #   | user_id               | provider                | created_at |
+| --- | --------------------- | ----------------------- | ---------- |
+| 1   | H3pwXW_u3B7XAm0nnD4d1 | Apple Push (iOS Safari) | 1780651633 |
+| 2   | uBM_X1MbuQuzhczxGbgNN | Apple Push (iOS Safari) | 1780578862 |
+| 3   | admin-001             | FCM (Android/Chrome)    | 1771813665 |
 
 3 real subscribers on prod. Pipeline is live. BUG-084 ("no enrollment UI, table always empty") was a false finding — retracted. Enrollment UI confirmed in SettingsOverlay, OnboardingModal, and NotificationPermission. BUG-085 (dedup key) is the active issue.
 
@@ -2457,9 +2559,11 @@ Separately: staging test match fired a real VAPID push to prod subscribers becau
 **Addendum (2026-07-01):** The notification content was confirmed as "Yanko scored a goal" — player-specific text matching the GOAL VAPID payload template (`${event.playerName} scores! ...`). This rules out the WS toast path (which carries no player name). The recipient was on an **iPad** — confirming it was one of the 2 Apple Push (`web.push.apple.com`) subscribers, not the FCM/Android subscriber (admin-001). VAPID delivery through Apple's push infrastructure confirmed end-to-end.
 
 **Commits:**
+
 - None this session (architecture doc + CORS fix — CORS needs Railway redeploy before committing is meaningful).
 
 **Deferred (carried from 38D + this session):**
+
 - Commit `server.js` CORS fix and trigger Railway redeploy
 - Commit mm:ss (`useWebSocket.tsx` + `LiveMatchStatus.tsx`) after visual check
 - Fix `page.tsx` line 394 — mm:ss in match detail header clock
@@ -2470,6 +2574,7 @@ Separately: staging test match fired a real VAPID push to prod subscribers becau
 - CRITICAL open: PATCH [eventId] open spread, score-before-delete ordering, loggerId public leak, BUG-085 dedup key, BUG-089 subscribe storm
 
 **Next session (39 — first dedicated implementation session):**
+
 1. Confirm server.js CORS on Railway — staging WS smoke test
 2. Commit mm:ss after visual check
 3. Fix PATCH [eventId] open spread (CRITICAL security)
@@ -2513,11 +2618,13 @@ Separately: staging test match fired a real VAPID push to prod subscribers becau
   - Decision: revert before break. Two visible inconsistencies would have shipped: badge shows `45:32`, header still shows `45'`; polling fallback resets seconds to `00` each 10s cycle. Full mm:ss wiring is a clean one-session job — do it whole after break.
 
 **Session doc commits:**
+
 - `0bd7fa8` — ARCHITECTURE.md patches + CLAUDE.md readiness checklist update + .env.example key rotation docs + architecture plan doc
 
 **Bugs filed this session:** none (all filing was done in sessions 38C–38E)
 
 **Known issues from this session:**
+
 - `b6d3112` (intermediate BUG-095 commit) exists in history as a superseded wrong approach — superseded by `4c73aba`. History is slightly noisy but final state is correct.
 - BUG-095 pending: curl verify on staging that unauthenticated GET `/events` strips loggerId correctly.
 - BUG-094 pending: live undo test on staging to confirm score reverts in correct order.
@@ -2526,6 +2633,7 @@ Separately: staging test match fired a real VAPID push to prod subscribers becau
 **7 commits ahead of origin/dev at wrap:** `fafab3a`, `358ee05`, `b6d3112`, `57b5bc8`, `4c73aba`, `abdc684`, `0bd7fa8`
 
 **Next session (post-backfill — Session 40):**
+
 1. Push dev branch to origin
 2. Railway redeploy — confirm staging WS connects (BUG-074 CORS fix live)
 3. Staging smoke test: curl GET `/events` unauthenticated — confirm no loggerId in response (BUG-095 evidence)
@@ -2578,6 +2686,7 @@ Separately: staging test match fired a real VAPID push to prod subscribers becau
 - Actual backfill events — blocked on Richard providing match sheets (all 34)
 
 **Next session (40B):**
+
 1. Richard pastes all match sheets → extract jersey numbers per team → generate player stub creation script
 2. Run player stubs dry-run, confirm, apply on staging
 3. Encode event data objects from sheets (goals, assists, cards per match)
@@ -2613,7 +2722,7 @@ Separately: staging test match fired a real VAPID push to prod subscribers becau
 - **Consolidated workbook tab name had a trailing space** (`"COLENG "`) — broke team resolution and leaked into output filenames. Root cause: `parse-match-sheet.mjs` used raw `wb.SheetNames` entries as teamSlug without trimming. Fixed: `.trim()` at the source.
 - **`players.position` is `NOT NULL` with no default** — MD1 g1's original write plan specified `position: null` for 4 stub players (TOJU, KANTE, AZEEZ, IK), which would have failed the insert outright. Caught via `PRAGMA table_info` before writing, not after a failed insert. Fixed: `''` (empty string), matching 20 existing real players already using that exact convention.
 - **First `--apply` attempt on MD1 g1 failed and rolled back** — conflated the `squad_players` gap-check (correctly found CHARLES/TOMIPE/ISREAL/UCHE JR missing) with `player_team_affiliations` existence, never separately re-verified for TOMIPE/UCHE JR (who already had affiliations). `client.batch(..., 'write')` confirmed genuinely atomic — zero partial writes on the failed attempt. Fixed by re-verifying both tables independently per candidate before the second attempt.
-- **CRITICAL, still open — Israel Emmanuel / COLMANS "ISREAL" dual-college collision.** `busa-pirates-player-17` (Israel Emmanuel) has a real, pre-existing COLENG affiliation (predates this session). MD1 g1's platform-wide matcher wrongly linked him to a "COLMANS" ISREAL sheet entry that is actually a different person, giving him two simultaneous active `affiliation_type='college'` rows — an invariant nothing in the matcher or the affiliation-insert step ever checked (club multi-affiliation is legitimate; dual-college is not, confirmed by a platform-wide scan finding zero other cases). Separately, MD1 g2 then needed the *real* Israel Emmanuel and instead created a brand-new stub (`ClqNXQiORuTQE54v5gqKU`) rather than linking to him. Full read-only trace completed and confirmed: contained to this one player, no wider collision across either match, no contamination of his real Pirates/Hammers data (he was never one of those 28 players — that assumption in an earlier planning pass was wrong). Fix script (`dev/fix-israel-emmanuel-swap.mjs`, 6 tasks: new real stub for COLMANS, re-point g1's 5 events + g2's 1 event + a substitution's `related_player_id`, move the wrong affiliation, delete the redundant g2 stub, cumulative recompute for both final IDs) is written but **`--dry-run` has not yet been run** — session ended before execution.
+- **CRITICAL, still open — Israel Emmanuel / COLMANS "ISREAL" dual-college collision.** `busa-pirates-player-17` (Israel Emmanuel) has a real, pre-existing COLENG affiliation (predates this session). MD1 g1's platform-wide matcher wrongly linked him to a "COLMANS" ISREAL sheet entry that is actually a different person, giving him two simultaneous active `affiliation_type='college'` rows — an invariant nothing in the matcher or the affiliation-insert step ever checked (club multi-affiliation is legitimate; dual-college is not, confirmed by a platform-wide scan finding zero other cases). Separately, MD1 g2 then needed the _real_ Israel Emmanuel and instead created a brand-new stub (`ClqNXQiORuTQE54v5gqKU`) rather than linking to him. Full read-only trace completed and confirmed: contained to this one player, no wider collision across either match, no contamination of his real Pirates/Hammers data (he was never one of those 28 players — that assumption in an earlier planning pass was wrong). Fix script (`dev/fix-israel-emmanuel-swap.mjs`, 6 tasks: new real stub for COLMANS, re-point g1's 5 events + g2's 1 event + a substitution's `related_player_id`, move the wrong affiliation, delete the redundant g2 stub, cumulative recompute for both final IDs) is written but **`--dry-run` has not yet been run** — session ended before execution.
 
 **Deferred / still open:**
 
@@ -2627,6 +2736,7 @@ Separately: staging test match fired a real VAPID push to prod subscribers becau
 **Scope creep / rejected:** None rejected outright — the college-logo work and the Pirates/Hammers fix were both flagged as out-of-scope-but-clearly-necessary before proceeding, not silently absorbed. The site-wide SEO logo bug (BUG-096) was explicitly filed-not-fixed on request to keep the branch scoped.
 
 **Next session (40C) — exact first task:**
+
 1. Run `node dev/fix-israel-emmanuel-swap.mjs` (dry-run), review output carefully against the trace findings already confirmed (5 g1 events, 1 g2 event + 1 substitution reference, exact affiliation/squad_players row IDs).
 2. On confirmation, `--apply`, then run the full post-apply verification block (new stub correctly COLMANS-only, Israel Emmanuel COLENG+Pirates-only with correct g2-only events, g2 stub fully deleted with zero remaining references, both players' stats recomputed correctly, no other player touched).
 3. Commit the 4 uncommitted `.agents/dev/*.md` files (session 40 + 40B accumulated changes) before starting new work.
@@ -2692,6 +2802,7 @@ Separately: staging test match fired a real VAPID push to prod subscribers becau
 - ARCHITECTURE.md drift (shootout columns, eyePointAwards) — still open from session 39.
 
 **Next session:**
+
 1. Check whether Richard's by-hand verification of `dev/staging-verification-dump.md` surfaced anything — resolve before touching BUSA League if so.
 2. Start the BUSA League backfill (27 matches) — same pipeline (now confirmed safe against real club-team data), sheets or goal-scorer-only as available, always through the matcher per the no-sheet precedent.
 3. Commit any remaining uncommitted doc changes.
@@ -2791,7 +2902,7 @@ Real bugs/lessons from the remaining 6 matches:
   - busa-match-16's FA-listed cards for Ise/Speedy and busa-match-13's FA-listed 4 Cruise cards: FA's structured "Cards" extraction had genuine parser errors in both cases — the real result graphics and source sheets independently agreed with what was already in the DB. **Working rule established: when FA's structured extraction conflicts with both the source logsheet AND a real result graphic, treat the FA extraction as the error, not the other two** (FA reports come from an automated PDF parser with no manual review layer).
 - **Full platform-wide collision audit run against all 84 distinct stub players** (85 created in session 41, minus MICHEAL already merged into Oguntola) — exact-name, cross-sport, fuzzy/nickname-tier, and old-contaminated-batch checks, read-only. 43 of 84 clean. Real signal: exactly 3 names (Charles, Peter, Azeez) out of 41 flagged — everything else was same-batch first-name coincidence or short-string fuzzy noise.
 - **Abdulazeez Jolaoye ↔ unassigned "Azeez" — merged.** The unassigned stub was his own COLNAS college identity (active affiliation, 2 real BUSALYMPICS substitution events from MD1 g1/MD2 g1), never linked to his Kings FC club identity — same club+college shape as Mayowa Agoyi and Abdul-jabbaar Bello. Re-pointed events + affiliation, deleted the redundant stub, his existing football_player_stats untouched (Substitution carries no stat weight).
-- **Charles and Peter collisions — investigated, closed as false alarms.** Unlike Azeez, both pairs have *active club affiliations to different clubs* (not one club-only + one college-only) — club-exclusivity (no mid-group-stage transfers) rules out same-person for either. Genuinely two different real people sharing a common first name in each case.
+- **Charles and Peter collisions — investigated, closed as false alarms.** Unlike Azeez, both pairs have _active club affiliations to different clubs_ (not one club-only + one college-only) — club-exclusivity (no mid-group-stage transfers) rules out same-person for either. Genuinely two different real people sharing a common first name in each case.
 - **`players.profile_id` traced end-to-end (read-only fact-finding, no writes).** Zero of 309 players have it populated, but the mechanism is fully built and reachable, not dead code: `getPlayerProfileId()` links two rows only if they share an email at bulk-register time, `GET /api/players/[id]` reads it into `relatedProfiles`, `/players/[id]` renders a real "Multi-Sport Athlete" card. Confirmed Abdul-jabbaar Bello (football) and Storm's "JABBAR" (basketball) both have `profile_id: null` — no existing link, no decision made on whether to link them.
 - **College-guard confirmed live-inert by design for club-team writes, verified against real data.** None of this session's write scripts imported `dev/lib/college-guard.mjs` — but the guard's target-team check only ever fires for one of 4 hardcoded college team IDs, so it's structurally a no-op for BUSA League club affiliations regardless. Retroactively ran `checkCollegeExclusivity()` against all 10 players who received new club affiliations this session who also hold a college affiliation — all 10 returned no-conflict, confirming both the target-team short-circuit and the post-40C fix hold against real data.
 
@@ -2820,7 +2931,7 @@ Real bugs/lessons from the remaining 6 matches:
 - **`profile_id` link applied** (`dev/link-jabbaar-profile.mjs --apply`, staging) — first real exercise of this platform mechanism, linking Abdul-jabbaar Bello (football) and Storm's "JABBAR" (basketball), confirmed same person by Richard. Pure identity link (fresh `nanoid()`, platform-wide uniqueness verified by real query), no data merge. **BACKLOG-120** filed — the only write path for this field (bulk-register email match) is structurally unreachable for almost every real player on the platform; a real admin "link profiles" action is needed eventually.
 - **BUG-098** (`2771297`) — `GET /api/players/[id]` leaked `profileId`, `memberships`, `organizationAffiliations` (3 of CLAUDE.md's banned public fields) to unauthenticated callers. Old, platform-wide gap (initial CRITICAL filing was corrected mid-session — not fresh, just newly exercised by the profile_id write). Fixed: strip `profileId` alongside `email` for non-admin; gate `memberships`/`organizationAffiliations` behind `isAdmin`. Verified both unauthenticated (local dev) and admin-authenticated (real staging browser session) paths.
 - **BUG-099** (`fd3a714`) — two more bugs surfaced while explaining the API response to Richard: `recentMatchesWithEvents` took the first 5 raw events without deduping by match (same match card repeated up to 5x) and had no secondary sort by minute (scrambled order); `eventsByType`/`goals`/`assists`/`yellowCards`/`redCards` compared event type against uppercase literals while stored values are Title Case (`"Goal"` not `"GOAL"`) — same class as the already-documented BUG-012, missed at this call site, silently empty for every player, zero frontend consumers found. Fixed both; added shared `normalizeType()` helper.
-- **BUG-100** (`96868a9`) — traced a display bug on the *admin* screen back to a much bigger platform-wide issue: **100% of FINISHED matches (66/66)** show `currentPeriod: 'NOT_STARTED'` (schema default), so every finished match's own detail page displays "NOT STARTED" instead of "FT" — the display fallback (`matchTime?.period ?? match.currentPeriod ?? match.status`) never reaches `status` once `currentPeriod` holds any real string. Confirmed via code read that the live match-finish flow still writes `currentPeriod` correctly today (zero FINISHED matches postdate the BUG-076/078 fix) — pure historical backfill gap, not a live-code regression. One-line `UPDATE`, 66 rows fixed, verified 0 remaining stale.
+- **BUG-100** (`96868a9`) — traced a display bug on the _admin_ screen back to a much bigger platform-wide issue: **100% of FINISHED matches (66/66)** show `currentPeriod: 'NOT_STARTED'` (schema default), so every finished match's own detail page displays "NOT STARTED" instead of "FT" — the display fallback (`matchTime?.period ?? match.currentPeriod ?? match.status`) never reaches `status` once `currentPeriod` holds any real string. Confirmed via code read that the live match-finish flow still writes `currentPeriod` correctly today (zero FINISHED matches postdate the BUG-076/078 fix) — pure historical backfill gap, not a live-code regression. One-line `UPDATE`, 66 rows fixed, verified 0 remaining stale.
 - **BUG-101** (`11f7cbb`) — Richard asked directly whether the payload was too heavy. Traced: `GET /api/players/[id]` embedded the full raw `matches` row (with `lineups`/`stats` blobs) inside every nested event, redundantly, up to 20x per response — AND four more banned fields (`loggerId`, `approvalStatus`, `managerNotes`, `approvedBy`) riding along unstripped on those same nested objects, same class as BUG-098, missed there since that fix only addressed the top-level `player` object. Traced all 5 real frontend consumers of the route first — confirmed none read the removed fields. Fix: explicit narrow projection. Response size 119,832 → 18,059 bytes (~85% reduction), confirmed by direct byte count.
 - **BUG-102** (`840721b`) — admin page's "Recent Match Events" read raw `allEvents` (missing BUG-099's fixes entirely) and could never show real team names (checked `match.homeTeam`/`awayTeam`, which never existed on the raw row — every match silently showed just the competition name). Added a small team-name join server-side, switched admin page to `recentMatches`. Verified live via real browser screenshot on staging — both a fully-timed and a goals-only-backfill match rendered correctly.
 - **BACKLOG-121** (`fe15f1d`, `3c019cb`) — Richard's UX request: group repeated identical event badges by type with a count (`SHOT OFF TARGET ×4`) instead of one badge per raw event, click-to-expand to reveal actual minutes. Applied uniformly to timed and untimed events per Richard's call. "no time data" label shortened to `—` on request. Verified live on staging — both match cards showed correct grouped counts (6→5 and 8→5 badges respectively).
@@ -2846,6 +2957,7 @@ Real bugs/lessons from the remaining 6 matches:
 **Focus:** Started as a Live Clock v2 design review (Tier 0), pivoted through an auth-security find, then a large BUSA League GW2 backfill push, and closed with the first real live-match test run this project has done since session 34 — which ended up being the most consequential part of the session.
 
 **Built/Changed:**
+
 - `src/app/api/loggers/route.ts`, `src/app/api/loggers/[id]/route.ts` — added `getAuthUser` + `role === 'admin' || 'logger_manager'` gates to all 4 handlers (GET/POST/PATCH/DELETE), fixed an unreliable `password: undefined` leak with explicit destructure-exclude, added a `role` allowlist on POST/PATCH excluding `'admin'` (BUG-107).
 - `src/lib/match-logger-helpers.ts` (`getLoggerMatches`) — narrowed a full-row `matches` spread (including `stats`/`lineups` blobs) to 9 named columns; same fix applied to the inline join in `route.ts`'s `GET /api/loggers`.
 - `~/.claude/skills/grill-me/SKILL.md`, `~/.claude/skills/grill-with-docs/SKILL.md` — two new user-level skills, adapted from Pocock's originals for this multi-project, Claude-Code-native setup (not the Antigravity assumptions of the source material).
@@ -2853,11 +2965,13 @@ Real bugs/lessons from the remaining 6 matches:
 - `CLAUDE.md`'s Live Event Readiness Checklist — the "public page updates within 5s" line updated from `UNVERIFIED` to `REGRESSION CONFIRMED`.
 
 **Bugs encountered and resolved:**
+
 - **BUG-107** (CRITICAL) — `/api/loggers` collection routes had zero auth of any kind (never got the sweep `/api/admin/*` routes got, since the path doesn't match that prefix). Found while verifying BUG-106. Fixed and live-verified on staging (unauthenticated calls now 401, admin PATCH incl. password change still works, response correctly excludes `password`).
 - **BUG-106** (CRITICAL, fixed in a prior session's commit `1a1a1a9`) — confirmed resolved via a real staging login test this session.
 - A duplicate-player merge (Underrated's "Chris" → "O.C") initially hit a clean `FOREIGN KEY` rollback — root cause: only reassigned `match_events.player_id`, missed `related_player_id` (a second, separate FK column on the same table). Fixed, and the general lesson (check every FK-bearing column before deleting/merging a parent row, not just the obvious one) is now in `known-issues.md`.
 
 **Bugs found, still OPEN (the session's main finding — from a real live match test on staging, logger driven from Richard's own mobile device, Claude watching independently via browser + direct DB queries):**
+
 - **BUG-108** (CRITICAL) — the DB write and the live WS broadcast for a match event are two fully independent, uncoordinated actions (`POST /api/matches/[id]/events` never emits; the broadcast is client-side only, from the logger's own tab). Any event that reaches the DB via a path with no open logger socket — confirmed for the offline-queue/Service-Worker-replay path — can never trigger a live push, only a refresh reveals it.
 - **BUG-109** (CRITICAL) — the actual root cause of this whole session's original "clock freezes, no recovery" investigation. The `matches` table has no `minute` column at all; the public clock number exists exclusively as long as a live WS tick keeps arriving, with zero DB-persisted fallback. Reproduced live two ways: a frozen stale number (existing tab, no live tick) and a fully blank clock (fresh page load, no live tick yet either). Supersedes the "ship the trimmed subset" clock decision reached earlier the same session — none of those three fixes touch this.
 - **BUG-110** (LOW) — a multi-logger heartbeat PATCH 404'd once during testing; route handler exists, likely a deployment-transient artifact from the `NEXT_PUBLIC_ENV` toggle-and-redeploy cycle done for BUG-107 verification, not independently root-caused.
@@ -2870,6 +2984,7 @@ Real bugs/lessons from the remaining 6 matches:
 **BACKLOG-018 (BUSA League backfill):** GW2 fully closed this session (busa-match-8, -9, plus Deadline's missing cards on -17). 20 of 32 matches now event-backfilled. 11 remain: 6 group-stage (18/19/20/21/22/23), 4 QF (24-27), and Deadline-Quantum (not yet in the `matches` table at all — score never sourced). Also did a real-CSV-backed roster cleanup across 6 GW2 teams (Allianz, Agenda, Westbridge, Quantum, Prime, La Fabrica) — see `known-issues.md` for the process lesson this surfaced (a DB/platform-wide search finding nothing does not mean nothing exists — the real team-sheet CSVs at `C:\Users\Wise\Downloads\BRIXSPORT\BUSA LEAGUE\teamsheet\` must be checked before stubbing).
 
 **Deferred / explicitly not built this session:**
+
 - The full Live Clock v2 smoothing model (seq counter, timestamp projection, catch-up multiplier) — held as likely oversized even before the live test, and now clearly not the actual priority given BUG-109 is upstream of everything that model assumes.
 - Fixes for BUG-108/109/110/111/112/113/114 themselves — all filed with root-cause detail, none built yet.
 - The `/matches` list/card page not showing a match as "live" — flagged by Richard mid-test, explicitly deferred, not investigated.
@@ -2887,7 +3002,7 @@ Real bugs/lessons from the remaining 6 matches:
 - **BUG-104 filed (not fixed)** — while porting the red-card indicator, found `MatchOverlay.tsx`'s own copy of that same indicator has never actually fired in production: the homepage (`src/app/page.tsx`) hardcodes `events: []` in all 4 of its match-transform maps feeding `selectedMatch`, same shape as the already-documented "round field not passed through page.tsx transform maps" issue.
 - Real red cards spot-checked against `match_events` directly before concluding either was a bug — both were legitimate, correctly-attributed dual-affiliated athletes (one is a Kings FC/COLNAS dual-affiliated player), not data corruption.
 
-**Both held-out semifinals backfilled and closed — full BACKLOG-018 detail in that entry and RUNLOG.md 2026-07-13.** Richard supplied real dates directly (Joga-Hammers 10 Jan 2026, Kings-Pirates 9 Jan 2026) — the sole blocker from earlier this session. Kings-Pirates also resolved session 41's open "3rd, extra goal (Akinbode)" question: it was a missed penalty (Kedem, saved by Malcom), not a goal — first backfill use of the `Penalty Missed`/`Penalty Saved` event types. One real bug caught mid-write: a fabricated player ID (misremembered from an old journal note about a *different* match) caused a clean FK-rollback on the Kings-Pirates batch; Richard confirmed the real identity (Michael Oguntola) directly, re-run succeeded, Joga-Hammers (a separate atomic batch) was unaffected and had already committed.
+**Both held-out semifinals backfilled and closed — full BACKLOG-018 detail in that entry and RUNLOG.md 2026-07-13.** Richard supplied real dates directly (Joga-Hammers 10 Jan 2026, Kings-Pirates 9 Jan 2026) — the sole blocker from earlier this session. Kings-Pirates also resolved session 41's open "3rd, extra goal (Akinbode)" question: it was a missed penalty (Kedem, saved by Malcom), not a goal — first backfill use of the `Penalty Missed`/`Penalty Saved` event types. One real bug caught mid-write: a fabricated player ID (misremembered from an old journal note about a _different_ match) caused a clean FK-rollback on the Kings-Pirates batch; Richard confirmed the real identity (Michael Oguntola) directly, re-run succeeded, Joga-Hammers (a separate atomic batch) was unaffected and had already committed.
 
 **Update — same session, continued 2026-07-13. GW1 group-stage backfill (busa-match-1 through -7), a new bug class found, and a hard process correction.**
 
@@ -2897,7 +3012,7 @@ Richard supplied 6 new files (`roaster.md`, `matchreport.md`/`2`/`3`/`4.md`, `ma
 - **busa-match-2** (Legacy 0-2 Agenda) — first match needing brand-new identity work for 2 teams. Surfaced a real jersey-number conflict (Legacy's existing "Uzor" stub wrongly at #5, sheet says #4) — left untouched per Richard's call rather than risk a wrong renumber. Introduced "profile as placeholder stub" for 3 unresolved card-holders (extending the established "Wolves #2" pattern) instead of skipping them, since future matches might identify them.
 - **busa-match-3** (Allianz 1-1 La Fabrica) — a card-count ambiguity resolved across 2 rounds of Richard confirmation, since a real FT graphic's simplified single-icon display for 2 of 3 double-card players initially looked like fewer events than the text implied. `ALLIANZ.csv` independently confirmed identical to `roaster.md`'s own Allianz section — double-sourced, no discrepancies.
 - **busa-match-4** (Underrated 4-0 Quantum) — bundled 6 profile fixes for existing platform-wide stub players (Richard: "update the profiles also") — full names and colleges, not just jersey numbers, matching the fuller Wolves-#2 precedent rather than a numbers-only patch.
-- **busa-match-5** (Kings 2-0 Hammers) — the graphic *under*-reported this time (2 of 7 real cards); the FA report had the fuller picture once its own goal/card jumbling was untangled. First occurrence of the "fabricated player ID" mistake (see below).
+- **busa-match-5** (Kings 2-0 Hammers) — the graphic _under_-reported this time (2 of 7 real cards); the FA report had the fuller picture once its own goal/card jumbling was untangled. First occurrence of the "fabricated player ID" mistake (see below).
 - **busa-match-6** (Westbridge 2-3 Prime) — resolved a real #10 jersey collision on Prime's own sheet (Mohammed vs Enoch) using the FA sheet as tiebreaker; bundled full-name fixes for 2 existing Prime stubs.
 - **busa-match-7** (Cruise 4-2 Santos) — **the actual last GW1 match**, initially missed (I'd wrongly called GW1 "complete" after match-6; Richard caught it). Cruise's own logsheet has zero jersey numbers on record — reconciled a real FT graphic against Richard's fuller text additively (both true simultaneously, not a conflict) rather than picking one source.
 
@@ -2947,12 +3062,13 @@ Also found and fixed a genuinely new bug via this same rigor: **BACKLOG-122** fi
 **Live-test methodology notes worth keeping**: this session repeatedly caught its own false leads before they became conclusions — a stale-bundle read (curl hit an old CDN edge mid-deploy, cross-checked against the browser's own loaded scripts before retesting), a wrong-token-type 500 (used an admin `users`-table id where `matchEvents.loggerId` has a real FK to `loggers.id`, caught by testing the same call on a working route first), and a version-skew moment resolved by fetching the exact live chunk's minified source directly rather than trusting either curl or the browser alone.
 
 **Session ended mid-investigation, not resolved:**
+
 - **BUG-108/116's live test failed** — posted real events via raw HTTP (`dev/gen-logger-test-token.mjs`, no WebSocket involved), DB write succeeded both times, but a connected viewer never received them live, checked within a tight few-second window. Suspected cause, not confirmed: the Railway dashboard showed **"0 Variables"** configured for the `ws-server` service — if `WS_API_KEY` is genuinely unset there, every `/broadcast` call would 401 silently (caught by `src/lib/socket.ts`'s own try/catch, server-side only, invisible from the browser). Session ended before Richard could check Railway's Variables tab directly.
 - BUG-074's real fix (in `ws-server/index.js`, the correct file) — not yet started.
 
 **Next session — exact first task:** check the Railway dashboard's `ws-server` service Variables tab directly — does `WS_API_KEY` exist there at all, and does it match what Vercel has configured? If missing/mismatched, add/fix it and redeploy, then redo the live broadcast test exactly as this session ran it (`dev/gen-logger-test-token.mjs` + a raw `POST /api/matches/[id]/events`, watch a connected viewer tab for the event arriving within a few seconds, no refresh). Only move BUG-108/116 to `RESOLVED` once that's confirmed. After that, port BUG-074's environment-scoping fix (`server.js`'s version is a correct, ready-to-copy reference) to `ws-server/index.js`.
 
-**Post-wrap continuation, same session, 2026-07-15 — `WS_API_KEY` confirmed missing, added, still not fully working.** Direct `POST /broadcast` to Railway (bypassing the app entirely) with the local `.env.local` key value: `401` before, `200` after Richard added `WS_API_KEY` to the Railway `ws-server` service — confirms that half of the root cause directly, not just inferred from the "0 Variables" dashboard view. But redoing the full live test (real app route + connected viewer tab) still didn't deliver the event. Narrowed further: the direct test only proves Railway accepts the *local file's* key value — the real app's broadcast call runs on **Vercel's own configured `WS_API_KEY`**, which was never directly confirmed to match. `.env.example` updated to document `WS_SERVER_URL`/`WS_API_KEY` (previously undocumented entirely) so this doesn't recur for a future environment setup.
+**Post-wrap continuation, same session, 2026-07-15 — `WS_API_KEY` confirmed missing, added, still not fully working.** Direct `POST /broadcast` to Railway (bypassing the app entirely) with the local `.env.local` key value: `401` before, `200` after Richard added `WS_API_KEY` to the Railway `ws-server` service — confirms that half of the root cause directly, not just inferred from the "0 Variables" dashboard view. But redoing the full live test (real app route + connected viewer tab) still didn't deliver the event. Narrowed further: the direct test only proves Railway accepts the _local file's_ key value — the real app's broadcast call runs on **Vercel's own configured `WS_API_KEY`**, which was never directly confirmed to match. `.env.example` updated to document `WS_SERVER_URL`/`WS_API_KEY` (previously undocumented entirely) so this doesn't recur for a future environment setup.
 **Next session — exact first task (updated):** compare Vercel's staging project's actual `WS_API_KEY` (dashboard, not the local `.env.local` file) against what's now in Railway's `ws-server` service — fix + redeploy Vercel if they differ. Then redo both: (1) the isolated direct `POST /broadcast` curl test as a quick sanity check, (2) the full live test (logger token + real API route + connected viewer tab, checking the Timeline within a few seconds). Only step 2 succeeding closes BUG-108/116 — step 1 alone already proved insufficient once.
 
 ---
@@ -2962,6 +3078,7 @@ Also found and fixed a genuinely new bug via this same rigor: **BACKLOG-122** fi
 **Focus:** Close out BUG-108/116 (live broadcast never reaching connected viewers) — the single open thread carried from session 43.
 
 **Found and fixed:**
+
 - **`WS_API_KEY` was a dead end.** Richard confirmed Vercel's staging value and Railway's `ws-server` value were byte-identical — ruling out the key as the cause session 43 suspected. Two fresh live-app tests (`dev/test-live-broadcast-post.mjs`, real `POST /api/matches/[id]/events` on staging + a connected viewer tab watching independently) both still failed to deliver live: DB writes succeeded (`201`) both times, but the viewer never logged a WS push, only picking events up later via the existing 25s reconciliation poll.
 - **Real root cause: `src/lib/socket.ts:43`** — `process.env.NEXT_PUBLIC_WS_URL || process.env.WS_SERVER_URL`. Vercel's `NEXT_PUBLIC_WS_URL` was missing its `https://` scheme (bare `brixsports-production-8fa3.up.railway.app`), so the server-side `fetch(broadcastUrl, ...)` threw on the malformed URL on every call — caught by the surrounding `try/catch` (`console.warn`, server-side only), invisible to every test run this session or last, including the direct curl sanity checks (those bypassed the app entirely and never exercised this code path). `WS_SERVER_URL` had the correct scheme the whole time but was never used, since the code prefers `NEXT_PUBLIC_WS_URL` when both are set.
 - **Fix**: Richard added the missing `https://` to `NEXT_PUBLIC_WS_URL` on Vercel's staging dashboard and redeployed. No code change required.
@@ -2972,9 +3089,17 @@ Also found and fixed a genuinely new bug via this same rigor: **BACKLOG-122** fi
 
 **Process note:** an early retest used an artificial `minute: 199` test event with no `period` set, which landed in a mislabeled "Extra Time" timeline bucket separate from the real second-half events — flagged by Richard as looking like a chronological-ordering bug. Traced to `LiveMatchTimeline.tsx`'s period-grouping fallback (`minute > 90` → "Extra Time" when no explicit `period` is set) — an artifact of the synthetic test data, not a real bug. Later retests set an explicit `period` to avoid this.
 
-**Deferred:**
-- Live broadcast latency (7–17s observed, target <5s) — not yet investigated.
-- BUG-074's real fix (environment-scoping the actually-deployed `ws-server/index.js`, not root `server.js`) — still open, untouched this session.
-- BACKLOG-018 (BUSA League backfill, 11 matches remaining) — untouched this session, Tier 2, still behind Tier 0 real-time work per the standing prioritization rule.
+**Update, same session, continued — BUG-074's real fix ported, and the "7-17s" latency figure turned out to be wrong.**
 
-**Next session — exact first task:** genuinely open. Candidates: investigate the 7–17s broadcast latency, port BUG-074's fix to `ws-server/index.js`, or resume BACKLOG-018's remaining 11 BUSA League matches.
+- **BUG-074 (workaround shipped, not RESOLVED)** — ported `server.js`'s env-scoping pattern (session 43, local-dev only, protected nothing live) to `ws-server/index.js`, the file Railway actually deploys. Every socket room (match, chat, competition, admin:loggers, admin:livestreams, multi-logger sync) now prefixed `staging:`/`prod:` from the connecting browser's Origin header — plus two gaps the original BUG-074 filing explicitly said room-prefixing alone wouldn't fix: the `notification:global` goal broadcast (→ `io.to(env).emit(...)`) and the `matchTimes` cache, both now scoped too. The REST `/broadcast` endpoint (Vercel → Railway, no browser Origin available) now receives an explicit `env` field from `src/lib/socket.ts` — **deliberately not `NEXT_PUBLIC_ENV`**, since Richard caught mid-session that staging keeps that label off `'staging'` on purpose to bypass `middleware.ts`'s staging-wide JWT gate, which would have silently misrouted every broadcast to the wrong room. Computed from `NEXT_PUBLIC_APP_URL`'s hostname instead, matching the same pattern the socket-side Origin check already uses. Committed `ea9454f`, pushed to `dev` (confirmed Railway's `ws-server` service tracks `dev`), deployed and live-verified — same-environment delivery still worked post-deploy, confirmed via Railway's own server logs showing the viewer's room join and the broadcast's room target matching exactly (`staging:match:...`). Does **not** fix BUG-074's full original scope — shared `JWT_SECRET` across environments is untouched, and the originally-recommended real fix (a second Railway service for staging) still hasn't been built. Cross-environment isolation itself (a staging event never reaching a real prod viewer) also remains logically-reviewed but not live-verified — no safe way to test that against real prod traffic this session.
+- **Latency measurement correction, important.** The "~7-17s" figure logged above was wrong — it came from eyeballing gaps between my own browser tool calls, not a real measurement. Richard pasted Railway's raw server log export for a retest, and the actual server-side timestamps showed a **42-second** gap between the DB write completing and the broadcast firing — worse than first reported, not better. Corrected in `BACKLOG.md`, `RUNLOG.md`, and `CLAUDE.md`'s readiness checklist rather than let the wrong number stand.
+- **BUG-119 (SHIPPED, real improvement, not fully resolved)** — investigating that 42s gap found the actual mechanism: all 5 `broadcast*()` calls across the 3 match write routes were fire-and-forget, and `src/lib/socket.ts`'s exported functions didn't even return their underlying promise — nothing to await even if a caller tried. On Vercel's serverless runtime, an unawaited promise has no guaranteed completion once the function returns its response; the instance can freeze mid-flight. This explains the wild inconsistency (sub-10s in one test, 42s in another) far better than "Railway is slow." Fix: `socket.ts`'s broadcast functions now return `Promise<void>` (were `void`); all 5 real call sites (`POST`/`DELETE /api/matches/[id]/events[/:eventId]`, `PATCH /api/matches/[id]`) wrapped in `next/server`'s `after()` (stable since Next.js 15.3.8, confirmed the version this repo runs) instead of a bare call — keeps the invocation alive until the broadcast settles without delaying the response to the logger. `/api/events`, a separate older route with the identical pattern, was left untouched — grepped for frontend callers and found none, not part of the live flow. Committed `b2ffcde`, pushed, Vercel staging redeployed. **Live-verified with server-log timing from the start this time**: DB write `16:35:27.914Z`, Railway's `[Broadcast API]` log `16:35:37.781Z` — a 9.9-second gap, down from 42s (~4x faster). Real, confirmed improvement. Still short of CLAUDE.md's <5s target — the remaining ~9.9s wasn't root-caused this session (candidates: Vercel cold start on the route invocation itself, Vercel→Railway network round-trip, Socket.IO's own emit path).
+
+**Deferred:**
+
+- The remaining ~9.9s broadcast latency (BUG-119) — real progress made, not fully closed. Next investigation must keep using server-log timestamps, not browser-side tool-call timing.
+- BACKLOG-018 (BUSA League backfill, 11 matches remaining) — untouched this session, Tier 2, still behind Tier 0 real-time work per the standing prioritization rule.
+- BUG-074's full original scope (shared `JWT_SECRET` across environments, second Railway service for staging) — the workaround shipped this session closes the specific broadcast-leakage risk, not the full bug.
+- Cross-environment isolation itself — reviewed carefully in code, not live-verified against real dual-environment traffic.
+
+**Next session — exact first task:** genuinely open. Candidates: root-cause the remaining ~9.9s broadcast latency (measure with server logs — Vercel function duration/cold-start timing would help isolate whether the delay is before or after the `fetch()` to Railway), or resume BACKLOG-018's remaining 11 BUSA League matches.
