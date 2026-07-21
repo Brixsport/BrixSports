@@ -207,3 +207,30 @@ Grep for `BACKSCOPED: 2026-06-08` to find all comment-out markers in source.
 
 **Reinstate when:** the session-based tie-break rule proves insufficient in real multi-logger use (e.g. a real need to let an admin deliberately override which logger has the clock, not just accept whoever connected first)
 **Risk if reinstated early:** scope/complexity not justified by a problem that hasn't been observed yet — the simpler rule is unverified in real multi-logger conditions too (no dual-logger test has ever been run on this platform), so building the more complex version first would be solving a problem before confirming the simple version doesn't already handle it
+
+---
+
+## Basketball + Track live logging — write-path gaps, deferred pending shared logger module
+
+**Backscoped:** 2026-07-21 (session 45)
+**Backlog ref:** BACKLOG-125
+**Current state:** NOT SAFE FOR A LIVE MATCH — `BasketballLogger.tsx` persists events but not the match score or period/quarter; `TrackLogger.tsx` persists nothing at all. Basketball/track *display*, historical data, and player pages are unaffected — this is specifically about the live-logging write path for these two sports.
+
+**What was found (code-read, session 45, before any live test — see `BACKLOG-125` for full detail):**
+- `BasketballLogger.tsx`'s match-level score never reaches the DB: the server's `isScoringEvent` check (`events/route.ts`) only recognizes football's `GOAL`/`PENALTY`/`OWN_GOAL` type strings, so the atomic score-increment path never fires for `FIELD_GOAL`/`THREE_POINTER`/`FREE_THROW`; and the one PATCH that does try to write `homeScore`/`awayScore` at finalize is sent as a `logger`-role request, which the server silently drops (score writes are admin-only, BUG-052).
+- Basketball's quarter/period transitions are never persisted to the DB at all — the same bug class as football's already-fixed TD-010, whose fix (an explicit PATCH per period-transition button) was never ported over.
+- The natural "End Quarter 4 → Finalize Match" UI path in `BasketballLogger.tsx` doesn't call the real, persisting `finalizeMatch()` function at all, and once it runs, the real Finalize button (gated on the same local state this path sets) becomes unreachable — a genuine dead end reachable via the logger's own intended flow, not an edge case.
+- `TrackLogger.tsx` has zero `fetch()` calls anywhere in the file — no event, score, or result of any kind is ever sent to the server. It's a fully local UI.
+- Basketball's event logging (`match_events` insert + broadcast) and player stats (`basketballPlayerStats`) share football's exact code path and look structurally sound, just never exercised live (0 rows recorded so far).
+
+**Why not fixed in place this session:** each sport's logger duplicates football's event/score/period/finalize logic in its own file rather than sharing it, so patching basketball's specific gaps directly risks producing a second, subtly different implementation of logic that's already been hardened through many rounds of live-tested bug fixes in `FootballLogger.tsx` (BUG-052, BUG-121, TD-010, BUG-076, and others). Doing that under time pressure, without a live test cycle of its own, is how a regression gets introduced into the one part of this platform that's actually proven solid. The properly-scoped fix is a shared logger core (event persistence, atomic score updates recognizing each sport's own scoring event types, period-transition PATCHes, a finalize path that can't become unreachable) that all three sport loggers consume — not three more one-off patches.
+
+**What's missing to reinstate (i.e. to make basketball/track logging safe for a real live match):**
+- Design + extract a shared logger module (or hook) covering: event persistence, score persistence (needs a sport-aware `isScoringEvent`, not football's hardcoded type list), period/quarter persistence, and a finalize path that always reaches the server regardless of which UI button triggered it
+- Port `FootballLogger.tsx` to the shared module first and re-verify all three Critical Flows still hold (it's the one sport with a real live-test track record — regressing it would be worse than basketball/track staying broken)
+- Port `BasketballLogger.tsx`, then live-test a full match end-to-end (score updates publicly in real time, quarter survives a refresh, finalize actually reaches `FINISHED` with the correct score)
+- Build `TrackLogger.tsx`'s persistence layer from scratch on the same shared module — nothing to port, it never had one
+- A full live test per sport before either is used for a real scored event — code-level confirmation alone (this session's method) is not sufficient sign-off, matching this project's own standing rule that a fix isn't RESOLVED until live-verified
+
+**Reinstate when:** the shared logger module is built and each sport has been live-tested end-to-end on staging (own instance, not inferred from football's tests)
+**Risk if reinstated early / if used for a real match now:** a live basketball match's public score stays frozen at whatever it was pre-tip-off for the entire game; a live track event has literally nothing to display since nothing is ever saved. Both are silent failures from the logger's own point of view — the in-app score/timer looks correct to whoever's logging, so this would not be caught by anyone relying on that screen alone.
