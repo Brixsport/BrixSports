@@ -225,17 +225,26 @@ export async function POST(
             await updatePlayerStats(match.sport, relatedPlayerId, 'Save', value);
         }
 
-        // Auto-calculate ratings after event (for live matches)
+        // Auto-calculate ratings after event (for live matches). Wrapped in after(),
+        // same reasoning as the broadcast calls above: this used to be a synchronous
+        // await sitting between the DB write and the response, so it delayed not just
+        // the response to the logger but also when the after()-scheduled broadcast
+        // above could even start (after() callbacks don't run until this handler's
+        // own promise resolves). Real contributor to BUG-119's remaining latency —
+        // see BACKLOG-124 for a separate, still-open bug: this self-fetch forwards no
+        // auth (no cookie/Authorization header), so it 401s and is silently swallowed
+        // every time; auto-ratings has never actually run live because of that.
         if (match.status === 'LIVE') {
-            try {
-                await fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/matches/${matchId}/ratings`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' }
-                });
-            } catch (error) {
-                console.error('Error auto-calculating ratings:', error);
-                // Don't fail event creation if rating calculation fails
-            }
+            after(async () => {
+                try {
+                    await fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/matches/${matchId}/ratings`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' }
+                    });
+                } catch (error) {
+                    console.error('Error auto-calculating ratings:', error);
+                }
+            });
         }
 
         return NextResponse.json({
