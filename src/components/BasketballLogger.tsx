@@ -278,6 +278,7 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                                 type: e.type,
                                 minute: e.minute,
                                 second: e.second,
+                                period: e.period,
                                 teamId: e.teamId,
                                 playerId: e.playerId,
                                 assistPlayerId: e.relatedPlayerId,
@@ -339,7 +340,7 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                 const syncedEvents: SyncEvent[] = events.map(e => ({
                     id: e.id,
                     type: e.type,
-                    minute: e.minute || quarter,
+                    minute: e.minute,
                     second: e.second || 0,
                     teamId: e.teamId,
                     playerId: e.playerId,
@@ -362,7 +363,7 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
         }, 15000); // Sync every 15 seconds
 
         return () => clearInterval(syncInterval);
-    }, [events, isConnected, syncEvents, currentLogger, quarter]);
+    }, [events, isConnected, syncEvents, currentLogger]);
 
     // Handle event button click - opens player modal
     const handleEventClick = (type: BasketballEventType, points?: number) => {
@@ -423,6 +424,23 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
         setShowAssistModal(false);
     };
 
+    // `quarter` alone used to be written into match_events.minute -- every downstream
+    // renderer (public match page, LiveMatchStatus, LiveMatchTimeline) assumes minute
+    // holds real elapsed match-time, not a period index, which broke period-grouping
+    // and minute display for every basketball event. `period` (Q1-Q4/OT) now carries
+    // which segment; `minute` carries a genuine elapsed-time value derived from the
+    // countdown clock -- monotonically increasing across quarters and into OT.
+    const getCurrentPeriod = () => (quarter > periodCount ? 'OT' : `Q${quarter}`);
+    const getElapsedMinute = () => {
+        const [minStr, secStr] = time.split(':');
+        const remainingSeconds = (parseInt(minStr) || 0) * 60 + (parseInt(secStr) || 0);
+        const isOT = quarter > periodCount;
+        const periodLengthMinutes = isOT ? overtimeDurationMinutes : quarterDuration;
+        const minutesElapsedInPeriod = Math.max(0, periodLengthMinutes - Math.ceil(remainingSeconds / 60));
+        const priorMinutes = isOT ? periodCount * quarterDuration : (quarter - 1) * quarterDuration;
+        return priorMinutes + minutesElapsedInPeriod;
+    };
+
     // Record the actual event
     const recordEvent = async (type: BasketballEventType, playerId: string, points?: number, assistPlayerId?: string | null) => {
         const allPlayers = [...homePlayers, ...awayPlayers];
@@ -438,8 +456,9 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
         const newEvent = {
             id: `e${events.length + 1}`,
             type,
-            minute: quarter,
+            minute: getElapsedMinute(),
             second: parseInt(time.split(':')[0]) * 60 + parseInt(time.split(':')[1]),
+            period: getCurrentPeriod(),
             teamId: selectedTeam === 'home' ? match.homeTeamId : match.awayTeamId,
             playerId,
             assistPlayerId: assistPlayerId || undefined,
@@ -486,8 +505,9 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     type,
-                    minute: quarter,
+                    minute: newEvent.minute,
                     second: parseInt(time.split(':')[0]) * 60 + parseInt(time.split(':')[1]),
+                    period: newEvent.period,
                     teamId: selectedTeam === 'home' ? match.homeTeamId : match.awayTeamId,
                     playerId,
                     relatedPlayerId: assistPlayerId || null,
@@ -553,6 +573,7 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     status: 'FINISHED',
+                    currentPeriod: 'FINISHED',
                     homeScore,
                     awayScore,
                 }),
@@ -635,6 +656,12 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                                                     headers: { 'Content-Type': 'application/json' },
                                                     body: JSON.stringify({
                                                         status: 'LIVE',
+                                                        // Without this, currentPeriod stays at the schema
+                                                        // default ('NOT_STARTED') for the entire first quarter
+                                                        // -- the End-of-Quarter modal is the only other place
+                                                        // that writes currentPeriod, and it doesn't fire until
+                                                        // Q1 ends.
+                                                        currentPeriod: 'Q1',
                                                     }),
                                                 });
 
@@ -938,7 +965,7 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                                         >
                                             <div className="flex items-center justify-between mb-2">
                                                 <span className="text-[10px] font-black uppercase tracking-widest text-white/40">
-                                                    Q{event.minute} - {Math.floor((event.second || 0) / 60)}:{String((event.second || 0) % 60).padStart(2, '0')}
+                                                    {event.period ?? 'Q?'} - {Math.floor((event.second || 0) / 60)}:{String((event.second || 0) % 60).padStart(2, '0')}
                                                 </span>
                                                 {event.value && (
                                                     <span className="text-xs font-display italic text-primary">+{event.value}</span>
@@ -1058,7 +1085,7 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                                 return (
                                     <div key={event.id} className="bg-white/5 border border-white/10 rounded-2xl p-4 flex items-center gap-4 hover:bg-white/10 transition-all">
                                         <div className="w-12 h-12 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-[10px] font-black text-white/40 shrink-0">
-                                            Q{event.minute}
+                                            {event.period ?? 'Q?'}
                                         </div>
                                         <div className="flex-1 min-w-0">
                                             <div className="flex items-center justify-between gap-2 mb-1">
@@ -1615,18 +1642,26 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                             </p>
 
                             <div className="grid grid-cols-1 gap-4">
-                                {quarter < 4 ? (
+                                {quarter < periodCount ? (
                                     <button
                                         onClick={() => {
-                                            setQuarter(prev => prev + 1);
+                                            const nextQuarter = quarter + 1;
+                                            setQuarter(nextQuarter);
                                             setTime(`${quarterDuration}:00`);
                                             setShowPeriodModal(false);
-                                            // Dispatch event for quarter change
-                                            if (typeof window !== 'undefined') {
-                                                window.dispatchEvent(new CustomEvent('MATCH_PERIOD_CHANGE', {
-                                                    detail: { matchId: match.id, period: `Q${quarter + 1}` }
-                                                }));
-                                            }
+                                            // Persist the transition -- BasketballLogger never wrote
+                                            // currentPeriod at all before this; every basketball match's
+                                            // period stayed at the schema default ('NOT_STARTED') for its
+                                            // entire lifetime regardless of real quarter. Fire-and-forget,
+                                            // same convention football's period-transition buttons use
+                                            // (TD-010) -- not the stricter PATCH-first Start/End Match
+                                            // pattern, since a failed period-label PATCH here doesn't risk
+                                            // silent data loss the way a failed status transition would.
+                                            fetch(`/api/matches/${match.id}`, {
+                                                method: 'PATCH',
+                                                headers: { 'Content-Type': 'application/json' },
+                                                body: JSON.stringify({ currentPeriod: `Q${nextQuarter}` }),
+                                            }).catch((e) => console.error('Failed to persist period transition:', e));
                                         }}
                                         className="w-full bg-primary text-black py-4 rounded-xl font-black uppercase tracking-widest hover:scale-105 transition-transform flex items-center justify-center gap-3"
                                     >
@@ -1639,23 +1674,26 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                                             // Check for tie if knockout/semi
                                             if (homeScore === awayScore) {
                                                 setIsOT(true);
-                                                setQuarter(5); // 5 represents OT
-                                                setTime("5:00");
+                                                setQuarter(periodCount + 1); // one integer past regulation represents OT
+                                                setTime(`${overtimeDurationMinutes}:00`);
                                                 setShowPeriodModal(false);
+                                                fetch(`/api/matches/${match.id}`, {
+                                                    method: 'PATCH',
+                                                    headers: { 'Content-Type': 'application/json' },
+                                                    body: JSON.stringify({ currentPeriod: 'OT' }),
+                                                }).catch((e) => console.error('Failed to persist OT transition:', e));
                                             } else {
-                                                setMatchEnded(true);
+                                                // Real match end. This used to only call setMatchEnded(true)
+                                                // locally + a dead CustomEvent dispatch -- never the real
+                                                // finalizeMatch() below, which is the only thing that
+                                                // actually PATCHes status=FINISHED. Once matchEnded flipped
+                                                // true, the header's real Finalize button (gated on
+                                                // matchStarted && !matchEnded) disappeared too, making the
+                                                // match permanently stuck LIVE in the DB with no UI path to
+                                                // close it -- same bug class as football's already-fixed
+                                                // BUG-076. Calling the real function fixes both at once.
                                                 setShowPeriodModal(false);
-                                                // Dispatch event for match end
-                                                if (typeof window !== 'undefined') {
-                                                    window.dispatchEvent(new CustomEvent('MATCH_STATUS_CHANGE', {
-                                                        detail: {
-                                                            matchId: match.id,
-                                                            status: 'FINISHED',
-                                                            homeScore,
-                                                            awayScore
-                                                        }
-                                                    }));
-                                                }
+                                                finalizeMatch();
                                             }
                                         }}
                                         className="w-full bg-primary text-black py-4 rounded-xl font-black uppercase tracking-widest hover:scale-105 transition-transform"
@@ -1668,8 +1706,14 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                                     onClick={() => {
                                         // Specific user request for "Extra Time" even after first qtr
                                         setIsOT(true);
-                                        setTime("5:00"); // Standard OT length or just extra logging time
+                                        setQuarter(periodCount + 1);
+                                        setTime(`${overtimeDurationMinutes}:00`);
                                         setShowPeriodModal(false);
+                                        fetch(`/api/matches/${match.id}`, {
+                                            method: 'PATCH',
+                                            headers: { 'Content-Type': 'application/json' },
+                                            body: JSON.stringify({ currentPeriod: 'OT' }),
+                                        }).catch((e) => console.error('Failed to persist OT transition:', e));
                                     }}
                                     className="w-full bg-white/5 border border-white/10 text-white py-4 rounded-xl font-black uppercase tracking-widest hover:bg-white/10 transition-all"
                                 >
