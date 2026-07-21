@@ -359,6 +359,16 @@ export default function MatchDetailPage() {
         UPCOMING: 'Upcoming',
         CANCELLED: 'Cancelled',
         SUSPENDED: 'Suspended',
+        // Basketball -- without these, currentPeriod values written by BasketballLogger
+        // (Q1-Q4/OT) fell through to the generic replace(/_/g,' ') fallback in
+        // getPeriodLabel below, which happened to render tolerably ("Q1" has no
+        // underscore to replace) but wasn't an explicit, intentional label the way
+        // every other sport/status value here is.
+        Q1: 'Q1',
+        Q2: 'Q2',
+        Q3: 'Q3',
+        Q4: 'Q4',
+        OT: 'OT',
     };
 
     const getPeriodLabel = (period: string) =>
