@@ -101,6 +101,7 @@ export async function POST(
             detail,
             isEyePoint = false,
             value,
+            made,
             loggerName,
             period,
         } = body;
@@ -217,7 +218,7 @@ export async function POST(
 
         // Update player stats for competitive matches only — friendlies and shootout events do not count
         if (playerId && match.matchType !== 'friendly' && !isPenaltyShootout) {
-            await updatePlayerStats(match.sport, playerId, type, value);
+            await updatePlayerStats(match.sport, playerId, type, value, made);
         }
 
         // Penalty Saved: credit the keeper's saves stat via relatedPlayerId (null-check — keeper is optional)
@@ -266,7 +267,8 @@ async function updatePlayerStats(
     sport: string,
     playerId: string,
     eventType: string,
-    value?: any
+    value?: any,
+    made?: boolean
 ) {
     try {
         const { basketballPlayerStats, footballPlayerStats, players } = await import('@/db/schema');
@@ -280,18 +282,32 @@ async function updatePlayerStats(
 
             const updates: any = {};
 
+            // BUG (missed-shot-counted-as-made): these three cases used to increment
+            // made-counts and totalPoints unconditionally on event type alone, with no
+            // make/miss distinction — a "2PT Missed"/"3PT Missed"/"FT Missed" log entry
+            // silently wrote a make + its points to the DB, since `value` truthiness
+            // (0 is falsy) was the only signal available and it collapsed to the same
+            // "absent" case as a real make with no value sent. `made` is an explicit
+            // boolean sent by the client for these three types specifically — a miss
+            // must increment zero counters, never inferred from value.
             switch (eventType) {
                 case 'Field Goal':
-                    updates.fieldGoalsMade = (stats?.fieldGoalsMade || 0) + 1;
-                    updates.totalPoints = (stats?.totalPoints || 0) + (value || 2);
+                    if (made) {
+                        updates.fieldGoalsMade = (stats?.fieldGoalsMade || 0) + 1;
+                        updates.totalPoints = (stats?.totalPoints || 0) + 2;
+                    }
                     break;
                 case 'Three Pointer':
-                    updates.threePointersMade = (stats?.threePointersMade || 0) + 1;
-                    updates.totalPoints = (stats?.totalPoints || 0) + 3;
+                    if (made) {
+                        updates.threePointersMade = (stats?.threePointersMade || 0) + 1;
+                        updates.totalPoints = (stats?.totalPoints || 0) + 3;
+                    }
                     break;
                 case 'Free Throw':
-                    updates.freeThrowsMade = (stats?.freeThrowsMade || 0) + 1;
-                    updates.totalPoints = (stats?.totalPoints || 0) + 1;
+                    if (made) {
+                        updates.freeThrowsMade = (stats?.freeThrowsMade || 0) + 1;
+                        updates.totalPoints = (stats?.totalPoints || 0) + 1;
+                    }
                     break;
                 case 'Rebound':
                     updates.totalRebounds = (stats?.totalRebounds || 0) + 1;

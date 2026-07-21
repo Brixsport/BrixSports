@@ -57,7 +57,9 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
 
     // Settings
     const [showSettingsModal, setShowSettingsModal] = useState(false);
-    const [quarterDuration, setQuarterDuration] = useState(12); // minutes per quarter
+    const [quarterDuration, setQuarterDuration] = useState(12); // minutes per quarter — overwritten by match config on mount
+    const [periodCount, setPeriodCount] = useState(4); // quarters — overwritten by match config on mount
+    const [overtimeDurationMinutes, setOvertimeDurationMinutes] = useState(5); // overwritten by match config on mount
 
     // Lineup Management
     const [showLineupModal, setShowLineupModal] = useState(false);
@@ -399,6 +401,12 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
         const player = allPlayers.find(p => p.id === playerId);
         const assistPlayer = assistPlayerId ? allPlayers.find(p => p.id === assistPlayerId) : null;
 
+        // Shot-type events pass points=0 for a miss ("2PT Missed" etc. buttons). `points`
+        // truthiness must never be used to tell make from miss — 0 is a real value, not an
+        // absence of one. `made` carries that distinction explicitly instead.
+        const isShotType = type === 'Field Goal' || type === 'Three Pointer' || type === 'Free Throw';
+        const made = isShotType ? (points ?? 0) > 0 : undefined;
+
         const newEvent = {
             id: `e${events.length + 1}`,
             type,
@@ -412,6 +420,7 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                 : player?.name || '',
             assistDetail: type === 'Substitution' ? undefined : assistPlayer?.name,
             value: points,
+            made,
             loggerId: currentLogger?.id,
             loggerName: currentLogger?.name,
             createdAt: new Date(),
@@ -455,7 +464,8 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                     playerId,
                     relatedPlayerId: assistPlayerId || null,
                     detail: newEvent.detail,
-                    value: points || null,
+                    value: points ?? null,
+                    made,
                     loggerId: currentLogger?.id,
                     loggerName: currentLogger?.name,
                 }),
