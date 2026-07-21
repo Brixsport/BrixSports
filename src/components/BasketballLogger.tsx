@@ -302,6 +302,34 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
         fetchData();
     }, [match.homeTeamId, match.awayTeamId, match.id]);
 
+    // Fetch match config on mount -- mirrors FootballLogger's halfDuration/
+    // maxSubstitutions fetch (FootballLogger.tsx:446-453). This logger never called
+    // this endpoint before; quarterDuration was a client-only hardcoded default with
+    // no competition/match override ever applied.
+    useEffect(() => {
+        const fetchConfig = async () => {
+            try {
+                const configRes = await fetch(`/api/matches/${match.id}/config`);
+                if (configRes.ok) {
+                    const { config } = await configRes.json();
+                    // config.halfDuration holds quarter length for basketball, not half
+                    // length -- named for football's 2-half model, deliberately not
+                    // renamed (live prod column, SQL-direct migration cost with no
+                    // functional benefit). See TD-012 in BACKLOG.md.
+                    setQuarterDuration(config.halfDuration);
+                    setTime(`${config.halfDuration}:00`);
+                    setPeriodCount(config.periodCount);
+                    setOvertimeDurationMinutes(config.overtimeDurationMinutes ?? 5);
+                } else {
+                    alert('Match config failed to load — using default duration. Check settings before starting.');
+                }
+            } catch (e) {
+                alert('Match config failed to load — using default duration. Check settings before starting.');
+            }
+        };
+        fetchConfig();
+    }, [match.id]);
+
     // Sync events with other loggers periodically
     useEffect(() => {
         if (!isConnected || !currentLogger) return;
@@ -1280,23 +1308,36 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                                         Quarter Duration (Minutes)
                                     </label>
                                     <div className="grid grid-cols-3 gap-3">
-                                        {[8, 10, 12].map((duration) => (
-                                            <button
-                                                key={duration}
-                                                onClick={() => {
-                                                    setQuarterDuration(duration);
-                                                    setTime(`${duration}:00`);
-                                                }}
-                                                className={`py-4 rounded-xl font-display text-2xl transition-all ${quarterDuration === duration
-                                                    ? 'bg-primary text-black'
-                                                    : 'bg-white/5 border border-white/10 text-white/60 hover:bg-white/10'
-                                                    }`}
-                                            >
-                                                {duration}
-                                            </button>
-                                        ))}
+                                        {[8, 10, 12].map((duration) => {
+                                            // Config locks once the match has started, same convention as
+                                            // FootballLogger's `currentPeriod !== 'NOT_STARTED'` half-duration lock.
+                                            const isLocked = matchStarted;
+                                            return (
+                                                <button
+                                                    key={duration}
+                                                    disabled={isLocked}
+                                                    onClick={() => {
+                                                        setQuarterDuration(duration);
+                                                        setTime(`${duration}:00`);
+                                                    }}
+                                                    className={`py-4 rounded-xl font-display text-2xl transition-all ${quarterDuration === duration
+                                                        ? 'bg-primary text-black'
+                                                        : isLocked
+                                                            ? 'bg-white/5 border border-white/5 text-white/60 opacity-30 cursor-not-allowed'
+                                                            : 'bg-white/5 border border-white/10 text-white/60 hover:bg-white/10'
+                                                        }`}
+                                                >
+                                                    {duration}
+                                                </button>
+                                            );
+                                        })}
                                     </div>
                                     <p className="text-xs text-white/40 mt-2">Standard: 12 min | Youth: 8-10 min</p>
+                                    {matchStarted && (
+                                        <p className="text-[9px] text-white/20 mt-1 uppercase tracking-tighter italic">
+                                            🔒 Duration locked — match already in progress
+                                        </p>
+                                    )}
                                 </div>
 
                                 {/* Time Controls */}

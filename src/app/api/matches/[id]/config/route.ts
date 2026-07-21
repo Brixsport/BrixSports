@@ -12,8 +12,23 @@ const SPORT_DEFAULTS: Record<string, {
     allowDraws: boolean;
     pointsForWin: number;
     pointsForDraw: number;
+    // minutes per period. Named for football's 2-half model, reused as one quarter's
+    // length for basketball -- deliberately not renamed to periodDuration (schema.ts's
+    // competition_sport_settings.halfDuration is a live prod column; renaming costs a
+    // SQL-direct migration for a naming-clarity-only change under BACKLOG-040's
+    // db:push block). See the TD entry in BACKLOG.md for the "revisit if Track's model
+    // needs a different shape" trigger.
     halfDuration: number;
     playersPerSide: number;
+    periodCount: number; // 2 halves (football) | 4 quarters (basketball)
+    substitutionModel: 'capped' | 'unlimited'; // documents whether maxSubstitutions is an enforced cap or a non-decision
+    // Basketball-only — not read by the football code path
+    overtimeDurationMinutes?: number;
+    foulDisqualifyAt?: number;
+    teamFoulBonusAt?: number;
+    technicalFoulValue?: number;
+    shotClockEnabled?: boolean;
+    shotClockSeconds?: number;
 }> = {
     football: {
         maxSubstitutions: 5,
@@ -25,6 +40,8 @@ const SPORT_DEFAULTS: Record<string, {
         pointsForDraw: 1,
         halfDuration: 45,
         playersPerSide: 11,
+        periodCount: 2,
+        substitutionModel: 'capped',
     },
     basketball: {
         maxSubstitutions: null,
@@ -34,8 +51,21 @@ const SPORT_DEFAULTS: Record<string, {
         allowDraws: false,
         pointsForWin: 2,
         pointsForDraw: 0,
-        halfDuration: 10,
+        halfDuration: 10, // quarter length in minutes, not half length -- see the field comment above
         playersPerSide: 5,
+        periodCount: 4,
+        substitutionModel: 'unlimited',
+        // BUSA/grassroots convention assumed FIBA-style — not confirmed against an official
+        // BUSA basketball rulebook. Nothing in this codebase enforces these yet (no
+        // disqualification check, no team-foul-bonus logic, no shot clock) — they exist
+        // here so the values are documented in one place whenever that gets built, rather
+        // than guessed again from scratch. Flag to Richard if BUSA's actual convention differs.
+        overtimeDurationMinutes: 5,
+        foulDisqualifyAt: 5,
+        teamFoulBonusAt: 5,
+        technicalFoulValue: 2,
+        shotClockEnabled: false,
+        shotClockSeconds: 24,
     },
 };
 
@@ -72,17 +102,28 @@ export async function GET(
 
         // Three-layer merge: match override → competition setting → sport default
         const halfDuration = compSettings?.halfDuration ?? sportDefaults.halfDuration;
+        const periodCount = sportDefaults.periodCount;
         const config = {
             halfDuration,
-            matchDuration: halfDuration * 2,
+            periodDurationMinutes: halfDuration, // same value, clearer name for non-football consumers
+            periodCount,
+            matchDuration: halfDuration * periodCount,
             playersPerSide: compSettings?.playersPerSide ?? sportDefaults.playersPerSide,
             maxSubstitutions: compSettings?.maxSubstitutions ?? sportDefaults.maxSubstitutions,
+            substitutionModel: sportDefaults.substitutionModel,
             allowSubbedOutReentry: compSettings?.allowSubbedOutReentry ?? sportDefaults.allowSubbedOutReentry,
             extraTimeEnabled: match.extraTimeEnabledOverride ?? compSettings?.extraTimeEnabled ?? sportDefaults.extraTimeEnabled,
             penaltiesEnabled: match.penaltiesEnabledOverride ?? compSettings?.penaltiesEnabled ?? sportDefaults.penaltiesEnabled,
             allowDraws: match.allowDrawsOverride ?? compSettings?.allowDraws ?? sportDefaults.allowDraws,
             pointsForWin: compSettings?.pointsForWin ?? sportDefaults.pointsForWin,
             pointsForDraw: compSettings?.pointsForDraw ?? sportDefaults.pointsForDraw,
+            // Basketball-only fields — undefined for football, harmless since nothing reads them there
+            overtimeDurationMinutes: sportDefaults.overtimeDurationMinutes,
+            foulDisqualifyAt: sportDefaults.foulDisqualifyAt,
+            teamFoulBonusAt: sportDefaults.teamFoulBonusAt,
+            technicalFoulValue: sportDefaults.technicalFoulValue,
+            shotClockEnabled: sportDefaults.shotClockEnabled,
+            shotClockSeconds: sportDefaults.shotClockSeconds,
         };
 
         return NextResponse.json({ config, matchId: match.id, sport });
