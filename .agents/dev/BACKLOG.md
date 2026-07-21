@@ -1599,6 +1599,56 @@ player stats can be stale or inconsistent after a match ends.
 
 ---
 
+### BACKLOG-126 — No Working Transfer/Season Tracking (Roster History Silently Lost)
+
+**Status:** OPEN
+**Priority:** Medium — Tier 2 (roster/season management, not live-match-critical), but explicitly named by Richard as a "ready for next season" concern
+**Filed:** 2026-07-21 (session 45), found while backfilling BUSA League Basketball — two real, confirmed mid-season transfers left zero trace in the DB
+
+**Problem, confirmed with real data, not theoretical:** two BUSA League Basketball players genuinely transferred clubs mid-season, inside the league's own official trading window ("*TRADING BEGINS FROM ROUND 3 THROUGH ROUND 7*", per `dev/basketball-dates-and-fixtures.md`) — chronologically proven via box-score CSVs (a clean appear/disappear cutoff on the exact transfer date, cross-checked against the *other* team's CSVs starting to show them right after):
+- `LIGHT`: Rim Reapers through 11-22-25 → Vikings from 11-26-25 onward
+- `dekunle`: Rim Reapers #77 through 11-28-25 → Storm #15 from 12-6-25 onward
+
+**Neither transfer left any trace in `player_team_affiliations`.** Both players have exactly ONE current affiliation row (`is_active: 1`, `end_date: null`) — for `LIGHT`, that row is Vikings (the *later* team); for `dekunle`, it's Rim Reapers (the *earlier* team). There's no consistency to which team ends up "current" — it's whatever a one-time roster entry happened to capture, not a maintained history. Confirmed via direct query (`dev/check-light-player.mjs`, inline check on `dekunle`'s affiliations) — neither has a second, inactive, dated row for their other team.
+
+**Root cause is structural, not a simple bug:**
+1. **Schema supports it, nothing uses that support.** `player_team_affiliations` already has `is_active`, `is_primary`, `start_date`, `end_date` — the right shape for a real transfer (close the old row, open a new one). But there is no admin UI action anywhere that does this — team/player management doesn't even have a basic "Create Team" UI yet (`BACKLOG-077`, still open), let alone transfer recording. The only precedent for writing affiliation changes at all is one-off `dev/*.mjs` scripts (BACKLOG-076's college-affiliation wiring).
+2. **`basketballPlayerStats`/`footballPlayerStats` hardcode `season: '2024'`** in `updatePlayerStats()` (`src/app/api/matches/[id]/events/route.ts`) rather than deriving it from the match/competition — live-logged stats next season would still be tagged '2024' unless this is fixed first.
+3. **No unique constraint on `(playerId, season, competitionId)`** on either stats table — nothing stops ambiguous duplicate rows across seasons, and the live path's `.get()` lookup (no season/competition filter) could silently update the wrong season's row if one ever exists.
+
+**Not a blocker for the current backfill** — `basketball_player_stats` aggregates by player, not by team, so attributing a transferred player's stats correctly doesn't require their affiliation history to be accurate. This is a separate, real gap in the platform's season/roster-management readiness, not something this backfill needs to solve to proceed.
+
+**Can be handled at script level today, no admin UI needed** — same precedent as BACKLOG-076: a `dev/*.mjs` script can correctly backfill the missing transfer history right now (deactivate the stale affiliation with a real `end_date`, insert the correct historical + current rows) even though there's no UI for it yet. Doing this for `LIGHT`/`dekunle` as part of this session's backfill (see RUNLOG.md).
+
+**What's still missing to actually be "ready for next season":**
+- An admin-facing way to record a transfer (even a simple one, not necessarily full UI) instead of a one-off script every time
+- Fix `updatePlayerStats()`'s hardcoded `season: '2024'` to derive the real season from the match's competition
+- A real unique constraint (or upsert-safe application logic) on `(playerId, season, competitionId)` for both stats tables
+- **Display side has the same gap, confirmed live (session 45):** `GET /api/players/[id]` correctly wrote and returned LIGHT's historical Rim Reapers row after this session's fix, but the `memberships` array only surfaces the *active* affiliation (Vikings) plus the college row — the inactive, dated Rim Reapers history is silently absent from the response entirely, not just hidden by the frontend. Even with correct data now sitting in the DB, there's no way for a viewer (or admin) to see a player's actual transfer history anywhere in the product. Recording history at the DB level (this session's fix) and *displaying* it are two separate gaps — closing one doesn't close the other.
+
+---
+
+### BACKLOG-127 — MVP Feature Is Fully Unwired (No Real Write Path, Anywhere)
+
+**Status:** OPEN
+**Priority:** Low — display/engagement feature, not live-match-critical
+**Filed:** 2026-07-21 (session 45), found while checking whether the basketball backfill should populate MVP data
+
+**Problem:** `src/app/api/basketball/leaderboard/mvp/route.ts` builds a "most MVP awards" leaderboard by reading `matches.stats.mvp` (a free-text field on each match row) across every Basketball match. The **only** code anywhere that ever writes to that field is `src/db/seed-busa-basketball.ts` — which wrote **randomly-picked fake names**, not real data. Grepped the entire app for any other writer: none exists. `BasketballLogger.tsx` has no MVP-assignment control at all (its one "MVP" text reference is a caption about player *ratings*, an unrelated, already-working feature). The admin match page has no MVP field either.
+
+**Made worse this session, incidentally**: the fake `stats.mvp` blobs on all 30 seeded BUSA League Basketball matches were cleared to `NULL` as part of the `BUG-105`-style stats cleanup (`dev/fix-basketball-seeded-matches.mjs`, correct thing to do — fake data is worse than none) — so the MVP leaderboard endpoint now returns nothing at all for these matches, whereas before it silently returned fake results. Not a regression in the sense of breaking something real (the prior fake data was never legitimate), but worth noting the leaderboard is now visibly empty rather than plausibly-wrong.
+
+**Real MVP data exists and is unused**: `dev/basketball-busa-league-scores.md` has the actual MVP for all 30 regular-season games (from the source Scores docx), never written anywhere.
+
+**What's missing to build this for real:**
+- A real write path — most naturally a post-match admin action (MVP is normally decided once full stats are in, same timing as the existing player-ratings calculation), not a live in-game `BasketballLogger.tsx` button
+- Decide the target shape: continue using `matches.stats.mvp` (simple, already has a reader) or a proper `player_id` FK instead of a free-text name (avoids the exact identity-resolution ambiguity this session spent significant effort resolving for player stats)
+- If keeping `matches.stats.mvp`, the real MVP names from `dev/basketball-busa-league-scores.md` could be backfilled into the 30 seeded matches once the write path exists — not done this session, deliberately deferred alongside the write-path decision above
+
+**Deferred:** not built this session — Richard's call, low priority relative to `BasketballLogger.tsx`'s Tier 0 gaps (`BACKLOG-125`).
+
+---
+
 ### BACKLOG-018 — Game Event Logsheets (BUSALYMPICS + BUSA League match events)
 
 **Status:** IN PROGRESS — BUSALYMPICS portion COMPLETE (7 of 7 matches, 2026-07-09). BUSA League: 20 matches now APPLIED, DB-verified — busa-match-13, -16, -15, -10, -12, -14, -final-2026, -11, -1, -2, -3, -4, -5, -6, -7, -17, -8, -9, plus both semifinals (`busa-sf-joga-hammers`, `busa-sf-kings-pirates`, both zero-deferred). 1078 total match_events written. Zero deferred items remain across all 20. A full platform-wide collision audit of all 84 session-41 stub players (2026-07-11) closed clean — 1 real merge found and applied (Abdulazeez Jolaoye ↔ his own unlinked COLNAS identity), 2 false alarms investigated and closed (Charles, Peter — both ruled out by active-club-affiliation-to-different-clubs). **11 matches remain in the full 32-match structure: 7 group-stage, 4 QF (QF1-3 bracket-confirmed, QF4 pending FA verification).** 3rd Place excluded from remaining count — already live-logged.
