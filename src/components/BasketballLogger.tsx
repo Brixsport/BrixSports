@@ -269,8 +269,24 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                 console.log('🏠 Home team ID:', match.homeTeamId);
                 console.log('✈️ Away team ID:', match.awayTeamId);
 
-                const homePlayersList = playersArray.filter((player: Player) => getPlayerTeam(player)?.id === match.homeTeamId);
-                const awayPlayersList = playersArray.filter((player: Player) => getPlayerTeam(player)?.id === match.awayTeamId);
+                // BUG-061: getPlayerTeam() alone only resolves a player's PRIMARY team
+                // affiliation -- a player whose basketball-team affiliation isn't marked
+                // primary (e.g. their college/department affiliation is primary instead)
+                // was silently dropped from every roster, for every basketball match.
+                // Confirmed live: every coleng-basketball/colnas-basketball affiliation in
+                // the DB has is_primary=0, so this filter matched zero players for either
+                // team on any real match -- the lineup modal always showed 0 selectable
+                // players. Same fix FootballLogger.tsx already applies: check memberships
+                // against the actual match team first, fall back to primary team only if
+                // that's absent.
+                const homePlayersList = playersArray.filter((player: Player) =>
+                    (player as any).memberships?.some((m: any) => m.team?.id === match.homeTeamId)
+                    || getPlayerTeam(player)?.id === match.homeTeamId
+                );
+                const awayPlayersList = playersArray.filter((player: Player) =>
+                    (player as any).memberships?.some((m: any) => m.team?.id === match.awayTeamId)
+                    || getPlayerTeam(player)?.id === match.awayTeamId
+                );
 
                 console.log('🏠 Home players:', homePlayersList.length);
                 console.log('✈️ Away players:', awayPlayersList.length);
