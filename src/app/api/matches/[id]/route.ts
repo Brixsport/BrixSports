@@ -514,7 +514,22 @@ export async function PATCH(
             }
         }
         if (body.status !== undefined) updateData.status = body.status;
-        if (body.currentPeriod !== undefined) updateData.currentPeriod = body.currentPeriod;
+        // currentPeriod had no enum validation at all, unlike status just above --
+        // reachable only by an authenticated, assigned logger/admin so low exploitability,
+        // but cheap to close. No DB-level constraint either (schema.ts:340, plain text
+        // column), so this is the only gate.
+        const VALID_PERIODS = [
+            'NOT_STARTED', 'FIRST_HALF', 'HALF_TIME', 'SECOND_HALF',
+            'EXTRA_TIME_1', 'EXTRA_TIME_BREAK', 'EXTRA_TIME_2', 'PENALTY_SHOOTOUT',
+            'FINISHED', 'SUSPENDED',
+            'Q1', 'Q2', 'Q3', 'Q4', 'OT',
+        ] as const;
+        if (body.currentPeriod !== undefined) {
+            if (!VALID_PERIODS.includes(body.currentPeriod)) {
+                return NextResponse.json({ error: 'Invalid currentPeriod value' }, { status: 422 });
+            }
+            updateData.currentPeriod = body.currentPeriod;
+        }
         // BUG-109: periodic DB checkpoint of the live clock — assigned logger or admin only
         // (already gated above), same integer-guard pattern as score. null clears the value
         // (e.g. on FINISHED) without requiring a separate code path.

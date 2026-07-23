@@ -850,6 +850,8 @@ BUG-001 through BUG-029, AUDIT-001/002 (partial), BACKLOG-065 — all resolved S
 
 - **TD-011** _(LOW)_: `updatePlayerStats` in `src/app/api/matches/[id]/events/route.ts` has `season: '2024'` hardcoded on insert (lines ~357, ~396). Will silently write to the wrong season bucket from 2025 onward. Fix: derive season from match `startTime` or pass as a match field. Filed: 2026-06-19.
 
+- **TD-012** _(LOW — naming, deliberately deferred)_: `competition_sport_settings.halfDuration` (schema.ts) is named for football's 2-half model but reused as "one period's length" for any sport — basketball's quarter length (10 min), and whatever Track's period model turns out to need. Considered renaming to `periodDuration` during BACKLOG-125 (basketball write-path work); decided against it because `halfDuration` is a live prod column and renaming requires a SQL-direct migration (BACKLOG-040 blocks `db:push`) for a naming-clarity-only change with no functional benefit — nothing downstream misreads the value, it's purely a readability cost for two of three sports. **Do not rename preemptively.** Revisit only if/when Track's actual period model turns out to be structurally incompatible with a single period-duration number (not just a third value for the same concept) — at that point all three sports' config-reads need touching anyway, making the rename effectively free as part of that work. Filed: 2026-07-21 (session 46, BACKLOG-125).
+
 - **TD-001** _(IN PROGRESS)_: `src/lib/env.ts` created — typed `env` object and `validateEnv()` startup check in place. `middleware.ts` migrated to use `env.jwtSecret` and `env.isStaging`. Remaining work: migrate all other `process.env` reads across 30+ files, add Zod validation. Full migration deferred — do not scatter `process.env` reads in new code from this point forward.
 - **TD-002**: Deduplication for event logging submissions on slow connections to prevent double-tap glitches.
 - **TD-003**: Match status transitions need a proper state machine (PENDING → LIVE → FINISHED) with automated triggers.
@@ -1574,13 +1576,14 @@ player stats can be stale or inconsistent after a match ends.
 
 **Deferred:** not fixed this session — session 45 fixed the latency contribution (wrapped in `after()`, see BUG-119) and filed this as the separate, still-open correctness gap.
 
----
+**Additional finding, session 46 (BACKLOG-125 work):** the silent-401 symptom above assumes `NEXT_PUBLIC_APP_URL` resolves quickly (correctly or not). Locally, `.env.local`'s `NEXT_PUBLIC_APP_URL` is set to the real deployed staging URL (`https://brixsports-staging.vercel.app`), not `localhost` — so a local dev server handling a `LIVE`-status event doesn't get a fast 401 from this self-fetch, it makes a real outbound HTTPS request to the deployed staging app from within the same process that's trying to serve the original request. Observed directly: the entire local dev server became unresponsive to *all* requests (not just the triggering one) for several minutes after posting one `LIVE`-status basketball event, confirmed via server logs and repeated timed-out `curl` calls to unrelated routes during the window. Root cause not fully confirmed (candidates: something in the custom `server.js`'s request handling doesn't truly yield during this specific outbound fetch, or Node's event loop was blocked by something else entirely triggered by the same code path) — but the practical impact is real and reproduced twice this session. Workaround used: give any local test match a non-`LIVE` status (e.g. `UPCOMING`) to avoid triggering this self-fetch at all. Proposed fix in the section above (skip the HTTP self-fetch, call the rating logic as a plain internal function) would also close this local-dev hang as a side effect, since there'd be no outbound fetch to hang on.
 
-### BACKLOG-125 — Basketball/Track Live Logging Write-Path Broken (Score, Period, Persistence)
-
-**Status:** OPEN — deliberately deferred, see `BACKSCOPE.md` for the "why not fixed now" reasoning
-**Priority:** High severity, deliberately not urgent — no live basketball/track match is currently scheduled; this must be resolved before either sport is used for a real scored event
-**Filed:** 2026-07-21 (session 45), found by code-reading `BasketballLogger.tsx` and `TrackLogger.tsx` against `FootballLogger.tsx`'s already-fixed equivalents, before any live test
+**Status:** SHIPPED (session 46, 2026-07-23) — basketball's core write path (score persistence, quarter/period persistence, the missed-shot stat bug, a roster-resolution bug blocking lineup selection entirely, and the "Finalize Match reachable" fix) fixed, pushed, and live-tested on `feature/basketball-write-path` (PR #11, targets `dev`, not yet merged/reviewed). **"Finalize Match reachable" confirmed via a real interactive logger walkthrough, not just API automation** — Richard played a real match through Q1-Q4 on the PR preview and successfully finalized it; DB confirmed post-finalize: `{"status":"FINISHED","current_period":"FINISHED","home_score":2,"away_score":3}`. Score persistence, period transitions, and rendering were all separately confirmed via direct API + DB checks earlier the same session. **Not RESOLVED yet — two items explicitly carried to next session:** (1) the event-save failure banner was never actually tested (deprioritized in favor of finishing the Finalize confirmation first); (2) this entry's own "shared logger core" fix is still not built — today's work patched `BasketballLogger.tsx` directly. `TrackLogger.tsx`'s complete absence of a persistence layer is untouched, still fully OPEN.
+**New findings confirmed live during the walkthrough, not fixed, carried forward:** basketball has no mid-match-resume seeding at all (worse than first suspected — `matchStarted` re-seeds from the server but `lineupSet`/`homeStarters`/`awayStarters` don't, and there's no UI path back into lineup selection once `matchStarted` is `true` again, a genuine dead end on refresh/remount); no WS emit exists for basketball at all (same shape as football's already-fixed `BUG-108/116`). Both are exactly the kind of gap the planned football-to-basketball systematic mapping session (see below) should surface deliberately rather than by accident.
+**Next session, in priority order:** (1) test the failure-save banner properly (a fresh match, block the events request via DevTools, confirm the banner renders); (2) run the systematic football-to-basketball mapping pass Richard has been asking for all session — walk `FootballLogger.tsx`'s business logic piece by piece (resume-seeding, WS emit + multi-logger sync, offline queue, undo/delete) and check each against `BasketballLogger.tsx`, fixing every gap found in one pass rather than more one-off live-test surprises; (3) decide whether PR #11 gets reviewed/merged before or after that mapping pass. See `RUNLOG.md` 2026-07-21 through 2026-07-23 for full verification evidence and `known-issues.md`/TD-012/BACKLOG-124/`BACKSCOPE.md` for adjacent findings discovered along the way (an admin-POST logger_id FK bug, a `second:0` collapsing to null, a local-dev-only ratings-fetch hang, and the Admin "Official Match Lineups" page's own separate football-centric-starter-count bug — none of those fixed, all filed separately).
+**Unconfirmed assumption to verify during the mapping pass (cross-ref `BACKSCOPE.md`):** Richard observed that `BasketballLogger.tsx` lets the logger set/edit the starting lineup directly in-app, with zero dependency on the separate Admin "Official Match Lineups" page (confirmed in code — `eligible-players` only reads `player_team_affiliations`, never that page's data). His working assumption is that football's lineup flow is admin-publish-only by contrast — **not yet confirmed either way.** `FootballLogger.tsx` appears to use the same `eligible-players`/`memberships` pattern for its own roster resolution, which would suggest it might *also* be self-contained, making the Admin page a parallel "public display" feature for both sports rather than a real workflow difference. Confirm by reading `FootballLogger.tsx`'s own lineup-selection flow directly.
+**Priority:** High severity, now urgent-in-progress rather than deliberately-deferred — actively being live-tested this session, not scheduled work.
+**Filed:** 2026-07-21 (session 45), found by code-reading `BasketballLogger.tsx` and `TrackLogger.tsx` against `FootballLogger.tsx`'s already-fixed equivalents, before any live test. **Original problem description below is historical — kept as-is for the record of what was found; see the session 46 update above for current state.**
 
 **Problem, `BasketballLogger.tsx` — match-level score never reaches the DB, three independent gaps stacking:**
 1. **During play**: `POST /api/matches/[id]/events`'s `isScoringEvent` check (`src/app/api/matches/[id]/events/route.ts`) is `upperType === 'GOAL' || upperType === 'PENALTY' || isOwnGoal` — football's type strings only. Basketball's normalized types (`FIELD_GOAL`, `THREE_POINTER`, `FREE_THROW`) never match, so the atomic score-increment transaction (BUG-121's fix) never runs, and `broadcastScoreUpdate` is never called. `matches.homeScore`/`awayScore` is never touched by any basketball event, ever.
@@ -1596,6 +1599,96 @@ player stats can be stale or inconsistent after a match ends.
 **Proposed fix (not built, deliberately deferred — see `BACKSCOPE.md`):** extract a shared logger core (event persistence, a sport-aware `isScoringEvent`, per-period PATCH persistence, and a finalize path that always reaches the server regardless of which button triggers it) that all three sport loggers consume, rather than patching three independent, duplicated implementations. Port `FootballLogger.tsx` to it first and re-verify the Three Critical Flows before touching basketball or building track's persistence layer — football is the only one of the three with a real live-test track record, and regressing it to fix basketball would be a worse outcome than leaving basketball/track as-is a while longer.
 
 **Deferred, Richard's call:** doing a quick, basketball-only patch under this session's time pressure risks introducing a subtly different, unverified reimplementation of logic `FootballLogger.tsx` already got right through many rounds of live-tested fixes (BUG-052, BUG-121, TD-010, BUG-076). The shared-module refactor is real, scoped work for its own session, not a same-session patch. See `BACKSCOPE.md`'s "Basketball + Track live logging" entry for the full reinstatement criteria.
+
+---
+
+### BUG-124 — Admin-Authenticated Event POST FK-Violates on `logger_id`
+
+**Status:** OPEN — found, not fixed
+**Priority:** Medium — only reachable by an admin bypassing the normal logger flow, but a clean 500 with no clear message when it happens
+**Filed:** 2026-07-23 (session 46), found while live-verifying the P0 missed-shot fix
+
+**Problem:** `POST /api/matches/[id]/events` (`src/app/api/matches/[id]/events/route.ts`) sets `loggerId: authUser.id` unconditionally, regardless of role. For an admin-authenticated request, `authUser.id` is the admin's `users.id` — but `match_events.loggerId` has an FK constraint to `loggers.id` (`schema.ts:378`), not `users.id`. Confirmed live: an admin token posting a real event 500s with `SQLITE_CONSTRAINT: FOREIGN KEY constraint failed`, since `admin-001` (or whichever admin id) doesn't exist in the `loggers` table.
+**Fix (not built):** set `loggerId` to `null` (or omit it) when `authUser.role === 'admin'` and there's no real logger session backing the request, rather than writing an ID that will never satisfy the FK. `match_events.loggerId` is nullable in schema, so this is a safe default.
+**Not fixed this session** — surfaced as a side effect of P0 verification, not this session's actual scope; flagging for its own small fix.
+
+---
+
+### BUG-125 — Admin "Official Match Lineups" Page Defaults to Football's 11 Starters for Any Sport
+
+**Status:** OPEN — found, not fixed
+**Priority:** Medium — this is a separate feature from `BasketballLogger`'s own in-app lineup selection (confirmed independent this session — `eligible-players` has no dependency on this page at all), so it doesn't block live logging, but it's broken for basketball as its own feature
+**Filed:** 2026-07-23 (session 46), found live by Richard while exploring the admin panel during the BACKLOG-125 walkthrough
+
+**Problem:** `src/app/admin/match-lineups/page.tsx`'s `handleMatchSelect` (lines 204-228) derives `playersPerSide` from `competitions.playersPerSide` (a competition-level column, schema default `11`) rather than from `match.sport` or `competition_sport_settings` (the table this same session's `BACKLOG-125` work extended with correct basketball defaults, `SPORT_DEFAULTS.basketball.playersPerSide: 5`). Since `BUSA LEAGUE BASKETBALL`'s `competitions.playersPerSide` was never explicitly set, this page silently falls back to `11`, showing "Home: 0/11 starters" and a football formation dropdown (`4-3-3` etc.) for a 5-a-side basketball match. Confirmed live via screenshot.
+**Fix (not built):** read `match.sport` (or join through `competition_sport_settings`) the same way `config/route.ts` and `BasketballLogger.tsx` now do, instead of the competition-level `playersPerSide` column, which was never the right source of truth for this.
+**Not fixed this session** — separate feature from the actual `BACKLOG-125` scope (live logging write path), filed for whenever this admin page gets attention.
+
+---
+
+### ~~BUG-126~~ — Basketball Boxscore Crashes (`a.toFixed is not a function`) ~15s Into Any Live Match
+
+**Status:** RESOLVED — 2026-07-23 (session 47)
+**Priority:** CRITICAL — guaranteed crash, not an edge case; would have hit every real basketball match
+**Filed:** 2026-07-23 (session 47), found live by Richard testing the failure-save banner on the PR #11 preview
+
+**Problem:** `match_events.value` is a TEXT column storing `JSON.stringify(value)` (`schema.ts:761`). `BasketballLogger.tsx`'s own initial-mount fetch correctly `JSON.parse`s it back to a number, but `useMultiLogger.ts`'s `syncEvents()` (line 140, shared by both sport loggers) passed `value: e.value` straight through unparsed. That sync runs on a 15-second interval for any connected logger (not just multi-logger sessions) and replaces the entire local `events` array with the merged result — so ~15s into any basketball match, every event's `value` silently became a string. `calculatePlayerRating`'s `rating += event.value` then string-concatenated instead of adding (`0 + "1"` → `"01"`), and the boxscore table's `.map()` over players crashed on `rating.toFixed(1)` (`"01".toFixed` is not a function) — reproduced live, full stack trace confirmed `Array.map` → the rating function → `toFixed`. Football never hit this because its equivalent rating calc already wraps with `Number(e.value)` at the same spot (`FootballLogger.tsx:493`) — basketball's never got that defensive coercion.
+**Fix:** (1) `useMultiLogger.ts:140` — parse `e.value` the same way `BasketballLogger.tsx`'s initial fetch already does (`typeof e.value === 'string' ? JSON.parse(e.value) : e.value`), fixing it at the shared root for both sports. (2) `BasketballLogger.tsx`'s rating calc now also defensively `Number(event.value)`s before the arithmetic, mirroring football's existing pattern, so a future un-coerced read path can't reintroduce the same crash.
+
+**Evidence:**
+- Commit: pending (this session)
+- Verified by: code trace only — `tsc --noEmit` clean on both changed files (49 pre-existing errors elsewhere, unchanged), root cause confirmed against the real stack trace Richard captured (`at e2 (page-e89a9b926648fcb2.js:1:37987)` inside `Array.map`) and against the schema (`value: text('value')`) and the two divergent read sites. **Not yet live-verified** — same crash-reproduction sequence (log a shot event, wait 15s+ for a sync tick, confirm boxscore renders without crashing) should be re-run on the next preview build.
+- Pending items: live re-verification on the post-fix preview build.
+
+---
+
+### BACKLOG-126 — No Working Transfer/Season Tracking (Roster History Silently Lost)
+
+**Status:** OPEN
+**Priority:** Medium — Tier 2 (roster/season management, not live-match-critical), but explicitly named by Richard as a "ready for next season" concern
+**Filed:** 2026-07-21 (session 45), found while backfilling BUSA League Basketball — two real, confirmed mid-season transfers left zero trace in the DB
+
+**Problem, confirmed with real data, not theoretical:** two BUSA League Basketball players genuinely transferred clubs mid-season, inside the league's own official trading window ("*TRADING BEGINS FROM ROUND 3 THROUGH ROUND 7*", per `dev/basketball-dates-and-fixtures.md`) — chronologically proven via box-score CSVs (a clean appear/disappear cutoff on the exact transfer date, cross-checked against the *other* team's CSVs starting to show them right after):
+- `LIGHT`: Rim Reapers through 11-22-25 → Vikings from 11-26-25 onward
+- `dekunle`: Rim Reapers #77 through 11-28-25 → Storm #15 from 12-6-25 onward
+
+**Neither transfer left any trace in `player_team_affiliations`.** Both players have exactly ONE current affiliation row (`is_active: 1`, `end_date: null`) — for `LIGHT`, that row is Vikings (the *later* team); for `dekunle`, it's Rim Reapers (the *earlier* team). There's no consistency to which team ends up "current" — it's whatever a one-time roster entry happened to capture, not a maintained history. Confirmed via direct query (`dev/check-light-player.mjs`, inline check on `dekunle`'s affiliations) — neither has a second, inactive, dated row for their other team.
+
+**Root cause is structural, not a simple bug:**
+1. **Schema supports it, nothing uses that support.** `player_team_affiliations` already has `is_active`, `is_primary`, `start_date`, `end_date` — the right shape for a real transfer (close the old row, open a new one). But there is no admin UI action anywhere that does this — team/player management doesn't even have a basic "Create Team" UI yet (`BACKLOG-077`, still open), let alone transfer recording. The only precedent for writing affiliation changes at all is one-off `dev/*.mjs` scripts (BACKLOG-076's college-affiliation wiring).
+2. **`basketballPlayerStats`/`footballPlayerStats` hardcode `season: '2024'`** in `updatePlayerStats()` (`src/app/api/matches/[id]/events/route.ts`) rather than deriving it from the match/competition — live-logged stats next season would still be tagged '2024' unless this is fixed first.
+3. **No unique constraint on `(playerId, season, competitionId)`** on either stats table — nothing stops ambiguous duplicate rows across seasons, and the live path's `.get()` lookup (no season/competition filter) could silently update the wrong season's row if one ever exists.
+
+**Not a blocker for the current backfill** — `basketball_player_stats` aggregates by player, not by team, so attributing a transferred player's stats correctly doesn't require their affiliation history to be accurate. This is a separate, real gap in the platform's season/roster-management readiness, not something this backfill needs to solve to proceed.
+
+**Can be handled at script level today, no admin UI needed** — same precedent as BACKLOG-076: a `dev/*.mjs` script can correctly backfill the missing transfer history right now (deactivate the stale affiliation with a real `end_date`, insert the correct historical + current rows) even though there's no UI for it yet. Doing this for `LIGHT`/`dekunle` as part of this session's backfill (see RUNLOG.md).
+
+**What's still missing to actually be "ready for next season":**
+- An admin-facing way to record a transfer (even a simple one, not necessarily full UI) instead of a one-off script every time
+- Fix `updatePlayerStats()`'s hardcoded `season: '2024'` to derive the real season from the match's competition
+- A real unique constraint (or upsert-safe application logic) on `(playerId, season, competitionId)` for both stats tables
+- **Display side has the same gap, confirmed live (session 45):** `GET /api/players/[id]` correctly wrote and returned LIGHT's historical Rim Reapers row after this session's fix, but the `memberships` array only surfaces the *active* affiliation (Vikings) plus the college row — the inactive, dated Rim Reapers history is silently absent from the response entirely, not just hidden by the frontend. Even with correct data now sitting in the DB, there's no way for a viewer (or admin) to see a player's actual transfer history anywhere in the product. Recording history at the DB level (this session's fix) and *displaying* it are two separate gaps — closing one doesn't close the other.
+
+---
+
+### BACKLOG-127 — MVP Feature Is Fully Unwired (No Real Write Path, Anywhere)
+
+**Status:** OPEN
+**Priority:** Low — display/engagement feature, not live-match-critical
+**Filed:** 2026-07-21 (session 45), found while checking whether the basketball backfill should populate MVP data
+
+**Problem:** `src/app/api/basketball/leaderboard/mvp/route.ts` builds a "most MVP awards" leaderboard by reading `matches.stats.mvp` (a free-text field on each match row) across every Basketball match. The **only** code anywhere that ever writes to that field is `src/db/seed-busa-basketball.ts` — which wrote **randomly-picked fake names**, not real data. Grepped the entire app for any other writer: none exists. `BasketballLogger.tsx` has no MVP-assignment control at all (its one "MVP" text reference is a caption about player *ratings*, an unrelated, already-working feature). The admin match page has no MVP field either.
+
+**Made worse this session, incidentally**: the fake `stats.mvp` blobs on all 30 seeded BUSA League Basketball matches were cleared to `NULL` as part of the `BUG-105`-style stats cleanup (`dev/fix-basketball-seeded-matches.mjs`, correct thing to do — fake data is worse than none) — so the MVP leaderboard endpoint now returns nothing at all for these matches, whereas before it silently returned fake results. Not a regression in the sense of breaking something real (the prior fake data was never legitimate), but worth noting the leaderboard is now visibly empty rather than plausibly-wrong.
+
+**Real MVP data exists and is unused**: `dev/basketball-busa-league-scores.md` has the actual MVP for all 30 regular-season games (from the source Scores docx), never written anywhere.
+
+**What's missing to build this for real:**
+- A real write path — most naturally a post-match admin action (MVP is normally decided once full stats are in, same timing as the existing player-ratings calculation), not a live in-game `BasketballLogger.tsx` button
+- Decide the target shape: continue using `matches.stats.mvp` (simple, already has a reader) or a proper `player_id` FK instead of a free-text name (avoids the exact identity-resolution ambiguity this session spent significant effort resolving for player stats)
+- If keeping `matches.stats.mvp`, the real MVP names from `dev/basketball-busa-league-scores.md` could be backfilled into the 30 seeded matches once the write path exists — not done this session, deliberately deferred alongside the write-path decision above
+
+**Deferred:** not built this session — Richard's call, low priority relative to `BasketballLogger.tsx`'s Tier 0 gaps (`BACKLOG-125`).
 
 ---
 

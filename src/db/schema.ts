@@ -269,7 +269,13 @@ export const competitionSportSettings = sqliteTable('competition_sport_settings'
     sport: text('sport').notNull(), // 'Football' | 'Basketball' | 'Scrabble' | 'Chess' | 'Table Tennis'
     format: text('format'), // '5-aside' | '3x3' | '1v1' | 'singles' | 'doubles' | 'standard'
     playersPerSide: integer('players_per_side').notNull(),
-    halfDuration: integer('half_duration'), // in minutes — null for non-timed sports
+    // in minutes — null for non-timed sports. Named for football's 2-half model but
+    // reused as "one period's length" for any sport (e.g. basketball's quarter length,
+    // 10 min) — a live prod column, so renaming costs a SQL-direct migration
+    // (BACKLOG-040 blocks db:push) for a naming-clarity-only change. Deliberately left
+    // overloaded rather than renamed; revisit if/when Track's period model needs a
+    // genuinely different shape, not preemptively — see TD entry in BACKLOG.md.
+    halfDuration: integer('half_duration'),
     // For round/set based sports (Chess, Scrabble, Table Tennis)
     // e.g. {"format":"round-based","tracking":"score-per-game","rounds":3}
     // e.g. {"format":"set-based","bestOf":5,"allowDoubles":true}

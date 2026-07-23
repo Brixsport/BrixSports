@@ -335,6 +335,16 @@ export default function LiveMatchTimeline({ events, homeTeam, awayTeam, eyePoint
                 case 'EXTRA_TIME_1': period = 'Extra Time 1'; break;
                 case 'EXTRA_TIME_2': period = 'Extra Time 2'; break;
                 case 'PENALTY_SHOOTOUT': period = 'Penalties'; break;
+                // Basketball -- BasketballLogger now sends period on every event (it never
+                // did before), so real basketball events reach this branch instead of the
+                // minute-based football-only fallback below, which always mislabeled every
+                // basketball event as "First Half"/"Second Half" since quarter numbers (1-5)
+                // never exceed the football thresholds.
+                case 'Q1': period = '1st Quarter'; break;
+                case 'Q2': period = '2nd Quarter'; break;
+                case 'Q3': period = '3rd Quarter'; break;
+                case 'Q4': period = '4th Quarter'; break;
+                case 'OT': period = 'Overtime'; break;
                 default: period = event.period.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, l => l.toUpperCase());
             }
         } else {
@@ -410,6 +420,26 @@ export default function LiveMatchTimeline({ events, homeTeam, awayTeam, eyePoint
                                                 if (min == null || min < 0) return '—';
 
                                                 const p = event.period;
+
+                                                // Basketball -- `min` is now a real elapsed-match-minute
+                                                // (BasketballLogger used to send the quarter number here,
+                                                // which every branch below assumed was elapsed time).
+                                                // Showing a bare elapsed-minute with a football-style `'`
+                                                // isn't what a basketball viewer expects; show the quarter
+                                                // label plus the in-quarter clock (event.second holds
+                                                // seconds-remaining-in-quarter from the logger's countdown).
+                                                if (sport?.toLowerCase() === 'basketball') {
+                                                    const secs = event.second ?? 0;
+                                                    const mm = Math.floor(secs / 60);
+                                                    const ss = String(secs % 60).padStart(2, '0');
+                                                    return (
+                                                        <>
+                                                            <span>{p ?? 'Q?'}</span>
+                                                            <span className="text-xs block opacity-70">{mm}:{ss}</span>
+                                                        </>
+                                                    );
+                                                }
+
                                                 const isFootball = sport?.toLowerCase() === 'football' || sport?.toLowerCase() === '5-a-side' || sport?.toLowerCase() === 'five-a-side';
 
                                                 let label = String(min);
