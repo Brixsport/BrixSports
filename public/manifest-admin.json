@@ -11,16 +11,16 @@
     "orientation": "any",
     "icons": [
         {
-            "src": "/assests/Logos/BRIX-SPORT-LOGO.png",
+            "src": "/icons/role-colorways/admin-192.png",
             "sizes": "192x192",
             "type": "image/png",
-            "purpose": "any maskable"
+            "purpose": "any"
         },
         {
-            "src": "/assests/Logos/BRIX-SPORT-LOGO.png",
+            "src": "/icons/role-colorways/admin-512.png",
             "sizes": "512x512",
             "type": "image/png",
-            "purpose": "any maskable"
+            "purpose": "any"
         }
     ],
     "categories": [
@@ -35,8 +35,8 @@
             "url": "/admin?source=pwa",
             "icons": [
                 {
-                    "src": "/icons/icon-96x96.png",
-                    "sizes": "96x96"
+                    "src": "/icons/role-colorways/admin-192.png",
+                    "sizes": "192x192"
                 }
             ]
         },
@@ -47,8 +47,8 @@
             "url": "/logger?source=pwa",
             "icons": [
                 {
-                    "src": "/icons/icon-96x96.png",
-                    "sizes": "96x96"
+                    "src": "/icons/role-colorways/admin-192.png",
+                    "sizes": "192x192"
                 }
             ]
         },
@@ -59,8 +59,8 @@
             "url": "/admin/matches?source=pwa",
             "icons": [
                 {
-                    "src": "/icons/icon-96x96.png",
-                    "sizes": "96x96"
+                    "src": "/icons/role-colorways/admin-192.png",
+                    "sizes": "192x192"
                 }
             ]
         },
@@ -71,7 +71,7 @@
             "url": "/admin/news?source=pwa",
             "icons": [
                 {
-                    "src": "/assests/Logos/BRIX-SPORT-LOGO.png",
+                    "src": "/icons/role-colorways/admin-192.png",
                     "sizes": "192x192"
                 }
             ]

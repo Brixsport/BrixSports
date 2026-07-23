@@ -10,12 +10,14 @@ export const metadata: Metadata = {
     title: 'Brix Admin | Statistics & Management',
     description: 'Admin dashboard for Brixsport',
     manifest: '/manifest-admin.json',
+    // Purple identity, distinct from viewer's brand purple (#8b5cf6) and from
+    // the live-match-status red used elsewhere in the app -- see BACKLOG.md
+    // favicon directive for the collision reasoning behind this pick.
     icons: {
         icon: [
-            { url: '/assests/Logos/BRIX-SPORT-LOGO.png', type: 'image/png' },
-            { url: '/favicon.ico', sizes: 'any' },
+            { url: '/icons/role-colorways/admin-32.png', sizes: '32x32', type: 'image/png' },
         ],
-        apple: '/assests/Logos/BRIX-SPORT-LOGO.png',
+        apple: '/icons/role-colorways/admin-192.png',
     },
 };
 

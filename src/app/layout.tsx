@@ -76,12 +76,12 @@ export const metadata: Metadata = {
     canonical: "https://brixsports.com",
   },
   manifest: "/manifest-user.json",
+  // Favicon itself is served via the app/icon.png file convention (navy,
+  // transparent background -- viewer-facing, what most users see). Only the
+  // iOS home-screen icon needs an explicit entry here since Apple fills a
+  // transparent PNG's background with black, so this one is solid navy.
   icons: {
-    icon: [
-      { url: '/assests/Logos/BRIX-SPORT-LOGO.png', type: 'image/png' },
-      { url: '/favicon.ico', sizes: 'any' },
-    ],
-    apple: '/assests/Logos/BRIX-SPORT-LOGO.png',
+    apple: '/icons/role-colorways/viewer-192.png',
   },
   appleWebApp: {
     capable: true,
@@ -110,9 +110,9 @@ export default function RootLayout({
   return (
     <html lang="en">
       <head>
-        <link rel="icon" href="/assests/Logos/BRIX-SPORT-LOGO.png" type="image/png" sizes="any" />
-        <link rel="icon" href="/favicon.ico" sizes="any" />
-        <link rel="apple-touch-icon" href="/assests/Logos/BRIX-SPORT-LOGO.png" />
+        {/* Favicon (app/icon.png) and apple-touch-icon (metadata.icons.apple
+            above) are both handled by Next.js's metadata API -- no manual
+            <link> tags needed here, avoids redundant/conflicting declarations. */}
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
         <meta name="apple-mobile-web-app-title" content="BRIXSPORTS" />
