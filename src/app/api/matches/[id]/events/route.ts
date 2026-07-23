@@ -135,7 +135,11 @@ export async function POST(
             matchId,
             type,
             minute,
-            second: second || null,
+            // second || null collapsed a legitimate 0 (event logged in the first second
+            // of a period) to null -- same falsy-zero bug class as the missed-shot fix
+            // (value: points || null), just never applied to this field. Found via a
+            // basketball timestamp-ordering test on the PR preview.
+            second: second ?? null,
             teamId: teamId || null,
             playerId: playerId || null,
             relatedPlayerId: relatedPlayerId || null,
