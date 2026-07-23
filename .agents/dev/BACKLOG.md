@@ -1626,6 +1626,22 @@ player stats can be stale or inconsistent after a match ends.
 
 ---
 
+### ~~BUG-126~~ — Basketball Boxscore Crashes (`a.toFixed is not a function`) ~15s Into Any Live Match
+
+**Status:** RESOLVED — 2026-07-23 (session 47)
+**Priority:** CRITICAL — guaranteed crash, not an edge case; would have hit every real basketball match
+**Filed:** 2026-07-23 (session 47), found live by Richard testing the failure-save banner on the PR #11 preview
+
+**Problem:** `match_events.value` is a TEXT column storing `JSON.stringify(value)` (`schema.ts:761`). `BasketballLogger.tsx`'s own initial-mount fetch correctly `JSON.parse`s it back to a number, but `useMultiLogger.ts`'s `syncEvents()` (line 140, shared by both sport loggers) passed `value: e.value` straight through unparsed. That sync runs on a 15-second interval for any connected logger (not just multi-logger sessions) and replaces the entire local `events` array with the merged result — so ~15s into any basketball match, every event's `value` silently became a string. `calculatePlayerRating`'s `rating += event.value` then string-concatenated instead of adding (`0 + "1"` → `"01"`), and the boxscore table's `.map()` over players crashed on `rating.toFixed(1)` (`"01".toFixed` is not a function) — reproduced live, full stack trace confirmed `Array.map` → the rating function → `toFixed`. Football never hit this because its equivalent rating calc already wraps with `Number(e.value)` at the same spot (`FootballLogger.tsx:493`) — basketball's never got that defensive coercion.
+**Fix:** (1) `useMultiLogger.ts:140` — parse `e.value` the same way `BasketballLogger.tsx`'s initial fetch already does (`typeof e.value === 'string' ? JSON.parse(e.value) : e.value`), fixing it at the shared root for both sports. (2) `BasketballLogger.tsx`'s rating calc now also defensively `Number(event.value)`s before the arithmetic, mirroring football's existing pattern, so a future un-coerced read path can't reintroduce the same crash.
+
+**Evidence:**
+- Commit: pending (this session)
+- Verified by: code trace only — `tsc --noEmit` clean on both changed files (49 pre-existing errors elsewhere, unchanged), root cause confirmed against the real stack trace Richard captured (`at e2 (page-e89a9b926648fcb2.js:1:37987)` inside `Array.map`) and against the schema (`value: text('value')`) and the two divergent read sites. **Not yet live-verified** — same crash-reproduction sequence (log a shot event, wait 15s+ for a sync tick, confirm boxscore renders without crashing) should be re-run on the next preview build.
+- Pending items: live re-verification on the post-fix preview build.
+
+---
+
 ### BACKLOG-126 — No Working Transfer/Season Tracking (Roster History Silently Lost)
 
 **Status:** OPEN

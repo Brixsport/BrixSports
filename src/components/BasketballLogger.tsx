@@ -135,13 +135,20 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                 switch (event.type) {
                     case 'Field Goal':
                     case 'Three Pointer':
-                    case 'Free Throw':
-                        if (event.value && event.value > 0) {
-                            rating += event.value; // Made shot
+                    case 'Free Throw': {
+                        // event.value can arrive as a string (match_events.value is a
+                        // TEXT column) via useMultiLogger's periodic sync -- coerce
+                        // defensively here too, mirroring FootballLogger's equivalent
+                        // rating calc, so a future un-coerced read path can't silently
+                        // turn `rating` into a string and crash `.toFixed()` below.
+                        const shotValue = Number(event.value);
+                        if (shotValue > 0) {
+                            rating += shotValue; // Made shot
                         } else {
                             rating -= 1; // Missed shot
                         }
                         break;
+                    }
                     case 'Rebound':
                         rating += 1.5;
                         break;
