@@ -73,13 +73,14 @@ const DEFAULT_FALLBACK = SPORT_DEFAULTS['football'];
 
 export async function GET(
     req: NextRequest,
-    { params }: { params: { id: string } }
+    { params }: { params: Promise<{ id: string }> }
 ) {
     try {
+        const { id } = await params;
         const match = await db
             .select()
             .from(matches)
-            .where(eq(matches.id, params.id))
+            .where(eq(matches.id, id))
             .limit(1)
             .then(r => r[0] ?? null);
 

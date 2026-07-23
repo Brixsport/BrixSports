@@ -32,6 +32,15 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
     const STARTER_COUNT = is3x3 ? 3 : 5;
     const [quarter, setQuarter] = useState(1);
     const [time, setTime] = useState('12:00');
+    // Wall-clock timestamp of when the current quarter/OT began. `time` is a manual,
+    // static display value (never auto-decrements -- no ticking clock exists here,
+    // by design, see the minute/second comment below) -- using it for event
+    // timestamps meant every event logged within the same quarter got an identical
+    // (minute, second) pair, since `time` only changes at quarter-reset points.
+    // quarterStartedAt gives each event a real, distinct, monotonically increasing
+    // timestamp within the quarter, without building a live-ticking clock display
+    // (deliberately out of scope -- minimal fix, not football-parity live clock).
+    const [quarterStartedAt, setQuarterStartedAt] = useState<number>(Date.now());
     const [events, setEvents] = useState<any[]>([]);
     const [selectedTeam, setSelectedTeam] = useState<'home' | 'away'>('home');
     const [homeTeam, setHomeTeam] = useState<Team | null>(null);
@@ -45,6 +54,9 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
     const [matchEnded, setMatchEnded] = useState(match.status === 'FINISHED');
     const [viewMode, setViewMode] = useState<'logger' | 'stats' | 'history'>('logger');
     const [isSaving, setIsSaving] = useState(false);
+    // Visible failure signal for event-save failures -- recordEvent used to only
+    // console.error on failure, with no on-screen indication the event never saved.
+    const [eventSaveError, setEventSaveError] = useState<string | null>(null);
 
 
 
@@ -428,15 +440,21 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
     // renderer (public match page, LiveMatchStatus, LiveMatchTimeline) assumes minute
     // holds real elapsed match-time, not a period index, which broke period-grouping
     // and minute display for every basketball event. `period` (Q1-Q4/OT) now carries
-    // which segment; `minute` carries a genuine elapsed-time value derived from the
-    // countdown clock -- monotonically increasing across quarters and into OT.
+    // which segment; `minute`/`second` carry a genuine elapsed-time value derived from
+    // Date.now() - quarterStartedAt, not from the static `time` display state --
+    // `time` never auto-decrements, so every event within a quarter used to get an
+    // identical timestamp, breaking chronological order (all ties on minute+second,
+    // the exact sort key events/route.ts's GET handler uses). Known limitation, not
+    // fixed here: quarterStartedAt resets to Date.now() on component mount, so a
+    // logger refreshing mid-quarter restarts that quarter's elapsed-time count --
+    // basketball has no mid-match-resume seeding at all yet (unlike football's
+    // BUG-115/117/118), a separate, larger gap.
     const getCurrentPeriod = () => (quarter > periodCount ? 'OT' : `Q${quarter}`);
+    const getElapsedSecondsInPeriod = () => Math.max(0, Math.floor((Date.now() - quarterStartedAt) / 1000));
     const getElapsedMinute = () => {
-        const [minStr, secStr] = time.split(':');
-        const remainingSeconds = (parseInt(minStr) || 0) * 60 + (parseInt(secStr) || 0);
         const isOT = quarter > periodCount;
         const periodLengthMinutes = isOT ? overtimeDurationMinutes : quarterDuration;
-        const minutesElapsedInPeriod = Math.max(0, periodLengthMinutes - Math.ceil(remainingSeconds / 60));
+        const minutesElapsedInPeriod = Math.min(periodLengthMinutes, Math.floor(getElapsedSecondsInPeriod() / 60));
         const priorMinutes = isOT ? periodCount * quarterDuration : (quarter - 1) * quarterDuration;
         return priorMinutes + minutesElapsedInPeriod;
     };
@@ -457,7 +475,7 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
             id: `e${events.length + 1}`,
             type,
             minute: getElapsedMinute(),
-            second: parseInt(time.split(':')[0]) * 60 + parseInt(time.split(':')[1]),
+            second: getElapsedSecondsInPeriod(),
             period: getCurrentPeriod(),
             teamId: selectedTeam === 'home' ? match.homeTeamId : match.awayTeamId,
             playerId,
@@ -498,15 +516,20 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
             } as SyncEvent);
         }
 
-        // Persist event to database
+        // Persist event to database. Previously only caught network-level failures
+        // (fetch() rejects) and never checked res.ok, so an HTTP error response
+        // (401/422/500) looked identical to a real success -- nothing was logged,
+        // nothing shown, the event just sat in local state looking "saved." Violates
+        // this project's own rule that logging errors must never appear to succeed
+        // silently.
         try {
-            await fetch(`/api/matches/${match.id}/events`, {
+            const res = await fetch(`/api/matches/${match.id}/events`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     type,
                     minute: newEvent.minute,
-                    second: parseInt(time.split(':')[0]) * 60 + parseInt(time.split(':')[1]),
+                    second: newEvent.second,
                     period: newEvent.period,
                     teamId: selectedTeam === 'home' ? match.homeTeamId : match.awayTeamId,
                     playerId,
@@ -518,9 +541,14 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                     loggerName: currentLogger?.name,
                 }),
             });
+            if (!res.ok) {
+                setEventSaveError(`Failed to save "${type}" (${res.status}) — event kept locally only. Check connection and retry logging it if needed.`);
+            } else {
+                setEventSaveError(null);
+            }
         } catch (error) {
             console.error('Failed to persist event:', error);
-            // Event is still in local state, can be synced later
+            setEventSaveError(`Failed to save "${type}" — offline or unreachable. Event kept locally only.`);
         }
 
         // Dispatch WebSocket event for live updates
@@ -648,6 +676,7 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                                         } else {
                                             console.log('▶️ Starting match...');
                                             setMatchStarted(true);
+                                            setQuarterStartedAt(Date.now());
 
                                             // Update match status in database to LIVE
                                             try {
@@ -746,6 +775,20 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                     </div>
                 </div>
             </div>
+
+            {eventSaveError && (
+                <div className="max-w-7xl mx-auto mb-4 px-4">
+                    <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-3 flex items-center justify-between gap-3">
+                        <p className="text-xs font-bold text-red-400">{eventSaveError}</p>
+                        <button
+                            onClick={() => setEventSaveError(null)}
+                            className="text-red-400 hover:text-red-300 text-xs font-black uppercase tracking-widest shrink-0"
+                        >
+                            Dismiss
+                        </button>
+                    </div>
+                </div>
+            )}
 
             <div className="max-w-7xl mx-auto">
                 {/* Scoreboard - Compact */}
@@ -1648,6 +1691,7 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                                             const nextQuarter = quarter + 1;
                                             setQuarter(nextQuarter);
                                             setTime(`${quarterDuration}:00`);
+                                            setQuarterStartedAt(Date.now());
                                             setShowPeriodModal(false);
                                             // Persist the transition -- BasketballLogger never wrote
                                             // currentPeriod at all before this; every basketball match's
@@ -1676,6 +1720,7 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                                                 setIsOT(true);
                                                 setQuarter(periodCount + 1); // one integer past regulation represents OT
                                                 setTime(`${overtimeDurationMinutes}:00`);
+                                                setQuarterStartedAt(Date.now());
                                                 setShowPeriodModal(false);
                                                 fetch(`/api/matches/${match.id}`, {
                                                     method: 'PATCH',
@@ -1708,6 +1753,7 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                                         setIsOT(true);
                                         setQuarter(periodCount + 1);
                                         setTime(`${overtimeDurationMinutes}:00`);
+                                        setQuarterStartedAt(Date.now());
                                         setShowPeriodModal(false);
                                         fetch(`/api/matches/${match.id}`, {
                                             method: 'PATCH',

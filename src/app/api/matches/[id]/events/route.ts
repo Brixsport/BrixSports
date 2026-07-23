@@ -154,7 +154,23 @@ export async function POST(
 
         const upperType = type.toUpperCase().replace(/\s+/g, '_');
         const isOwnGoal = upperType === 'OWN_GOAL';
-        const isScoringEvent = upperType === 'GOAL' || upperType === 'PENALTY' || isOwnGoal;
+        // Basketball's Field Goal/Three Pointer/Free Throw events never updated
+        // matches.homeScore/awayScore at all -- the only place basketball score was
+        // ever written was finalizeMatch()'s PATCH, which silently drops homeScore/
+        // awayScore for a non-admin logger (those fields are admin-only gated,
+        // BUG-052). A logger finalizing a match got a false "finalized successfully"
+        // while the score never saved. Root-caused here instead of loosening BUG-052's
+        // admin gate (that would be a trust-boundary change needing its own review) --
+        // basketball scores now update live through this same atomic transaction
+        // football already uses, so finalize-time score writes become redundant
+        // rather than load-bearing. `made` (not `value` truthiness) gates this, same
+        // discipline as the missed-shot fix -- a miss must never touch the score.
+        const isBasketballScore =
+            match.sport === 'Basketball' &&
+            made === true &&
+            typeof value === 'number' && value > 0 &&
+            (upperType === 'FIELD_GOAL' || upperType === 'THREE_POINTER' || upperType === 'FREE_THROW');
+        const isScoringEvent = upperType === 'GOAL' || upperType === 'PENALTY' || isOwnGoal || isBasketballScore;
 
         // BUG-121: event insert + score update used to be two separate, independently
         // committed statements with no enclosing transaction — a failure after the
