@@ -1,82 +1,67 @@
 {
-    "id": "brix-admin-pwa",
-    "name": "Brixsport Admin & Logger",
-    "short_name": "Brix Admin",
-    "description": "Admin and logger dashboard for Brixsport",
-    "start_url": "/admin?source=pwa",
-    "scope": "/",
-    "display": "standalone",
-    "background_color": "#050505",
-    "theme_color": "#ef4444",
-    "orientation": "any",
-    "icons": [
+  "id": "brix-admin-pwa",
+  "name": "Brixsport Admin Panel",
+  "short_name": "Brix Admin",
+  "description": "Admin dashboard for Brixsport",
+  "start_url": "/admin?source=pwa",
+  "scope": "/admin",
+  "display": "standalone",
+  "background_color": "#050505",
+  "theme_color": "#ef4444",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "/icons/role-colorways/admin-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/role-colorways/admin-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ],
+  "categories": ["productivity", "business"],
+  "shortcuts": [
+    {
+      "name": "Admin Dashboard",
+      "short_name": "Dashboard",
+      "description": "Admin dashboard",
+      "url": "/admin?source=pwa",
+      "icons": [
         {
-            "src": "/icons/role-colorways/admin-192.png",
-            "sizes": "192x192",
-            "type": "image/png",
-            "purpose": "any"
-        },
-        {
-            "src": "/icons/role-colorways/admin-512.png",
-            "sizes": "512x512",
-            "type": "image/png",
-            "purpose": "any"
+          "src": "/icons/role-colorways/admin-192.png",
+          "sizes": "192x192"
         }
-    ],
-    "categories": [
-        "productivity",
-        "business"
-    ],
-    "shortcuts": [
+      ]
+    },
+    {
+      "name": "Manage Matches",
+      "short_name": "Matches",
+      "description": "Manage matches",
+      "url": "/admin/matches?source=pwa",
+      "icons": [
         {
-            "name": "Admin Dashboard",
-            "short_name": "Dashboard",
-            "description": "Admin dashboard",
-            "url": "/admin?source=pwa",
-            "icons": [
-                {
-                    "src": "/icons/role-colorways/admin-192.png",
-                    "sizes": "192x192"
-                }
-            ]
-        },
-        {
-            "name": "Logger",
-            "short_name": "Logger",
-            "description": "Match logger",
-            "url": "/logger?source=pwa",
-            "icons": [
-                {
-                    "src": "/icons/role-colorways/admin-192.png",
-                    "sizes": "192x192"
-                }
-            ]
-        },
-        {
-            "name": "Manage Matches",
-            "short_name": "Matches",
-            "description": "Manage matches",
-            "url": "/admin/matches?source=pwa",
-            "icons": [
-                {
-                    "src": "/icons/role-colorways/admin-192.png",
-                    "sizes": "192x192"
-                }
-            ]
-        },
-        {
-            "name": "Manage News",
-            "short_name": "News",
-            "description": "Manage news",
-            "url": "/admin/news?source=pwa",
-            "icons": [
-                {
-                    "src": "/icons/role-colorways/admin-192.png",
-                    "sizes": "192x192"
-                }
-            ]
+          "src": "/icons/role-colorways/admin-192.png",
+          "sizes": "192x192"
         }
-    ],
-    "prefer_related_applications": false,
-    "related_applications": []
+      ]
+    },
+    {
+      "name": "Manage News",
+      "short_name": "News",
+      "description": "Manage news",
+      "url": "/admin/news?source=pwa",
+      "icons": [
+        {
+          "src": "/icons/role-colorways/admin-192.png",
+          "sizes": "192x192"
+        }
+      ]
+    }
+  ],
+  "prefer_related_applications": false,
+  "related_applications": []
 }
