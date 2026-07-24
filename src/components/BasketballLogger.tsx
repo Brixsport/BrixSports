@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Activity, Save, Undo2, Clock, Users, TrendingUp, Target, Play, Settings } from 'lucide-react';
 import { useMultiLogger } from '@/hooks/useMultiLogger';
@@ -61,6 +61,15 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
     // calls, double-logging the same action server-side. Guards recordEvent itself so
     // it holds regardless of which UI entry point triggers it.
     const [isRecording, setIsRecording] = useState(false);
+    // A useState guard alone is not sufficient here -- confirmed live, not a
+    // hypothetical: a true simultaneous double-click can fire two click handler
+    // invocations against the SAME render's closure before React commits the
+    // setIsRecording(true) update, so both invocations read the same stale
+    // `isRecording === false` and both proceed. A ref mutation is synchronous and
+    // visible immediately to any closure holding the same ref object, regardless of
+    // which render created it -- this is the actual guard; `isRecording` state is
+    // kept only to drive the buttons' visual disabled state.
+    const isRecordingRef = useRef(false);
     // Visible failure signal for event-save failures -- recordEvent used to only
     // console.error on failure, with no on-screen indication the event never saved.
     const [eventSaveError, setEventSaveError] = useState<string | null>(null);
@@ -522,7 +531,8 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
 
     // Record the actual event
     const recordEvent = async (type: BasketballEventType, playerId: string, points?: number, assistPlayerId?: string | null) => {
-        if (isRecording) return;
+        if (isRecordingRef.current) return;
+        isRecordingRef.current = true;
         setIsRecording(true);
         try {
         const allPlayers = [...homePlayers, ...awayPlayers];
@@ -555,8 +565,16 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
             createdAt: new Date(),
         };
 
-        // Update local state immediately for responsive UI
-        setEvents([...events, newEvent]);
+        // Update local state immediately for responsive UI. Functional update --
+        // confirmed live that a non-functional `setEvents([...events, newEvent])`
+        // here let one of two near-simultaneous recordEvent invocations silently
+        // overwrite the other's local event in state (both POSTs still landed
+        // server-side, creating a real duplicate row, but only one was visible
+        // client-side until the next sync pulled the other back in as a "new" one).
+        // The isRecordingRef guard above should make this unreachable going forward,
+        // but a functional update removes the stale-closure hazard structurally
+        // rather than relying solely on the guard holding.
+        setEvents(prev => [...prev, newEvent]);
 
         // Calculate new scores
         const newHomeScore = selectedTeam === 'home' ? homeScore + (points || 0) : homeScore;
@@ -648,6 +666,7 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
         setPendingEvent(null);
         setSelectedEventPlayer(null);
         } finally {
+            isRecordingRef.current = false;
             setIsRecording(false);
         }
     };
