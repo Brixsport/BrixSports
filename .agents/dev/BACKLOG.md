@@ -5600,14 +5600,20 @@ Filed together, same investigation: a deliberate side-by-side comparison of `Foo
 
 ---
 
-### BUG-131 — No Server-Side Bound on Scoring `value` — Score Inflatable by Any Authenticated Logger
+### ~~BUG-131~~ — No Server-Side Bound on Scoring `value` — Score Inflatable by Any Authenticated Logger
 
-**Status:** OPEN — CRITICAL, must fix before any live match day
+**Status:** RESOLVED — 2026-07-24 (session 47B)
 **Priority:** CRITICAL — a realistic threat given this project's own 120-minute logger session requirement (long-lived sessions, mobile, more surface for a buggy client to misfire)
 
 **Problem:** `events/route.ts`'s scoring path trusts client-supplied `value` verbatim: `const points = typeof value === 'number' ? value : 1;` — no check that it matches the event type's real point value (1/2/3 for Free Throw/Field Goal/Three Pointer). A POST with `{ type: 'Field Goal', value: 500, made: true }` atomically adds 500 to `matches.homeScore` in one request — effectively bypassing BUG-052's admin-only score-write gate through this separate endpoint. Shared code, so football's `GOAL`/`PENALTY` path has the identical structural gap; basketball's legitimate non-1 values make an out-of-range value easier to miss in review.
 
-**Fix:** validate `value` against an explicit allowlist per event type (`FIELD_GOAL: 2, THREE_POINTER: 3, FREE_THROW: 1`) before it enters the atomic transaction, not just `typeof value === 'number'`.
+**Fix:** `points` is now derived from an explicit `SCORING_POINT_VALUES` allowlist keyed by normalized event type (`GOAL/PENALTY/OWN_GOAL: 1`, `FIELD_GOAL: 2`, `THREE_POINTER: 3`, `FREE_THROW: 1`) — client-supplied `value` no longer has any influence on the atomic score increment, for either sport. `src/app/api/matches/[id]/events/route.ts`.
+
+**Evidence:**
+- Commit: pending (this session, uncommitted at time of writing)
+- Verified by: live DB-confirmed test — `dev/verify-bug131-fix.mjs` created a throwaway `UPCOMING` basketball match on staging, POSTed `{ type: 'Field Goal', value: 500, made: true }` as a real assigned logger (`logger_1767968844029`) against the local dev server running the fixed code, then read `matches.home_score` back directly from the DB (not the API response).
+- Observed result: `POST` returned `201` with the event saved (raw `value: "500"` persisted on the event row itself, unrelated to score integrity), and `matches.home_score` read back as exactly `2` — the canonical Field Goal value — not `500`. Throwaway match, its event, and its logger assignment were all deleted after. `tsc --noEmit` held at 49 pre-existing errors, none new, none in the touched file.
+- Pending items: none for this specific gap. Found in passing during setup, filed separately, not fixed here: an admin-authenticated POST to this same route 500s with a `FOREIGN KEY constraint failed` on `logger_id` (`loggerId: authUser.id` is a `users.id` for an admin, but the column FKs to `loggers.id`) — this is the already-open `BUG-124`, confirmed still reproducible live, not a new finding.
 
 ---
 
@@ -5655,6 +5661,8 @@ Filed together, same investigation: a deliberate side-by-side comparison of `Foo
 3. No debounce/in-flight guard on scoring action buttons — only disabled by `!matchStarted || matchEnded`. A rapid double-tap fires two independently-atomic DB writes, double-logging the action server-side.
 
 **Fix:** reuse the existing `eventSaveError` banner pattern for (1) and (2); add an `isRecording` guard disabling the tapped button mid-request for (3), and prefer functional state updates (`setEvents(prev => ...)`) over closure-read values throughout `recordEvent`.
+
+**Note, session 47B (Richard, session-start context):** the event-save failure banner (`eventSaveError`, referenced above and in BACKLOG-125's carried-forward "next session" item 1) is **still not live-tested** — not because it was skipped, but because every attempt this cycle got derailed by BUG-126's `toFixed` crash (now code-fixed, not yet live-reverified per its own Evidence block). The crash was real, reproduced live, not a false alarm — but recovering from it requires a page refresh, and refreshing mid-test resets/disrupts the in-app player list (lineup selection), which blocks a clean re-run of the actual failure-banner repro steps (fresh match → block events request via DevTools → confirm banner renders). So two separate things remain open, not one: (1) BUG-126's fix needs its own live-reverify pass, (2) the failure-banner test needs a full uninterrupted run once (1) stops interrupting it.
 
 ---
 

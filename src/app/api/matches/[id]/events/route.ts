@@ -197,11 +197,30 @@ export async function POST(
         let newHomeScore: number | undefined;
         let newAwayScore: number | undefined;
 
+        // BUG-131: `points = typeof value === 'number' ? value : 1` trusted the
+        // client-supplied `value` verbatim for the atomic score increment — a POST
+        // with `{ type: 'Field Goal', value: 500, made: true }` added 500 to the
+        // score in a single request, bypassing BUG-052's admin-only score-write gate
+        // through this separate endpoint. Football's GOAL/PENALTY/OWN_GOAL path had
+        // the identical gap (never sends `value` at all, so it always fell through
+        // to the `: 1` default — but nothing stopped a crafted request from sending
+        // one). The authoritative point value for a scoring event is a fixed fact of
+        // its type, never something the client should supply — derive it from an
+        // explicit allowlist instead of trusting `value`, regardless of what was sent.
+        const SCORING_POINT_VALUES: Record<string, number> = {
+            GOAL: 1,
+            PENALTY: 1,
+            OWN_GOAL: 1,
+            FIELD_GOAL: 2,
+            THREE_POINTER: 3,
+            FREE_THROW: 1,
+        };
+
         await db.transaction(async (tx) => {
             await tx.insert(matchEvents).values(newEvent);
 
             if (isScoringEvent && !isPenaltyShootout) {
-                const points = typeof value === 'number' ? value : 1;
+                const points = SCORING_POINT_VALUES[upperType] ?? 1;
                 // Own goal: teamId is the player's team (who conceded) — credit the opposing team
                 const isHomeTeam = isOwnGoal
                     ? teamId !== match.homeTeamId
