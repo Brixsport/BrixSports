@@ -5594,9 +5594,9 @@ Filed together, same investigation: a deliberate side-by-side comparison of `Foo
 
 ---
 
-### BUG-129 — Every Basketball Event Silently Duplicates Within 15 Seconds
+### ~~BUG-129~~ — Every Basketball Event Silently Duplicates Within 15 Seconds
 
-**Status:** SHIPPED — 2026-07-24 (session 47B). Code fixed, live UI verification deliberately deferred (Richard's call — see Evidence).
+**Status:** RESOLVED — 2026-07-24 (session 47B). Live UI walkthrough completed on the PR #12 Vercel preview.
 **Priority:** CRITICAL — corrupts the event log and every derived stat for every basketball match, not an edge case
 
 **Problem:** `BasketballLogger.tsx`'s `recordEvent` generates a local id `` `e${events.length + 1}` `` and never reads the POST response body — only checks `res.ok`. `useMultiLogger.ts`'s `mergeEvents()` (confirmed, `src/lib/multiLogger.ts:130-131`) dedupes strictly via `new Map(allEvents.map(e => [e.id, e]))` — exact ID match only. Since the local temp id never gets swapped for the DB's real `nanoid()` id, the very next 15s sync cycle pulls the same event back from the server as a "new" entry and appends it. Every downstream stat (`calculateAdvancedStats`, `calculatePlayerRating`, event log/history views) double-counts. `FootballLogger.tsx` avoids this via `manager.confirmEvent(event.id, saved.event.id)` after a successful POST — basketball has no equivalent.
@@ -5605,15 +5605,14 @@ Filed together, same investigation: a deliberate side-by-side comparison of `Foo
 
 **Evidence:**
 - Commit: pending (this session, uncommitted at time of writing)
-- Verified by: code trace against football's already-proven equivalent pattern, plus a live API-level confirmation (from this session's `BUG-131` verification run) that a real POST to this exact route returns `{ event: { id: "S4L7TSlLs33l7iVVt8hFv", ... } }` — a real nanoid, not the client's temp `e1`-style id — confirming the response shape the fix's `saved.event.id` read depends on is correct and populated on every successful save.
-- **Not yet live-verified — explicitly deferred, not silently assumed:** whether the fix actually prevents the visible duplicate in the browser (click a scoring button, wait past the 15s sync tick, confirm the event/stat count stays at 1) requires a real interactive UI walkthrough, which a server-side script/API call cannot exercise. Started setting this up mid-session (a persistent `LIVE`-status throwaway match + injected browser session) but stopped and deleted it immediately once flagged — a `LIVE`-status match is exactly the trigger condition for the known `BACKLOG-124` local-dev hang (any event logged on a `LIVE` match fires an internal ratings self-fetch to a real deployed `NEXT_PUBLIC_APP_URL`, which can freeze the local dev server for minutes). Richard's explicit call: reserve full browser/UI verification for cases script/API genuinely can't cover, revisit later rather than mid-flow this session.
-- Pending items: the live UI dedup walkthrough above, whenever it's picked back up — use an `UPCOMING`-status match and manually flip `matchStarted` (or PATCH status to `LIVE` only right before the click, then back down) to avoid re-triggering the hang.
+- Verified by: full real interactive walkthrough on the PR #12 Vercel preview (`brixsports-staging-gb8ibb1qk...vercel.app`), real logger session, real pre-existing `LIVE` match (`w6o4YQAF5pem_Qa8uazAm`, unblocked by the same session's `BUG-139` fix). Logged a real Field Goal for a real player (LIGHT); DB-confirmed exactly 1 new row (`dev/check-live-match-events.mjs`), client showed "3 Events Recorded" (2 pre-existing + 1 new). Waited 18s (past the 15s sync interval), re-checked both the client's Event Log (still exactly 3, `LIGHT`'s Field Goal appearing once) and the DB row count (`SELECT COUNT(*)` = 3) — no duplicate on either side.
+- Pending items: none.
 
 ---
 
-### BUG-130 — `undoLastEvent()` Is Cosmetic Only, Never Reaches the Server (and the Server Wouldn't Revert the Score Even If It Did)
+### ~~BUG-130~~ — `undoLastEvent()` Is Cosmetic Only, Never Reaches the Server (and the Server Wouldn't Revert the Score Even If It Did)
 
-**Status:** SHIPPED — 2026-07-24 (session 47B). Server-side pieces live-verified; client-side UI trigger deliberately deferred (see Evidence).
+**Status:** RESOLVED — 2026-07-24 (session 47B). Live UI walkthrough completed on the PR #12 Vercel preview.
 **Priority:** CRITICAL — directly breaks Flow B/Flow C guarantees
 
 **Problem:** Three stacked gaps, all required for a real fix:
@@ -5631,8 +5630,8 @@ Filed together, same investigation: a deliberate side-by-side comparison of `Foo
 - Commit: pending (this session, uncommitted at time of writing)
 - Verified by: live DB-confirmed test — `dev/verify-bug130-fix.mjs`, staging DB via local dev server, real TBK player (`i7VBmo4RZkk5Q6_Zixw2I`).
 - Observed result: a made Field Goal correctly moved `home_score` `0 → 2` and `basketball_player_stats.field_goals_made`/`total_points` up by 1/+2; the DELETE call against that event's real id brought `home_score` back to exactly `0` and both stat columns back to their exact pre-event baseline (not a flat `-1`, not a partial revert). A separately-posted missed Field Goal (`value: 0, made: false`) never moved the score in either direction, and deleting it left the score and `field_goals_made` untouched — confirming the miss-gate holds symmetrically on both credit and revert. `tsc --noEmit` held at 49 pre-existing errors, none new, across all four touched files (`BasketballLogger.tsx`, `events/route.ts`, `events/[eventId]/route.ts`, `src/lib/scoring.ts`).
-- **Not yet live-verified — explicitly deferred:** whether `BasketballLogger.tsx`'s `undoLastEvent` actually fires this DELETE call correctly from a real Undo button click (the UI-interaction half of item 1 above) requires the same live browser walkthrough deferred for `BUG-129`, for the same reason (avoiding the `BACKLOG-124` `LIVE`-status local-dev hang mid-session). Everything a server-side script can prove about this fix is proven; the UI trigger itself is not yet click-tested.
-- Pending items: the deferred UI walkthrough above — do it together with `BUG-129`'s at PR-review time (click a scoring button, wait past the 15s sync, then click Undo; confirm both the dedup and the undo round-trip in one session).
+- **Live UI walkthrough, same session as `BUG-129`'s:** real Undo button click on the PR #12 preview, real logger session, the real Field Goal logged for `BUG-129`'s test. Score reverted client-side (`4 → 2`); DB-confirmed the event row was actually gone (`dev/check-live-match-events.mjs`) and `home_score` was back to `2` server-side, not just locally. Also confirmed the player's stat row (`dev/check-light-stats.mjs`): `field_goals_attempted` back to `0` (it was `0` before this player's first event of the session), `field_goals_made`/`total_points` back to their exact pre-event baseline — the click-driven undo reverts the same way the script-driven test already proved.
+- Pending items: none.
 
 ---
 
