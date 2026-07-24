@@ -308,6 +308,29 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                 setHomePlayers(homePlayersList);
                 setAwayPlayers(awayPlayersList);
 
+                // Resume-seeding gap (SYSTEM_CRITICALITY_MAP.md Tier 0, tracked since
+                // session 46, confirmed live this session): homeStarters/awayStarters
+                // are only ever populated by the in-app lineup-selection wizard --
+                // there is no server-side lineup persistence for basketball at all
+                // (unlike football's GET /api/matches/[id]/lineup). Since matchStarted
+                // initializes straight to true whenever match.status === 'LIVE' on
+                // mount, any already-live match (a refresh, a second logger, or simply
+                // reopening the app) skips the wizard entirely -- homeStarters/
+                // awayStarters stay permanently [], and the "Select Player" modal
+                // (filtered to just those arrays) is permanently empty, blocking every
+                // new event from ever being logged. Building full lineup persistence
+                // to mirror football exactly is real, separate scope -- this seeds
+                // starters from the full roster instead, which unblocks logging
+                // completely at the cost of not distinguishing on-court from bench
+                // for a resumed session specifically (a resumed session can select any
+                // rostered player, not just the original 5 starters -- acceptable
+                // given the alternative is a permanently unusable logger).
+                if (match.status === 'LIVE') {
+                    setHomeStarters(prev => prev.length > 0 ? prev : homePlayersList.map((p: Player) => p.id));
+                    setAwayStarters(prev => prev.length > 0 ? prev : awayPlayersList.map((p: Player) => p.id));
+                    setLineupSet(true);
+                }
+
                 // Fetch existing events for this match
                 try {
                     const eventsResponse = await fetch(`/api/matches/${match.id}/events`);
