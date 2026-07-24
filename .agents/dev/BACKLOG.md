@@ -5882,3 +5882,18 @@ Filed together, same investigation: a `code-reviewer` agent pass explicitly inde
 - Pending items: full click-through re-verification on the next preview rebuild (push required — this fix isn't live on the deployed preview until the new commit builds). Server-side lineup persistence (the "real" fix, restoring actual starters/bench on resume) remains open, not filed as a separate number yet — revisit if/when the shared-logger-core refactor or a dedicated lineup-persistence directive gets scoped.
 
 ---
+
+---
+
+### BACKLOG-141 — Real Server-Side Lineup Persistence for Basketball (Mirror Football's `/lineup` Endpoint)
+
+**Status:** OPEN — deliberately deferred, not attempted
+**Priority:** Medium-High — the actual, complete fix for `BUG-139`'s resume-seeding gap; `BUG-139`'s shipped fix is a safe fallback, not this
+
+**Problem:** `BUG-139` (this session) fixed the immediate blocker — basketball's "Select Player" modal being permanently empty on any resumed/already-`LIVE` match — by seeding `homeStarters`/`awayStarters` from the full roster when they're empty on mount. That's a fallback, not a real fix: it means a resumed session can never distinguish the original 5 starters from the bench, for the rest of that session. Football doesn't have this problem because it persists lineups server-side: `FootballLogger.tsx` fetches `GET /api/matches/[id]/lineup` on every mount and calls `setLineups(lineupsData.lineups)`, so the real starters/bench split survives a refresh, a second logger joining, or any resume — basketball has no equivalent endpoint, no equivalent persisted column usage, and no equivalent fetch-on-mount.
+
+**Fix (not built):** build the basketball equivalent of football's lineup flow — persist `homeStarters`/`awayStarters` (or an equivalent starters/bench shape) to the server when a logger completes the in-app lineup wizard (the `matches.lineups` JSON column already exists and is already read by `src/lib/ratingsService.ts`'s `calculateAndSaveRatings`, so the shape is already partially spoken for — confirm compatibility before reusing it, or add a dedicated basketball lineup table/column if the shapes conflict), then fetch and seed from it on every mount, mirroring football's `GET /lineup` pattern exactly. Once this lands, `BUG-139`'s roster-fallback becomes a true last-resort (a match that was started before this feature existed) rather than the only mechanism.
+
+**Deferred:** real, separate feature-sized scope — not a same-session patch alongside tonight's critical-bug fixes. Explicitly named and filed per Richard's request, distinct from `BUG-139`'s already-shipped stopgap.
+
+---
