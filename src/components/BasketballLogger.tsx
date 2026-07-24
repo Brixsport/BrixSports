@@ -55,6 +55,12 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
     const [viewMode, setViewMode] = useState<'logger' | 'stats' | 'history'>('logger');
     const [isSaving, setIsSaving] = useState(false);
     const [isUndoing, setIsUndoing] = useState(false);
+    // BACKLOG-134: scoring buttons were only disabled by !matchStarted || matchEnded --
+    // a rapid double-tap (most reachable via the player-select modal, which every
+    // scoring action routes through) fired two independently-atomic recordEvent()
+    // calls, double-logging the same action server-side. Guards recordEvent itself so
+    // it holds regardless of which UI entry point triggers it.
+    const [isRecording, setIsRecording] = useState(false);
     // Visible failure signal for event-save failures -- recordEvent used to only
     // console.error on failure, with no on-screen indication the event never saved.
     const [eventSaveError, setEventSaveError] = useState<string | null>(null);
@@ -319,7 +325,10 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                                 playerId: e.playerId,
                                 assistPlayerId: e.relatedPlayerId,
                                 detail: e.detail,
-                                value: e.value ? (typeof e.value === 'string' ? JSON.parse(e.value) : e.value) : undefined,
+                                // Same falsy-zero class as BUG-126/BUG-132/BUG-133 -- `e.value ? ... : undefined`
+                                // collapsed a legitimate logged-miss `value: 0` back to undefined on every
+                                // page refresh/remount, discarding the make/miss distinction the DB actually holds.
+                                value: e.value !== undefined && e.value !== null ? (typeof e.value === 'string' ? JSON.parse(e.value) : e.value) : undefined,
                             }));
                             setEvents(transformedEvents);
                         }
@@ -331,7 +340,12 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
 
                 setIsLoading(false);
             } catch (error) {
+                // BACKLOG-134: this outer catch only console.error'd -- a failed
+                // teams/players/eligible-players fetch left the roster empty with zero
+                // on-screen indication, indistinguishable from "this match genuinely has
+                // no eligible players." Reuse the existing eventSaveError banner.
                 console.error('Error fetching data:', error);
+                setEventSaveError('Failed to load teams/roster — check connection and reload. Player lists may be empty or incomplete.');
                 setIsLoading(false);
             }
         };
@@ -485,6 +499,9 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
 
     // Record the actual event
     const recordEvent = async (type: BasketballEventType, playerId: string, points?: number, assistPlayerId?: string | null) => {
+        if (isRecording) return;
+        setIsRecording(true);
+        try {
         const allPlayers = [...homePlayers, ...awayPlayers];
         const player = allPlayers.find(p => p.id === playerId);
         const assistPlayer = assistPlayerId ? allPlayers.find(p => p.id === assistPlayerId) : null;
@@ -607,6 +624,9 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
         // Reset state
         setPendingEvent(null);
         setSelectedEventPlayer(null);
+        } finally {
+            setIsRecording(false);
+        }
     };
 
     const undoLastEvent = async () => {
@@ -958,25 +978,25 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                                         value="2PT"
                                         color="bg-green-500/20 text-green-500 border-green-500/30"
                                         onClick={() => handleEventClick('Field Goal', 2)}
-                                        matchStarted={matchStarted} matchEnded={matchEnded}
+                                        matchStarted={matchStarted} matchEnded={matchEnded} disabled={isRecording}
                                     />
                                     <ActionButton
                                         label="3 Points Made"
                                         value="3PT"
                                         color="bg-purple-500/20 text-purple-500 border-purple-500/30"
                                         onClick={() => handleEventClick('Three Pointer', 3)}
-                                        matchStarted={matchStarted} matchEnded={matchEnded}
+                                        matchStarted={matchStarted} matchEnded={matchEnded} disabled={isRecording}
                                     />
                                     <ActionButton
                                         label="Free Throw"
                                         value="FT"
                                         color="bg-blue-500/20 text-blue-500 border-blue-500/30"
                                         onClick={() => handleEventClick('Free Throw', 1)}
-                                        matchStarted={matchStarted} matchEnded={matchEnded}
+                                        matchStarted={matchStarted} matchEnded={matchEnded} disabled={isRecording}
                                     />
-                                    <SimpleActionButton label="2PT Missed" onClick={() => handleEventClick('Field Goal', 0)} matchStarted={matchStarted} matchEnded={matchEnded} />
-                                    <SimpleActionButton label="3PT Missed" onClick={() => handleEventClick('Three Pointer', 0)} matchStarted={matchStarted} matchEnded={matchEnded} />
-                                    <SimpleActionButton label="FT Missed" onClick={() => handleEventClick('Free Throw', 0)} matchStarted={matchStarted} matchEnded={matchEnded} />
+                                    <SimpleActionButton label="2PT Missed" onClick={() => handleEventClick('Field Goal', 0)} matchStarted={matchStarted} matchEnded={matchEnded} disabled={isRecording} />
+                                    <SimpleActionButton label="3PT Missed" onClick={() => handleEventClick('Three Pointer', 0)} matchStarted={matchStarted} matchEnded={matchEnded} disabled={isRecording} />
+                                    <SimpleActionButton label="FT Missed" onClick={() => handleEventClick('Free Throw', 0)} matchStarted={matchStarted} matchEnded={matchEnded} disabled={isRecording} />
                                 </div>
                             </div>
 
@@ -987,8 +1007,8 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                                     Rebounds
                                 </h3>
                                 <div className="grid grid-cols-2 gap-3">
-                                    <SimpleActionButton label="Offensive Rebound" onClick={() => handleEventClick('Rebound')} matchStarted={matchStarted} matchEnded={matchEnded} />
-                                    <SimpleActionButton label="Defensive Rebound" onClick={() => handleEventClick('Rebound')} matchStarted={matchStarted} matchEnded={matchEnded} />
+                                    <SimpleActionButton label="Offensive Rebound" onClick={() => handleEventClick('Rebound')} matchStarted={matchStarted} matchEnded={matchEnded} disabled={isRecording} />
+                                    <SimpleActionButton label="Defensive Rebound" onClick={() => handleEventClick('Rebound')} matchStarted={matchStarted} matchEnded={matchEnded} disabled={isRecording} />
                                 </div>
                             </div>
 
@@ -999,9 +1019,9 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                                     Defense
                                 </h3>
                                 <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                                    <SimpleActionButton label="Steal" onClick={() => handleEventClick('Steal')} matchStarted={matchStarted} matchEnded={matchEnded} />
-                                    <SimpleActionButton label="Block" onClick={() => handleEventClick('Block')} matchStarted={matchStarted} matchEnded={matchEnded} />
-                                    <SimpleActionButton label="Deflection" onClick={() => handleEventClick('Block')} matchStarted={matchStarted} matchEnded={matchEnded} />
+                                    <SimpleActionButton label="Steal" onClick={() => handleEventClick('Steal')} matchStarted={matchStarted} matchEnded={matchEnded} disabled={isRecording} />
+                                    <SimpleActionButton label="Block" onClick={() => handleEventClick('Block')} matchStarted={matchStarted} matchEnded={matchEnded} disabled={isRecording} />
+                                    <SimpleActionButton label="Deflection" onClick={() => handleEventClick('Block')} matchStarted={matchStarted} matchEnded={matchEnded} disabled={isRecording} />
                                 </div>
                             </div>
 
@@ -1012,8 +1032,8 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                                     Playmaking
                                 </h3>
                                 <div className="grid grid-cols-2 gap-3">
-                                    <SimpleActionButton label="Assist" onClick={() => handleEventClick('Assist')} matchStarted={matchStarted} matchEnded={matchEnded} />
-                                    <SimpleActionButton label="Turnover" onClick={() => handleEventClick('Turnover')} matchStarted={matchStarted} matchEnded={matchEnded} />
+                                    <SimpleActionButton label="Assist" onClick={() => handleEventClick('Assist')} matchStarted={matchStarted} matchEnded={matchEnded} disabled={isRecording} />
+                                    <SimpleActionButton label="Turnover" onClick={() => handleEventClick('Turnover')} matchStarted={matchStarted} matchEnded={matchEnded} disabled={isRecording} />
                                 </div>
                             </div>
 
@@ -1024,12 +1044,12 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                                     Fouls
                                 </h3>
                                 <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                                    <SimpleActionButton label="Personal Foul" onClick={() => handleEventClick('Foul')} matchStarted={matchStarted} matchEnded={matchEnded} />
-                                    <SimpleActionButton label="Technical Foul" onClick={() => handleEventClick('Foul')} matchStarted={matchStarted} matchEnded={matchEnded} />
-                                    <SimpleActionButton label="Flagrant Foul" onClick={() => handleEventClick('Foul')} matchStarted={matchStarted} matchEnded={matchEnded} />
-                                    <SimpleActionButton label="Offensive Foul" onClick={() => handleEventClick('Foul')} matchStarted={matchStarted} matchEnded={matchEnded} />
-                                    <SimpleActionButton label="Shooting Foul" onClick={() => handleEventClick('Foul')} matchStarted={matchStarted} matchEnded={matchEnded} />
-                                    <SimpleActionButton label="Unsportsmanlike" onClick={() => handleEventClick('Foul')} matchStarted={matchStarted} matchEnded={matchEnded} />
+                                    <SimpleActionButton label="Personal Foul" onClick={() => handleEventClick('Foul')} matchStarted={matchStarted} matchEnded={matchEnded} disabled={isRecording} />
+                                    <SimpleActionButton label="Technical Foul" onClick={() => handleEventClick('Foul')} matchStarted={matchStarted} matchEnded={matchEnded} disabled={isRecording} />
+                                    <SimpleActionButton label="Flagrant Foul" onClick={() => handleEventClick('Foul')} matchStarted={matchStarted} matchEnded={matchEnded} disabled={isRecording} />
+                                    <SimpleActionButton label="Offensive Foul" onClick={() => handleEventClick('Foul')} matchStarted={matchStarted} matchEnded={matchEnded} disabled={isRecording} />
+                                    <SimpleActionButton label="Shooting Foul" onClick={() => handleEventClick('Foul')} matchStarted={matchStarted} matchEnded={matchEnded} disabled={isRecording} />
+                                    <SimpleActionButton label="Unsportsmanlike" onClick={() => handleEventClick('Foul')} matchStarted={matchStarted} matchEnded={matchEnded} disabled={isRecording} />
                                 </div>
                             </div>
 
@@ -1040,8 +1060,8 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                                     Team Actions
                                 </h3>
                                 <div className="grid grid-cols-2 gap-3">
-                                    <SimpleActionButton label="Substitution" onClick={() => handleEventClick('Substitution')} matchStarted={matchStarted} matchEnded={matchEnded} />
-                                    <SimpleActionButton label="Timeout" onClick={() => handleEventClick('Timeout')} matchStarted={matchStarted} matchEnded={matchEnded} />
+                                    <SimpleActionButton label="Substitution" onClick={() => handleEventClick('Substitution')} matchStarted={matchStarted} matchEnded={matchEnded} disabled={isRecording} />
+                                    <SimpleActionButton label="Timeout" onClick={() => handleEventClick('Timeout')} matchStarted={matchStarted} matchEnded={matchEnded} disabled={isRecording} />
                                 </div>
                             </div>
                         </div>
@@ -1763,11 +1783,20 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                                             // (TD-010) -- not the stricter PATCH-first Start/End Match
                                             // pattern, since a failed period-label PATCH here doesn't risk
                                             // silent data loss the way a failed status transition would.
+                                            // BACKLOG-134: this fire-and-forget PATCH only console.error'd on
+                                            // failure -- no user-facing signal if the quarter change didn't
+                                            // persist. `res.ok` was never even checked (fetch only rejects on
+                                            // network failure, not on a 4xx/5xx response).
                                             fetch(`/api/matches/${match.id}`, {
                                                 method: 'PATCH',
                                                 headers: { 'Content-Type': 'application/json' },
                                                 body: JSON.stringify({ currentPeriod: `Q${nextQuarter}` }),
-                                            }).catch((e) => console.error('Failed to persist period transition:', e));
+                                            }).then((res) => {
+                                                if (!res.ok) setEventSaveError(`Failed to save Q${nextQuarter} transition (${res.status}) — quarter may not persist on refresh.`);
+                                            }).catch((e) => {
+                                                console.error('Failed to persist period transition:', e);
+                                                setEventSaveError(`Failed to save Q${nextQuarter} transition — offline or unreachable.`);
+                                            });
                                         }}
                                         className="w-full bg-primary text-black py-4 rounded-xl font-black uppercase tracking-widest hover:scale-105 transition-transform flex items-center justify-center gap-3"
                                     >
@@ -1788,7 +1817,12 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                                                     method: 'PATCH',
                                                     headers: { 'Content-Type': 'application/json' },
                                                     body: JSON.stringify({ currentPeriod: 'OT' }),
-                                                }).catch((e) => console.error('Failed to persist OT transition:', e));
+                                                }).then((res) => {
+                                                    if (!res.ok) setEventSaveError(`Failed to save OT transition (${res.status}) — period may not persist on refresh.`);
+                                                }).catch((e) => {
+                                                    console.error('Failed to persist OT transition:', e);
+                                                    setEventSaveError('Failed to save OT transition — offline or unreachable.');
+                                                });
                                             } else {
                                                 // Real match end. This used to only call setMatchEnded(true)
                                                 // locally + a dead CustomEvent dispatch -- never the real
@@ -1821,7 +1855,12 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                                             method: 'PATCH',
                                             headers: { 'Content-Type': 'application/json' },
                                             body: JSON.stringify({ currentPeriod: 'OT' }),
-                                        }).catch((e) => console.error('Failed to persist OT transition:', e));
+                                        }).then((res) => {
+                                            if (!res.ok) setEventSaveError(`Failed to save OT transition (${res.status}) — period may not persist on refresh.`);
+                                        }).catch((e) => {
+                                            console.error('Failed to persist OT transition:', e);
+                                            setEventSaveError('Failed to save OT transition — offline or unreachable.');
+                                        });
                                     }}
                                     className="w-full bg-white/5 border border-white/10 text-white py-4 rounded-xl font-black uppercase tracking-widest hover:bg-white/10 transition-all"
                                 >
@@ -1851,11 +1890,11 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
 }
 
 
-function ActionButton({ label, value, color, onClick, matchStarted, matchEnded }: { label: string; value: string; color: string; onClick: () => void; matchStarted: boolean; matchEnded?: boolean }) {
+function ActionButton({ label, value, color, onClick, matchStarted, matchEnded, disabled }: { label: string; value: string; color: string; onClick: () => void; matchStarted: boolean; matchEnded?: boolean; disabled?: boolean }) {
     return (
         <button
             onClick={onClick}
-            disabled={!matchStarted || matchEnded}
+            disabled={!matchStarted || matchEnded || disabled}
             className={`border rounded-2xl p-6 transition-all hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 ${color}`}
         >
             <p className="text-3xl font-display italic mb-2">{value}</p>
@@ -1864,11 +1903,11 @@ function ActionButton({ label, value, color, onClick, matchStarted, matchEnded }
     );
 }
 
-function SimpleActionButton({ label, onClick, matchStarted, matchEnded }: { label: string; onClick: () => void; matchStarted: boolean; matchEnded?: boolean }) {
+function SimpleActionButton({ label, onClick, matchStarted, matchEnded, disabled }: { label: string; onClick: () => void; matchStarted: boolean; matchEnded?: boolean; disabled?: boolean }) {
     return (
         <button
             onClick={onClick}
-            disabled={!matchStarted || matchEnded}
+            disabled={!matchStarted || matchEnded || disabled}
             className="bg-white/5 border border-white/10 rounded-xl p-4 hover:bg-white/10 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
         >
             <p className="text-xs font-black uppercase tracking-widest">{label}</p>
