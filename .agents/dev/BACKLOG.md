@@ -5577,12 +5577,18 @@ Filed together, same investigation: a deliberate side-by-side comparison of `Foo
 
 ### BUG-129 — Every Basketball Event Silently Duplicates Within 15 Seconds
 
-**Status:** OPEN — CRITICAL, must fix before any live match day
+**Status:** SHIPPED — 2026-07-24 (session 47B). Code fixed, live UI verification deliberately deferred (Richard's call — see Evidence).
 **Priority:** CRITICAL — corrupts the event log and every derived stat for every basketball match, not an edge case
 
 **Problem:** `BasketballLogger.tsx`'s `recordEvent` generates a local id `` `e${events.length + 1}` `` and never reads the POST response body — only checks `res.ok`. `useMultiLogger.ts`'s `mergeEvents()` (confirmed, `src/lib/multiLogger.ts:130-131`) dedupes strictly via `new Map(allEvents.map(e => [e.id, e]))` — exact ID match only. Since the local temp id never gets swapped for the DB's real `nanoid()` id, the very next 15s sync cycle pulls the same event back from the server as a "new" entry and appends it. Every downstream stat (`calculateAdvancedStats`, `calculatePlayerRating`, event log/history views) double-counts. `FootballLogger.tsx` avoids this via `manager.confirmEvent(event.id, saved.event.id)` after a successful POST — basketball has no equivalent.
 
-**Fix:** on a successful POST, read `saved.event.id` from the response and replace the local temp id in `events` state with it, before the next sync cycle can run.
+**Fix:** `recordEvent`'s POST-success branch now `await`s `res.json()`, and on `saved?.event?.id` present, replaces the matching temp-id event in `events` state (`setEvents(prev => prev.map(...))`) with the server's real id — mirrors football's `manager.confirmEvent(tempId, serverId)` pattern. `src/components/BasketballLogger.tsx`.
+
+**Evidence:**
+- Commit: pending (this session, uncommitted at time of writing)
+- Verified by: code trace against football's already-proven equivalent pattern, plus a live API-level confirmation (from this session's `BUG-131` verification run) that a real POST to this exact route returns `{ event: { id: "S4L7TSlLs33l7iVVt8hFv", ... } }` — a real nanoid, not the client's temp `e1`-style id — confirming the response shape the fix's `saved.event.id` read depends on is correct and populated on every successful save.
+- **Not yet live-verified — explicitly deferred, not silently assumed:** whether the fix actually prevents the visible duplicate in the browser (click a scoring button, wait past the 15s sync tick, confirm the event/stat count stays at 1) requires a real interactive UI walkthrough, which a server-side script/API call cannot exercise. Started setting this up mid-session (a persistent `LIVE`-status throwaway match + injected browser session) but stopped and deleted it immediately once flagged — a `LIVE`-status match is exactly the trigger condition for the known `BACKLOG-124` local-dev hang (any event logged on a `LIVE` match fires an internal ratings self-fetch to a real deployed `NEXT_PUBLIC_APP_URL`, which can freeze the local dev server for minutes). Richard's explicit call: reserve full browser/UI verification for cases script/API genuinely can't cover, revisit later rather than mid-flow this session.
+- Pending items: the live UI dedup walkthrough above, whenever it's picked back up — use an `UPCOMING`-status match and manually flip `matchStarted` (or PATCH status to `LIVE` only right before the click, then back down) to avoid re-triggering the hang.
 
 ---
 

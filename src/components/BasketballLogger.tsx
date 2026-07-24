@@ -568,6 +568,17 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                 setEventSaveError(`Failed to save "${type}" (${res.status}) — event kept locally only. Check connection and retry logging it if needed.`);
             } else {
                 setEventSaveError(null);
+                // BUG-129: the local temp id (`e${events.length + 1}`) must be swapped
+                // for the server's real nanoid() id before the next 15s multi-logger
+                // sync tick — useMultiLogger's mergeEvents() dedupes strictly by exact
+                // id match, so an un-swapped temp id makes the server's copy of this
+                // same event look like a brand-new entry on the very next sync,
+                // double-counting it in every derived stat (rating, boxscore, event
+                // history). Mirrors FootballLogger's manager.confirmEvent(tempId, serverId).
+                const saved = await res.json().catch(() => null);
+                if (saved?.event?.id) {
+                    setEvents(prev => prev.map(e => (e.id === newEvent.id ? { ...e, id: saved.event.id } : e)));
+                }
             }
         } catch (error) {
             console.error('Failed to persist event:', error);
