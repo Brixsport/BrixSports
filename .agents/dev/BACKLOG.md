@@ -5456,3 +5456,95 @@ On event delete: instead of decrementing a global counter (fragile, can go negat
 **Scope:** ~40 lines. `FootballLogger.tsx` only — pass `isShootout` prop to `PenaltySequenceModal` and conditionally skip Step 1.
 
 **Related:** BACKLOG-105 (shootout implementation), BACKLOG-104 (penalty outcomes)
+
+---
+
+### BACKLOG-128 — Site Header Logo Is a CSS Div Placeholder, Not the Real Monogram
+
+**Status:** OPEN
+**Priority:** Low-Medium — cosmetic, but platform-wide and visible on every page
+**Filed:** 2026-07-23 (session 47), found by Richard via element inspector during the favicon directive
+
+**Problem:** The header logo across the viewer app (confirmed via `<launch-selected-element>`, path `div.max-w-7xl > div.h-14 > div.flex > a.flex`) is a hand-rolled Tailwind div, not an image:
+```html
+<div class="w-7 h-7 bg-primary rounded-lg flex items-center justify-center font-display text-lg -skew-x-12 text-black">B</div>
+```
+A skewed black "B" on the theme's `bg-primary` blue — never replaced with the actual BrixSports monogram (navy/purple/amber assets now exist at `public/icons/role-colorways/`). Whether admin/logger dashboards have their own equivalent placeholder is unconfirmed — needs checking during the fix.
+
+**Not fixed this session** — this is a shared-component UI change (need to locate the actual header component, decide sizing/skew/transparent-vs-solid treatment, verify it doesn't regress layout), not an asset swap. Explicitly out of scope for the favicon/PWA-icon directive this was found during.
+
+**Fix (not built):** Replace the div with an `<Image>` using the transparent navy monogram (`viewer-32-transparent.png` or similar, sized to match the current `w-7 h-7` slot), or the solid navy version if a background is preferred at that size.
+
+---
+
+### BACKLOG-129 — Dynamic, Role-Relevant PWA Shortcuts (Future)
+
+**Status:** OPEN — deliberately deferred, Richard's own framing ("in the future")
+**Priority:** Low
+**Filed:** 2026-07-23 (session 47), noted during the favicon directive
+
+**Idea:** Currently each manifest's `shortcuts` array is a fixed, hand-written list (viewer: Live Matches/News/Profile; admin: Dashboard/Matches/News; logger: Logger). Richard's idea for later: make these more dynamic/contextual per role — e.g. viewer shortcuts could deep-link to a followed team or recently-viewed competition; admin could surface "Manage Lineups"/"Assign Loggers"; logger could surface "Assign Match"/"Manage Match" for whatever's currently assigned.
+
+**Not scoped or estimated** — purely a future idea at this point, no design decided. All three manifests' shortcuts currently point at valid, existing icons (fixed this session as part of the favicon directive) — the *icons* aren't broken, only the *content* is static rather than dynamic.
+
+---
+
+### BACKLOG-130 — Clean Confirmed `create-next-app` Boilerplate From `public/`
+
+**Status:** OPEN
+**Priority:** Low — cosmetic/hygiene, zero functional impact
+**Filed:** 2026-07-23 (session 47), Richard's suspicion confirmed during the favicon directive
+
+**Problem:** `public/next.svg`, `public/vercel.svg`, `public/window.svg`, `public/file.svg`, `public/globe.svg` — confirmed via repo-wide grep to have zero references anywhere in `src/`. These are the default assets `create-next-app` scaffolds on `next init`, never cleaned up. **`public/grid.svg` is NOT part of this** — confirmed actively used (decorative background) in `src/app/profile/page.tsx:256` and `src/app/teams/[id]/page.tsx:124` — do not remove it.
+
+**Not deleted this session** — low-stakes but deserves its own small, deliberate pass rather than riding along silently in an unrelated commit, per the same conservative "flag before delete" convention applied to `manifest.json` and `admin-icon.svg` this same session.
+
+**Fix (not built):** Delete the 5 confirmed-orphan SVGs. Re-grep immediately before deleting (this list could drift) rather than trusting this entry's snapshot.
+
+---
+
+### BUG-127 — Viewer PWA (root `/`) Reportedly Not Offering Install — Unconfirmed, Needs Repro
+
+**Status:** OPEN — flagged, not diagnosed
+**Priority:** Medium — if real, blocks the viewer app's own PWA install entirely (Tier 1, not Tier 0 — the site itself works fine unwrapped)
+**Filed:** 2026-07-23 (session 47), Richard reported "the / root i.e. the viewer manifest unable to install"
+
+**Problem:** Richard reported the viewer app (root `/`) doesn't offer install. Investigated what's inspectable from here — found nothing wrong: `manifest-user.json` fetched live from `https://brixsports-staging.vercel.app/manifest-user.json` is valid JSON, has `name`/`short_name`/`icons` (192+512, `purpose: "any"`)/`start_url`/`scope`/`display: "standalone"` — meets Chrome's documented installability criteria on paper. Console log on the live site confirms `Service Worker registered: /sw-user.js` with no errors. Could not reproduce or diagnose further from an automated browser session — Chrome's native install prompt (`beforeinstallprompt`) requires genuine user engagement signals that don't fire from scripted navigation, and Chrome doesn't log an explicit "not installable" reason to the console — that only shows in DevTools' own Application → Manifest panel or a Lighthouse PWA audit, run interactively.
+
+**Explicitly not guessed at** — per this project's evidence-standard discipline, not fixing based on a plausible-sounding theory when the actual failure hasn't been observed directly.
+
+**Needs from Richard:** what does Chrome's install UI actually show (or not show) on `/` — no install icon in the address bar at all, an install option that does nothing when clicked, or something else? Ideally paired with DevTools' Application → Manifest panel screenshot, which states the specific installability blocker directly if one exists.
+
+**Update, same session:** Chrome's own address-bar install affordance ("Open in app") was observed present on `/` in a later screenshot — genuine browser-level installability may already be fine. What "unable to install" actually referred to needs clarifying: native browser installability, or BrixSports' own custom in-app install-prompt UI (`InstallPrompt.tsx`) not appearing/behaving as expected. See BACKLOG-131 for real, confirmed gaps found in that custom prompt's logic while investigating this.
+
+---
+
+### BUG-128 — Admin Session Bleeds Into Viewer Header via Shared, Unscoped `localStorage.authToken`
+
+**Status:** OPEN — confirmed root cause via code, not yet fixed
+**Priority:** HIGH — directly violates this project's own actor-model rule ("Viewers NEVER have a session. Never assume otherwise.") and works against the same-session's own effort to make viewer/admin/logger feel like distinct apps
+**Filed:** 2026-07-23 (session 47), found by Richard: visiting `/` (root viewer page) while an admin session was active showed "ADMIN USER" in the header instead of a normal viewer/guest state
+
+**Problem:** `AuthContext.tsx` reads a single, unscoped `localStorage.getItem('authToken')` key (lines 54/74/135/171/201) with no separation by role or app. Since viewer/admin/logger are all the same origin, logging into `/admin` writes `authToken` to `localStorage`; the *viewer's* `AuthContext.checkAuth()` on `/` reads that exact same key and renders the header as authenticated — as the admin. Confirmed via screenshot: header showed "ADMIN USER" while browsing the public root path.
+
+**Same root-cause class as an already-partially-fixed bug, different surface:** session 38C (`known-issues.md`, 2026-06-30) found and fixed the identical shape via `resolveEffectiveUserId()` for the `follows`/`favorites`/`teams/follow`/`notifications` API routes (auth-cookie path scope, `authToken` set at `path: '/'` reaching every role's routes). This is the same underlying single-shared-credential problem, surfacing via `localStorage` this time, in the header/account-display UI rather than an API route — that earlier fix never covered this surface.
+
+**Not fixed this session** — deliberately deferred, Richard's explicit call to avoid scope creep during the favicon directive. Scope of a real fix is unclear without investigation: does this affect only the header display, or can an admin's `authToken` also authorize viewer-surface API calls incorrectly (or vice versa)? That question needs answering before scoping the fix, not assumed either way.
+
+**Needs its own dedicated session** — this is an auth/session-architecture question, not a UI patch.
+
+---
+
+### BACKLOG-131 — PWA Install-Prompt System: Confirmed Bugs + Deferred Design Question
+
+**Status:** OPEN
+**Priority:** Medium (the confirmed bug) / not scoped (the design question)
+**Filed:** 2026-07-23 (session 47), Richard asked how the install-prompt trigger logic works today and whether a proper reminder system/algorithm is needed
+
+**Confirmed via code, not fixed (deliberately deferred to avoid scope creep):**
+1. `InstallPrompt.tsx`'s dismiss timestamp (`localStorage['pwa-install-dismissed']`) is **not namespaced per app type** — unlike the "installed" flag (`brix-${appType}-installed`), which is correctly scoped. Dismissing the install prompt on the viewer suppresses it for admin and logger too (and vice versa) for the full 7-day window. Directly undercuts this session's own work making the three roles feel like distinct apps.
+2. Stale comment/code mismatch: comment says "Show prompt after 30 seconds," actual code is `setTimeout(..., 5000)` (5s). Cosmetic, but misleading to a future reader.
+
+**Deferred, not scoped — Richard's broader design question:** should there be a dedicated system (e.g. a sliding-window reminder strategy — show once, escalate/re-show on a schedule if dismissed, per-role tuning) rather than the current flat "5s after event, 7-day dismiss cooldown" logic? Real product/UX design work, not a quick fix — needs its own session to actually design, not sketched under time pressure here.
+
+**Also unresolved from the same investigation:** whether "unable to install" (the original report that started this whole thread) referred to genuine browser-level installability (Chrome's own criteria — appeared fine when checked) or this custom in-app prompt component specifically. See BUG-127.
