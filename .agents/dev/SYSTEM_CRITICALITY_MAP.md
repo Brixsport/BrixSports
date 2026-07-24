@@ -35,6 +35,19 @@ This is not a feature among features — it's the spine everything else attaches
 - **No mutation audit trail for `matches` table.** Score, status, and period are admin-PATCHable with no record of previous values, actor, or timestamp. `system_settings_history` already proves the pattern works — match data mutations need the same treatment. Without it, a direct admin score correction during a live match is invisible and unrecoverable.
 - ~~Basketball live match-score/period persistence is broken~~ **RESOLVED, session 46 (`BACKLOG-125`), live-tested via a real played-through match, not just code review.** `matches.homeScore`/`awayScore` now updates correctly during play (sport-aware `isScoringEvent`) and quarter/period transitions persist (TD-010's fix ported from `FootballLogger.tsx`). DB-confirmed post-finalize on a real logger walkthrough: `{"status":"FINISHED","current_period":"FINISHED","home_score":2,"away_score":3}`. See `BACKLOG.md` BACKLOG-125, `RUNLOG.md` 2026-07-23.
 - **Basketball has zero WS broadcast wired up — confirmed live, session 46.** Same shape as football's own already-fixed `BUG-108/116` history (DB write and live broadcast fully decoupled), except basketball never received that fix at all — a live basketball match today would write correct scores/events to the DB but no connected viewer would see anything update without a manual refresh. This is Tier 0 (WS connection resilience / Flow B), not a Tier 1 polish item. Must be resolved before basketball is used for any real live-scored match. Filed as part of the football→basketball systematic mapping pass, session 47.
+
+  **Scoping note for whenever this port is built (session 47's basketball-native audit, checked against football's own still-OPEN WS gaps, not just its fixed ones):**
+  | Football's open WS/clock gap | Inherited automatically by basketball's port, or needs separate copy-in? |
+  |---|---|
+  | No delta cap in `tick()` (`match-state-manager.ts`) | Needs copy-in — football-specific file, not imported by basketball today |
+  | `SUSPENDED` doesn't stop the clock (`match-state-manager.ts`) | Needs copy-in — same reasoning |
+  | Dual-logger dual clocks | N/A — already RESOLVED (BUG-122), shared server code, inherited for free if the port reuses `match:time:update` |
+  | `isStale` binary, no escalation | Inherited for free — shared `useWebSocket.tsx`, already active on basketball's viewer pages today |
+  | Subscribe storm | Inherited for free — same file |
+  | Retry-interval leak on remount (`BUG-137`) | Inherited for free — same file |
+  | Staging/prod share one Railway WS server | Inherited for free — room-prefix mitigation already shipped, residual risk (no dedicated staging service) also applies automatically |
+
+  Net: most of football's *open* WS-layer risk is shared, sport-agnostic code basketball will inherit the moment it connects — for both the mitigations already shipped and the gaps still open. Only the two clock-`tick()` items live in football-specific code and would need a deliberate decision to copy in (or, better, an opportunity to simply not repeat them).
 - **Basketball has no mid-match-resume seeding at all — confirmed live, session 46, worse than first suspected.** `matchStarted` correctly re-seeds from the server on remount, but `lineupSet`/`homeStarters`/`awayStarters` do not, and there is no UI path back into lineup selection once `matchStarted` is `true` again — a logger who refreshes or re-opens the tab mid-match hits a genuine dead end, not just a stale display. Same bug class football already solved (BUG-115/117/118), never ported. Tier 0 because it can silently end a live match's logging capability mid-game with no recovery path. Filed as part of the football→basketball systematic mapping pass, session 47.
 
 ---

@@ -5675,3 +5675,88 @@ Filed together, same investigation: a deliberate side-by-side comparison of `Foo
 **Problem:** `.docs/stats-tab-fix.md` (dated to original project scaffolding, pre-dates most of this project's real session history) describes a conditional-rendering fix for `MatchOverlay.tsx` — hide a stat category entirely rather than showing a hardcoded `[0,0]` when no data exists at all. **Confirmed still live in current code** (`MatchOverlay.tsx:1152-1153`, now with optional chaining, same core mechanism) — this part is real and working, not stale documentation.
 
 **What it does NOT solve — BACKLOG-122's later, worse finding still stands:** a stat category with *asymmetric partial* data (one team's events fully logged, the other's barely logged) produces a genuinely non-null, confidently-wrong-looking number — `busa-match-16`'s `100%-0%` possession, `26-0` shots — not a "no data" case the conditional-render fix would catch, since the value is real and present, just derived from lopsided sheet coverage. This is the harder, still-unsolved half of the same "Stats tab" problem. See `BACKLOG-122` for the full detail and proposed fix (distinguish "goals-only backfill" matches from "full stat capture" matches before deciding what to render).
+
+---
+
+## Session 47 — Basketball-Native Domain Audit (BUG-134 through BUG-137, BACKLOG-137 through BACKLOG-139)
+
+Filed together, same investigation: a `code-reviewer` agent pass explicitly independent of the football-parity method above — basketball's own code read against real FIBA/NBA rules as ground truth, plus a cross-check of football's still-*open* WS gaps (not its fixed ones) against what basketball's future WS-emit port would inherit. Every item below is CONFIRMED via direct code read (file:line cited in each), not inferred — items the agent could not confirm from code alone are explicitly marked as needing a live test, not silently assumed either way.
+
+---
+
+### BUG-134 — Basketball's Foul System Is Structurally Unenforced (Disqualification, Team Fouls, Bonus, Technical-Foul Miscounting)
+
+**Status:** OPEN
+**Priority:** HIGH — a real basketball match cannot be officiated correctly through this logger today; this is a domain-correctness gap, not an edge case
+
+**Problem, four confirmed sub-findings, same root cause (no foul system beyond a single generic counter):**
+1. **No disqualification threshold anywhere.** `BasketballLogger.tsx:988-993` — all six foul buttons (Personal/Technical/Flagrant/Offensive/Shooting/Unsportsmanlike) call the same `handleEventClick('Foul')` with no subtype. No `personalFouls` counter is compared against any threshold anywhere in the component.
+2. **Team foul count is never tracked at all** — no per-team, per-quarter accumulator exists, and nothing resets on quarter transition. `config/route.ts:58-62`'s own source comment already admits this: *"Nothing in this codebase enforces these yet (no disqualification check, no team-foul-bonus logic, no shot clock)."*
+3. **`teamFoulBonusAt: 5` is computed and returned by the config API but never read** — `BasketballLogger.tsx`'s config-fetch effect destructures only `halfDuration`/`periodCount`/`overtimeDurationMinutes` (confirmed via grep: zero matches for `teamFoulBonusAt` in the component). No "in the bonus" UI state exists anywhere.
+4. **`technicalFouls` isn't just write-orphaned (already known) — it's actively wrong.** `events/route.ts:353-355`'s `case 'Foul':` unconditionally writes to `personalFouls`, with no branch for technical fouls at all. Clicking "Technical Foul" in the UI silently inflates `personalFouls` — the same counter a real personal foul increments — conflating two different foul types into one number.
+
+**Fix (not built):** needs foul-subtype UI (the buttons already exist and pass distinct labels — just need to actually pass the subtype through to `recordEvent`/the POST body), a team-level foul accumulator with quarter-reset, bonus-state UI once team fouls are tracked, and a real disqualification gate once personal-foul count is tracked per player. Real scope, not a one-line fix — needs its own directive.
+
+---
+
+### BUG-135 — No Distinct Second-Overtime (OT2) Path — Quarter Number Never Advances Past `periodCount + 1`
+
+**Status:** OPEN
+**Priority:** Medium — only matters for a match tied after OT1, real but rare
+
+**Problem:** both the end-of-regulation branch and the "Add Extra Time" button (`BasketballLogger.tsx:1738-1790`) unconditionally call `setQuarter(periodCount + 1)`. If OT1 ends still tied and a real OT2 is needed, re-triggering "Start Extra Time" re-runs the identical `setQuarter(periodCount + 1)` — already the current value, so quarter number never advances into a genuine OT2 state. `getCurrentPeriod()` returns the flat string `'OT'` for any `quarter > periodCount`, so OT1 and OT2 events would be stored with an identical `period` field, indistinguishable in `match_events` history.
+
+**Fix (not built):** track overtime count separately from `quarter` (e.g. `otNumber`), derive the period label as `` `OT${otNumber}` `` instead of a flat `'OT'`.
+
+---
+
+### BUG-136 — Compound Risk: a Fouled-Out Player Can Be Subbed Back Onto the Court
+
+**Status:** OPEN — code-confirmed the gate is missing; the live occurrence itself is unconfirmed, needs a live test
+**Priority:** HIGH — direct consequence of BUG-134, worth its own entry since the *substitution* side is a distinct fix location
+
+**Problem:** `handleSubIn` (`BasketballLogger.tsx:434-452`) and the sub-in player-selection modal filter only by `homeSubs`/`awaySubs` bench membership — no code path anywhere checks a player's foul count before allowing them back onto the court. Since BUG-134 already establishes zero foul-out enforcement exists, there is nothing gating a disqualified (5+ personal fouls) player from re-entering. The absence of the code-level gate is confirmed by direct read; whether this has actually happened in a real logged match is not confirmed and needs a live test, not assumed either way.
+
+**Fix (not built):** blocked on BUG-134's per-player foul tracking landing first — the sub-in filter needs to exclude any player at/above the disqualification threshold once that count exists to check against.
+
+---
+
+### BUG-137 — Retry-Interval Leak on `SocketProvider` Remount, Confirmed in Current Code (Mechanism Has Changed Since `ARCHITECTURE.md` Was Written)
+
+**Status:** OPEN — real, current, distinct from the doc's stale description
+**Priority:** Medium — shared/generic code (`useWebSocket.tsx`), applies to every sport's WS connection, not basketball-specific
+
+**Problem:** `ARCHITECTURE.md` describes this as a plain `setInterval` leak — that description is itself stale. The actual current mechanism (post-BUG-114) is a recursive `setTimeout` chain (`scheduleRetry()`) guarded by a module-level `manualRetryLoopActive` flag. Neither the pending `setTimeout` handle nor the `reconnect_failed` listener is cleared on `SocketProvider` unmount or `sharedSocket.disconnect()` — `SocketProvider`'s cleanup nulls `sharedSocket` but never touches the pending retry timeout or resets the flag. Once a retry loop starts and the socket later tears down, `manualRetryLoopActive` can stay `true` forever (the loop's own self-clearing check reads `sharedSocket?.connected` on a now-null socket, always falsy, so it never fires) — permanently blocking any genuinely new retry loop from starting for a future socket.
+
+**Fix (not built):** clear the pending `scheduleRetry` timeout and reset `manualRetryLoopActive` explicitly in `SocketProvider`'s unmount cleanup, not just null the socket reference.
+
+**Inheritance note (Part B of this audit):** shared, sport-agnostic code — inherited automatically by basketball's future WS-emit port with zero basketball-side work, for better or worse. See the `SYSTEM_CRITICALITY_MAP.md` WS-emit gap entry for the full inheritance determination across all 7 checked football-WS gaps.
+
+---
+
+### BACKLOG-137 — Basketball Quarter Duration Is Fetched and Displayed, Never Enforced
+
+**Status:** OPEN
+**Priority:** Low-Medium — distinct from the already-accepted "no ticking clock" design choice; this is "nothing stops logging past the limit," not "the display doesn't tick"
+
+**Problem:** no code path compares elapsed time against `quarterDuration` for any blocking purpose. All scoring/event buttons are gated only by `!matchStarted || matchEnded` — never by time. A logger can log events indefinitely past the configured quarter length with zero warning or block.
+
+---
+
+### BACKLOG-138 — No Halftime State Exists for Basketball at All
+
+**Status:** OPEN
+**Priority:** Low — cosmetic/flow, not a data-correctness issue
+
+**Problem:** confirmed via grep — zero matches for `halftime`/`half.?time` (case-insensitive) anywhere in `BasketballLogger.tsx` or `schema.ts`. Not "present but unused" — the field doesn't exist in the config shape at all. Q2→Q3 uses the identical "Start Quarter N+1" handler as every other quarter transition, no distinct halftime UI state.
+
+---
+
+### BACKLOG-139 — `BasketballMatchOverlay.tsx`'s Shooting-Percentage Fields Are Never Written by Any Code Path (Worse Than the Known Casing Mismatch)
+
+**Status:** OPEN
+**Priority:** Medium — silently renders flat 0% for every basketball match's overlay percentages, not a crash, but always wrong
+
+**Problem:** `BasketballMatchOverlay.tsx:377-378,385-386,393-394` reads `match.stats.fieldGoalPercentage`/`threePointPercentage`/`freeThrowPercentage`, each guarded with `|| 0`. Traced every writer of `match.stats` for basketball (`matches/[id]/route.ts:318-368`) — its derived-from-events object's own keys never include `fieldGoalPercentage`/`threePointPercentage`/`freeThrowPercentage` at all (confirmed via project-wide grep: the only other references are the type declaration and an unrelated per-player/per-season schema column with a different shape). **This is a separate, deeper gap from the already-known `'2PT_MADE'` vs `'Field Goal'` casing mismatch in the same derivation block** (also confirmed present here, same file) — even if the casing matched, these specific percentage fields would still never be produced by any writer. Net effect confirmed as silently-incomplete data (always renders 0%), not a visible crash/NaN — no live division against the already-known-zero `fieldGoalsAttempted`-family counters (BUG-133) actually happens anywhere in the codebase.
+
+**Fix (not built):** add the three percentage fields to the basketball stats-derivation block in `matches/[id]/route.ts`, computed from the same made/attempted counts once BUG-133 lands (attempts need to be tracked before a percentage can be computed at all).
