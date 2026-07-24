@@ -5696,9 +5696,9 @@ Filed together, same investigation: a deliberate side-by-side comparison of `Foo
 
 ---
 
-### BACKLOG-134 — Silent Failures: Initial Roster Load, Period-Transition PATCHes, No Debounce on Scoring Buttons
+### ~~BACKLOG-134~~ — Silent Failures: Initial Roster Load, Period-Transition PATCHes, No Debounce on Scoring Buttons
 
-**Status:** SHIPPED — 2026-07-24 (session 47B). Debounce guard's first version was live-tested and found genuinely broken, now re-fixed but not yet re-verified live. Roster-load happy path confirmed working live (via `BUG-139`'s walkthrough); the actual failure-banner trigger for (1) and (2) was not exercised (would need a simulated network failure, not attempted this session) — see Evidence.
+**Status:** RESOLVED — 2026-07-24 (session 47B). All three pieces live-verified on the PR #12 Vercel preview, including both failure banners actually triggered via a simulated `fetch` failure (not just the happy path) — this is the first time the roster-load and period-transition banners, and the event-save banner referenced throughout this entry's history, have ever actually been tested since being written.
 **Priority:** Medium — all three violate `CLAUDE.md`'s own error-visibility rule ("logging errors must show a clear message to the logger — never appear to succeed when they didn't")
 
 **Problem, three related findings from the same code-reviewer pass:**
@@ -5716,8 +5716,11 @@ Filed together, same investigation: a deliberate side-by-side comparison of `Foo
 **Evidence:**
 - Commit: pending (this session, uncommitted at time of writing)
 - Verified by: full real interactive walkthrough on the PR #12 Vercel preview, same live match as `BUG-129`/`BUG-130`'s verification.
-- **Items (1) and (2) (roster-load and period-transition failure banners):** only the happy path was exercised this session (roster loaded correctly once `BUG-139` was fixed; no period-transition PATCH failures occurred). The actual banner-on-failure behavior was not triggered or observed live — doing so would require simulating a network failure (e.g. blocking the request via DevTools), not attempted this walkthrough. Code-reviewed only for these two.
-- **Debounce guard — real gap found and fixed live, not a clean pass:** double-clicked a Foul action's player button using the Browser pane's native `double_click` action (fires two genuine click events close enough together to race). First check looked clean (client showed one event) — but a follow-up check minutes later, after the next 15s multi-logger sync tick, showed **two** identical "Foul KOSI" entries client-side, and a direct DB query confirmed two separate rows with an identical `created_at` timestamp. Root cause: the `useState`-based `isRecording` guard is not synchronous across two click-handler invocations from the same render's closure — both can read the same stale `isRecording === false` before React commits the state update from the first call, so both proceed. **Fixed:** switched the actual guard to a `useRef` (`isRecordingRef`, a plain synchronous mutation immune to the stale-closure timing), keeping `isRecording` state only for the buttons' visual `disabled` attribute. Also converted `recordEvent`'s optimistic `setEvents([...events, newEvent])` to a functional update (`setEvents(prev => [...prev, newEvent])`) — the non-functional version was independently masking the duplicate client-side (one of the two near-simultaneous writes silently overwrote the other in local state, even though both had already landed in the DB). Re-verified after this fix: pending re-test on the next preview rebuild (this fix landed after the double-click test, not yet re-run against a fresh double-click).
+- **Item (1) (roster-load failure banner) — actually triggered, not just happy-path:** patched `window.fetch` in the live browser session to reject calls to `/api/teams`/`/api/players`/`/eligible-players`, then forced a fresh mount of `BasketballLogger` (exited to the match-assignment screen, re-entered). Banner rendered exactly as written: *"Failed to load teams/roster — check connection and reload. Player lists may be empty or incomplete."* Team names/logos correctly blank (COLNAS-B/COLENG-B labels missing, only placeholder icons), consistent with the simulated failure. Restored `fetch`, reloaded, confirmed normal roster load resumed.
+- **Item (2) (period-transition failure banner) — actually triggered:** patched `fetch` to return `500` for the exact PATCH call, clicked through "End Quarter" → "Start Quarter 2". Banner rendered: *"Failed to save Q2 transition (500) — quarter may not persist on refresh."* DB-confirmed `matches.current_period` correctly stayed `Q1` (the failed write never landed), even though the client's local `quarter` state optimistically advanced to `2` (fire-and-forget by design) — reloaded to resync the client back to the true server state.
+- **The event-save failure banner itself (`eventSaveError`, referenced throughout this entry's multi-session history as "never actually tested") — finally tested:** patched `fetch` to reject (simulated offline) for the event POST specifically, logged a Field Goal. Banner rendered: *"Failed to save 'Field Goal' — offline or unreachable. Event kept locally only."* DB-confirmed no phantom event or score change landed. This closes a pending item that had been carried forward since session 46.
+- **Debounce guard — real gap found and fixed live, not a clean pass:** double-clicked a Foul action's player button using the Browser pane's native `double_click` action (fires two genuine click events close enough together to race). First check looked clean (client showed one event) — but a follow-up check minutes later, after the next 15s multi-logger sync tick, showed **two** identical "Foul KOSI" entries client-side, and a direct DB query confirmed two separate rows with an identical `created_at` timestamp. Root cause: the `useState`-based `isRecording` guard is not synchronous across two click-handler invocations from the same render's closure — both can read the same stale `isRecording === false` before React commits the state update from the first call, so both proceed. **Fixed:** switched the actual guard to a `useRef` (`isRecordingRef`, a plain synchronous mutation immune to the stale-closure timing), keeping `isRecording` state only for the buttons' visual `disabled` attribute. Also converted `recordEvent`'s optimistic `setEvents([...events, newEvent])` to a functional update (`setEvents(prev => [...prev, newEvent])`). **Re-verified after the fix, on a rebuilt preview:** repeated the exact same `double_click` stress test on the same action — exactly one event recorded, both immediately and past the 15s sync tick, confirmed via direct DB query. The race is closed.
+- All test data (the roster/period/event-banner probes, the debounce race's duplicate row) cleaned up by exact id; the real match confirmed back to its original state (2-3, Q1, 2 events) via a final DB check.
 - Test data cleanup: the 3 test Foul events created during this walkthrough (1 clean single-click + 2 from the double-click race) were deleted by exact id (`dev/cleanup-live-match-test-events.mjs`), restoring the real match to its original 2-event state.
 - Pending items: re-run the double-click stress test once more against the rebuilt preview to confirm the `useRef` fix actually closes the race (the fix is code-reviewed and `tsc`-clean, but the specific race that was just proven live hasn't been re-proven closed yet).
 
@@ -5895,5 +5898,46 @@ Filed together, same investigation: a `code-reviewer` agent pass explicitly inde
 **Fix (not built):** build the basketball equivalent of football's lineup flow — persist `homeStarters`/`awayStarters` (or an equivalent starters/bench shape) to the server when a logger completes the in-app lineup wizard (the `matches.lineups` JSON column already exists and is already read by `src/lib/ratingsService.ts`'s `calculateAndSaveRatings`, so the shape is already partially spoken for — confirm compatibility before reusing it, or add a dedicated basketball lineup table/column if the shapes conflict), then fetch and seed from it on every mount, mirroring football's `GET /lineup` pattern exactly. Once this lands, `BUG-139`'s roster-fallback becomes a true last-resort (a match that was started before this feature existed) rather than the only mechanism.
 
 **Deferred:** real, separate feature-sized scope — not a same-session patch alongside tonight's critical-bug fixes. Explicitly named and filed per Richard's request, distinct from `BUG-139`'s already-shipped stopgap.
+
+---
+
+### BUG-140 — Basketball Logger Has No Auth-Refresh Recovery Mechanism (Football Analog of BUG-058b)
+
+**Status:** OPEN — filed this session, not fixed
+**Priority:** Medium-High — silent, session-killing, invisible until something relies on it; not actively blocking anything today since basketball has no offline queue yet to be broken by it
+
+**Problem:** `FootballLogger.tsx` has a `useEffect` (~lines 208-219) that calls `POST /api/auth/refresh` on mount to re-seed `localStorage.authToken` after `AuthContext`'s own `/api/auth/me` 401-check can wipe it — this is `BUG-058b`'s fix (see that entry for full original context on what it solves and why). `BasketballLogger.tsx` has zero occurrences of `auth/refresh`, `authToken`, or `BrixsportAdminDB` anywhere (confirmed via grep) — no equivalent mechanism exists at all. Practical effect: any basketball logger session that triggers `AuthContext`'s 401-wipe path loses `localStorage.authToken` permanently for that session, with no recovery. This would silently break any future offline-queue work for basketball (basketball doesn't have an offline queue yet either — that's a separate, already-known gap, not re-filed here) and is a real gap today wherever basketball code might read `localStorage.authToken`.
+
+**Fix (not built):** port football's auth-refresh `useEffect` pattern (the same `POST /api/auth/refresh`-on-mount re-seed) to `BasketballLogger.tsx`.
+
+**Found:** session 47B, via a systematic `FootballLogger.tsx`-vs-`BasketballLogger.tsx` comparison pass (an Explore agent's audit) requested by Richard mid-session, comparing basketball-logger parity against football's mature, battle-tested equivalent.
+
+---
+
+### BUG-141 — No Empty-State Message on Basketball's Substitution Sub-In Modal (Football Analog of BUG-070)
+
+**Status:** OPEN — filed this session, not fixed
+**Priority:** Low — UX confusion, not data loss
+
+**Problem:** `FootballLogger.tsx`'s substitution modal has an `emptyMessage` prop (e.g. `'No available substitutes'`) shown when there are no eligible bench players — this is `BUG-070`'s fix (see that entry for full original football context). `BasketballLogger.tsx`'s own sub-in modal (around lines 1343-1373) renders an empty grid with zero fallback message when `homeSubs`/`awaySubs` is empty. Practical effect: a logger taps Substitution, sees a blank modal with no bench players and no explanation, and may think the app is broken mid-game.
+
+**Fix (not built):** add an `emptyMessage`-style fallback to basketball's sub-in modal, mirroring football's pattern.
+
+**Found:** session 47B, via a systematic `FootballLogger.tsx`-vs-`BasketballLogger.tsx` comparison pass (an Explore agent's audit) requested by Richard mid-session, comparing basketball-logger parity against football's mature, battle-tested equivalent.
+
+---
+
+---
+
+### BUG-142 — Basketball Has No Offline-Queue/Retry Mechanism at All — Failed Writes Are Visible But Never Recovered
+
+**Status:** OPEN — mentioned in passing multiple times this session (`BACKLOG-134`, `BUG-140`), never filed as its own tracked item until now
+**Priority:** High — every write path this session gave a failure a visible banner (roster load, period-transition PATCH, event POST), but none of them can ever self-heal; a logger who doesn't notice or can't manually retry loses the write permanently
+
+**Problem:** Confirmed live this session: forcing a period-transition PATCH to fail (mocked `fetch` returning `500` for the exact PATCH call) correctly showed `BACKLOG-134`'s new banner ("Failed to save Q2 transition (500) — quarter may not persist on refresh") and correctly left `matches.current_period` unchanged in the DB (`Q1`, confirmed via direct query) rather than writing bad data. But that's where it ends — there is no queue, no retry, no background sync. `FootballLogger.tsx` has a full mechanism for exactly this scenario: failed writes go into IndexedDB (`BrixsportAdminDB`), a service worker drains the queue on reconnect (`syncMatchEvents()` in `sw-admin.js`), and the auth token needed to replay the write is embedded in the queued row at write time (since a service worker sync event has no live session). `BasketballLogger.tsx` has zero references to `indexedDB`, `IndexedDB`, `offline`, `queue`, or `syncMatchEvents` anywhere (confirmed via grep) — every failure this session (roster load, period PATCH, event POST, undo DELETE) is a dead end once the banner is dismissed. This compounds `BUG-140` (no auth-refresh either) — even if an offline queue existed today, the token needed to replay a queued write could already be gone by the time connectivity returns.
+
+**Fix (not built):** port football's IndexedDB queue + service-worker drain mechanism to basketball's write paths (event POST, period-transition PATCH, undo DELETE, roster-load retry). Real, feature-sized scope — not a same-session patch. Should land after `BUG-140` (auth-refresh) since the queue is only as good as the token it can replay with.
+
+**Found:** session 47B, confirmed live while testing `BACKLOG-134`'s period-transition failure banner on the PR #12 preview — the banner worked exactly as designed, which is what made the absence of any recovery path obvious.
 
 ---
