@@ -153,8 +153,24 @@ export async function POST(
             // second/points fixes above and BUG-126 -- checked explicitly for
             // undefined/null instead of truthiness.
             value: value !== undefined && value !== null ? JSON.stringify(value) : null,
-            loggerId: authUser.id,
-            loggerName: loggerName || null,
+            // BUG-124: this used to be `authUser.id` unconditionally -- for an
+            // admin-authenticated POST (bypassing the normal logger flow), authUser.id
+            // is a users.id, but match_events.logger_id FKs to loggers.id specifically.
+            // An admin's id essentially never satisfies that FK, so admin-posted events
+            // 500'd with SQLITE_CONSTRAINT: FOREIGN KEY constraint failed. The column is
+            // nullable -- there's no real logger session to attribute an admin-posted
+            // event to, so null is the correct, honest value for this FK'd column
+            // specifically, not a guessed/borrowed id.
+            loggerId: authUser.role === 'logger' ? authUser.id : null,
+            // Losing loggerId to null must not also lose the audit trail entirely --
+            // loggerName has no FK, so it's free to carry an identity even when
+            // loggerId can't. Sourced from the verified authUser (server session),
+            // never the client-passed loggerName field, when the actor is an admin --
+            // audit fields must always come from the verified session per this
+            // project's own rule, not from request-body input. Stores the admin's
+            // real users.id (not a formatted display string) so the actor can still be
+            // looked up exactly, the same way loggerId itself would if the FK allowed it.
+            loggerName: authUser.role === 'logger' ? (loggerName || null) : authUser.id,
             period: period || null,
             createdAt: new Date(),
         };

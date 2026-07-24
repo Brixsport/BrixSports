@@ -1619,15 +1619,25 @@ player stats can be stale or inconsistent after a match ends.
 
 ---
 
-### BUG-124 — Admin-Authenticated Event POST FK-Violates on `logger_id`
+### ~~BUG-124~~ — Admin-Authenticated Event POST FK-Violates on `logger_id`
 
-**Status:** OPEN — found, not fixed
+**Status:** RESOLVED — 2026-07-24 (session 47B)
 **Priority:** Medium — only reachable by an admin bypassing the normal logger flow, but a clean 500 with no clear message when it happens
 **Filed:** 2026-07-23 (session 46), found while live-verifying the P0 missed-shot fix
 
-**Problem:** `POST /api/matches/[id]/events` (`src/app/api/matches/[id]/events/route.ts`) sets `loggerId: authUser.id` unconditionally, regardless of role. For an admin-authenticated request, `authUser.id` is the admin's `users.id` — but `match_events.loggerId` has an FK constraint to `loggers.id` (`schema.ts:378`), not `users.id`. Confirmed live: an admin token posting a real event 500s with `SQLITE_CONSTRAINT: FOREIGN KEY constraint failed`, since `admin-001` (or whichever admin id) doesn't exist in the `loggers` table.
-**Fix (not built):** set `loggerId` to `null` (or omit it) when `authUser.role === 'admin'` and there's no real logger session backing the request, rather than writing an ID that will never satisfy the FK. `match_events.loggerId` is nullable in schema, so this is a safe default.
-**Not fixed this session** — surfaced as a side effect of P0 verification, not this session's actual scope; flagging for its own small fix.
+**Problem:** `POST /api/matches/[id]/events` (`src/app/api/matches/[id]/events/route.ts`) sets `loggerId: authUser.id` unconditionally, regardless of role. For an admin-authenticated request, `authUser.id` is the admin's `users.id` — but `match_events.loggerId` has an FK constraint to `loggers.id` (`schema.ts:378`), not `users.id`. Confirmed live: an admin token posting a real event 500s with `SQLITE_CONSTRAINT: FOREIGN KEY constraint failed`, since `admin-001` (or whichever admin id) doesn't exist in the `loggers` table. Re-confirmed live again this session (found while verifying `BUG-131`, before this fix landed).
+
+**Fix:** `loggerId` is now `authUser.role === 'logger' ? authUser.id : null` — `null` is the honest value for this FK'd column when there's no real logger session backing the request. **Richard's own catch, addressed in the same pass:** null-ing `loggerId` alone would have silently discarded the audit trail entirely (no way to tell which admin posted the event). `loggerName` (a plain text column, no FK) now carries the admin's real `users.id` in that case — sourced from the verified `authUser` server-side, never client-passed input, per this project's own audit-field rule. `logger` role callers are unaffected (unchanged: `loggerName` still comes from the client-passed display name for real logger sessions).
+
+**Evidence:**
+- Commit: pending (this session, uncommitted at time of writing)
+- Verified by: live DB-confirmed test — `dev/verify-bug124-fix.mjs`, staging DB via local dev server, admin token.
+- Observed result: `POST` returned `201` (not a 401 — admins are already authorized to post events by this route's own auth gate; this was never an auth problem, purely a DB FK mismatch). `match_events.logger_id` stored as `null`, `logger_name` stored as `"admin-001"` (the real admin id), `matches.home_score` correctly credited to `2` — confirming the event saves cleanly, the FK-unsafe column stays null, and the audit trail survives via the non-FK'd column instead of being silently dropped.
+- Pending items: none for this specific gap.
+
+**Related, raised and confirmed in the same discussion (not a new bug, already-shipped work re-verified):** `BUG-121`'s atomic transaction (event insert + score update in one `db.transaction`, score increment as a single atomic SQL expression) already correctly rolled back this exact FK crash with zero partial state — confirmed directly from this session's own earlier verification attempt (admin token, pre-fix), where the insert threw inside the transaction and `matches.home_score` was independently confirmed to have stayed at `0`, not partially incremented. No new work needed; cited here as live re-confirmation that `BUG-121`'s fix still holds under a real failure, not just the happy path.
+
+**Related, filed separately per Richard's request — see `BACKLOG-140`:** this bug's root cause (a separate `loggers` identity table instead of a unified `users` table with an RBAC role) is the same structural root as `BUG-057`, `BUG-044`/`BUG-044b`, and two `known-issues.md` entries (2026-06-22, 2026-06-30). Filed as its own architecture item, not fixed here.
 
 ---
 
@@ -5806,3 +5816,24 @@ Filed together, same investigation: a `code-reviewer` agent pass explicitly inde
 **Problem:** `BasketballMatchOverlay.tsx:377-378,385-386,393-394` reads `match.stats.fieldGoalPercentage`/`threePointPercentage`/`freeThrowPercentage`, each guarded with `|| 0`. Traced every writer of `match.stats` for basketball (`matches/[id]/route.ts:318-368`) — its derived-from-events object's own keys never include `fieldGoalPercentage`/`threePointPercentage`/`freeThrowPercentage` at all (confirmed via project-wide grep: the only other references are the type declaration and an unrelated per-player/per-season schema column with a different shape). **This is a separate, deeper gap from the already-known `'2PT_MADE'` vs `'Field Goal'` casing mismatch in the same derivation block** (also confirmed present here, same file) — even if the casing matched, these specific percentage fields would still never be produced by any writer. Net effect confirmed as silently-incomplete data (always renders 0%), not a visible crash/NaN — no live division against the already-known-zero `fieldGoalsAttempted`-family counters (BUG-133) actually happens anywhere in the codebase.
 
 **Fix (not built):** add the three percentage fields to the basketball stats-derivation block in `matches/[id]/route.ts`, computed from the same made/attempted counts once BUG-133 lands (attempts need to be tracked before a percentage can be computed at all).
+
+---
+
+### BACKLOG-140 — Separate `loggers` Identity Table Is the Root Cause of a Recurring Bug Class (Auth/FK Divergence From `users`)
+
+**Status:** OPEN — architecture item, deliberately not scoped for a same-session fix
+**Priority:** Medium-High — not urgent on its own, but every new feature touching auth/audit fields for a logger-or-admin actor risks reintroducing this same class of bug until it's addressed structurally
+**Filed:** 2026-07-24 (session 47B), Richard's own question while reviewing `BUG-124`'s fix
+
+**Problem:** `loggers` is a fully separate identity table from `users` — not a `role` value within one shared table — and every place in the codebase that needs to authenticate or attribute an action to "whichever actor is logged in, admin or logger" has had to build its own bridge between the two. That bridge has broken, differently, multiple times:
+- `BUG-124` (today) — `match_events.logger_id` FKs to `loggers.id` specifically. An admin's `users.id` can never satisfy it, so any admin-authenticated event POST 500'd until fixed with a role-conditional null.
+- `BUG-057` (2026-06-22) — `getAuthUser`/`verifyAuth` didn't know to look in `loggers` at all for a logger session; a logger JWT's `id` field got queried against `users`, found nothing, returned a false 401 despite a valid cookie.
+- `BUG-044`/`BUG-044b` (2026-06-19/26) — logger auth cookie-setting and `/api/loggers/me` needed their own bespoke auth paths because they couldn't reuse the `users`-table auth machinery as-is.
+- `known-issues.md` 2026-06-30 entry — a `users` row with `role: 'logger'` (a viewer-path account that also happens to log matches) has a JWT whose id exists in `users`, not `loggers`; a single-table lookup silently misses it, requiring an explicit try-`loggers`-then-`users` fallback (`getAuthUser`, still in place today) rather than one canonical lookup.
+- JWT payload shape divergence (`{ userId }` for `users`-issued tokens vs `{ id }` for `loggers`-issued tokens) — a direct consequence of the two tables never sharing a schema or an issuance path, requiring `verifyAuth` to normalize `decoded.userId ?? decoded.id` on every verify.
+
+**Root cause:** this is structurally non-standard RBAC. The conventional shape for "several actor types, one of which (logger) also needs a many-to-many assignment to matches" is: one `users` table with a `role` column (`admin` | `logger` | `viewer`), one JWT payload shape for every role, one `getAuthUser` lookup with no role-branching, and the existing `match_logger_assignments` join table (already correctly modeled as a separate many-to-many table) continues to reference `users.id` instead of a second identity table's id. Every FK that currently has to special-case "this column points at loggers.id, not users.id" would instead point at one shared `users.id` uniformly.
+
+**Fix (not built, explicitly not scoped for this session):** merge `loggers` rows into `users` with `role: 'logger'`, migrate `match_logger_assignments.logger_id` and `match_events.logger_id` to reference `users.id`, unify JWT issuance to one payload shape, and remove `getAuthUser`'s role-branching table lookup. This touches auth on every protected route in the app (both directly — every handler that calls `getAuthUser` — and indirectly, via every FK currently pointed at `loggers.id`) and needs its own dedicated session with a real migration plan (staging first, per this project's own schema-migration rule), not a drive-by patch layered onto other work.
+
+**Deferred, Richard's explicit call:** raised as a direct question while reviewing `BUG-124`'s fix ("will you say the db architecture was bad as to having a separate logger table?") — confirmed as the correct read of the accumulated evidence above, filed as its own item rather than attempted mid-session.
