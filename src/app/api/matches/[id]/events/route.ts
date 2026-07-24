@@ -145,7 +145,13 @@ export async function POST(
             relatedPlayerId: relatedPlayerId || null,
             detail: detail || null,
             isEyePoint,
-            value: value ? JSON.stringify(value) : null,
+            // BUG-132: `value ? ... : null` collapsed a legitimate 0 (basketball's own
+            // miss sentinel, `points ?? 0` for a "2PT Missed" etc. button) to null,
+            // discarding the make/miss distinction right after the client computed it
+            // via the explicit `made` boolean. Same falsy-zero class as the
+            // second/points fixes above and BUG-126 -- checked explicitly for
+            // undefined/null instead of truthiness.
+            value: value !== undefined && value !== null ? JSON.stringify(value) : null,
             loggerId: authUser.id,
             loggerName: loggerName || null,
             period: period || null,
