@@ -5,6 +5,7 @@ import { eq, asc, and, sql } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { getAuthUser } from '@/lib/auth';
 import { broadcastMatchEvent, broadcastScoreUpdate } from '@/lib/socket';
+import { SCORING_POINT_VALUES } from '@/lib/scoring';
 
 // GET /api/matches/[id]/events - Get all events for a match
 export async function GET(
@@ -207,14 +208,9 @@ export async function POST(
         // one). The authoritative point value for a scoring event is a fixed fact of
         // its type, never something the client should supply — derive it from an
         // explicit allowlist instead of trusting `value`, regardless of what was sent.
-        const SCORING_POINT_VALUES: Record<string, number> = {
-            GOAL: 1,
-            PENALTY: 1,
-            OWN_GOAL: 1,
-            FIELD_GOAL: 2,
-            THREE_POINTER: 3,
-            FREE_THROW: 1,
-        };
+        // Shared with events/[eventId]/route.ts's DELETE revert (src/lib/scoring.ts) —
+        // the two must always agree on what a scoring event is worth, or a delete
+        // reverts a different amount than an insert credited.
 
         await db.transaction(async (tx) => {
             await tx.insert(matchEvents).values(newEvent);

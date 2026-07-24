@@ -54,6 +54,7 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
     const [matchEnded, setMatchEnded] = useState(match.status === 'FINISHED');
     const [viewMode, setViewMode] = useState<'logger' | 'stats' | 'history'>('logger');
     const [isSaving, setIsSaving] = useState(false);
+    const [isUndoing, setIsUndoing] = useState(false);
     // Visible failure signal for event-save failures -- recordEvent used to only
     // console.error on failure, with no on-screen indication the event never saved.
     const [eventSaveError, setEventSaveError] = useState<string | null>(null);
@@ -608,20 +609,47 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
         setSelectedEventPlayer(null);
     };
 
-    const undoLastEvent = () => {
-        if (events.length === 0) return;
+    const undoLastEvent = async () => {
+        if (events.length === 0 || isUndoing) return;
         const lastEvent = events[events.length - 1];
 
-        // Revert score if it was a scoring event
-        if (lastEvent.value) {
+        // BUG-130: undo used to be cosmetic-only — it sliced local `events` state and
+        // reverted local score state with no `fetch()` call at all. The DB event row
+        // and the score it already atomically incremented (BUG-121) were both
+        // untouched, so any refresh, multi-logger sync, or public viewer still saw
+        // the "undone" event and its score contribution. Server-first, gated on
+        // `res.ok`, same discipline as BUG-049's Start/End Match fix — never flip
+        // local state before the server confirms the write. The server's own DELETE
+        // handler now also reverts the score and player stats correctly for
+        // basketball's types (events/[eventId]/route.ts, same BUG-130).
+        setIsUndoing(true);
+        try {
+            const res = await fetch(`/api/matches/${match.id}/events/${lastEvent.id}`, { method: 'DELETE' });
+            if (!res.ok) {
+                setEventSaveError(`Failed to undo "${lastEvent.type}" (${res.status}) — event was not removed. Try again.`);
+                return;
+            }
+            setEventSaveError(null);
+        } catch (error) {
+            console.error('Failed to undo event:', error);
+            setEventSaveError(`Failed to undo "${lastEvent.type}" — offline or unreachable. Event was not removed.`);
+            return;
+        } finally {
+            setIsUndoing(false);
+        }
+
+        // Revert score locally now that the server has confirmed both the delete and
+        // its own score revert. Functional updates — this runs after an await, so the
+        // closure-captured homeScore/awayScore may already be stale.
+        if (typeof lastEvent.value === 'number' && lastEvent.value > 0) {
             if (lastEvent.teamId === match.homeTeamId) {
-                setHomeScore(homeScore - lastEvent.value);
+                setHomeScore(prev => Math.max(0, prev - (lastEvent.value as number)));
             } else {
-                setAwayScore(awayScore - lastEvent.value);
+                setAwayScore(prev => Math.max(0, prev - (lastEvent.value as number)));
             }
         }
 
-        setEvents(events.slice(0, -1));
+        setEvents(prev => prev.slice(0, -1));
     };
 
     const finalizeMatch = async () => {
@@ -781,11 +809,11 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
 
                             <button
                                 onClick={undoLastEvent}
-                                disabled={!matchStarted || matchEnded}
+                                disabled={!matchStarted || matchEnded || isUndoing || events.length === 0}
                                 className="px-6 py-3 bg-white/5 border border-white/10 rounded-2xl hover:bg-white/10 transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                                 <Undo2 size={16} />
-                                <span className="text-xs font-black uppercase tracking-widest">Undo</span>
+                                <span className="text-xs font-black uppercase tracking-widest">{isUndoing ? 'Undoing...' : 'Undo'}</span>
                             </button>
                             {matchStarted && !matchEnded && (
                                 <button

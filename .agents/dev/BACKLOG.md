@@ -5594,15 +5594,26 @@ Filed together, same investigation: a deliberate side-by-side comparison of `Foo
 
 ### BUG-130 — `undoLastEvent()` Is Cosmetic Only, Never Reaches the Server (and the Server Wouldn't Revert the Score Even If It Did)
 
-**Status:** OPEN — CRITICAL, must fix before any live match day
+**Status:** SHIPPED — 2026-07-24 (session 47B). Server-side pieces live-verified; client-side UI trigger deliberately deferred (see Evidence).
 **Priority:** CRITICAL — directly breaks Flow B/Flow C guarantees
 
-**Problem:** Two stacked gaps, both required for a real fix:
+**Problem:** Three stacked gaps, all required for a real fix:
 1. `undoLastEvent()` only slices local `events` state and reverts local score state — no `fetch()` call at all. The DB event row and the DB score (already atomically incremented by the original POST) are both untouched. Any refresh, multi-logger sync, or public viewer still sees the "undone" event and its score contribution.
-2. Even after wiring the DELETE call, `events/[eventId]/route.ts`'s own score-revert `isScoringEvent` check only recognizes `GOAL`/`PENALTY`/`OWN_GOAL` — not basketball's `FIELD_GOAL`/`THREE_POINTER`/`FREE_THROW`. The score would still never revert.
-3. Related, same root cause: `revertPlayerStat()` in the same route file has `if (sport !== 'Football') return;` — a hard, literal no-op for basketball, confirmed by reading the function directly. Any basketball event deletion (via a fixed undo, or any future delete path) leaves permanent ghost stats. Same shape as football's already-fixed BUG-060, never ported.
+2. `events/[eventId]/route.ts`'s own score-revert `isScoringEvent` check only recognized `GOAL`/`PENALTY`/`OWN_GOAL` — not basketball's `FIELD_GOAL`/`THREE_POINTER`/`FREE_THROW`. The score would never revert even with the DELETE call wired.
+3. Related, same root cause: `revertPlayerStat()` in the same route file had `if (sport !== 'Football') return;` — a hard, literal no-op for basketball. Any basketball event deletion left permanent ghost stats. Same shape as football's already-fixed BUG-060, never ported.
 
-**Fix:** wire `undoLastEvent` to call `DELETE /api/matches/[id]/events/[eventId]`, gated on `res.ok`, mirroring football's server-first pattern. Extend `[eventId]/route.ts`'s scoring detection and `revertPlayerStat` to handle basketball's types — both must land together, since one without the other leaves score or stats silently wrong.
+**Fix:**
+1. `BasketballLogger.tsx`'s `undoLastEvent` is now async, calls `DELETE /api/matches/[id]/events/[eventId]` first, gates local `events`/score state on `res.ok` (server-first, mirrors BUG-049's Start/End Match discipline), shows `eventSaveError` on failure, and adds an `isUndoing` in-flight guard (the fetch introduces a real double-click race that didn't exist while undo was synchronous).
+2. `events/[eventId]/route.ts`'s `isScoringEvent` now also recognizes basketball's shot types via a `match.sport === 'Basketball'` + parsed-`value`-is-a-positive-number gate (`isBasketballScore`), mirroring the POST route's own credit-time gate exactly — a deleted miss still correctly never touches the score.
+3. `revertPlayerStat()` gained a full basketball branch mirroring `updatePlayerStats`'s basketball switch, decrementing with a `Math.max(0, x-1)` floor, gated on the same made/miss check.
+4. The score-revert decrement amount is now sourced from a new shared `SCORING_POINT_VALUES` allowlist (`src/lib/scoring.ts`, exported from `BUG-131`'s fix) instead of a hardcoded `- 1` — a Field Goal must revert by 2, not 1, or the score ends up permanently short after a basketball undo. Prevents the exact "helper needed by a sibling route file" gap `known-issues.md` already documents (2026-06-29 entry) — moved to a shared lib instead of duplicating the map.
+
+**Evidence:**
+- Commit: pending (this session, uncommitted at time of writing)
+- Verified by: live DB-confirmed test — `dev/verify-bug130-fix.mjs`, staging DB via local dev server, real TBK player (`i7VBmo4RZkk5Q6_Zixw2I`).
+- Observed result: a made Field Goal correctly moved `home_score` `0 → 2` and `basketball_player_stats.field_goals_made`/`total_points` up by 1/+2; the DELETE call against that event's real id brought `home_score` back to exactly `0` and both stat columns back to their exact pre-event baseline (not a flat `-1`, not a partial revert). A separately-posted missed Field Goal (`value: 0, made: false`) never moved the score in either direction, and deleting it left the score and `field_goals_made` untouched — confirming the miss-gate holds symmetrically on both credit and revert. `tsc --noEmit` held at 49 pre-existing errors, none new, across all four touched files (`BasketballLogger.tsx`, `events/route.ts`, `events/[eventId]/route.ts`, `src/lib/scoring.ts`).
+- **Not yet live-verified — explicitly deferred:** whether `BasketballLogger.tsx`'s `undoLastEvent` actually fires this DELETE call correctly from a real Undo button click (the UI-interaction half of item 1 above) requires the same live browser walkthrough deferred for `BUG-129`, for the same reason (avoiding the `BACKLOG-124` `LIVE`-status local-dev hang mid-session). Everything a server-side script can prove about this fix is proven; the UI trigger itself is not yet click-tested.
+- Pending items: the deferred UI walkthrough above — do it together with `BUG-129`'s at PR-review time (click a scoring button, wait past the 15s sync, then click Undo; confirm both the dedup and the undo round-trip in one session).
 
 ---
 
