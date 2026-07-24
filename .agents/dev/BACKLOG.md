@@ -1562,9 +1562,9 @@ player stats can be stale or inconsistent after a match ends.
 
 ---
 
-### BACKLOG-124 — Live Auto-Ratings Silently Broken Since Written (No Auth Forwarded)
+### ~~BACKLOG-124~~ — Live Auto-Ratings Silently Broken Since Written (No Auth Forwarded)
 
-**Status:** OPEN
+**Status:** RESOLVED — 2026-07-24 (session 47B)
 **Priority:** Medium — not data-corrupting, but a named feature (auto-ratings during a live match) has never once actually run
 **Filed:** 2026-07-21 (session 45), found while root-causing BUG-119's remaining latency
 
@@ -1577,6 +1577,15 @@ player stats can be stale or inconsistent after a match ends.
 **Deferred:** not fixed this session — session 45 fixed the latency contribution (wrapped in `after()`, see BUG-119) and filed this as the separate, still-open correctness gap.
 
 **Additional finding, session 46 (BACKLOG-125 work):** the silent-401 symptom above assumes `NEXT_PUBLIC_APP_URL` resolves quickly (correctly or not). Locally, `.env.local`'s `NEXT_PUBLIC_APP_URL` is set to the real deployed staging URL (`https://brixsports-staging.vercel.app`), not `localhost` — so a local dev server handling a `LIVE`-status event doesn't get a fast 401 from this self-fetch, it makes a real outbound HTTPS request to the deployed staging app from within the same process that's trying to serve the original request. Observed directly: the entire local dev server became unresponsive to *all* requests (not just the triggering one) for several minutes after posting one `LIVE`-status basketball event, confirmed via server logs and repeated timed-out `curl` calls to unrelated routes during the window. Root cause not fully confirmed (candidates: something in the custom `server.js`'s request handling doesn't truly yield during this specific outbound fetch, or Node's event loop was blocked by something else entirely triggered by the same code path) — but the practical impact is real and reproduced twice this session. Workaround used: give any local test match a non-`LIVE` status (e.g. `UPCOMING`) to avoid triggering this self-fetch at all. Proposed fix in the section above (skip the HTTP self-fetch, call the rating logic as a plain internal function) would also close this local-dev hang as a side effect, since there'd be no outbound fetch to hang on.
+
+**Fix, session 47B:** implemented option (b) from the proposed fix above — extracted the entire rating-calculation body out of `ratings/route.ts`'s POST handler into `src/lib/ratingsService.ts`'s `calculateAndSaveRatings(matchId)`. `events/route.ts` now calls this function directly inside its existing `after()` block instead of making an HTTP self-fetch — no auth to forward or re-check, since this code only runs after `authUser.role` has already been verified as admin/logger earlier in the same handler. `ratings/route.ts`'s POST handler is now a thin wrapper (auth check → call the shared function → shape the response); its own auth gate and the GET handler's separate viewer-cookie-forwarding fallback path are both untouched.
+
+**Evidence:**
+- Commit: pending (this session, uncommitted at time of writing)
+- Verified by: live DB + timing test — `dev/verify-backlog124-fix.mjs`, staging DB, a throwaway `LIVE`-status basketball match with real lineups and a real logger session (the exact configuration that previously froze the local dev server for minutes).
+- Observed result: `POST /events` returned `201` in `7.4s` (not the old multi-minute freeze — the local dev server was independently confirmed still responsive to an unrelated request in under a second immediately after). A real `player_ratings` row was written (`auto_rating: 6.2`) for the scoring player — auto-ratings computed and persisted from a live event for the first time since this feature was written. `tsc --noEmit` held at 49 pre-existing errors, none new.
+- **New finding surfaced by this fix, filed separately as `BUG-138`, not fixed here (Richard's explicit call — file only, no schema changes this session):** making this code path reachable for the first time revealed that `team_ratings` doesn't exist as a table on staging at all (schema drift — declared in `schema-ratings.ts`, apparently never pushed). `calculateAndSaveRatings` throws on its first `team_ratings` write, after all `player_ratings` writes have already succeeded — caught silently by the same `after()` try/catch, so it does not affect the event POST's `201` response, but team ratings have never been written on this platform either. Confirmed directly via `dev/check-rating-tables.mjs` (`sqlite_master` query): only `player_ratings` and `rating_history` exist.
+- Pending items: `BUG-138` (missing `team_ratings` table) tracked separately. The 7.4s response time, while not the historic hang, is slower than ideal for a live-logging path — not investigated further this session (likely first-hit dev-server compilation of the new lib file rather than a structural issue, but not confirmed either way).
 
 ---
 
@@ -5837,3 +5846,19 @@ Filed together, same investigation: a `code-reviewer` agent pass explicitly inde
 **Fix (not built, explicitly not scoped for this session):** merge `loggers` rows into `users` with `role: 'logger'`, migrate `match_logger_assignments.logger_id` and `match_events.logger_id` to reference `users.id`, unify JWT issuance to one payload shape, and remove `getAuthUser`'s role-branching table lookup. This touches auth on every protected route in the app (both directly — every handler that calls `getAuthUser` — and indirectly, via every FK currently pointed at `loggers.id`) and needs its own dedicated session with a real migration plan (staging first, per this project's own schema-migration rule), not a drive-by patch layered onto other work.
 
 **Deferred, Richard's explicit call:** raised as a direct question while reviewing `BUG-124`'s fix ("will you say the db architecture was bad as to having a separate logger table?") — confirmed as the correct read of the accumulated evidence above, filed as its own item rather than attempted mid-session.
+
+---
+
+### BUG-138 — `team_ratings` Table Does Not Exist on Staging (Schema Drift), Silently Fails Every Team-Rating Write
+
+**Status:** OPEN — found, not fixed (Richard's explicit call: file only, no schema changes this session)
+**Priority:** Medium — non-blocking (player ratings still write fine; this only affects the team-rating half of the same calculation), but confirmed to fail on 100% of attempts
+**Filed:** 2026-07-24 (session 47B), found live while verifying `BACKLOG-124`'s fix
+
+**Problem:** `teamRatings` is declared in `src/db/schema-ratings.ts` (table name `team_ratings`) and `calculateAndSaveRatings()` (`src/lib/ratingsService.ts`, extracted this session from the old `ratings/route.ts` POST handler — the bug is not new, just newly reachable) writes to it in a loop immediately after successfully writing all player ratings. Confirmed via a direct `sqlite_master` query against the staging DB (`dev/check-rating-tables.mjs`): only `player_ratings` and `rating_history` exist — `team_ratings` was apparently never pushed to staging, despite being fully defined in schema. Every call to `calculateAndSaveRatings` throws `SQLITE_UNKNOWN: no such table: team_ratings` partway through, after player ratings have already committed successfully. This was previously invisible because the only caller that could reach this code path was `events/route.ts`'s old self-fetch (`BACKLOG-124`), which 401'd before ever getting this far — fixing `BACKLOG-124` made this code path reachable for the first time, which is how this surfaced.
+
+**Confirmed live (same verification run):** a real basketball event POST on a `LIVE`-status throwaway match correctly wrote a `player_ratings` row (`auto_rating: 6.2`) via the now-fixed `BACKLOG-124` path; the immediately-following `team_ratings` write threw, caught silently by `events/route.ts`'s own `after()` try/catch (`console.error` only, does not affect the event POST's `201` response).
+
+**Fix (not built):** run `drizzle-kit push` (or the project's standard migration path) against staging first to create the missing `team_ratings` table from the existing schema definition — no schema.ts changes needed, purely a drift-correction push. Verify on staging, then repeat for prod per this project's standard migration rule. Not attempted this session per Richard's explicit call (file only, no schema changes tonight).
+
+---

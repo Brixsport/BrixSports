@@ -6,6 +6,7 @@ import { nanoid } from 'nanoid';
 import { getAuthUser } from '@/lib/auth';
 import { broadcastMatchEvent, broadcastScoreUpdate } from '@/lib/socket';
 import { SCORING_POINT_VALUES } from '@/lib/scoring';
+import { calculateAndSaveRatings } from '@/lib/ratingsService';
 
 // GET /api/matches/[id]/events - Get all events for a match
 export async function GET(
@@ -288,17 +289,21 @@ export async function POST(
         // await sitting between the DB write and the response, so it delayed not just
         // the response to the logger but also when the after()-scheduled broadcast
         // above could even start (after() callbacks don't run until this handler's
-        // own promise resolves). Real contributor to BUG-119's remaining latency —
-        // see BACKLOG-124 for a separate, still-open bug: this self-fetch forwards no
-        // auth (no cookie/Authorization header), so it 401s and is silently swallowed
-        // every time; auto-ratings has never actually run live because of that.
+        // own promise resolves). Real contributor to BUG-119's remaining latency.
+        // BACKLOG-124: this used to be an HTTP self-fetch to this route's own
+        // /ratings sibling, forwarding no Cookie/Authorization header -- it 401'd and
+        // was silently swallowed on every single live event, so auto-ratings had
+        // never actually run live since this feature was written. That same
+        // self-fetch was also the exact trigger for a local-dev hang (a genuine
+        // outbound HTTPS request to a real deployed NEXT_PUBLIC_APP_URL from within
+        // the same process handling the original request). Calling the shared
+        // function directly (src/lib/ratingsService.ts) removes the HTTP round-trip
+        // entirely -- this code only runs once `authUser.role` has already been
+        // verified as admin/logger above, so there's no auth to forward or re-check.
         if (match.status === 'LIVE') {
             after(async () => {
                 try {
-                    await fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/matches/${matchId}/ratings`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' }
-                    });
+                    await calculateAndSaveRatings(matchId);
                 } catch (error) {
                     console.error('Error auto-calculating ratings:', error);
                 }
