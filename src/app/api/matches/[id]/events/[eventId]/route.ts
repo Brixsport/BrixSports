@@ -33,19 +33,27 @@ async function revertPlayerStat(sport: string, playerId: string, eventType: stri
             const wasMake = typeof value === 'number' && value > 0;
 
             switch (eventType) {
+                // BUG-133: the write side (events/route.ts) increments the *Attempted
+                // counter on every shot attempt regardless of make/miss -- the revert
+                // must decrement it unconditionally too, or a deleted shot leaves the
+                // attempt count permanently 1 too high (asymmetric with the write path,
+                // the exact anti-pattern known-issues.md already documents for BUG-060).
                 case 'Field Goal':
+                    updates.fieldGoalsAttempted = Math.max(0, (stats.fieldGoalsAttempted || 0) - 1);
                     if (wasMake) {
                         updates.fieldGoalsMade = Math.max(0, (stats.fieldGoalsMade || 0) - 1);
                         updates.totalPoints = Math.max(0, (stats.totalPoints || 0) - 2);
                     }
                     break;
                 case 'Three Pointer':
+                    updates.threePointersAttempted = Math.max(0, (stats.threePointersAttempted || 0) - 1);
                     if (wasMake) {
                         updates.threePointersMade = Math.max(0, (stats.threePointersMade || 0) - 1);
                         updates.totalPoints = Math.max(0, (stats.totalPoints || 0) - 3);
                     }
                     break;
                 case 'Free Throw':
+                    updates.freeThrowsAttempted = Math.max(0, (stats.freeThrowsAttempted || 0) - 1);
                     if (wasMake) {
                         updates.freeThrowsMade = Math.max(0, (stats.freeThrowsMade || 0) - 1);
                         updates.totalPoints = Math.max(0, (stats.totalPoints || 0) - 1);

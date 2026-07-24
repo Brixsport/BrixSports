@@ -5645,25 +5645,36 @@ Filed together, same investigation: a deliberate side-by-side comparison of `Foo
 
 ---
 
-### BUG-133 — Shooting-Attempt, Rebound-Split, and Foul-Split Stat Columns Are Write-Orphaned
+### ~~BUG-133~~ — Shooting-Attempt Stat Columns Were Write-Orphaned (Attempt-Counter Half Fixed; Rebound/Foul Split Remains Blocked)
 
-**Status:** OPEN
+**Status:** RESOLVED (attempt-counter tracking) — 2026-07-24 (session 47B). Rebound/foul type-splitting remains explicitly out of scope, still blocked on UI work not yet built (unchanged from original filing).
 **Priority:** Medium — shooting percentage can never be computed correctly, ever, for any basketball player
 
-**Problem:** `basketball_player_stats` schema has `fieldGoalsAttempted`/`threePointersAttempted`/`freeThrowsAttempted`, `offensiveRebounds`/`defensiveRebounds`, and `technicalFouls` as distinct columns from their "made"/generic/personal counterparts — but `updatePlayerStats()`'s basketball branch never increments any of them, on make or miss. A missed shot currently increments nothing at all (correctly avoiding the BUG-126-class false-make bug), but it should still increment the attempt counter — without it, there is no denominator for `fieldGoalPercentage`/`threePointPercentage`/`freeThrowPercentage` ever, for any player, at any point. Rebound/foul type-splitting ties to the already-known "foul subtypes collapse to one generic type" gap (BACKLOG-125's own carried-forward note) — same root cause, wider surface than previously scoped.
+**Problem:** `basketball_player_stats` schema has `fieldGoalsAttempted`/`threePointersAttempted`/`freeThrowsAttempted`, `offensiveRebounds`/`defensiveRebounds`, and `technicalFouls` as distinct columns from their "made"/generic/personal counterparts — but `updatePlayerStats()`'s basketball branch never incremented any of them, on make or miss. A missed shot correctly incremented nothing at all (avoiding the BUG-126-class false-make bug), but it should still increment the attempt counter — without it, there is no denominator for `fieldGoalPercentage`/`threePointPercentage`/`freeThrowPercentage` ever, for any player, at any point. Rebound/foul type-splitting ties to the already-known "foul subtypes collapse to one generic type" gap (BACKLOG-125's own carried-forward note) — same root cause, wider surface than previously scoped, still not fixed.
 
-**Fix:** increment the relevant `*Attempted` column on every shot attempt regardless of make/miss. Offensive/defensive rebound and personal/technical foul splitting needs UI support for those subtypes first (not yet built) before the write path can distinguish them — this part is blocked on that, not a standalone fix.
+**Fix:** `events/route.ts`'s `updatePlayerStats` now increments `fieldGoalsAttempted`/`threePointersAttempted`/`freeThrowsAttempted` on every shot attempt regardless of make/miss — the existing made-counter/`totalPoints` logic is unchanged, this is additive. Symmetrically, `events/[eventId]/route.ts`'s `revertPlayerStat` (BUG-130's basketball branch, added this same session) now decrements the same `*Attempted` column unconditionally on delete — without this, a deleted shot would have left the attempt count permanently 1 too high, the exact write/revert asymmetry `known-issues.md` already documents for BUG-060. Offensive/defensive rebound and personal/technical foul splitting still needs UI support for those subtypes first (not yet built) before the write path can distinguish them — this part remains blocked, unchanged, not attempted this session.
+
+**Evidence:**
+- Commit: pending (this session, uncommitted at time of writing)
+- Verified by: live DB-confirmed test — `dev/verify-bug133-fix.mjs`, staging DB via local dev server, real TBK player (`i7VBmo4RZkk5Q6_Zixw2I`).
+- Observed result: a made Field Goal moved `field_goals_attempted` and `field_goals_made` both `+1` from baseline. A subsequently-logged missed Field Goal moved `field_goals_attempted` `+1` again (now +2 from baseline) while `field_goals_made` stayed unchanged. Deleting both events brought both columns back to their exact pre-test baseline (`0`/`31` in the test run), confirming the revert decrements symmetrically regardless of make/miss. `tsc --noEmit` held at 49 pre-existing errors, none new.
+- Pending items: rebound/foul-subtype splitting, unchanged, still blocked on UI work.
 
 ---
 
-### BACKLOG-133 — Unbounded Query on `matches/[id]` GET's Events Select
+### ~~BACKLOG-133~~ — Unbounded Query on `matches/[id]` GET's Events Select
 
-**Status:** OPEN
+**Status:** RESOLVED — 2026-07-24 (session 47B)
 **Priority:** Medium — direct violation of `CLAUDE.md`'s own explicit anti-pattern ("List query with no `.limit()` clause")
 
-**Problem:** `matches/[id]/route.ts`'s `eventsData` query (lines ~63-79) has no `.limit()`. The `playerRatings` select nearby has the same gap (lower risk, roster-bounded).
+**Problem:** `matches/[id]/route.ts`'s `eventsData` query (lines ~63-79) had no `.limit()`. The `playerRatings` select nearby had the same gap (lower risk, roster-bounded).
 
-**Fix:** add `.limit(500)` (or similar) to the events select.
+**Fix:** `.limit(500)` added to the events select; `.limit(100)` added to the `playerRatings` select (roster-bounded, generous headroom). `src/app/api/matches/[id]/route.ts`.
+
+**Evidence:**
+- Commit: pending (this session, uncommitted at time of writing)
+- Verified by: `tsc --noEmit` held at 49 pre-existing errors, none new. No existing match has anywhere near 500 events, so the limit's actual clamping behavior isn't independently observable against live data yet — this is a straightforward defensive bound matching the project's own stated anti-pattern rule, not a fix for an observed failure, so a syntax/regression check via `tsc` plus the code diff itself is the appropriate evidence bar here (consistent with how BACKLOG-045's original `.limit(200)` fix was evidenced).
+- Pending items: none.
 
 ---
 

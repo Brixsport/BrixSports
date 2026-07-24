@@ -331,20 +331,30 @@ async function updatePlayerStats(
             // "absent" case as a real make with no value sent. `made` is an explicit
             // boolean sent by the client for these three types specifically — a miss
             // must increment zero counters, never inferred from value.
+            // BUG-133: *Attempted columns (fieldGoalsAttempted/threePointersAttempted/
+            // freeThrowsAttempted) were never incremented on make OR miss -- with no
+            // denominator, fieldGoalPercentage/threePointPercentage/freeThrowPercentage
+            // could never be computed for any player, ever. Every shot attempt (make or
+            // miss) increments its Attempted counter; only a make also increments the
+            // Made counter and totalPoints -- made/miss discipline from the fix above
+            // is unchanged, this is additive.
             switch (eventType) {
                 case 'Field Goal':
+                    updates.fieldGoalsAttempted = (stats?.fieldGoalsAttempted || 0) + 1;
                     if (made) {
                         updates.fieldGoalsMade = (stats?.fieldGoalsMade || 0) + 1;
                         updates.totalPoints = (stats?.totalPoints || 0) + 2;
                     }
                     break;
                 case 'Three Pointer':
+                    updates.threePointersAttempted = (stats?.threePointersAttempted || 0) + 1;
                     if (made) {
                         updates.threePointersMade = (stats?.threePointersMade || 0) + 1;
                         updates.totalPoints = (stats?.totalPoints || 0) + 3;
                     }
                     break;
                 case 'Free Throw':
+                    updates.freeThrowsAttempted = (stats?.freeThrowsAttempted || 0) + 1;
                     if (made) {
                         updates.freeThrowsMade = (stats?.freeThrowsMade || 0) + 1;
                         updates.totalPoints = (stats?.totalPoints || 0) + 1;
