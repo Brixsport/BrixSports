@@ -6,6 +6,7 @@
 - **Auth**: Custom JWT (jose / jsonwebtoken). Validation is strictly server-side.
 - **Real-time**: Custom WebSockets broadcasting events and score updates.
 - **Client**: Next.js App Router with TailwindCSS. PWA implementation required for offline event queueing for loggers.
+- **Versioning** (settled 2026-07-23, session 47): `package.json` stays at `0.1.0` (the untouched `create-next-app` default) deliberately while the project is `CLAUDE.md`'s own stated tier ("MVP → moving toward PRODUCTION") — semver's 0.x convention fits honestly. Bump to `1.0.0` only at genuine production-readiness (all Tier 0 gaps in `SYSTEM_CRITICALITY_MAP.md` closed, a real live match run end-to-end). Version bumps happen at prod-release checkpoints, not per dev/staging commit. "brixsports-v2" is a lineage name (V1 crashed under the previous developer, this is a clean restart), not a semver marker — keep the two separate.
 
 ---
 

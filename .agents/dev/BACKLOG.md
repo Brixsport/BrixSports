@@ -5533,6 +5533,10 @@ A skewed black "B" on the theme's `bg-primary` blue — never replaced with the 
 
 **Needs its own dedicated session** — this is an auth/session-architecture question, not a UI patch.
 
+**Related finding, parked alongside this one (same session, same root shape):** narrowing `manifest-admin.json`'s scope from `/` to `/admin` (fixed this session, separately) resolved the specific symptom of `/admin`'s "Open in app" chip offering the wrong installed PWA — but `manifest-user.json`'s scope is still `/`, which technically still overlaps `/admin` and `/logger`. This isn't cleanly fixable the way admin/logger were: viewer legitimately spans dozens of route prefixes (`/matches`, `/teams`, `/players`, `/live`, `/news`, `/profile`, etc.) and the manifest spec's `scope` field is a single prefix with no exclusion syntax — there's no narrower string that means "everything except /admin and /logger." Chrome appears to prefer the more specific scope match when resolving "Open in app" on an overlapping URL (consistent with `/admin` now correctly resolving to the Admin PWA), but this is inferred from one observation, not confirmed against Chrome's actual documented disambiguation behavior — and whether install *order* (installing admin/logger before vs. after viewer) changes anything is untested, not just unconfirmed.
+
+**Why both of these exist at all — Richard's own recollection:** the original plan was to route admin/logger ("ops") to a **separate subdomain** rather than path-based routing (`/admin`, `/logger`) under the same origin as the viewer. Subdomain separation would structurally eliminate both this entry's `localStorage.authToken` bleed *and* the manifest-scope-overlap finding above in one move — separate origins get fully separate `localStorage`, cookies, and PWA scope enforced by the browser's own same-origin security model, not by scoping conventions (`path:`, `scope:`) that have to be manually gotten right and kept right across every new route/manifest, which is exactly the class of bug both these findings are. Worth treating subdomain separation as the real architectural fix to evaluate first, when this gets its own session — not path-scoping patches layered on top of the current single-origin structure.
+
 ---
 
 ### BACKLOG-131 — PWA Install-Prompt System: Confirmed Bugs + Deferred Design Question
@@ -5548,3 +5552,126 @@ A skewed black "B" on the theme's `bg-primary` blue — never replaced with the 
 **Deferred, not scoped — Richard's broader design question:** should there be a dedicated system (e.g. a sliding-window reminder strategy — show once, escalate/re-show on a schedule if dismissed, per-role tuning) rather than the current flat "5s after event, 7-day dismiss cooldown" logic? Real product/UX design work, not a quick fix — needs its own session to actually design, not sketched under time pressure here.
 
 **Also unresolved from the same investigation:** whether "unable to install" (the original report that started this whole thread) referred to genuine browser-level installability (Chrome's own criteria — appeared fine when checked) or this custom in-app prompt component specifically. See BUG-127.
+
+---
+
+### BACKLOG-132 — Logger UX Redesign + Viewer Sport-Differentiated UI: Deferred Until System Stability
+
+**Status:** DEFERRED — not backscoped (nothing built yet to hide), a backlog deferral
+**Priority:** N/A until system stability is reached
+**Filed:** 2026-07-23 (session 47), Richard's explicit call
+
+**Decision:** the one-tap/quick-actions/accessibility logger UX philosophy (confirmed platform-wide, not basketball-specific — Richard's own answer, session 47) and basketball's sport-differentiated viewer UI are both deferred until the system is stable across all open criticalities in `SYSTEM_CRITICALITY_MAP.md` — not just basketball's Tier 0 gaps (WS emit, resume-seeding), but the broader open list including BUG-128 (auth bleed) and anything else still open when this gets picked back up. Refinement/polish work happens in a subsequent update once the system underneath it is settled, not layered on top of a still-moving target.
+
+**Why:** consistent with, not a new departure from, standing project doctrine — `SYSTEM_CRITICALITY_MAP.md`'s own rule that any open Tier 0 gap outranks any other tier's work regardless of severity, and the same UI/UX-sweep-deferred sequencing Richard already established back in session 44 (full UI/UX polish waits until system-level bugs/data issues are handled).
+
+**Note on terminology:** this is filed as a BACKLOG deferral, not a `BACKSCOPE.md` entry — `BACKSCOPE.md` tracks already-*built* features hidden pending reinstatement (FPL, predictions, polls); nothing has been built for this redesign yet, so there's nothing to hide. Revisit as a real backscope entry only if partial redesign work gets built and then needs pausing mid-flight.
+
+---
+
+## Session 47 — Football→Basketball Systematic Mapping Pass (BUG-129 through BUG-133, BACKLOG-133 through BACKLOG-136)
+
+Filed together, same investigation: a deliberate side-by-side comparison of `FootballLogger.tsx` (mature, live-tested) against `BasketballLogger.tsx` (newer), cross-referencing every football bug fix documented in `known-issues.md` against verified basketball code, plus an independent `code-reviewer` agent pass on the same files. Every finding below is code-confirmed, not inferred — either by direct read or by an agent finding independently verified against the actual source afterward.
+
+---
+
+### BUG-129 — Every Basketball Event Silently Duplicates Within 15 Seconds
+
+**Status:** OPEN — CRITICAL, must fix before any live match day
+**Priority:** CRITICAL — corrupts the event log and every derived stat for every basketball match, not an edge case
+
+**Problem:** `BasketballLogger.tsx`'s `recordEvent` generates a local id `` `e${events.length + 1}` `` and never reads the POST response body — only checks `res.ok`. `useMultiLogger.ts`'s `mergeEvents()` (confirmed, `src/lib/multiLogger.ts:130-131`) dedupes strictly via `new Map(allEvents.map(e => [e.id, e]))` — exact ID match only. Since the local temp id never gets swapped for the DB's real `nanoid()` id, the very next 15s sync cycle pulls the same event back from the server as a "new" entry and appends it. Every downstream stat (`calculateAdvancedStats`, `calculatePlayerRating`, event log/history views) double-counts. `FootballLogger.tsx` avoids this via `manager.confirmEvent(event.id, saved.event.id)` after a successful POST — basketball has no equivalent.
+
+**Fix:** on a successful POST, read `saved.event.id` from the response and replace the local temp id in `events` state with it, before the next sync cycle can run.
+
+---
+
+### BUG-130 — `undoLastEvent()` Is Cosmetic Only, Never Reaches the Server (and the Server Wouldn't Revert the Score Even If It Did)
+
+**Status:** OPEN — CRITICAL, must fix before any live match day
+**Priority:** CRITICAL — directly breaks Flow B/Flow C guarantees
+
+**Problem:** Two stacked gaps, both required for a real fix:
+1. `undoLastEvent()` only slices local `events` state and reverts local score state — no `fetch()` call at all. The DB event row and the DB score (already atomically incremented by the original POST) are both untouched. Any refresh, multi-logger sync, or public viewer still sees the "undone" event and its score contribution.
+2. Even after wiring the DELETE call, `events/[eventId]/route.ts`'s own score-revert `isScoringEvent` check only recognizes `GOAL`/`PENALTY`/`OWN_GOAL` — not basketball's `FIELD_GOAL`/`THREE_POINTER`/`FREE_THROW`. The score would still never revert.
+3. Related, same root cause: `revertPlayerStat()` in the same route file has `if (sport !== 'Football') return;` — a hard, literal no-op for basketball, confirmed by reading the function directly. Any basketball event deletion (via a fixed undo, or any future delete path) leaves permanent ghost stats. Same shape as football's already-fixed BUG-060, never ported.
+
+**Fix:** wire `undoLastEvent` to call `DELETE /api/matches/[id]/events/[eventId]`, gated on `res.ok`, mirroring football's server-first pattern. Extend `[eventId]/route.ts`'s scoring detection and `revertPlayerStat` to handle basketball's types — both must land together, since one without the other leaves score or stats silently wrong.
+
+---
+
+### BUG-131 — No Server-Side Bound on Scoring `value` — Score Inflatable by Any Authenticated Logger
+
+**Status:** OPEN — CRITICAL, must fix before any live match day
+**Priority:** CRITICAL — a realistic threat given this project's own 120-minute logger session requirement (long-lived sessions, mobile, more surface for a buggy client to misfire)
+
+**Problem:** `events/route.ts`'s scoring path trusts client-supplied `value` verbatim: `const points = typeof value === 'number' ? value : 1;` — no check that it matches the event type's real point value (1/2/3 for Free Throw/Field Goal/Three Pointer). A POST with `{ type: 'Field Goal', value: 500, made: true }` atomically adds 500 to `matches.homeScore` in one request — effectively bypassing BUG-052's admin-only score-write gate through this separate endpoint. Shared code, so football's `GOAL`/`PENALTY` path has the identical structural gap; basketball's legitimate non-1 values make an out-of-range value easier to miss in review.
+
+**Fix:** validate `value` against an explicit allowlist per event type (`FIELD_GOAL: 2, THREE_POINTER: 3, FREE_THROW: 1`) before it enters the atomic transaction, not just `typeof value === 'number'`.
+
+---
+
+### BUG-132 — `value: 0` Collapses to `null` on Write (Write-Side Falsy-Zero, Distinct From the Read-Side Fix Already Shipped This Session)
+
+**Status:** OPEN
+**Priority:** Medium — the same falsy-zero bug class fixed twice already this session (BUG-126, the missed-shot-counted-as-made fix), missed here specifically
+
+**Problem:** `events/route.ts:148` — `value: value ? JSON.stringify(value) : null` — collapses a legitimate `value: 0` (basketball's own miss sentinel) to `null` in the DB, discarding the make/miss distinction right after the client computed it via the explicit `made` boolean. The warning comment two lines above this exact line ("points truthiness must never be used to tell make from miss") describes precisely this bug, yet the persistence line still does it. Works today only by accident (`made` itself is never persisted — `match_events` schema has no `made` column — so there's no durable record of make vs. miss beyond this fragile convention).
+
+**Fix:** `value: value !== undefined && value !== null ? JSON.stringify(value) : null`. Consider adding a real `made` column to `match_events` if make/miss needs to survive a reload/undo reliably (currently it doesn't).
+
+---
+
+### BUG-133 — Shooting-Attempt, Rebound-Split, and Foul-Split Stat Columns Are Write-Orphaned
+
+**Status:** OPEN
+**Priority:** Medium — shooting percentage can never be computed correctly, ever, for any basketball player
+
+**Problem:** `basketball_player_stats` schema has `fieldGoalsAttempted`/`threePointersAttempted`/`freeThrowsAttempted`, `offensiveRebounds`/`defensiveRebounds`, and `technicalFouls` as distinct columns from their "made"/generic/personal counterparts — but `updatePlayerStats()`'s basketball branch never increments any of them, on make or miss. A missed shot currently increments nothing at all (correctly avoiding the BUG-126-class false-make bug), but it should still increment the attempt counter — without it, there is no denominator for `fieldGoalPercentage`/`threePointPercentage`/`freeThrowPercentage` ever, for any player, at any point. Rebound/foul type-splitting ties to the already-known "foul subtypes collapse to one generic type" gap (BACKLOG-125's own carried-forward note) — same root cause, wider surface than previously scoped.
+
+**Fix:** increment the relevant `*Attempted` column on every shot attempt regardless of make/miss. Offensive/defensive rebound and personal/technical foul splitting needs UI support for those subtypes first (not yet built) before the write path can distinguish them — this part is blocked on that, not a standalone fix.
+
+---
+
+### BACKLOG-133 — Unbounded Query on `matches/[id]` GET's Events Select
+
+**Status:** OPEN
+**Priority:** Medium — direct violation of `CLAUDE.md`'s own explicit anti-pattern ("List query with no `.limit()` clause")
+
+**Problem:** `matches/[id]/route.ts`'s `eventsData` query (lines ~63-79) has no `.limit()`. The `playerRatings` select nearby has the same gap (lower risk, roster-bounded).
+
+**Fix:** add `.limit(500)` (or similar) to the events select.
+
+---
+
+### BACKLOG-134 — Silent Failures: Initial Roster Load, Period-Transition PATCHes, No Debounce on Scoring Buttons
+
+**Status:** OPEN
+**Priority:** Medium — all three violate `CLAUDE.md`'s own error-visibility rule ("logging errors must show a clear message to the logger — never appear to succeed when they didn't")
+
+**Problem, three related findings from the same code-reviewer pass:**
+1. `fetchData`'s outer catch only `console.error`s — a failed teams/players/eligible-players fetch shows an empty roster with zero on-screen indication.
+2. The three fire-and-forget quarter/OT/period-transition PATCH calls only `console.error` on failure — no user-facing signal if a period change doesn't persist.
+3. No debounce/in-flight guard on scoring action buttons — only disabled by `!matchStarted || matchEnded`. A rapid double-tap fires two independently-atomic DB writes, double-logging the action server-side.
+
+**Fix:** reuse the existing `eventSaveError` banner pattern for (1) and (2); add an `isRecording` guard disabling the tapped button mid-request for (3), and prefer functional state updates (`setEvents(prev => ...)`) over closure-read values throughout `recordEvent`.
+
+---
+
+### BACKLOG-135 — Dead `BASKETBALL_EVENT`/`MULTI_LOGGER_EVENT` CustomEvent Dispatches
+
+**Status:** OPEN
+**Priority:** Low — reinforces the already-known "no WS broadcast for basketball" gap, but worth its own note since reading the dispatch code in isolation implies broadcasting is happening when it isn't
+
+**Problem:** `broadcastEvent` (`useMultiLogger.ts`) and `BasketballLogger`'s own `BASKETBALL_EVENT` `CustomEvent` dispatch have zero listeners anywhere in the codebase (confirmed via grep). Not a bug on its own — just misleading dead code adjacent to the real WS-emit gap already tracked elsewhere.
+
+---
+
+### BACKLOG-136 — Stats Tab: Partial Fix Confirmed Live, Harder Problem (BACKLOG-122) Still Open
+
+**Status:** OPEN — cross-reference note, not a new bug
+**Priority:** Tier 1 (feel/polish adjacent to data accuracy) — flagged by Richard explicitly as "don't want to forget," not urgent
+
+**Problem:** `.docs/stats-tab-fix.md` (dated to original project scaffolding, pre-dates most of this project's real session history) describes a conditional-rendering fix for `MatchOverlay.tsx` — hide a stat category entirely rather than showing a hardcoded `[0,0]` when no data exists at all. **Confirmed still live in current code** (`MatchOverlay.tsx:1152-1153`, now with optional chaining, same core mechanism) — this part is real and working, not stale documentation.
+
+**What it does NOT solve — BACKLOG-122's later, worse finding still stands:** a stat category with *asymmetric partial* data (one team's events fully logged, the other's barely logged) produces a genuinely non-null, confidently-wrong-looking number — `busa-match-16`'s `100%-0%` possession, `26-0` shots — not a "no data" case the conditional-render fix would catch, since the value is real and present, just derived from lopsided sheet coverage. This is the harder, still-unsolved half of the same "Stats tab" problem. See `BACKLOG-122` for the full detail and proposed fix (distinguish "goals-only backfill" matches from "full stat capture" matches before deciding what to render).
