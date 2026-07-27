@@ -5596,6 +5596,13 @@ A skewed black "B" on the theme's `bg-primary` blue — never replaced with the 
 
 **Note on terminology:** this is filed as a BACKLOG deferral, not a `BACKSCOPE.md` entry — `BACKSCOPE.md` tracks already-*built* features hidden pending reinstatement (FPL, predictions, polls); nothing has been built for this redesign yet, so there's nothing to hide. Revisit as a real backscope entry only if partial redesign work gets built and then needs pausing mid-flight.
 
+**Additional concrete notes for whenever this redesign is picked up, session 47C (Richard's direct requests, not built now — same deferral as above):**
+- Make the scoreboard/clock block genuinely sticky at the top of the logger view (currently scrolls with the page) — both sports.
+- The sticky header's own contents need a pass once it's actually sticky — what belongs there changes when it's always visible vs. only seen at the top.
+- A general sweep for hardcoded display data left in the logger UI beyond what this session already found (`STARTER_COUNT`-class issues) — not itemized further here, a real pass needed when this work starts.
+- Clarify (product decision, not just code) the actual distinction between "Event Log" and "Match History" as they currently appear in the logger UI — worth confirming these aren't two names for near-identical data before designing anything further on top of either.
+- The Settings modal needs a real rework of what belongs in it — actual settings/options vs. usage info vs. one-off actions are currently mixed together; needs a deliberate information-architecture pass, not just visual polish.
+
 ---
 
 ## Session 47 — Football→Basketball Systematic Mapping Pass (BUG-129 through BUG-133, BACKLOG-133 through BACKLOG-136)
@@ -6032,5 +6039,20 @@ No `clearTimeout` exists anywhere in the file. The effect that sets `stateManage
 
 **Fix (not built):** `calculateAdvancedStats`'s `ast` computation should also count events where `type === 'Assist' && e.playerId === playerId`, in addition to the existing `assistPlayerId` check, so both assist-recording paths (embedded-on-shot and standalone-button) are reflected in the box score.
 **Found:** session 47C, surfaced incidentally while re-investigating `BUG-143` above (tracing how basketball records assists to compare against football's chain).
+
+---
+
+### BACKLOG-145 — Basketball's `STARTER_COUNT` Is String-Matched, Not Competition-Config-Aware (Football Already Does This Correctly)
+
+**Status:** OPEN — found this session, not fixed. Backlog only, per Richard's request — not built now.
+**Priority:** Low-Medium — works today for the two known formats (5-a-side, 3x3's 3-a-side), but is a real correctness gap for any future basketball competition format that doesn't match the hardcoded string check
+
+**Correction to the original ask that filed this:** the request was to sweep *football* for legacy hardcoded player-count/duration constants — checked, and `FootballLogger.tsx` already does this correctly: `STARTER_COUNT = competitionPlayersPerSide || (is5Aside ? 5 : 11)` (~line 138), where `competitionPlayersPerSide` is fetched from the competition's own config (~line 392-394) and only falls back to a hardcoded 5/11 if that's absent. `halfDuration` follows the same pattern (fetched from match config, ~line 456-462). **The actual gap is on basketball's side, not football's:** `BasketballLogger.tsx`'s `STARTER_COUNT = is3x3 ? 3 : 5` (~line 32) never attempts to read any competition-level config at all — `is3x3` is a hardcoded string match against `match.sport`/`match.competition` (`'3x3 Basketball'`, `'Basketball 3x3'`, or `.includes('3x3')`), with no fallback-if-config-exists path the way football has. `quarterDuration`/`periodCount`/`overtimeDurationMinutes` do get overwritten by match config on mount (per existing comments in the file), so this gap is specifically `STARTER_COUNT`, not every config value.
+
+**Fix (not built):** port football's pattern — fetch a competition-level `playersPerSide` (or the `competition_sport_settings`/`SPORT_DEFAULTS.basketball.playersPerSide` value referenced elsewhere in this file's `BACKLOG-125`/125-adjacent entries) and prefer it over the `is3x3` string-match, keeping the string-match only as the final fallback.
+
+**Related, same theme, also not built:** Richard separately asked whether `BasketballLogger.tsx`'s player-selector and its roster/manager-setup ("load & manager setup") should be re-read against `FootballLogger.tsx`'s own equivalents, since football's patterns here are already live-tested and verified (the `memberships`-aware player-team filtering fixed as `BUG-061`/session-46's basketball port is the known-good precedent for this class of comparison). Not investigated this session — noted for whenever this gets picked up, same "read football first, compare, port only what's actually better" discipline used for the rest of this session's basketball-parity work.
+
+**Found:** session 47C, per Richard's request to sweep for legacy/redundant hardcoded values across both loggers.
 
 ---
