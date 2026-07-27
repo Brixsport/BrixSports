@@ -30,8 +30,8 @@ We have **two separate service workers** for different user types:
   - Offline page fallback
 
 #### 2. Admin/Logger Service Worker (`/sw-admin.js`)
-- **Scope**: Admin and logger users
-- **Manifest**: `/manifest-admin.json`
+- **Scope**: Admin and logger users — this single script is registered twice, once at scope `/admin` and once at scope `/logger` (see ownership map below). This is intentional, not a duplicate/oversight — `sw-admin.js`'s own precache list includes both `/admin` and `/logger` routes.
+- **Manifest**: `/manifest-admin.json` (admin), `/manifest-logger.json` (logger)
 - **Caching Strategy**:
   - **API Requests**: Network-first with short cache
   - **Critical Data**: Always fresh from network
@@ -40,6 +40,44 @@ We have **two separate service workers** for different user types:
   - Background sync for match events and admin changes
   - Offline match logging capability
   - Real-time sync when connection restored
+
+### Service Worker Ownership Map (BACKLOG-059 audit, 2026-07-27)
+
+There is exactly **one** call site that ever invokes `navigator.serviceWorker.register()`:
+`src/lib/pwa.ts:24` (`registerServiceWorker()`), invoked only from `src/hooks/usePWA.ts:18`.
+Every layout below goes through that single path via `<PWAProvider>` — there is no
+second, independent `.register()` call anywhere in the codebase.
+
+| # | Trigger (route / layout) | SW file | `scope` argument | File:line |
+|---|---|---|---|---|
+| 1 | Root layout — every route by default | `/sw-user.js` | not passed → defaults to `/` (`PWAProvider` default) | `src/app/layout.tsx:223` |
+| 2 | `/admin/*` | `/sw-admin.js` | `/admin` | `src/app/admin/layout.tsx:54-58` |
+| 3 | `/logger/*` | `/sw-admin.js` (reused, not a dedicated file) | `/logger` | `src/app/logger/layout.tsx:24-28` |
+| — | Any consumer of `getPushService()` | none — calls `getRegistration('/')`, never `.register()` | n/a | `src/lib/notifications/push-service.ts:43` |
+
+**Guard:** `src/hooks/usePWA.ts:12-17` skips the actual `.register()` call for `/sw-user.js`
+whenever the current pathname starts with `/admin` or `/logger`, so the root layout's
+provider never fires a competing registration on those paths even though its nominal
+scope (`/`) would otherwise cover them.
+
+**Conflict check — none found:**
+- `sw-user.js` (scope `/`) and `sw-admin.js` (scopes `/admin`, `/logger`) overlap in
+  theory, but the browser resolves overlapping scopes by longest-prefix match, so
+  `/admin/*` and `/logger/*` pages are always controlled by `sw-admin.js`. Combined with
+  the `usePWA` guard above (which stops `sw-user.js` from even attempting to register
+  on those paths), there is no scope fight.
+- `sw-admin.js` being registered twice (once per scope) is benign — same script,
+  two independent registrations, explicitly designed this way (BACKLOG-093) so the
+  logger role gets full SW coverage without a fourth file.
+- Manifest scopes match their SW scopes 1:1: `manifest-user.json` → `/`,
+  `manifest-admin.json` → `/admin`, `manifest-logger.json` → `/logger`.
+- `public/sw.js` (the third SW referenced by the original BACKLOG-059 filing) was
+  already deleted in commit `d0f27336` ("chore(pwa): delete retired sw.js - replaced
+  by sw-user.js (BACKLOG-059)", 2026-06-16). Zero references to `/sw.js` remain
+  anywhere in `src/` or `public/`. The historical `push-service.ts` double-registration
+  bug (it used to call `.register('/sw-user.js')` directly) was also already fixed —
+  it now only calls `getRegistration('/')`, per the known-issues.md entry dated
+  2026-06-16.
 
 ## Installation Instructions
 

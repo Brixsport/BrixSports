@@ -27,7 +27,7 @@ interface NotificationQueueItem {
 }
 
 export class EventDrivenNotifier {
-    private sentNotifications = new Set<string>();
+    private sentNotifications = new Map<string, number>();
     private queue: NotificationQueueItem[] = [];
     private isProcessing = false;
     private maxRetries = 3;
@@ -49,7 +49,11 @@ export class EventDrivenNotifier {
             const saved = localStorage.getItem('sent_notifications');
             if (saved) {
                 const parsed = JSON.parse(saved);
-                this.sentNotifications = new Set(parsed);
+                // Old format was a flat array of strings (Set); those entries carry no
+                // timestamp and dedup never worked while they were written, so discard them.
+                if (Array.isArray(parsed) && parsed.every((entry: unknown) => Array.isArray(entry) && entry.length === 2)) {
+                    this.sentNotifications = new Map(parsed);
+                }
             }
         } catch (error) {
             console.error('Failed to load sent notifications:', error);
@@ -60,7 +64,7 @@ export class EventDrivenNotifier {
         if (typeof window === 'undefined') return;
 
         try {
-            const array = Array.from(this.sentNotifications);
+            const array = Array.from(this.sentNotifications.entries());
             localStorage.setItem('sent_notifications', JSON.stringify(array));
         } catch (error) {
             console.error('Failed to persist sent notifications:', error);
@@ -73,12 +77,8 @@ export class EventDrivenNotifier {
     private cleanupOldNotifications(): void {
         const sevenDaysAgo = Date.now() - (7 * 24 * 60 * 60 * 1000);
 
-        this.sentNotifications.forEach(key => {
-            // Extract timestamp from key format: matchId_eventId_timestamp
-            const parts = key.split('_');
-            const timestamp = parseInt(parts[parts.length - 1]);
-
-            if (timestamp && timestamp < sevenDaysAgo) {
+        this.sentNotifications.forEach((timestamp, key) => {
+            if (timestamp < sevenDaysAgo) {
                 this.sentNotifications.delete(key);
             }
         });
@@ -120,7 +120,7 @@ export class EventDrivenNotifier {
     }): Promise<void> {
         const { matchId, homeTeamId, awayTeamId, periodEventType, score } = detail;
 
-        const notificationKey = `${matchId}_${periodEventType}_${Date.now()}`;
+        const notificationKey = `${matchId}_${periodEventType}`;
         if (this.sentNotifications.has(notificationKey)) return;
 
         this.queue.push({
@@ -133,7 +133,7 @@ export class EventDrivenNotifier {
             lastAttempt: 0,
         });
 
-        this.sentNotifications.add(notificationKey);
+        this.sentNotifications.set(notificationKey, Date.now());
         this.persistSentNotifications();
         this.processQueue();
     }
@@ -147,8 +147,8 @@ export class EventDrivenNotifier {
     }): Promise<void> {
         const { matchId, homeTeamId, awayTeamId, event, score } = detail;
 
-        // Generate deduplication key (includes timestamp for cleanup)
-        const notificationKey = `${matchId}_${event.id}_${Date.now()}`;
+        // Deduplication key — timestamp tracked separately (see sentNotifications) for cleanup only
+        const notificationKey = `${matchId}_${event.id}`;
 
         // Check if already sent
         if (this.sentNotifications.has(notificationKey)) {
@@ -172,7 +172,7 @@ export class EventDrivenNotifier {
         });
 
         // Mark as sent immediately (optimistic)
-        this.sentNotifications.add(notificationKey);
+        this.sentNotifications.set(notificationKey, Date.now());
         this.persistSentNotifications();
 
         // Process queue
@@ -332,10 +332,7 @@ export class EventDrivenNotifier {
      * Check if notification was sent for an event
      */
     wasNotificationSent(matchId: string, eventId: string): boolean {
-        // Check all keys that start with matchId_eventId
-        return Array.from(this.sentNotifications).some(key =>
-            key.startsWith(`${matchId}_${eventId}_`)
-        );
+        return this.sentNotifications.has(`${matchId}_${eventId}`);
     }
 
     /**
