@@ -103,7 +103,7 @@
 | `/admin/access` | PARTIAL | middleware ✓ | Access management page. Unknown scope. |
 | `/admin/livestreams` | PARTIAL | middleware ✓ | Livestream management. |
 | `/admin/infrastructure` | PARTIAL | middleware ✓ | System health dashboard. Has no `getAuthUser` check in handler — only middleware protection. |
-| `/admin/manager` | PARTIAL | middleware ✓ | Manager dashboard. Has real UI (matches, loggers, comms), but `StaffComms` flow is unverified. |
+| `/admin/manager` | PARTIAL | middleware ✓ | Manager dashboard. Has real UI (matches, loggers, comms). **Correction, 2026-07-27 (session 47C):** the `StaffComms` flow is no longer "unverified" — it's confirmed wired end-to-end (`GET`/`POST /api/staff-comms`, real data), but its own API route has zero auth check (see `BACKLOG-142`), and this page's initial comms load is a half-built placeholder ("first unapproved finished match") separate from its own correct per-match click handler. |
 | `/admin/past-matches/import` | PARTIAL | middleware ✓ | CSV import UI. |
 
 **IMPORTANT:** Admin *page* routes are protected by middleware. Admin *API* handlers have `getAuthUser` in ~23 routes. See §5 for full API auth inventory.
@@ -311,7 +311,7 @@ All FPL routes (`/api/fpl/*`) have **no auth gates** observed and reference `sch
 | `transfers` | PARTIAL | CRUD. BUG-004 fixed. 🔴 High Volatility. |
 | `systemSettings` | WORKING | CRUD via `/api/admin/settings`. |
 | `systemSettingsHistory` | DEAD | Schema exists. No writes observed — settings changes are not logged. |
-| `staffComms` | PARTIAL | Used in Manager dashboard. `/api/chat/send` forwards to WS. Direct DB insert path unclear. |
+| `staffComms` | PARTIAL | Used in Manager dashboard and `FootballLogger.tsx`. **Correction, 2026-07-27 (session 47C):** this row previously conflated `staffComms` with `/api/chat/send` — those are two separate, unrelated mechanisms. `/api/chat/send` has no DB table at all (forwards straight to a WS broadcast room for `LivestreamChat.tsx`, has proper `getAuthUser`); `staffComms` is its own `staff_comms` table written directly by `GET`/`POST /api/staff-comms`, confirmed wired (not "unclear"), but that route itself has **zero auth gate** in production (see `BACKLOG-142`, `SYSTEM_CRITICALITY_MAP.md`). |
 | `pushSubscriptions` | PARTIAL | Subscribe route exists with no auth gate (any user can subscribe). Debug route exposes all subscriptions. |
 | `matchReminders` | PARTIAL | Schema + API route. Notification dispatch unverified. |
 | `passwordResetTokens` | PARTIAL | Schema + forgot-password API. Email delivery depends on BACKLOG-026. |

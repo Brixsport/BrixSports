@@ -101,6 +101,7 @@ Necessary for the product to function as a multi-user system, but not where the 
 
 - **Team Manager role has no permission boundary.** Listed in the actor model with its own row, but `role='team_manager'` is never checked in any route handler — all admin routes check `role === 'admin'` only. A team manager account today has full super-admin access. This is acceptable for a single-university pilot with one admin; it becomes a real access-control failure the moment multiple universities onboard and need scoped permissions.
 - **No rate limiting on public endpoints.** Only `POST /api/loggers/auth` has a rate limit. `GET /api/matches`, `GET /api/events`, `GET /api/players` are unbounded. A WhatsApp-shared match link during a live final can produce a sudden traffic spike with no protection layer. Needs addressing before multi-campus public launches.
+- **`POST /api/staff-comms` has zero auth gate in production (session 47C, `BACKLOG-142`).** A real, wired feature (staff coordination notes, consumed by `FootballLogger.tsx` and `admin/manager/page.tsx`) whose API route was never covered by `middleware.ts`'s `/admin`/`/api/admin` matcher — same bug class as the already-fixed BUG-034/BUG-107 (POST routes with no auth check), just never caught for this route. Anyone can read any match's staff notes or post one under a spoofed `userId`. Not Tier 0 (doesn't touch the live-match write path), but a real, live gap sitting in a Tier 3 admin surface today.
 
 ---
 
