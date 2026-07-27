@@ -74,6 +74,12 @@ interface FootballLoggerProps {
 export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerProps) {
     // ========== STATE MANAGEMENT ==========
     const stateManager = useRef<MatchStateManager | null>(null);
+    // BUG-143: the Goal/Penalty->Assist chain schedules a delayed confirmEvent() call
+    // (see "1b" below) that nothing ever cancelled -- if the logger navigated away
+    // within that window, the timeout still fired and silently wrote/broadcast an
+    // event for a match no longer on screen. Tracked here so the unmount cleanup can
+    // clear any still-pending ones.
+    const pendingAssistTimeouts = useRef<ReturnType<typeof setTimeout>[]>([]);
     const [matchState, setMatchState] = useState<MatchState | null>(null);
     // BUG-109: last wall-clock time a clock checkpoint was persisted to the DB —
     // throttles the PATCH separately from the per-tick WS emit.
@@ -531,6 +537,11 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
         init();
         return () => {
             if (unsubscribe) unsubscribe();
+            // BUG-143: cancel any still-pending assist-chain timeouts so they can't
+            // fire (and silently write/broadcast an event) after this component --
+            // and this specific match's stateManager -- is gone.
+            pendingAssistTimeouts.current.forEach(clearTimeout);
+            pendingAssistTimeouts.current = [];
         };
     }, [match.id, match.homeTeamId, match.awayTeamId]);
 
@@ -963,9 +974,10 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
         // If this is a Goal/Penalty and has an assistant, record the assistant as a separate event
         if ((type === 'Goal' || type === 'Penalty') && relatedPlayerId) {
             // We give it a short delay so IDs and order are consistent
-            setTimeout(() => {
+            const timeoutId = setTimeout(() => {
                 confirmEvent('Assist', relatedPlayerId, playerId);
             }, 500);
+            pendingAssistTimeouts.current.push(timeoutId);
         }
 
         // 2. Send Push Notifications for key discipline and scoring events
