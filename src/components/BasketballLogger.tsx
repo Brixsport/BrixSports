@@ -140,6 +140,25 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
         });
     }, [showLineupModal, lineupSet, homePlayers.length, awayPlayers.length, homeStarters.length, awayStarters.length]);
 
+    // BUG-140: AuthContext wipes localStorage.authToken when /api/auth/me returns
+    // 401 for logger roles. FootballLogger re-seeds it on mount via /api/auth/refresh
+    // (BUG-058b) -- basketball had no equivalent, so any session hitting that 401-wipe
+    // path lost its token permanently with no recovery.
+    useEffect(() => {
+        const ensureLocalToken = async () => {
+            try {
+                const res = await fetch('/api/auth/refresh', { method: 'POST', credentials: 'include' });
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data.token) localStorage.setItem('authToken', data.token);
+                }
+            } catch {
+                // offline at mount -- silently ignore, token may already be in localStorage
+            }
+        };
+        ensureLocalToken();
+    }, []);
+
     // Dynamic Player Rating Calculation
     const calculatePlayerRating = (playerId: string, currentEvents: any[] = events) => {
         const playerEvents = currentEvents.filter(e => e.playerId === playerId || e.assistPlayerId === playerId);
@@ -1359,37 +1378,51 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                             <p className="text-sm text-white/40 mb-6">
                                 Select the player coming from the bench to replace <span className="text-primary font-bold">{(selectedTeam === 'home' ? homePlayers : awayPlayers).find(p => p.id === playerComingOut)?.name}</span>
                             </p>
-                            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                                {(selectedTeam === 'home' ? homePlayers : awayPlayers)
-                                    .filter(p => (selectedTeam === 'home' ? homeSubs : awaySubs).includes(p.id))
-                                    .map((player) => (
-                                        <button
-                                            key={player.id}
-                                            onClick={() => handleSubIn(player.id)}
-                                            className="bg-white/5 border border-white/10 rounded-xl p-4 hover:bg-primary/20 hover:border-primary transition-all"
-                                        >
-                                            <div className="flex items-center gap-3">
-                                                <div
-                                                    className="w-12 h-12 rounded-full flex items-center justify-center font-display text-xl font-bold border-2 border-white/30"
-                                                    style={{
-                                                        backgroundColor: selectedTeam === 'home' ? homeTeam?.color : awayTeam?.color,
-                                                    }}
-                                                >
-                                                    {player.number}
-                                                </div>
-                                                <div className="flex-1 min-w-0 text-left">
-                                                    <div className="flex items-center justify-between gap-2 overflow-hidden">
-                                                        <p className="text-sm font-black uppercase tracking-tight truncate">{player.name}</p>
-                                                        <span className="text-[10px] font-black bg-primary/20 text-primary px-1.5 py-0.5 rounded flex-shrink-0">
-                                                            {calculatePlayerRating(player.id)}
-                                                        </span>
+                            {(() => {
+                                const availableSubs = (selectedTeam === 'home' ? homePlayers : awayPlayers)
+                                    .filter(p => (selectedTeam === 'home' ? homeSubs : awaySubs).includes(p.id));
+                                // BUG-141: an empty bench with no fallback message read as a
+                                // broken app mid-game (football's equivalent modal has always
+                                // had an emptyMessage prop for this exact case, see BUG-070).
+                                if (availableSubs.length === 0) {
+                                    return (
+                                        <div className="text-center text-white/40 text-sm font-bold py-8">
+                                            No available substitutes
+                                        </div>
+                                    );
+                                }
+                                return (
+                                    <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                                        {availableSubs.map((player) => (
+                                            <button
+                                                key={player.id}
+                                                onClick={() => handleSubIn(player.id)}
+                                                className="bg-white/5 border border-white/10 rounded-xl p-4 hover:bg-primary/20 hover:border-primary transition-all"
+                                            >
+                                                <div className="flex items-center gap-3">
+                                                    <div
+                                                        className="w-12 h-12 rounded-full flex items-center justify-center font-display text-xl font-bold border-2 border-white/30"
+                                                        style={{
+                                                            backgroundColor: selectedTeam === 'home' ? homeTeam?.color : awayTeam?.color,
+                                                        }}
+                                                    >
+                                                        {player.number}
                                                     </div>
-                                                    <p className="text-[10px] text-white/40 font-bold">{player.position}</p>
+                                                    <div className="flex-1 min-w-0 text-left">
+                                                        <div className="flex items-center justify-between gap-2 overflow-hidden">
+                                                            <p className="text-sm font-black uppercase tracking-tight truncate">{player.name}</p>
+                                                            <span className="text-[10px] font-black bg-primary/20 text-primary px-1.5 py-0.5 rounded flex-shrink-0">
+                                                                {calculatePlayerRating(player.id)}
+                                                            </span>
+                                                        </div>
+                                                        <p className="text-[10px] text-white/40 font-bold">{player.position}</p>
+                                                    </div>
                                                 </div>
-                                            </div>
-                                        </button>
-                                    ))}
-                            </div>
+                                            </button>
+                                        ))}
+                                    </div>
+                                );
+                            })()}
                             <button
                                 onClick={() => {
                                     setShowSubInModal(false);
