@@ -339,7 +339,7 @@ BUG-001 through BUG-029, AUDIT-001/002 (partial), BACKLOG-065 — all resolved S
 
 - ~~**BACKLOG-119**~~ _(UX — Match Detail Page)_: Remove green "Live" dot from header; colour clock and period label red during live match. Active play (H1/H2/ET/PK): pulsing red dot + red period label + red minute. Half Time: red "HT" label only, no dot, no clock. FT/Pending: neutral. Commit `f9c6764`. **Status:** RESOLVED — 2026-07-27 (session 47C), live-verified on PR #12's Vercel preview (`/matches/w6o4YQAF5pem_Qa8uazAm`, a real `LIVE` basketball match — confirms the styling is sport-agnostic, not football-only despite the original H1/H2/ET/PK example). **Evidence:** DOM-inspected directly rather than eyeballed — found `<span class="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse">` (the pulsing dot) and the period label (`Q1`) rendered with `className: "text-red-400"`, computed color `oklch(0.704 0.191 22.216)` (genuinely red, not just visually similar). Verified by: session 47C.
 
-- **BUG-092** _(HIGH — Real-time / Viewer UX)_: Undone events stay visible on the public Timeline tab until hard refresh. Root cause: `handleUndo` in `FootballLogger.tsx` sends `DELETE /api/matches/[id]/events/[eventId]` which removes the event from DB, but the WS server only broadcasts `match:event:new` — there is no `match:event:deleted` broadcast. The viewer page's `useMatchEvents` hook accumulates events via WS and has no mechanism to receive deletions. Fix: (a) in the event DELETE handler (`src/app/api/matches/[id]/events/[eventId]/route.ts`), after confirmed DB delete, emit `match:event:deleted` with `{ matchId, eventId }` via the WS server; (b) `useMatchEvents` in `useWebSocket.tsx` listens for `match:event:deleted` and filters the deleted event out of local state. Observed live: double-yellow undo removed the Red Card from DB correctly but Red Card and original Yellow both remained on viewer Timeline until page reload. Filed: 2026-06-30. **Status:** OPEN
+- ~~**BUG-092**~~ _(HIGH — Real-time / Viewer UX)_: Undone events stay visible on the public Timeline tab until hard refresh. Root cause: `handleUndo` in `FootballLogger.tsx` sends `DELETE /api/matches/[id]/events/[eventId]` which removes the event from DB, but the WS server only broadcasts `match:event:new` — there is no `match:event:deleted` broadcast. The viewer page's `useMatchEvents` hook accumulates events via WS and has no mechanism to receive deletions. Fix: (a) in the event DELETE handler (`src/app/api/matches/[id]/events/[eventId]/route.ts`), after confirmed DB delete, emit `match:event:deleted` with `{ matchId, eventId }` via the WS server; (b) `useMatchEvents` in `useWebSocket.tsx` listens for `match:event:deleted` and filters the deleted event out of local state. Observed live: double-yellow undo removed the Red Card from DB correctly but Red Card and original Yellow both remained on viewer Timeline until page reload. Filed: 2026-06-30. **Status:** SHIPPED — found already fixed, session 47D. **Real fix landed silently as a side effect of `BUG-119` (`b2ffcde`, "stop firing broadcast calls unawaited on serverless"), which added `after(() => broadcastEventDeleted(matchId, eventId))` to the DELETE handler — never cross-referenced back to this entry.** `useWebSocket.tsx`'s `handleEventDeleted` (filters `setEvents(prev => prev.filter(e => e.id !== data.eventId))` on the `event:deleted` socket event) has existed since the original WS setup commit, so the listener side was never actually the gap — only the emit side was missing until BUG-119 added it. `MatchOverlay.tsx` has its own separate `event:deleted` listener too, also already wired. **Not marked RESOLVED**: confirmed by code read + git history only, no live delete-and-observe-viewer-update test run this session — needs a real live match to move to RESOLVED with an evidence block, per this project's own evidence standard.
 
 - **BUG-091** _(MEDIUM — Viewer UX)_: Favourite/heart button on match detail page turns red (optimistic UI) but no write is confirmed. The button is likely calling `POST /api/users/favorites` or `POST /api/teams/[id]/follow` — both routes are listed under BACKLOG-118 remaining work as not yet having `resolveEffectiveUserId` applied. For a viewer-only user (no logger cookie), the failure is likely a silent 401/403 with no UI feedback — the heart state is never rolled back on error. Fix: (a) apply `resolveEffectiveUserId` to `src/app/api/users/favorites/route.ts` and `src/app/api/teams/[id]/follow/route.ts` (BACKLOG-118 remaining work); (b) add error rollback to the heart button — if the API call fails, revert the optimistic toggle and show a toast. Filed: 2026-06-30. **Status:** OPEN
 
@@ -3909,9 +3909,9 @@ If connection drops mid-match, events are silently lost. No retry, no queue.
 
 ---
 
-### BACKLOG-059 — SW Scope Conflict Audit (PRE-LIVE-MATCH BLOCKER)
+### ~~BACKLOG-059~~ — SW Scope Conflict Audit (PRE-LIVE-MATCH BLOCKER)
 
-**Status:** OPEN
+**Status:** RESOLVED — 2026-07-27 (session 47D)
 **Priority:** HIGH — potential SW scope conflict in production
 **Filed:** 2026-06-16
 
@@ -3930,6 +3930,14 @@ two SWs fight over the same registration scope.
 #### Notes
 - Must resolve before BACKLOG-058 (logger offline queue)
 - Pre-live-match blocker
+
+**Audit result (session 47D, delegated to a subagent, code-confirmed):** the premise was already stale — `public/sw.js` doesn't exist. It was deleted in `d0f27336` ("chore(pwa): delete retired sw.js - replaced by sw-user.js (BACKLOG-059)"), **the same day this entry was filed**, but the entry itself was never closed. Only two SWs are live: `sw-user.js` (root layout, scope `/`, `src/app/layout.tsx:223`) and `sw-admin.js` (registered on both `/admin`, `src/app/admin/layout.tsx:54-58`, and `/logger`, `src/app/logger/layout.tsx:24-28` — deliberate reuse per `BACKLOG-093`, not an oversight; `sw-admin.js`'s own precache list explicitly covers both paths). `usePWA.ts`'s path guard (`src/hooks/usePWA.ts:12-17`) skips the root `sw-user.js` registration on `/admin`/`/logger`, so the on-paper scope overlap (`/` vs `/admin`/`/logger`) never actually collides in practice — confirmed via the only real `.register()` call site in the codebase (`src/lib/pwa.ts:24`). The double-registration risk the ticket specifically worried about (`push-service.ts` independently calling `.register('/sw-user.js')`, `known-issues.md`'s own documented past bug) is also already fixed — it now only calls `getRegistration('/')`, no register.
+
+**Evidence:**
+- Commit: `d0f27336` (the actual sw.js deletion, pre-existing) — this session only closed the doc gap
+- Verified by: full-codebase grep for every `navigator.serviceWorker.register`/`getRegistration` call site, cross-referenced against all three role layouts
+- Observed result: no `sw.js` file, no scope conflict, no double-registration — all three original fix steps were already done, only step 4 (document ownership) was outstanding
+- Pending items: none for this entry. `PWA_IMPLEMENTATION_GUIDE.md` updated with a "Service Worker Ownership Map" section per the entry's own step 4.
 
 ---
 
@@ -4621,9 +4629,9 @@ On submit: POST to `/api/teams`, refresh list.
 
 ---
 
-### BUG-041 — HIGH: React Error 418 (Hydration Mismatch) Confirmed Live on Homepage
+### ~~BUG-041~~ — HIGH: React Error 418 (Hydration Mismatch) Confirmed Live on Homepage
 
-**Status:** OPEN
+**Status:** SHIPPED — 2026-07-27 (session 47D)
 **Priority:** High — actively degrading every real user experience
 **Filed:** 2026-06-17
 
@@ -4635,25 +4643,43 @@ Root cause hypothesis: same pattern as BUG-028 — Framer Motion initial prop or
 
 Related: BUG-028 (resolved standings instance), BACKLOG-085, BACKLOG-090.
 
+**Actual root cause (session 47D, different from the hypothesis above — not a Framer Motion `initial` prop this time):** `src/components/pwa/UpdatePrompt.tsx`'s `controllerchange` listener called `window.location.reload()` unconditionally on ANY service-worker controller change. `public/sw-user.js:61`'s `activate` handler calls `self.clients.claim()`, which fires `controllerchange` on the very first claim of a previously-uncontrolled page — i.e. on a genuinely fresh visit, not just on a real update swap. That forces a full hard reload while the page is still mid-hydration, which both interrupts hydration (producing error #418) and re-executes the entire bundle (the recurring long-task/TBT spike from the shared framework chunk the original filing pointed at). Not a one-time load issue — it can refire on any visit where the SW hadn't claimed the page yet. Fix: capture `hadControllerAlready = !!navigator.serviceWorker.controller` before attaching the listener, and only reload when that was already true (a genuine swap of an already-active worker) — never on the first claim of an uncontrolled page. Minimal, targeted fix — confirmed against the actual `sw-user.js` source, not guessed.
+
+**Evidence:**
+- Commit: pending (uncommitted at time of writing, `src/components/pwa/UpdatePrompt.tsx`)
+- Verified by: code read confirming the cited `public/sw-user.js:61` line exists as described; `npx tsc --noEmit` clean (no new errors from this file)
+- Observed result: fix is in place and type-checks; the actual browser hydration-error-gone confirmation (a fresh visit with no prior SW controller, checking for zero error #418 and zero forced reload) was not run live this session
+- Pending items: live verification of the fix (fresh incognito-equivalent visit, confirm no forced reload/no #418 in console), then promote to RESOLVED with that evidence
+
 ---
 
-### BACKLOG-078 — Privacy Policy + Terms of Service Pages
+### ~~BACKLOG-078~~ — Privacy Policy + Terms of Service Pages
 
-**Status:** OPEN
+**Status:** SHIPPED — 2026-07-27 (session 47D)
 **Priority:** High — required before any public user data collection
 **Filed:** 2026-06-17
 
 Legal pages /privacy and /terms required for NDPA compliance and PWA listing. Link from footer and registration flows. Related: BACKLOG-086 (NDPA registration).
 
+**Fix:** `src/app/privacy/page.tsx` and `src/app/terms/page.tsx` created — both explicitly marked as placeholder/not-legally-reviewed in-page (Richard's own call: draft now so the routes exist and PWA/NDPA requirements aren't blocked, replace with reviewed legal copy before public launch). There is no site-wide footer component in this codebase (mobile-first PWA, bottom-nav based) — linked instead from the two most relevant real entry points: the signup form (terms notice below the submit button, satisfies "registration flows" directly) and the settings overlay (a small links row, closest thing to a discoverable "legal" surface). Third-party disclosure list (Section 5 of the privacy page) was caught missing Google OAuth by a `code-reviewer` pass — signup offers "Continue with Google" via a live `/api/auth/google` route — fixed same session. `BACKLOG-086` (NDPA registration) remains separately unstarted, correctly — it depends on this page being live first, per its own note.
+
+**Evidence:**
+- Commit: pending (uncommitted at time of writing)
+- Verified by: live browser check on local dev — both routes render, correct metadata titles, no console errors; signup and settings links navigate correctly
+- Observed result: both pages live at `/privacy` and `/terms`, cross-linked to each other, third-party list accurate against actual integrations (Cloudinary, Sentry, VAPID, Turso, Google OAuth)
+- Pending items: real legal review before public launch (explicitly flagged in-page); NDPA portal registration itself (`BACKLOG-086`)
+
 ---
 
-### BACKLOG-079 — Security Headers Configuration
+### ~~BACKLOG-079~~ — Security Headers Configuration
 
-**Status:** OPEN
+**Status:** SHIPPED — 2026-07-27 (session 47D)
 **Priority:** High
 **Filed:** 2026-06-17
 
 Configure HTTP security headers in next.config.ts: Content-Security-Policy, X-Frame-Options DENY, X-Content-Type-Options nosniff, Referrer-Policy strict-origin-when-cross-origin, Permissions-Policy. None currently set. Pre-prod blocker.
+
+**Fix:** All five headers added to `next.config.ts`'s `headers()`. CSP is deliberately permissive rather than maximally strict — `script-src`/`frame-src` allowlist the Cloudinary upload widget domains (`upload-widget.cloudinary.com`, `*.cloudinary.com`), `connect-src` allows `https:`/`wss:` broadly (the WS endpoint is env-driven — `NEXT_PUBLIC_WS_URL` — and differs staging vs prod, both real Railway hosts), `img-src` allows `https:` broadly (matches `next.config.ts`'s own `images.remotePatterns` wildcard-hostname policy, already an accepted platform decision), `style-src`/`font-src` allow Google Fonts. `script-src`/`style-src` keep `'unsafe-inline'`/`'unsafe-eval'` — a nonce/hash-based strict CSP would need real per-role live testing (viewer/logger/admin, including the Cloudinary upload flow) that wasn't attempted this session. Live-verified on local dev (`BUG-146`'s SSR fix made this possible again): homepage renders fully, all `/api/*` calls succeed, zero CSP-violation console errors, network requests all 200 — no regression found. **Not RESOLVED**: only the homepage was checked; admin upload flow (the one real Cloudinary-widget consumer) and a logger session weren't live-tested this session.
 
 ---
 
