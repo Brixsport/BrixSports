@@ -5397,9 +5397,9 @@ On event delete: instead of decrementing a global counter (fragile, can go negat
 
 ---
 
-### BACKLOG-111 — Stat Reversion on Event Undo
+### ~~BACKLOG-111~~ — Stat Reversion on Event Undo
 
-**Status:** SHIPPED — `f44edfa`, Session 36. Pending live verification.
+**Status:** RESOLVED — 2026-07-27 (session 47C), live-verified on a real football match/logger session
 **Priority:** Low
 **Filed:** 2026-06-29
 
@@ -5408,6 +5408,12 @@ On event delete: instead of decrementing a global counter (fragile, can go negat
 **Fix:** Self-contained `revertPlayerStat(sport, playerId, eventType)` function added to `[eventId]/route.ts`. Switch covers: GOAL, ASSIST, OWN GOAL, PENALTY, PENALTY MISSED, PENALTY SAVED, FOUL, YELLOW CARD, RED CARD, SAVE. All with `Math.max(0, x-1)` floor. Guards: `matchType !== 'friendly'` and `!isPenaltyShootout`. Match fetch moved unconditional; null-guarded on both score-revert and stat-revert paths. `PENALTY SAVED` also reverts keeper `saves--` via `event.relatedPlayerId` (null-checked).
 
 **Scope:** `src/app/api/matches/[id]/events/[eventId]/route.ts` only.
+
+**Evidence:**
+- Commit: `f44edfa` (session 36, unchanged tonight — only the live verification was missing until now)
+- Verified by: a real throwaway football match (COLNAS vs COLENG, real logger session), session 47C. Note: `matchType !== 'friendly'` guard means a **friendly**-type match can't exercise this path at all — had to switch the throwaway match to `match_type: 'competition'` (no real `competition_id` attached, so no real standings were touched) to actually trigger the stat write in the first place.
+- Observed result: real player `busa-joga-player-45` (Samuel Olapite) — baseline `goals: 7` → logged a real Goal → `goals: 8` (confirmed increment) → clicked Undo → `goals: 7` (confirmed exact reversion, not a floor-clamped guess). Event row confirmed deleted from `match_events`, not just hidden client-side.
+- Pending items: none. Throwaway match and all its data fully cleaned up (`RUNLOG.md`), real player stats confirmed back to their exact pre-test baseline.
 
 **Related:** BUG-072 (second yellow undo cascade — SHIPPED), BACKLOG-104 (penalty outcomes), BACKLOG-106 (stat recompute via match_player_stats)
 
@@ -6015,7 +6021,7 @@ Filed together, same investigation: a `code-reviewer` agent pass explicitly inde
 
 ### ~~BUG-143~~ — `FootballLogger.tsx`'s Goal/Penalty→Assist Chain Leaks a `setTimeout`, Can Fire After Unmount
 
-**Status:** SHIPPED — 2026-07-27 (session 47C). Not yet live-tested (dev server SSR-500 still blocks local browser verification — same standing blocker as BUG-140/141).
+**Status:** SHIPPED — 2026-07-27 (session 47C). Live negative-test attempted same session on a real throwaway football match, came back inconclusive (a scripted "immediate exit" click actually hit the Settings button, not the real exit control, per a class-name mix-up) — Richard's explicit call to accept the code-level fix as sufficient rather than keep chasing a corrected selector. Full detail in `RUNLOG.md`'s 2026-07-27 entry. Not escalated to RESOLVED; this was a deliberate stop, not a pass/fail result.
 **Priority:** Medium — silent, invisible, real (confirmed by code trace, not just theory), but narrow window (500ms) and requires the logger to navigate away at exactly the wrong moment
 
 **Problem:** `FootballLogger.tsx`'s "1b" comment block (~line 958-969) auto-records an `Assist` event 500ms after a `Goal`/`Penalty` with a `relatedPlayerId`:
