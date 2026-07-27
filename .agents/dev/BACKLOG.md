@@ -5548,7 +5548,17 @@ A skewed black "B" on the theme's `bg-primary` blue — never replaced with the 
 
 **Same root-cause class as an already-partially-fixed bug, different surface:** session 38C (`known-issues.md`, 2026-06-30) found and fixed the identical shape via `resolveEffectiveUserId()` for the `follows`/`favorites`/`teams/follow`/`notifications` API routes (auth-cookie path scope, `authToken` set at `path: '/'` reaching every role's routes). This is the same underlying single-shared-credential problem, surfacing via `localStorage` this time, in the header/account-display UI rather than an API route — that earlier fix never covered this surface.
 
-**Not fixed this session** — deliberately deferred, Richard's explicit call to avoid scope creep during the favicon directive. Scope of a real fix is unclear without investigation: does this affect only the header display, or can an admin's `authToken` also authorize viewer-surface API calls incorrectly (or vice versa)? That question needs answering before scoping the fix, not assumed either way.
+**Not fixed session 47** — deliberately deferred, Richard's explicit call to avoid scope creep during the favicon directive. Scope of a real fix was unclear without investigation: does this affect only the header display, or can an admin's `authToken` also authorize viewer-surface API calls incorrectly (or vice versa)? That question is now answered, session 47C:
+
+**Investigated thoroughly, session 47C — the open question above is answered:** this is a real, confirmed API-level bleed, not just a cosmetic header display issue. Root cause traced through the full chain:
+- `src/app/api/auth/login/route.ts` is the **single, universal login endpoint** for every role — there is no separate `/api/admin/login` (confirmed: no admin-specific login page exists anywhere under `src/app/admin`). It sets **one** cookie, name `authToken`, `path: '/'`, `httpOnly`, 7-day `maxAge`, with no role or app scoping of any kind.
+- `AuthContext.tsx`'s `checkAuth()` (used by the viewer's own header/nav) tries this exact cookie **first**, via `credentials: 'include'` on `GET /api/auth/me` — `localStorage.authToken` (this entry's original title) is actually the **secondary** fallback, only consulted if the cookie-based check fails. The cookie itself, not just localStorage, is the primary and more significant vector.
+- `src/lib/auth.ts`'s `getAuthUser()` — called by every protected route, admin and viewer alike — reads that identical unscoped cookie (`request.cookies.get('authToken')`) with zero awareness of which "app" (viewer/admin/logger) the request is conceptually for.
+- **Net effect, confirmed:** an admin who logs in at `/admin` then browses the public viewer site in the same browser has every viewer-surface route that calls `getAuthUser()` (follows, favorites, notification prefs, ratings, etc.) resolve to their **real admin `users.id`** — not a spoof, not a crash, but a genuine actor-model violation ("Viewers NEVER have a session") and a real data-misattribution risk (viewer-side actions taken while an admin session is active get silently attributed to the admin's own account, and vice versa is structurally possible too).
+- **No privilege-escalation risk found** — `middleware.ts`'s `/admin`/`/api/admin` gate independently re-checks `payload.role === 'admin'` on every request regardless of cookie presence, so a viewer session can never pass as admin this way. The bleed is one-directional in severity: identity/data misattribution and actor-model violation, not an admin-impersonation or privilege-escalation vector.
+- Session 38C's `resolveEffectiveUserId()` (referenced above) does not close this gap for admins specifically — it only special-cases `role === 'logger'` (looking up a matching fan account by email); for `role === 'admin'`, it returns `authUser.id` unchanged, meaning the admin's real `users.id` genuinely gets used for viewer-surface writes rather than crashing or erroring, which is *correct* from a DB-integrity standpoint but confirms the bleed is real and silent, not merely cosmetic.
+
+**Confirms the original recommendation stands — needs its own dedicated session, not a patch here.** The fix isn't a quick scoping tweak: it requires either (a) separate cookie names per app (`viewerAuthToken`/`adminAuthToken`/`loggerAuthToken`, each still `path: '/'` since they're same-origin, checked independently by each app's own auth context) or (b) the subdomain separation Richard already recalled as the original plan (structurally the more correct fix, since separate origins get fully separate cookie jars and `localStorage` enforced by the browser itself, not by convention). Either requires touching `login/route.ts`, `AuthContext.tsx`, `middleware.ts`, and every admin/logger auth entry point consistently — real, coordinated auth-architecture work, appropriately out of scope for the basketball-parity branch this was found on.
 
 **Needs its own dedicated session** — this is an auth/session-architecture question, not a UI patch.
 
@@ -5864,6 +5874,12 @@ Filed together, same investigation: a `code-reviewer` agent pass explicitly inde
 
 **Fix (not built):** run `drizzle-kit push` (or the project's standard migration path) against staging first to create the missing `team_ratings` table from the existing schema definition — no schema.ts changes needed, purely a drift-correction push. Verify on staging, then repeat for prod per this project's standard migration rule. Not attempted this session per Richard's explicit call (file only, no schema changes tonight).
 
+**Investigated further, session 47C:** confirmed the "silently fails" framing is accurate for the automatic path but incomplete overall — there is a second, real, user-facing consequence.
+- **Automatic path confirmed safe:** `events/route.ts:304-310` wraps `calculateAndSaveRatings()` in its own `after()` + try/catch, `console.error` only — genuinely does not affect the event POST's `201` response. Flow B is not at risk.
+- **Manual path is NOT silent — a real admin-facing gap, not previously documented:** `src/app/admin/match-ratings/[id]/page.tsx`'s "Calculate Ratings" action (line ~138) calls `POST /api/matches/[id]/ratings` directly. That route's own try/catch (`ratings/route.ts:134-139`) catches the `team_ratings` failure but returns `{ error: err.message }` at `status: 500` — `err.message` there is the **raw SQLite error string** (`no such table: team_ratings`), sent straight to the client and displayed in the admin UI's error banner. This is a second, independent violation of this project's own "never return raw database errors to the client" rule, caused by the same missing table, reachable by any admin who clicks "Calculate Ratings" for a match — not just a background no-op.
+- `schema-ratings.ts`'s `teamRatings` definition (`id`, FK'd `matchId`/`teamId` with cascade delete, `rating`, `playerCount`, `totalPlayerRating`, `goals`, nullable `possession`/`shotsOnTarget`, timestamps) is clean and self-contained — creating it is purely additive, no data migration, no risk to existing tables.
+- **Recommendation:** the `drizzle-kit push` fix is low-risk and would close both the background no-op and the admin-facing raw-error exposure in one move. Still not run this session — schema pushes against staging are a "confirm first" action per this project's own migration governance, not something to execute without an explicit go-ahead even though the change itself is additive-only.
+
 ---
 
 ---
@@ -5960,5 +5976,61 @@ Filed together, same investigation: a `code-reviewer` agent pass explicitly inde
 
 **Fix:** (1) `src/app/api/staff-comms/route.ts` — both `GET` and `POST` now call `getAuthUser(request)` and reject with 401 if absent; `POST` derives `userId` via `resolveEffectiveUserId(authUser)` rather than the client body, since `staffComms.userId` FKs to `users.id` and a naive `authUser.id` would FK-crash for a logger-role session (same class as `BUG-124`). (2) rather than rebuild `admin/manager/page.tsx`'s selection flow right now, the whole feature is pulled from the UI instead (`FootballLogger.tsx`'s modal/button/effect, `admin/manager/page.tsx`'s sidebar panel/stat-tile/effects) — commented out, not deleted, per `BACKSCOPE.md` convention. Full detail in that file's new "Staff Comms" entry.
 **Found:** session 47C, per Richard's direct request to check this feature's actual current state before considering whether to extend it to basketball.
+
+---
+
+### ~~BUG-143~~ — `FootballLogger.tsx`'s Goal/Penalty→Assist Chain Leaks a `setTimeout`, Can Fire After Unmount
+
+**Status:** SHIPPED — 2026-07-27 (session 47C). Not yet live-tested (dev server SSR-500 still blocks local browser verification — same standing blocker as BUG-140/141).
+**Priority:** Medium — silent, invisible, real (confirmed by code trace, not just theory), but narrow window (500ms) and requires the logger to navigate away at exactly the wrong moment
+
+**Problem:** `FootballLogger.tsx`'s "1b" comment block (~line 958-969) auto-records an `Assist` event 500ms after a `Goal`/`Penalty` with a `relatedPlayerId`:
+```js
+if ((type === 'Goal' || type === 'Penalty') && relatedPlayerId) {
+    setTimeout(() => {
+        confirmEvent('Assist', relatedPlayerId, playerId);
+    }, 500);
+}
+```
+No `clearTimeout` exists anywhere in the file. The effect that sets `stateManager.current = manager` (~line 448) has a cleanup that only calls `unsubscribe()` — it never nulls `stateManager.current` or destroys the manager, so `confirmEvent`'s own guard (`if (!stateManager.current) return;`, ~line 925) never trips post-unmount. **Confirmed reachable:** if a logger logs a Goal/Penalty with an assist, then navigates away (switches matches, logs out, closes the panel) within that 500ms window, the orphaned timeout still fires — records the event, POSTs it, dispatches broadcasts — for a match the UI no longer shows, with zero visibility to anyone. Violates this project's own "no silent failures/successes" rule, just inverted (a silent *success* nobody asked for anymore, not a failure).
+
+**Secondary, lower-severity, same root cause:** `confirmEvent` is a plain closure re-created every render, so the delayed call is bound to `selectedTeam` (and other component state) as it was the instant the Goal was logged. If the logger taps the home/away toggle within that same 500ms, the assist gets recorded against the stale team. Low probability, real if it happens.
+
+**Not a football/basketball parity gap:** `BasketballLogger.tsx` doesn't need an equivalent chain — it already embeds the assist as an `assistPlayerId` field directly on the same shot event (`handlePlayerSelect`/`handleAssistSelect`, one atomic POST, no second temp-ID, no race window at all). That's a better pattern than football's chained-event approach, not a gap to close.
+
+**Fix:** the simplest option (`clearTimeout` on unmount) is what's implemented — `FootballLogger.tsx` now holds a `pendingAssistTimeouts` ref array, pushes every scheduled assist-chain timeout ID onto it, and the same effect cleanup that calls `unsubscribe()` now also `clearTimeout`s and empties that array. The more thorough option (embed the assist directly on the Goal/Penalty event instead of chaining a second delayed one, matching basketball's pattern) was deliberately not done here — see `BACKLOG-144` below, a real design conversation about the whole chain's shape, not a minimal leak patch.
+**Found:** session 47C, via a dedicated re-investigation of the existing "1b" comment (requested by Richard, an Explore/general-purpose agent's code trace, independently verified against the real `confirmEvent`/`match-state-manager.ts` source).
+
+---
+
+### BACKLOG-144 — Publish Goal Instantly, Backfill Assist After (SofaScore-Style), Instead of Today's Blocking Modal Chain
+
+**Status:** OPEN — direction confirmed by Richard, not scoped or built
+**Priority:** Medium — real UX/latency improvement for viewers, not a bug fix
+
+**Context, confirmed by code trace (session 47C, alongside `BUG-143`):** today's flow is fully synchronous and blocking — tapping "Goal" opens a scorer-select modal, then an assist-select modal, and **nothing is saved or broadcast to viewers until both resolve.** `relatedPlayerId` (the assist) is already known and embedded directly on the Goal/Penalty event by the time it's written (`confirmEvent`, `relatedPlayerId: relatedPlayerId` on the same object) — there is no technical latency in "getting" the assist by the time of the write; the delay viewers actually experience is the logger's own time spent navigating both modals before anything goes out at all.
+
+**Richard's direction:** flip this — publish the goal (and broadcast to viewers) the instant the scorer is confirmed, *before* the assist modal even opens, then attach the assist as a fast follow-up update once the logger picks it (or skips it). Matches how platforms like SofaScore publish "GOAL" immediately and backfill the scorer/assist detail moments later, rather than gating the viewer-facing broadcast on the logger finishing every detail step first.
+
+**Real design work required, not scoped here:**
+- The Goal event needs to be create-able and broadcastable with `relatedPlayerId` absent, then updated in place once the assist is chosen — today's write path assumes an event is fully-formed at creation; a same-event in-place update after broadcast is a different shape.
+- Decide what the public-facing UI shows in the gap between "goal published" and "assist attached" (no assist line at all, briefly? a pending/loading state?).
+- `BUG-143`'s fix (this same session) removes the chained-second-`Assist`-event's leak risk but doesn't change the blocking-modal ordering — this item is the actual UX change Richard wants, independent of that fix.
+- Basketball's embedded-assist pattern (one atomic event) doesn't have this problem at all today since its assist entry is optional/single-step, not a second blocking modal — worth confirming that stays true if this redesign is ever generalized across sports.
+
+**Reinstate/build when:** its own scoped session — this is a real write-path + broadcast-timing redesign for `POST /api/matches/[id]/events` and `FootballLogger.tsx`'s event flow, not a quick patch.
+**Found:** session 47C, Richard's own direction during the `BUG-143` investigation.
+
+---
+
+### BACKLOG-143 — Basketball's Standalone "Assist" Event Is Invisible to the Box Score's `ast` Stat
+
+**Status:** OPEN — found this session, not fixed
+**Priority:** Low-Medium — rating calc is correct, box score display undercounts
+
+**Problem:** `BasketballLogger.tsx`'s standalone "Assist" button (~line 1096) creates a separate `type: 'Assist'` event. `calculatePlayerRating` correctly counts it (`+2`, ~line 190-192), but `calculateAdvancedStats`'s box-score `ast` field (~line 227) only counts embedded `assistPlayerId` fields on shot events — it never looks at standalone `Assist`-type events. A player credited with a standalone assist gets the rating bump but the box score under-reports their assist count.
+
+**Fix (not built):** `calculateAdvancedStats`'s `ast` computation should also count events where `type === 'Assist' && e.playerId === playerId`, in addition to the existing `assistPlayerId` check, so both assist-recording paths (embedded-on-shot and standalone-button) are reflected in the box score.
+**Found:** session 47C, surfaced incidentally while re-investigating `BUG-143` above (tracing how basketball records assists to compare against football's chain).
 
 ---
