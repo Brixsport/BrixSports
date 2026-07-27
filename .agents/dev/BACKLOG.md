@@ -5926,8 +5926,14 @@ Filed together, same investigation: a `code-reviewer` agent pass explicitly inde
 
 ### ~~BUG-140~~ — Basketball Logger Has No Auth-Refresh Recovery Mechanism (Football Analog of BUG-058b)
 
-**Status:** SHIPPED — 2026-07-27 (session 47C). Code fix in place, `tsc --noEmit` clean (49 pre-existing errors, none new, zero in `BasketballLogger.tsx`). **Not yet live-tested** — local dev server's SSR-500 issue (see `project_local_dev_browser_broken_session47b.md`) still blocks local browser verification; needs the same PR-preview workaround session 47B used, or a resolution of the dev-server bug itself.
+**Status:** RESOLVED — 2026-07-27 (session 47C)
 **Priority:** Medium-High — silent, session-killing, invisible until something relies on it; not actively blocking anything today since basketball has no offline queue yet to be broken by it
+
+**Evidence:**
+- Commit: `ab8c44e`
+- Verified by: live UI test on PR #12's Vercel preview (`brixsports-staging-git-fix-basketbal-a82f03-...`), a real logger session (`logger_1767968844029`) on the existing `LIVE` match.
+- Observed result: cleared `localStorage.authToken` (`null` confirmed), then remounted `BasketballLogger` (navigated back to `/logger`, re-entered the match). `localStorage.authToken` read back afterward contained a **freshly-issued** JWT — different `iat`/`exp` from the token manually injected earlier in the session, confirming the mount effect genuinely called `/api/auth/refresh` and wrote a new token back, not stale state.
+- Pending items: none.
 
 **Problem:** `FootballLogger.tsx` has a `useEffect` (~lines 208-219) that calls `POST /api/auth/refresh` on mount to re-seed `localStorage.authToken` after `AuthContext`'s own `/api/auth/me` 401-check can wipe it — this is `BUG-058b`'s fix (see that entry for full original context on what it solves and why). `BasketballLogger.tsx` has zero occurrences of `auth/refresh`, `authToken`, or `BrixsportAdminDB` anywhere (confirmed via grep) — no equivalent mechanism exists at all. Practical effect: any basketball logger session that triggers `AuthContext`'s 401-wipe path loses `localStorage.authToken` permanently for that session, with no recovery. This would silently break any future offline-queue work for basketball (basketball doesn't have an offline queue yet either — that's a separate, already-known gap, not re-filed here) and is a real gap today wherever basketball code might read `localStorage.authToken`.
 
@@ -5939,8 +5945,14 @@ Filed together, same investigation: a `code-reviewer` agent pass explicitly inde
 
 ### ~~BUG-141~~ — No Empty-State Message on Basketball's Substitution Sub-In Modal (Football Analog of BUG-070)
 
-**Status:** SHIPPED — 2026-07-27 (session 47C). Code fix in place, `tsc --noEmit` clean. **Not yet live-tested** — same local-dev-server blocker as `BUG-140` above.
+**Status:** RESOLVED — 2026-07-27 (session 47C)
 **Priority:** Low — UX confusion, not data loss
+
+**Evidence:**
+- Commit: `ab8c44e`
+- Verified by: live UI test on PR #12's Vercel preview, same logger session as `BUG-140`.
+- Observed result: clicked Substitution, selected an on-court player to sub out. The "who is entering" modal rendered "**No available substitutes**" with a "Cancel Substitution" button — not the old blank grid.
+- Pending items: none.
 
 **Problem:** `FootballLogger.tsx`'s substitution modal has an `emptyMessage` prop (e.g. `'No available substitutes'`) shown when there are no eligible bench players — this is `BUG-070`'s fix (see that entry for full original football context). `BasketballLogger.tsx`'s own sub-in modal (around lines 1343-1373) renders an empty grid with zero fallback message when `homeSubs`/`awaySubs` is empty. Practical effect: a logger taps Substitution, sees a blank modal with no bench players and no explanation, and may think the app is broken mid-game.
 
@@ -5967,8 +5979,14 @@ Filed together, same investigation: a `code-reviewer` agent pass explicitly inde
 
 ### ~~BACKLOG-142~~ — Staff-Comms: Current-State Audit → Auth Gap Fixed, UI Pulled Pending a Real Selection Flow
 
-**Status:** SHIPPED — 2026-07-27 (session 47C). Not yet live-tested (dev server SSR-500 still blocks local browser verification). Per Richard's explicit call after the audit below: rather than half-fix a feature not on any Critical Flow, the API route's auth gap is fixed in place and the UI is pulled from both consumers (`BACKSCOPE.md`, grep `BACKSCOPED: 2026-07-27`) until the admin-side selection flow is rebuilt properly.
+**Status:** RESOLVED — 2026-07-27 (session 47C). Per Richard's explicit call after the audit below: rather than half-fix a feature not on any Critical Flow, the API route's auth gap is fixed in place and the UI is pulled from both consumers (`BACKSCOPE.md`, grep `BACKSCOPED: 2026-07-27`) until the admin-side selection flow is rebuilt properly.
 **Priority:** Medium — the auth gap was a real, live production gap; the rest is stability/completeness assessment, not an active incident
+
+**Evidence:**
+- Commit: `81cce2e`
+- Verified by: live test on PR #12's Vercel preview — both an admin session (`gen-admin-test-token.mjs`) and a logger session.
+- Observed result: (1) UI removal confirmed on `/admin/manager` — `document.body.innerText` search for "comms" returned zero matches anywhere on the rendered page. (2) API auth confirmed both ways on the same route: authenticated admin session → `GET /api/staff-comms?matchId=...` returned a real `200`/`[]`; same request with cookies fully cleared → request never reached the route at all, redirected straight to `/login` (confirmed via `res.redirected`/`res.url` on the fetch response).
+- Pending items: `FootballLogger.tsx`'s side of the same removal not independently re-verified live (identical code pattern from the same commit, already confirmed via direct source read + clean `tsc` — treated as sufficiently covered rather than redundantly re-tested).
 
 **What this feature actually is, confirmed by direct read (not assumed from the name):** a per-match staff notes channel — `staff_comms` table (`schema.ts:782`, `matchId`/`userId`/`content`/`type`/`priority`/`isRead`), `GET`/`POST /api/staff-comms` (`src/app/api/staff-comms/route.ts`), consumed by two real UIs: `FootballLogger.tsx` (fetch-on-mount + 15s poll, plus a `handleSendNote` composer) and `src/app/admin/manager/page.tsx` (a comms panel for admins). This is a genuinely wired, non-stub feature — not a dead scaffold.
 
