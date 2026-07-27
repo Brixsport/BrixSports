@@ -5871,17 +5871,24 @@ Filed together, same investigation: a `code-reviewer` agent pass explicitly inde
 
 ---
 
-### BUG-138 — `team_ratings` Table Does Not Exist on Staging (Schema Drift), Silently Fails Every Team-Rating Write
+### ~~BUG-138~~ — `team_ratings` Table Did Not Exist on Staging or Prod (Schema Drift), Silently Failed Every Team-Rating Write
 
-**Status:** OPEN — found, not fixed (Richard's explicit call: file only, no schema changes this session)
+**Status:** RESOLVED — 2026-07-27 (session 47C)
 **Priority:** Medium — non-blocking (player ratings still write fine; this only affects the team-rating half of the same calculation), but confirmed to fail on 100% of attempts
 **Filed:** 2026-07-24 (session 47B), found live while verifying `BACKLOG-124`'s fix
 
-**Problem:** `teamRatings` is declared in `src/db/schema-ratings.ts` (table name `team_ratings`) and `calculateAndSaveRatings()` (`src/lib/ratingsService.ts`, extracted this session from the old `ratings/route.ts` POST handler — the bug is not new, just newly reachable) writes to it in a loop immediately after successfully writing all player ratings. Confirmed via a direct `sqlite_master` query against the staging DB (`dev/check-rating-tables.mjs`): only `player_ratings` and `rating_history` exist — `team_ratings` was apparently never pushed to staging, despite being fully defined in schema. Every call to `calculateAndSaveRatings` throws `SQLITE_UNKNOWN: no such table: team_ratings` partway through, after player ratings have already committed successfully. This was previously invisible because the only caller that could reach this code path was `events/route.ts`'s old self-fetch (`BACKLOG-124`), which 401'd before ever getting this far — fixing `BACKLOG-124` made this code path reachable for the first time, which is how this surfaced.
+**Problem:** `teamRatings` is declared in `src/db/schema-ratings.ts` (table name `team_ratings`) and `calculateAndSaveRatings()` (`src/lib/ratingsService.ts`, extracted this session from the old `ratings/route.ts` POST handler — the bug is not new, just newly reachable) writes to it in a loop immediately after successfully writing all player ratings. Confirmed via a direct `sqlite_master` query against the staging DB (`dev/check-rating-tables.mjs`): only `player_ratings` and `rating_history` exist — `team_ratings` was apparently never pushed to staging, despite being fully defined in schema. Every call to `calculateAndSaveRatings` threw `SQLITE_UNKNOWN: no such table: team_ratings` partway through, after player ratings had already committed successfully. This was previously invisible because the only caller that could reach this code path was `events/route.ts`'s old self-fetch (`BACKLOG-124`), which 401'd before ever getting this far — fixing `BACKLOG-124` made this code path reachable for the first time, which is how this surfaced.
 
-**Confirmed live (same verification run):** a real basketball event POST on a `LIVE`-status throwaway match correctly wrote a `player_ratings` row (`auto_rating: 6.2`) via the now-fixed `BACKLOG-124` path; the immediately-following `team_ratings` write threw, caught silently by `events/route.ts`'s own `after()` try/catch (`console.error` only, does not affect the event POST's `201` response).
+**Confirmed live (session 47B verification run):** a real basketball event POST on a `LIVE`-status throwaway match correctly wrote a `player_ratings` row (`auto_rating: 6.2`) via the now-fixed `BACKLOG-124` path; the immediately-following `team_ratings` write threw, caught silently by `events/route.ts`'s own `after()` try/catch (`console.error` only, does not affect the event POST's `201` response).
 
-**Fix (not built):** run `drizzle-kit push` (or the project's standard migration path) against staging first to create the missing `team_ratings` table from the existing schema definition — no schema.ts changes needed, purely a drift-correction push. Verify on staging, then repeat for prod per this project's standard migration rule. Not attempted this session per Richard's explicit call (file only, no schema changes tonight).
+**Fix:** created the missing `team_ratings` table on both staging and prod via a targeted, additive `CREATE TABLE` (`dev/create-team-ratings-table.mjs`) rather than `drizzle-kit push` — this project's own session-11 precedent (`RUNLOG.md`, `BACKLOG-040`) shows a plain push getting blocked by unrelated schema drift elsewhere. Pulled `player_ratings`' actual DDL directly from `sqlite_master` (not guessed from `schema.ts`) and matched `team_ratings` to that same real, already-working pattern.
+
+**Evidence:**
+- Commit: N/A (schema-only fix, no application code change)
+- Verified by: `dev/check-team-ratings-both-envs.mjs` (confirmed missing on **both** staging and prod, not just staging as originally filed — prod had never been checked), `dev/create-team-ratings-table.mjs --apply` (both environments), `dev/verify-team-ratings-write.mjs`/`-prod.mjs` (real insert/read/delete cycle on each, using real match/team IDs to satisfy FKs). Full detail in `RUNLOG.md`'s 2026-07-27 entries.
+- Observed result: `team_ratings` now exists on both environments with all 11 expected columns (`PRAGMA table_info` confirmed, not assumed from the DDL). A real row inserted, read back with correct values and defaults, then deleted cleanly (0 rows remaining) on both staging and prod.
+- **New finding, filed separately as `BACKLOG-146`, not part of this fix's scope:** the actual `POST /api/matches/[id]/ratings` endpoint still can't complete end-to-end for basketball matches — `calculateAndSaveRatings()` requires `match.lineups` in football's JSON shape, which basketball never populates (its lineup state lives locally instead, per `BACKLOG-141`). Confirmed live: `400 "No lineups found for this match"` on a real assigned-logger session, before ever reaching the (now-fixed) `team_ratings` write. `team_ratings` existing was necessary but not sufficient for basketball ratings to actually calculate.
+- Pending items: none for this specific gap (the missing table). `BACKLOG-146` tracks the newly-found, separate lineup-format gap.
 
 **Investigated further, session 47C:** confirmed the "silently fails" framing is accurate for the automatic path but incomplete overall — there is a second, real, user-facing consequence.
 - **Automatic path confirmed safe:** `events/route.ts:304-310` wraps `calculateAndSaveRatings()` in its own `after()` + try/catch, `console.error` only — genuinely does not affect the event POST's `201` response. Flow B is not at risk.
@@ -6096,5 +6103,17 @@ No `clearTimeout` exists anywhere in the file. The effect that sets `stateManage
 **Unblocks:** `BUG-140`, `BUG-141`, `BACKLOG-142`, `BUG-143` — all four were SHIPPED but explicitly marked "not yet live-tested, blocked by dev server SSR-500" this same session. That blocker is now gone; live verification for all four is a direct next step.
 
 **Found:** session 47C, root-caused live at Richard's direct request after weeks of this blocking local verification across sessions 46/47/47B.
+
+---
+
+### BACKLOG-146 — Ratings Calculation Requires Football's `match.lineups` JSON Shape, Can't Run for Any Basketball Match
+
+**Status:** OPEN — found this session, not fixed
+**Priority:** Medium — blocks basketball ratings entirely, but ratings are a secondary feature, not on any Critical Flow
+
+**Problem:** `calculateAndSaveRatings()` (`src/lib/ratingsService.ts`) reads `match.lineups` and parses it as JSON, expecting `{ home: { starters, bench }, away: {...} }` (or a flat array) — this is football's lineup-publishing shape. Basketball has no equivalent: its starters/bench live only in `BasketballLogger.tsx`'s local `homeStarters`/`awayStarters` state (per `BACKLOG-141`, there's no server-side lineup persistence for basketball at all), so `match.lineups` is never populated for a basketball match. Confirmed live, session 47C: `POST /api/matches/w6o4YQAF5pem_Qa8uazAm/ratings` (a real, assigned-logger-authenticated request against a real `LIVE` basketball match) returned a clean `400 { "error": "No lineups found for this match" }` — the function exits before ever reaching the player-stats or team-ratings calculation at all.
+**Practical effect:** basketball has never had a working ratings calculation, independent of `BUG-138` (the missing `team_ratings` table, now fixed) — that fix was necessary but not sufficient. Both the automatic background trigger (`events/route.ts`'s `after()` call) and the manual "Calculate Ratings" admin action fail identically for basketball today, just with different visibility (silent vs. a raw error, see `BUG-138`'s own note on the admin-facing exposure).
+**Fix (not built):** either (a) block on `BACKLOG-141` (real server-side lineup persistence for basketball) and have `calculateAndSaveRatings()` read from wherever that ends up living, or (b) teach the function to also accept basketball's actual starter/bench data source once one exists server-side. Not a quick patch — genuinely blocked on the same underlying gap `BACKLOG-141` already tracks.
+**Found:** session 47C, while functionally verifying `BUG-138`'s `team_ratings` fix via the real ratings endpoint.
 
 ---
