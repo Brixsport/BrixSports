@@ -372,6 +372,11 @@ git push origin hotfix/description
 
 ## Session Conventions
 
+### Background/Sub-Agent Git Safety
+- Any Agent-tool call that shares this working directory (no `isolation: "worktree"`) can run `git stash`/`reset`/`checkout` and silently wipe every other in-progress edit in the session — this has actually happened (session 47D: a background agent ran `git stash` mid-task, reverting five files of concurrent work; recovered only because `git status` was checked immediately after and the stash hadn't been dropped yet).
+- Prefer `isolation: "worktree"` for any agent that will edit files, OR explicitly forbid destructive git commands (`stash`, `reset`, `checkout --`, `clean`) in the agent's prompt when it must share this directory.
+- After any parallel agent that touched files completes, run `git status`/`git stash list` before trusting the working tree — don't assume it's untouched.
+
 ### Before Every Session
 - Read `.agents/rules/backlog.md` (if it exists) and `.agents/dev/PROJECT_HISTORY.md`
 - Check current branch — all work on `feature/*` or `fix/*` off `dev`, never directly on `dev` or `main`
