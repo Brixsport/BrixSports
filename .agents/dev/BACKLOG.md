@@ -297,6 +297,8 @@ BUG-001 through BUG-029, AUDIT-001/002 (partial), BACKLOG-065 — all resolved S
 
 - **BUG-080** _(HIGH — Public Page / CLAUDE.md violation)_: No HTTP polling fallback when WebSocket is disconnected. Public match page (`/matches/[id]`) uses `useWebSocket` exclusively for real-time updates — clock, score, events. When WS fails (max 5 reconnect attempts), the page freezes on stale data indefinitely. CLAUDE.md mandates: *"Live update mechanism must have a fallback if the channel drops. Viewer must see stale data clearly on failure, not a crash."* This is confirmed violated — page shows no stale indicator and no recovery. Fix: when `isConnected === false && isLive`, poll `GET /api/matches/[id]` every 10s and merge response into display state. Show a "live updates paused — reconnecting" banner when WS is down. Confirmed via session 34 test match — public clock and score were frozen throughout because Railway was down. Filed: 2026-06-27. **Status:** SHIPPED — session 38D. Two root causes fixed: (1) `isLiveStatus` check in polling effect (line 163) and toast effect (line 181) used `=== 'LIVE' || === 'HALF_TIME'` — now uses module-level `LIVE_STATES.has()` covering all 7 live-ish period values; (2) `sharedSocket?.disconnect()` called at `connect_error` attempt 5, permanently killing Socket.IO reconnect loop — removed; added `reconnect_failed` listener with 30 s manual retry loop (`socket.connect()`). `LIVE_STATES` moved to module scope so effects and render share the same constant. Pending: Railway-down staging verify (amber toast, polling active, reconnect recovery). **NOTIF-12 (accepted risk):** offline notification queuing — notifications fired during a WS/server outage are lost; no retry queue exists. Accepted at MVP with a handful of viewers. Production-level concern to revisit at scale.
 
+**Assessed, not live-tested, session 47C:** attempted to verify this as part of a pass through the stale-SHIPPED pile. No safe way found to force a real WS disconnect from the Browser tool without either (a) actually taking down the shared Railway instance (affects staging *and* prod simultaneously, per `BUG-074` — a real cost for a test, not a free one), or (b) the app exposing its socket instance globally for scripted manipulation, which it correctly does not (module-scoped, not attached to `window` — confirmed via direct JS inspection). Left as `SHIPPED`, not force-tested tonight; the actual "Railway down" scenario remains the only real way to verify this end-to-end.
+
 - ~~**BUG-081**~~ _(CRITICAL — Security)_: `GET /api/users/follows` had no auth. **Status:** RESOLVED — `1c7a6f3`, 2026-06-29.
 **Evidence:**
 - Commit: `1c7a6f3`
@@ -335,7 +337,7 @@ BUG-001 through BUG-029, AUDIT-001/002 (partial), BACKLOG-065 — all resolved S
 
 - **BUG-089** _(MEDIUM — WebSocket)_: Subscribe storm — 3–5× `match:subscribe` emitted per WS connect. Multiple hooks (`useMatchEvents`, `useMatchStatus`, `useMatchViewers`, `useMatchTimer`, `useLineupUpdates`) each independently call `useMatchSubscription`. Every connect triggers all of them simultaneously. On Railway, each subscribe creates a separate room join. Fix: deduplicate at the `useMatchSubscription` level using a module-level Set keyed by `socketId + matchId` — skip emit if already subscribed on current connection. Filed: 2026-06-29. **Status:** OPEN
 
-- **BACKLOG-119** _(UX — Match Detail Page)_: Remove green "Live" dot from header; colour clock and period label red during live match. Active play (H1/H2/ET/PK): pulsing red dot + red period label + red minute. Half Time: red "HT" label only, no dot, no clock. FT/Pending: neutral. Commit `f9c6764`. **Status:** SHIPPED `f9c6764` — pending visual verify alongside BUG-083 and BUG-080.
+- ~~**BACKLOG-119**~~ _(UX — Match Detail Page)_: Remove green "Live" dot from header; colour clock and period label red during live match. Active play (H1/H2/ET/PK): pulsing red dot + red period label + red minute. Half Time: red "HT" label only, no dot, no clock. FT/Pending: neutral. Commit `f9c6764`. **Status:** RESOLVED — 2026-07-27 (session 47C), live-verified on PR #12's Vercel preview (`/matches/w6o4YQAF5pem_Qa8uazAm`, a real `LIVE` basketball match — confirms the styling is sport-agnostic, not football-only despite the original H1/H2/ET/PK example). **Evidence:** DOM-inspected directly rather than eyeballed — found `<span class="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse">` (the pulsing dot) and the period label (`Q1`) rendered with `className: "text-red-400"`, computed color `oklch(0.704 0.191 22.216)` (genuinely red, not just visually similar). Verified by: session 47C.
 
 - **BUG-092** _(HIGH — Real-time / Viewer UX)_: Undone events stay visible on the public Timeline tab until hard refresh. Root cause: `handleUndo` in `FootballLogger.tsx` sends `DELETE /api/matches/[id]/events/[eventId]` which removes the event from DB, but the WS server only broadcasts `match:event:new` — there is no `match:event:deleted` broadcast. The viewer page's `useMatchEvents` hook accumulates events via WS and has no mechanism to receive deletions. Fix: (a) in the event DELETE handler (`src/app/api/matches/[id]/events/[eventId]/route.ts`), after confirmed DB delete, emit `match:event:deleted` with `{ matchId, eventId }` via the WS server; (b) `useMatchEvents` in `useWebSocket.tsx` listens for `match:event:deleted` and filters the deleted event out of local state. Observed live: double-yellow undo removed the Red Card from DB correctly but Red Card and original Yellow both remained on viewer Timeline until page reload. Filed: 2026-06-30. **Status:** OPEN
 
@@ -546,7 +548,7 @@ BUG-001 through BUG-029, AUDIT-001/002 (partial), BACKLOG-065 — all resolved S
   **Fix**: `src/hooks/useWebSocket.tsx`'s `reconnect_failed` handler now self-reschedules with the same *shape* of algorithm the library already uses for its own attempts — base 10s, factor 1.5, capped at 60s, ±50% jitter — instead of a flat `setInterval(fn, 30000)`. Sequence: ~10s → ~15s → ~23s → ~34s → ~51s → ~60s (each individually randomized within its range), settling at ~30-90s indefinitely once capped, rather than growing unboundedly during a long outage. Also added a `manualRetryLoopActive` guard so a second `reconnect_failed` firing while a loop is already running can't stack a parallel loop and double the retry rate — a small, directly-relevant robustness addition, not scope creep.
   **Verified**: the delay-calculation math directly (`node -e`, printed the full sequence for attempts 0-6, confirmed sensible growth and cap). `tsc --noEmit` clean.
   **Not yet live-verified against a real Railway outage — decision pending**: proving the herd-smoothing effect specifically would need *multiple simultaneous browser tabs* reconnecting at once with their retry timings compared, not a single test script — a meaningfully heavier test than anything else run tonight. It would also need Railway to stay down for at least ~40-60s continuously (long enough to exhaust the 5 built-in attempts and actually reach the code that changed) — a real restart is often faster than that, so a casual restart test might not even exercise this code path at all. Also takes down real-time delivery for both staging and prod simultaneously (shared instance, BUG-074), a real cost for a test that might not prove much beyond what the math already confirms.
-  **Status:** SHIPPED, session 44 — logic verified, not live-tested against a real multi-client outage scenario.
+  **Status:** SHIPPED, session 44 — logic verified, not live-tested against a real multi-client outage scenario. **Reassessed, session 47C:** still not forced tonight, for the exact reason this entry's own text already gives — a real test needs multiple simultaneous tabs and a sustained (~40-60s) shared-instance outage, hitting staging and prod at once (`BUG-074`). Deliberately deferred again, not an oversight.
 
 - **BUG-117** _(CRITICAL — Auth / Logger Dashboard, session 43, found live while testing BUG-115)_: **A plain `logger`-role account can never fetch its own assigned-matches list — `GET /api/loggers/[id]` rejects it outright.** Reproduced repeatedly: Richard's own logger session hit `GET /api/loggers/logger_1767968844029` (his own ID) and got `401 Unauthorized` on every attempt across multiple sessions today (`15:57`, `16:08`, `16:09`, `20:43` — confirmed via HAR, not a one-off), producing the logger dashboard's "NO ASSIGNED MATCHES" / "0 Live" screen even though the real DB assignment (`match_logger_assignments`, `status: active`) was fully intact the whole time — confirmed directly via `dev/check-logger-assignment.mjs`. Ruled out as a timing race first: Richard confirmed a second refresh produced the identical failure, not a transient blip.
   **Root cause**: `src/app/api/loggers/[id]/route.ts:21`'s `GET` handler only allows `authUser.role === 'admin' || 'logger_manager'` — a regression from BUG-107 (session 42), which added this gate to close a real "zero auth on `/api/loggers/*`" vulnerability but didn't account for `src/app/logger/page.tsx:112-116`'s `fetchAssignedMatches(loggerId)`, which calls this exact route with the *current logger's own ID* to populate their own dashboard. A plain `logger` role was never in the allowed list, so the legitimate self-service call has been silently broken since BUG-107 shipped.
@@ -1562,9 +1564,9 @@ player stats can be stale or inconsistent after a match ends.
 
 ---
 
-### BACKLOG-124 — Live Auto-Ratings Silently Broken Since Written (No Auth Forwarded)
+### ~~BACKLOG-124~~ — Live Auto-Ratings Silently Broken Since Written (No Auth Forwarded)
 
-**Status:** OPEN
+**Status:** RESOLVED — 2026-07-24 (session 47B)
 **Priority:** Medium — not data-corrupting, but a named feature (auto-ratings during a live match) has never once actually run
 **Filed:** 2026-07-21 (session 45), found while root-causing BUG-119's remaining latency
 
@@ -1578,9 +1580,18 @@ player stats can be stale or inconsistent after a match ends.
 
 **Additional finding, session 46 (BACKLOG-125 work):** the silent-401 symptom above assumes `NEXT_PUBLIC_APP_URL` resolves quickly (correctly or not). Locally, `.env.local`'s `NEXT_PUBLIC_APP_URL` is set to the real deployed staging URL (`https://brixsports-staging.vercel.app`), not `localhost` — so a local dev server handling a `LIVE`-status event doesn't get a fast 401 from this self-fetch, it makes a real outbound HTTPS request to the deployed staging app from within the same process that's trying to serve the original request. Observed directly: the entire local dev server became unresponsive to *all* requests (not just the triggering one) for several minutes after posting one `LIVE`-status basketball event, confirmed via server logs and repeated timed-out `curl` calls to unrelated routes during the window. Root cause not fully confirmed (candidates: something in the custom `server.js`'s request handling doesn't truly yield during this specific outbound fetch, or Node's event loop was blocked by something else entirely triggered by the same code path) — but the practical impact is real and reproduced twice this session. Workaround used: give any local test match a non-`LIVE` status (e.g. `UPCOMING`) to avoid triggering this self-fetch at all. Proposed fix in the section above (skip the HTTP self-fetch, call the rating logic as a plain internal function) would also close this local-dev hang as a side effect, since there'd be no outbound fetch to hang on.
 
+**Fix, session 47B:** implemented option (b) from the proposed fix above — extracted the entire rating-calculation body out of `ratings/route.ts`'s POST handler into `src/lib/ratingsService.ts`'s `calculateAndSaveRatings(matchId)`. `events/route.ts` now calls this function directly inside its existing `after()` block instead of making an HTTP self-fetch — no auth to forward or re-check, since this code only runs after `authUser.role` has already been verified as admin/logger earlier in the same handler. `ratings/route.ts`'s POST handler is now a thin wrapper (auth check → call the shared function → shape the response); its own auth gate and the GET handler's separate viewer-cookie-forwarding fallback path are both untouched.
+
+**Evidence:**
+- Commit: `dffc43f`
+- Verified by: live DB + timing test — `dev/verify-backlog124-fix.mjs`, staging DB, a throwaway `LIVE`-status basketball match with real lineups and a real logger session (the exact configuration that previously froze the local dev server for minutes).
+- Observed result: `POST /events` returned `201` in `7.4s` (not the old multi-minute freeze — the local dev server was independently confirmed still responsive to an unrelated request in under a second immediately after). A real `player_ratings` row was written (`auto_rating: 6.2`) for the scoring player — auto-ratings computed and persisted from a live event for the first time since this feature was written. `tsc --noEmit` held at 49 pre-existing errors, none new.
+- **New finding surfaced by this fix, filed separately as `BUG-138`, not fixed here (Richard's explicit call — file only, no schema changes this session):** making this code path reachable for the first time revealed that `team_ratings` doesn't exist as a table on staging at all (schema drift — declared in `schema-ratings.ts`, apparently never pushed). `calculateAndSaveRatings` throws on its first `team_ratings` write, after all `player_ratings` writes have already succeeded — caught silently by the same `after()` try/catch, so it does not affect the event POST's `201` response, but team ratings have never been written on this platform either. Confirmed directly via `dev/check-rating-tables.mjs` (`sqlite_master` query): only `player_ratings` and `rating_history` exist.
+- Pending items: `BUG-138` (missing `team_ratings` table) tracked separately. The 7.4s response time, while not the historic hang, is slower than ideal for a live-logging path — not investigated further this session (likely first-hit dev-server compilation of the new lib file rather than a structural issue, but not confirmed either way).
+
 ---
 
-### BACKLOG-125 — Basketball Live-Logging Write Path Broken (Score/Period Never Persisted, Roster Resolution Blocked Lineup Selection Entirely)
+### ~~BACKLOG-125~~ — Basketball Live-Logging Write Path Broken (Score/Period Never Persisted, Roster Resolution Blocked Lineup Selection Entirely)
 
 **Status:** RESOLVED — 2026-07-23 (session 47)
 
@@ -1594,7 +1605,7 @@ player stats can be stale or inconsistent after a match ends.
 <summary>Original session 46 SHIPPED note (superseded by the RESOLVED status above)</summary>
 
 **Status:** SHIPPED (session 46, 2026-07-23) — basketball's core write path (score persistence, quarter/period persistence, the missed-shot stat bug, a roster-resolution bug blocking lineup selection entirely, and the "Finalize Match reachable" fix) fixed, pushed, and live-tested on `feature/basketball-write-path` (PR #11, targets `dev`, not yet merged/reviewed). **"Finalize Match reachable" confirmed via a real interactive logger walkthrough, not just API automation** — Richard played a real match through Q1-Q4 on the PR preview and successfully finalized it; DB confirmed post-finalize: `{"status":"FINISHED","current_period":"FINISHED","home_score":2,"away_score":3}`. Score persistence, period transitions, and rendering were all separately confirmed via direct API + DB checks earlier the same session. **Not RESOLVED yet — two items explicitly carried to next session:** (1) the event-save failure banner was never actually tested (deprioritized in favor of finishing the Finalize confirmation first); (2) this entry's own "shared logger core" fix is still not built — today's work patched `BasketballLogger.tsx` directly. `TrackLogger.tsx`'s complete absence of a persistence layer is untouched, still fully OPEN.
-**New findings confirmed live during the walkthrough, not fixed, carried forward:** basketball has no mid-match-resume seeding at all (worse than first suspected — `matchStarted` re-seeds from the server but `lineupSet`/`homeStarters`/`awayStarters` don't, and there's no UI path back into lineup selection once `matchStarted` is `true` again, a genuine dead end on refresh/remount); no WS emit exists for basketball at all (same shape as football's already-fixed `BUG-108/116`). Both are exactly the kind of gap the planned football-to-basketball systematic mapping session (see below) should surface deliberately rather than by accident.
+**New findings confirmed live during the walkthrough, not fixed, carried forward:** basketball has no mid-match-resume seeding at all (worse than first suspected — `matchStarted` re-seeds from the server but `lineupSet`/`homeStarters`/`awayStarters` don't, and there's no UI path back into lineup selection once `matchStarted` is `true` again, a genuine dead end on refresh/remount); no WS emit exists for basketball at all (same shape as football's already-fixed `BUG-108/116`). Both are exactly the kind of gap the planned football-to-basketball systematic mapping session (see below) should surface deliberately rather than by accident. **The resume-seeding half — RESOLVED session 47B, see `BUG-139`** (found live again, the hard way, on the PR #12 preview walkthrough — promoted from this buried note to its own tracked item and fixed with a roster-fallback seed, not the full server-side lineup-persistence rebuild). The WS-emit half remains open.
 **Next session, in priority order:** (1) test the failure-save banner properly (a fresh match, block the events request via DevTools, confirm the banner renders); (2) run the systematic football-to-basketball mapping pass Richard has been asking for all session — walk `FootballLogger.tsx`'s business logic piece by piece (resume-seeding, WS emit + multi-logger sync, offline queue, undo/delete) and check each against `BasketballLogger.tsx`, fixing every gap found in one pass rather than more one-off live-test surprises; (3) decide whether PR #11 gets reviewed/merged before or after that mapping pass. See `RUNLOG.md` 2026-07-21 through 2026-07-23 for full verification evidence and `known-issues.md`/TD-012/BACKLOG-124/`BACKSCOPE.md` for adjacent findings discovered along the way (an admin-POST logger_id FK bug, a `second:0` collapsing to null, a local-dev-only ratings-fetch hang, and the Admin "Official Match Lineups" page's own separate football-centric-starter-count bug — none of those fixed, all filed separately).
 **Unconfirmed assumption to verify during the mapping pass (cross-ref `BACKSCOPE.md`):** Richard observed that `BasketballLogger.tsx` lets the logger set/edit the starting lineup directly in-app, with zero dependency on the separate Admin "Official Match Lineups" page (confirmed in code — `eligible-players` only reads `player_team_affiliations`, never that page's data). His working assumption is that football's lineup flow is admin-publish-only by contrast — **not yet confirmed either way.** `FootballLogger.tsx` appears to use the same `eligible-players`/`memberships` pattern for its own roster resolution, which would suggest it might *also* be self-contained, making the Admin page a parallel "public display" feature for both sports rather than a real workflow difference. Confirm by reading `FootballLogger.tsx`'s own lineup-selection flow directly.
 **Priority:** High severity, now urgent-in-progress rather than deliberately-deferred — actively being live-tested this session, not scheduled work.
@@ -1619,15 +1630,25 @@ player stats can be stale or inconsistent after a match ends.
 
 ---
 
-### BUG-124 — Admin-Authenticated Event POST FK-Violates on `logger_id`
+### ~~BUG-124~~ — Admin-Authenticated Event POST FK-Violates on `logger_id`
 
-**Status:** OPEN — found, not fixed
+**Status:** RESOLVED — 2026-07-24 (session 47B)
 **Priority:** Medium — only reachable by an admin bypassing the normal logger flow, but a clean 500 with no clear message when it happens
 **Filed:** 2026-07-23 (session 46), found while live-verifying the P0 missed-shot fix
 
-**Problem:** `POST /api/matches/[id]/events` (`src/app/api/matches/[id]/events/route.ts`) sets `loggerId: authUser.id` unconditionally, regardless of role. For an admin-authenticated request, `authUser.id` is the admin's `users.id` — but `match_events.loggerId` has an FK constraint to `loggers.id` (`schema.ts:378`), not `users.id`. Confirmed live: an admin token posting a real event 500s with `SQLITE_CONSTRAINT: FOREIGN KEY constraint failed`, since `admin-001` (or whichever admin id) doesn't exist in the `loggers` table.
-**Fix (not built):** set `loggerId` to `null` (or omit it) when `authUser.role === 'admin'` and there's no real logger session backing the request, rather than writing an ID that will never satisfy the FK. `match_events.loggerId` is nullable in schema, so this is a safe default.
-**Not fixed this session** — surfaced as a side effect of P0 verification, not this session's actual scope; flagging for its own small fix.
+**Problem:** `POST /api/matches/[id]/events` (`src/app/api/matches/[id]/events/route.ts`) sets `loggerId: authUser.id` unconditionally, regardless of role. For an admin-authenticated request, `authUser.id` is the admin's `users.id` — but `match_events.loggerId` has an FK constraint to `loggers.id` (`schema.ts:378`), not `users.id`. Confirmed live: an admin token posting a real event 500s with `SQLITE_CONSTRAINT: FOREIGN KEY constraint failed`, since `admin-001` (or whichever admin id) doesn't exist in the `loggers` table. Re-confirmed live again this session (found while verifying `BUG-131`, before this fix landed).
+
+**Fix:** `loggerId` is now `authUser.role === 'logger' ? authUser.id : null` — `null` is the honest value for this FK'd column when there's no real logger session backing the request. **Richard's own catch, addressed in the same pass:** null-ing `loggerId` alone would have silently discarded the audit trail entirely (no way to tell which admin posted the event). `loggerName` (a plain text column, no FK) now carries the admin's real `users.id` in that case — sourced from the verified `authUser` server-side, never client-passed input, per this project's own audit-field rule. `logger` role callers are unaffected (unchanged: `loggerName` still comes from the client-passed display name for real logger sessions).
+
+**Evidence:**
+- Commit: `9e0abcd`
+- Verified by: live DB-confirmed test — `dev/verify-bug124-fix.mjs`, staging DB via local dev server, admin token.
+- Observed result: `POST` returned `201` (not a 401 — admins are already authorized to post events by this route's own auth gate; this was never an auth problem, purely a DB FK mismatch). `match_events.logger_id` stored as `null`, `logger_name` stored as `"admin-001"` (the real admin id), `matches.home_score` correctly credited to `2` — confirming the event saves cleanly, the FK-unsafe column stays null, and the audit trail survives via the non-FK'd column instead of being silently dropped.
+- Pending items: none for this specific gap.
+
+**Related, raised and confirmed in the same discussion (not a new bug, already-shipped work re-verified):** `BUG-121`'s atomic transaction (event insert + score update in one `db.transaction`, score increment as a single atomic SQL expression) already correctly rolled back this exact FK crash with zero partial state — confirmed directly from this session's own earlier verification attempt (admin token, pre-fix), where the insert threw inside the transaction and `matches.home_score` was independently confirmed to have stayed at `0`, not partially incremented. No new work needed; cited here as live re-confirmation that `BUG-121`'s fix still holds under a real failure, not just the happy path.
+
+**Related, filed separately per Richard's request — see `BACKLOG-140`:** this bug's root cause (a separate `loggers` identity table instead of a unified `users` table with an RBAC role) is the same structural root as `BUG-057`, `BUG-044`/`BUG-044b`, and two `known-issues.md` entries (2026-06-22, 2026-06-30). Filed as its own architecture item, not fixed here.
 
 ---
 
@@ -1653,9 +1674,9 @@ player stats can be stale or inconsistent after a match ends.
 **Fix:** (1) `useMultiLogger.ts:140` — parse `e.value` the same way `BasketballLogger.tsx`'s initial fetch already does (`typeof e.value === 'string' ? JSON.parse(e.value) : e.value`), fixing it at the shared root for both sports. (2) `BasketballLogger.tsx`'s rating calc now also defensively `Number(event.value)`s before the arithmetic, mirroring football's existing pattern, so a future un-coerced read path can't reintroduce the same crash.
 
 **Evidence:**
-- Commit: pending (this session)
-- Verified by: code trace only — `tsc --noEmit` clean on both changed files (49 pre-existing errors elsewhere, unchanged), root cause confirmed against the real stack trace Richard captured (`at e2 (page-e89a9b926648fcb2.js:1:37987)` inside `Array.map`) and against the schema (`value: text('value')`) and the two divergent read sites. **Not yet live-verified** — same crash-reproduction sequence (log a shot event, wait 15s+ for a sync tick, confirm boxscore renders without crashing) should be re-run on the next preview build.
-- Pending items: live re-verification on the post-fix preview build.
+- Commit: `52b906c` (squash-merged to `dev` via PR #11)
+- Verified by: code trace at fix time (`tsc --noEmit` clean on both changed files, 49 pre-existing errors elsewhere unchanged, root cause confirmed against the real stack trace Richard captured and against the schema/two divergent read sites), **plus a later live re-verification the same session** — the fix was re-confirmed live on the PR #11 preview via the `BACKLOG-134` failure-save-banner test (which is what originally surfaced this crash), then merged to `dev`.
+- Pending items: none.
 
 ---
 
@@ -5376,9 +5397,9 @@ On event delete: instead of decrementing a global counter (fragile, can go negat
 
 ---
 
-### BACKLOG-111 — Stat Reversion on Event Undo
+### ~~BACKLOG-111~~ — Stat Reversion on Event Undo
 
-**Status:** SHIPPED — `f44edfa`, Session 36. Pending live verification.
+**Status:** RESOLVED — 2026-07-27 (session 47C), live-verified on a real football match/logger session
 **Priority:** Low
 **Filed:** 2026-06-29
 
@@ -5387,6 +5408,12 @@ On event delete: instead of decrementing a global counter (fragile, can go negat
 **Fix:** Self-contained `revertPlayerStat(sport, playerId, eventType)` function added to `[eventId]/route.ts`. Switch covers: GOAL, ASSIST, OWN GOAL, PENALTY, PENALTY MISSED, PENALTY SAVED, FOUL, YELLOW CARD, RED CARD, SAVE. All with `Math.max(0, x-1)` floor. Guards: `matchType !== 'friendly'` and `!isPenaltyShootout`. Match fetch moved unconditional; null-guarded on both score-revert and stat-revert paths. `PENALTY SAVED` also reverts keeper `saves--` via `event.relatedPlayerId` (null-checked).
 
 **Scope:** `src/app/api/matches/[id]/events/[eventId]/route.ts` only.
+
+**Evidence:**
+- Commit: `f44edfa` (session 36, unchanged tonight — only the live verification was missing until now)
+- Verified by: a real throwaway football match (COLNAS vs COLENG, real logger session), session 47C. Note: `matchType !== 'friendly'` guard means a **friendly**-type match can't exercise this path at all — had to switch the throwaway match to `match_type: 'competition'` (no real `competition_id` attached, so no real standings were touched) to actually trigger the stat write in the first place.
+- Observed result: real player `busa-joga-player-45` (Samuel Olapite) — baseline `goals: 7` → logged a real Goal → `goals: 8` (confirmed increment) → clicked Undo → `goals: 7` (confirmed exact reversion, not a floor-clamped guess). Event row confirmed deleted from `match_events`, not just hidden client-side.
+- Pending items: none. Throwaway match and all its data fully cleaned up (`RUNLOG.md`), real player stats confirmed back to their exact pre-test baseline.
 
 **Related:** BUG-072 (second yellow undo cascade — SHIPPED), BACKLOG-104 (penalty outcomes), BACKLOG-106 (stat recompute via match_player_stats)
 
@@ -5529,7 +5556,17 @@ A skewed black "B" on the theme's `bg-primary` blue — never replaced with the 
 
 **Same root-cause class as an already-partially-fixed bug, different surface:** session 38C (`known-issues.md`, 2026-06-30) found and fixed the identical shape via `resolveEffectiveUserId()` for the `follows`/`favorites`/`teams/follow`/`notifications` API routes (auth-cookie path scope, `authToken` set at `path: '/'` reaching every role's routes). This is the same underlying single-shared-credential problem, surfacing via `localStorage` this time, in the header/account-display UI rather than an API route — that earlier fix never covered this surface.
 
-**Not fixed this session** — deliberately deferred, Richard's explicit call to avoid scope creep during the favicon directive. Scope of a real fix is unclear without investigation: does this affect only the header display, or can an admin's `authToken` also authorize viewer-surface API calls incorrectly (or vice versa)? That question needs answering before scoping the fix, not assumed either way.
+**Not fixed session 47** — deliberately deferred, Richard's explicit call to avoid scope creep during the favicon directive. Scope of a real fix was unclear without investigation: does this affect only the header display, or can an admin's `authToken` also authorize viewer-surface API calls incorrectly (or vice versa)? That question is now answered, session 47C:
+
+**Investigated thoroughly, session 47C — the open question above is answered:** this is a real, confirmed API-level bleed, not just a cosmetic header display issue. Root cause traced through the full chain:
+- `src/app/api/auth/login/route.ts` is the **single, universal login endpoint** for every role — there is no separate `/api/admin/login` (confirmed: no admin-specific login page exists anywhere under `src/app/admin`). It sets **one** cookie, name `authToken`, `path: '/'`, `httpOnly`, 7-day `maxAge`, with no role or app scoping of any kind.
+- `AuthContext.tsx`'s `checkAuth()` (used by the viewer's own header/nav) tries this exact cookie **first**, via `credentials: 'include'` on `GET /api/auth/me` — `localStorage.authToken` (this entry's original title) is actually the **secondary** fallback, only consulted if the cookie-based check fails. The cookie itself, not just localStorage, is the primary and more significant vector.
+- `src/lib/auth.ts`'s `getAuthUser()` — called by every protected route, admin and viewer alike — reads that identical unscoped cookie (`request.cookies.get('authToken')`) with zero awareness of which "app" (viewer/admin/logger) the request is conceptually for.
+- **Net effect, confirmed:** an admin who logs in at `/admin` then browses the public viewer site in the same browser has every viewer-surface route that calls `getAuthUser()` (follows, favorites, notification prefs, ratings, etc.) resolve to their **real admin `users.id`** — not a spoof, not a crash, but a genuine actor-model violation ("Viewers NEVER have a session") and a real data-misattribution risk (viewer-side actions taken while an admin session is active get silently attributed to the admin's own account, and vice versa is structurally possible too).
+- **No privilege-escalation risk found** — `middleware.ts`'s `/admin`/`/api/admin` gate independently re-checks `payload.role === 'admin'` on every request regardless of cookie presence, so a viewer session can never pass as admin this way. The bleed is one-directional in severity: identity/data misattribution and actor-model violation, not an admin-impersonation or privilege-escalation vector.
+- Session 38C's `resolveEffectiveUserId()` (referenced above) does not close this gap for admins specifically — it only special-cases `role === 'logger'` (looking up a matching fan account by email); for `role === 'admin'`, it returns `authUser.id` unchanged, meaning the admin's real `users.id` genuinely gets used for viewer-surface writes rather than crashing or erroring, which is *correct* from a DB-integrity standpoint but confirms the bleed is real and silent, not merely cosmetic.
+
+**Confirms the original recommendation stands — needs its own dedicated session, not a patch here.** The fix isn't a quick scoping tweak: it requires either (a) separate cookie names per app (`viewerAuthToken`/`adminAuthToken`/`loggerAuthToken`, each still `path: '/'` since they're same-origin, checked independently by each app's own auth context) or (b) the subdomain separation Richard already recalled as the original plan (structurally the more correct fix, since separate origins get fully separate cookie jars and `localStorage` enforced by the browser itself, not by convention). Either requires touching `login/route.ts`, `AuthContext.tsx`, `middleware.ts`, and every admin/logger auth entry point consistently — real, coordinated auth-architecture work, appropriately out of scope for the basketball-parity branch this was found on.
 
 **Needs its own dedicated session** — this is an auth/session-architecture question, not a UI patch.
 
@@ -5567,6 +5604,13 @@ A skewed black "B" on the theme's `bg-primary` blue — never replaced with the 
 
 **Note on terminology:** this is filed as a BACKLOG deferral, not a `BACKSCOPE.md` entry — `BACKSCOPE.md` tracks already-*built* features hidden pending reinstatement (FPL, predictions, polls); nothing has been built for this redesign yet, so there's nothing to hide. Revisit as a real backscope entry only if partial redesign work gets built and then needs pausing mid-flight.
 
+**Additional concrete notes for whenever this redesign is picked up, session 47C (Richard's direct requests, not built now — same deferral as above):**
+- Make the scoreboard/clock block genuinely sticky at the top of the logger view (currently scrolls with the page) — both sports.
+- The sticky header's own contents need a pass once it's actually sticky — what belongs there changes when it's always visible vs. only seen at the top.
+- A general sweep for hardcoded display data left in the logger UI beyond what this session already found (`STARTER_COUNT`-class issues) — not itemized further here, a real pass needed when this work starts.
+- Clarify (product decision, not just code) the actual distinction between "Event Log" and "Match History" as they currently appear in the logger UI — worth confirming these aren't two names for near-identical data before designing anything further on top of either.
+- The Settings modal needs a real rework of what belongs in it — actual settings/options vs. usage info vs. one-off actions are currently mixed together; needs a deliberate information-architecture pass, not just visual polish.
+
 ---
 
 ## Session 47 — Football→Basketball Systematic Mapping Pass (BUG-129 through BUG-133, BACKLOG-133 through BACKLOG-136)
@@ -5575,39 +5619,61 @@ Filed together, same investigation: a deliberate side-by-side comparison of `Foo
 
 ---
 
-### BUG-129 — Every Basketball Event Silently Duplicates Within 15 Seconds
+### ~~BUG-129~~ — Every Basketball Event Silently Duplicates Within 15 Seconds
 
-**Status:** OPEN — CRITICAL, must fix before any live match day
+**Status:** RESOLVED — 2026-07-24 (session 47B). Live UI walkthrough completed on the PR #12 Vercel preview.
 **Priority:** CRITICAL — corrupts the event log and every derived stat for every basketball match, not an edge case
 
 **Problem:** `BasketballLogger.tsx`'s `recordEvent` generates a local id `` `e${events.length + 1}` `` and never reads the POST response body — only checks `res.ok`. `useMultiLogger.ts`'s `mergeEvents()` (confirmed, `src/lib/multiLogger.ts:130-131`) dedupes strictly via `new Map(allEvents.map(e => [e.id, e]))` — exact ID match only. Since the local temp id never gets swapped for the DB's real `nanoid()` id, the very next 15s sync cycle pulls the same event back from the server as a "new" entry and appends it. Every downstream stat (`calculateAdvancedStats`, `calculatePlayerRating`, event log/history views) double-counts. `FootballLogger.tsx` avoids this via `manager.confirmEvent(event.id, saved.event.id)` after a successful POST — basketball has no equivalent.
 
-**Fix:** on a successful POST, read `saved.event.id` from the response and replace the local temp id in `events` state with it, before the next sync cycle can run.
+**Fix:** `recordEvent`'s POST-success branch now `await`s `res.json()`, and on `saved?.event?.id` present, replaces the matching temp-id event in `events` state (`setEvents(prev => prev.map(...))`) with the server's real id — mirrors football's `manager.confirmEvent(tempId, serverId)` pattern. `src/components/BasketballLogger.tsx`.
+
+**Evidence:**
+- Commit: `6c7309f`
+- Verified by: full real interactive walkthrough on the PR #12 Vercel preview (`brixsports-staging-gb8ibb1qk...vercel.app`), real logger session, real pre-existing `LIVE` match (`w6o4YQAF5pem_Qa8uazAm`, unblocked by the same session's `BUG-139` fix). Logged a real Field Goal for a real player (LIGHT); DB-confirmed exactly 1 new row (`dev/check-live-match-events.mjs`), client showed "3 Events Recorded" (2 pre-existing + 1 new). Waited 18s (past the 15s sync interval), re-checked both the client's Event Log (still exactly 3, `LIGHT`'s Field Goal appearing once) and the DB row count (`SELECT COUNT(*)` = 3) — no duplicate on either side.
+- Pending items: none.
 
 ---
 
-### BUG-130 — `undoLastEvent()` Is Cosmetic Only, Never Reaches the Server (and the Server Wouldn't Revert the Score Even If It Did)
+### ~~BUG-130~~ — `undoLastEvent()` Is Cosmetic Only, Never Reaches the Server (and the Server Wouldn't Revert the Score Even If It Did)
 
-**Status:** OPEN — CRITICAL, must fix before any live match day
+**Status:** RESOLVED — 2026-07-24 (session 47B). Live UI walkthrough completed on the PR #12 Vercel preview.
 **Priority:** CRITICAL — directly breaks Flow B/Flow C guarantees
 
-**Problem:** Two stacked gaps, both required for a real fix:
+**Problem:** Three stacked gaps, all required for a real fix:
 1. `undoLastEvent()` only slices local `events` state and reverts local score state — no `fetch()` call at all. The DB event row and the DB score (already atomically incremented by the original POST) are both untouched. Any refresh, multi-logger sync, or public viewer still sees the "undone" event and its score contribution.
-2. Even after wiring the DELETE call, `events/[eventId]/route.ts`'s own score-revert `isScoringEvent` check only recognizes `GOAL`/`PENALTY`/`OWN_GOAL` — not basketball's `FIELD_GOAL`/`THREE_POINTER`/`FREE_THROW`. The score would still never revert.
-3. Related, same root cause: `revertPlayerStat()` in the same route file has `if (sport !== 'Football') return;` — a hard, literal no-op for basketball, confirmed by reading the function directly. Any basketball event deletion (via a fixed undo, or any future delete path) leaves permanent ghost stats. Same shape as football's already-fixed BUG-060, never ported.
+2. `events/[eventId]/route.ts`'s own score-revert `isScoringEvent` check only recognized `GOAL`/`PENALTY`/`OWN_GOAL` — not basketball's `FIELD_GOAL`/`THREE_POINTER`/`FREE_THROW`. The score would never revert even with the DELETE call wired.
+3. Related, same root cause: `revertPlayerStat()` in the same route file had `if (sport !== 'Football') return;` — a hard, literal no-op for basketball. Any basketball event deletion left permanent ghost stats. Same shape as football's already-fixed BUG-060, never ported.
 
-**Fix:** wire `undoLastEvent` to call `DELETE /api/matches/[id]/events/[eventId]`, gated on `res.ok`, mirroring football's server-first pattern. Extend `[eventId]/route.ts`'s scoring detection and `revertPlayerStat` to handle basketball's types — both must land together, since one without the other leaves score or stats silently wrong.
+**Fix:**
+1. `BasketballLogger.tsx`'s `undoLastEvent` is now async, calls `DELETE /api/matches/[id]/events/[eventId]` first, gates local `events`/score state on `res.ok` (server-first, mirrors BUG-049's Start/End Match discipline), shows `eventSaveError` on failure, and adds an `isUndoing` in-flight guard (the fetch introduces a real double-click race that didn't exist while undo was synchronous).
+2. `events/[eventId]/route.ts`'s `isScoringEvent` now also recognizes basketball's shot types via a `match.sport === 'Basketball'` + parsed-`value`-is-a-positive-number gate (`isBasketballScore`), mirroring the POST route's own credit-time gate exactly — a deleted miss still correctly never touches the score.
+3. `revertPlayerStat()` gained a full basketball branch mirroring `updatePlayerStats`'s basketball switch, decrementing with a `Math.max(0, x-1)` floor, gated on the same made/miss check.
+4. The score-revert decrement amount is now sourced from a new shared `SCORING_POINT_VALUES` allowlist (`src/lib/scoring.ts`, exported from `BUG-131`'s fix) instead of a hardcoded `- 1` — a Field Goal must revert by 2, not 1, or the score ends up permanently short after a basketball undo. Prevents the exact "helper needed by a sibling route file" gap `known-issues.md` already documents (2026-06-29 entry) — moved to a shared lib instead of duplicating the map.
+
+**Evidence:**
+- Commit: `e4c8c53`
+- Verified by: live DB-confirmed test — `dev/verify-bug130-fix.mjs`, staging DB via local dev server, real TBK player (`i7VBmo4RZkk5Q6_Zixw2I`).
+- Observed result: a made Field Goal correctly moved `home_score` `0 → 2` and `basketball_player_stats.field_goals_made`/`total_points` up by 1/+2; the DELETE call against that event's real id brought `home_score` back to exactly `0` and both stat columns back to their exact pre-event baseline (not a flat `-1`, not a partial revert). A separately-posted missed Field Goal (`value: 0, made: false`) never moved the score in either direction, and deleting it left the score and `field_goals_made` untouched — confirming the miss-gate holds symmetrically on both credit and revert. `tsc --noEmit` held at 49 pre-existing errors, none new, across all four touched files (`BasketballLogger.tsx`, `events/route.ts`, `events/[eventId]/route.ts`, `src/lib/scoring.ts`).
+- **Live UI walkthrough, same session as `BUG-129`'s:** real Undo button click on the PR #12 preview, real logger session, the real Field Goal logged for `BUG-129`'s test. Score reverted client-side (`4 → 2`); DB-confirmed the event row was actually gone (`dev/check-live-match-events.mjs`) and `home_score` was back to `2` server-side, not just locally. Also confirmed the player's stat row (`dev/check-light-stats.mjs`): `field_goals_attempted` back to `0` (it was `0` before this player's first event of the session), `field_goals_made`/`total_points` back to their exact pre-event baseline — the click-driven undo reverts the same way the script-driven test already proved.
+- Pending items: none.
 
 ---
 
-### BUG-131 — No Server-Side Bound on Scoring `value` — Score Inflatable by Any Authenticated Logger
+### ~~BUG-131~~ — No Server-Side Bound on Scoring `value` — Score Inflatable by Any Authenticated Logger
 
-**Status:** OPEN — CRITICAL, must fix before any live match day
+**Status:** RESOLVED — 2026-07-24 (session 47B)
 **Priority:** CRITICAL — a realistic threat given this project's own 120-minute logger session requirement (long-lived sessions, mobile, more surface for a buggy client to misfire)
 
 **Problem:** `events/route.ts`'s scoring path trusts client-supplied `value` verbatim: `const points = typeof value === 'number' ? value : 1;` — no check that it matches the event type's real point value (1/2/3 for Free Throw/Field Goal/Three Pointer). A POST with `{ type: 'Field Goal', value: 500, made: true }` atomically adds 500 to `matches.homeScore` in one request — effectively bypassing BUG-052's admin-only score-write gate through this separate endpoint. Shared code, so football's `GOAL`/`PENALTY` path has the identical structural gap; basketball's legitimate non-1 values make an out-of-range value easier to miss in review.
 
-**Fix:** validate `value` against an explicit allowlist per event type (`FIELD_GOAL: 2, THREE_POINTER: 3, FREE_THROW: 1`) before it enters the atomic transaction, not just `typeof value === 'number'`.
+**Fix:** `points` is now derived from an explicit `SCORING_POINT_VALUES` allowlist keyed by normalized event type (`GOAL/PENALTY/OWN_GOAL: 1`, `FIELD_GOAL: 2`, `THREE_POINTER: 3`, `FREE_THROW: 1`) — client-supplied `value` no longer has any influence on the atomic score increment, for either sport. `src/app/api/matches/[id]/events/route.ts`.
+
+**Evidence:**
+- Commit: `dfb5052`
+- Verified by: live DB-confirmed test — `dev/verify-bug131-fix.mjs` created a throwaway `UPCOMING` basketball match on staging, POSTed `{ type: 'Field Goal', value: 500, made: true }` as a real assigned logger (`logger_1767968844029`) against the local dev server running the fixed code, then read `matches.home_score` back directly from the DB (not the API response).
+- Observed result: `POST` returned `201` with the event saved (raw `value: "500"` persisted on the event row itself, unrelated to score integrity), and `matches.home_score` read back as exactly `2` — the canonical Field Goal value — not `500`. Throwaway match, its event, and its logger assignment were all deleted after. `tsc --noEmit` held at 49 pre-existing errors, none new, none in the touched file.
+- Pending items: none for this specific gap. Found in passing during setup, filed separately, not fixed here: an admin-authenticated POST to this same route 500s with a `FOREIGN KEY constraint failed` on `logger_id` (`loggerId: authUser.id` is a `users.id` for an admin, but the column FKs to `loggers.id`) — this is the already-open `BUG-124`, confirmed still reproducible live, not a new finding.
 
 ---
 
@@ -5622,31 +5688,42 @@ Filed together, same investigation: a deliberate side-by-side comparison of `Foo
 
 ---
 
-### BUG-133 — Shooting-Attempt, Rebound-Split, and Foul-Split Stat Columns Are Write-Orphaned
+### ~~BUG-133~~ — Shooting-Attempt Stat Columns Were Write-Orphaned (Attempt-Counter Half Fixed; Rebound/Foul Split Remains Blocked)
 
-**Status:** OPEN
+**Status:** RESOLVED (attempt-counter tracking) — 2026-07-24 (session 47B). Rebound/foul type-splitting remains explicitly out of scope, still blocked on UI work not yet built (unchanged from original filing).
 **Priority:** Medium — shooting percentage can never be computed correctly, ever, for any basketball player
 
-**Problem:** `basketball_player_stats` schema has `fieldGoalsAttempted`/`threePointersAttempted`/`freeThrowsAttempted`, `offensiveRebounds`/`defensiveRebounds`, and `technicalFouls` as distinct columns from their "made"/generic/personal counterparts — but `updatePlayerStats()`'s basketball branch never increments any of them, on make or miss. A missed shot currently increments nothing at all (correctly avoiding the BUG-126-class false-make bug), but it should still increment the attempt counter — without it, there is no denominator for `fieldGoalPercentage`/`threePointPercentage`/`freeThrowPercentage` ever, for any player, at any point. Rebound/foul type-splitting ties to the already-known "foul subtypes collapse to one generic type" gap (BACKLOG-125's own carried-forward note) — same root cause, wider surface than previously scoped.
+**Problem:** `basketball_player_stats` schema has `fieldGoalsAttempted`/`threePointersAttempted`/`freeThrowsAttempted`, `offensiveRebounds`/`defensiveRebounds`, and `technicalFouls` as distinct columns from their "made"/generic/personal counterparts — but `updatePlayerStats()`'s basketball branch never incremented any of them, on make or miss. A missed shot correctly incremented nothing at all (avoiding the BUG-126-class false-make bug), but it should still increment the attempt counter — without it, there is no denominator for `fieldGoalPercentage`/`threePointPercentage`/`freeThrowPercentage` ever, for any player, at any point. Rebound/foul type-splitting ties to the already-known "foul subtypes collapse to one generic type" gap (BACKLOG-125's own carried-forward note) — same root cause, wider surface than previously scoped, still not fixed.
 
-**Fix:** increment the relevant `*Attempted` column on every shot attempt regardless of make/miss. Offensive/defensive rebound and personal/technical foul splitting needs UI support for those subtypes first (not yet built) before the write path can distinguish them — this part is blocked on that, not a standalone fix.
+**Fix:** `events/route.ts`'s `updatePlayerStats` now increments `fieldGoalsAttempted`/`threePointersAttempted`/`freeThrowsAttempted` on every shot attempt regardless of make/miss — the existing made-counter/`totalPoints` logic is unchanged, this is additive. Symmetrically, `events/[eventId]/route.ts`'s `revertPlayerStat` (BUG-130's basketball branch, added this same session) now decrements the same `*Attempted` column unconditionally on delete — without this, a deleted shot would have left the attempt count permanently 1 too high, the exact write/revert asymmetry `known-issues.md` already documents for BUG-060. Offensive/defensive rebound and personal/technical foul splitting still needs UI support for those subtypes first (not yet built) before the write path can distinguish them — this part remains blocked, unchanged, not attempted this session.
+
+**Evidence:**
+- Commit: `f879e2c`
+- Verified by: live DB-confirmed test — `dev/verify-bug133-fix.mjs`, staging DB via local dev server, real TBK player (`i7VBmo4RZkk5Q6_Zixw2I`).
+- Observed result: a made Field Goal moved `field_goals_attempted` and `field_goals_made` both `+1` from baseline. A subsequently-logged missed Field Goal moved `field_goals_attempted` `+1` again (now +2 from baseline) while `field_goals_made` stayed unchanged. Deleting both events brought both columns back to their exact pre-test baseline (`0`/`31` in the test run), confirming the revert decrements symmetrically regardless of make/miss. `tsc --noEmit` held at 49 pre-existing errors, none new.
+- Pending items: rebound/foul-subtype splitting, unchanged, still blocked on UI work.
 
 ---
 
-### BACKLOG-133 — Unbounded Query on `matches/[id]` GET's Events Select
+### ~~BACKLOG-133~~ — Unbounded Query on `matches/[id]` GET's Events Select
 
-**Status:** OPEN
+**Status:** RESOLVED — 2026-07-24 (session 47B)
 **Priority:** Medium — direct violation of `CLAUDE.md`'s own explicit anti-pattern ("List query with no `.limit()` clause")
 
-**Problem:** `matches/[id]/route.ts`'s `eventsData` query (lines ~63-79) has no `.limit()`. The `playerRatings` select nearby has the same gap (lower risk, roster-bounded).
+**Problem:** `matches/[id]/route.ts`'s `eventsData` query (lines ~63-79) had no `.limit()`. The `playerRatings` select nearby had the same gap (lower risk, roster-bounded).
 
-**Fix:** add `.limit(500)` (or similar) to the events select.
+**Fix:** `.limit(500)` added to the events select; `.limit(100)` added to the `playerRatings` select (roster-bounded, generous headroom). `src/app/api/matches/[id]/route.ts`.
+
+**Evidence:**
+- Commit: `f879e2c`
+- Verified by: `tsc --noEmit` held at 49 pre-existing errors, none new. No existing match has anywhere near 500 events, so the limit's actual clamping behavior isn't independently observable against live data yet — this is a straightforward defensive bound matching the project's own stated anti-pattern rule, not a fix for an observed failure, so a syntax/regression check via `tsc` plus the code diff itself is the appropriate evidence bar here (consistent with how BACKLOG-045's original `.limit(200)` fix was evidenced).
+- Pending items: none.
 
 ---
 
-### BACKLOG-134 — Silent Failures: Initial Roster Load, Period-Transition PATCHes, No Debounce on Scoring Buttons
+### ~~BACKLOG-134~~ — Silent Failures: Initial Roster Load, Period-Transition PATCHes, No Debounce on Scoring Buttons
 
-**Status:** OPEN
+**Status:** RESOLVED — 2026-07-24 (session 47B). All three pieces live-verified on the PR #12 Vercel preview, including both failure banners actually triggered via a simulated `fetch` failure (not just the happy path) — this is the first time the roster-load and period-transition banners, and the event-save banner referenced throughout this entry's history, have ever actually been tested since being written.
 **Priority:** Medium — all three violate `CLAUDE.md`'s own error-visibility rule ("logging errors must show a clear message to the logger — never appear to succeed when they didn't")
 
 **Problem, three related findings from the same code-reviewer pass:**
@@ -5654,7 +5731,23 @@ Filed together, same investigation: a deliberate side-by-side comparison of `Foo
 2. The three fire-and-forget quarter/OT/period-transition PATCH calls only `console.error` on failure — no user-facing signal if a period change doesn't persist.
 3. No debounce/in-flight guard on scoring action buttons — only disabled by `!matchStarted || matchEnded`. A rapid double-tap fires two independently-atomic DB writes, double-logging the action server-side.
 
-**Fix:** reuse the existing `eventSaveError` banner pattern for (1) and (2); add an `isRecording` guard disabling the tapped button mid-request for (3), and prefer functional state updates (`setEvents(prev => ...)`) over closure-read values throughout `recordEvent`.
+**Fix:**
+1. `fetchData`'s outer catch now also calls `setEventSaveError(...)`, reusing the existing banner rather than a new UI element.
+2. All three fire-and-forget period-transition PATCHes (Q-transition, OT-if-tied, Add Extra Time) now check `res.ok` (previously never checked at all — `fetch()` only rejects on network failure, not on a 4xx/5xx response) and surface a specific banner message on either a bad status or a network failure, still fire-and-forget by design (doesn't block the UI transition itself, per the original TD-010 convention this mirrors).
+3. Added an `isRecording` state guarding `recordEvent` itself (`if (isRecording) return;` at the top, `finally { setIsRecording(false) }` at the end) — this holds regardless of which UI entry point calls it (direct scoring buttons, the player-select modal, the assist modal, substitution), which is where the actual double-tap risk lives, not the initial type-select buttons. All `ActionButton`/`SimpleActionButton` call sites (21 total) now also pass `disabled={isRecording}` so the tapped button visibly disables mid-request, not just silently no-ops server-side.
+4. `recordEvent`'s post-await state updates (`setEvents`, id-swap from `BUG-129`) already use functional updates; extended the same discipline to `undoLastEvent`'s post-await score reverts (`BUG-130`).
+5. Found in passing, same file, same falsy-zero bug class as `BUG-126`/`BUG-132`/`BUG-133` (4th occurrence this session) — fixed opportunistically: `fetchData`'s initial-load event transform had `value: e.value ? ... : undefined`, collapsing a legitimate logged-miss `value: 0` back to `undefined` on every page refresh/remount. Changed to an explicit `!== undefined && !== null` check.
+
+**Evidence:**
+- Commit: `84f0885` (plus `b63cc49` — the `useState`→`useRef` debounce-guard follow-up fix, same entry, see below)
+- Verified by: full real interactive walkthrough on the PR #12 Vercel preview, same live match as `BUG-129`/`BUG-130`'s verification.
+- **Item (1) (roster-load failure banner) — actually triggered, not just happy-path:** patched `window.fetch` in the live browser session to reject calls to `/api/teams`/`/api/players`/`/eligible-players`, then forced a fresh mount of `BasketballLogger` (exited to the match-assignment screen, re-entered). Banner rendered exactly as written: *"Failed to load teams/roster — check connection and reload. Player lists may be empty or incomplete."* Team names/logos correctly blank (COLNAS-B/COLENG-B labels missing, only placeholder icons), consistent with the simulated failure. Restored `fetch`, reloaded, confirmed normal roster load resumed.
+- **Item (2) (period-transition failure banner) — actually triggered:** patched `fetch` to return `500` for the exact PATCH call, clicked through "End Quarter" → "Start Quarter 2". Banner rendered: *"Failed to save Q2 transition (500) — quarter may not persist on refresh."* DB-confirmed `matches.current_period` correctly stayed `Q1` (the failed write never landed), even though the client's local `quarter` state optimistically advanced to `2` (fire-and-forget by design) — reloaded to resync the client back to the true server state.
+- **The event-save failure banner itself (`eventSaveError`, referenced throughout this entry's multi-session history as "never actually tested") — finally tested:** patched `fetch` to reject (simulated offline) for the event POST specifically, logged a Field Goal. Banner rendered: *"Failed to save 'Field Goal' — offline or unreachable. Event kept locally only."* DB-confirmed no phantom event or score change landed. This closes a pending item that had been carried forward since session 46.
+- **Debounce guard — real gap found and fixed live, not a clean pass:** double-clicked a Foul action's player button using the Browser pane's native `double_click` action (fires two genuine click events close enough together to race). First check looked clean (client showed one event) — but a follow-up check minutes later, after the next 15s multi-logger sync tick, showed **two** identical "Foul KOSI" entries client-side, and a direct DB query confirmed two separate rows with an identical `created_at` timestamp. Root cause: the `useState`-based `isRecording` guard is not synchronous across two click-handler invocations from the same render's closure — both can read the same stale `isRecording === false` before React commits the state update from the first call, so both proceed. **Fixed:** switched the actual guard to a `useRef` (`isRecordingRef`, a plain synchronous mutation immune to the stale-closure timing), keeping `isRecording` state only for the buttons' visual `disabled` attribute. Also converted `recordEvent`'s optimistic `setEvents([...events, newEvent])` to a functional update (`setEvents(prev => [...prev, newEvent])`). **Re-verified after the fix, on a rebuilt preview:** repeated the exact same `double_click` stress test on the same action — exactly one event recorded, both immediately and past the 15s sync tick, confirmed via direct DB query. The race is closed.
+- All test data (the roster/period/event-banner probes, the debounce race's duplicate row) cleaned up by exact id; the real match confirmed back to its original state (2-3, Q1, 2 events) via a final DB check.
+- Test data cleanup: the 3 test Foul events created during this walkthrough (1 clean single-click + 2 from the double-click race) were deleted by exact id (`dev/cleanup-live-match-test-events.mjs`), restoring the real match to its original 2-event state.
+- Pending items: re-run the double-click stress test once more against the rebuilt preview to confirm the `useRef` fix actually closes the race (the fix is code-reviewed and `tsc`-clean, but the specific race that was just proven live hasn't been re-proven closed yet).
 
 ---
 
@@ -5675,3 +5768,358 @@ Filed together, same investigation: a deliberate side-by-side comparison of `Foo
 **Problem:** `.docs/stats-tab-fix.md` (dated to original project scaffolding, pre-dates most of this project's real session history) describes a conditional-rendering fix for `MatchOverlay.tsx` — hide a stat category entirely rather than showing a hardcoded `[0,0]` when no data exists at all. **Confirmed still live in current code** (`MatchOverlay.tsx:1152-1153`, now with optional chaining, same core mechanism) — this part is real and working, not stale documentation.
 
 **What it does NOT solve — BACKLOG-122's later, worse finding still stands:** a stat category with *asymmetric partial* data (one team's events fully logged, the other's barely logged) produces a genuinely non-null, confidently-wrong-looking number — `busa-match-16`'s `100%-0%` possession, `26-0` shots — not a "no data" case the conditional-render fix would catch, since the value is real and present, just derived from lopsided sheet coverage. This is the harder, still-unsolved half of the same "Stats tab" problem. See `BACKLOG-122` for the full detail and proposed fix (distinguish "goals-only backfill" matches from "full stat capture" matches before deciding what to render).
+
+---
+
+## Session 47 — Basketball-Native Domain Audit (BUG-134 through BUG-137, BACKLOG-137 through BACKLOG-139)
+
+Filed together, same investigation: a `code-reviewer` agent pass explicitly independent of the football-parity method above — basketball's own code read against real FIBA/NBA rules as ground truth, plus a cross-check of football's still-*open* WS gaps (not its fixed ones) against what basketball's future WS-emit port would inherit. Every item below is CONFIRMED via direct code read (file:line cited in each), not inferred — items the agent could not confirm from code alone are explicitly marked as needing a live test, not silently assumed either way.
+
+---
+
+### BUG-134 — Basketball's Foul System Is Structurally Unenforced (Disqualification, Team Fouls, Bonus, Technical-Foul Miscounting)
+
+**Status:** OPEN
+**Priority:** HIGH — a real basketball match cannot be officiated correctly through this logger today; this is a domain-correctness gap, not an edge case
+
+**Problem, four confirmed sub-findings, same root cause (no foul system beyond a single generic counter):**
+1. **No disqualification threshold anywhere.** `BasketballLogger.tsx:988-993` — all six foul buttons (Personal/Technical/Flagrant/Offensive/Shooting/Unsportsmanlike) call the same `handleEventClick('Foul')` with no subtype. No `personalFouls` counter is compared against any threshold anywhere in the component.
+2. **Team foul count is never tracked at all** — no per-team, per-quarter accumulator exists, and nothing resets on quarter transition. `config/route.ts:58-62`'s own source comment already admits this: *"Nothing in this codebase enforces these yet (no disqualification check, no team-foul-bonus logic, no shot clock)."*
+3. **`teamFoulBonusAt: 5` is computed and returned by the config API but never read** — `BasketballLogger.tsx`'s config-fetch effect destructures only `halfDuration`/`periodCount`/`overtimeDurationMinutes` (confirmed via grep: zero matches for `teamFoulBonusAt` in the component). No "in the bonus" UI state exists anywhere.
+4. **`technicalFouls` isn't just write-orphaned (already known) — it's actively wrong.** `events/route.ts:353-355`'s `case 'Foul':` unconditionally writes to `personalFouls`, with no branch for technical fouls at all. Clicking "Technical Foul" in the UI silently inflates `personalFouls` — the same counter a real personal foul increments — conflating two different foul types into one number.
+
+**Fix (not built):** needs foul-subtype UI (the buttons already exist and pass distinct labels — just need to actually pass the subtype through to `recordEvent`/the POST body), a team-level foul accumulator with quarter-reset, bonus-state UI once team fouls are tracked, and a real disqualification gate once personal-foul count is tracked per player. Real scope, not a one-line fix — needs its own directive.
+
+---
+
+### BUG-135 — No Distinct Second-Overtime (OT2) Path — Quarter Number Never Advances Past `periodCount + 1`
+
+**Status:** OPEN
+**Priority:** Medium — only matters for a match tied after OT1, real but rare
+
+**Problem:** both the end-of-regulation branch and the "Add Extra Time" button (`BasketballLogger.tsx:1738-1790`) unconditionally call `setQuarter(periodCount + 1)`. If OT1 ends still tied and a real OT2 is needed, re-triggering "Start Extra Time" re-runs the identical `setQuarter(periodCount + 1)` — already the current value, so quarter number never advances into a genuine OT2 state. `getCurrentPeriod()` returns the flat string `'OT'` for any `quarter > periodCount`, so OT1 and OT2 events would be stored with an identical `period` field, indistinguishable in `match_events` history.
+
+**Fix (not built):** track overtime count separately from `quarter` (e.g. `otNumber`), derive the period label as `` `OT${otNumber}` `` instead of a flat `'OT'`.
+
+---
+
+### BUG-136 — Compound Risk: a Fouled-Out Player Can Be Subbed Back Onto the Court
+
+**Status:** OPEN — code-confirmed the gate is missing; the live occurrence itself is unconfirmed, needs a live test
+**Priority:** HIGH — direct consequence of BUG-134, worth its own entry since the *substitution* side is a distinct fix location
+
+**Problem:** `handleSubIn` (`BasketballLogger.tsx:434-452`) and the sub-in player-selection modal filter only by `homeSubs`/`awaySubs` bench membership — no code path anywhere checks a player's foul count before allowing them back onto the court. Since BUG-134 already establishes zero foul-out enforcement exists, there is nothing gating a disqualified (5+ personal fouls) player from re-entering. The absence of the code-level gate is confirmed by direct read; whether this has actually happened in a real logged match is not confirmed and needs a live test, not assumed either way.
+
+**Fix (not built):** blocked on BUG-134's per-player foul tracking landing first — the sub-in filter needs to exclude any player at/above the disqualification threshold once that count exists to check against.
+
+---
+
+### BUG-137 — Retry-Interval Leak on `SocketProvider` Remount, Confirmed in Current Code (Mechanism Has Changed Since `ARCHITECTURE.md` Was Written)
+
+**Status:** OPEN — real, current, distinct from the doc's stale description
+**Priority:** Medium — shared/generic code (`useWebSocket.tsx`), applies to every sport's WS connection, not basketball-specific
+
+**Problem:** `ARCHITECTURE.md` describes this as a plain `setInterval` leak — that description is itself stale. The actual current mechanism (post-BUG-114) is a recursive `setTimeout` chain (`scheduleRetry()`) guarded by a module-level `manualRetryLoopActive` flag. Neither the pending `setTimeout` handle nor the `reconnect_failed` listener is cleared on `SocketProvider` unmount or `sharedSocket.disconnect()` — `SocketProvider`'s cleanup nulls `sharedSocket` but never touches the pending retry timeout or resets the flag. Once a retry loop starts and the socket later tears down, `manualRetryLoopActive` can stay `true` forever (the loop's own self-clearing check reads `sharedSocket?.connected` on a now-null socket, always falsy, so it never fires) — permanently blocking any genuinely new retry loop from starting for a future socket.
+
+**Fix (not built):** clear the pending `scheduleRetry` timeout and reset `manualRetryLoopActive` explicitly in `SocketProvider`'s unmount cleanup, not just null the socket reference.
+
+**Inheritance note (Part B of this audit):** shared, sport-agnostic code — inherited automatically by basketball's future WS-emit port with zero basketball-side work, for better or worse. See the `SYSTEM_CRITICALITY_MAP.md` WS-emit gap entry for the full inheritance determination across all 7 checked football-WS gaps.
+
+---
+
+### BACKLOG-137 — Basketball Quarter Duration Is Fetched and Displayed, Never Enforced
+
+**Status:** OPEN
+**Priority:** Low-Medium — distinct from the already-accepted "no ticking clock" design choice; this is "nothing stops logging past the limit," not "the display doesn't tick"
+
+**Problem:** no code path compares elapsed time against `quarterDuration` for any blocking purpose. All scoring/event buttons are gated only by `!matchStarted || matchEnded` — never by time. A logger can log events indefinitely past the configured quarter length with zero warning or block.
+
+---
+
+### BACKLOG-138 — No Halftime State Exists for Basketball at All
+
+**Status:** OPEN
+**Priority:** Low — cosmetic/flow, not a data-correctness issue
+
+**Problem:** confirmed via grep — zero matches for `halftime`/`half.?time` (case-insensitive) anywhere in `BasketballLogger.tsx` or `schema.ts`. Not "present but unused" — the field doesn't exist in the config shape at all. Q2→Q3 uses the identical "Start Quarter N+1" handler as every other quarter transition, no distinct halftime UI state.
+
+---
+
+### BACKLOG-139 — `BasketballMatchOverlay.tsx`'s Shooting-Percentage Fields Are Never Written by Any Code Path (Worse Than the Known Casing Mismatch)
+
+**Status:** OPEN
+**Priority:** Medium — silently renders flat 0% for every basketball match's overlay percentages, not a crash, but always wrong
+
+**Problem:** `BasketballMatchOverlay.tsx:377-378,385-386,393-394` reads `match.stats.fieldGoalPercentage`/`threePointPercentage`/`freeThrowPercentage`, each guarded with `|| 0`. Traced every writer of `match.stats` for basketball (`matches/[id]/route.ts:318-368`) — its derived-from-events object's own keys never include `fieldGoalPercentage`/`threePointPercentage`/`freeThrowPercentage` at all (confirmed via project-wide grep: the only other references are the type declaration and an unrelated per-player/per-season schema column with a different shape). **This is a separate, deeper gap from the already-known `'2PT_MADE'` vs `'Field Goal'` casing mismatch in the same derivation block** (also confirmed present here, same file) — even if the casing matched, these specific percentage fields would still never be produced by any writer. Net effect confirmed as silently-incomplete data (always renders 0%), not a visible crash/NaN — no live division against the already-known-zero `fieldGoalsAttempted`-family counters (BUG-133) actually happens anywhere in the codebase.
+
+**Fix (not built):** add the three percentage fields to the basketball stats-derivation block in `matches/[id]/route.ts`, computed from the same made/attempted counts once BUG-133 lands (attempts need to be tracked before a percentage can be computed at all).
+
+---
+
+### BACKLOG-140 — Separate `loggers` Identity Table Is the Root Cause of a Recurring Bug Class (Auth/FK Divergence From `users`)
+
+**Status:** OPEN — architecture item, deliberately not scoped for a same-session fix
+**Priority:** Medium-High — not urgent on its own, but every new feature touching auth/audit fields for a logger-or-admin actor risks reintroducing this same class of bug until it's addressed structurally
+**Filed:** 2026-07-24 (session 47B), Richard's own question while reviewing `BUG-124`'s fix
+
+**Problem:** `loggers` is a fully separate identity table from `users` — not a `role` value within one shared table — and every place in the codebase that needs to authenticate or attribute an action to "whichever actor is logged in, admin or logger" has had to build its own bridge between the two. That bridge has broken, differently, multiple times:
+- `BUG-124` (today) — `match_events.logger_id` FKs to `loggers.id` specifically. An admin's `users.id` can never satisfy it, so any admin-authenticated event POST 500'd until fixed with a role-conditional null.
+- `BUG-057` (2026-06-22) — `getAuthUser`/`verifyAuth` didn't know to look in `loggers` at all for a logger session; a logger JWT's `id` field got queried against `users`, found nothing, returned a false 401 despite a valid cookie.
+- `BUG-044`/`BUG-044b` (2026-06-19/26) — logger auth cookie-setting and `/api/loggers/me` needed their own bespoke auth paths because they couldn't reuse the `users`-table auth machinery as-is.
+- `known-issues.md` 2026-06-30 entry — a `users` row with `role: 'logger'` (a viewer-path account that also happens to log matches) has a JWT whose id exists in `users`, not `loggers`; a single-table lookup silently misses it, requiring an explicit try-`loggers`-then-`users` fallback (`getAuthUser`, still in place today) rather than one canonical lookup.
+- JWT payload shape divergence (`{ userId }` for `users`-issued tokens vs `{ id }` for `loggers`-issued tokens) — a direct consequence of the two tables never sharing a schema or an issuance path, requiring `verifyAuth` to normalize `decoded.userId ?? decoded.id` on every verify.
+
+**Root cause:** this is structurally non-standard RBAC. The conventional shape for "several actor types, one of which (logger) also needs a many-to-many assignment to matches" is: one `users` table with a `role` column (`admin` | `logger` | `viewer`), one JWT payload shape for every role, one `getAuthUser` lookup with no role-branching, and the existing `match_logger_assignments` join table (already correctly modeled as a separate many-to-many table) continues to reference `users.id` instead of a second identity table's id. Every FK that currently has to special-case "this column points at loggers.id, not users.id" would instead point at one shared `users.id` uniformly.
+
+**Fix (not built, explicitly not scoped for this session):** merge `loggers` rows into `users` with `role: 'logger'`, migrate `match_logger_assignments.logger_id` and `match_events.logger_id` to reference `users.id`, unify JWT issuance to one payload shape, and remove `getAuthUser`'s role-branching table lookup. This touches auth on every protected route in the app (both directly — every handler that calls `getAuthUser` — and indirectly, via every FK currently pointed at `loggers.id`) and needs its own dedicated session with a real migration plan (staging first, per this project's own schema-migration rule), not a drive-by patch layered onto other work.
+
+**Deferred, Richard's explicit call:** raised as a direct question while reviewing `BUG-124`'s fix ("will you say the db architecture was bad as to having a separate logger table?") — confirmed as the correct read of the accumulated evidence above, filed as its own item rather than attempted mid-session.
+
+---
+
+### ~~BUG-138~~ — `team_ratings` Table Did Not Exist on Staging or Prod (Schema Drift), Silently Failed Every Team-Rating Write
+
+**Status:** RESOLVED — 2026-07-27 (session 47C)
+**Priority:** Medium — non-blocking (player ratings still write fine; this only affects the team-rating half of the same calculation), but confirmed to fail on 100% of attempts
+**Filed:** 2026-07-24 (session 47B), found live while verifying `BACKLOG-124`'s fix
+
+**Problem:** `teamRatings` is declared in `src/db/schema-ratings.ts` (table name `team_ratings`) and `calculateAndSaveRatings()` (`src/lib/ratingsService.ts`, extracted this session from the old `ratings/route.ts` POST handler — the bug is not new, just newly reachable) writes to it in a loop immediately after successfully writing all player ratings. Confirmed via a direct `sqlite_master` query against the staging DB (`dev/check-rating-tables.mjs`): only `player_ratings` and `rating_history` exist — `team_ratings` was apparently never pushed to staging, despite being fully defined in schema. Every call to `calculateAndSaveRatings` threw `SQLITE_UNKNOWN: no such table: team_ratings` partway through, after player ratings had already committed successfully. This was previously invisible because the only caller that could reach this code path was `events/route.ts`'s old self-fetch (`BACKLOG-124`), which 401'd before ever getting this far — fixing `BACKLOG-124` made this code path reachable for the first time, which is how this surfaced.
+
+**Confirmed live (session 47B verification run):** a real basketball event POST on a `LIVE`-status throwaway match correctly wrote a `player_ratings` row (`auto_rating: 6.2`) via the now-fixed `BACKLOG-124` path; the immediately-following `team_ratings` write threw, caught silently by `events/route.ts`'s own `after()` try/catch (`console.error` only, does not affect the event POST's `201` response).
+
+**Fix:** created the missing `team_ratings` table on both staging and prod via a targeted, additive `CREATE TABLE` (`dev/create-team-ratings-table.mjs`) rather than `drizzle-kit push` — this project's own session-11 precedent (`RUNLOG.md`, `BACKLOG-040`) shows a plain push getting blocked by unrelated schema drift elsewhere. Pulled `player_ratings`' actual DDL directly from `sqlite_master` (not guessed from `schema.ts`) and matched `team_ratings` to that same real, already-working pattern.
+
+**Evidence:**
+- Commit: N/A (schema-only fix, no application code change)
+- Verified by: `dev/check-team-ratings-both-envs.mjs` (confirmed missing on **both** staging and prod, not just staging as originally filed — prod had never been checked), `dev/create-team-ratings-table.mjs --apply` (both environments), `dev/verify-team-ratings-write.mjs`/`-prod.mjs` (real insert/read/delete cycle on each, using real match/team IDs to satisfy FKs). Full detail in `RUNLOG.md`'s 2026-07-27 entries.
+- Observed result: `team_ratings` now exists on both environments with all 11 expected columns (`PRAGMA table_info` confirmed, not assumed from the DDL). A real row inserted, read back with correct values and defaults, then deleted cleanly (0 rows remaining) on both staging and prod.
+- **New finding, filed separately as `BACKLOG-146`, not part of this fix's scope:** the actual `POST /api/matches/[id]/ratings` endpoint still can't complete end-to-end for basketball matches — `calculateAndSaveRatings()` requires `match.lineups` in football's JSON shape, which basketball never populates (its lineup state lives locally instead, per `BACKLOG-141`). Confirmed live: `400 "No lineups found for this match"` on a real assigned-logger session, before ever reaching the (now-fixed) `team_ratings` write. `team_ratings` existing was necessary but not sufficient for basketball ratings to actually calculate.
+- Pending items: none for this specific gap (the missing table). `BACKLOG-146` tracks the newly-found, separate lineup-format gap.
+
+**Investigated further, session 47C:** confirmed the "silently fails" framing is accurate for the automatic path but incomplete overall — there is a second, real, user-facing consequence.
+- **Automatic path confirmed safe:** `events/route.ts:304-310` wraps `calculateAndSaveRatings()` in its own `after()` + try/catch, `console.error` only — genuinely does not affect the event POST's `201` response. Flow B is not at risk.
+- **Manual path is NOT silent — a real admin-facing gap, not previously documented:** `src/app/admin/match-ratings/[id]/page.tsx`'s "Calculate Ratings" action (line ~138) calls `POST /api/matches/[id]/ratings` directly. That route's own try/catch (`ratings/route.ts:134-139`) catches the `team_ratings` failure but returns `{ error: err.message }` at `status: 500` — `err.message` there is the **raw SQLite error string** (`no such table: team_ratings`), sent straight to the client and displayed in the admin UI's error banner. This is a second, independent violation of this project's own "never return raw database errors to the client" rule, caused by the same missing table, reachable by any admin who clicks "Calculate Ratings" for a match — not just a background no-op.
+- `schema-ratings.ts`'s `teamRatings` definition (`id`, FK'd `matchId`/`teamId` with cascade delete, `rating`, `playerCount`, `totalPlayerRating`, `goals`, nullable `possession`/`shotsOnTarget`, timestamps) is clean and self-contained — creating it is purely additive, no data migration, no risk to existing tables.
+- **Recommendation:** the `drizzle-kit push` fix is low-risk and would close both the background no-op and the admin-facing raw-error exposure in one move. Still not run this session — schema pushes against staging are a "confirm first" action per this project's own migration governance, not something to execute without an explicit go-ahead even though the change itself is additive-only.
+
+---
+
+---
+
+### ~~BUG-139~~ — No Mid-Match-Resume Seeding for Basketball Blocks Logging Entirely on Any Already-LIVE Match
+
+**Status:** RESOLVED — 2026-07-24 (session 47B). Promoted from a buried "carried forward" note (`BACKLOG-125`, session 46) to its own tracked item and fixed, per Richard's explicit call after live-hitting it during the PR #12 preview walkthrough.
+**Priority:** CRITICAL — permanently blocks logging any new event on any match that's already `LIVE` when the page loads (a refresh, a second logger joining, or simply reopening the app), not an edge case
+
+**Problem:** `homeStarters`/`awayStarters` are only ever populated by the in-app lineup-selection wizard (`showLineupModal` → pick 5 starters → `setHomeStarters`/`setAwayStarters`) — there is no server-side lineup persistence for basketball at all (confirmed via grep: zero references to `lineups`/`/lineup` anywhere in `BasketballLogger.tsx`, unlike `FootballLogger.tsx` which fetches `GET /api/matches/[id]/lineup` on every mount). Since `matchStarted` initializes straight to `true` whenever `match.status === 'LIVE'` on mount, any already-live match skips the lineup wizard entirely — `homeStarters`/`awayStarters` stay permanently `[]` for that session. The "Select Player" modal (`BasketballLogger.tsx:1262`) filters strictly to `(selectedTeam === 'home' ? homeStarters : awayStarters).includes(p.id)` — with both arrays empty, the modal renders with zero players, permanently, blocking every scoring/rebound/foul/etc. event from ever being logged for that session. **Confirmed live**, not inferred: reused a real pre-existing `LIVE` match (`w6o4YQAF5pem_Qa8uazAm`, COLNAS-B vs COLENG-B) on the PR #12 Vercel preview — the eligible-players API correctly returned 11 real players with correct `memberships` (confirmed via a direct in-browser `fetch()`), but the "Select Player" modal showed literally zero player buttons after clicking any scoring action.
+
+**Fix:** `fetchData`'s roster-load effect now seeds `homeStarters`/`awayStarters` from the full resolved roster (`homePlayersList`/`awayPlayersList`, the same lists that were already confirmed correct) whenever `match.status === 'LIVE'` and the starters arrays are still empty (a functional-update guard, `prev => prev.length > 0 ? prev : ...`, so it never clobbers a real in-session lineup selection). `lineupSet` is also set `true` in this path so no stale "Set Lineup" UI can reappear. `src/components/BasketballLogger.tsx`.
+
+**Known limitation, accepted rather than silently hidden:** this does not distinguish on-court starters from bench for a *resumed* session specifically — every rostered player becomes selectable, not just the original 5. Building real server-side lineup persistence (mirroring football's `/lineup` endpoint, so a resumed session can restore the *actual* starters/bench split) is real, separate scope, not attempted here — the alternative (a permanently unusable logger on every resume) is worse.
+
+**Evidence:**
+- Commit: `9420364`
+- Verified by: found live via a real interactive walkthrough on the PR #12 Vercel preview deployment (a genuine `LIVE` match, real logger session, real roster data confirmed via direct API fetch from inside the authenticated browser tab) — not inferred from code alone. `tsc --noEmit` held at 49 pre-existing errors, none new.
+- Pending items: full click-through re-verification on the next preview rebuild (push required — this fix isn't live on the deployed preview until the new commit builds). Server-side lineup persistence (the "real" fix, restoring actual starters/bench on resume) remains open, not filed as a separate number yet — revisit if/when the shared-logger-core refactor or a dedicated lineup-persistence directive gets scoped.
+
+---
+
+---
+
+### BACKLOG-141 — Real Server-Side Lineup Persistence for Basketball (Mirror Football's `/lineup` Endpoint)
+
+**Status:** OPEN — deliberately deferred, not attempted
+**Priority:** Medium-High — the actual, complete fix for `BUG-139`'s resume-seeding gap; `BUG-139`'s shipped fix is a safe fallback, not this
+
+**Problem:** `BUG-139` (this session) fixed the immediate blocker — basketball's "Select Player" modal being permanently empty on any resumed/already-`LIVE` match — by seeding `homeStarters`/`awayStarters` from the full roster when they're empty on mount. That's a fallback, not a real fix: it means a resumed session can never distinguish the original 5 starters from the bench, for the rest of that session. Football doesn't have this problem because it persists lineups server-side: `FootballLogger.tsx` fetches `GET /api/matches/[id]/lineup` on every mount and calls `setLineups(lineupsData.lineups)`, so the real starters/bench split survives a refresh, a second logger joining, or any resume — basketball has no equivalent endpoint, no equivalent persisted column usage, and no equivalent fetch-on-mount.
+
+**Fix (not built):** build the basketball equivalent of football's lineup flow — persist `homeStarters`/`awayStarters` (or an equivalent starters/bench shape) to the server when a logger completes the in-app lineup wizard (the `matches.lineups` JSON column already exists and is already read by `src/lib/ratingsService.ts`'s `calculateAndSaveRatings`, so the shape is already partially spoken for — confirm compatibility before reusing it, or add a dedicated basketball lineup table/column if the shapes conflict), then fetch and seed from it on every mount, mirroring football's `GET /lineup` pattern exactly. Once this lands, `BUG-139`'s roster-fallback becomes a true last-resort (a match that was started before this feature existed) rather than the only mechanism.
+
+**Deferred:** real, separate feature-sized scope — not a same-session patch alongside tonight's critical-bug fixes. Explicitly named and filed per Richard's request, distinct from `BUG-139`'s already-shipped stopgap.
+
+---
+
+### ~~BUG-140~~ — Basketball Logger Has No Auth-Refresh Recovery Mechanism (Football Analog of BUG-058b)
+
+**Status:** RESOLVED — 2026-07-27 (session 47C)
+**Priority:** Medium-High — silent, session-killing, invisible until something relies on it; not actively blocking anything today since basketball has no offline queue yet to be broken by it
+
+**Evidence:**
+- Commit: `ab8c44e`
+- Verified by: live UI test on PR #12's Vercel preview (`brixsports-staging-git-fix-basketbal-a82f03-...`), a real logger session (`logger_1767968844029`) on the existing `LIVE` match.
+- Observed result: cleared `localStorage.authToken` (`null` confirmed), then remounted `BasketballLogger` (navigated back to `/logger`, re-entered the match). `localStorage.authToken` read back afterward contained a **freshly-issued** JWT — different `iat`/`exp` from the token manually injected earlier in the session, confirming the mount effect genuinely called `/api/auth/refresh` and wrote a new token back, not stale state.
+- Pending items: none.
+
+**Problem:** `FootballLogger.tsx` has a `useEffect` (~lines 208-219) that calls `POST /api/auth/refresh` on mount to re-seed `localStorage.authToken` after `AuthContext`'s own `/api/auth/me` 401-check can wipe it — this is `BUG-058b`'s fix (see that entry for full original context on what it solves and why). `BasketballLogger.tsx` has zero occurrences of `auth/refresh`, `authToken`, or `BrixsportAdminDB` anywhere (confirmed via grep) — no equivalent mechanism exists at all. Practical effect: any basketball logger session that triggers `AuthContext`'s 401-wipe path loses `localStorage.authToken` permanently for that session, with no recovery. This would silently break any future offline-queue work for basketball (basketball doesn't have an offline queue yet either — that's a separate, already-known gap, not re-filed here) and is a real gap today wherever basketball code might read `localStorage.authToken`.
+
+**Fix:** ported football's auth-refresh `useEffect` pattern verbatim (the same `POST /api/auth/refresh`-on-mount re-seed) to `BasketballLogger.tsx`, placed alongside the existing lineup-modal-state debug effect.
+
+**Found:** session 47B, via a systematic `FootballLogger.tsx`-vs-`BasketballLogger.tsx` comparison pass (an Explore agent's audit) requested by Richard mid-session, comparing basketball-logger parity against football's mature, battle-tested equivalent.
+
+---
+
+### ~~BUG-141~~ — No Empty-State Message on Basketball's Substitution Sub-In Modal (Football Analog of BUG-070)
+
+**Status:** RESOLVED — 2026-07-27 (session 47C)
+**Priority:** Low — UX confusion, not data loss
+
+**Evidence:**
+- Commit: `ab8c44e`
+- Verified by: live UI test on PR #12's Vercel preview, same logger session as `BUG-140`.
+- Observed result: clicked Substitution, selected an on-court player to sub out. The "who is entering" modal rendered "**No available substitutes**" with a "Cancel Substitution" button — not the old blank grid.
+- Pending items: none.
+
+**Problem:** `FootballLogger.tsx`'s substitution modal has an `emptyMessage` prop (e.g. `'No available substitutes'`) shown when there are no eligible bench players — this is `BUG-070`'s fix (see that entry for full original football context). `BasketballLogger.tsx`'s own sub-in modal (around lines 1343-1373) renders an empty grid with zero fallback message when `homeSubs`/`awaySubs` is empty. Practical effect: a logger taps Substitution, sees a blank modal with no bench players and no explanation, and may think the app is broken mid-game.
+
+**Fix:** the sub-in modal's player grid is now computed into an `availableSubs` list first; when empty it renders a "No available substitutes" fallback message instead of an empty grid, mirroring football's `emptyMessage` pattern.
+
+**Found:** session 47B, via a systematic `FootballLogger.tsx`-vs-`BasketballLogger.tsx` comparison pass (an Explore agent's audit) requested by Richard mid-session, comparing basketball-logger parity against football's mature, battle-tested equivalent.
+
+---
+
+---
+
+### BUG-142 — Basketball Has No Offline-Queue/Retry Mechanism at All — Failed Writes Are Visible But Never Recovered
+
+**Status:** OPEN — mentioned in passing multiple times this session (`BACKLOG-134`, `BUG-140`), never filed as its own tracked item until now
+**Priority:** High — every write path this session gave a failure a visible banner (roster load, period-transition PATCH, event POST), but none of them can ever self-heal; a logger who doesn't notice or can't manually retry loses the write permanently
+
+**Problem:** Confirmed live this session: forcing a period-transition PATCH to fail (mocked `fetch` returning `500` for the exact PATCH call) correctly showed `BACKLOG-134`'s new banner ("Failed to save Q2 transition (500) — quarter may not persist on refresh") and correctly left `matches.current_period` unchanged in the DB (`Q1`, confirmed via direct query) rather than writing bad data. But that's where it ends — there is no queue, no retry, no background sync. `FootballLogger.tsx` has a full mechanism for exactly this scenario: failed writes go into IndexedDB (`BrixsportAdminDB`), a service worker drains the queue on reconnect (`syncMatchEvents()` in `sw-admin.js`), and the auth token needed to replay the write is embedded in the queued row at write time (since a service worker sync event has no live session). `BasketballLogger.tsx` has zero references to `indexedDB`, `IndexedDB`, `offline`, `queue`, or `syncMatchEvents` anywhere (confirmed via grep) — every failure this session (roster load, period PATCH, event POST, undo DELETE) is a dead end once the banner is dismissed. This compounds `BUG-140` (no auth-refresh either) — even if an offline queue existed today, the token needed to replay a queued write could already be gone by the time connectivity returns.
+
+**Fix (not built):** port football's IndexedDB queue + service-worker drain mechanism to basketball's write paths (event POST, period-transition PATCH, undo DELETE, roster-load retry). Real, feature-sized scope — not a same-session patch. Should land after `BUG-140` (auth-refresh) since the queue is only as good as the token it can replay with.
+
+**Found:** session 47B, confirmed live while testing `BACKLOG-134`'s period-transition failure banner on the PR #12 preview — the banner worked exactly as designed, which is what made the absence of any recovery path obvious.
+
+---
+
+### ~~BACKLOG-142~~ — Staff-Comms: Current-State Audit → Auth Gap Fixed, UI Pulled Pending a Real Selection Flow
+
+**Status:** RESOLVED — 2026-07-27 (session 47C). Per Richard's explicit call after the audit below: rather than half-fix a feature not on any Critical Flow, the API route's auth gap is fixed in place and the UI is pulled from both consumers (`BACKSCOPE.md`, grep `BACKSCOPED: 2026-07-27`) until the admin-side selection flow is rebuilt properly.
+**Priority:** Medium — the auth gap was a real, live production gap; the rest is stability/completeness assessment, not an active incident
+
+**Evidence:**
+- Commit: `81cce2e`
+- Verified by: live test on PR #12's Vercel preview — both an admin session (`gen-admin-test-token.mjs`) and a logger session.
+- Observed result: (1) UI removal confirmed on `/admin/manager` — `document.body.innerText` search for "comms" returned zero matches anywhere on the rendered page. (2) API auth confirmed both ways on the same route: authenticated admin session → `GET /api/staff-comms?matchId=...` returned a real `200`/`[]`; same request with cookies fully cleared → request never reached the route at all, redirected straight to `/login` (confirmed via `res.redirected`/`res.url` on the fetch response).
+- Pending items: `FootballLogger.tsx`'s side of the same removal not independently re-verified live (identical code pattern from the same commit, already confirmed via direct source read + clean `tsc` — treated as sufficiently covered rather than redundantly re-tested).
+
+**What this feature actually is, confirmed by direct read (not assumed from the name):** a per-match staff notes channel — `staff_comms` table (`schema.ts:782`, `matchId`/`userId`/`content`/`type`/`priority`/`isRead`), `GET`/`POST /api/staff-comms` (`src/app/api/staff-comms/route.ts`), consumed by two real UIs: `FootballLogger.tsx` (fetch-on-mount + 15s poll, plus a `handleSendNote` composer) and `src/app/admin/manager/page.tsx` (a comms panel for admins). This is a genuinely wired, non-stub feature — not a dead scaffold.
+
+**It is a different, unrelated mechanism from `/api/chat/send`** (used only by `LivestreamChat.tsx`, a livestream-viewer chat forwarded straight to a WS broadcast room, no DB table at all, has proper `getAuthUser`). `.agents/dev/SYSTEM_AUDIT.md`'s 2026-06-08 entry (`staffComms: PARTIAL... /api/chat/send forwards to WS. Direct DB insert path unclear`) conflates the two under one line — that audit is also ~7 weeks stale generally, not just on this point, and shouldn't be trusted without re-verification (consistent with this project's own stale-fact-propagation lesson in `known-issues.md`).
+
+**Real problems found, confirmed this session:**
+1. **No auth at all, in production.** Neither `GET` nor `POST` in `staff-comms/route.ts` calls `getAuthUser()`. `middleware.ts`'s matcher only covers `/admin/:path*` + `/api/admin/:path*` (all environments) and a staging-only JWT gate — `/api/staff-comms` matches neither, so in production anyone with a `matchId` can read every match's notes and `POST` a note under any `userId` they choose (the route trusts `body.userId` verbatim). Same bug class as the already-fixed BUG-034/BUG-107.
+2. **The admin-side UI is genuinely half-built, not just untested.** `admin/manager/page.tsx`'s initial load doesn't let the admin pick a match to view comms for — it auto-fetches comms for "the first unapproved finished match if it exists" (the code's own comment literally says `// For now, let's just fetch for the first...`), while a separate, real per-match `onSelect` handler further down the same file does the intentional thing correctly. Two different selection mechanisms for the same panel, one of them a placeholder.
+3. **No live test, no bug filing, no mention anywhere in `BUILD_JOURNAL.md`/`BACKLOG.md` prior to this entry** — this feature has shipped and been in use with zero verification history.
+
+**Verdict, per Richard's own "stable things over partial systems" framing:** this is a working-but-unhardened, feature-incomplete system — real enough that the auth gap should not be ignored indefinitely, but not something to extend to basketball yet. **Do not port to `BasketballLogger.tsx` until (1) is fixed and (2) is cleaned up** — otherwise basketball inherits the same unauthenticated write path and the same half-built admin selection flow on day one.
+
+**Fix:** (1) `src/app/api/staff-comms/route.ts` — both `GET` and `POST` now call `getAuthUser(request)` and reject with 401 if absent; `POST` derives `userId` via `resolveEffectiveUserId(authUser)` rather than the client body, since `staffComms.userId` FKs to `users.id` and a naive `authUser.id` would FK-crash for a logger-role session (same class as `BUG-124`). (2) rather than rebuild `admin/manager/page.tsx`'s selection flow right now, the whole feature is pulled from the UI instead (`FootballLogger.tsx`'s modal/button/effect, `admin/manager/page.tsx`'s sidebar panel/stat-tile/effects) — commented out, not deleted, per `BACKSCOPE.md` convention. Full detail in that file's new "Staff Comms" entry.
+**Found:** session 47C, per Richard's direct request to check this feature's actual current state before considering whether to extend it to basketball.
+
+---
+
+### ~~BUG-143~~ — `FootballLogger.tsx`'s Goal/Penalty→Assist Chain Leaks a `setTimeout`, Can Fire After Unmount
+
+**Status:** SHIPPED — 2026-07-27 (session 47C). Live negative-test attempted same session on a real throwaway football match, came back inconclusive (a scripted "immediate exit" click actually hit the Settings button, not the real exit control, per a class-name mix-up) — Richard's explicit call to accept the code-level fix as sufficient rather than keep chasing a corrected selector. Full detail in `RUNLOG.md`'s 2026-07-27 entry. Not escalated to RESOLVED; this was a deliberate stop, not a pass/fail result.
+**Priority:** Medium — silent, invisible, real (confirmed by code trace, not just theory), but narrow window (500ms) and requires the logger to navigate away at exactly the wrong moment
+
+**Problem:** `FootballLogger.tsx`'s "1b" comment block (~line 958-969) auto-records an `Assist` event 500ms after a `Goal`/`Penalty` with a `relatedPlayerId`:
+```js
+if ((type === 'Goal' || type === 'Penalty') && relatedPlayerId) {
+    setTimeout(() => {
+        confirmEvent('Assist', relatedPlayerId, playerId);
+    }, 500);
+}
+```
+No `clearTimeout` exists anywhere in the file. The effect that sets `stateManager.current = manager` (~line 448) has a cleanup that only calls `unsubscribe()` — it never nulls `stateManager.current` or destroys the manager, so `confirmEvent`'s own guard (`if (!stateManager.current) return;`, ~line 925) never trips post-unmount. **Confirmed reachable:** if a logger logs a Goal/Penalty with an assist, then navigates away (switches matches, logs out, closes the panel) within that 500ms window, the orphaned timeout still fires — records the event, POSTs it, dispatches broadcasts — for a match the UI no longer shows, with zero visibility to anyone. Violates this project's own "no silent failures/successes" rule, just inverted (a silent *success* nobody asked for anymore, not a failure).
+
+**Secondary, lower-severity, same root cause:** `confirmEvent` is a plain closure re-created every render, so the delayed call is bound to `selectedTeam` (and other component state) as it was the instant the Goal was logged. If the logger taps the home/away toggle within that same 500ms, the assist gets recorded against the stale team. Low probability, real if it happens.
+
+**Not a football/basketball parity gap:** `BasketballLogger.tsx` doesn't need an equivalent chain — it already embeds the assist as an `assistPlayerId` field directly on the same shot event (`handlePlayerSelect`/`handleAssistSelect`, one atomic POST, no second temp-ID, no race window at all). That's a better pattern than football's chained-event approach, not a gap to close.
+
+**Fix:** the simplest option (`clearTimeout` on unmount) is what's implemented — `FootballLogger.tsx` now holds a `pendingAssistTimeouts` ref array, pushes every scheduled assist-chain timeout ID onto it, and the same effect cleanup that calls `unsubscribe()` now also `clearTimeout`s and empties that array. The more thorough option (embed the assist directly on the Goal/Penalty event instead of chaining a second delayed one, matching basketball's pattern) was deliberately not done here — see `BACKLOG-144` below, a real design conversation about the whole chain's shape, not a minimal leak patch.
+**Found:** session 47C, via a dedicated re-investigation of the existing "1b" comment (requested by Richard, an Explore/general-purpose agent's code trace, independently verified against the real `confirmEvent`/`match-state-manager.ts` source).
+
+---
+
+### BACKLOG-144 — Publish Goal Instantly, Backfill Assist After (SofaScore-Style), Instead of Today's Blocking Modal Chain
+
+**Status:** OPEN — direction confirmed by Richard, not scoped or built
+**Priority:** Medium — real UX/latency improvement for viewers, not a bug fix
+
+**Context, confirmed by code trace (session 47C, alongside `BUG-143`):** today's flow is fully synchronous and blocking — tapping "Goal" opens a scorer-select modal, then an assist-select modal, and **nothing is saved or broadcast to viewers until both resolve.** `relatedPlayerId` (the assist) is already known and embedded directly on the Goal/Penalty event by the time it's written (`confirmEvent`, `relatedPlayerId: relatedPlayerId` on the same object) — there is no technical latency in "getting" the assist by the time of the write; the delay viewers actually experience is the logger's own time spent navigating both modals before anything goes out at all.
+
+**Richard's direction:** flip this — publish the goal (and broadcast to viewers) the instant the scorer is confirmed, *before* the assist modal even opens, then attach the assist as a fast follow-up update once the logger picks it (or skips it). Matches how platforms like SofaScore publish "GOAL" immediately and backfill the scorer/assist detail moments later, rather than gating the viewer-facing broadcast on the logger finishing every detail step first.
+
+**Real design work required, not scoped here:**
+- The Goal event needs to be create-able and broadcastable with `relatedPlayerId` absent, then updated in place once the assist is chosen — today's write path assumes an event is fully-formed at creation; a same-event in-place update after broadcast is a different shape.
+- Decide what the public-facing UI shows in the gap between "goal published" and "assist attached" (no assist line at all, briefly? a pending/loading state?).
+- `BUG-143`'s fix (this same session) removes the chained-second-`Assist`-event's leak risk but doesn't change the blocking-modal ordering — this item is the actual UX change Richard wants, independent of that fix.
+- Basketball's embedded-assist pattern (one atomic event) doesn't have this problem at all today since its assist entry is optional/single-step, not a second blocking modal — worth confirming that stays true if this redesign is ever generalized across sports.
+
+**Reinstate/build when:** its own scoped session — this is a real write-path + broadcast-timing redesign for `POST /api/matches/[id]/events` and `FootballLogger.tsx`'s event flow, not a quick patch.
+**Found:** session 47C, Richard's own direction during the `BUG-143` investigation.
+
+---
+
+### BACKLOG-143 — Basketball's Standalone "Assist" Event Is Invisible to the Box Score's `ast` Stat
+
+**Status:** OPEN — found this session, not fixed
+**Priority:** Low-Medium — rating calc is correct, box score display undercounts
+
+**Problem:** `BasketballLogger.tsx`'s standalone "Assist" button (~line 1096) creates a separate `type: 'Assist'` event. `calculatePlayerRating` correctly counts it (`+2`, ~line 190-192), but `calculateAdvancedStats`'s box-score `ast` field (~line 227) only counts embedded `assistPlayerId` fields on shot events — it never looks at standalone `Assist`-type events. A player credited with a standalone assist gets the rating bump but the box score under-reports their assist count.
+
+**Fix (not built):** `calculateAdvancedStats`'s `ast` computation should also count events where `type === 'Assist' && e.playerId === playerId`, in addition to the existing `assistPlayerId` check, so both assist-recording paths (embedded-on-shot and standalone-button) are reflected in the box score.
+**Found:** session 47C, surfaced incidentally while re-investigating `BUG-143` above (tracing how basketball records assists to compare against football's chain).
+
+---
+
+### BACKLOG-145 — Basketball's `STARTER_COUNT` Is String-Matched, Not Competition-Config-Aware (Football Already Does This Correctly)
+
+**Status:** OPEN — found this session, not fixed. Backlog only, per Richard's request — not built now.
+**Priority:** Low-Medium — works today for the two known formats (5-a-side, 3x3's 3-a-side), but is a real correctness gap for any future basketball competition format that doesn't match the hardcoded string check
+
+**Correction to the original ask that filed this:** the request was to sweep *football* for legacy hardcoded player-count/duration constants — checked, and `FootballLogger.tsx` already does this correctly: `STARTER_COUNT = competitionPlayersPerSide || (is5Aside ? 5 : 11)` (~line 138), where `competitionPlayersPerSide` is fetched from the competition's own config (~line 392-394) and only falls back to a hardcoded 5/11 if that's absent. `halfDuration` follows the same pattern (fetched from match config, ~line 456-462). **The actual gap is on basketball's side, not football's:** `BasketballLogger.tsx`'s `STARTER_COUNT = is3x3 ? 3 : 5` (~line 32) never attempts to read any competition-level config at all — `is3x3` is a hardcoded string match against `match.sport`/`match.competition` (`'3x3 Basketball'`, `'Basketball 3x3'`, or `.includes('3x3')`), with no fallback-if-config-exists path the way football has. `quarterDuration`/`periodCount`/`overtimeDurationMinutes` do get overwritten by match config on mount (per existing comments in the file), so this gap is specifically `STARTER_COUNT`, not every config value.
+
+**Fix (not built):** port football's pattern — fetch a competition-level `playersPerSide` (or the `competition_sport_settings`/`SPORT_DEFAULTS.basketball.playersPerSide` value referenced elsewhere in this file's `BACKLOG-125`/125-adjacent entries) and prefer it over the `is3x3` string-match, keeping the string-match only as the final fallback.
+
+**Related, same theme, also not built:** Richard separately asked whether `BasketballLogger.tsx`'s player-selector and its roster/manager-setup ("load & manager setup") should be re-read against `FootballLogger.tsx`'s own equivalents, since football's patterns here are already live-tested and verified (the `memberships`-aware player-team filtering fixed as `BUG-061`/session-46's basketball port is the known-good precedent for this class of comparison). Not investigated this session — noted for whenever this gets picked up, same "read football first, compare, port only what's actually better" discipline used for the rest of this session's basketball-parity work.
+
+**Found:** session 47C, per Richard's request to sweep for legacy/redundant hardcoded values across both loggers.
+
+---
+
+### ~~BUG-146~~ — Local Dev Server 500s on Every Page Route (Root-Caused: Node v22+'s Native `localStorage` Global)
+
+**Status:** RESOLVED — 2026-07-27 (session 47C)
+**Priority:** High — blocked all local browser-based verification since session 46, forcing every subsequent session onto a PR-preview workaround
+**Filed:** originally tracked only in `.agents/rules/known-issues.md` (2026-07-23, session 46) and `project_local_dev_browser_broken_session47b.md`, never given its own tracked number until now
+
+**Problem:** `npm run dev` (`node server.js`) 500'd on every page route with `TypeError: localStorage.getItem is not a function`, thrown during SSR. Root cause: Node 22+ (this machine: v25) ships an experimental native `globalThis.localStorage` (Web Storage API) that exists even in a plain Node process outside any browser `window`. Without a valid `--localstorage-file` path, Node still constructs the object, but it's broken — confirmed via the server's own startup warning (`` `--localstorage-file` was provided without a valid path``). Something in the render path calls `localStorage.getItem(...)` directly; previously this was a harmless `ReferenceError` in Node (since `localStorage` truly didn't exist), but now it hits Node's own broken object instead and throws the `TypeError` seen here. Exact call site not pinned down (grepping `node_modules` for the common `typeof localStorage` isomorphic-guard pattern returned zero matches; every direct call in our own `src/` is inside a `useEffect`/handler that never runs during SSR) — not needed to fix it, since the flag disables the feature at the source regardless of where it's read.
+
+**Confirmed via a real before/after test:** ran the server both ways back to back. Without any flag: identical crash, same error text, every time. With Node's `--no-webstorage` flag: `GET /` returned a clean `200` with real homepage HTML (`<title>BRIXSPORTS | Nigerian University Sports Live</title>`) in ~6-10s, repeated successfully, zero errors in the server log.
+
+**Fix:** `package.json`'s `dev` and `start` scripts now pass `--no-webstorage` directly to `node` (`node --no-webstorage server.js`). A first attempt used `NODE_OPTIONS=--no-webstorage node server.js` (shell env-var prefix) — failed outright (`'NODE_OPTIONS' is not recognized as an internal or external command`), because `npm run` executes scripts through `cmd.exe` on Windows, which doesn't support Unix `VAR=value command` syntax. Passing the flag as a direct `node` CLI argument sidesteps that entirely.
+
+**Related finding, not fixed here:** the pre-existing `start` script's own `NODE_ENV=production node server.js` prefix has almost certainly never actually worked on native Windows cmd.exe either, for the identical reason — a separate, pre-existing bug incidentally surfaced by this fix, not introduced by it. Not chased further since `start` isn't part of this project's actual deploy path (Vercel builds via `next build` and runs its own managed runtime — it never invokes `server.js` or this `start` script at all, which is also why production was never exposed to the `localStorage` crash in the first place).
+
+**Deliberately not touched:** `dev:turbo` (`next dev --turbopack`) and `start:next` (`next start`) — neither goes through `node server.js` directly, so the same direct-CLI-flag fix doesn't apply cleanly, and neither is the script actually used day-to-day. Would need a `cross-env`-style solution (a new dependency) if that changes.
+
+**Unblocks:** `BUG-140`, `BUG-141`, `BACKLOG-142`, `BUG-143` — all four were SHIPPED but explicitly marked "not yet live-tested, blocked by dev server SSR-500" this same session. That blocker is now gone; live verification for all four is a direct next step.
+
+**Found:** session 47C, root-caused live at Richard's direct request after weeks of this blocking local verification across sessions 46/47/47B.
+
+---
+
+### BACKLOG-146 — Ratings Calculation Requires Football's `match.lineups` JSON Shape, Can't Run for Any Basketball Match
+
+**Status:** OPEN — found this session, not fixed
+**Priority:** Medium — blocks basketball ratings entirely, but ratings are a secondary feature, not on any Critical Flow
+
+**Problem:** `calculateAndSaveRatings()` (`src/lib/ratingsService.ts`) reads `match.lineups` and parses it as JSON, expecting `{ home: { starters, bench }, away: {...} }` (or a flat array) — this is football's lineup-publishing shape. Basketball has no equivalent: its starters/bench live only in `BasketballLogger.tsx`'s local `homeStarters`/`awayStarters` state (per `BACKLOG-141`, there's no server-side lineup persistence for basketball at all), so `match.lineups` is never populated for a basketball match. Confirmed live, session 47C: `POST /api/matches/w6o4YQAF5pem_Qa8uazAm/ratings` (a real, assigned-logger-authenticated request against a real `LIVE` basketball match) returned a clean `400 { "error": "No lineups found for this match" }` — the function exits before ever reaching the player-stats or team-ratings calculation at all.
+**Practical effect:** basketball has never had a working ratings calculation, independent of `BUG-138` (the missing `team_ratings` table, now fixed) — that fix was necessary but not sufficient. Both the automatic background trigger (`events/route.ts`'s `after()` call) and the manual "Calculate Ratings" admin action fail identically for basketball today, just with different visibility (silent vs. a raw error, see `BUG-138`'s own note on the admin-facing exposure).
+**Fix (not built):** either (a) block on `BACKLOG-141` (real server-side lineup persistence for basketball) and have `calculateAndSaveRatings()` read from wherever that ends up living, or (b) teach the function to also accept basketball's actual starter/bench data source once one exists server-side. Not a quick patch — genuinely blocked on the same underlying gap `BACKLOG-141` already tracks.
+**Found:** session 47C, while functionally verifying `BUG-138`'s `team_ratings` fix via the real ratings endpoint.
+
+---

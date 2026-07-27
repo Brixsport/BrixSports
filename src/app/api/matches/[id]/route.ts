@@ -76,7 +76,8 @@ export async function GET(
             .leftJoin(players, eq(matchEvents.playerId, players.id))
             .leftJoin(teams, eq(matchEvents.teamId, teams.id))
             .where(eq(matchEvents.matchId, matchId))
-            .orderBy(desc(matchEvents.minute), desc(matchEvents.second));
+            .orderBy(desc(matchEvents.minute), desc(matchEvents.second))
+            .limit(500);
 
         // Process events to include related player data
         const events = await Promise.all(
@@ -375,7 +376,8 @@ export async function GET(
                 const updatedRatings = await db
                     .select()
                     .from(playerRatings)
-                    .where(eq(playerRatings.matchId, matchId));
+                    .where(eq(playerRatings.matchId, matchId))
+                    .limit(100);
 
                 if (updatedRatings.length > 0) {
                     const ratingMap = new Map();

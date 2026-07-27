@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Activity, Save, Undo2, Clock, Users, TrendingUp, Target, Play, Settings } from 'lucide-react';
 import { useMultiLogger } from '@/hooks/useMultiLogger';
@@ -54,6 +54,22 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
     const [matchEnded, setMatchEnded] = useState(match.status === 'FINISHED');
     const [viewMode, setViewMode] = useState<'logger' | 'stats' | 'history'>('logger');
     const [isSaving, setIsSaving] = useState(false);
+    const [isUndoing, setIsUndoing] = useState(false);
+    // BACKLOG-134: scoring buttons were only disabled by !matchStarted || matchEnded --
+    // a rapid double-tap (most reachable via the player-select modal, which every
+    // scoring action routes through) fired two independently-atomic recordEvent()
+    // calls, double-logging the same action server-side. Guards recordEvent itself so
+    // it holds regardless of which UI entry point triggers it.
+    const [isRecording, setIsRecording] = useState(false);
+    // A useState guard alone is not sufficient here -- confirmed live, not a
+    // hypothetical: a true simultaneous double-click can fire two click handler
+    // invocations against the SAME render's closure before React commits the
+    // setIsRecording(true) update, so both invocations read the same stale
+    // `isRecording === false` and both proceed. A ref mutation is synchronous and
+    // visible immediately to any closure holding the same ref object, regardless of
+    // which render created it -- this is the actual guard; `isRecording` state is
+    // kept only to drive the buttons' visual disabled state.
+    const isRecordingRef = useRef(false);
     // Visible failure signal for event-save failures -- recordEvent used to only
     // console.error on failure, with no on-screen indication the event never saved.
     const [eventSaveError, setEventSaveError] = useState<string | null>(null);
@@ -123,6 +139,25 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
             awayStartersCount: awayStarters.length
         });
     }, [showLineupModal, lineupSet, homePlayers.length, awayPlayers.length, homeStarters.length, awayStarters.length]);
+
+    // BUG-140: AuthContext wipes localStorage.authToken when /api/auth/me returns
+    // 401 for logger roles. FootballLogger re-seeds it on mount via /api/auth/refresh
+    // (BUG-058b) -- basketball had no equivalent, so any session hitting that 401-wipe
+    // path lost its token permanently with no recovery.
+    useEffect(() => {
+        const ensureLocalToken = async () => {
+            try {
+                const res = await fetch('/api/auth/refresh', { method: 'POST', credentials: 'include' });
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data.token) localStorage.setItem('authToken', data.token);
+                }
+            } catch {
+                // offline at mount -- silently ignore, token may already be in localStorage
+            }
+        };
+        ensureLocalToken();
+    }, []);
 
     // Dynamic Player Rating Calculation
     const calculatePlayerRating = (playerId: string, currentEvents: any[] = events) => {
@@ -301,6 +336,29 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                 setHomePlayers(homePlayersList);
                 setAwayPlayers(awayPlayersList);
 
+                // Resume-seeding gap (SYSTEM_CRITICALITY_MAP.md Tier 0, tracked since
+                // session 46, confirmed live this session): homeStarters/awayStarters
+                // are only ever populated by the in-app lineup-selection wizard --
+                // there is no server-side lineup persistence for basketball at all
+                // (unlike football's GET /api/matches/[id]/lineup). Since matchStarted
+                // initializes straight to true whenever match.status === 'LIVE' on
+                // mount, any already-live match (a refresh, a second logger, or simply
+                // reopening the app) skips the wizard entirely -- homeStarters/
+                // awayStarters stay permanently [], and the "Select Player" modal
+                // (filtered to just those arrays) is permanently empty, blocking every
+                // new event from ever being logged. Building full lineup persistence
+                // to mirror football exactly is real, separate scope -- this seeds
+                // starters from the full roster instead, which unblocks logging
+                // completely at the cost of not distinguishing on-court from bench
+                // for a resumed session specifically (a resumed session can select any
+                // rostered player, not just the original 5 starters -- acceptable
+                // given the alternative is a permanently unusable logger).
+                if (match.status === 'LIVE') {
+                    setHomeStarters(prev => prev.length > 0 ? prev : homePlayersList.map((p: Player) => p.id));
+                    setAwayStarters(prev => prev.length > 0 ? prev : awayPlayersList.map((p: Player) => p.id));
+                    setLineupSet(true);
+                }
+
                 // Fetch existing events for this match
                 try {
                     const eventsResponse = await fetch(`/api/matches/${match.id}/events`);
@@ -318,7 +376,10 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                                 playerId: e.playerId,
                                 assistPlayerId: e.relatedPlayerId,
                                 detail: e.detail,
-                                value: e.value ? (typeof e.value === 'string' ? JSON.parse(e.value) : e.value) : undefined,
+                                // Same falsy-zero class as BUG-126/BUG-132/BUG-133 -- `e.value ? ... : undefined`
+                                // collapsed a legitimate logged-miss `value: 0` back to undefined on every
+                                // page refresh/remount, discarding the make/miss distinction the DB actually holds.
+                                value: e.value !== undefined && e.value !== null ? (typeof e.value === 'string' ? JSON.parse(e.value) : e.value) : undefined,
                             }));
                             setEvents(transformedEvents);
                         }
@@ -330,7 +391,12 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
 
                 setIsLoading(false);
             } catch (error) {
+                // BACKLOG-134: this outer catch only console.error'd -- a failed
+                // teams/players/eligible-players fetch left the roster empty with zero
+                // on-screen indication, indistinguishable from "this match genuinely has
+                // no eligible players." Reuse the existing eventSaveError banner.
                 console.error('Error fetching data:', error);
+                setEventSaveError('Failed to load teams/roster — check connection and reload. Player lists may be empty or incomplete.');
                 setIsLoading(false);
             }
         };
@@ -484,6 +550,10 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
 
     // Record the actual event
     const recordEvent = async (type: BasketballEventType, playerId: string, points?: number, assistPlayerId?: string | null) => {
+        if (isRecordingRef.current) return;
+        isRecordingRef.current = true;
+        setIsRecording(true);
+        try {
         const allPlayers = [...homePlayers, ...awayPlayers];
         const player = allPlayers.find(p => p.id === playerId);
         const assistPlayer = assistPlayerId ? allPlayers.find(p => p.id === assistPlayerId) : null;
@@ -514,8 +584,16 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
             createdAt: new Date(),
         };
 
-        // Update local state immediately for responsive UI
-        setEvents([...events, newEvent]);
+        // Update local state immediately for responsive UI. Functional update --
+        // confirmed live that a non-functional `setEvents([...events, newEvent])`
+        // here let one of two near-simultaneous recordEvent invocations silently
+        // overwrite the other's local event in state (both POSTs still landed
+        // server-side, creating a real duplicate row, but only one was visible
+        // client-side until the next sync pulled the other back in as a "new" one).
+        // The isRecordingRef guard above should make this unreachable going forward,
+        // but a functional update removes the stale-closure hazard structurally
+        // rather than relying solely on the guard holding.
+        setEvents(prev => [...prev, newEvent]);
 
         // Calculate new scores
         const newHomeScore = selectedTeam === 'home' ? homeScore + (points || 0) : homeScore;
@@ -568,6 +646,17 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                 setEventSaveError(`Failed to save "${type}" (${res.status}) — event kept locally only. Check connection and retry logging it if needed.`);
             } else {
                 setEventSaveError(null);
+                // BUG-129: the local temp id (`e${events.length + 1}`) must be swapped
+                // for the server's real nanoid() id before the next 15s multi-logger
+                // sync tick — useMultiLogger's mergeEvents() dedupes strictly by exact
+                // id match, so an un-swapped temp id makes the server's copy of this
+                // same event look like a brand-new entry on the very next sync,
+                // double-counting it in every derived stat (rating, boxscore, event
+                // history). Mirrors FootballLogger's manager.confirmEvent(tempId, serverId).
+                const saved = await res.json().catch(() => null);
+                if (saved?.event?.id) {
+                    setEvents(prev => prev.map(e => (e.id === newEvent.id ? { ...e, id: saved.event.id } : e)));
+                }
             }
         } catch (error) {
             console.error('Failed to persist event:', error);
@@ -595,22 +684,53 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
         // Reset state
         setPendingEvent(null);
         setSelectedEventPlayer(null);
+        } finally {
+            isRecordingRef.current = false;
+            setIsRecording(false);
+        }
     };
 
-    const undoLastEvent = () => {
-        if (events.length === 0) return;
+    const undoLastEvent = async () => {
+        if (events.length === 0 || isUndoing) return;
         const lastEvent = events[events.length - 1];
 
-        // Revert score if it was a scoring event
-        if (lastEvent.value) {
+        // BUG-130: undo used to be cosmetic-only — it sliced local `events` state and
+        // reverted local score state with no `fetch()` call at all. The DB event row
+        // and the score it already atomically incremented (BUG-121) were both
+        // untouched, so any refresh, multi-logger sync, or public viewer still saw
+        // the "undone" event and its score contribution. Server-first, gated on
+        // `res.ok`, same discipline as BUG-049's Start/End Match fix — never flip
+        // local state before the server confirms the write. The server's own DELETE
+        // handler now also reverts the score and player stats correctly for
+        // basketball's types (events/[eventId]/route.ts, same BUG-130).
+        setIsUndoing(true);
+        try {
+            const res = await fetch(`/api/matches/${match.id}/events/${lastEvent.id}`, { method: 'DELETE' });
+            if (!res.ok) {
+                setEventSaveError(`Failed to undo "${lastEvent.type}" (${res.status}) — event was not removed. Try again.`);
+                return;
+            }
+            setEventSaveError(null);
+        } catch (error) {
+            console.error('Failed to undo event:', error);
+            setEventSaveError(`Failed to undo "${lastEvent.type}" — offline or unreachable. Event was not removed.`);
+            return;
+        } finally {
+            setIsUndoing(false);
+        }
+
+        // Revert score locally now that the server has confirmed both the delete and
+        // its own score revert. Functional updates — this runs after an await, so the
+        // closure-captured homeScore/awayScore may already be stale.
+        if (typeof lastEvent.value === 'number' && lastEvent.value > 0) {
             if (lastEvent.teamId === match.homeTeamId) {
-                setHomeScore(homeScore - lastEvent.value);
+                setHomeScore(prev => Math.max(0, prev - (lastEvent.value as number)));
             } else {
-                setAwayScore(awayScore - lastEvent.value);
+                setAwayScore(prev => Math.max(0, prev - (lastEvent.value as number)));
             }
         }
 
-        setEvents(events.slice(0, -1));
+        setEvents(prev => prev.slice(0, -1));
     };
 
     const finalizeMatch = async () => {
@@ -770,11 +890,11 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
 
                             <button
                                 onClick={undoLastEvent}
-                                disabled={!matchStarted || matchEnded}
+                                disabled={!matchStarted || matchEnded || isUndoing || events.length === 0}
                                 className="px-6 py-3 bg-white/5 border border-white/10 rounded-2xl hover:bg-white/10 transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                                 <Undo2 size={16} />
-                                <span className="text-xs font-black uppercase tracking-widest">Undo</span>
+                                <span className="text-xs font-black uppercase tracking-widest">{isUndoing ? 'Undoing...' : 'Undo'}</span>
                             </button>
                             {matchStarted && !matchEnded && (
                                 <button
@@ -919,25 +1039,25 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                                         value="2PT"
                                         color="bg-green-500/20 text-green-500 border-green-500/30"
                                         onClick={() => handleEventClick('Field Goal', 2)}
-                                        matchStarted={matchStarted} matchEnded={matchEnded}
+                                        matchStarted={matchStarted} matchEnded={matchEnded} disabled={isRecording}
                                     />
                                     <ActionButton
                                         label="3 Points Made"
                                         value="3PT"
                                         color="bg-purple-500/20 text-purple-500 border-purple-500/30"
                                         onClick={() => handleEventClick('Three Pointer', 3)}
-                                        matchStarted={matchStarted} matchEnded={matchEnded}
+                                        matchStarted={matchStarted} matchEnded={matchEnded} disabled={isRecording}
                                     />
                                     <ActionButton
                                         label="Free Throw"
                                         value="FT"
                                         color="bg-blue-500/20 text-blue-500 border-blue-500/30"
                                         onClick={() => handleEventClick('Free Throw', 1)}
-                                        matchStarted={matchStarted} matchEnded={matchEnded}
+                                        matchStarted={matchStarted} matchEnded={matchEnded} disabled={isRecording}
                                     />
-                                    <SimpleActionButton label="2PT Missed" onClick={() => handleEventClick('Field Goal', 0)} matchStarted={matchStarted} matchEnded={matchEnded} />
-                                    <SimpleActionButton label="3PT Missed" onClick={() => handleEventClick('Three Pointer', 0)} matchStarted={matchStarted} matchEnded={matchEnded} />
-                                    <SimpleActionButton label="FT Missed" onClick={() => handleEventClick('Free Throw', 0)} matchStarted={matchStarted} matchEnded={matchEnded} />
+                                    <SimpleActionButton label="2PT Missed" onClick={() => handleEventClick('Field Goal', 0)} matchStarted={matchStarted} matchEnded={matchEnded} disabled={isRecording} />
+                                    <SimpleActionButton label="3PT Missed" onClick={() => handleEventClick('Three Pointer', 0)} matchStarted={matchStarted} matchEnded={matchEnded} disabled={isRecording} />
+                                    <SimpleActionButton label="FT Missed" onClick={() => handleEventClick('Free Throw', 0)} matchStarted={matchStarted} matchEnded={matchEnded} disabled={isRecording} />
                                 </div>
                             </div>
 
@@ -948,8 +1068,8 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                                     Rebounds
                                 </h3>
                                 <div className="grid grid-cols-2 gap-3">
-                                    <SimpleActionButton label="Offensive Rebound" onClick={() => handleEventClick('Rebound')} matchStarted={matchStarted} matchEnded={matchEnded} />
-                                    <SimpleActionButton label="Defensive Rebound" onClick={() => handleEventClick('Rebound')} matchStarted={matchStarted} matchEnded={matchEnded} />
+                                    <SimpleActionButton label="Offensive Rebound" onClick={() => handleEventClick('Rebound')} matchStarted={matchStarted} matchEnded={matchEnded} disabled={isRecording} />
+                                    <SimpleActionButton label="Defensive Rebound" onClick={() => handleEventClick('Rebound')} matchStarted={matchStarted} matchEnded={matchEnded} disabled={isRecording} />
                                 </div>
                             </div>
 
@@ -960,9 +1080,9 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                                     Defense
                                 </h3>
                                 <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                                    <SimpleActionButton label="Steal" onClick={() => handleEventClick('Steal')} matchStarted={matchStarted} matchEnded={matchEnded} />
-                                    <SimpleActionButton label="Block" onClick={() => handleEventClick('Block')} matchStarted={matchStarted} matchEnded={matchEnded} />
-                                    <SimpleActionButton label="Deflection" onClick={() => handleEventClick('Block')} matchStarted={matchStarted} matchEnded={matchEnded} />
+                                    <SimpleActionButton label="Steal" onClick={() => handleEventClick('Steal')} matchStarted={matchStarted} matchEnded={matchEnded} disabled={isRecording} />
+                                    <SimpleActionButton label="Block" onClick={() => handleEventClick('Block')} matchStarted={matchStarted} matchEnded={matchEnded} disabled={isRecording} />
+                                    <SimpleActionButton label="Deflection" onClick={() => handleEventClick('Block')} matchStarted={matchStarted} matchEnded={matchEnded} disabled={isRecording} />
                                 </div>
                             </div>
 
@@ -973,8 +1093,8 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                                     Playmaking
                                 </h3>
                                 <div className="grid grid-cols-2 gap-3">
-                                    <SimpleActionButton label="Assist" onClick={() => handleEventClick('Assist')} matchStarted={matchStarted} matchEnded={matchEnded} />
-                                    <SimpleActionButton label="Turnover" onClick={() => handleEventClick('Turnover')} matchStarted={matchStarted} matchEnded={matchEnded} />
+                                    <SimpleActionButton label="Assist" onClick={() => handleEventClick('Assist')} matchStarted={matchStarted} matchEnded={matchEnded} disabled={isRecording} />
+                                    <SimpleActionButton label="Turnover" onClick={() => handleEventClick('Turnover')} matchStarted={matchStarted} matchEnded={matchEnded} disabled={isRecording} />
                                 </div>
                             </div>
 
@@ -985,12 +1105,12 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                                     Fouls
                                 </h3>
                                 <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                                    <SimpleActionButton label="Personal Foul" onClick={() => handleEventClick('Foul')} matchStarted={matchStarted} matchEnded={matchEnded} />
-                                    <SimpleActionButton label="Technical Foul" onClick={() => handleEventClick('Foul')} matchStarted={matchStarted} matchEnded={matchEnded} />
-                                    <SimpleActionButton label="Flagrant Foul" onClick={() => handleEventClick('Foul')} matchStarted={matchStarted} matchEnded={matchEnded} />
-                                    <SimpleActionButton label="Offensive Foul" onClick={() => handleEventClick('Foul')} matchStarted={matchStarted} matchEnded={matchEnded} />
-                                    <SimpleActionButton label="Shooting Foul" onClick={() => handleEventClick('Foul')} matchStarted={matchStarted} matchEnded={matchEnded} />
-                                    <SimpleActionButton label="Unsportsmanlike" onClick={() => handleEventClick('Foul')} matchStarted={matchStarted} matchEnded={matchEnded} />
+                                    <SimpleActionButton label="Personal Foul" onClick={() => handleEventClick('Foul')} matchStarted={matchStarted} matchEnded={matchEnded} disabled={isRecording} />
+                                    <SimpleActionButton label="Technical Foul" onClick={() => handleEventClick('Foul')} matchStarted={matchStarted} matchEnded={matchEnded} disabled={isRecording} />
+                                    <SimpleActionButton label="Flagrant Foul" onClick={() => handleEventClick('Foul')} matchStarted={matchStarted} matchEnded={matchEnded} disabled={isRecording} />
+                                    <SimpleActionButton label="Offensive Foul" onClick={() => handleEventClick('Foul')} matchStarted={matchStarted} matchEnded={matchEnded} disabled={isRecording} />
+                                    <SimpleActionButton label="Shooting Foul" onClick={() => handleEventClick('Foul')} matchStarted={matchStarted} matchEnded={matchEnded} disabled={isRecording} />
+                                    <SimpleActionButton label="Unsportsmanlike" onClick={() => handleEventClick('Foul')} matchStarted={matchStarted} matchEnded={matchEnded} disabled={isRecording} />
                                 </div>
                             </div>
 
@@ -1001,8 +1121,8 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                                     Team Actions
                                 </h3>
                                 <div className="grid grid-cols-2 gap-3">
-                                    <SimpleActionButton label="Substitution" onClick={() => handleEventClick('Substitution')} matchStarted={matchStarted} matchEnded={matchEnded} />
-                                    <SimpleActionButton label="Timeout" onClick={() => handleEventClick('Timeout')} matchStarted={matchStarted} matchEnded={matchEnded} />
+                                    <SimpleActionButton label="Substitution" onClick={() => handleEventClick('Substitution')} matchStarted={matchStarted} matchEnded={matchEnded} disabled={isRecording} />
+                                    <SimpleActionButton label="Timeout" onClick={() => handleEventClick('Timeout')} matchStarted={matchStarted} matchEnded={matchEnded} disabled={isRecording} />
                                 </div>
                             </div>
                         </div>
@@ -1258,37 +1378,51 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                             <p className="text-sm text-white/40 mb-6">
                                 Select the player coming from the bench to replace <span className="text-primary font-bold">{(selectedTeam === 'home' ? homePlayers : awayPlayers).find(p => p.id === playerComingOut)?.name}</span>
                             </p>
-                            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                                {(selectedTeam === 'home' ? homePlayers : awayPlayers)
-                                    .filter(p => (selectedTeam === 'home' ? homeSubs : awaySubs).includes(p.id))
-                                    .map((player) => (
-                                        <button
-                                            key={player.id}
-                                            onClick={() => handleSubIn(player.id)}
-                                            className="bg-white/5 border border-white/10 rounded-xl p-4 hover:bg-primary/20 hover:border-primary transition-all"
-                                        >
-                                            <div className="flex items-center gap-3">
-                                                <div
-                                                    className="w-12 h-12 rounded-full flex items-center justify-center font-display text-xl font-bold border-2 border-white/30"
-                                                    style={{
-                                                        backgroundColor: selectedTeam === 'home' ? homeTeam?.color : awayTeam?.color,
-                                                    }}
-                                                >
-                                                    {player.number}
-                                                </div>
-                                                <div className="flex-1 min-w-0 text-left">
-                                                    <div className="flex items-center justify-between gap-2 overflow-hidden">
-                                                        <p className="text-sm font-black uppercase tracking-tight truncate">{player.name}</p>
-                                                        <span className="text-[10px] font-black bg-primary/20 text-primary px-1.5 py-0.5 rounded flex-shrink-0">
-                                                            {calculatePlayerRating(player.id)}
-                                                        </span>
+                            {(() => {
+                                const availableSubs = (selectedTeam === 'home' ? homePlayers : awayPlayers)
+                                    .filter(p => (selectedTeam === 'home' ? homeSubs : awaySubs).includes(p.id));
+                                // BUG-141: an empty bench with no fallback message read as a
+                                // broken app mid-game (football's equivalent modal has always
+                                // had an emptyMessage prop for this exact case, see BUG-070).
+                                if (availableSubs.length === 0) {
+                                    return (
+                                        <div className="text-center text-white/40 text-sm font-bold py-8">
+                                            No available substitutes
+                                        </div>
+                                    );
+                                }
+                                return (
+                                    <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                                        {availableSubs.map((player) => (
+                                            <button
+                                                key={player.id}
+                                                onClick={() => handleSubIn(player.id)}
+                                                className="bg-white/5 border border-white/10 rounded-xl p-4 hover:bg-primary/20 hover:border-primary transition-all"
+                                            >
+                                                <div className="flex items-center gap-3">
+                                                    <div
+                                                        className="w-12 h-12 rounded-full flex items-center justify-center font-display text-xl font-bold border-2 border-white/30"
+                                                        style={{
+                                                            backgroundColor: selectedTeam === 'home' ? homeTeam?.color : awayTeam?.color,
+                                                        }}
+                                                    >
+                                                        {player.number}
                                                     </div>
-                                                    <p className="text-[10px] text-white/40 font-bold">{player.position}</p>
+                                                    <div className="flex-1 min-w-0 text-left">
+                                                        <div className="flex items-center justify-between gap-2 overflow-hidden">
+                                                            <p className="text-sm font-black uppercase tracking-tight truncate">{player.name}</p>
+                                                            <span className="text-[10px] font-black bg-primary/20 text-primary px-1.5 py-0.5 rounded flex-shrink-0">
+                                                                {calculatePlayerRating(player.id)}
+                                                            </span>
+                                                        </div>
+                                                        <p className="text-[10px] text-white/40 font-bold">{player.position}</p>
+                                                    </div>
                                                 </div>
-                                            </div>
-                                        </button>
-                                    ))}
-                            </div>
+                                            </button>
+                                        ))}
+                                    </div>
+                                );
+                            })()}
                             <button
                                 onClick={() => {
                                     setShowSubInModal(false);
@@ -1724,11 +1858,20 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                                             // (TD-010) -- not the stricter PATCH-first Start/End Match
                                             // pattern, since a failed period-label PATCH here doesn't risk
                                             // silent data loss the way a failed status transition would.
+                                            // BACKLOG-134: this fire-and-forget PATCH only console.error'd on
+                                            // failure -- no user-facing signal if the quarter change didn't
+                                            // persist. `res.ok` was never even checked (fetch only rejects on
+                                            // network failure, not on a 4xx/5xx response).
                                             fetch(`/api/matches/${match.id}`, {
                                                 method: 'PATCH',
                                                 headers: { 'Content-Type': 'application/json' },
                                                 body: JSON.stringify({ currentPeriod: `Q${nextQuarter}` }),
-                                            }).catch((e) => console.error('Failed to persist period transition:', e));
+                                            }).then((res) => {
+                                                if (!res.ok) setEventSaveError(`Failed to save Q${nextQuarter} transition (${res.status}) — quarter may not persist on refresh.`);
+                                            }).catch((e) => {
+                                                console.error('Failed to persist period transition:', e);
+                                                setEventSaveError(`Failed to save Q${nextQuarter} transition — offline or unreachable.`);
+                                            });
                                         }}
                                         className="w-full bg-primary text-black py-4 rounded-xl font-black uppercase tracking-widest hover:scale-105 transition-transform flex items-center justify-center gap-3"
                                     >
@@ -1749,7 +1892,12 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                                                     method: 'PATCH',
                                                     headers: { 'Content-Type': 'application/json' },
                                                     body: JSON.stringify({ currentPeriod: 'OT' }),
-                                                }).catch((e) => console.error('Failed to persist OT transition:', e));
+                                                }).then((res) => {
+                                                    if (!res.ok) setEventSaveError(`Failed to save OT transition (${res.status}) — period may not persist on refresh.`);
+                                                }).catch((e) => {
+                                                    console.error('Failed to persist OT transition:', e);
+                                                    setEventSaveError('Failed to save OT transition — offline or unreachable.');
+                                                });
                                             } else {
                                                 // Real match end. This used to only call setMatchEnded(true)
                                                 // locally + a dead CustomEvent dispatch -- never the real
@@ -1782,7 +1930,12 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                                             method: 'PATCH',
                                             headers: { 'Content-Type': 'application/json' },
                                             body: JSON.stringify({ currentPeriod: 'OT' }),
-                                        }).catch((e) => console.error('Failed to persist OT transition:', e));
+                                        }).then((res) => {
+                                            if (!res.ok) setEventSaveError(`Failed to save OT transition (${res.status}) — period may not persist on refresh.`);
+                                        }).catch((e) => {
+                                            console.error('Failed to persist OT transition:', e);
+                                            setEventSaveError('Failed to save OT transition — offline or unreachable.');
+                                        });
                                     }}
                                     className="w-full bg-white/5 border border-white/10 text-white py-4 rounded-xl font-black uppercase tracking-widest hover:bg-white/10 transition-all"
                                 >
@@ -1812,11 +1965,11 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
 }
 
 
-function ActionButton({ label, value, color, onClick, matchStarted, matchEnded }: { label: string; value: string; color: string; onClick: () => void; matchStarted: boolean; matchEnded?: boolean }) {
+function ActionButton({ label, value, color, onClick, matchStarted, matchEnded, disabled }: { label: string; value: string; color: string; onClick: () => void; matchStarted: boolean; matchEnded?: boolean; disabled?: boolean }) {
     return (
         <button
             onClick={onClick}
-            disabled={!matchStarted || matchEnded}
+            disabled={!matchStarted || matchEnded || disabled}
             className={`border rounded-2xl p-6 transition-all hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 ${color}`}
         >
             <p className="text-3xl font-display italic mb-2">{value}</p>
@@ -1825,11 +1978,11 @@ function ActionButton({ label, value, color, onClick, matchStarted, matchEnded }
     );
 }
 
-function SimpleActionButton({ label, onClick, matchStarted, matchEnded }: { label: string; onClick: () => void; matchStarted: boolean; matchEnded?: boolean }) {
+function SimpleActionButton({ label, onClick, matchStarted, matchEnded, disabled }: { label: string; onClick: () => void; matchStarted: boolean; matchEnded?: boolean; disabled?: boolean }) {
     return (
         <button
             onClick={onClick}
-            disabled={!matchStarted || matchEnded}
+            disabled={!matchStarted || matchEnded || disabled}
             className="bg-white/5 border border-white/10 rounded-xl p-4 hover:bg-white/10 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
         >
             <p className="text-xs font-black uppercase tracking-widest">{label}</p>

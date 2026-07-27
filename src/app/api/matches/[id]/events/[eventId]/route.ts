@@ -1,17 +1,97 @@
 import { NextRequest, NextResponse, after } from 'next/server';
 import * as Sentry from '@sentry/nextjs';
 import { db } from '@/db';
-import { matchEvents, matches, matchLoggerAssignments, footballPlayerStats } from '@/db/schema';
+import { matchEvents, matches, matchLoggerAssignments, footballPlayerStats, basketballPlayerStats } from '@/db/schema';
 import { eq, and, sql } from 'drizzle-orm';
 import { getAuthUser } from '@/lib/auth';
 import { broadcastEventDeleted, broadcastScoreUpdate } from '@/lib/socket';
+import { SCORING_POINT_VALUES } from '@/lib/scoring';
 
 // Reverts one stat increment for a player when an event is deleted.
 // Mirrors updatePlayerStats in events/route.ts — same guards must apply at call site.
 // Does NOT throw — event deletion already succeeded by the time this runs.
-async function revertPlayerStat(sport: string, playerId: string, eventType: string): Promise<void> {
-    if (sport !== 'Football') return;
+// `value` (already JSON.parsed by the caller) is only meaningful for basketball's
+// shot types — same make/miss gate as updatePlayerStats' `made` boolean, since a
+// missed shot must never decrement a made-count that was never incremented.
+async function revertPlayerStat(sport: string, playerId: string, eventType: string, value?: unknown): Promise<void> {
     try {
+        // BUG-130: basketball had zero revert coverage at all — a hard `if (sport !==
+        // 'Football') return;` no-op'd every basketball stat revert, same shape as
+        // football's already-fixed BUG-060, just never ported. Mirrors
+        // updatePlayerStats' basketball branch (events/route.ts) exactly, decrementing
+        // with a MAX(x-1, 0) floor instead of incrementing.
+        if (sport === 'Basketball') {
+            const stats = await db
+                .select()
+                .from(basketballPlayerStats)
+                .where(eq(basketballPlayerStats.playerId, playerId))
+                .get();
+
+            if (!stats) return;
+
+            const updates: Partial<typeof stats> = {};
+            const wasMake = typeof value === 'number' && value > 0;
+
+            switch (eventType) {
+                // BUG-133: the write side (events/route.ts) increments the *Attempted
+                // counter on every shot attempt regardless of make/miss -- the revert
+                // must decrement it unconditionally too, or a deleted shot leaves the
+                // attempt count permanently 1 too high (asymmetric with the write path,
+                // the exact anti-pattern known-issues.md already documents for BUG-060).
+                case 'Field Goal':
+                    updates.fieldGoalsAttempted = Math.max(0, (stats.fieldGoalsAttempted || 0) - 1);
+                    if (wasMake) {
+                        updates.fieldGoalsMade = Math.max(0, (stats.fieldGoalsMade || 0) - 1);
+                        updates.totalPoints = Math.max(0, (stats.totalPoints || 0) - 2);
+                    }
+                    break;
+                case 'Three Pointer':
+                    updates.threePointersAttempted = Math.max(0, (stats.threePointersAttempted || 0) - 1);
+                    if (wasMake) {
+                        updates.threePointersMade = Math.max(0, (stats.threePointersMade || 0) - 1);
+                        updates.totalPoints = Math.max(0, (stats.totalPoints || 0) - 3);
+                    }
+                    break;
+                case 'Free Throw':
+                    updates.freeThrowsAttempted = Math.max(0, (stats.freeThrowsAttempted || 0) - 1);
+                    if (wasMake) {
+                        updates.freeThrowsMade = Math.max(0, (stats.freeThrowsMade || 0) - 1);
+                        updates.totalPoints = Math.max(0, (stats.totalPoints || 0) - 1);
+                    }
+                    break;
+                case 'Rebound':
+                    updates.totalRebounds = Math.max(0, (stats.totalRebounds || 0) - 1);
+                    break;
+                case 'Assist':
+                    updates.assists = Math.max(0, (stats.assists || 0) - 1);
+                    break;
+                case 'Steal':
+                    updates.steals = Math.max(0, (stats.steals || 0) - 1);
+                    break;
+                case 'Block':
+                    updates.blocks = Math.max(0, (stats.blocks || 0) - 1);
+                    break;
+                case 'Turnover':
+                    updates.turnovers = Math.max(0, (stats.turnovers || 0) - 1);
+                    break;
+                case 'Foul':
+                    updates.personalFouls = Math.max(0, (stats.personalFouls || 0) - 1);
+                    break;
+                default:
+                    return;
+            }
+
+            if (Object.keys(updates).length > 0) {
+                await db
+                    .update(basketballPlayerStats)
+                    .set(updates)
+                    .where(eq(basketballPlayerStats.playerId, playerId));
+            }
+            return;
+        }
+
+        if (sport !== 'Football') return;
+
         const stats = await db
             .select()
             .from(footballPlayerStats)
@@ -205,14 +285,28 @@ export async function DELETE(
 
         const upperType = event.type.toUpperCase().replace(/\s+/g, '_');
         const isOwnGoal = upperType === 'OWN_GOAL';
-        const isScoringEvent = upperType === 'GOAL' || upperType === 'PENALTY' || isOwnGoal;
 
-        // Fetch match — needed for score revert, stat guards, and sport
+        // Fetch match — needed for score revert, stat guards, sport, and (new) the
+        // basketball-aware isScoringEvent check below.
         const match = await db
             .select()
             .from(matches)
             .where(eq(matches.id, matchId))
             .get();
+
+        // BUG-130: this check only ever recognized football's GOAL/PENALTY/OWN_GOAL —
+        // deleting a basketball Field Goal/Three Pointer/Free Throw event removed the
+        // event row but never touched matches.homeScore/awayScore, leaving a ghost
+        // score the event log no longer justified. `event.value` is TEXT-column
+        // JSON (BUG-126/BUG-132) — parse it the same way the POST route's own
+        // isBasketballScore gate does, so a deleted *miss* (value 0/absent) correctly
+        // never triggers a revert, mirroring the credit-time gate exactly.
+        const parsedValue = event.value != null ? JSON.parse(event.value) : null;
+        const isBasketballScore =
+            match?.sport === 'Basketball' &&
+            typeof parsedValue === 'number' && parsedValue > 0 &&
+            (upperType === 'FIELD_GOAL' || upperType === 'THREE_POINTER' || upperType === 'FREE_THROW');
+        const isScoringEvent = upperType === 'GOAL' || upperType === 'PENALTY' || isOwnGoal || isBasketballScore;
 
         // BUG-121: delete + score revert used to be two separate, independently
         // committed statements with no enclosing transaction, and the revert itself
@@ -222,6 +316,10 @@ export async function DELETE(
         // transaction, and the revert is an atomic SQL decrement (MAX(col - 1, 0),
         // same floor-at-zero clamp as before, now enforced by SQLite's MAX()
         // instead of Math.max() in application code) rather than a JS-computed value.
+        // BUG-130: the decrement amount is now the same shared, type-keyed
+        // SCORING_POINT_VALUES allowlist the POST route credits with (src/lib/scoring.ts)
+        // instead of a hardcoded `- 1` — a Field Goal must revert by 2, not 1, or the
+        // score ends up permanently 1 point short of correct after any basketball undo.
         let newHomeScore: number | undefined;
         let newAwayScore: number | undefined;
 
@@ -229,18 +327,19 @@ export async function DELETE(
             await tx.delete(matchEvents).where(eq(matchEvents.id, eventId));
 
             if (isScoringEvent && match) {
-                // OWN GOAL: teamId is the conceding team — the opponent was credited. Revert opponent.
+                const points = SCORING_POINT_VALUES[upperType] ?? 1;
+                // Own goal: teamId is the conceding team — the opponent was credited. Revert opponent.
                 const isHomeTeam = isOwnGoal
                     ? event.teamId !== match.homeTeamId
                     : event.teamId === match.homeTeamId;
 
                 const [updated] = isHomeTeam
                     ? await tx.update(matches)
-                        .set({ homeScore: sql`MAX(${matches.homeScore} - 1, 0)`, updatedAt: new Date() })
+                        .set({ homeScore: sql`MAX(${matches.homeScore} - ${points}, 0)`, updatedAt: new Date() })
                         .where(eq(matches.id, matchId))
                         .returning({ homeScore: matches.homeScore, awayScore: matches.awayScore })
                     : await tx.update(matches)
-                        .set({ awayScore: sql`MAX(${matches.awayScore} - 1, 0)`, updatedAt: new Date() })
+                        .set({ awayScore: sql`MAX(${matches.awayScore} - ${points}, 0)`, updatedAt: new Date() })
                         .where(eq(matches.id, matchId))
                         .returning({ homeScore: matches.homeScore, awayScore: matches.awayScore });
 
@@ -265,12 +364,12 @@ export async function DELETE(
             const isCompetitive = match.matchType !== 'friendly' && !isPenaltyShootout;
 
             if (event.playerId && isCompetitive) {
-                await revertPlayerStat(match.sport, event.playerId, event.type);
+                await revertPlayerStat(match.sport, event.playerId, event.type, parsedValue);
             }
 
             // Penalty Saved: also revert the keeper's saves stat (relatedPlayerId = keeper, may be null)
             if (upperType === 'PENALTY_SAVED' && event.relatedPlayerId && isCompetitive) {
-                await revertPlayerStat(match.sport, event.relatedPlayerId, 'Save');
+                await revertPlayerStat(match.sport, event.relatedPlayerId, 'Save', parsedValue);
             }
         }
 

@@ -3,10 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "node server.js",
+    "dev": "node --no-webstorage server.js",
     "dev:turbo": "next dev --turbopack",
     "build": "next build",
-    "start": "NODE_ENV=production node server.js",
+    "start": "NODE_ENV=production node --no-webstorage server.js",
     "start:next": "next start",
     "lint": "next lint",
     "db:generate": "drizzle-kit generate",

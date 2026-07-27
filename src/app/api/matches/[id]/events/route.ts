@@ -5,6 +5,8 @@ import { eq, asc, and, sql } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { getAuthUser } from '@/lib/auth';
 import { broadcastMatchEvent, broadcastScoreUpdate } from '@/lib/socket';
+import { SCORING_POINT_VALUES } from '@/lib/scoring';
+import { calculateAndSaveRatings } from '@/lib/ratingsService';
 
 // GET /api/matches/[id]/events - Get all events for a match
 export async function GET(
@@ -145,9 +147,31 @@ export async function POST(
             relatedPlayerId: relatedPlayerId || null,
             detail: detail || null,
             isEyePoint,
-            value: value ? JSON.stringify(value) : null,
-            loggerId: authUser.id,
-            loggerName: loggerName || null,
+            // BUG-132: `value ? ... : null` collapsed a legitimate 0 (basketball's own
+            // miss sentinel, `points ?? 0` for a "2PT Missed" etc. button) to null,
+            // discarding the make/miss distinction right after the client computed it
+            // via the explicit `made` boolean. Same falsy-zero class as the
+            // second/points fixes above and BUG-126 -- checked explicitly for
+            // undefined/null instead of truthiness.
+            value: value !== undefined && value !== null ? JSON.stringify(value) : null,
+            // BUG-124: this used to be `authUser.id` unconditionally -- for an
+            // admin-authenticated POST (bypassing the normal logger flow), authUser.id
+            // is a users.id, but match_events.logger_id FKs to loggers.id specifically.
+            // An admin's id essentially never satisfies that FK, so admin-posted events
+            // 500'd with SQLITE_CONSTRAINT: FOREIGN KEY constraint failed. The column is
+            // nullable -- there's no real logger session to attribute an admin-posted
+            // event to, so null is the correct, honest value for this FK'd column
+            // specifically, not a guessed/borrowed id.
+            loggerId: authUser.role === 'logger' ? authUser.id : null,
+            // Losing loggerId to null must not also lose the audit trail entirely --
+            // loggerName has no FK, so it's free to carry an identity even when
+            // loggerId can't. Sourced from the verified authUser (server session),
+            // never the client-passed loggerName field, when the actor is an admin --
+            // audit fields must always come from the verified session per this
+            // project's own rule, not from request-body input. Stores the admin's
+            // real users.id (not a formatted display string) so the actor can still be
+            // looked up exactly, the same way loggerId itself would if the FK allowed it.
+            loggerName: authUser.role === 'logger' ? (loggerName || null) : authUser.id,
             period: period || null,
             createdAt: new Date(),
         };
@@ -191,11 +215,25 @@ export async function POST(
         let newHomeScore: number | undefined;
         let newAwayScore: number | undefined;
 
+        // BUG-131: `points = typeof value === 'number' ? value : 1` trusted the
+        // client-supplied `value` verbatim for the atomic score increment — a POST
+        // with `{ type: 'Field Goal', value: 500, made: true }` added 500 to the
+        // score in a single request, bypassing BUG-052's admin-only score-write gate
+        // through this separate endpoint. Football's GOAL/PENALTY/OWN_GOAL path had
+        // the identical gap (never sends `value` at all, so it always fell through
+        // to the `: 1` default — but nothing stopped a crafted request from sending
+        // one). The authoritative point value for a scoring event is a fixed fact of
+        // its type, never something the client should supply — derive it from an
+        // explicit allowlist instead of trusting `value`, regardless of what was sent.
+        // Shared with events/[eventId]/route.ts's DELETE revert (src/lib/scoring.ts) —
+        // the two must always agree on what a scoring event is worth, or a delete
+        // reverts a different amount than an insert credited.
+
         await db.transaction(async (tx) => {
             await tx.insert(matchEvents).values(newEvent);
 
             if (isScoringEvent && !isPenaltyShootout) {
-                const points = typeof value === 'number' ? value : 1;
+                const points = SCORING_POINT_VALUES[upperType] ?? 1;
                 // Own goal: teamId is the player's team (who conceded) — credit the opposing team
                 const isHomeTeam = isOwnGoal
                     ? teamId !== match.homeTeamId
@@ -251,17 +289,21 @@ export async function POST(
         // await sitting between the DB write and the response, so it delayed not just
         // the response to the logger but also when the after()-scheduled broadcast
         // above could even start (after() callbacks don't run until this handler's
-        // own promise resolves). Real contributor to BUG-119's remaining latency —
-        // see BACKLOG-124 for a separate, still-open bug: this self-fetch forwards no
-        // auth (no cookie/Authorization header), so it 401s and is silently swallowed
-        // every time; auto-ratings has never actually run live because of that.
+        // own promise resolves). Real contributor to BUG-119's remaining latency.
+        // BACKLOG-124: this used to be an HTTP self-fetch to this route's own
+        // /ratings sibling, forwarding no Cookie/Authorization header -- it 401'd and
+        // was silently swallowed on every single live event, so auto-ratings had
+        // never actually run live since this feature was written. That same
+        // self-fetch was also the exact trigger for a local-dev hang (a genuine
+        // outbound HTTPS request to a real deployed NEXT_PUBLIC_APP_URL from within
+        // the same process handling the original request). Calling the shared
+        // function directly (src/lib/ratingsService.ts) removes the HTTP round-trip
+        // entirely -- this code only runs once `authUser.role` has already been
+        // verified as admin/logger above, so there's no auth to forward or re-check.
         if (match.status === 'LIVE') {
             after(async () => {
                 try {
-                    await fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/matches/${matchId}/ratings`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' }
-                    });
+                    await calculateAndSaveRatings(matchId);
                 } catch (error) {
                     console.error('Error auto-calculating ratings:', error);
                 }
@@ -310,20 +352,30 @@ async function updatePlayerStats(
             // "absent" case as a real make with no value sent. `made` is an explicit
             // boolean sent by the client for these three types specifically — a miss
             // must increment zero counters, never inferred from value.
+            // BUG-133: *Attempted columns (fieldGoalsAttempted/threePointersAttempted/
+            // freeThrowsAttempted) were never incremented on make OR miss -- with no
+            // denominator, fieldGoalPercentage/threePointPercentage/freeThrowPercentage
+            // could never be computed for any player, ever. Every shot attempt (make or
+            // miss) increments its Attempted counter; only a make also increments the
+            // Made counter and totalPoints -- made/miss discipline from the fix above
+            // is unchanged, this is additive.
             switch (eventType) {
                 case 'Field Goal':
+                    updates.fieldGoalsAttempted = (stats?.fieldGoalsAttempted || 0) + 1;
                     if (made) {
                         updates.fieldGoalsMade = (stats?.fieldGoalsMade || 0) + 1;
                         updates.totalPoints = (stats?.totalPoints || 0) + 2;
                     }
                     break;
                 case 'Three Pointer':
+                    updates.threePointersAttempted = (stats?.threePointersAttempted || 0) + 1;
                     if (made) {
                         updates.threePointersMade = (stats?.threePointersMade || 0) + 1;
                         updates.totalPoints = (stats?.totalPoints || 0) + 3;
                     }
                     break;
                 case 'Free Throw':
+                    updates.freeThrowsAttempted = (stats?.freeThrowsAttempted || 0) + 1;
                     if (made) {
                         updates.freeThrowsMade = (stats?.freeThrowsMade || 0) + 1;
                         updates.totalPoints = (stats?.totalPoints || 0) + 1;

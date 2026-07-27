@@ -74,6 +74,12 @@ interface FootballLoggerProps {
 export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerProps) {
     // ========== STATE MANAGEMENT ==========
     const stateManager = useRef<MatchStateManager | null>(null);
+    // BUG-143: the Goal/Penalty->Assist chain schedules a delayed confirmEvent() call
+    // (see "1b" below) that nothing ever cancelled -- if the logger navigated away
+    // within that window, the timeout still fired and silently wrote/broadcast an
+    // event for a match no longer on screen. Tracked here so the unmount cleanup can
+    // clear any still-pending ones.
+    const pendingAssistTimeouts = useRef<ReturnType<typeof setTimeout>[]>([]);
     const [matchState, setMatchState] = useState<MatchState | null>(null);
     // BUG-109: last wall-clock time a clock checkpoint was persisted to the DB —
     // throttles the PATCH separately from the per-tick WS emit.
@@ -222,47 +228,51 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
     const [editingTeam, setEditingTeam] = useState<'home' | 'away'>('home');
     const [draftLineup, setDraftLineup] = useState<{ starters: Player[], subs: Player[] }>({ starters: [], subs: [] });
 
-    // Fetch staff comms
-    useEffect(() => {
-        const fetchComms = async () => {
-            try {
-                const res = await fetch(`/api/staff-comms?matchId=${match.id}`);
-                if (res.ok) {
-                    const data = await res.json();
-                    setComms(data);
-                }
-            } catch (err) {
-                console.error(err);
-            }
-        };
-
-        fetchComms();
-        const interval = setInterval(fetchComms, 15000);
-        return () => clearInterval(interval);
-    }, [match.id]);
-
-    const handleSendNote = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!noteContent || !user) return;
-
-        try {
-            await fetch('/api/staff-comms', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    matchId: match.id,
-                    userId: user.id,
-                    content: noteContent,
-                    type: 'note'
-                })
-            });
-            setNoteContent('');
-            const res = await fetch(`/api/staff-comms?matchId=${match.id}`);
-            if (res.ok) setComms(await res.json());
-        } catch (err) {
-            console.error(err);
-        }
-    };
+    // BACKSCOPED: 2026-07-27 (session 47C) — BACKLOG-142. Reinstate when: /api/staff-comms
+    // has a real auth gate (currently none in production -- unauthenticated read + a
+    // spoofable userId on write) and admin/manager/page.tsx's half-built match-selection
+    // flow for this panel is cleaned up. See BACKLOG-142 for the full audit.
+    // // Fetch staff comms
+    // useEffect(() => {
+    //     const fetchComms = async () => {
+    //         try {
+    //             const res = await fetch(`/api/staff-comms?matchId=${match.id}`);
+    //             if (res.ok) {
+    //                 const data = await res.json();
+    //                 setComms(data);
+    //             }
+    //         } catch (err) {
+    //             console.error(err);
+    //         }
+    //     };
+    //
+    //     fetchComms();
+    //     const interval = setInterval(fetchComms, 15000);
+    //     return () => clearInterval(interval);
+    // }, [match.id]);
+    //
+    // const handleSendNote = async (e: React.FormEvent) => {
+    //     e.preventDefault();
+    //     if (!noteContent || !user) return;
+    //
+    //     try {
+    //         await fetch('/api/staff-comms', {
+    //             method: 'POST',
+    //             headers: { 'Content-Type': 'application/json' },
+    //             body: JSON.stringify({
+    //                 matchId: match.id,
+    //                 userId: user.id,
+    //                 content: noteContent,
+    //                 type: 'note'
+    //             })
+    //         });
+    //         setNoteContent('');
+    //         const res = await fetch(`/api/staff-comms?matchId=${match.id}`);
+    //         if (res.ok) setComms(await res.json());
+    //     } catch (err) {
+    //         console.error(err);
+    //     }
+    // };
 
     // Derive sub event sets for a team — shared by both pool functions
     const getSubSets = (teamId: string) => {
@@ -527,6 +537,11 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
         init();
         return () => {
             if (unsubscribe) unsubscribe();
+            // BUG-143: cancel any still-pending assist-chain timeouts so they can't
+            // fire (and silently write/broadcast an event) after this component --
+            // and this specific match's stateManager -- is gone.
+            pendingAssistTimeouts.current.forEach(clearTimeout);
+            pendingAssistTimeouts.current = [];
         };
     }, [match.id, match.homeTeamId, match.awayTeamId]);
 
@@ -959,9 +974,10 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
         // If this is a Goal/Penalty and has an assistant, record the assistant as a separate event
         if ((type === 'Goal' || type === 'Penalty') && relatedPlayerId) {
             // We give it a short delay so IDs and order are consistent
-            setTimeout(() => {
+            const timeoutId = setTimeout(() => {
                 confirmEvent('Assist', relatedPlayerId, playerId);
             }, 500);
+            pendingAssistTimeouts.current.push(timeoutId);
         }
 
         // 2. Send Push Notifications for key discipline and scoring events
@@ -1514,12 +1530,13 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                                 </span>
                             </div>
                         )}
-                        <button onClick={() => setShowCommsModal(true)} className="p-1.5 bg-white/5 rounded-lg hover:bg-white/10 shrink-0 relative">
+                        {/* BACKSCOPED: 2026-07-27 (session 47C) — BACKLOG-142. Reinstate when: /api/staff-comms is auth-gated. */}
+                        {/* <button onClick={() => setShowCommsModal(true)} className="p-1.5 bg-white/5 rounded-lg hover:bg-white/10 shrink-0 relative">
                             <MessageSquare size={16} />
                             {comms.some(c => !c.isRead) && (
                                 <span className="absolute -top-1 -right-1 w-2 h-2 bg-primary rounded-full animate-pulse shadow-[0_0_5px_rgba(var(--primary-rgb),0.5)]" />
                             )}
-                        </button>
+                        </button> */}
                         <button onClick={() => setShowSettingsModal(true)} className="p-1.5 bg-white/5 rounded-lg hover:bg-white/10 shrink-0">
                             <Settings size={16} />
                         </button>
@@ -2223,7 +2240,10 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
             />
 
             {/* Staff Communication Modal */}
-            <AnimatePresence>
+            {/* BACKSCOPED: 2026-07-27 (session 47C) — BACKLOG-142. Reinstate when: /api/staff-comms
+                is auth-gated (done, see route.ts) AND admin/manager/page.tsx's half-built
+                match-selection flow for this panel is rebuilt properly. */}
+            {/* <AnimatePresence>
                 {showCommsModal && (
                     <motion.div
                         initial={{ opacity: 0 }}
@@ -2293,7 +2313,7 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                         </motion.div>
                     </motion.div>
                 )}
-            </AnimatePresence>
+            </AnimatePresence> */}
         </div>
     );
 }
