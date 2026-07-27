@@ -6056,3 +6056,25 @@ No `clearTimeout` exists anywhere in the file. The effect that sets `stateManage
 **Found:** session 47C, per Richard's request to sweep for legacy/redundant hardcoded values across both loggers.
 
 ---
+
+### ~~BUG-146~~ — Local Dev Server 500s on Every Page Route (Root-Caused: Node v22+'s Native `localStorage` Global)
+
+**Status:** RESOLVED — 2026-07-27 (session 47C)
+**Priority:** High — blocked all local browser-based verification since session 46, forcing every subsequent session onto a PR-preview workaround
+**Filed:** originally tracked only in `.agents/rules/known-issues.md` (2026-07-23, session 46) and `project_local_dev_browser_broken_session47b.md`, never given its own tracked number until now
+
+**Problem:** `npm run dev` (`node server.js`) 500'd on every page route with `TypeError: localStorage.getItem is not a function`, thrown during SSR. Root cause: Node 22+ (this machine: v25) ships an experimental native `globalThis.localStorage` (Web Storage API) that exists even in a plain Node process outside any browser `window`. Without a valid `--localstorage-file` path, Node still constructs the object, but it's broken — confirmed via the server's own startup warning (`` `--localstorage-file` was provided without a valid path``). Something in the render path calls `localStorage.getItem(...)` directly; previously this was a harmless `ReferenceError` in Node (since `localStorage` truly didn't exist), but now it hits Node's own broken object instead and throws the `TypeError` seen here. Exact call site not pinned down (grepping `node_modules` for the common `typeof localStorage` isomorphic-guard pattern returned zero matches; every direct call in our own `src/` is inside a `useEffect`/handler that never runs during SSR) — not needed to fix it, since the flag disables the feature at the source regardless of where it's read.
+
+**Confirmed via a real before/after test:** ran the server both ways back to back. Without any flag: identical crash, same error text, every time. With Node's `--no-webstorage` flag: `GET /` returned a clean `200` with real homepage HTML (`<title>BRIXSPORTS | Nigerian University Sports Live</title>`) in ~6-10s, repeated successfully, zero errors in the server log.
+
+**Fix:** `package.json`'s `dev` and `start` scripts now pass `--no-webstorage` directly to `node` (`node --no-webstorage server.js`). A first attempt used `NODE_OPTIONS=--no-webstorage node server.js` (shell env-var prefix) — failed outright (`'NODE_OPTIONS' is not recognized as an internal or external command`), because `npm run` executes scripts through `cmd.exe` on Windows, which doesn't support Unix `VAR=value command` syntax. Passing the flag as a direct `node` CLI argument sidesteps that entirely.
+
+**Related finding, not fixed here:** the pre-existing `start` script's own `NODE_ENV=production node server.js` prefix has almost certainly never actually worked on native Windows cmd.exe either, for the identical reason — a separate, pre-existing bug incidentally surfaced by this fix, not introduced by it. Not chased further since `start` isn't part of this project's actual deploy path (Vercel builds via `next build` and runs its own managed runtime — it never invokes `server.js` or this `start` script at all, which is also why production was never exposed to the `localStorage` crash in the first place).
+
+**Deliberately not touched:** `dev:turbo` (`next dev --turbopack`) and `start:next` (`next start`) — neither goes through `node server.js` directly, so the same direct-CLI-flag fix doesn't apply cleanly, and neither is the script actually used day-to-day. Would need a `cross-env`-style solution (a new dependency) if that changes.
+
+**Unblocks:** `BUG-140`, `BUG-141`, `BACKLOG-142`, `BUG-143` — all four were SHIPPED but explicitly marked "not yet live-tested, blocked by dev server SSR-500" this same session. That blocker is now gone; live verification for all four is a direct next step.
+
+**Found:** session 47C, root-caused live at Richard's direct request after weeks of this blocking local verification across sessions 46/47/47B.
+
+---
