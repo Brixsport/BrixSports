@@ -5942,10 +5942,10 @@ Filed together, same investigation: a `code-reviewer` agent pass explicitly inde
 
 ---
 
-### BACKLOG-142 — Staff-Comms: Current-State Audit (Football/Admin-Only, Not Ported to Basketball, Not Hardened)
+### ~~BACKLOG-142~~ — Staff-Comms: Current-State Audit → Auth Gap Fixed, UI Pulled Pending a Real Selection Flow
 
-**Status:** OPEN — audited this session, nothing built. Richard's explicit call: this is an existing feature, audit its real state before considering whether to extend it to basketball — don't port a shaky foundation further.
-**Priority:** Medium — the auth gap below is a real, live production gap; the rest is stability/completeness assessment, not an active incident
+**Status:** SHIPPED — 2026-07-27 (session 47C). Not yet live-tested (dev server SSR-500 still blocks local browser verification). Per Richard's explicit call after the audit below: rather than half-fix a feature not on any Critical Flow, the API route's auth gap is fixed in place and the UI is pulled from both consumers (`BACKSCOPE.md`, grep `BACKSCOPED: 2026-07-27`) until the admin-side selection flow is rebuilt properly.
+**Priority:** Medium — the auth gap was a real, live production gap; the rest is stability/completeness assessment, not an active incident
 
 **What this feature actually is, confirmed by direct read (not assumed from the name):** a per-match staff notes channel — `staff_comms` table (`schema.ts:782`, `matchId`/`userId`/`content`/`type`/`priority`/`isRead`), `GET`/`POST /api/staff-comms` (`src/app/api/staff-comms/route.ts`), consumed by two real UIs: `FootballLogger.tsx` (fetch-on-mount + 15s poll, plus a `handleSendNote` composer) and `src/app/admin/manager/page.tsx` (a comms panel for admins). This is a genuinely wired, non-stub feature — not a dead scaffold.
 
@@ -5958,7 +5958,7 @@ Filed together, same investigation: a `code-reviewer` agent pass explicitly inde
 
 **Verdict, per Richard's own "stable things over partial systems" framing:** this is a working-but-unhardened, feature-incomplete system — real enough that the auth gap should not be ignored indefinitely, but not something to extend to basketball yet. **Do not port to `BasketballLogger.tsx` until (1) is fixed and (2) is cleaned up** — otherwise basketball inherits the same unauthenticated write path and the same half-built admin selection flow on day one.
 
-**Fix (not built, either piece):** (1) add `getAuthUser(request)` to both handlers, derive `userId` from the verified session rather than the client body. (2) replace `admin/manager/page.tsx`'s auto-select placeholder with an explicit "no match selected yet" state, relying solely on the existing `onSelect` handler.
+**Fix:** (1) `src/app/api/staff-comms/route.ts` — both `GET` and `POST` now call `getAuthUser(request)` and reject with 401 if absent; `POST` derives `userId` via `resolveEffectiveUserId(authUser)` rather than the client body, since `staffComms.userId` FKs to `users.id` and a naive `authUser.id` would FK-crash for a logger-role session (same class as `BUG-124`). (2) rather than rebuild `admin/manager/page.tsx`'s selection flow right now, the whole feature is pulled from the UI instead (`FootballLogger.tsx`'s modal/button/effect, `admin/manager/page.tsx`'s sidebar panel/stat-tile/effects) — commented out, not deleted, per `BACKSCOPE.md` convention. Full detail in that file's new "Staff Comms" entry.
 **Found:** session 47C, per Richard's direct request to check this feature's actual current state before considering whether to extend it to basketball.
 
 ---

@@ -238,3 +238,29 @@ Grep for `BACKSCOPED: 2026-06-08` to find all comment-out markers in source.
 **Update, session 46 (2026-07-23):** score persistence, period/quarter persistence, and the `finalizeMatch()`-unreachable dead end above are now fixed and live-verified via API for `BasketballLogger.tsx` (see `BACKLOG-125`'s updated status, `RUNLOG.md`) — this entry's "what's missing" list is partially stale as a result, kept as historical context rather than rewritten mid-walkthrough. `TrackLogger.tsx` remains fully untouched, still zero persistence. The shared-logger-core question itself (the actual subject of this backscope entry) is still open and still deliberately deferred — today's fixes patched `BasketballLogger.tsx` directly, they did not extract shared logic, so the original reasoning here (avoid a second implementation of football's hardened logic) still applies going forward.
 
 **Open question flagged for the football-to-basketball mapping session, not yet confirmed either way:** Richard observed that `BasketballLogger.tsx`'s own "Set Starting Lineup" modal lets the *logger* set/edit the starting lineup directly in-app before starting a match, with no dependency on the separate Admin "Official Match Lineups" page (`/admin/match-lineups`) — confirmed in code this session, that page and `eligible-players`/the in-app lineup modal are fully independent data paths for basketball. Richard's working assumption is that this differs from football, where lineup publishing is admin-only. **Not verified either way** — `FootballLogger.tsx` appears to use the same `eligible-players` + `memberships` pattern for its own roster resolution, which would suggest football's logger might *also* be self-contained and not actually gated on the Admin page, making the Admin page a parallel "public display" feature for both sports rather than a real football-vs-basketball workflow difference. Confirm by reading `FootballLogger.tsx`'s own lineup-selection flow directly (does it have its own in-app "set lineup" modal like basketball's, or does it read from/require the Admin-published lineup?) during the systematic mapping pass.
+
+---
+
+## Staff Comms — Internal Match Coordination Notes
+
+**Backscoped:** 2026-07-27 (session 47C)
+**Backlog ref:** BACKLOG-142
+**Current state:** WORKING BUT PULLED — a genuinely wired, non-stub feature (not a scaffold like the rest of this file's entries), removed from the UI specifically because it shipped with zero auth and a half-built admin selection flow, not because it lacked a backend.
+
+**What this is:** a per-match staff notes channel — `staff_comms` table (`schema.ts:782`), `GET`/`POST /api/staff-comms`. Two UIs consumed it: `FootballLogger.tsx` (a modal, fetch-on-mount + 15s poll, note composer) and `src/app/admin/manager/page.tsx` (a sidebar panel + a "Staff Comms" stat tile).
+
+**What was found (session 47C audit, `BACKLOG-142`):**
+1. Neither `GET` nor `POST` had a `getAuthUser()` call — `middleware.ts`'s matcher doesn't cover `/api/staff-comms`, so in production anyone could read any match's notes or post one under any spoofed `userId`.
+2. `admin/manager/page.tsx`'s match-selection for the panel was a placeholder (`// For now, let's just fetch for the first unapproved finished match if it exists`) sitting alongside a separate, correct per-match click handler — never the intentional design.
+
+**What exists in code (comment-out markers, grep `BACKSCOPED: 2026-07-27`):**
+- `src/components/FootballLogger.tsx` — the comms-fetch `useEffect`, `handleSendNote`, the header button + unread badge, and the full modal JSX are all commented out, not deleted
+- `src/app/admin/manager/page.tsx` — the comms-fetch in `fetchData`, `handleSendNote`, the `onSelect` comms-fetch line, the "Staff Comms" `TacticalCard`, and the entire sidebar `<aside>` panel are all commented out
+- `src/app/api/staff-comms/route.ts` — **not backscoped, fixed in place instead**: both handlers now call `getAuthUser()` and reject unauthenticated requests; `POST` derives `userId` via `resolveEffectiveUserId(authUser)` (never the client body) so a reinstated logger-role caller doesn't hit the same FK-mismatch class as `BUG-124` (`staffComms.userId` FKs to `users.id`, not `loggers.id`)
+
+**What's missing to reinstate:**
+- `admin/manager/page.tsx`'s match-selection flow needs a real design (not the "first unapproved finished match" placeholder) before the panel goes back in
+- A decision on whether logger-role callers should be able to post at all, given `resolveEffectiveUserId` only works if the logger also has a fan account in `users` — otherwise it silently falls back to the logger's own non-`users` id and would still FK-crash on insert (not hit today since no logger UI calls this route anymore, but real if `FootballLogger.tsx`'s panel comes back without addressing it)
+
+**Reinstate when:** the admin-side selection flow above is rebuilt, and the logger-caller edge case is either resolved or explicitly decided against (admin/manager-only feature)
+**Risk if reinstated early:** exactly what was found this session — an unauthenticated internal-notes endpoint, live in production, plus a placeholder selection flow presented as a finished feature
