@@ -36,14 +36,17 @@ export default function ManagerDashboard() {
                 setMatches(matchesData);
                 setLoggers(loggersData);
 
-                // Fetch comms for the most active match or a general feed if we had one
-                // For now, let's just fetch for the first unapproved finished match if it exists
-                const finishedUnapproved = matchesData.find((m: any) => m.status === 'FINISHED' && m.approvalStatus === 'PENDING');
-                if (finishedUnapproved) {
-                    const commsRes = await fetch(`/api/staff-comms?matchId=${finishedUnapproved.id}`);
-                    const commsData = await commsRes.json();
-                    setComms(commsData);
-                }
+                // BACKSCOPED: 2026-07-27 (session 47C) -- BACKLOG-142. Reinstate when: this
+                // panel's own match-selection flow is rebuilt (was a "for now" placeholder,
+                // never the intentional design -- see BACKLOG-142 for the full audit).
+                // // Fetch comms for the most active match or a general feed if we had one
+                // // For now, let's just fetch for the first unapproved finished match if it exists
+                // const finishedUnapproved = matchesData.find((m: any) => m.status === 'FINISHED' && m.approvalStatus === 'PENDING');
+                // if (finishedUnapproved) {
+                //     const commsRes = await fetch(`/api/staff-comms?matchId=${finishedUnapproved.id}`);
+                //     const commsData = await commsRes.json();
+                //     setComms(commsData);
+                // }
             } catch (error) {
                 console.error('Error fetching manager data:', error);
             } finally {
@@ -78,30 +81,31 @@ export default function ManagerDashboard() {
         }
     };
 
-    const handleSendNote = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!selectedMatch || !noteContent || !user) return;
-
-        try {
-            await fetch('/api/staff-comms', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    matchId: selectedMatch.id,
-                    userId: user.id,
-                    content: noteContent,
-                    type: 'note'
-                })
-            });
-            setNoteContent('');
-            // Refresh comms
-            const commsRes = await fetch(`/api/staff-comms?matchId=${selectedMatch.id}`);
-            const commsData = await commsRes.json();
-            setComms(commsData);
-        } catch (error) {
-            console.error('Failed to send note:', error);
-        }
-    };
+    // BACKSCOPED: 2026-07-27 (session 47C) -- BACKLOG-142. See fetchData's effect above.
+    // const handleSendNote = async (e: React.FormEvent) => {
+    //     e.preventDefault();
+    //     if (!selectedMatch || !noteContent || !user) return;
+    //
+    //     try {
+    //         await fetch('/api/staff-comms', {
+    //             method: 'POST',
+    //             headers: { 'Content-Type': 'application/json' },
+    //             body: JSON.stringify({
+    //                 matchId: selectedMatch.id,
+    //                 userId: user.id,
+    //                 content: noteContent,
+    //                 type: 'note'
+    //             })
+    //         });
+    //         setNoteContent('');
+    //         // Refresh comms
+    //         const commsRes = await fetch(`/api/staff-comms?matchId=${selectedMatch.id}`);
+    //         const commsData = await commsRes.json();
+    //         setComms(commsData);
+    //     } catch (error) {
+    //         console.error('Failed to send note:', error);
+    //     }
+    // };
 
     return (
         <div className="p-6 lg:p-12 min-h-screen bg-[#050505]">
@@ -165,13 +169,14 @@ export default function ManagerDashboard() {
                         icon={<UserCheck size={20} className="text-blue-400" />}
                         trend={`${loggers.length} total active`}
                     />
+                    {/* BACKSCOPED: 2026-07-27 (session 47C) -- BACKLOG-142.
                     <TacticalCard
                         label="Staff Comms"
                         value={comms.length}
                         subLabel="Internal Events"
                         icon={<MessageSquare size={20} className="text-green-400" />}
                         trend="Recent activity"
-                    />
+                    /> */}
                 </div>
 
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -202,8 +207,8 @@ export default function ManagerDashboard() {
                                             onApprove={() => handleApprove(match.id)}
                                             onSelect={() => {
                                                 setSelectedMatch(match);
-                                                // Fetch comms for this match
-                                                fetch(`/api/staff-comms?matchId=${match.id}`).then(res => res.json()).then(setComms);
+                                                // BACKSCOPED: 2026-07-27 (session 47C) -- BACKLOG-142.
+                                                // fetch(`/api/staff-comms?matchId=${match.id}`).then(res => res.json()).then(setComms);
                                             }}
                                             isSelected={selectedMatch?.id === match.id}
                                         />
@@ -232,9 +237,12 @@ export default function ManagerDashboard() {
                         </section>
                     </div>
 
+                    {/* BACKSCOPED: 2026-07-27 (session 47C) -- BACKLOG-142. Reinstate when:
+                        /api/staff-comms is auth-gated (done, see route.ts) AND this panel's
+                        own match-selection flow is rebuilt (this whole sidebar depended on
+                        the same "for now" placeholder removed from fetchData above). */}
                     {/* Communication & Staff Sidebar */}
-                    <aside className="space-y-8">
-                        {/* Internal Comms Panel */}
+                    {/* <aside className="space-y-8">
                         <div className="bg-white/5 border border-white/10 rounded-[40px] p-8 space-y-8 flex flex-col h-[700px]">
                             <div className="space-y-2">
                                 <h3 className="font-display text-2xl italic uppercase tracking-tighter flex items-center gap-3">
@@ -247,7 +255,6 @@ export default function ManagerDashboard() {
                                 </div>
                             </div>
 
-                            {/* Comms Feed */}
                             <div className="flex-1 overflow-y-auto space-y-4 pr-2 custom-scrollbar">
                                 {selectedMatch ? (
                                     <>
@@ -289,7 +296,6 @@ export default function ManagerDashboard() {
                                 )}
                             </div>
 
-                            {/* Message Entry */}
                             <form onSubmit={handleSendNote} className="pt-4 border-t border-white/10 space-y-3">
                                 <textarea
                                     value={noteContent}
@@ -308,7 +314,7 @@ export default function ManagerDashboard() {
                                 </button>
                             </form>
                         </div>
-                    </aside>
+                    </aside> */}
                 </div>
             </div>
         </div>
