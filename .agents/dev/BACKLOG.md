@@ -6227,9 +6227,9 @@ No `clearTimeout` exists anywhere in the file. The effect that sets `stateManage
 
 ---
 
-### BUG-149 — Homepage Never Refreshes Live Match Data For Real Viewers (No WS, No Polling)
+### ~~BUG-149~~ — Homepage Never Refreshes Live Match Data For Real Viewers (No WS, No Polling)
 
-**Status:** OPEN — found session 47D, not fixed
+**Status:** RESOLVED — 2026-07-28 (session 47D)
 **Priority:** CRITICAL — this is the highest-traffic viewer surface and it violates the core product promise ("what's happening right now, accurately") for the most common entry point
 **Filed:** 2026-07-27
 
@@ -6238,6 +6238,14 @@ No `clearTimeout` exists anywhere in the file. The effect that sets `stateManage
 **Also broken, same root cause class:** `src/app/football/page.tsx`/`src/app/basketball/page.tsx` (sport hub MATCHES tab) fetch once per competition selection, no poll, no WS — same static-snapshot problem.
 
 **Fix (not built):** the cheapest correct fix is the same pattern `/live/page.tsx` already uses as its own self-documented stopgap (15s poll of `/api/matches`, filtered client-side) — port that pattern to the homepage and the sport-hub pages, or better, wire a real WS subscription the way `/matches/[id]/page.tsx` already does (10s/25s polling fallback + WS live layer, `BUG-080`/`BUG-108`). Given how many pages share this gap, a shared hook (e.g. `useLiveMatchList(sport?)`) is worth considering over copy-pasting the poll three more times.
+
+**Fix applied, session 47D:** consolidated the homepage's two previously-duplicated fetch/transform blocks (initial mount + the same-tab-only `MATCH_STATUS_CHANGE` handler) into one `fetchAllMatches` function via `useCallback`, and added a 15s `setInterval` poll matching `/live/page.tsx`'s own established pattern. The same-tab `MATCH_STATUS_CHANGE` listener is kept as a same-device fast-path (instant refresh + notification for a logger previewing their own site) but the poll is now the real fix — it reaches every viewer regardless of tab/device. **Sport-hub pages (`football/page.tsx`/`basketball/page.tsx`) were not touched this session** — same root cause, not yet fixed, tracked separately if needed.
+
+**Evidence:**
+- Commit: pending (uncommitted at time of writing)
+- Verified by: live browser test against local dev — a temporary timestamped console log confirmed 5 consecutive poll ticks at 14:59:26, 14:59:41, 14:59:56, 15:00:11, 15:00:26, 15:00:41 UTC, each ~15.00s apart (max deviation 0.03s across all 5 intervals). Debug log removed after verification.
+- Observed result: homepage now refetches match data on a reliable 15s cadence independent of WS connection state (confirmed while local WS was itself down, proving the poll doesn't depend on it)
+- Pending items: sport-hub pages still have the same gap, not in this fix's scope
 
 **Found:** session 47D, by a background audit agent doing a full read-only trace of the public viewer experience.
 
@@ -6471,6 +6479,10 @@ No `clearTimeout` exists anywhere in the file. The effect that sets `stateManage
 **What already works as a substitute, confirmed the same investigation:** `PATCH /api/matches/[id]/route.ts:595` fires `after(() => broadcastToMatch(matchId, 'match:updated', { matchId, ...updateData }))` on **every** admin/logger PATCH, unconditionally, sport-agnostic, carrying whatever fields changed (status, currentPeriod, minute, scores, lineups, stats). Both loggers already hit this route for period transitions. This channel is real and currently fires — but its only consumer anywhere in the codebase is `useMatchStatus` (`useWebSocket.tsx`), whose only caller is `MatchOverlay.tsx` (the football-only homepage widget). **`/matches/[id]/page.tsx` — the page every shared match link actually points to — never subscribes to `match:updated` at all.**
 
 **Fix (not built, two options):** (a) cheapest — fix the two emit-name typos in `FootballLogger.tsx` to match what `ws-server/index.js` actually listens for, and wire a real caller for `broadcastMatchStatus`; or (b) arguably better — since `match:updated` already fires correctly and sport-agnostically on every relevant PATCH, just add one `socket.on('match:updated', ...)` listener to `/matches/[id]/page.tsx` (mirroring what `MatchOverlay.tsx` already does) — this closes the gap for *both* sports at once without touching the logger components at all, and doesn't require basketball to ever emit `match:status:changed` in the first place.
+
+**Fix applied, session 47D — took option (b).** Added a `handleMatchUpdate` listener for `match:updated` to `/matches/[id]/page.tsx`'s existing WS-listener effect, merging `status`/`currentPeriod`/`homeScore`/`awayScore`/`minute`/`extraTime` into local state whenever present in the payload (mirroring `useMatchStatus`'s existing merge pattern). The two dead `match:status:changed`/`match:score:updated` listeners were left in place, not removed — harmless no-ops today, free insurance if the emit-name typo is ever fixed at the source instead.
+
+**Status:** SHIPPED — 2026-07-28 (session 47D). `tsc` clean, code mirrors the exact pattern already proven correct in `MatchOverlay.tsx`/`useMatchStatus`. **Not RESOLVED**: local dev's standalone `ws-server` would not accept a browser connection during this session for reasons that predate this change (repeated `[WS] Connection error` observed even before tonight's edits) — root cause not chased down, out of scope for a fix this size. Live verification needs either that local WS issue independently resolved, or a real deploy (staging has the actual Railway WS server already confirmed working in prior sessions) — recommended next step per Richard's own call rather than continuing local debugging.
 
 **Found:** session 47D, by a background audit agent doing a full read-only trace of the logging/WS pipeline (the same investigation that found new-event/score/delete broadcasts already work for basketball via the shared routes).
 
