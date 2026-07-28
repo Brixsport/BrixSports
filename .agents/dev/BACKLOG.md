@@ -6211,3 +6211,128 @@ No `clearTimeout` exists anywhere in the file. The effect that sets `stateManage
 **Found:** session 47D, by a background audit agent investigating the auth/account/notifications system, cross-checking the privacy-policy work done earlier the same session.
 
 ---
+
+### BUG-149 — Homepage Never Refreshes Live Match Data For Real Viewers (No WS, No Polling)
+
+**Status:** OPEN — found session 47D, not fixed
+**Priority:** CRITICAL — this is the highest-traffic viewer surface and it violates the core product promise ("what's happening right now, accurately") for the most common entry point
+**Filed:** 2026-07-27
+
+**Problem:** `src/app/page.tsx` (the homepage) fetches `matches` once on mount and only re-fetches on a `window` `MATCH_STATUS_CHANGE` `CustomEvent`. Grepped every dispatch site: it's fired **only** from `src/lib/match-state-manager.ts:935` and `src/components/BasketballLogger.tsx:851` — both logger-tab-only, dispatched to that browser tab's own `window`. A remote viewer's browser can never receive it. There is no WS subscription and no `setInterval` poll anywhere on the homepage. A viewer who leaves the homepage open during a live match sees a **permanently frozen score/status until manual reload** — for both sports. This also silently starves the football homepage-overlay modal (`MatchOverlay.tsx`) of fresh data for anyone who doesn't click through to `/matches/[id]`, and is the root cause underneath `BasketballMatchOverlay.tsx`'s already-suspected zero-WS finding (that overlay renders from whatever stale `selectedMatch` state the homepage handed it).
+
+**Also broken, same root cause class:** `src/app/football/page.tsx`/`src/app/basketball/page.tsx` (sport hub MATCHES tab) fetch once per competition selection, no poll, no WS — same static-snapshot problem.
+
+**Fix (not built):** the cheapest correct fix is the same pattern `/live/page.tsx` already uses as its own self-documented stopgap (15s poll of `/api/matches`, filtered client-side) — port that pattern to the homepage and the sport-hub pages, or better, wire a real WS subscription the way `/matches/[id]/page.tsx` already does (10s/25s polling fallback + WS live layer, `BUG-080`/`BUG-108`). Given how many pages share this gap, a shared hook (e.g. `useLiveMatchList(sport?)`) is worth considering over copy-pasting the poll three more times.
+
+**Found:** session 47D, by a background audit agent doing a full read-only trace of the public viewer experience.
+
+---
+
+### BUG-150 — Anonymous Viewers Cannot Enable Push Notifications Through Any Reachable UI Path
+
+**Status:** OPEN — found session 47D, not fixed
+**Priority:** HIGH — directly contradicts CLAUDE.md's own actor model rule ("Viewers NEVER have a session")
+**Filed:** 2026-07-27
+
+**Problem:** every push-notification enrollment surface that is actually reachable by a click today requires a signed-in user; every component that would work anonymously is defined but never mounted. Traced all five candidates:
+- `SettingsOverlay.tsx` (opened from the homepage bell icon) — `handleEnablePush` explicitly gates: `if (!user) { toast.error('Please sign in to enable notifications'); return; }` (line 83-87). The browser permission prompt is never even requested for an anonymous viewer.
+- `OnboardingModal.tsx` — requires a `userId` prop, only rendered from `signup/page.tsx`, unreachable pre-account.
+- `NotificationPermission.tsx` — takes a `userId` prop, would work anonymously if mounted with a fallback, but is **never imported or rendered anywhere in the app** (confirmed via grep — not in `layout.tsx`, not in any page, not in `PWAProvider`). Dead code.
+- `useNotificationPrompt.ts` — never called anywhere. Also dead code, and its own internal logic additionally gates on `isAuthenticated && user?.id` even if it were wired up.
+- `src/components/notifications/NotificationPrompt.tsx` — a `sonner`-toast variant with no mount site found under `src/app`.
+
+**Net effect:** the actor model's core promise ("Viewers NEVER have a session" — i.e. the product must work fully for them) is broken specifically for notifications. `BUG-084`'s retraction ("three enrollment paths exist") never checked whether any of the three work *without* signing in — none do.
+
+**Fix (not built):** mount `NotificationPermission.tsx` (or wire `useNotificationPrompt`) somewhere reachable in the anonymous viewer flow, with a device-scoped (not user-scoped) subscription path — the push-subscription backend (`pushSubscriptions` table) would need to support a null/anonymous `userId` or a device-id fallback for this to work end to end; not confirmed either way whether that's already possible.
+
+**Found:** session 47D, by a background audit agent doing a full read-only trace of the public viewer experience.
+
+---
+
+### BACKLOG-151 — Multi-Logger Sync Is Poll-Only: Real-Time Broadcast and Conflict Resolution Are Both No-Ops
+
+**Status:** OPEN — found session 47D, not fixed
+**Priority:** HIGH — Tier 0, directly relevant to CLAUDE.md's own still-open Live Event Readiness Checklist item ("Two simultaneous loggers do not conflict or overwrite — no dual-logger test ever run")
+
+**Problem, three parts, same root cause (`useMultiLogger.ts`/`multiLogger.ts`):**
+1. `broadcastEvent` (`useMultiLogger.ts:178-192`) does not send anything to another device, tab, or the server — it only dispatches a same-tab `window` `CustomEvent('MULTI_LOGGER_EVENT')`, which by definition never leaves the browser tab that dispatched it. Every `broadcastEvent()` call site in both `FootballLogger.tsx:741` and `BasketballLogger.tsx:613` is effectively inert for real cross-device sync.
+2. The **only** actual cross-logger sync mechanism is the periodic poll — 10s (football, `FootballLogger.tsx:667-726`) / 15s (basketball, `BasketballLogger.tsx:439-467`) — which fetches all DB events and merges by exact-ID dedup (`mergeEvents`, `multiLogger.ts:123-145`). Two loggers on the same match only converge once every 10-15 seconds, never in real time.
+3. `resolveConflict` (`useMultiLogger.ts:197-208`) only flips a local React `resolved: true` flag when a logger clicks "resolve" on a conflict banner. It never deletes a duplicate row or merges a contradiction server-side — the DB and every public viewer still see the conflicting data exactly as before, the banner just disappears for the logger who clicked it.
+
+**Fix (not built):** (a) either wire `broadcastEvent` through the existing WS infrastructure (the same `emit()`/socket path `FootballLogger.tsx` already uses for other events) so it's a real push, or remove it and rely explicitly on the poll with a shorter interval; (b) make `resolveConflict` actually call the DELETE/PATCH needed to resolve the conflict server-side, not just clear a local flag.
+
+**Found:** session 47D, by a background audit agent doing a full read-only trace of the live-logging system's sub-features.
+
+---
+
+### BUG-151 — No Server-Side Event Dedup/Idempotency Check Exists At All
+
+**Status:** OPEN — found session 47D, not fixed
+**Priority:** MEDIUM — client-side guards (temp-ID swap, `isRecordingRef`) cover the common case; this is a defense-in-depth gap, not a confirmed-active data-corruption incident
+**Filed:** 2026-07-27
+
+**Problem:** `POST /api/matches/[id]/events` (`events/route.ts:170-240`) has no idempotency-key check and no "does an identical event already exist for this match/player/type/minute" query — it unconditionally inserts whatever event body arrives, wrapped only in a transaction (`BUG-121`) that guarantees the insert and score-update commit atomically together, not that a *repeated* POST is rejected. If a client-side guard fails or is bypassed (a replayed offline-queue POST, or two loggers' independent optimistic writes racing for the same real-world event — see `BACKLOG-151` above), nothing server-side catches or merges the duplicate; both rows persist and both count in stats/score.
+
+**Fix (not built):** add a server-side idempotency check — e.g. a unique constraint or pre-insert query on `(matchId, playerId, type, minute, second)` within a short window, or require clients to send a client-generated idempotency key that the server dedupes on.
+
+**Found:** session 47D, by a background audit agent doing a full read-only trace of the live-logging system's sub-features.
+
+---
+
+### BACKLOG-152 — Track & Field Logger Has Zero Persistence Layer (Confirmed More Severe Than Assumed)
+
+**Status:** OPEN — confirmed session 47D, no existing entry previously tracked this
+**Priority:** HIGH if Track is ever scheduled for a real live match — currently no live Track matches are run on this platform, so practical urgency is low
+
+**Problem:** `TrackLogger.tsx` has a fully-built, sport-correct local event model (finish times with 1ms tie-handling, field-event best-of-6 with foul tracking and wind-legality checks, DQ with reason) — but **zero API calls anywhere in the file**. `saveResults()` (line 361) is a literal `alert('Results saved successfully!')` with a code comment "In real implementation, save to database." Reaction times are also simulated via `Math.random()`, not real input. Every track result logged today is permanently lost on refresh or navigation away. No existing BACKLOG/BUG entry was found tracking this despite its severity.
+
+**Fix (not built):** build the actual persistence layer — a `/api/matches/[id]/events` equivalent for track results, or extend the existing route to accept track's event shape. Real scope, not a quick patch — track's event model (times/marks/positions, not goals/cards) doesn't map cleanly onto the existing football/basketball event schema.
+
+**Found:** session 47D, by a background audit agent doing a full read-only trace of the live-logging system's sub-features.
+
+---
+
+### BACKLOG-153 — Admin Match-Edit Modal Has No Score-Correction Fields; Three Dead Offline-Queue Implementations; Other Logging-System Cleanup Items
+
+**Status:** OPEN — found session 47D, not fixed
+**Priority:** MEDIUM — none of these block a live match today, but compound the already-tracked "no mutation audit trail" gap and represent real maintenance debt
+
+**Findings, bundled (same investigation, none individually urgent enough for its own entry):**
+1. **Admin match-edit modal has no score-correction UI.** `src/app/admin/matches/page.tsx`'s edit modal (`handleUpdate`/`handleEdit`) covers sport, teams, venue, competition, status, matchType, round, groupName, matchday — but not `homeScore`/`awayScore`, even though the underlying `PATCH /api/matches/[id]` route accepts them (loggers send them routinely). An admin has no UI path to correct a bad live score, compounding `SYSTEM_CRITICALITY_MAP.md`'s already-tracked "no mutation audit trail for `matches` table" gap.
+2. **Three parallel, mutually-exclusive offline-queue implementations exist — only one is wired up.** `FootballLogger.tsx`'s inline `BrixsportAdminDB` queue + `sw-admin.js` is the real, working one (its own top-of-file comment explicitly warns future readers away from the others). `src/lib/offline/queue-manager.ts`, `src/lib/offline/sync-manager.ts`, `src/lib/offline-queue.ts`, and `/api/events/sync` (whose only callers are these dead modules) are fully-built but never instantiated by either logger component. Not a live risk, but a real discoverability trap for a future engineer.
+3. **No confirmed server-side write-lock on FINISHED matches.** The event-POST route's auth/role/payload checks were read, but no explicit rejection of a POST against an already-`FINISHED` match was found in the section reviewed. Flagged for dedicated investigation, not asserted as broken — needs a direct test (POST an event against a real FINISHED match, confirm accept/reject).
+4. **`sw-admin.js`'s API cache-first-on-failure fallback doesn't distinguish safe-to-serve-stale from dangerous-to-serve-stale endpoints** (`sw-admin.js:86-119`) — a logger could see a stale event list after a network blip with no visual distinction from fresh data, touching this project's own "never show success when it didn't happen" rule.
+
+**Found:** session 47D, by a background audit agent doing a full read-only trace of the live-logging system's sub-features.
+
+---
+
+### BUG-152 — Match-Detail Page's Own Favourite Heart Doesn't Persist At All (Third Divergent Implementation)
+
+**Status:** OPEN — found session 47D, not fixed
+**Priority:** MEDIUM — cosmetic/trust issue (button appears to work, silently forgets), not a data-integrity issue
+
+**Problem:** `src/app/matches/[id]/page.tsx` (the page every shared match link actually points to) has its own favourite-heart implementation — `const [isFavorited, setIsFavorited] = useState(false)` (line 43), toggled with **no** `localStorage` write and **no** API call, and without using the shared `useFavorites.ts` hook that the homepage/`MatchOverlay.tsx` correctly use. It silently resets to unfavorited on every page reload. This is a third, undocumented implementation, distinct from `BUG-091` (which concerns the team-follow heart specifically) — and strictly worse, since `useFavorites.ts`'s `localStorage`-only approach is actually correct/adequate for genuine anonymous viewers (per this session's audit), while this one doesn't persist in any form at all.
+
+**Fix (not built):** replace the local `useState` with `useFavorites.ts`, matching the pattern already used correctly elsewhere in the app.
+
+**Found:** session 47D, by a background audit agent doing a full read-only trace of the public viewer experience.
+
+---
+
+### BACKLOG-154 — Viewer-Surface Consistency Debt: Status Styling, Timeline Rendering, and Dead Components
+
+**Status:** OPEN — found session 47D, not fixed
+**Priority:** LOW/MEDIUM — cosmetic/consistency issues, no functional breakage beyond what's already filed above
+
+**Findings, bundled:**
+1. **`BACKLOG-119`'s red-dot/red-label live styling was live-verified on only one of four surfaces that display match status** — `/matches/[id]`'s own header matches the spec exactly; `LiveMatchStatus.tsx` (homepage cards), `MatchOverlay.tsx`'s own status pill, and `BasketballMatchOverlay.tsx` are three separate, independent implementations that were never updated to match. `BasketballMatchOverlay.tsx` has no live/red styling at all. Any future tweak to the visual language requires editing (at least) four separate places.
+2. **`MatchOverlay.tsx`'s inline Timeline tab is a third, hand-rolled event-timeline renderer** that bypasses `BUG-083`'s case-normalization fix entirely (raw `event.minute`, no basketball-aware period labeling) — a materially different, less-correct timeline than `/matches/[id]`'s `LiveMatchTimeline.tsx` for the exact same match.
+3. **`BasketballMatchOverlay.tsx` has no timeline/events tab at all** (`watch, overview, lineups, stats, standings, scout, chat` — no timeline) — a basketball viewer using the homepage overlay has no play-by-play feed.
+4. **`MatchOverlay.tsx`'s own inline Stats tab is football-only** (`possession`, `expectedGoals`, etc.) — a latent trap if a basketball match were ever routed through this component instead of `BasketballMatchOverlay` (not currently possible per `page.tsx`'s routing, but no structural guard prevents it either).
+5. **Dead/orphaned components:** `LiveMatchCard.tsx`, `FixtureCard.tsx` (unused anywhere), `MatchStatusBadge.tsx` (only reachable via those two, plus one dead import in `matches/[id]/page.tsx` that's never actually rendered), `NotificationPermission.tsx`, `useNotificationPrompt.ts` (both dead per `BUG-150` above). Not actively harmful, but a real risk that a future session "fixes" one of these thinking it reaches production when it doesn't.
+6. **`BACKLOG-096`** ("no server-side WS emit on event save," filed 2026-06-19, still shows `Status: OPEN`) appears substantially superseded by `BUG-116`'s later fix (server-side broadcast landed session 43) — worth a status re-check and likely closure next time that entry is touched.
+
+**Found:** session 47D, by a background audit agent doing a full read-only trace of the public viewer experience.
+
+---
