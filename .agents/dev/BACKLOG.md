@@ -4598,7 +4598,7 @@ Replace with a `.where(eq(teams.sport, 'Basketball'))` clause to push the filter
 #### Problem
 `/admin/teams` is a read-only list page with no create button. The only way to create a team today is through `/admin/bulk-register` — which creates a team as a side effect of registering players, not as a standalone operation. That path sets wrong defaults and breaks business logic when you need an empty team (e.g. basketball college teams with no players yet).
 
-`POST /api/teams` exists and is gated — the UI just doesn't surface it.
+~~`POST /api/teams` exists and is gated — the UI just doesn't surface it.`~~ **Correction, session 47D:** false under current code — `src/app/api/teams/route.ts` POST has zero `getAuthUser` call, confirmed by reading the full file. See `BUG-147` (filed session 47D) — this route is part of that cluster, not a UI-only gap.
 
 #### Required Changes
 Add a "Create Team" modal or inline form to `/admin/teams/page.tsx` with fields:
@@ -6147,5 +6147,67 @@ No `clearTimeout` exists anywhere in the file. The effect that sets `stateManage
 **Practical effect:** basketball has never had a working ratings calculation, independent of `BUG-138` (the missing `team_ratings` table, now fixed) — that fix was necessary but not sufficient. Both the automatic background trigger (`events/route.ts`'s `after()` call) and the manual "Calculate Ratings" admin action fail identically for basketball today, just with different visibility (silent vs. a raw error, see `BUG-138`'s own note on the admin-facing exposure).
 **Fix (not built):** either (a) block on `BACKLOG-141` (real server-side lineup persistence for basketball) and have `calculateAndSaveRatings()` read from wherever that ends up living, or (b) teach the function to also accept basketball's actual starter/bench data source once one exists server-side. Not a quick patch — genuinely blocked on the same underlying gap `BACKLOG-141` already tracks.
 **Found:** session 47C, while functionally verifying `BUG-138`'s `team_ratings` fix via the real ratings endpoint.
+
+---
+
+### BUG-147 — CRITICAL: Systemic Unauthenticated-Write Surface Across ~16 Mutation Routes Outside `/api/admin/*`
+
+**Status:** OPEN — found session 47D, not yet fixed
+**Priority:** CRITICAL — includes account takeover/mass-deletion and direct live-match-score corruption with zero auth
+**Filed:** 2026-07-27
+
+**Root cause (one finding, not sixteen independent oversights):** `middleware.ts`'s admin gate only matches the literal `/admin/:path*` and `/api/admin/:path*` prefixes. A large population of routes that are admin-only *in intent* — team/news/transfer/match/lineup/notification/bracket/stat/standings mutation — live outside that prefix and were never brought under the gate or given their own `getAuthUser()` call. Exact same bug class as `BUG-034`/`BUG-107`/`BACKLOG-142` (staff-comms), caught and fixed twice before — this is the first exhaustive sweep of the rest of the surface. Found by a dedicated full-system read-only audit agent, session 47D, then extended with two more routes found in a same-session follow-up check of the areas that first sweep explicitly hadn't reached yet (football-adjacent routes, per Richard's direct ask not to forget those).
+
+**Most severe — `src/app/api/users/[id]/route.ts` PATCH/DELETE.** Zero auth, zero ownership check. Any caller can edit any user's profile fields (name/bio/avatar/coverImage/favoriteTeamId) by ID, or **delete any account outright**. Classified Tier 3 by system in `SYSTEM_CRITICALITY_MAP.md`, but per that map's own exception clause ("classify by blast radius on the actual incident, not by which system the bug code lives in"), account takeover/mass deletion earns CRITICAL treatment regardless of which tier the code technically sits in.
+
+**Full route list, all confirmed via direct file read (not grep-only) to have zero `getAuthUser` call in the relevant handler(s):**
+
+| Route | Method(s) | Impact |
+|---|---|---|
+| `src/app/api/users/[id]/route.ts` | PATCH, DELETE | Edit or delete any user account by ID — no ownership check |
+| `src/app/api/matches/[id]/lineup/route.ts` | POST, DELETE | Overwrite or delete any match's saved lineup |
+| `src/app/api/fixtures/[id]/route.ts` | PATCH, DELETE | Directly rewrite `homeScore`/`awayScore`/`status`/`loggerId` on any match, or delete a non-live match + its events — bypasses every hardening the events pipeline has (atomic transactions, score-revert ordering, audit trail) |
+| `src/app/api/fixtures/route.ts` | POST | Create arbitrary matches directly in `matches` — the correctly-gated `/api/matches` POST writes the identical table right next to this ungated twin |
+| `src/app/api/news/route.ts` | POST | Publish arbitrary articles; `authorId` taken from request body (also violates the audit-field rule independent of the auth gap); triggers a real push notification to all subscribers |
+| `src/app/api/news/[id]/route.ts` | PATCH, DELETE | Edit or delete any news article — code comment says `(Admin only)`, nothing enforces it |
+| `src/app/api/transfers/[id]/route.ts` | PATCH, DELETE | Edit or delete any transfer record — same `(Admin only)` comment, same gap. `POST /api/transfers` (same feature) is correctly gated; this is the one route in the pair that was missed |
+| `src/app/api/notifications/send/route.ts` | POST | Send an arbitrary push notification (title/body/url/icon) to the entire subscriber base or any team's followers — live spam/phishing vector through a trusted channel |
+| `src/app/api/brackets/[id]/route.ts` | PATCH, DELETE | Rewrite bracket node scores/status/team assignments (auto-propagates winners downstream) or delete a node |
+| `src/app/api/players/[id]/stats/route.ts` | POST, PATCH | Forge or increment any player's stats — feeds Tier 2 leaderboards |
+| `src/app/api/events/sync/route.ts` | POST | Insert `match_events` rows directly for any match — a second, unauthenticated write path into the exact table the hardened logger event route is supposed to be the sole trusted writer of |
+| `src/app/api/standings/route.ts` | POST | Upsert (`onConflictDoUpdate`) standings rows for any team/competition — can silently corrupt a live table; this GET also has no `.limit()` (separate anti-pattern, same file) |
+| `src/app/api/competitions/templates/route.ts` | POST | Create arbitrary competitions from a template |
+| `src/app/api/teams/route.ts` | POST | Create arbitrary teams — raw `db.insert(teams).values(body)`, no field allowlist. Corrects `BACKLOG-077`'s stale claim that this route "exists and is gated" |
+| `src/app/api/teams/bulk/route.ts` | POST | Bulk-create arbitrary teams |
+| `src/app/api/head-to-head/route.ts` | POST | Write/overwrite head-to-head records for any two teams, any scoreline |
+| `src/app/api/teams/[id]/form/route.ts` | POST, DELETE | Insert fabricated match-form entries for any team, or bulk-delete a team's form history via `?before=timestamp` |
+
+**Confirmed NOT affected (checked same investigation, correctly gated or read-only):** `/api/matches` POST, `/api/competitions` POST, `/api/transfers` POST, `/api/players` POST/PATCH/DELETE, `/api/squads/*`, `/api/players/search`, `/api/admin/teams/[teamId]/roster`, all literal `/api/admin/*` routes spot-checked (users/settings/ads/organizations). `/api/football/matches`, `/api/football/standings`, `/api/players/compare` are GET-only, no mutation risk.
+
+**Also found in the same investigation, same root cause, deliberately not urgent given the standing Tier 4 backscope rule:** `src/app/api/predictions/route.ts` (POST/PUT) and `src/app/api/polls/route.ts` (POST/PATCH) are live and unauthenticated. `BACKSCOPE.md` confirms the *pages* for these are correctly hidden (`notFound()`), but the underlying API routes were never pulled with them — a caller who finds these routes directly can still write to `matchPredictions`/`polls`/`pollVotes`. Low real-world risk (no UI surfaces them), but a real gap between "backscoped" as documented and as actually enforced. Worth a `BACKSCOPE.md` note, not a fix, given Tier 4's correctly-deprioritized status.
+
+**Bonus bug, unrelated to auth, found while reading `matches/[id]/lineup/route.ts` closely:** line ~113 references an undefined `teamId` inside the squad-validation branch — the route only ever destructures `{ team, lineup }` from the body. Any competition with `requireSquad: true` throws a `ReferenceError` on this line (caught by the outer try/catch, 500s rather than crashing) the moment a lineup is saved with at least one player — squad validation is completely non-functional for any squad-gated competition today, independent of the auth gap on the same route.
+
+**Fix:** add `getAuthUser(request)` + `role === 'admin'` (or the appropriate role check per route) to every handler listed above, before reading the request body — the exact pattern already proven correct 30+ times elsewhere in this codebase. Mechanical, not novel — the risk is in coverage (missing one), not in the pattern itself.
+
+**Found:** session 47D, full-system read-only sweep (background agent) + same-session manual follow-up check of the routes that sweep explicitly hadn't reached (`/api/football/*`, `/api/head-to-head`, `/api/players/compare`, `/api/teams/[id]/form`), per Richard's direct request not to leave football-adjacent routes unchecked.
+
+---
+
+### BUG-148 — Google OAuth Sign-In Is Completely Broken (Missing Callback Route)
+
+**Status:** OPEN — found session 47D, not fixed
+**Priority:** Medium — a real, live user-facing dead end, but not a security or data-integrity issue, and email/password signup works as an alternative
+**Filed:** 2026-07-27
+
+**Problem:** `src/app/api/auth/google/route.ts` builds a Google OAuth consent URL with `redirect_uri` set to `${NEXT_PUBLIC_APP_URL}/api/auth/google/callback` — but `src/app/api/auth/google/` contains only `route.ts`, no `callback/route.ts`. Confirmed via direct directory listing. Any user who clicks "Continue with Google" (`src/app/signup/page.tsx`, `src/app/login/page.tsx`) is sent to Google, completes consent, and is redirected back to a URL that 404s — the flow dead-ends every time, for every user, always has (this is a missing file, not a regression).
+
+**Correction to earlier session 47D communication:** this session's privacy-policy work (`BACKLOG-078`) described the Google OAuth flow as "live" when disclosing it as a third-party data-sharing path. That characterization was wrong — no data has ever actually reached Google's callback or been exchanged with this app via this flow, since it 404s before any token exchange happens. The privacy policy's disclosure itself isn't false (it correctly describes what *would* happen if the flow worked, worded conditionally — "if you choose to sign up... we receive...") so it doesn't need a content change, but the flow should not be described as functioning anywhere else.
+
+**Also found in the same investigation:** a second, fully separate Google auth implementation exists via NextAuth (`src/app/api/auth/[...nextauth]/route.ts`) that is functionally complete in isolation, but is never invoked by any UI button, and even if it were, it issues its own NextAuth session cookie disconnected from this app's actual `authToken`-based auth model (`src/lib/auth.ts`). Two incompatible Google-auth implementations exist side by side; neither is usable as-is without a decision on which one this app actually wants.
+
+**Fix (not built):** either (a) build `src/app/api/auth/google/callback/route.ts` to complete the OAuth code exchange and issue a real `authToken` cookie matching this app's existing auth model, discarding the unused NextAuth implementation, or (b) the reverse — wire the UI buttons to the NextAuth flow and adapt `getAuthUser`/`middleware.ts` to also accept a NextAuth session. Not attempted this session — a real architectural decision, not a quick patch.
+
+**Found:** session 47D, by a background audit agent investigating the auth/account/notifications system, cross-checking the privacy-policy work done earlier the same session.
 
 ---

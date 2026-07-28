@@ -68,6 +68,8 @@ Grep for `BACKSCOPED: 2026-06-08` to find all comment-out markers in source.
 **Reinstate when:** Phase 7 engagement feature sprint begins
 **Risk if reinstated early:** Auth not wired for submissions, leaderboard broken, confusing UX
 
+**Gap found session 47D (`BUG-147` investigation):** the page is correctly `notFound()`'d, but `src/app/api/predictions/route.ts` (POST/PUT) is live and has zero auth — a caller who finds the route directly can still write to `matchPredictions`. Low real-world risk (no UI surfaces it, no organic traffic would discover it), but "backscoped" only holds at the page layer, not the API layer. Not fixed — Tier 4 standing rule (nothing here gets session time while Tier 0-3 gaps exist) — noted here rather than filed as its own bug so it isn't silently forgotten when Phase 7 eventually picks this up.
+
 ---
 
 ## /scouts — Scout Reports
@@ -165,6 +167,8 @@ Grep for `BACKSCOPED: 2026-06-08` to find all comment-out markers in source.
 
 **Reinstate when:** Phase 7 engagement sprint — requires admin poll creation tool first
 **Risk if reinstated early:** Components render empty states or error silently, no polls exist in DB
+
+**Gap found session 47D (`BUG-147` investigation):** same shape as the predictions entry above — `src/app/api/polls/route.ts` (POST/PATCH) is live and unauthenticated, `createdBy` optional and taken from the request body. Low real-world risk, not fixed per the standing Tier 4 rule, noted here for whenever this feature is picked back up.
 
 ---
 
