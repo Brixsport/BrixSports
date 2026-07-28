@@ -6476,4 +6476,18 @@ No `clearTimeout` exists anywhere in the file. The effect that sets `stateManage
 
 ---
 
+### BACKLOG-162 — Auth/Account Minor Cleanup: Dead Favourites Page, Duplicate `useAuth` Hooks, Wrong-Key `localStorage` Cleanup
+
+**Status:** OPEN — found session 47D, not fixed
+**Priority:** LOW/MEDIUM — no active data-integrity risk, real UX/maintenance debt
+
+**Findings, bundled (missed in the first filing pass, caught on a completeness re-check):**
+1. **`src/app/profile/favorites/page.tsx` is 100% hardcoded mock data** — a `mockFavorites` object (lines 8-25), no API calls anywhere in the file, `removeFavorite` only mutates local state. Distinct from and more severe than `BUG-091` (the match-detail heart button, which does hit real APIs via `useFavorites`) — this dedicated page has never been wired to `useFavorites` or any backend route at all.
+2. **Two competing `useAuth` hooks exist**: `src/hooks/useAuth.ts` (cookie-only check via `/api/auth/me`, no localStorage fallback, no `login`/`register`/`logout` methods) vs. `src/contexts/AuthContext.tsx`'s own exported `useAuth`. `src/app/profile/settings/page.tsx` imports the former, everywhere else imports the latter. Structural risk (behavior could silently diverge between the two), not yet a proven live bug.
+3. **`src/app/profile/page.tsx:226`'s failed-auth-fetch catch block calls `localStorage.removeItem('token')`** — but the key used everywhere else in the app is `'authToken'`, never `'token'`. Dead code; a stale/invalid `authToken` is never cleared on this page's failure path.
+
+**Fix (not built):** wire `/profile/favorites` to `useFavorites`; consolidate to one `useAuth` implementation (retire the cookie-only one or make it delegate to the context); fix the `localStorage` key typo.
+
+**Found:** session 47D, by a background audit agent doing a full read-only trace of the auth/account/notifications system.
+
 ---
