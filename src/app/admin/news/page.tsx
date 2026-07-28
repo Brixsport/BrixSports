@@ -217,8 +217,8 @@ function AdminNewsPageContent() {
             const payload = {
                 ...formData,
                 tags: formData.tags ? formData.tags.split(',').map(t => t.trim()) : [],
-                authorId: 'admin-1',
-                authorName: 'Admin',
+                // authorId/authorName are derived server-side from the verified session
+                // (BUG-147) -- anything sent here is ignored, no longer sent.
             };
 
             const url = editingNews ? `/api/news/${editingNews.id}` : '/api/news';
