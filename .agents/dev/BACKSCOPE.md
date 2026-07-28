@@ -35,6 +35,8 @@ Grep for `BACKSCOPED: 2026-06-08` to find all comment-out markers in source.
 **Reinstate when:** Phase 7 revenue/engagement feature sprint begins
 **Risk if reinstated early:** Empty pages, broken UX, no data to display
 
+**Gap found session 47D (`BUG-147` investigation, same shape as the predictions/polls entries below):** all five FPL API routes are live and unauthenticated — `POST /api/fpl/teams` takes `userId` directly from the request body with no verification it belongs to the caller. Low real-world risk (no UI surfaces any of them), not fixed per the standing Tier 4 rule, noted here so it isn't forgotten when Phase 7 picks this back up.
+
 ---
 
 ## /predictions — Match Predictions

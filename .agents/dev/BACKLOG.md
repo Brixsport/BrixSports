@@ -4571,17 +4571,21 @@ Add `getAuthUser()` to POST and DELETE. Source `userId` from `authUser.id`, not 
 
 ---
 
-### BUG-039 — LOW: Unbounded Teams Query in /api/basketball/players
+### BUG-039 — Unbounded Teams Query in /api/basketball/players — Worse Than Filed: Also a Correctness Bug
 
 **Status:** OPEN
-**Priority:** Low — performance issue, not a security issue
+**Priority:** MEDIUM (raised from Low, session 47D — this is now confirmed to also silently drop real teams, not just a performance issue)
 **Filed:** 2026-06-17
 
 #### Problem
-`src/app/api/basketball/players/route.ts` line 14 runs `db.select().from(teams).all()` — loads all 236+ teams from the DB just to filter in JS to the ~6 basketball teams by name. This full table scan runs on every basketball player page load.
+`src/app/api/basketball/players/route.ts` line 14 runs `db.select().from(teams).all()` — loads all 236+ teams from the DB just to filter in JS. This full table scan runs on every basketball player page load.
+
+**Confirmed worse, session 47D:** the JS filter isn't `sport === 'Basketball'` as originally assumed — it's a **hardcoded array of six literal team names** (`['TBK', 'Titans', 'Storm', 'Rim Reapers', 'Vikings', 'Siberia']`, line 14-15). Any basketball team whose name isn't in this literal list — a newly-onboarded university's team, or a college team created after this list was written — is silently excluded from this endpoint's results entirely. This is a correctness bug, not just a performance one.
 
 #### Fix
-Replace with a `.where(eq(teams.sport, 'Basketball'))` clause to push the filter to SQLite.
+Replace with a `.where(eq(teams.sport, 'Basketball'))` clause — pushes the filter to SQLite (fixes the performance issue) and removes the hardcoded name list entirely (fixes the correctness issue), both at once.
+
+**Found (correctness escalation):** session 47D, by a background audit agent doing a full read-only trace of the player/team/competition data system.
 
 #### Files
 - `src/app/api/basketball/players/route.ts`
@@ -4925,8 +4929,8 @@ Related: BACKLOG-090 (RSC/client island architecture), BACKLOG-095 (data freshne
 
 ### BACKLOG-097 — Event Pipeline: No Standings/Points Update on Goal Save
 
-**Status:** OPEN
-**Priority:** MEDIUM
+**Status:** OPEN — CONFIRMED REAL, session 47D (was "OPEN, needs audit")
+**Priority:** HIGH (raised from MEDIUM — confirmed total, not partial, and compounds with a second finding below)
 **Filed:** 2026-06-19
 
 #### Finding
@@ -4941,6 +4945,16 @@ Affected flows:
 1. Check `PATCH /api/matches/[id]` — does setting `status: 'FINISHED'` trigger a standings recalculation?
 2. Check `/api/competitions/[id]/standings` — does it recalculate on the fly from match results, or read from a cached table?
 3. If neither triggers a recalculation: wire standings update into the FINISHED status transition.
+
+#### Audit answer (session 47D, confirmed by direct code read + codebase-wide grep)
+
+**The gap is real and total, not partial.** `standings` is a stored table, read verbatim by every consumer (`/api/football/standings`, `/api/competitions/[id]/standings`, generic `/api/standings` GET) — none derive from `matches` at read time. The **only** writer anywhere in the codebase is `POST /api/standings`, a manual admin bulk-upsert (grepped every `.ts`/`.tsx` for `insert(standings)`/`update(standings)` — zero other hits). Nothing in the match-finalize path (`events/route.ts`'s `after()` hooks: `broadcastMatchEvent`, `broadcastScoreUpdate`, `calculateAndSaveRatings()`) touches `standings`. No cron/scheduled recompute exists either. A competition's standings only reflect reality if an admin manually re-POSTs correct numbers or a one-off backfill script runs.
+
+**Compounding finding, same session, new:** `src/app/teams/[id]/page.tsx` (a team's own profile page) reads its "Season Stats" card from a **third, independent** location — the `teams` table's own `played`/`won`/`drawn`/`lost`/`goalsFor`/`goalsAgainst` columns (`src/app/api/teams/[id]/route.ts:184-217`). These columns default to `0` (not `null`) in the schema, so the route's own "calculate live from finished matches" fallback branch (gated on `team.played === null`) never actually executes — confirmed via grep, nothing ever calls `.update(teams).set({ played: ..., won: ... })` anywhere in the live app. This is a frozen snapshot from whatever seed/backfill script last touched it. **Net effect: the public `/teams` directory and a team's own `/teams/[id]` profile page can show different Played/Won/Points numbers for the same team**, because they read from two separately-stale caches with no reconciliation.
+
+**Fix (not built):** wire a real standings recalculation into the match-finalize path (on `status → FINISHED`), and either retire the `teams` table's redundant stat columns in favor of always deriving from `standings`, or keep both in sync from the same trigger. Real scope — not a quick patch, touches the finalize path for both sports.
+
+**Found:** session 47D, by a background audit agent doing a full read-only trace of the player/team/competition data system.
 
 Do not build anything until the audit confirms whether the gap is real.
 
@@ -5611,6 +5625,7 @@ A skewed black "B" on the theme's `bg-primary` blue — never replaced with the 
 **Confirmed via code, not fixed (deliberately deferred to avoid scope creep):**
 1. `InstallPrompt.tsx`'s dismiss timestamp (`localStorage['pwa-install-dismissed']`) is **not namespaced per app type** — unlike the "installed" flag (`brix-${appType}-installed`), which is correctly scoped. Dismissing the install prompt on the viewer suppresses it for admin and logger too (and vice versa) for the full 7-day window. Directly undercuts this session's own work making the three roles feel like distinct apps.
 2. Stale comment/code mismatch: comment says "Show prompt after 30 seconds," actual code is `setTimeout(..., 5000)` (5s). Cosmetic, but misleading to a future reader.
+3. **Added session 47D (PWA audit):** `IOSInstallPrompt.tsx`/`IOSInstallBanner` have the identical un-namespaced bug for their own dismissal keys (`ios-install-dismissed`, `ios-banner-dismissed`) — not previously named in this ticket, which only called out `InstallPrompt.tsx`. Their "already installed" check (`brix-${appType}-installed`) is correctly namespaced, matching item 1's pattern exactly — same fix (namespace every dismissal/cooldown key by `appType`, not just the installed flag) closes both at once.
 
 **Deferred, not scoped — Richard's broader design question:** should there be a dedicated system (e.g. a sliding-window reminder strategy — show once, escalate/re-show on a schedule if dismissed, per-role tuning) rather than the current flat "5s after event, 7-day dismiss cooldown" logic? Real product/UX design work, not a quick fix — needs its own session to actually design, not sketched under time pressure here.
 
@@ -6334,5 +6349,112 @@ No `clearTimeout` exists anywhere in the file. The effect that sets `stateManage
 6. **`BACKLOG-096`** ("no server-side WS emit on event save," filed 2026-06-19, still shows `Status: OPEN`) appears substantially superseded by `BUG-116`'s later fix (server-side broadcast landed session 43) — worth a status re-check and likely closure next time that entry is touched.
 
 **Found:** session 47D, by a background audit agent doing a full read-only trace of the public viewer experience.
+
+---
+
+### BACKLOG-155 — Admin Feature Flags Are Fully Inert (Read Nowhere Else In The Codebase)
+
+**Status:** OPEN — found session 47D, not fixed
+**Priority:** HIGH — directly undercuts the still-open Live Event Readiness Checklist item ("All 🔴 High Volatility features are disabled or hidden from the UI")
+
+**Problem:** `src/app/admin/settings/page.tsx`'s feature-flag CRUD (fetching, editing, saving) genuinely works against a real `systemSettings` table. But all seven default settings — `system.maintenance.mode`, `system.registration.enabled`, `system.notifications.enabled`, `features.fpl.enabled`, `features.predictions.enabled`, `features.polls.enabled`, `features.transfers.enabled` (`src/app/api/admin/settings/route.ts:15-28`) — are **read nowhere else in the entire codebase**. Grepped every key string across `src/**`; only the settings page and its own API route reference them. Toggling "maintenance mode" or "Enable Transfer News" off changes a DB row with zero effect on anything a user or admin experiences — no route guard, no conditional render, no middleware check consults these values anywhere.
+
+**Why this matters now:** `CLAUDE.md`'s own Live Event Readiness Checklist has an unchecked item — "All 🔴 High Volatility features are disabled or hidden from the UI — OPEN — Ads, Lineup Builder, Transfers, User Management, News, and `/api/auth/test` all accessible. Must gate or hide before any public match day." There is currently **no working mechanism in this codebase to accomplish that** via these flags — building real gating (conditional rendering + a shared `isFeatureEnabled()` check wired into the relevant routes/middleware) would be new work, not flipping an existing switch.
+
+**Fix (not built):** either wire the existing flags into real conditional checks at each High Volatility feature's entry point, or if a different mechanism is preferred (env vars, a deploy-time constant), retire the inert Settings UI so it stops implying a control that doesn't exist.
+
+**Found:** session 47D, by a background audit agent doing a full read-only trace of the admin platform.
+
+---
+
+### BACKLOG-156 — Admin Dashboards Present Placeholder/Fabricated Data As Real, Without Labeling It
+
+**Status:** OPEN — found session 47D, not fixed
+**Priority:** MEDIUM — misleads an admin relying on these panels, matches this project's own documented "fabricated data presented as real" pattern (e.g. `BUG-088`)
+
+**Findings, bundled (same theme, different pages):**
+1. **Match Ratings list's "★ N ratings published" badge is always wrong.** `src/app/admin/match-ratings/page.tsx:28-29`'s `hasRatings`/`ratingsCount` fields drive the badge, but a codebase-wide grep for both names finds **only this one file** — no API route, including the `/api/matches` endpoint this page actually calls, ever sets them. Every match renders "No ratings yet" regardless of whether ratings actually exist, misleading an admin scanning for which matches still need attention.
+2. **Infrastructure dashboard has three placeholder metrics presented as live data**, none labeled as such in the UI: `disk: 0` always (`src/app/api/admin/infrastructure/route.ts:146`, own comment admits "would need OS-specific calls"); `cpu` is `process.cpuUsage().user / 1e6 % 100` — a meaningless-as-a-percentage proxy, not real system load; `recentErrors` (`route.ts:183-187`) is hardcoded to always return `[]` with a comment "placeholder — integrate with error logging service," despite Sentry already being configured elsewhere in this project per `CLAUDE.md`'s own stack list — the "Recent Errors" panel can never show anything, ever.
+
+**Fix (not built):** either wire these to real data sources (Sentry API for `recentErrors` in particular, since the infrastructure already exists) or visibly label them as unavailable/placeholder rather than rendering a value that looks real.
+
+**Found:** session 47D, by a background audit agent doing a full read-only trace of the admin platform.
+
+---
+
+### BACKLOG-157 — Public Lineup Builder (`/lineups`) Silently Swallows Save Failures
+
+**Status:** OPEN — found session 47D, not fixed
+**Priority:** MEDIUM — a direct instance of CLAUDE.md's "no silent failures" rule, inverted (silent no-op instead of silent success)
+
+**Problem:** `src/app/lineups/page.tsx` lets any visitor build a formation visually and download it as a PNG (works fine, no auth needed) or "Save Draft" (`handleSaveDraft`, lines 201-225), which POSTs to `/api/matches/[id]/lineup` — a route gated to `admin`/`logger` roles only. The save handler only checks `if (data.success)` and never checks `response.ok`, so a 401/403 JSON error response falls through both the success branch and the catch block silently. A viewer (or any non-admin/logger) clicking "Save Draft" sees **no error at all** — not even a failed-save message — and has no way to know their work wasn't saved.
+
+**Fix (not built):** check `response.ok` before `data.success`, surface a clear error toast/message on any non-2xx response, matching the pattern used correctly elsewhere in the app (e.g. `FootballLogger.tsx`'s server-first event handlers).
+
+**Found:** session 47D, by a background audit agent doing a full read-only trace of the admin platform.
+
+---
+
+### BACKLOG-158 — Admin CRUD Completeness Gaps and Minor Dead UI (Bundled, Low Priority)
+
+**Status:** OPEN — found session 47D, not fixed
+**Priority:** LOW — none of these block any Critical Flow; genuine feature-completeness debt
+
+**Findings, bundled:**
+1. **Organizations management has no edit or delete/deactivate** (`src/app/admin/organizations/page.tsx`) — create-only; an org's `status` can only be set at creation, never toggled after.
+2. **Track & Field events admin has no edit functionality** (`src/app/admin/track-events/page.tsx`) — create and delete work, but a created meet's venue/time/teams/categories can't be changed short of delete-and-recreate.
+3. **Notifications admin hub oversells what exists** (`src/app/admin/notifications/page.tsx`) — "History" and "Settings" quick-action cards are plain `<div>`s with no `href`/`onClick`, styled identically to the one real link (Composer) but fully decorative. (History functionality does actually exist, just nested inside Composer's own `fetchSendHistory` rather than as its own page.)
+4. **Push Diagnostics page is orphaned** (`src/app/admin/push-diagnose/page.tsx`) — not linked from `AdminSidebar.tsx` or any other admin page, reachable only by typing the URL directly. Likely intentional (a debug tool), not confirmed either way.
+5. **`src/app/analytics/loggers/page.tsx` has no client-side auth check**, unlike every page under `/admin/**` — not a security hole (its data API is properly gated server-side), but a non-admin hitting this URL gets a broken/empty dashboard instead of the redirect-to-login every other admin page gives.
+6. **`logger_manager` role found in `admin/layout.tsx`'s gate check is not documented anywhere in `CLAUDE.md`'s stated Actor Model** (Super Admin → Competition Admin → Team Manager → Logger → Viewer) — a docs/code reconciliation gap, not a functional bug.
+
+**Found:** session 47D, by a background audit agent doing a full read-only trace of the admin platform.
+
+---
+
+### BACKLOG-159 — `players.rating` (Shown On Every Player Profile) Is a Dead, Never-Live-Updated Field
+
+**Status:** OPEN — found session 47D, not fixed
+**Priority:** HIGH — this is the rating number every viewer actually sees; it is stale for 100% of players, both sports, always
+
+**Problem:** the platform runs two completely disconnected rating pipelines. `players.rating` (`schema.ts:59`, `default(7.0)`) — the number shown on every player profile, comparison card, and the `/xi` Build-Your-XI tool — is only ever mutated by a legacy route, `src/app/api/events/route.ts` (a different, older `POST /api/events`, NOT the real match-logging route). Confirmed via grep: no logger component (`FootballLogger.tsx`, `BasketballLogger.tsx`, `TrackLogger.tsx`, `MatchLoggerUI.tsx`) has ever called this route — all of them POST to `/api/matches/[id]/events` instead. The only other reference to `/api/events` anywhere is an infrastructure health-check pinger. **`players.rating` is not live-updated by any match a logger ever logs today, for either sport** — it reflects whatever a seed/backfill script set it to, frozen from that point on.
+
+**The "real" rating system exists, but doesn't reach this field.** `calculateAndSaveRatings()` (`ratingsService.ts`, called from the actual live route) writes to a separate `playerRatings`/`teamRatings` schema using a *different* `RatingCalculator` class (`src/lib/ratingCalculator.ts`) than the legacy route's own `src/lib/services/rating-calculator.ts` — **two independent `RatingCalculator` implementations exist as a live dead-code fork**, the same maintenance-trap pattern as the logging audit's "three parallel offline-queue implementations" finding. The real system's only public surface is the football/basketball hub pages' "Power Ranking" leaderboard card (`?type=powerRanking`), not the player's own profile page.
+
+**Confirmed downstream, basketball-specific symptom:** since `calculateAndSaveRatings()` never succeeds for any basketball match (`BACKLOG-146`), the Basketball hub's Power Ranking card always queries an empty set — it renders a normal-looking card with zero rows and no explanation, indistinguishable from "no matches logged yet" to a viewer. Football's card works correctly, making the asymmetry visible side-by-side.
+
+**Fix (not built):** retire the legacy `/api/events`-fed pipeline and `players.rating` field (or repoint it to read from `playerRatings` at query time), consolidate to one `RatingCalculator` implementation, and add a real "ratings not yet available" state to the Power Ranking card so basketball's empty state doesn't look identical to "nothing logged yet."
+
+**Found:** session 47D, by a background audit agent doing a full read-only trace of the player/team/competition data system.
+
+---
+
+### BACKLOG-160 — Player Discovery Gaps: Broken Inline Compare Tab, No Player Listing Page, Two Dead `/players` Links
+
+**Status:** OPEN — found session 47D, not fixed
+**Priority:** MEDIUM
+
+**Findings, bundled (same investigation area):**
+1. **The inline "Compare" tab on a player's own profile page (`src/app/players/[id]/page.tsx`) is broken — always returns zero results.** It calls `/api/search?q=...&type=players&limit=10`, but `src/app/api/search/route.ts` reads the category filter from a param named `category`, not `type` — so the filter is silently ignored and every category branch runs. Worse, the response shape is `{ results: { players: [...] } }` but the handler reads `data.players` directly (always `undefined`), so `setSearchResults(data.players || [])` always sets an empty array regardless of query. The **dedicated** `/players/compare` page works correctly (right param name, right response shape) — only the inline tab variant is broken.
+2. **No player listing/directory page exists.** `src/app/players/` contains only `[id]/page.tsx` and `compare/page.tsx` — there is no `src/app/players/page.tsx`, so there's no way to browse/filter the full roster as its own destination (unlike `/teams`, which has one).
+3. **Two dead links to the nonexistent `/players` route, both 404** — `src/app/favourites/page.tsx:119` ("Back" link from an empty favourites state) and `src/app/players/compare/page.tsx:222` ("Back to Players").
+
+**Fix (not built):** fix the inline Compare tab's param name (`type` → `category`) and response-shape read (`data.players` → `data.results.players`) to match the working dedicated page; build a `src/app/players/page.tsx` listing page (or point the two dead links somewhere real, like `/search?category=players`, as a cheaper interim fix).
+
+**Found:** session 47D, by a background audit agent doing a full read-only trace of the player/team/competition data system.
+
+---
+
+### BACKLOG-161 — Minor Data/Discoverability Findings (Bundled, Low Priority)
+
+**Status:** OPEN — found session 47D, not fixed
+**Priority:** LOW
+
+**Findings, bundled:**
+1. **The `headToHead` table's write path is entirely dead.** `POST /api/head-to-head` (its only writer) is never called anywhere in the app — not by any admin page, the match-finalization path, or any live script. `GET /api/head-to-head` correctly falls back to computing head-to-head stats live from the last 5 finished matches when no stored row exists (`calculateH2HStats`), which is why the feature still works end to end today — but that fallback only looks at the last 5 matches, so a long rivalry's true all-time record (which the dedicated table's schema clearly intends to track) is never actually shown, only a recent-form snapshot.
+2. **`/stats` is a team-only stats page despite the name** — the actual player leaderboards (goals/assists/points/rebounds/power-ranking) live inside the football/basketball hub pages' STATS tabs instead. Pure information-architecture/discoverability gap, not a broken feature.
+3. **`/xi` ("Build Your XI") has no sport-awareness in its player picker** — `GET /api/players?limit=100` with no sport/team filter means a viewer could technically build a "team" mixing football and basketball players. Its displayed team rating also reads the same dead `players.rating` field as `BACKLOG-159`. Low severity — this is a fan-engagement feature, not officiating-critical, and already has its own auth gap tracked (`BUG-037`, OPEN, not part of the `BUG-147` sweep).
+
+**Found:** session 47D, by a background audit agent doing a full read-only trace of the player/team/competition data system.
 
 ---
