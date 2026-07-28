@@ -78,10 +78,12 @@ Grep for `BACKSCOPED: 2026-06-08` to find all comment-out markers in source.
 
 **Backscoped:** 2026-06-08 (was already dead before this session)
 **Backlog ref:** BACKLOG-028
-**Current state:** DEAD — page component exists but already contained a redirect to `/`. No API routes. No DB tables.
+**Current state:** DEAD — page returns `notFound()`. No API routes exist anywhere under `/api/scouts/**` (confirmed by glob, zero matches). No DB tables.
 
 **What exists in code:**
-- `src/app/scouts/page.tsx` — pre-existing redirect to `/`
+- `src/app/scouts/page.tsx` — `notFound()` (**correction, session 47D**: this entry previously described a "redirect to `/`" — the mechanism was changed to match the other Tier 4 pages' `notFound()` convention at some point without this entry being updated; functionally equivalent, no user-facing difference)
+
+**No pending security/auth issues to track here** — unlike FPL/Predictions/Polls, there's no API surface at all for this feature, so there's nothing to gate before it's eventually built.
 
 **What's missing to reinstate:**
 - Full scout/talent hub feature design + build
@@ -112,6 +114,8 @@ Grep for `BACKSCOPED: 2026-06-08` to find all comment-out markers in source.
 
 **Reinstate when:** NESA event is planned and full build is scoped
 **Risk if reinstated early:** Form submits to nothing, data is lost, broken FK constraints would cause 500s
+
+**No pending security/auth issues to track here** — session 47D confirmed zero `/api/nesa-registration/**` routes exist at all (matches this entry as already written); nothing to gate before it's eventually built.
 
 ---
 
@@ -270,3 +274,20 @@ Grep for `BACKSCOPED: 2026-06-08` to find all comment-out markers in source.
 
 **Reinstate when:** the admin-side selection flow above is rebuilt, and the logger-caller edge case is either resolved or explicitly decided against (admin/manager-only feature)
 **Risk if reinstated early:** exactly what was found this session — an unauthenticated internal-notes endpoint, live in production, plus a placeholder selection flow presented as a finished feature
+
+---
+
+## /xi + /xi/gallery — "Build Your XI" (fan-engagement team builder)
+
+**Flagged (not yet backscoped):** 2026-07-27 (session 47D) — Richard's own call, noting it here to track rather than acting yet
+**Backlog ref:** `BUG-037` (auth gap), plus new unfiled findings from the player-data audit
+**Current state:** LIVE and functional (no crashes — pick a formation, slot in players, save, view the public gallery of saved XIs) but genuinely not stable enough to stand as a finished feature:
+1. `POST /api/user/xi` has no auth gate (`BUG-037`, OPEN) — `userId` comes from the request body, so any caller can attribute a saved XI to any other user's account.
+2. The player picker (`GET /api/players?limit=100`) has no sport/team filter at all — a "team" can mix football and basketball players with nothing preventing it.
+3. The displayed team rating (`teamRating`, average of selected players' `.rating`) reads the same dead, never-live-updated `players.rating` field documented in `BACKLOG-159` — the number shown while building is fabricated, not real.
+
+**Not currently in either Tier 4's backscoped list or Tier 0-3's active-and-solid list** — this entry exists to track that ambiguity, not to resolve it. No code changed; the feature remains live as-is pending a real decision.
+
+**What's missing to actually stabilize (if kept live) or reinstate cleanly (if backscoped later):** the `BUG-037` auth fix, a sport filter on the player picker, and either wiring the rating to something real or dropping the rating display entirely.
+
+**Decision:** deferred — noted here per Richard's explicit request, no `notFound()` applied, no functionality removed.

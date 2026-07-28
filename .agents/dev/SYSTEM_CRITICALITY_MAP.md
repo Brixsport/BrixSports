@@ -119,6 +119,8 @@ Features that would deepen engagement _if_ the core product were fully solid, bu
 
 **Standing rule:** nothing in Tier 4 gets session time while any Tier 0 item is open, full stop. This isn't a severity judgment on these features — it's sequencing logic. A polished prediction feature sitting on top of an unreliable live clock actively hurts the product, because it invites engagement with data the user has no reason to trust yet.
 
+**Tier 4-adjacent, live but not stable, session 47D:** `/xi` + `/xi/gallery` ("Build Your XI") is NOT backscoped — it's live, functional, no crashes — but has three confirmed bugs (no auth on save, `BUG-037`; no sport filter, lets a "team" mix football and basketball players; displayed team rating reads a dead, never-live-updated field, `BACKLOG-159`) that put it below the bar for a finished feature. Richard's explicit call: note it here and in `BACKSCOPE.md`, don't backscope or fix yet — tracked, not resolved. Contrast: News/Blog admin (also engagement-adjacent, Tier 3) was checked the same session and found genuinely stable — full working CMS, one found bug (hardcoded `authorId`) already fixed same session, no open concerns.
+
 ---
 
 ## How This Maps to Current Open Work (as of 2026-06-30)
