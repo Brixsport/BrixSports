@@ -263,14 +263,30 @@ export default function MatchDetailPage() {
             });
         };
 
+        // BUG-092: broadcastEventDeleted's 'event:deleted' is already received
+        // correctly by useMatchEvents' own internal state (liveEvents, unused
+        // here for rendering) -- but nothing was filtering it out of
+        // matchData.events, the state the Timeline tab actually renders from.
+        // Without this, a deleted event only vanished once the unrelated 25s
+        // reconciliation poll (BUG-108) happened to refetch -- not instant.
+        const handleEventDeleted = (data: { matchId: string; eventId: string }) => {
+            if (data.matchId !== matchId) return;
+            setMatchData(prev => {
+                if (!prev) return prev;
+                return { ...prev, events: prev.events.filter((e: any) => e.id !== data.eventId) };
+            });
+        };
+
         on('match:score:updated', handleScoreUpdate);
         on('match:status:changed', handleStatusChange);
         on('match:updated', handleMatchUpdate);
+        on('event:deleted', handleEventDeleted);
 
         return () => {
             off('match:score:updated', handleScoreUpdate);
             off('match:status:changed', handleStatusChange);
             off('match:updated', handleMatchUpdate);
+            off('event:deleted', handleEventDeleted);
         };
     }, [matchId, matchData, on, off]);
 
