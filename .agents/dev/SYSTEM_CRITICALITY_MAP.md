@@ -154,6 +154,30 @@ This table should be updated whenever a new significant bug or feature is identi
 
 ---
 
+## Session 47D — Full-System Audit, Mapped to Tier + the Three Critical Flows (2026-07-27)
+
+Six parallel background agents traced the entire platform (logging system, public viewer, auth/notifications, admin platform, player/team/competition data, PWA/Tier 4) — full detail in `.agents/dev/AUDITS/*_47D.md`, full entries in `BACKLOG.md`. This table pulls out only what changes tier placement or touches a Critical Flow directly — see BACKLOG.md for the complete list (BUG-147 through BUG-152, BACKLOG-151 through BACKLOG-161, plus escalations to BACKLOG-097 and BUG-039).
+
+**Critical Flow key:** A = Match Creation (admin creates → assigns loggers → appears public) · B = Live Event Logging (logger → DB → public updates) · C = Public Livescore (viewer sees live match, updates without refresh)
+
+| Item | Tier | Flow | Why it matters |
+|---|---|---|---|
+| `BUG-149` — homepage never refreshes live match data (no WS, no poll, ever) | 0/1 | **C** | The single most severe finding this session. The homepage is the highest-traffic entry point and it violates Flow C's own core promise — a viewer sees a permanently frozen score during a live match until manual reload. Also starves the football homepage-overlay and both sport-hub MATCHES tabs of freshness. |
+| `BACKLOG-151` — multi-logger sync is poll-only; real-time broadcast (`broadcastEvent`) and conflict resolution (`resolveConflict`) are both no-ops | 0 | **B** | Directly the CLAUDE.md Live Event Readiness Checklist's own still-open item ("no dual-logger test ever run"). Two loggers only converge every 10-15s, never in real time, and a "resolved" conflict never actually changes the DB. |
+| `BUG-151` — no server-side event dedup/idempotency check exists at all | 0 | **B** | Client-side guards are the only protection against a duplicate event landing twice (replayed offline-queue POST, or two loggers racing the same real event). Defense-in-depth gap, not a confirmed active incident. |
+| `BUG-147` — 18-route unauthenticated-write cluster, most severe sub-items for Flow A/B: `fixtures/[id]` PATCH (direct score/status rewrite bypassing the hardened events pipeline), `matches/[id]/lineup` (overwrite any lineup), `events/sync` (second unauthenticated write path into `match_events`) | 0/3 (mixed) | **A, B** | **RESOLVED this session** — all 18 routes gated. Kept here as a record of how close Flow A/B data integrity came to being bypassable entirely outside the normal, hardened write path. |
+| `BACKLOG-152` — Track & Field logger has zero persistence layer at all | 0 | **B** (Track only) | Every track result is lost on refresh. No live Track matches currently run on this platform — real severity, zero current urgency. |
+| `BACKLOG-153` — admin match-edit modal has no score-correction field; three dead offline-queue implementations; unconfirmed FINISHED write-lock | 0 (structural) | **A, B** (adjacent) | Compounds the already-tracked "no mutation audit trail" gap — an admin has no *supported* way to correct a bad live score, only an unsupported raw-API path. |
+| `BACKLOG-097` (escalated) — standings never recalculate on match finish; **new**: `teams` table's own season-stat columns are a second, independently-stale cache, so `/teams` and `/teams/[id]` can disagree on the same team's record | 2 | none directly (post-match derived data) | Confirms this project's own previously-unresolved "Required Audit" — the gap is real and total, not partial. Raised HIGH given the "two pages disagree" compounding finding. |
+| `BACKLOG-159` — `players.rating` (shown on every profile, comparison card, `/xi`) is fed by a dead legacy route no logger has called since the pipeline was rebuilt; two duplicate `RatingCalculator` classes exist | 2 | none directly | The rating number every viewer actually sees is stale for 100% of players, both sports, always — bigger in reach than the already-known basketball-specific ratings gap (`BACKLOG-146`), though lower urgency since it's not Flow-blocking. |
+| `BUG-150` — anonymous viewers cannot enable push notifications through any reachable UI path | 1 | adjacent to **C** | Direct contradiction of `CLAUDE.md`'s own actor-model rule ("Viewers NEVER have a session" — i.e. the product must fully work for them). The one component that would work anonymously is defined but never mounted. |
+| `BACKLOG-154` — `BACKLOG-119`'s live-styling fix only reached 1 of 4 surfaces that show match status; 3 independent timeline implementations with uneven parity | 1 | **C** | Visible-trust inconsistency during live viewing — not a data-correctness issue, but a real "does this look live and current" gap on 3 of the 4 places a viewer would check. |
+| `BACKLOG-155` — all 7 admin feature flags are inert, read nowhere else in the codebase | 3 | none directly, but blocks pre-live-match readiness | Directly undercuts the still-open Live Event Readiness Checklist item "All 🔴 High Volatility features are disabled or hidden from the UI" — there is currently no working mechanism to do that with. |
+
+**Net read for planning:** the two items that actually touch a Critical Flow at CRITICAL severity are `BUG-149` (Flow C, homepage) and `BACKLOG-151`/`BUG-151` (Flow B, multi-logger sync + dedup) — everything else this session found is Tier 1-3 (real, but not flow-breaking) or was already fixed same-session (`BUG-147`). This should directly inform next-session sequencing over the BACKLOG's raw priority labels alone.
+
+---
+
 ## Locked Decisions (do not relitigate)
 
 These were explicitly decided in planning sessions and are not open questions.
