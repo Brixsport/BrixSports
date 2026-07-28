@@ -240,12 +240,37 @@ export default function MatchDetailPage() {
             }
         };
 
+        // BUG-153: match:score:updated/match:status:changed are dead client-emit
+        // paths from FootballLogger.tsx (event-name typo vs. what ws-server.js
+        // actually listens for -- never fires, either sport). match:updated is
+        // the real, already-firing, sport-agnostic broadcast (PATCH
+        // /api/matches/[id]'s after() hook, fires on every admin/logger PATCH)
+        // that this page never subscribed to. Kept the two dead-path listeners
+        // above rather than removing them -- harmless no-ops today, and free
+        // insurance if that emit-name bug is ever fixed at the source instead.
+        const handleMatchUpdate = (data: any) => {
+            if (data.matchId !== matchId || !matchData) return;
+            setMatchData(prev => {
+                if (!prev) return prev;
+                const nextMatch: any = { ...prev.match };
+                if (data.status !== undefined) nextMatch.status = data.status;
+                if (data.currentPeriod !== undefined) nextMatch.currentPeriod = data.currentPeriod;
+                if (data.homeScore !== undefined) nextMatch.homeScore = data.homeScore;
+                if (data.awayScore !== undefined) nextMatch.awayScore = data.awayScore;
+                if (data.minute !== undefined) nextMatch.minute = data.minute;
+                if (data.extraTime !== undefined) nextMatch.extraTime = data.extraTime;
+                return { ...prev, match: nextMatch };
+            });
+        };
+
         on('match:score:updated', handleScoreUpdate);
         on('match:status:changed', handleStatusChange);
+        on('match:updated', handleMatchUpdate);
 
         return () => {
             off('match:score:updated', handleScoreUpdate);
             off('match:status:changed', handleStatusChange);
+            off('match:updated', handleMatchUpdate);
         };
     }, [matchId, matchData, on, off]);
 
