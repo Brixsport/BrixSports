@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
 import { users, userPreferences, userFavorites, userFollows, teams } from '@/db/schema';
 import { eq, sql } from 'drizzle-orm';
+import { getAuthUser } from '@/lib/auth';
 
 /**
  * GET user profile with stats
@@ -124,6 +125,15 @@ export async function PATCH(
 ) {
     try {
         const { id: userId } = await params;
+
+        const authUser = await getAuthUser(request);
+        if (!authUser) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+        if (authUser.id !== userId && authUser.role !== 'admin') {
+            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+        }
+
         const body = await request.json();
         const { name, bio, avatar, coverImage, favoriteTeamId } = body;
 
@@ -176,6 +186,14 @@ export async function DELETE(
 ) {
     try {
         const { id: userId } = await params;
+
+        const authUser = await getAuthUser(request);
+        if (!authUser) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+        if (authUser.id !== userId && authUser.role !== 'admin') {
+            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+        }
 
         // Delete user (cascade will handle related records)
         await db

@@ -226,7 +226,12 @@ export async function POST(request: NextRequest) {
                 console.log('[Transfers API] Sending push notification...');
                 const notificationResponse = await fetch(`${request.nextUrl.origin}/api/notifications/send`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: {
+                        'Content-Type': 'application/json',
+                        // /api/notifications/send is admin-gated (BUG-147); forward the
+                        // already-verified admin's cookie for this server-to-server call.
+                        cookie: request.headers.get('cookie') || '',
+                    },
                     body: JSON.stringify({
                         type: 'transfer',
                         transferId,

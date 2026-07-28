@@ -1,6 +1,7 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
 import { teams } from '@/db/schema';
+import { getAuthUser } from '@/lib/auth';
 
 export async function GET() {
     try {
@@ -12,8 +13,16 @@ export async function GET() {
     }
 }
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
     try {
+        const authUser = await getAuthUser(request);
+        if (!authUser) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+        if (authUser.role !== 'admin') {
+            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+        }
+
         const body = await request.json();
         const newTeam = await db.insert(teams).values(body).returning();
         return NextResponse.json(newTeam[0], { status: 201 });

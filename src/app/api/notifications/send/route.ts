@@ -3,6 +3,7 @@ import webpush from 'web-push';
 import { db } from '@/db';
 import { pushSubscriptions, userFollows, userFavorites, users } from '@/db/schema';
 import { eq, inArray, and, or } from 'drizzle-orm';
+import { getAuthUser } from '@/lib/auth';
 
 // Configure web-push with VAPID keys for each request (serverless-safe)
 function configureVAPID(): { success: boolean; error?: string } {
@@ -121,6 +122,14 @@ async function getTargetUserIds(
 // POST /api/notifications/send - Send push notification to subscribers
 export async function POST(request: NextRequest) {
     try {
+        const authUser = await getAuthUser(request);
+        if (!authUser) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+        if (authUser.role !== 'admin') {
+            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+        }
+
         // Configure VAPID fresh for each request (serverless-safe)
         const vapidResult = configureVAPID();
         if (!vapidResult.success) {

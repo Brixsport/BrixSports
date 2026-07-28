@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
 import { headToHead, teams, matches } from '@/db/schema';
 import { eq, and, or, desc } from 'drizzle-orm';
+import { getAuthUser } from '@/lib/auth';
 
 /**
  * GET head-to-head record
@@ -98,6 +99,14 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
     try {
+        const authUser = await getAuthUser(request);
+        if (!authUser) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+        if (authUser.role !== 'admin') {
+            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+        }
+
         const body = await request.json();
         const { matchId, team1Id, team2Id, team1Score, team2Score, competition } = body;
 

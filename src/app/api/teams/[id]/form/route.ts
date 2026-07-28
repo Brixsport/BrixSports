@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
 import { teamForm, matches, teams } from '@/db/schema';
 import { eq, desc, and, lt } from 'drizzle-orm';
+import { getAuthUser } from '@/lib/auth';
 
 /**
  * GET team form
@@ -92,6 +93,14 @@ export async function POST(
     { params }: { params: { id: string } }
 ) {
     try {
+        const authUser = await getAuthUser(request);
+        if (!authUser) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+        if (authUser.role !== 'admin') {
+            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+        }
+
         const teamId = params.id;
         const body = await request.json();
         const { matchId, competition, result, goalsFor, goalsAgainst, matchDate } = body;
@@ -151,6 +160,14 @@ export async function DELETE(
     { params }: { params: { id: string } }
 ) {
     try {
+        const authUser = await getAuthUser(request);
+        if (!authUser) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+        if (authUser.role !== 'admin') {
+            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+        }
+
         const teamId = params.id;
         const { searchParams } = new URL(request.url);
         const before = searchParams.get('before');

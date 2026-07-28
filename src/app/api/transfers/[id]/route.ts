@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
 import { transfers, players, teams } from '@/db/schema';
 import { eq } from 'drizzle-orm';
+import { getAuthUser } from '@/lib/auth';
 
 // GET /api/transfers/[id] - Get single transfer with full details
 export async function GET(
@@ -75,6 +76,14 @@ export async function PATCH(
     { params }: { params: { id: string } }
 ) {
     try {
+        const authUser = await getAuthUser(request);
+        if (!authUser) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+        if (authUser.role !== 'admin') {
+            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+        }
+
         const { id } = params;
         const body = await request.json();
 
@@ -149,7 +158,12 @@ export async function PATCH(
                 console.log('[Transfers API] Sending push notification...');
                 const notificationResponse = await fetch(`${request.nextUrl.origin}/api/notifications/send`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: {
+                        'Content-Type': 'application/json',
+                        // /api/notifications/send is admin-gated (BUG-147); forward the
+                        // already-verified admin's cookie for this server-to-server call.
+                        cookie: request.headers.get('cookie') || '',
+                    },
                     body: JSON.stringify({
                         type: 'transfer',
                         transferId: transfer.id,
@@ -203,6 +217,14 @@ export async function DELETE(
     { params }: { params: { id: string } }
 ) {
     try {
+        const authUser = await getAuthUser(request);
+        if (!authUser) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+        if (authUser.role !== 'admin') {
+            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+        }
+
         const { id } = params;
 
         // Delete transfer

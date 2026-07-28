@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
 import { news, newsLikes, users } from '@/db/schema';
 import { eq, desc, and, like, or, sql } from 'drizzle-orm';
+import { getAuthUser } from '@/lib/auth';
 
 // GET /api/news - Get all news articles with filters
 export async function GET(request: NextRequest) {
@@ -80,6 +81,14 @@ export async function GET(request: NextRequest) {
 // POST /api/news - Create new news article (Admin only)
 export async function POST(request: NextRequest) {
     try {
+        const authUser = await getAuthUser(request);
+        if (!authUser) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+        if (authUser.role !== 'admin') {
+            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+        }
+
         const body = await request.json();
         const {
             title,
@@ -90,16 +99,14 @@ export async function POST(request: NextRequest) {
             tags,
             isBreaking,
             isFeatured,
-            authorId,
-            authorName,
             sendPushNotification,
             status,
         } = body;
 
         // Validate required fields
-        if (!title || !content || !category || !authorId) {
+        if (!title || !content || !category) {
             return NextResponse.json(
-                { error: 'Missing required fields: title, content, category, authorId' },
+                { error: 'Missing required fields: title, content, category' },
                 { status: 400 }
             );
         }
@@ -113,16 +120,7 @@ export async function POST(request: NextRequest) {
         // Create news article
         const newsId = `news-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
-        // Check if author exists in users table (foreign key constraint)
-        let validAuthorId = authorId;
-        if (authorId) {
-            const existingUser = await db.select({ id: users.id }).from(users).where(eq(users.id, authorId)).limit(1);
-            if (existingUser.length === 0) {
-                // User doesn't exist, set to null to avoid FK constraint violation
-                validAuthorId = null;
-            }
-        }
-
+        // authorId/authorName always come from the verified session, never the request body
         const newNews = await db.insert(news).values({
             id: newsId,
             title,
@@ -134,8 +132,8 @@ export async function POST(request: NextRequest) {
             tags: tags ? JSON.stringify(tags) : null,
             isBreaking: isBreaking || false,
             isFeatured: isFeatured || false,
-            authorId: validAuthorId,
-            authorName: authorName || 'Admin',
+            authorId: authUser.id,
+            authorName: authUser.name || 'Admin',
             sendPushNotification: sendPushNotification || false,
             status: status || 'draft',
             publishedAt: status === 'published' ? new Date() : null,
@@ -148,7 +146,13 @@ export async function POST(request: NextRequest) {
                 console.log('[News API] Sending push notification...');
                 const notificationResponse = await fetch(`${request.nextUrl.origin}/api/notifications/send`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: {
+                        'Content-Type': 'application/json',
+                        // Forward the caller's auth cookie -- /api/notifications/send is
+                        // admin-gated (BUG-147), and this is a server-to-server call made
+                        // on behalf of the already-verified admin who hit this route.
+                        cookie: request.headers.get('cookie') || '',
+                    },
                     body: JSON.stringify({
                         type: 'news',
                         newsId,

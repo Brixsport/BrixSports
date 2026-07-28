@@ -8,6 +8,7 @@ import { db } from '@/db';
 import { matchEvents, matches } from '@/db/schema';
 import { eq } from 'drizzle-orm';
 import { broadcastMatchEvent } from '@/lib/socket';
+import { getAuthUser } from '@/lib/auth';
 
 interface SyncEventRequest {
     matchId: string;
@@ -31,6 +32,14 @@ interface SyncEventRequest {
  */
 export async function POST(request: NextRequest) {
     try {
+        const authUser = await getAuthUser(request);
+        if (!authUser) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+        if (authUser.role !== 'admin' && authUser.role !== 'logger') {
+            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+        }
+
         const body: SyncEventRequest = await request.json();
         const { matchId, event, timestamp } = body;
 

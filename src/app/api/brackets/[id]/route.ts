@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
 import { bracketNodes, matches } from '@/db/schema';
 import { eq } from 'drizzle-orm';
+import { getAuthUser } from '@/lib/auth';
 
 // GET /api/brackets/[id] - Get a specific bracket node
 export async function GET(
@@ -43,6 +44,14 @@ export async function PATCH(
     { params }: { params: { id: string } }
 ) {
     try {
+        const authUser = await getAuthUser(request);
+        if (!authUser) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+        if (authUser.role !== 'admin') {
+            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+        }
+
         const nodeId = params.id;
         const updates = await request.json();
 
@@ -155,6 +164,14 @@ export async function DELETE(
     { params }: { params: { id: string } }
 ) {
     try {
+        const authUser = await getAuthUser(request);
+        if (!authUser) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+        if (authUser.role !== 'admin') {
+            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+        }
+
         const nodeId = params.id;
 
         // Verify node exists

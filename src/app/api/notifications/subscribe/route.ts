@@ -133,6 +133,14 @@ export async function DELETE(request: NextRequest) {
             );
         }
 
+        const authUser = await getAuthUser(request);
+        if (!authUser) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+        if (authUser.id !== userId && authUser.role !== 'admin') {
+            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+        }
+
         // Remove all subscriptions for this user
         await db
             .delete(pushSubscriptions)
@@ -164,6 +172,14 @@ export async function GET(request: NextRequest) {
                 { error: 'Missing userId' },
                 { status: 400 }
             );
+        }
+
+        const authUser = await getAuthUser(request);
+        if (!authUser) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+        if (authUser.id !== userId && authUser.role !== 'admin') {
+            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
         }
 
         // Get subscriptions from database

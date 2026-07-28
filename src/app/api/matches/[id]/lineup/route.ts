@@ -1,7 +1,8 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
 import { matches, competitions, squadPlayers } from '@/db/schema';
 import { eq, and, inArray } from 'drizzle-orm';
+import { getAuthUser } from '@/lib/auth';
 
 // GET /api/matches/[id]/lineup - Get lineup for a match
 export async function GET(
@@ -41,10 +42,18 @@ export async function GET(
 
 // POST /api/matches/[id]/lineup - Create/update lineup (draft)
 export async function POST(
-    request: Request,
+    request: NextRequest,
     props: { params: Promise<{ id: string }> }
 ) {
     try {
+        const authUser = await getAuthUser(request);
+        if (!authUser) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+        if (authUser.role !== 'admin' && authUser.role !== 'logger') {
+            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+        }
+
         const params = await props.params;
         const matchId = params.id;
         const body = await request.json();
@@ -105,6 +114,7 @@ export async function POST(
 
                 if (lineupPlayerIds.length > 0) {
                     // Check if all players are in the squad
+                    const teamId = team === 'home' ? matchData.homeTeamId : matchData.awayTeamId;
                     const squadMembers = await db
                         .select({ playerId: squadPlayers.playerId })
                         .from(squadPlayers)
@@ -161,10 +171,18 @@ export async function POST(
 
 // DELETE /api/matches/[id]/lineup - Delete lineup
 export async function DELETE(
-    request: Request,
+    request: NextRequest,
     props: { params: Promise<{ id: string }> }
 ) {
     try {
+        const authUser = await getAuthUser(request);
+        if (!authUser) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+        if (authUser.role !== 'admin' && authUser.role !== 'logger') {
+            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+        }
+
         const params = await props.params;
         const matchId = params.id;
         const { searchParams } = new URL(request.url);
