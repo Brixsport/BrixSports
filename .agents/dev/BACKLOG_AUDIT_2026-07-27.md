@@ -1,4 +1,7 @@
 # BrixSports — Full BACKLOG.md Audit
+
+> **STALE — superseded by session 47D (2026-07-28).** Every item this audit flagged as "genuinely open, real risk" (§1) has since been either resolved (`BUG-041`, `BACKLOG-059`, `BACKLOG-079`, `BUG-123`) or explicitly re-deferred with a documented reason (`BUG-074`, `BACKLOG-080`). Session 47D also ran a much larger, 6-agent full-system sweep covering far more than this single-agent BACKLOG re-read did — see `.agents/dev/AUDITS/*_47D.md` (six files: logging system, public viewer, auth/notifications, admin platform, player/team/competition data, PWA/Tier 4) for the current, authoritative picture, and `BACKLOG.md` itself for live status (this file is a point-in-time snapshot, not maintained). Kept here as historical record of what session 47C found, not as a current task list.
+
 **Date:** 2026-07-27 (session 47C)
 **Method:** full start-to-end read of `.agents/dev/BACKLOG.md` (5,943 lines at the time of this audit), not a tail/grep skim — done specifically because old entries are never rewritten in place in this project's convention (only corrected in a later paragraph), so staleness and forgotten items can only be found by reading the whole thing. Cross-checked against `.agents/rules/known-issues.md` and the tail of `.agents/dev/BUILD_JOURNAL.md` (sessions 47/47B).
 
