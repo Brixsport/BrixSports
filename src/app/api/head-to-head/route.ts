@@ -72,10 +72,23 @@ export async function GET(request: NextRequest) {
             .orderBy(desc(matches.startTime))
             .limit(5);
 
-        // Calculate stats if no H2H record exists
+        // Calculate stats if no H2H record exists. Two teams that have never
+        // played a FINISHED match against each other is a normal, common case
+        // (not an edge case) -- must still return a valid zeroed object, never
+        // undefined, since the consumer (HeadToHeadComparison) divides by
+        // totalMatches unconditionally.
         let stats = h2h;
-        if (!h2h && recentMatches.length > 0) {
-            stats = calculateH2HStats(team1Id, team2Id, recentMatches);
+        if (!h2h) {
+            stats = recentMatches.length > 0
+                ? calculateH2HStats(team1Id, team2Id, recentMatches)
+                : {
+                    totalMatches: 0,
+                    team1Wins: 0,
+                    team2Wins: 0,
+                    draws: 0,
+                    team1GoalsFor: 0,
+                    team2GoalsFor: 0,
+                };
         }
 
         return NextResponse.json({
