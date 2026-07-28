@@ -339,7 +339,14 @@ BUG-001 through BUG-029, AUDIT-001/002 (partial), BACKLOG-065 — all resolved S
 
 - ~~**BACKLOG-119**~~ _(UX — Match Detail Page)_: Remove green "Live" dot from header; colour clock and period label red during live match. Active play (H1/H2/ET/PK): pulsing red dot + red period label + red minute. Half Time: red "HT" label only, no dot, no clock. FT/Pending: neutral. Commit `f9c6764`. **Status:** RESOLVED — 2026-07-27 (session 47C), live-verified on PR #12's Vercel preview (`/matches/w6o4YQAF5pem_Qa8uazAm`, a real `LIVE` basketball match — confirms the styling is sport-agnostic, not football-only despite the original H1/H2/ET/PK example). **Evidence:** DOM-inspected directly rather than eyeballed — found `<span class="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse">` (the pulsing dot) and the period label (`Q1`) rendered with `className: "text-red-400"`, computed color `oklch(0.704 0.191 22.216)` (genuinely red, not just visually similar). Verified by: session 47C.
 
-- ~~**BUG-092**~~ _(HIGH — Real-time / Viewer UX)_: Undone events stay visible on the public Timeline tab until hard refresh. Root cause: `handleUndo` in `FootballLogger.tsx` sends `DELETE /api/matches/[id]/events/[eventId]` which removes the event from DB, but the WS server only broadcasts `match:event:new` — there is no `match:event:deleted` broadcast. The viewer page's `useMatchEvents` hook accumulates events via WS and has no mechanism to receive deletions. Fix: (a) in the event DELETE handler (`src/app/api/matches/[id]/events/[eventId]/route.ts`), after confirmed DB delete, emit `match:event:deleted` with `{ matchId, eventId }` via the WS server; (b) `useMatchEvents` in `useWebSocket.tsx` listens for `match:event:deleted` and filters the deleted event out of local state. Observed live: double-yellow undo removed the Red Card from DB correctly but Red Card and original Yellow both remained on viewer Timeline until page reload. Filed: 2026-06-30. **Status:** SHIPPED — found already fixed, session 47D. **Real fix landed silently as a side effect of `BUG-119` (`b2ffcde`, "stop firing broadcast calls unawaited on serverless"), which added `after(() => broadcastEventDeleted(matchId, eventId))` to the DELETE handler — never cross-referenced back to this entry.** `useWebSocket.tsx`'s `handleEventDeleted` (filters `setEvents(prev => prev.filter(e => e.id !== data.eventId))` on the `event:deleted` socket event) has existed since the original WS setup commit, so the listener side was never actually the gap — only the emit side was missing until BUG-119 added it. `MatchOverlay.tsx` has its own separate `event:deleted` listener too, also already wired. **Not marked RESOLVED**: confirmed by code read + git history only, no live delete-and-observe-viewer-update test run this session — needs a real live match to move to RESOLVED with an evidence block, per this project's own evidence standard.
+- ~~**BUG-092**~~ _(HIGH — Real-time / Viewer UX)_: Undone events stay visible on the public Timeline tab until hard refresh. Root cause: `handleUndo` in `FootballLogger.tsx` sends `DELETE /api/matches/[id]/events/[eventId]` which removes the event from DB, but the WS server only broadcasts `match:event:new` — there is no `match:event:deleted` broadcast. The viewer page's `useMatchEvents` hook accumulates events via WS and has no mechanism to receive deletions. Fix: (a) in the event DELETE handler (`src/app/api/matches/[id]/events/[eventId]/route.ts`), after confirmed DB delete, emit `match:event:deleted` with `{ matchId, eventId }` via the WS server; (b) `useMatchEvents` in `useWebSocket.tsx` listens for `match:event:deleted` and filters the deleted event out of local state. Observed live: double-yellow undo removed the Red Card from DB correctly but Red Card and original Yellow both remained on viewer Timeline until page reload. Filed: 2026-06-30. **Status:** SHIPPED — found already fixed, session 47D. **Real fix landed silently as a side effect of `BUG-119` (`b2ffcde`, "stop firing broadcast calls unawaited on serverless"), which added `after(() => broadcastEventDeleted(matchId, eventId))` to the DELETE handler — never cross-referenced back to this entry.** `useWebSocket.tsx`'s `handleEventDeleted` (filters `setEvents(prev => prev.filter(e => e.id !== data.eventId))` on the `event:deleted` socket event) has existed since the original WS setup commit, so the listener side was never actually the gap — only the emit side was missing until BUG-119 added it. `MatchOverlay.tsx` has its own separate `event:deleted` listener too, also already wired. **Live-tested on staging, 2026-07-28 — status refined, not a clean RESOLVED.** Posted a real test event (`Timeout`) to the live match `w6o4YQAF5pem_Qa8uazAm`, confirmed it appeared, then DELETEd it and watched the same viewer tab without reloading. Console confirmed the broadcast is genuinely received: `[WS] Event deleted for Match w6o4YQAF5pem_Qa8uazAm: [object Object]`. But the event did **not** disappear from the Timeline instantly — it took roughly the length of one `BUG-108` reconciliation-poll cycle (~25s) to vanish. Root cause, confirmed by code read: `useWebSocket.tsx`'s `handleEventDeleted` correctly filters `useMatchEvents`' own internal `events` state (aliased `liveEvents` in `matches/[id]/page.tsx:50`) — but **nothing wires that deletion into `matchData.events`**, which is the state the Timeline tab actually renders from (`page.tsx:144-162` only has a one-way `useEffect` that *adds* `latestEvent` into `matchData.events` on `event:new`; there is no equivalent removal path for a deleted event id). The event only disappeared once the unrelated 25s reconciliation poll (`BUG-108`) did a full silent refetch of `matchData` from the DB, which naturally excluded the deleted row.
+
+**Status:** SHIPPED, refined — genuinely better than the original filing (no manual reload needed, self-heals within ~25s instead of requiring a hard refresh), but not the instant fix the WS listener implies. **Fix needed for true RESOLVED:** add a small `useEffect` in `matches/[id]/page.tsx` that filters `matchData.events` on the same `event:deleted` socket event (either via a new `deletedEventId` piece of state exposed from `useMatchEvents`, or a second direct `on('event:deleted', ...)` listener on the page itself, matching the pattern the page already uses for `match:score:updated`/`match:status:changed`/`match:updated`).
+
+**Evidence:**
+- Verified by: live two-tab test against staging, real event POST + DELETE via admin session, observed via the public match page without reload
+- Observed result: broadcast received immediately (console-confirmed); UI update lagged ~25s, driven by the reconciliation poll, not the WS listener
+- Pending items: wire `event:deleted` directly into `matchData.events` for a true instant fix
 
 - **BUG-091** _(MEDIUM — Viewer UX)_: Favourite/heart button on match detail page turns red (optimistic UI) but no write is confirmed. The button is likely calling `POST /api/users/favorites` or `POST /api/teams/[id]/follow` — both routes are listed under BACKLOG-118 remaining work as not yet having `resolveEffectiveUserId` applied. For a viewer-only user (no logger cookie), the failure is likely a silent 401/403 with no UI feedback — the heart state is never rolled back on error. Fix: (a) apply `resolveEffectiveUserId` to `src/app/api/users/favorites/route.ts` and `src/app/api/teams/[id]/follow/route.ts` (BACKLOG-118 remaining work); (b) add error rollback to the heart button — if the API call fails, revert the optimistic toggle and show a toast. Filed: 2026-06-30. **Status:** OPEN
 
@@ -4635,7 +4642,7 @@ On submit: POST to `/api/teams`, refresh list.
 
 ### ~~BUG-041~~ — HIGH: React Error 418 (Hydration Mismatch) Confirmed Live on Homepage
 
-**Status:** SHIPPED — 2026-07-27 (session 47D)
+**Status:** RESOLVED — 2026-07-28 (session 47D)
 **Priority:** High — actively degrading every real user experience
 **Filed:** 2026-06-17
 
@@ -4650,10 +4657,10 @@ Related: BUG-028 (resolved standings instance), BACKLOG-085, BACKLOG-090.
 **Actual root cause (session 47D, different from the hypothesis above — not a Framer Motion `initial` prop this time):** `src/components/pwa/UpdatePrompt.tsx`'s `controllerchange` listener called `window.location.reload()` unconditionally on ANY service-worker controller change. `public/sw-user.js:61`'s `activate` handler calls `self.clients.claim()`, which fires `controllerchange` on the very first claim of a previously-uncontrolled page — i.e. on a genuinely fresh visit, not just on a real update swap. That forces a full hard reload while the page is still mid-hydration, which both interrupts hydration (producing error #418) and re-executes the entire bundle (the recurring long-task/TBT spike from the shared framework chunk the original filing pointed at). Not a one-time load issue — it can refire on any visit where the SW hadn't claimed the page yet. Fix: capture `hadControllerAlready = !!navigator.serviceWorker.controller` before attaching the listener, and only reload when that was already true (a genuine swap of an already-active worker) — never on the first claim of an uncontrolled page. Minimal, targeted fix — confirmed against the actual `sw-user.js` source, not guessed.
 
 **Evidence:**
-- Commit: pending (uncommitted at time of writing, `src/components/pwa/UpdatePrompt.tsx`)
-- Verified by: code read confirming the cited `public/sw-user.js:61` line exists as described; `npx tsc --noEmit` clean (no new errors from this file)
-- Observed result: fix is in place and type-checks; the actual browser hydration-error-gone confirmation (a fresh visit with no prior SW controller, checking for zero error #418 and zero forced reload) was not run live this session
-- Pending items: live verification of the fix (fresh incognito-equivalent visit, confirm no forced reload/no #418 in console), then promote to RESOLVED with that evidence
+- Commit: `176a553` (part of the BUG-149 commit — `UpdatePrompt.tsx` was pulled in alongside it, see session 47D's git-stash-recovery incident notes for why)
+- Verified by: live staging test, `https://brixsports-staging.vercel.app`, fresh page load with no prior SW controller
+- Observed result: console showed `[UpdatePrompt] Controller changed (first claim on an uncontrolled page, no reload needed)` — the exact guarded no-reload log path the fix added — with zero forced `window.location.reload()` observed on a genuinely fresh visit
+- Pending items: none
 
 ---
 
@@ -6467,9 +6474,9 @@ No `clearTimeout` exists anywhere in the file. The effect that sets `stateManage
 
 ---
 
-### BUG-153 — Period/Status Live-Broadcast Has Silently Never Worked, Either Sport: Event-Name Typo (`...changed` vs `...change`)
+### ~~BUG-153~~ — Period/Status Live-Broadcast Has Silently Never Worked, Either Sport: Event-Name Typo (`...changed` vs `...change`)
 
-**Status:** OPEN — found session 47D, not fixed
+**Status:** RESOLVED — 2026-07-28 (session 47D)
 **Priority:** HIGH — Tier 0, Flow B/C. Currently masked by a working polling fallback (10s/25s on `/matches/[id]`), so no viewer-visible symptom on that page, but this is the actual root cause the WS layer was supposed to solve.
 
 **Problem:** `FootballLogger.tsx:635,1170` calls `emit('match:status:changed', {...})` and `FootballLogger.tsx:628` calls `emit('match:score:updated', {...})` — but `ws-server/index.js:369` listens for `'match:status:change'` (no trailing "d") and `ws-server/index.js:343` listens for `'match:score:update'` (no trailing "d"). Socket.IO does exact-string event matching with no wildcard/`onAny` fallback registered anywhere in `ws-server/index.js` (confirmed absent by grep) — an emit to an unregistered event name is silently dropped, no error surfaced on either side. **This has never worked, for football, since these emit calls were written** — not a regression.
@@ -6482,7 +6489,15 @@ No `clearTimeout` exists anywhere in the file. The effect that sets `stateManage
 
 **Fix applied, session 47D — took option (b).** Added a `handleMatchUpdate` listener for `match:updated` to `/matches/[id]/page.tsx`'s existing WS-listener effect, merging `status`/`currentPeriod`/`homeScore`/`awayScore`/`minute`/`extraTime` into local state whenever present in the payload (mirroring `useMatchStatus`'s existing merge pattern). The two dead `match:status:changed`/`match:score:updated` listeners were left in place, not removed — harmless no-ops today, free insurance if the emit-name typo is ever fixed at the source instead.
 
-**Status:** SHIPPED — 2026-07-28 (session 47D). `tsc` clean, code mirrors the exact pattern already proven correct in `MatchOverlay.tsx`/`useMatchStatus`. **Not RESOLVED**: local dev's standalone `ws-server` would not accept a browser connection during this session for reasons that predate this change (repeated `[WS] Connection error` observed even before tonight's edits) — root cause not chased down, out of scope for a fix this size. Live verification needs either that local WS issue independently resolved, or a real deploy (staging has the actual Railway WS server already confirmed working in prior sessions) — recommended next step per Richard's own call rather than continuing local debugging.
+**Live-verified on staging, 2026-07-28.** Local dev's standalone `ws-server` wouldn't accept a browser connection this session for unrelated pre-existing reasons — moved verification to staging instead, where the real Railway WS server is already known-good.
+
+**Evidence:**
+- Commit: `a954f1d`
+- Verified by: real two-tab live test against `https://brixsports-staging.vercel.app`, admin session authenticated. Tab A (viewer) opened `/matches/w6o4YQAF5pem_Qa8uazAm` (a real `LIVE` basketball match, `Q1`, score 2-3). Tab B (admin) sent `PATCH /api/matches/w6o4YQAF5pem_Qa8uazAm` with `{ currentPeriod: 'Q2' }` via `fetch()`, confirmed `200 { success: true }`.
+- Observed result: Tab A's displayed period label changed from "Q1" to "Q2" **instantly, with zero page reload or manual refresh** — the only mechanism that could produce that is the new `match:updated` WS listener, since the page was never touched directly. Reverted the match back to `Q1` afterward to restore original state.
+- Pending items: none for the core fix. Sport-hub pages and homepage overlay still don't listen for `match:updated` (not in this fix's scope, tracked separately under `BUG-149`'s note on sport-hub pages).
+
+**Also observed, same staging session, worth noting for the record:** `BUG-041`'s hydration fix confirmed live and working — console showed `[UpdatePrompt] Controller changed (first claim on an uncontrolled page, no reload needed)` on a fresh page load, exactly the guarded no-reload path the fix added, with zero forced reload observed.
 
 **Found:** session 47D, by a background audit agent doing a full read-only trace of the logging/WS pipeline (the same investigation that found new-event/score/delete broadcasts already work for basketball via the shared routes).
 
@@ -6501,5 +6516,26 @@ No `clearTimeout` exists anywhere in the file. The effect that sets `stateManage
 **Fix (not built):** wire `/profile/favorites` to `useFavorites`; consolidate to one `useAuth` implementation (retire the cookie-only one or make it delegate to the context); fix the `localStorage` key typo.
 
 **Found:** session 47D, by a background audit agent doing a full read-only trace of the auth/account/notifications system.
+
+---
+
+### ~~BUG-154~~ — H2H Tab Crashes ("Cannot read properties of undefined, reading 'team1Wins'") For Any Fresh Matchup
+
+**Status:** RESOLVED — 2026-07-28 (session 47D)
+**Priority:** HIGH — Flow C (Public Livescore), real live crash found by Richard on staging while verifying tonight's other fixes
+
+**Problem:** `GET /api/head-to-head` (`src/app/api/head-to-head/route.ts:75-79`) only computed a `stats` object when either a stored `headToHead` row existed OR at least one FINISHED match between the two teams existed. Two teams that have simply never played each other before — a completely normal, common case, not an edge case — left `stats` as `undefined`, and the route still returned `headToHead: undefined` in its JSON response. `HeadToHeadComparison` (`src/components/HeadToHead.tsx:38`) destructures `headToHead` from props and immediately does `headToHead.team1Wins / headToHead.totalMatches` with no guard — a hard crash on the H2H tab of `/matches/[id]` for any such matchup. Live-reproduced by Richard on staging.
+
+**This is exactly the kind of bug tonight's `tsc` baseline had already flagged, just never acted on** — `src/app/api/head-to-head/route.ts`'s pre-existing type error (`Property 'competitionId' is missing in type...`, present since before this session) was in the same function, same root cause class (the object shape returned doesn't reliably match what consumers expect). Prompted a full sweep of the rest of the `tsc` baseline for other Critical-Flow-relevant misses — see the new "Pre-Existing `tsc` Errors Mapped to Critical Flow Impact" entry below.
+
+**Fix:** the route now always returns a valid, fully-shaped `headToHead` object (zeroed defaults: `totalMatches: 0, team1Wins: 0, team2Wins: 0, draws: 0, team1GoalsFor: 0, team2GoalsFor: 0`) when there's no stored record and no finished matches, instead of `undefined`. Also hardened `HeadToHeadComparison` itself to guard all three percentage calculations against `totalMatches === 0` (would otherwise render `NaN%` even with a valid zeroed object) — belt-and-suspenders on top of the root-cause fix, not a replacement for it.
+
+**Evidence:**
+- Commit: pending (uncommitted at time of writing)
+- Verified by: `npx tsc --noEmit` clean (zero new errors from either changed file)
+- Observed result: fix addresses the exact reproduction Richard reported live on staging; not yet re-tested against that same live case post-fix (staging redeploy pending)
+- Pending items: live re-verification on staging after next deploy, confirming the H2H tab renders "0-0-0" instead of crashing for a fresh matchup
+
+**Found:** session 47D, live crash reported by Richard while verifying `BUG-041`/`BUG-153` on staging.
 
 ---
