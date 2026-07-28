@@ -6458,3 +6458,22 @@ No `clearTimeout` exists anywhere in the file. The effect that sets `stateManage
 **Found:** session 47D, by a background audit agent doing a full read-only trace of the player/team/competition data system.
 
 ---
+
+### BUG-153 — Period/Status Live-Broadcast Has Silently Never Worked, Either Sport: Event-Name Typo (`...changed` vs `...change`)
+
+**Status:** OPEN — found session 47D, not fixed
+**Priority:** HIGH — Tier 0, Flow B/C. Currently masked by a working polling fallback (10s/25s on `/matches/[id]`), so no viewer-visible symptom on that page, but this is the actual root cause the WS layer was supposed to solve.
+
+**Problem:** `FootballLogger.tsx:635,1170` calls `emit('match:status:changed', {...})` and `FootballLogger.tsx:628` calls `emit('match:score:updated', {...})` — but `ws-server/index.js:369` listens for `'match:status:change'` (no trailing "d") and `ws-server/index.js:343` listens for `'match:score:update'` (no trailing "d"). Socket.IO does exact-string event matching with no wildcard/`onAny` fallback registered anywhere in `ws-server/index.js` (confirmed absent by grep) — an emit to an unregistered event name is silently dropped, no error surfaced on either side. **This has never worked, for football, since these emit calls were written** — not a regression.
+
+**Why this was never caught:** the score-update case is masked by a separate, correct code path — the server-side `POST /events` → `broadcastScoreUpdate()` → REST `/broadcast` call → `io.to(room).emit()` — which never goes through a `socket.on()` relay at all, and delivers real score updates regardless of this dead client-emit. The status-change case has **no such masking replacement**: `broadcastMatchStatus` (`src/lib/socket.ts:139-144`, the dedicated server-side function for this exact event) has **zero callers anywhere in `src/`** (confirmed via project-wide grep) — no API route ever triggers it. This is the direct, sole reason period/status live-push has silently never worked through every session that touched `BUG-108/116/119`.
+
+**What already works as a substitute, confirmed the same investigation:** `PATCH /api/matches/[id]/route.ts:595` fires `after(() => broadcastToMatch(matchId, 'match:updated', { matchId, ...updateData }))` on **every** admin/logger PATCH, unconditionally, sport-agnostic, carrying whatever fields changed (status, currentPeriod, minute, scores, lineups, stats). Both loggers already hit this route for period transitions. This channel is real and currently fires — but its only consumer anywhere in the codebase is `useMatchStatus` (`useWebSocket.tsx`), whose only caller is `MatchOverlay.tsx` (the football-only homepage widget). **`/matches/[id]/page.tsx` — the page every shared match link actually points to — never subscribes to `match:updated` at all.**
+
+**Fix (not built, two options):** (a) cheapest — fix the two emit-name typos in `FootballLogger.tsx` to match what `ws-server/index.js` actually listens for, and wire a real caller for `broadcastMatchStatus`; or (b) arguably better — since `match:updated` already fires correctly and sport-agnostically on every relevant PATCH, just add one `socket.on('match:updated', ...)` listener to `/matches/[id]/page.tsx` (mirroring what `MatchOverlay.tsx` already does) — this closes the gap for *both* sports at once without touching the logger components at all, and doesn't require basketball to ever emit `match:status:changed` in the first place.
+
+**Found:** session 47D, by a background audit agent doing a full read-only trace of the logging/WS pipeline (the same investigation that found new-event/score/delete broadcasts already work for basketball via the shared routes).
+
+---
+
+---
