@@ -41,7 +41,7 @@ to BACKLOG-166.
 - **BUG-151** — No server-side event dedup/idempotency check exists at all (either sport).
 - **BACKLOG-152** — Track & Field logger has zero persistence layer — confirmed worse than assumed.
 - **BACKLOG-153** — Admin match-edit modal has no score-correction fields; three dead offline-queue implementations found; other logging-system cleanup.
-- **BACKLOG-166** — Basketball foul system, remaining scope: team-foul bonus tracking, technical-foul miscounting into `personalFouls`, competition-level threshold override. Split out when BUG-134 shipped minimal-only.
+- ~~BACKLOG-166~~ — SHIPPED (partial) session 47E: team-foul tracking (data only, no UI) + technical-foul split into its own DB column, both fixed. Sub-finding 3 (competition-level threshold override) still needs a schema migration — flagged for Richard's go-ahead, not started.
 - (Not yet filed, folding in at session close per Richard: football's in-app lineup editor bypasses the admin page's own publish-lock/unlock RBAC — two lineup-editing surfaces enforce different rules.)
 - ~~BUG-134~~ / ~~BUG-136~~ — SHIPPED session 47E (foul-out disqualification + blocked re-sub), pending live test.
 - ~~BUG-142~~ — SHIPPED IN FULL session 47E: event-POST queue, period-transition PATCH + undo DELETE queue (activated previously-dead `pendingAdminChanges`/`syncAdminChanges` infra, fixed a real missing-auth-token bug in it), and roster-load auto-retry on reconnect. All four paths from the original filing done.

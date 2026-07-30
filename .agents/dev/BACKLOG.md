@@ -6626,17 +6626,22 @@ No `clearTimeout` exists anywhere in the file. The effect that sets `stateManage
 
 ### BACKLOG-166 — Basketball Foul System: Team-Foul Bonus Tracking, Technical-Foul Miscounting, Competition-Level Threshold Override
 
-**Status:** OPEN — deliberately deferred from BUG-134, Richard's own explicit scope call (session 47E)
+**Status:** SHIPPED (partial) — 2026-07-30 (session 47E), commit `541559b`. Sub-findings 1 and 2 done. Sub-finding 3 (schema migration) intentionally not started — flagged separately for Richard's go-ahead given the migration risk, not silently skipped.
 **Priority:** MEDIUM — real, but BUG-134's disqualification gate (the domain-integrity-critical piece) is already shipped; this is the remaining polish/completeness layer
 
-**Deferred from BUG-134's original four sub-findings — only sub-finding 1 (disqualification) was built:**
-1. **Team-foul accumulator + quarter-reset + bonus-state UI** — no per-team, per-quarter foul counter exists anywhere; `teamFoulBonusAt: 5` is computed and returned by `config/route.ts` but still never read by `BasketballLogger.tsx`. No "team is in the bonus" indicator exists for the logger or viewer.
-2. **`technicalFouls` still miscounts into `personalFouls`** — `events/route.ts`'s `case 'Foul':` unconditionally writes to `personalFouls` regardless of which of the six foul button labels (Personal/Technical/Flagrant/Offensive/Shooting/Unsportsmanlike) triggered it; no subtype is passed through from click to DB write at all. BUG-134's disqualification fix inherited this same collapsed-to-one-type behavior deliberately (counts every foul type toward foul-out, matching the existing data shape) rather than fixing the underlying miscount — fixing this properly means deciding whether technical fouls should count toward personal disqualification at all (rule-dependent) before touching the DB write.
-3. **Competition-level override for foul thresholds** — `foulDisqualifyAt`/`teamFoulBonusAt`/`technicalFoulValue` are sport-default-only today (`SPORT_DEFAULTS.basketball` in `config/route.ts`); unlike `halfDuration`/`maxSubstitutions`/`playersPerSide`, there is no matching column on `competitionSportSettings` to let a specific competition use a non-FIBA-default rule (e.g. NBA's 6-foul disqualification). Needs a schema migration (new columns on `competitionSportSettings`) plus wiring into the same three-layer merge the other config fields already use.
+**Sub-finding 1, SHIPPED — team-foul tracking (data only, no UI):** `getTeamFoulCountThisQuarter(teamId)` / `isTeamInBonus(teamId)` added, derived from local event state, naturally resets each quarter since it's keyed off `getCurrentPeriod()` rather than a separately-incrementing counter needing manual reset logic. No visible "BONUS" indicator built — Richard's explicit scope call this session, keeping this MEDIUM-priority item tight. `teamFoulBonusAt` now read from match config on mount, mirroring `foulDisqualifyAt`.
 
-**Fix (not built):** each of the three above is independently scoped and can be picked up separately. (1) and (2) are logger/route changes only. (3) needs a `db:push` migration — per this project's own convention, staging first, then prod, logged in `RUNLOG.md`.
+**Sub-finding 2, SHIPPED — technical-foul split:** `Technical Foul` is now its own `BasketballEventType`, distinct from generic `Foul` — previously all six foul buttons (Personal/Technical/Flagrant/Offensive/Shooting/Unsportsmanlike) dispatched the same `type: 'Foul'`, silently inflating `personalFouls` on a Technical Foul. Server-side write (`events/route.ts`) and revert (`events/[eventId]/route.ts`) both updated symmetrically. Also added a rating-calc case (previously fell through unscored, `-1.5`, worse than a regular foul's `-1`). **Rules decision, Richard's explicit call:** Technical Fouls count toward the same `foulDisqualifyAt` threshold as Personal Fouls (combined count, not a separate ejection trigger) — simpler, and preserves BUG-134's existing protective behavior rather than loosening it. Flagrant/Offensive/Shooting/Unsportsmanlike still all dispatch generic `type: 'Foul'` — personal-foul subvarieties for stat-counting purposes, same as real box scores.
 
-**Found:** session 47D (original BUG-134 filing), scope split session 47E when only sub-finding 1 was built.
+**Sub-finding 3, NOT STARTED — competition-level threshold override:** still needs a real schema migration (new `competitionSportSettings` columns for `foulDisqualifyAt`/`teamFoulBonusAt`/`technicalFoulValue`) plus wiring into the existing three-layer merge. Per this project's own convention (`db:push` staging first, then prod, logged in `RUNLOG.md`), this needs an explicit go-ahead rather than being done inline with a logger-component fix.
+
+**Evidence:**
+- Commit: `541559b`
+- Verified by: `npx tsc --noEmit` clean (zero new errors across all three changed files)
+- Observed result: not yet live-tested (no real Technical Foul logged and cross-checked against `technicalFouls`/`personalFouls` columns, no real team-foul-bonus threshold crossed and verified)
+- Pending items: live test — log a Technical Foul, confirm `technicalFouls` increments and `personalFouls` does not; log enough fouls to cross `foulDisqualifyAt` via a mix of Foul + Technical Foul, confirm disqualification triggers; log enough team fouls in one quarter to cross `teamFoulBonusAt`, confirm `isTeamInBonus()` would return true (no UI to visually check yet). Sub-finding 3's migration decision still needed from Richard.
+
+**Found:** session 47D (original BUG-134 filing), scope split session 47E when only sub-finding 1 (disqualification) was built, sub-findings 1+2 of this entry shipped later the same session.
 
 ---
 
