@@ -24,6 +24,17 @@ interface Match {
 const FORMATIONS_11 = ['4-3-3', '4-4-2', '4-2-3-1', '3-5-2', '3-4-3', '5-3-2', '4-1-4-1', '3-1-4-2', '4-5-1', '3-2-4-1'];
 const FORMATIONS_5 = ['1-2-1', '2-1-1'];
 
+// BUG-125: this entire page is a football/5-a-side formation-pitch builder --
+// positions, formations, everything below assumes a football-shaped roster.
+// It was never sport-aware at all (playersPerSide came only from the
+// competition row, defaulting to 11 for any sport that didn't have it set),
+// so a basketball match silently got a broken 11-starter "lineup" UI. Rather
+// than build a second, formation-free lineup UI here (real duplicate scope --
+// BasketballLogger's own lineup wizard already does this correctly and now
+// persists it for real, BACKLOG-141), gate basketball matches out with a
+// clear redirect instead of letting them through broken.
+const isBasketballMatch = (match: Match) => (match.sport || '').toLowerCase().includes('basketball');
+
 interface Player {
     id: string;
     name: string;
@@ -484,6 +495,20 @@ export default function AdminMatchLineupsPage() {
                                 </div>
                             </div>
 
+                            {isBasketballMatch(selectedMatch) && (
+                                <div className="mt-4 p-4 bg-orange-500/10 border border-orange-500/20 rounded-xl text-orange-300 text-sm flex items-start gap-2">
+                                    <AlertCircle size={16} className="mt-0.5 flex-shrink-0" />
+                                    <span>
+                                        This tool is a football formation builder and doesn&apos;t support basketball rosters (no formation/position concept applies).
+                                        Basketball lineups are managed directly in the Logger for this match, where they now save to the server.
+                                    </span>
+                                </div>
+                            )}
+                        </div>
+
+                        {isBasketballMatch(selectedMatch) ? null : (
+                        <>
+                        <div className="bg-white/5 rounded-xl border border-white/10 p-6">
                             {/* Validation Status */}
                             <div className="flex items-center gap-4 text-sm">
                                 <div className={`flex items-center gap-2 ${homeStarters.length === playersPerSide ? 'text-green-400' : 'text-orange-400'}`}>
@@ -648,6 +673,8 @@ export default function AdminMatchLineupsPage() {
                                 </p>
                             )}
                         </div>
+                        </>
+                        )}
                     </div>
                 )}
             </div>

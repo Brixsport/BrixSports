@@ -346,24 +346,43 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                 setHomePlayers(homePlayersList);
                 setAwayPlayers(awayPlayersList);
 
-                // Resume-seeding gap (SYSTEM_CRITICALITY_MAP.md Tier 0, tracked since
-                // session 46, confirmed live this session): homeStarters/awayStarters
-                // are only ever populated by the in-app lineup-selection wizard --
-                // there is no server-side lineup persistence for basketball at all
-                // (unlike football's GET /api/matches/[id]/lineup). Since matchStarted
-                // initializes straight to true whenever match.status === 'LIVE' on
-                // mount, any already-live match (a refresh, a second logger, or simply
-                // reopening the app) skips the wizard entirely -- homeStarters/
-                // awayStarters stay permanently [], and the "Select Player" modal
-                // (filtered to just those arrays) is permanently empty, blocking every
-                // new event from ever being logged. Building full lineup persistence
-                // to mirror football exactly is real, separate scope -- this seeds
-                // starters from the full roster instead, which unblocks logging
-                // completely at the cost of not distinguishing on-court from bench
-                // for a resumed session specifically (a resumed session can select any
-                // rostered player, not just the original 5 starters -- acceptable
-                // given the alternative is a permanently unusable logger).
-                if (match.status === 'LIVE') {
+                // BACKLOG-141: real server-side lineup persistence, mirroring football's
+                // GET /api/matches/[id]/lineup exactly -- that endpoint was always
+                // sport-agnostic (generic team/lineup JSON on the matches row), basketball
+                // just never called it. Try the real persisted lineup first; only fall
+                // back to BUG-139's full-roster seed (doesn't distinguish on-court from
+                // bench) if nothing was ever actually published for this match.
+                let hydratedFromServer = false;
+                try {
+                    const lineupRes = await fetch(`/api/matches/${match.id}/lineup`);
+                    if (lineupRes.ok) {
+                        const lineupData = await lineupRes.json();
+                        const homeLineup = lineupData?.lineups?.home;
+                        const awayLineup = lineupData?.lineups?.away;
+                        if (lineupData.success && (homeLineup || awayLineup)) {
+                            const idsFrom = (l: any) => (l?.starters || l?.players || [])
+                                .map((p: any) => p.playerId || p.id || p)
+                                .filter(Boolean);
+                            const subsFrom = (l: any) => (l?.substitutes || [])
+                                .map((p: any) => p.playerId || p.id || p)
+                                .filter(Boolean);
+                            if (homeLineup) {
+                                setHomeStarters(idsFrom(homeLineup));
+                                setHomeSubs(subsFrom(homeLineup));
+                            }
+                            if (awayLineup) {
+                                setAwayStarters(idsFrom(awayLineup));
+                                setAwaySubs(subsFrom(awayLineup));
+                            }
+                            setLineupSet(true);
+                            hydratedFromServer = true;
+                        }
+                    }
+                } catch (e) {
+                    console.error('Failed to fetch persisted lineup:', e);
+                }
+
+                if (!hydratedFromServer && match.status === 'LIVE') {
                     setHomeStarters(prev => prev.length > 0 ? prev : homePlayersList.map((p: Player) => p.id));
                     setAwayStarters(prev => prev.length > 0 ? prev : awayPlayersList.map((p: Player) => p.id));
                     setLineupSet(true);
@@ -1845,13 +1864,55 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                                     </div>
                                 </div>
                                 <button
-                                    onClick={() => {
+                                    onClick={async () => {
                                         if (homeStarters.length === STARTER_COUNT && awayStarters.length === STARTER_COUNT) {
-                                            // Set remaining players as subs
-                                            setHomeSubs(homePlayers.filter(p => !homeStarters.includes(p.id)).map(p => p.id));
-                                            setAwaySubs(awayPlayers.filter(p => !awayStarters.includes(p.id)).map(p => p.id));
+                                            const homeSubIds = homePlayers.filter(p => !homeStarters.includes(p.id)).map(p => p.id);
+                                            const awaySubIds = awayPlayers.filter(p => !awayStarters.includes(p.id)).map(p => p.id);
+                                            setHomeSubs(homeSubIds);
+                                            setAwaySubs(awaySubIds);
                                             setLineupSet(true);
                                             setShowLineupModal(false);
+
+                                            // BACKLOG-141: persist to the server, mirroring FootballLogger's
+                                            // saveLineupDraft -- same endpoint (already sport-agnostic), same
+                                            // payload shape. Fire-and-forget-with-visible-failure, not blocking
+                                            // the UI: the wizard has already been completed locally, so a save
+                                            // failure shouldn't trap the logger back in the modal, but it must
+                                            // be surfaced, not silently lost (CLAUDE.md: no silent failures).
+                                            const toLineupPayload = (starterIds: string[], subIds: string[], allPlayers: Player[]) => {
+                                                const byId = new Map(allPlayers.map(p => [p.id, p]));
+                                                const toEntry = (id: string) => {
+                                                    const p = byId.get(id);
+                                                    return { playerId: id, id, name: p?.name, number: p?.number, position: p?.position };
+                                                };
+                                                return {
+                                                    starters: starterIds.map(toEntry),
+                                                    substitutes: subIds.map(toEntry),
+                                                    players: starterIds.map(toEntry), // legacy key, mirrors football
+                                                    status: 'published',
+                                                };
+                                            };
+
+                                            try {
+                                                const [homeRes, awayRes] = await Promise.all([
+                                                    fetch(`/api/matches/${match.id}/lineup`, {
+                                                        method: 'POST',
+                                                        headers: { 'Content-Type': 'application/json' },
+                                                        body: JSON.stringify({ team: 'home', lineup: toLineupPayload(homeStarters, homeSubIds, homePlayers) }),
+                                                    }),
+                                                    fetch(`/api/matches/${match.id}/lineup`, {
+                                                        method: 'POST',
+                                                        headers: { 'Content-Type': 'application/json' },
+                                                        body: JSON.stringify({ team: 'away', lineup: toLineupPayload(awayStarters, awaySubIds, awayPlayers) }),
+                                                    }),
+                                                ]);
+                                                if (!homeRes.ok || !awayRes.ok) {
+                                                    setEventSaveError('Lineup confirmed locally but failed to save to the server — it will not survive a refresh or be visible to other loggers.');
+                                                }
+                                            } catch (e) {
+                                                console.error('Failed to persist lineup:', e);
+                                                setEventSaveError('Lineup confirmed locally but failed to save to the server — offline or unreachable. It will not survive a refresh.');
+                                            }
                                         }
                                     }}
                                     disabled={homeStarters.length !== STARTER_COUNT || awayStarters.length !== STARTER_COUNT}
