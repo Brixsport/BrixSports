@@ -6151,12 +6151,19 @@ No `clearTimeout` exists anywhere in the file. The effect that sets `stateManage
 
 ### BACKLOG-143 — Basketball's Standalone "Assist" Event Is Invisible to the Box Score's `ast` Stat
 
-**Status:** OPEN — found this session, not fixed
+**Status:** SHIPPED — 2026-07-30 (session 47E), commit `4e5e76a`
 **Priority:** Low-Medium — rating calc is correct, box score display undercounts
 
 **Problem:** `BasketballLogger.tsx`'s standalone "Assist" button (~line 1096) creates a separate `type: 'Assist'` event. `calculatePlayerRating` correctly counts it (`+2`, ~line 190-192), but `calculateAdvancedStats`'s box-score `ast` field (~line 227) only counts embedded `assistPlayerId` fields on shot events — it never looks at standalone `Assist`-type events. A player credited with a standalone assist gets the rating bump but the box score under-reports their assist count.
 
-**Fix (not built):** `calculateAdvancedStats`'s `ast` computation should also count events where `type === 'Assist' && e.playerId === playerId`, in addition to the existing `assistPlayerId` check, so both assist-recording paths (embedded-on-shot and standalone-button) are reflected in the box score.
+**Fix:** `calculateAdvancedStats`'s `ast` computation now also counts events where `type === 'Assist' && e.playerId === playerId`, in addition to the existing `assistPlayerId` check, so both assist-recording paths (embedded-on-shot and standalone-button) are reflected in the box score.
+
+**Evidence:**
+- Commit: `4e5e76a`
+- Verified by: `npx tsc --noEmit` clean (zero new errors)
+- Observed result: not yet live-tested (no real standalone-Assist-button event logged and cross-checked against the box score)
+- Pending items: live test — log a standalone Assist, confirm the box score's `ast` column increments for that player
+
 **Found:** session 47C, surfaced incidentally while re-investigating `BUG-143` above (tracing how basketball records assists to compare against football's chain).
 
 ---
