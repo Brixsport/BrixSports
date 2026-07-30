@@ -1667,15 +1667,14 @@ player stats can be stale or inconsistent after a match ends.
 
 ---
 
-### BUG-125 — Admin "Official Match Lineups" Page Defaults to Football's 11 Starters for Any Sport
+### ~~BUG-125~~ — Admin "Official Match Lineups" Page Defaults to Football's 11 Starters for Any Sport
 
-**Status:** OPEN — found, not fixed
+**Status:** SHIPPED — commit `415c5e4`, session 47E (per `BUILD_JOURNAL.md`'s own session 47E entry, which describes this exact fix). **Status line never updated after the fix landed — found stale session 47F**, third instance of this same failure class this session (after `BUG-092`, `BACKLOG-141`). Confirmed genuinely built via direct code read, session 47F: `src/app/admin/match-lineups/page.tsx:27-36` — a comment block explicitly citing `BUG-125`, plus `isBasketballMatch()` and two call sites (`:501`, `:512`) that gate basketball matches out of this football-only formation-pitch builder with a redirect message, rather than the originally-proposed fix (making this page basketball-aware). A deliberate scope decision (avoid duplicating `BasketballLogger`'s own now-real lineup wizard, `BACKLOG-141`), not the fix this entry originally proposed below — kept for history. Not yet live-tested (verification pending, session 47F's broader pass).
 **Priority:** Medium — this is a separate feature from `BasketballLogger`'s own in-app lineup selection (confirmed independent this session — `eligible-players` has no dependency on this page at all), so it doesn't block live logging, but it's broken for basketball as its own feature
 **Filed:** 2026-07-23 (session 46), found live by Richard while exploring the admin panel during the BACKLOG-125 walkthrough
 
 **Problem:** `src/app/admin/match-lineups/page.tsx`'s `handleMatchSelect` (lines 204-228) derives `playersPerSide` from `competitions.playersPerSide` (a competition-level column, schema default `11`) rather than from `match.sport` or `competition_sport_settings` (the table this same session's `BACKLOG-125` work extended with correct basketball defaults, `SPORT_DEFAULTS.basketball.playersPerSide: 5`). Since `BUSA LEAGUE BASKETBALL`'s `competitions.playersPerSide` was never explicitly set, this page silently falls back to `11`, showing "Home: 0/11 starters" and a football formation dropdown (`4-3-3` etc.) for a 5-a-side basketball match. Confirmed live via screenshot.
-**Fix (not built):** read `match.sport` (or join through `competition_sport_settings`) the same way `config/route.ts` and `BasketballLogger.tsx` now do, instead of the competition-level `playersPerSide` column, which was never the right source of truth for this.
-**Not fixed this session** — separate feature from the actual `BACKLOG-125` scope (live logging write path), filed for whenever this admin page gets attention.
+**Original fix proposal (superseded by the actual fix above, kept for history):** read `match.sport` (or join through `competition_sport_settings`) the same way `config/route.ts` and `BasketballLogger.tsx` now do, instead of the competition-level `playersPerSide` column, which was never the right source of truth for this.
 
 ---
 
@@ -6010,9 +6009,9 @@ Filed together, same investigation: a `code-reviewer` agent pass explicitly inde
 
 ---
 
-### BACKLOG-141 — Real Server-Side Lineup Persistence for Basketball (Mirror Football's `/lineup` Endpoint)
+### ~~BACKLOG-141~~ — Real Server-Side Lineup Persistence for Basketball (Mirror Football's `/lineup` Endpoint)
 
-**Status:** OPEN — deliberately deferred, not attempted
+**Status:** SHIPPED — commit `415c5e4`, landed later the same session (47E) this entry was originally filed as deferred. **Status line never updated after the fix landed — found stale session 47F**, same failure class as `BUG-092`'s staleness (a fix landing without its own tracking entry being updated). Confirmed genuinely built via direct code read, session 47F: `BasketballLogger.tsx:437` fetches `GET /api/matches/[id]/lineup` on mount (comment explicitly cites `BACKLOG-141`), hydrates `homeStarters`/`awayStarters`/subs from the response, and `BasketballLogger.tsx:2137,2142` POSTs back to the same endpoint on lineup confirmation with visible failure-banner handling — exactly the fix this entry's own "Fix (not built)" section below describes. Not yet live-tested (verification pending, session 47F's broader pass).
 **Priority:** Medium-High — the actual, complete fix for `BUG-139`'s resume-seeding gap; `BUG-139`'s shipped fix is a safe fallback, not this
 
 **Problem:** `BUG-139` (this session) fixed the immediate blocker — basketball's "Select Player" modal being permanently empty on any resumed/already-`LIVE` match — by seeding `homeStarters`/`awayStarters` from the full roster when they're empty on mount. That's a fallback, not a real fix: it means a resumed session can never distinguish the original 5 starters from the bench, for the rest of that session. Football doesn't have this problem because it persists lineups server-side: `FootballLogger.tsx` fetches `GET /api/matches/[id]/lineup` on every mount and calls `setLineups(lineupsData.lineups)`, so the real starters/bench split survives a refresh, a second logger joining, or any resume — basketball has no equivalent endpoint, no equivalent persisted column usage, and no equivalent fetch-on-mount.
@@ -6227,15 +6226,15 @@ No `clearTimeout` exists anywhere in the file. The effect that sets `stateManage
 
 ### BUG-147 — CRITICAL: Systemic Unauthenticated-Write Surface Across ~16 Mutation Routes Outside `/api/admin/*`
 
-**Status:** SHIPPED — commit `0195b22`, landed 2026-07-28 (session 47D), 34 seconds before the docs commit that filed this entry as "not yet fixed" -- never corrected until session 47E's Saturday-readiness check. All 20 routes (the 16 below plus `users/[id]/preferences` and `notifications/subscribe` DELETE/GET, folded in same commit) confirmed gated via `getAuthUser` + role check. Confirmed `0195b22` is an ancestor of `dev` (`git merge-base --is-ancestor`), so this is live on staging, not sitting unmerged on a stale branch.
+**Status:** RESOLVED — 2026-07-30 (session 47F), live-tested against a Vercel preview. Originally shipped commit `0195b22`, landed 2026-07-28 (session 47D), 34 seconds before the docs commit that filed this entry as "not yet fixed" -- never corrected until session 47E's Saturday-readiness check. All 20 routes (the 16 below plus `users/[id]/preferences` and `notifications/subscribe` DELETE/GET, folded in same commit) confirmed gated via `getAuthUser` + role check. Confirmed `0195b22` is an ancestor of `dev` (`git merge-base --is-ancestor`), so this is live on staging, not sitting unmerged on a stale branch.
 **Priority:** CRITICAL — includes account takeover/mass-deletion and direct live-match-score corruption with zero auth
 **Filed:** 2026-07-27
 
 **Evidence:**
 - Commit: `0195b22`
-- Verified by: direct `getAuthUser` grep confirmed present on `fixtures/[id]/route.ts`, `matches/[id]/lineup/route.ts`, `users/[id]/route.ts` (the three most severe); commit's own diff stat shows all 20 listed files touched; author's commit message states zero new tsc errors (verified via stash/pop against the one pre-existing head-to-head error)
-- Observed result: not independently live-tested this session (no real unauthenticated curl against each route), but the fix pattern matches 30+ already-proven-correct call sites in this codebase
-- Pending items: a real unauthenticated-request smoke test against each of the 20 routes would be the gold-standard confirmation, not done here
+- Verified by: live test against a Vercel preview deployment (`dev/verify-staging-bug147-routes.mjs`) — real unauthenticated requests against 24 routes (the 20 originally listed plus 4 extra checked in the same pass), full detail in `RUNLOG.md`
+- Observed result: 23/24 correctly rejected with 401/403. The one apparent failure (`notifications/subscribe` DELETE returning 500) is not a missing auth gate on inspection — the route's `request.json()` call runs before its (correctly-present) auth check, so a malformed/empty body throws before ever reaching it. Filed separately as `BACKLOG-188` (low severity, an ordering nit, not a security gap — the route still requires and checks auth before doing anything once the body parses).
+- Pending items: none — `BACKLOG-188` is tracked as its own low-priority item, not blocking this entry's resolution
 
 **Root cause (one finding, not sixteen independent oversights):** `middleware.ts`'s admin gate only matches the literal `/admin/:path*` and `/api/admin/:path*` prefixes. A large population of routes that are admin-only *in intent* — team/news/transfer/match/lineup/notification/bracket/stat/standings mutation — live outside that prefix and were never brought under the gate or given their own `getAuthUser()` call. Exact same bug class as `BUG-034`/`BUG-107`/`BACKLOG-142` (staff-comms), caught and fixed twice before — this is the first exhaustive sweep of the rest of the surface. Found by a dedicated full-system read-only audit agent, session 47D, then extended with two more routes found in a same-session follow-up check of the areas that first sweep explicitly hadn't reached yet (football-adjacent routes, per Richard's direct ask not to forget those).
 
@@ -6648,7 +6647,7 @@ No `clearTimeout` exists anywhere in the file. The effect that sets `stateManage
 
 ### BACKLOG-166 — Basketball Foul System: Team-Foul Bonus Tracking, Technical-Foul Miscounting, Competition-Level Threshold Override
 
-**Status:** SHIPPED (partial) — 2026-07-30 (session 47E), commit `541559b`. Sub-findings 1 and 2 done. Sub-finding 3 (schema migration) intentionally not started — flagged separately for Richard's go-ahead given the migration risk, not silently skipped.
+**Status:** SHIPPED (partial), sub-finding 2 now live-tested — 2026-07-30, commit `541559b` (session 47E), verified session 47F. Sub-finding 1 (team-foul bonus) still needs live verification — no server-persisted state to check the way sub-finding 2 had (see its own note below). Sub-finding 3 (schema migration) intentionally not started — flagged separately for Richard's go-ahead given the migration risk, not silently skipped.
 **Priority:** MEDIUM — real, but BUG-134's disqualification gate (the domain-integrity-critical piece) is already shipped; this is the remaining polish/completeness layer
 
 **Sub-finding 1, SHIPPED — team-foul tracking (data only, no UI):** `getTeamFoulCountThisQuarter(teamId)` / `isTeamInBonus(teamId)` added, derived from local event state, naturally resets each quarter since it's keyed off `getCurrentPeriod()` rather than a separately-incrementing counter needing manual reset logic. No visible "BONUS" indicator built — Richard's explicit scope call this session, keeping this MEDIUM-priority item tight. `teamFoulBonusAt` now read from match config on mount, mirroring `foulDisqualifyAt`.
@@ -6657,11 +6656,11 @@ No `clearTimeout` exists anywhere in the file. The effect that sets `stateManage
 
 **Sub-finding 3, NOT STARTED — competition-level threshold override:** still needs a real schema migration (new `competitionSportSettings` columns for `foulDisqualifyAt`/`teamFoulBonusAt`/`technicalFoulValue`) plus wiring into the existing three-layer merge. Per this project's own convention (`db:push` staging first, then prod, logged in `RUNLOG.md`), this needs an explicit go-ahead rather than being done inline with a logger-component fix.
 
-**Evidence:**
+**Evidence (sub-finding 2 only):**
 - Commit: `541559b`
-- Verified by: `npx tsc --noEmit` clean (zero new errors across all three changed files)
-- Observed result: not yet live-tested (no real Technical Foul logged and cross-checked against `technicalFouls`/`personalFouls` columns, no real team-foul-bonus threshold crossed and verified)
-- Pending items: live test — log a Technical Foul, confirm `technicalFouls` increments and `personalFouls` does not; log enough fouls to cross `foulDisqualifyAt` via a mix of Foul + Technical Foul, confirm disqualification triggers; log enough team fouls in one quarter to cross `teamFoulBonusAt`, confirm `isTeamInBonus()` would return true (no UI to visually check yet). Sub-finding 3's migration decision still needed from Richard.
+- Verified by: live test against a Vercel preview deployment (`dev/verify-staging-technical-foul.mjs`), real logger session, real `basketball_player_stats` row, full detail in `RUNLOG.md`
+- Observed result: baseline `{ technical_fouls: 0, personal_fouls: 4 }` → POST a real `'Technical Foul'` event (`201`) → `{ technical_fouls: 1, personal_fouls: 4 }` — `technical_fouls` incremented by exactly 1, `personal_fouls` genuinely untouched. **Note on methodology:** first attempt used `match_type: 'friendly'` for the throwaway match and got a false negative (`technical_fouls` stayed `0`) — not a bug, the existing friendly-guard on player-stat writes correctly blocked it; retried with `match_type: 'competition'` (`competitionId` left `null` so no real standings were touched), which is the actual correct way to test this. Player's real stats restored to exact baseline after the test.
+- Pending items: sub-finding 1 (team-foul bonus, `isTeamInBonus()`) and the `foulDisqualifyAt` disqualification gate (`BUG-134`) are both pure client-side state with no server-persisted data to check via script — genuinely needs a browser test, not re-attempted here. Sub-finding 3's migration decision still needed from Richard.
 
 **Found:** session 47D (original BUG-134 filing), scope split session 47E when only sub-finding 1 (disqualification) was built, sub-findings 1+2 of this entry shipped later the same session.
 
@@ -7000,5 +6999,18 @@ const allEvents = matchIds.length ? await db.select().from(matchEvents).where(in
 **Fix (not built):** add standard offset/limit pagination (or a "load more") to the admin matches list, matching whatever pattern other paginated admin lists in this codebase already use.
 
 **Found:** session 47F, Richard's own observation while working on match-cleanup/config-coupling tasks.
+
+---
+
+### ~~BACKLOG-188~~ — `notifications/subscribe` DELETE Parses Request Body Before Its Auth Check, Malformed Body Masks 401 as 500
+
+**Status:** SHIPPED — 2026-07-30 (session 47F), not yet re-verified against the redeployed preview
+**Priority:** LOW — not a security gap (the route still correctly requires and verifies auth before doing anything), purely an error-ordering/UX nit found incidentally while live-testing `BUG-147`
+
+**Problem:** `src/app/api/notifications/subscribe/route.ts`'s `DELETE` handler calls `const body = await request.json()` (line 126) before `getAuthUser(request)` (line 136). A request with no body or a malformed body throws inside `request.json()`, caught by the outer `try/catch`, which returns a generic `500` — never reaching the real `401`/`403` auth gate that genuinely exists and is correctly ordered before the actual delete operation. Found while live-testing `BUG-147`'s fix against a Vercel preview: this route was the one FAIL out of 24 checked (`500` instead of the expected `401`) — confirmed by code read this is not a missing auth gate, just JSON-parse-before-auth ordering. `GET` and `POST` in the same file don't have this issue (both parse `searchParams`/read a validated body only after the auth check, or in POST's case the ordering happens to not matter since `getAuthUser` runs first there too).
+
+**Fix:** moved `const authUser = await getAuthUser(request); if (!authUser) return 401;` above the `request.json()` call in `DELETE`, matching the ordering already correct in `GET`/`POST`.
+
+**Found:** session 47F, live-testing `BUG-147` against a Vercel preview deployment (`dev/verify-staging-bug147-routes.mjs`). Fixed same session.
 
 ---
