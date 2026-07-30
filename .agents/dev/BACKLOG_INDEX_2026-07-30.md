@@ -1,89 +1,99 @@
 # BrixSports — Session 47D/47E Findings, Categorized for Session Picking
 
-Scope: every OPEN item filed by the session 47D six-agent audit and session 47E's
-two follow-up audits, grouped by theme instead of filing order. Full detail/evidence
-for each lives in `.agents/dev/BACKLOG.md` under its own ID — this is an index, not
-a replacement. RESOLVED/SHIPPED items from the same audits (BUG-149/153/154, etc.)
-are already closed out and not repeated here.
-
-Session 47E's second background audit (API payload size, PII/sensitive-field
-discipline, caching strategy, cross-route convention consistency) has landed —
-folded in below under "Production Discipline / Security."
-
-Also updated: BUG-134 and BUG-136 shipped this session (minimal scope — foul-out
-disqualification + blocking re-sub of a fouled-out player). Full scope (team-foul
-bonus, technical-foul miscounting, competition-level threshold override) split out
-to BACKLOG-166.
+Scope: every item filed by the session 47D six-agent audit and session 47E's three
+follow-up audits, grouped by theme instead of filing order. Full detail/evidence for
+each lives in `.agents/dev/BACKLOG.md` under its own ID — this is an index, not a
+replacement. Updated at session 47E's close to reflect final state — everything
+shipped this session is marked as such; nothing here is stale as of 2026-07-30.
 
 ---
 
-## 🔴 Pre-Prod Blocker (do this before any real public match day)
+## 🔴 Still-Open, Genuinely Urgent
 
-- **BACKLOG-155** — Admin feature flags are fully inert (read nowhere else in the codebase). CLAUDE.md's own Live Event Readiness Checklist requires all 🔴 high-volatility features (Ads, Lineup Builder, Transfers, User Management, News, `/api/auth/test`) gated/hidden before going live — there is currently **no working mechanism to do that at all**. Confirmed the single most concrete unstarted item standing in the checklist's way.
-- **BACKLOG-167** — `/api/players` and `/api/search` leak banned/PII fields (`email`, `profileId`, `memberships`, `organizationAffiliations`) to unauthenticated callers — the same bug already fixed once on the detail route (BUG-098/101), never ported to list/search. CRITICAL — real, live, unauthenticated leak.
+- **BACKLOG-167** — `/api/players` and `/api/search` leak banned/PII fields (`email`, `profileId`, `memberships`, `organizationAffiliations`) to unauthenticated callers — the same bug already fixed once on the detail route (BUG-098/101), never ported to list/search. CRITICAL, filed session 47E, **not fixed** — real, live, unauthenticated leak, still standing.
+- **BACKLOG-168** — Two admin routes (`lineup/unlock`, `livestream`) bypass `getAuthUser()`, trust the JWT role claim directly — a demoted admin's token keeps working there for its full 7-day life. Not fixed.
 
-## 🔒 Production Discipline / Security (session 47E, second audit)
+## ✅ Shipped This Session (pending live-test verification — none of these have been re-tested live yet)
 
-- **BACKLOG-167** — (see Pre-Prod Blocker above)
-- **BACKLOG-168** — Two admin routes (`lineup/unlock`, `livestream`) bypass `getAuthUser()`, trust the JWT role claim directly — a demoted admin's token keeps working there for its full 7-day life.
-- **BACKLOG-169** — `limit` query param unclamped in 14+ list routes — technically has `.limit()`, but caller-controlled with no ceiling.
-- **BACKLOG-170** — Raw `error.message` returned to the client in 4 routes, one (`news` GET) fully public.
-- **BACKLOG-171** — Public matches list embeds full event history (up to 200/match × 50 matches) on the Flow C hot path.
-- **BACKLOG-172** — Three N+1 query patterns, one on the public livescore hot path.
-- **BACKLOG-173** — Zero `Cache-Control`/ISR anywhere in the API or page layer (findings only, no fix designed).
-- **BACKLOG-174** — Block-list DTO shaping is fragile — new sensitive columns leak by default unless manually excluded.
-- **BACKLOG-175** — `GET /api/universities` has no `.limit()` at all.
-- **BACKLOG-176** — `cloudinary/sign` reads `process.env` directly instead of `src/lib/env.ts`.
+- ~~BACKLOG-141~~ — real server-side basketball lineup persistence (mirrors football's own `/lineup` endpoint).
+- ~~BUG-125~~ — admin match-lineups page gated off basketball matches (football-only formation builder).
+- ~~BUG-134~~ / ~~BUG-136~~ — basketball foul-out disqualification + blocked re-sub of a fouled-out player.
+- ~~BACKLOG-166~~ (partial) — technical-foul split into its own DB column + team-foul tracking (data only, no UI). Sub-finding 3 (competition-level threshold override, needs a schema migration) intentionally still open, flagged for Richard's go-ahead.
+- ~~BUG-142~~ — offline queue/retry in full: event POST, period-transition PATCH, undo DELETE, roster-load auto-retry. All four original paths done.
+- ~~BUG-135~~ — distinct `OT2`+ period tracking (`otNumber` state, `OT${n}` labels).
+- ~~BACKLOG-146~~ — superseded: original blocker (no basketball lineups) resolved as a side effect of BACKLOG-141, which exposed a bigger issue (ratings stat-extraction is 100% football-shaped) — guarded off rather than left to silently compute wrong ratings. Real fix tracked under BACKLOG-159.
+- ~~BACKLOG-143~~ — box-score `ast` stat now counts standalone Assist-button events, not just embedded `assistPlayerId`.
+- ~~BUG-137~~ — `SocketProvider` manual-retry timeout now actually cancelled on unmount (was a real leak — flag could get stuck permanently blocking future retry loops).
+- ~~BACKLOG-155~~ — real feature-flag gating built and wired (Ads/User Management/News/Transfers admin panels). Lineup Builder deliberately left ungated (Richard's call — one of only two real ways a lineup gets persisted).
+- ~~BACKLOG-182~~ — bulk-register dedup check scoped to the target team, not the whole `players` table — was silently capable of dropping a brand-new player on a name collision. CRITICAL, found and fixed same session ahead of Saturday's new-team registration.
 
-## 🏀 Basketball Parity / Logging Core
+## 🏀 Basketball Parity / Logging Core — remaining open
 
+- **BACKLOG-166** (sub-finding 3 only) — competition-level foul-threshold override, needs a `competitionSportSettings` schema migration. Deliberately not started.
 - **BACKLOG-151** — Multi-logger sync is poll-only; real-time broadcast and conflict resolution are both no-ops.
 - **BUG-151** — No server-side event dedup/idempotency check exists at all (either sport).
-- **BACKLOG-152** — Track & Field logger has zero persistence layer — confirmed worse than assumed.
+- **BACKLOG-152** — Track & Field logger has zero persistence layer.
 - **BACKLOG-153** — Admin match-edit modal has no score-correction fields; three dead offline-queue implementations found; other logging-system cleanup.
-- ~~BACKLOG-166~~ — SHIPPED (partial) session 47E: team-foul tracking (data only, no UI) + technical-foul split into its own DB column, both fixed. Sub-finding 3 (competition-level threshold override) still needs a schema migration — flagged for Richard's go-ahead, not started.
-- (Not yet filed, folding in at session close per Richard: football's in-app lineup editor bypasses the admin page's own publish-lock/unlock RBAC — two lineup-editing surfaces enforce different rules.)
-- ~~BUG-134~~ / ~~BUG-136~~ — SHIPPED session 47E (foul-out disqualification + blocked re-sub), pending live test.
-- ~~BUG-142~~ — SHIPPED IN FULL session 47E: event-POST queue, period-transition PATCH + undo DELETE queue (activated previously-dead `pendingAdminChanges`/`syncAdminChanges` infra, fixed a real missing-auth-token bug in it), and roster-load auto-retry on reconnect. All four paths from the original filing done.
-- ~~BUG-135~~ — SHIPPED session 47E: distinct `otNumber` tracking, `OT${n}` period labels, live-clock consumers updated to match on OT-prefix.
-- ~~BACKLOG-146~~ — SUPERSEDED session 47E: original blocker (no lineups for basketball) resolved as a side effect of BACKLOG-141, but that exposed a bigger issue (ratings stat-extraction is 100% football-shaped) — guarded off rather than left to silently compute wrong ratings. Real fix tracked under BACKLOG-159.
-- Basketball parity pile from tonight is now fully worked through (BACKLOG-141, BUG-125, BUG-134/136, BUG-142, BUG-135 all shipped) — remaining open items are BACKLOG-166 (foul system full scope, deliberately deferred) and the football lineup-editor RBAC bypass (not yet filed, folding in at session close).
 
 ## 🔐 Auth / Identity Architecture
 
 - **BUG-148** — Google OAuth sign-in completely broken (missing callback route, dead parallel NextAuth implementation).
 - **BACKLOG-162** — Dead favourites page (100% mock data), two competing `useAuth` hooks, wrong-key `localStorage` cleanup.
-- Carried from earlier sessions: **BUG-128** (shared unscoped `authToken` cookie across roles — no priv-esc risk, but real identity bleed), **BACKLOG-094** (JWT_SECRET rotation decision still waiting on Richard), **BACKLOG-140** (loggers-as-separate-table architecture critique).
+- **BACKLOG-184** — Football's in-app lineup editor bypasses the admin page's own publish-lock/unlock RBAC — two lineup-editing surfaces enforce different rules for the same data. Filed session 47E (previously flagged mid-session, filing was deferred and is now done).
+- Carried from earlier sessions: **BUG-128** (shared unscoped `authToken` cookie across roles — no priv-esc risk, real identity bleed), **BACKLOG-094** (JWT_SECRET rotation decision still waiting on Richard), **BACKLOG-140** (loggers-as-separate-table architecture critique).
+
+## 🔒 Production Discipline / Security
+
+- **BACKLOG-167** / **BACKLOG-168** — see "Still-Open, Genuinely Urgent" above.
+- **BACKLOG-169** — `limit` query param unclamped in 14+ list routes.
+- **BACKLOG-170** — Raw `error.message` returned to the client in 4 routes, one (`news` GET) fully public.
+- **BACKLOG-171** — Public matches list embeds full event history on the Flow C hot path.
+- **BACKLOG-172** — Three N+1 query patterns, one on the public livescore hot path.
+- **BACKLOG-173** — Zero `Cache-Control`/ISR anywhere in the API or page layer.
+- **BACKLOG-174** — Block-list DTO shaping is fragile.
+- **BACKLOG-175** — `GET /api/universities` has no `.limit()` at all.
+- **BACKLOG-176** — `cloudinary/sign` reads `process.env` directly instead of `src/lib/env.ts`.
+- **BACKLOG-179** — `POST /api/teams` has zero NOT NULL validation, would 500 on any real caller (no live caller today).
+- **BACKLOG-181** — Unbounded `players` table scan in `/api/competitions/[id]/eligible-players` (not on the live-logging hot path).
+
+## ⚙️ Match/Competition Config Coupling (new theme, session 47E — genuinely not wired end-to-end)
+
+- **BACKLOG-178** — Lineup persistence API has no server-side cross-check against competition `playersPerSide`. Write-side of this gap.
+- **BACKLOG-183** — Admin match-lineups page hardcodes `playersPerSide: 11` for any friendly (a 5-a-side friendly has no way to configure correctly). Read-side of the same gap.
+- **BACKLOG-180** — Match-creation form defaults `competitionLevel` to `'busa-league'` even for friendlies, no UI control (currently mitigated by two independent enforced paths elsewhere, not urgent).
+- These three share one real root cause: match/competition config (`/api/matches/[id]/config`) is the correct source of truth and resolves things correctly, but neither the admin lineup UI, the lineup-write API, nor the match-creation form actually reads from it consistently. A coherent single fix should wire all three against that one source, not three independent patches.
+- **BACKLOG-177** — Predictions/Polls/FPL feature flags remain equally inert (same bug BACKLOG-155 fixed for the 5 High-Volatility flags) — not on the gating-checklist, deliberately not wired this session.
 
 ## 👀 Public Viewer Experience
 
 - **BUG-150** — Anonymous viewers cannot enable push notifications through any reachable UI path.
-- **BUG-152** — Match-detail page's own favourite heart doesn't persist at all (a third, divergent implementation from `useFavorites`/`BUG-091`).
-- **BACKLOG-154** — Status-styling/timeline-rendering/dead-component consistency debt (4 separate live-status implementations, 3 separate timeline renderers).
-- **BACKLOG-157** — Public Lineup Builder (`/lineups`) silently swallows save failures for non-admin/logger users.
-- **BACKLOG-159** — `players.rating` (shown on every profile) is a dead field — two disconnected rating pipelines, neither reaching the field viewers actually see.
-- **BACKLOG-160** — Player discovery gaps: broken inline Compare tab, no player listing page, two dead `/players` links.
-- **BACKLOG-161** — Minor data/discoverability bundle (dead `headToHead` write path, `/stats` naming mismatch, `/xi` has no sport-awareness).
+- **BUG-152** — Match-detail page's own favourite heart doesn't persist at all (a third, divergent implementation).
+- **BACKLOG-154** — Status-styling/timeline-rendering/dead-component consistency debt.
+- **BACKLOG-157** — Public Lineup Builder (`/lineups`) silently swallows save failures for non-admin/logger users (confirmed this session: it's not actually a second way to set real lineups, same gated API, silent 401/403).
+- **BACKLOG-159** — `players.rating` is a dead field — two disconnected rating pipelines.
+- **BACKLOG-160** — Player discovery gaps: broken inline Compare tab, no player listing page.
+- **BACKLOG-161** — Minor data/discoverability bundle.
 
 ## 🛠️ Admin Platform
 
-- **BACKLOG-155** — (see Pre-Prod Blocker above)
-- **BACKLOG-156** — Admin dashboards present placeholder/fabricated data as real, unlabeled (fake "ratings published" badge, fake CPU/disk/error metrics on the infra dashboard).
-- **BACKLOG-158** — Admin CRUD completeness gaps + minor dead UI (orgs/track-events can't be edited, notifications hub oversells itself, orphaned push-diagnostics page).
+- **BACKLOG-156** — Admin dashboards present placeholder/fabricated data as real, unlabeled.
+- **BACKLOG-158** — Admin CRUD completeness gaps + minor dead UI.
 
-## 📅 Season Transition / Hardcodes (session 47E)
+## 📅 Season Transition / Hardcodes
 
-- **BACKLOG-163** — Homepage round-grouping fallback hardcodes the 2025-26 season's calendar (`page.tsx:278-295`) — degrades silently, doesn't crash, once the anchor date goes stale.
-- **BACKLOG-164** — Admin "Create Competition" form defaults to `season: '2024/2025'` in two files.
-- **BACKLOG-165** — Pre-existing `tsc` error (`teamId` undefined) in the admin match-lineups publish route — same class BUG-154 flagged as worth a deliberate sweep rather than baseline noise.
-- Already covered, no new filing needed: the transfer/roster-history gap Richard asked about is real but already fully captured by **BACKLOG-126** (no working transfer tracking) and **BACKLOG-049** (seasonal affiliations schema) — confirmed via this session's audit, not re-filed.
+- **BACKLOG-163** — Homepage round-grouping fallback hardcodes the 2025-26 season's calendar.
+- **BACKLOG-164** — Admin "Create Competition" form defaults to `season: '2024/2025'`.
+- **BACKLOG-165** — Pre-existing `tsc` error (`teamId` undefined) in the admin match-lineups publish route.
+- Already covered, no new filing needed: the transfer/roster-history gap is real but already fully captured by **BACKLOG-126**/**BACKLOG-049**.
 
 ---
 
 ## How to use this for session picking
 
-Each category above is roughly one dedicated session's worth of work. Pre-Prod
-Blocker is the one item with an explicit checklist dependency (CLAUDE.md) — everything
-else is real debt but not gating a single test match. Basketball Parity is the
-biggest pile and the one already in progress this session (BACKLOG-141/BUG-125 done
-tonight; BUG-134/142/135/136 still open).
+BACKLOG-167 (unauthenticated PII leak) is the single most urgent unaddressed item
+in this whole index — genuinely live, genuinely unauthenticated, not gated by
+anything. Everything shipped this session (the large ✅ block above) still needs a
+real live-test pass before it can move from SHIPPED to RESOLVED — that's the
+natural next-session starting point alongside BACKLOG-167. The Match/Competition
+Config Coupling theme (BACKLOG-178/180/183) is newly identified and worth treating
+as one coherent fix rather than three, whenever it's picked up.
