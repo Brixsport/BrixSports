@@ -6884,6 +6884,19 @@ const allEvents = matchIds.length ? await db.select().from(matchEvents).where(in
 
 ---
 
+### BACKLOG-183 — Admin Match-Lineups Page Hardcodes `playersPerSide: 11` For Any Friendly Match (Same Bug Class As BUG-125, Football Side)
+
+**Status:** OPEN — found session 47E, not fixed, deliberately deferred (Richard's own call)
+**Priority:** MEDIUM — real, would block correctly building a 5-a-side lineup for a friendly (e.g. Saturday's own match, if it's 5-a-side); confirmed via code, not yet hit live
+
+**Problem:** `src/app/admin/match-lineups/page.tsx`'s `handleMatchSelect` looks up `matchComp = competitions.find(c => c.name === match.competition)` to resolve `playersPerSide`. A friendly match's `competition` field is typically just `"Friendly"` — not a real, configured `competitions` row with its own `competitionSportSettings`. That lookup fails, falls into the `else` branch, and `playersPerSide` is hardcoded to `11` (`page.tsx:234,238`) regardless of the match's actual format. A 5-a-side (or futsal) friendly has no way to configure the lineup builder for 5 starters — same root cause class as `BUG-125` (basketball got the identical wrong-default treatment from this same page), just the football-format-variant instead of the wrong-sport case.
+
+**Fix (not built):** the match-config system (`/api/matches/[id]/config`) already resolves `playersPerSide` correctly for a given match including format detection (5-a-side keyword matching, per `FootballLogger.tsx`'s own `is5Aside` logic) — this page should read from that same endpoint instead of doing its own competition-name lookup, the same fix direction already used to correct the config route's own sport-filter bug this session.
+
+**Found:** session 47E, Richard's own question about whether competition match settings actually couple through to lineup publishing for friendlies specifically.
+
+---
+
 ### BACKLOG-181 — Unbounded `players` Table Scan in `/api/competitions/[id]/eligible-players`
 
 **Status:** OPEN — found session 47E, not fixed
