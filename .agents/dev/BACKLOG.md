@@ -6219,9 +6219,15 @@ No `clearTimeout` exists anywhere in the file. The effect that sets `stateManage
 
 ### BUG-147 — CRITICAL: Systemic Unauthenticated-Write Surface Across ~16 Mutation Routes Outside `/api/admin/*`
 
-**Status:** OPEN — found session 47D, not yet fixed
+**Status:** SHIPPED — commit `0195b22`, landed 2026-07-28 (session 47D), 34 seconds before the docs commit that filed this entry as "not yet fixed" -- never corrected until session 47E's Saturday-readiness check. All 20 routes (the 16 below plus `users/[id]/preferences` and `notifications/subscribe` DELETE/GET, folded in same commit) confirmed gated via `getAuthUser` + role check. Confirmed `0195b22` is an ancestor of `dev` (`git merge-base --is-ancestor`), so this is live on staging, not sitting unmerged on a stale branch.
 **Priority:** CRITICAL — includes account takeover/mass-deletion and direct live-match-score corruption with zero auth
 **Filed:** 2026-07-27
+
+**Evidence:**
+- Commit: `0195b22`
+- Verified by: direct `getAuthUser` grep confirmed present on `fixtures/[id]/route.ts`, `matches/[id]/lineup/route.ts`, `users/[id]/route.ts` (the three most severe); commit's own diff stat shows all 20 listed files touched; author's commit message states zero new tsc errors (verified via stash/pop against the one pre-existing head-to-head error)
+- Observed result: not independently live-tested this session (no real unauthenticated curl against each route), but the fix pattern matches 30+ already-proven-correct call sites in this codebase
+- Pending items: a real unauthenticated-request smoke test against each of the 20 routes would be the gold-standard confirmation, not done here
 
 **Root cause (one finding, not sixteen independent oversights):** `middleware.ts`'s admin gate only matches the literal `/admin/:path*` and `/api/admin/:path*` prefixes. A large population of routes that are admin-only *in intent* — team/news/transfer/match/lineup/notification/bracket/stat/standings mutation — live outside that prefix and were never brought under the gate or given their own `getAuthUser()` call. Exact same bug class as `BUG-034`/`BUG-107`/`BACKLOG-142` (staff-comms), caught and fixed twice before — this is the first exhaustive sweep of the rest of the surface. Found by a dedicated full-system read-only audit agent, session 47D, then extended with two more routes found in a same-session follow-up check of the areas that first sweep explicitly hadn't reached yet (football-adjacent routes, per Richard's direct ask not to forget those).
 
