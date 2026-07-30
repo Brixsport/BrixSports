@@ -5892,8 +5892,14 @@ Filed together, same investigation: a `code-reviewer` agent pass explicitly inde
 
 ### BUG-137 — Retry-Interval Leak on `SocketProvider` Remount, Confirmed in Current Code (Mechanism Has Changed Since `ARCHITECTURE.md` Was Written)
 
-**Status:** OPEN — real, current, distinct from the doc's stale description
+**Status:** SHIPPED — 2026-07-30 (session 47E), commit `7cb44d3`, prioritized ahead of schedule given the Saturday football beta-test-on-staging deadline (real WS-affecting bug, shared/generic code)
 **Priority:** Medium — shared/generic code (`useWebSocket.tsx`), applies to every sport's WS connection, not basketball-specific
+
+**Evidence:**
+- Commit: `7cb44d3`
+- Verified by: `npx tsc --noEmit` clean
+- Observed result: not yet live-tested (no real unmount-during-active-retry-loop scenario forced and confirmed to recover)
+- Pending items: live test — force a WS disconnect long enough to enter the manual retry loop, then unmount/remount `SocketProvider` (e.g. full page navigation), confirm a fresh retry loop can still start afterward instead of being permanently blocked
 
 **Problem:** `ARCHITECTURE.md` describes this as a plain `setInterval` leak — that description is itself stale. The actual current mechanism (post-BUG-114) is a recursive `setTimeout` chain (`scheduleRetry()`) guarded by a module-level `manualRetryLoopActive` flag. Neither the pending `setTimeout` handle nor the `reconnect_failed` listener is cleared on `SocketProvider` unmount or `sharedSocket.disconnect()` — `SocketProvider`'s cleanup nulls `sharedSocket` but never touches the pending retry timeout or resets the flag. Once a retry loop starts and the socket later tears down, `manualRetryLoopActive` can stay `true` forever (the loop's own self-clearing check reads `sharedSocket?.connected` on a now-null socket, always falsy, so it never fires) — permanently blocking any genuinely new retry loop from starting for a future socket.
 
