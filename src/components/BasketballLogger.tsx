@@ -485,6 +485,7 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                 }
 
                 setIsLoading(false);
+                didFail = false;
             } catch (error) {
                 // BACKLOG-134: this outer catch only console.error'd -- a failed
                 // teams/players/eligible-players fetch left the roster empty with zero
@@ -493,10 +494,23 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                 console.error('Error fetching data:', error);
                 setEventSaveError('Failed to load teams/roster — check connection and reload. Player lists may be empty or incomplete.');
                 setIsLoading(false);
+                didFail = true;
             }
         };
 
+        // BUG-142 (roster-load retry, the last remaining piece of this entry's
+        // original scope): a failed initial load was visible (BACKLOG-134) but
+        // otherwise a dead end -- the logger had to manually reload the whole page.
+        // `didFail` is a plain closure variable, not React state -- it only needs to
+        // gate this one effect instance's own retry listener, not trigger a re-render.
+        let didFail = false;
         fetchData();
+
+        const retryOnReconnect = () => {
+            if (didFail) fetchData();
+        };
+        window.addEventListener('online', retryOnReconnect);
+        return () => window.removeEventListener('online', retryOnReconnect);
     }, [match.homeTeamId, match.awayTeamId, match.id]);
 
     // Fetch match config on mount -- mirrors FootballLogger's halfDuration/
