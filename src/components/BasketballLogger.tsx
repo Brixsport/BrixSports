@@ -300,7 +300,13 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
         const stats = {
             pts: 0,
             reb: 0,
-            ast: events.filter(e => e.assistPlayerId === playerId).length,
+            // BACKLOG-143: standalone "Assist" button events (type: 'Assist', the
+            // assisting player as e.playerId) were invisible here -- only embedded
+            // assistPlayerId on shot events counted, even though calculatePlayerRating
+            // already credits both paths. A player using the standalone button got
+            // the rating bump but the box score undercounted their real assist total.
+            ast: events.filter(e => e.assistPlayerId === playerId).length
+                + events.filter(e => e.type === 'Assist' && e.playerId === playerId).length,
             stl: 0,
             blk: 0,
             tov: 0,
