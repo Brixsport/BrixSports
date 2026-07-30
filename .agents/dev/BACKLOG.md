@@ -5858,12 +5858,18 @@ Filed together, same investigation: a `code-reviewer` agent pass explicitly inde
 
 ### BUG-135 — No Distinct Second-Overtime (OT2) Path — Quarter Number Never Advances Past `periodCount + 1`
 
-**Status:** OPEN
+**Status:** SHIPPED — 2026-07-30 (session 47E), commit `d892b99`
 **Priority:** Medium — only matters for a match tied after OT1, real but rare
 
 **Problem:** both the end-of-regulation branch and the "Add Extra Time" button (`BasketballLogger.tsx:1738-1790`) unconditionally call `setQuarter(periodCount + 1)`. If OT1 ends still tied and a real OT2 is needed, re-triggering "Start Extra Time" re-runs the identical `setQuarter(periodCount + 1)` — already the current value, so quarter number never advances into a genuine OT2 state. `getCurrentPeriod()` returns the flat string `'OT'` for any `quarter > periodCount`, so OT1 and OT2 events would be stored with an identical `period` field, indistinguishable in `match_events` history.
 
-**Fix (not built):** track overtime count separately from `quarter` (e.g. `otNumber`), derive the period label as `` `OT${otNumber}` `` instead of a flat `'OT'`.
+**Fix:** exactly the prescribed approach — new `otNumber` state, tracked separately from `quarter`. Both OT-entry points (tie-triggered "Start Extra Time" and the always-available "Add Extra Time" button) were duplicating the identical buggy logic; extracted into one `startNextOvertime()` helper rather than fixing it twice. Period label is now `` `OT${otNumber}` ``. Also updated the two live-clock consumers touched earlier this session (`LiveMatchStatus.tsx`, `matches/[id]/page.tsx`) to match on an OT-prefix check instead of the exact string `'OT'`, so a real OT2+ still renders the live countdown instead of silently falling back — otherwise this fix would have quietly broken tonight's earlier live-clock work for any match reaching a genuine second overtime.
+
+**Evidence:**
+- Commit: `d892b99`
+- Verified by: `npx tsc --noEmit` clean (zero new errors across all three changed files)
+- Observed result: not yet live-tested (no real match forced into a tied-OT1 scenario)
+- Pending items: live test — force a match to end OT1 tied, confirm "Add Extra Time"/"Start Extra Time" shows "OT2", confirm the resulting event's `period` field is `OT2` not `OT`, confirm the public page's live clock still renders correctly during OT2
 
 ---
 

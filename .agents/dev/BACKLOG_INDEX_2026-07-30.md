@@ -45,7 +45,8 @@ to BACKLOG-166.
 - (Not yet filed, folding in at session close per Richard: football's in-app lineup editor bypasses the admin page's own publish-lock/unlock RBAC — two lineup-editing surfaces enforce different rules.)
 - ~~BUG-134~~ / ~~BUG-136~~ — SHIPPED session 47E (foul-out disqualification + blocked re-sub), pending live test.
 - ~~BUG-142~~ — SHIPPED (partial) session 47E: event-POST offline queue ported from football, shared module extracted (`src/lib/admin-offline-queue.ts`). Remaining scope (period-transition PATCH, undo DELETE, roster-load retry) still open, same entry.
-- Carried from earlier sessions, still open: **BUG-135** (no distinct OT2 path).
+- ~~BUG-135~~ — SHIPPED session 47E: distinct `otNumber` tracking, `OT${n}` period labels, live-clock consumers updated to match on OT-prefix.
+- Basketball parity pile from tonight is now fully worked through (BACKLOG-141, BUG-125, BUG-134/136, BUG-142 partial, BUG-135 all shipped) — remaining open items are BACKLOG-166 (foul system full scope) and BUG-142's remaining write paths.
 
 ## 🔐 Auth / Identity Architecture
 
