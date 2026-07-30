@@ -6426,8 +6426,16 @@ No `clearTimeout` exists anywhere in the file. The effect that sets `stateManage
 
 ### BACKLOG-155 — Admin Feature Flags Are Fully Inert (Read Nowhere Else In The Codebase)
 
-**Status:** OPEN — found session 47D, not fixed
+**Status:** SHIPPED — 2026-07-30 (session 47E), commit `74d9a2a`. Ads/User Management/News/Transfers gated for real; Lineup Builder deliberately left ungated (Richard's call — it's one of only two real ways a lineup gets persisted, not a peripheral feature); Predictions/Polls/FPL flags remain equally inert, split out to `BACKLOG-177` rather than scope-creeping into this pass.
 **Priority:** HIGH — directly undercuts the still-open Live Event Readiness Checklist item ("All 🔴 High Volatility features are disabled or hidden from the UI")
+
+**Fix:** built as a real, reusable system per Richard's explicit ask ("beyond just this live match test window"), not a one-off hide. `src/lib/featureFlags.ts` (`isFeatureEnabled(key)`, server-only, fails open on an unrecognized key or DB error), `src/app/api/feature-flags/route.ts` (thin public read surface for the gated pages, all of which are client components), `src/components/admin/FeatureGate.tsx` (shared wrapper, renders a plain disabled-state instead of children). Four new flag keys added to `DEFAULT_SETTINGS`, defaulted `false`. Caught and fixed mid-build: `admin/transfers/page.tsx` already had its own pre-existing content/wrapper split that an early version of this change blindly re-derived, introducing a duplicate function name — fixed by wrapping the existing structure instead of re-deriving it.
+
+**Evidence:**
+- Commit: `74d9a2a`
+- Verified by: `npx tsc --noEmit` clean (confirmed the only errors in the diff, 3 in `admin/news/page.tsx`, are the same pre-existing baseline shifted by this change's own added lines)
+- Observed result: not yet live-tested (no real toggle-off-and-confirm-page-hides test run)
+- Pending items: live test — toggle each of the 4 gated flags off via Settings, confirm the corresponding admin page shows the disabled state instead of its real content; confirm toggling back on restores it
 
 **Problem:** `src/app/admin/settings/page.tsx`'s feature-flag CRUD (fetching, editing, saving) genuinely works against a real `systemSettings` table. But all seven default settings — `system.maintenance.mode`, `system.registration.enabled`, `system.notifications.enabled`, `features.fpl.enabled`, `features.predictions.enabled`, `features.polls.enabled`, `features.transfers.enabled` (`src/app/api/admin/settings/route.ts:15-28`) — are **read nowhere else in the entire codebase**. Grepped every key string across `src/**`; only the settings page and its own API route reference them. Toggling "maintenance mode" or "Enable Transfer News" off changes a DB row with zero effect on anything a user or admin experiences — no route guard, no conditional render, no middleware check consults these values anywhere.
 
@@ -6802,5 +6810,89 @@ const allEvents = matchIds.length ? await db.select().from(matchEvents).where(in
 **Fix (not built):** add the Cloudinary vars to `env.ts` if not already present, import from there instead.
 
 **Found:** session 47E, same background audit as BACKLOG-167.
+
+---
+
+### ~~BACKLOG-182~~ — Bulk-Register Dedup Check Not Scoped to Target Team, Could Silently Drop a New Player
+
+**Status:** RESOLVED — 2026-07-30 (session 47E), commit `dd92b68`
+**Priority:** CRITICAL — found ahead of Saturday's friendly against a brand-new team with brand-new players, the exact scenario this bug hits hardest
+
+**Problem:** `POST /api/players/bulk-register`'s pre-flight dedup matched a new player against the entire `players` table (hundreds of legacy rows), not scoped to the team being registered. A brand-new external team's players typically have no `college` set, so the match condition collapsed to "same name, college NULL/empty" against the whole database — any name collision with an unrelated existing player who also has no college silently skipped the new player, no error, no crash, just never created. Invisible to the logger afterward, no in-UI way to force-create.
+
+**Fix:** dedup query scoped to the target team via a join through `playerTeamAffiliations` (`teamId` + `isActive`) instead of the whole table.
+
+**Evidence:**
+- Commit: `dd92b68`
+- Verified by: `npx tsc --noEmit` clean
+- Observed result: not yet live-tested (no real bulk-registration of a name-colliding new player run against the fix)
+- Pending items: live test on staging before Saturday — register a new team with a player name deliberately colliding with an existing unrelated player who has no college set, confirm the new player is created, not skipped
+
+**Found:** session 47E, by a background audit agent doing a read-only trace of the new-team/new-player registration path ahead of Saturday's friendly.
+
+---
+
+### BACKLOG-177 — Predictions/Polls/FPL Feature Flags Remain Inert (Same Underlying Bug As BACKLOG-155)
+
+**Status:** OPEN — found session 47E, not fixed
+**Priority:** LOW — no Live Event Readiness Checklist dependency, unlike the 5 flags BACKLOG-155 wired; these are pre-existing default settings with no urgency attached
+
+**Problem:** `features.fpl.enabled`, `features.predictions.enabled`, `features.polls.enabled` are, like the flags `BACKLOG-155` fixed, only ever referenced in `admin/settings/route.ts` itself — never read anywhere else. Toggling them in the Settings UI has zero effect. Deliberately not wired in the same session as `BACKLOG-155` — those three features aren't on CLAUDE.md's High Volatility gating list and wiring them wasn't necessary for Saturday.
+
+**Fix (not built):** same pattern `BACKLOG-155` already established — `isFeatureEnabled()`/`FeatureGate` already exist and are reusable; this is just identifying where FPL/Predictions/Polls actually render (their own pages, not admin panels — these are public-facing features) and wrapping them the same way.
+
+**Found:** session 47E, while wiring `BACKLOG-155`.
+
+---
+
+### BACKLOG-178 — Lineup Persistence API Has No Server-Side Cross-Check Against Competition `playersPerSide`/Match Settings
+
+**Status:** OPEN — found session 47E, not fixed
+**Priority:** MEDIUM — real gap, not new risk (has always been this way), client-trust only
+
+**Problem:** `src/app/api/matches/[id]/lineup/route.ts` has zero reference to `competitionSportSettings`/`halfDuration`/`playersPerSide` anywhere. The competition-aware `playersPerSide` value is computed correctly by `/api/matches/[id]/config` (including this session's `BUG-125`-adjacent sport-filter fix), but enforcement of "does the submitted lineup's starter count actually match" lives only in each client component (`FootballLogger.tsx`, `BasketballLogger.tsx`, the admin match-lineups page) via their own local `STARTER_COUNT` checks. The server-side write endpoint accepts whatever starter array it's given, no count validation at all.
+
+**Fix (not built):** add a server-side check in the lineup POST handler — fetch the match's config (reuse the same three-layer merge `config/route.ts` already does) and reject a `starters` array whose length doesn't match the expected `playersPerSide` for that match's sport/competition.
+
+**Found:** session 47E, while answering Richard's question about whether competition match settings actually couple to the rest of the lineup-publishing flow.
+
+---
+
+### BACKLOG-179 — `POST /api/teams` Has No Validation Against NOT NULL Schema Columns, Would 500 On Any Real Caller
+
+**Status:** OPEN — found session 47E, not fixed
+**Priority:** MEDIUM — not live risk today (confirmed no UI anywhere calls this route directly), but a landmine for whenever one is built
+
+**Problem:** `src/app/api/teams/route.ts` inserts `request.body` directly with no validation, but `teams.shortName`/`logo`/`university`/`color` are all `.notNull()` in schema. The only working team-creation path today is `/admin/bulk-register`, which supplies all required fields with defaults — this route itself has never been exercised by any real UI. The moment a future "quick create team" form is built against it expecting `/api/players`-style defaulting, it will 500 on any minimal-fields submission.
+
+**Fix (not built):** default/validate `logo`, `color` (and confirm `shortName`/`university` are present) before insert, matching the pattern bulk-register already uses.
+
+**Found:** session 47E, by the same background audit that found `BACKLOG-182`.
+
+---
+
+### BACKLOG-180 — Match-Creation Form Defaults `competitionLevel` to `'busa-league'` Even For Friendlies, No UI Control
+
+**Status:** OPEN — found session 47E, not fixed
+**Priority:** LOW — currently mitigated by two independent enforced paths (bulk-register requires `university`; admin/players auto-fills it from the selected team), not a live risk today, but a single point of failure with no visible safety net
+
+**Problem:** `src/app/admin/matches/page.tsx` defaults `competitionLevel` to `'busa-league'` for every match including friendlies, with no UI to change it. That value flows into `/api/matches/[id]/eligible-players`'s `normalizeCompetitionLevel()`, which requires a non-empty `player.university` at the `'busa-league'` eligibility level. Currently safe because both real player-creation paths (bulk-register, admin/players) always populate `university` — but if a player or team is ever created outside those two enforced paths, `eligible-players` would silently return an empty roster with no error surfaced to the logger.
+
+**Fix (not built):** add a `competitionLevel` select for friendly matches, or default friendlies to a non-filtering level (`'inter-university'`/`'external'`) instead of `'busa-league'`.
+
+**Found:** session 47E, by the same background audit that found `BACKLOG-182`.
+
+---
+
+### BACKLOG-181 — Unbounded `players` Table Scan in `/api/competitions/[id]/eligible-players`
+
+**Status:** OPEN — found session 47E, not fixed
+**Priority:** LOW — confirmed this route is NOT the one FootballLogger's live-logging flow actually calls (that's the properly-scoped `/api/matches/[id]/eligible-players`), so no Saturday impact
+
+**Problem:** `src/app/api/competitions/[id]/eligible-players/route.ts` — `const allPlayers = await db.select().from(players);` has no `.limit()`, violating CLAUDE.md's "every list endpoint MUST have a `.limit()` clause" rule.
+
+**Fix (not built):** add a `.limit(1000)`-style cap.
+
+**Found:** session 47E, by the same background audit that found `BACKLOG-182`.
 
 ---
