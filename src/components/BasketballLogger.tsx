@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { X, Activity, Save, Undo2, Clock, Users, TrendingUp, Target, Play, Settings } from 'lucide-react';
 import { useMultiLogger } from '@/hooks/useMultiLogger';
 import { useWebSocket } from '@/hooks/useWebSocket';
+import { queueOfflineEvent, jwtSecondsRemaining } from '@/lib/admin-offline-queue';
 import { MultiLoggerStatus } from '@/components/MultiLoggerStatus';
 import type { SyncEvent } from '@/lib/multiLogger';
 import { getPrimaryTeam } from '@/lib/player-affiliation-utils';
@@ -172,6 +173,52 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
             }
         };
         ensureLocalToken();
+    }, []);
+
+    // BUG-142: basketball had no offline-queue/retry mechanism at all -- a failed
+    // event write during a network drop was visible (BACKLOG-134's error banner)
+    // but never recoverable. Ports FootballLogger's own proven mechanism
+    // (BACKLOG-058, live-tested on staging) rather than building a new one --
+    // same IndexedDB store sw-admin.js already drains, so no service-worker
+    // change is needed, only the write side.
+    const [queuedOfflineCount, setQueuedOfflineCount] = useState(0);
+
+    useEffect(() => {
+        if (!('serviceWorker' in navigator)) return;
+        const handleMessage = (e: MessageEvent) => {
+            if (e.data?.type === 'SYNC_COMPLETE' && e.data?.tag === 'sync-match-events') {
+                setQueuedOfflineCount(0);
+            }
+        };
+        navigator.serviceWorker.addEventListener('message', handleMessage);
+        return () => navigator.serviceWorker.removeEventListener('message', handleMessage);
+    }, []);
+
+    // iOS drain fallback -- Background Sync API is a no-op on iOS (BACKLOG-107).
+    // When the page comes online or becomes visible, trigger a drain directly:
+    // Android/desktop: re-register the sync tag (idempotent).
+    // iOS: postMessage DRAIN_MATCH_EVENTS to the SW, which calls syncMatchEvents().
+    useEffect(() => {
+        const triggerDrain = () => {
+            if (!('serviceWorker' in navigator)) return;
+            navigator.serviceWorker.ready.then((reg) => {
+                if ('sync' in reg) {
+                    (reg as ServiceWorkerRegistration & { sync: { register: (tag: string) => Promise<void> } })
+                        .sync.register('sync-match-events').catch(() => {});
+                } else if (navigator.serviceWorker.controller) {
+                    navigator.serviceWorker.controller.postMessage({ type: 'DRAIN_MATCH_EVENTS' });
+                }
+            }).catch(() => {});
+        };
+        const handleVisibility = () => {
+            if (document.visibilityState === 'visible') triggerDrain();
+        };
+        window.addEventListener('online', triggerDrain);
+        document.addEventListener('visibilitychange', handleVisibility);
+        return () => {
+            window.removeEventListener('online', triggerDrain);
+            document.removeEventListener('visibilitychange', handleVisibility);
+        };
     }, []);
 
     // Dynamic Player Rating Calculation
@@ -709,24 +756,25 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
         // nothing shown, the event just sat in local state looking "saved." Violates
         // this project's own rule that logging errors must never appear to succeed
         // silently.
+        const eventPayload = {
+            type,
+            minute: newEvent.minute,
+            second: newEvent.second,
+            period: newEvent.period,
+            teamId: selectedTeam === 'home' ? match.homeTeamId : match.awayTeamId,
+            playerId,
+            relatedPlayerId: assistPlayerId || null,
+            detail: newEvent.detail,
+            value: points ?? null,
+            made,
+            loggerId: currentLogger?.id,
+            loggerName: currentLogger?.name,
+        };
         try {
             const res = await fetch(`/api/matches/${match.id}/events`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    type,
-                    minute: newEvent.minute,
-                    second: newEvent.second,
-                    period: newEvent.period,
-                    teamId: selectedTeam === 'home' ? match.homeTeamId : match.awayTeamId,
-                    playerId,
-                    relatedPlayerId: assistPlayerId || null,
-                    detail: newEvent.detail,
-                    value: points ?? null,
-                    made,
-                    loggerId: currentLogger?.id,
-                    loggerName: currentLogger?.name,
-                }),
+                body: JSON.stringify(eventPayload),
             });
             if (!res.ok) {
                 setEventSaveError(`Failed to save "${type}" (${res.status}) — event kept locally only. Check connection and retry logging it if needed.`);
@@ -745,8 +793,35 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                 }
             }
         } catch (error) {
+            // Network failure -- server never received the event. Queue for
+            // background sync (BUG-142), mirroring FootballLogger's own mechanism
+            // exactly rather than leaving this the silent-loss dead end it was.
             console.error('Failed to persist event:', error);
-            setEventSaveError(`Failed to save "${type}" — offline or unreachable. Event kept locally only.`);
+            const token = localStorage.getItem('authToken');
+            if (!token) {
+                setEventSaveError(`Failed to save "${type}" — offline and no session found. Event NOT queued; please re-login and re-log this event manually.`);
+                return;
+            }
+            const QUEUE_MIN_TTL_SECONDS = 30 * 60;
+            if (jwtSecondsRemaining(token) < QUEUE_MIN_TTL_SECONDS) {
+                setEventSaveError(`Session expiring soon — "${type}" was NOT queued for offline sync. Please re-login before continuing offline, then re-log this event.`);
+                return;
+            }
+            try {
+                await queueOfflineEvent(match.id, eventPayload, token);
+                setQueuedOfflineCount(prev => prev + 1);
+                setEventSaveError(`"${type}" queued for offline sync — will save automatically once back online.`);
+                if ('serviceWorker' in navigator) {
+                    const reg = await navigator.serviceWorker.ready;
+                    if ('sync' in reg) {
+                        await (reg as ServiceWorkerRegistration & { sync: { register: (tag: string) => Promise<void> } }).sync.register('sync-match-events');
+                    }
+                }
+                console.log('[BasketballLogger] Event queued for background sync');
+            } catch (queueErr) {
+                console.error('Failed to queue event:', queueErr);
+                setEventSaveError(`Failed to save "${type}" — offline or unreachable, and queueing also failed. Event kept locally only.`);
+            }
         }
 
         // Dispatch WebSocket event for live updates
