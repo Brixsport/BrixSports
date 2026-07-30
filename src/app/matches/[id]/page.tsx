@@ -374,6 +374,7 @@ export default function MatchDetailPage() {
     const liveExtraTime = (!isMatchTimeStale && matchTime?.extraTime != null) ? matchTime.extraTime : match.extraTime;
 
     const ACTIVE_PLAY_PERIODS = ['FIRST_HALF', 'SECOND_HALF', 'EXTRA_TIME_1', 'EXTRA_TIME_2'];
+    const BASKETBALL_ACTIVE_PERIODS = ['Q1', 'Q2', 'Q3', 'Q4', 'OT'];
     const PERIOD_LABELS: Record<string, string> = {
         // H1/H2 labels commented out — clock alone carries active play display (2026-06-30)
         // FIRST_HALF: 'H1',
@@ -490,14 +491,21 @@ export default function MatchDetailPage() {
                                     <span className="flex items-center gap-1.5 justify-center">
                                         <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse" />
                                         {ACTIVE_PLAY_PERIODS.includes(displayPeriod) ? (
-                                            // Active play — clock only, no H1/H2 label
+                                            // Football active play — clock only, no H1/H2 label
                                             liveMinute != null ? (
                                                 <span className="text-red-400">
                                                     {liveMinute}'{(liveExtraTime ?? 0) > 0 ? `+${liveExtraTime}` : ''}
                                                 </span>
                                             ) : null
+                                        ) : BASKETBALL_ACTIVE_PERIODS.includes(displayPeriod) && !isMatchTimeStale && matchTime?.second != null ? (
+                                            // Basketball active play — quarter label + countdown
+                                            // (minute/second here are remaining-in-quarter, not
+                                            // elapsed, unlike football's liveMinute above).
+                                            <span className="text-red-400">
+                                                {displayPeriod} {liveMinute}:{String(matchTime.second).padStart(2, '0')}
+                                            </span>
                                         ) : (
-                                            // HT / PK — label only, no clock
+                                            // HT / PK, or basketball before its first live tick — label only
                                             <span className="text-red-400">{getPeriodLabel(displayPeriod)}</span>
                                         )}
                                     </span>

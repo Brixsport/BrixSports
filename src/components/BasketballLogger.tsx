@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Activity, Save, Undo2, Clock, Users, TrendingUp, Target, Play, Settings } from 'lucide-react';
 import { useMultiLogger } from '@/hooks/useMultiLogger';
+import { useWebSocket } from '@/hooks/useWebSocket';
 import { MultiLoggerStatus } from '@/components/MultiLoggerStatus';
 import type { SyncEvent } from '@/lib/multiLogger';
 import { getPrimaryTeam } from '@/lib/player-affiliation-utils';
@@ -125,6 +126,15 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
         loggerId: currentLogger?.id || 'unknown',
         loggerName: currentLogger?.name || 'Unknown Logger',
         enabled: !!currentLogger,
+    });
+
+    // WebSocket -- BasketballLogger never had this at all before (BUG-153's audit
+    // note: "no WS emit wired for basketball at all"). Mirrors FootballLogger's own
+    // setup exactly, same shared-socket singleton, so this doesn't open a second
+    // connection alongside useMultiLogger's (which is polling-based, not socket-based).
+    const { emit, isConnected: isSocketConnected } = useWebSocket({
+        matchId: match.id,
+        autoConnect: true,
     });
 
     // Debug: Monitor lineup modal state
@@ -547,6 +557,48 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
         const priorMinutes = isOT ? periodCount * quarterDuration : (quarter - 1) * quarterDuration;
         return priorMinutes + minutesElapsedInPeriod;
     };
+
+    // Live-ticking quarter clock + WS broadcast (basketball's own analog of
+    // FootballLogger's `match:time:update` effect, BUG-153's audit gap: "no WS
+    // emit wired for basketball at all"). `time` was previously a manual display
+    // string only ever set on quarter transitions, never auto-decrementing -- real
+    // per-second countdown now derived from quarterStartedAt, same source the
+    // event-timestamp helpers above already use. Deliberately reuses the exact
+    // `match:time:update` channel football uses: ws-server's clock-authority
+    // single-writer enforcement (index.js) keys off that event name generically,
+    // not per-sport, so basketball gets the same dual-logger clock-collision
+    // protection for free. Payload semantics differ from football on purpose --
+    // minute/second here are countdown-remaining, not elapsed -- LiveMatchStatus
+    // renders the two sports differently already.
+    useEffect(() => {
+        if (!matchStarted || matchEnded || quarterEnded) return;
+
+        const isOT = quarter > periodCount;
+        const periodLengthSeconds = (isOT ? overtimeDurationMinutes : quarterDuration) * 60;
+
+        const tick = () => {
+            const remaining = Math.max(0, periodLengthSeconds - getElapsedSecondsInPeriod());
+            const mm = Math.floor(remaining / 60);
+            const ss = remaining % 60;
+            setTime(`${mm}:${String(ss).padStart(2, '0')}`);
+
+            if (isSocketConnected) {
+                emit('match:time:update', {
+                    matchId: match.id,
+                    minute: mm,
+                    second: ss,
+                    half: quarter,
+                    extraTime: 0,
+                    period: getCurrentPeriod(),
+                });
+            }
+        };
+
+        tick();
+        const interval = setInterval(tick, 1000);
+        return () => clearInterval(interval);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [matchStarted, matchEnded, quarterEnded, quarter, periodCount, quarterDuration, overtimeDurationMinutes, quarterStartedAt, isSocketConnected, emit, match.id]);
 
     // Record the actual event
     const recordEvent = async (type: BasketballEventType, playerId: string, points?: number, assistPlayerId?: string | null) => {

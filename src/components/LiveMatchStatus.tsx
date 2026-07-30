@@ -18,13 +18,7 @@ const PERIOD_LABELS: Record<string, string> = {
     EXTRA_TIME_BREAK: 'ET HT',
     PENALTY_SHOOTOUT: 'PK',
     FINISHED: 'FT',
-    // Basketball -- this is the branch that actually matters for basketball today.
-    // BasketballLogger never emits a WS match:time:update tick (no live-clock
-    // broadcast exists for basketball at all), so `matchTime` stays null and every
-    // basketball match renders via the `!matchTime` fallback path below, keyed off
-    // this same map. The switch further down is effectively unreachable for
-    // basketball until a live broadcast is built, but is extended too in case that
-    // changes.
+    // Basketball
     Q1: 'Q1',
     Q2: 'Q2',
     Q3: 'Q3',
@@ -87,10 +81,16 @@ export default function LiveMatchStatus({ matchId, sport, variant = 'default', f
         case 'Q3':
         case 'Q4':
         case 'OT':
-            // Quarter label only, no {minute}' -- minute here would be elapsed
-            // match-time, not a quarter countdown, and showing "12'" during Q1 reads
-            // as a football-style clock rather than a quarter indicator.
-            label = matchTime.period;
+            // BasketballLogger now emits a real per-second countdown (mm/second =
+            // remaining time in the quarter, not elapsed -- opposite semantics from
+            // football's minute field). Render it once live data actually exists;
+            // fall back to the bare quarter label if a viewer's socket hasn't
+            // received a tick yet (fresh page load) or the value's gone stale.
+            label = matchTime.second != null && !isStale ? (
+                <span>
+                    {matchTime.period} {minute}:{String(matchTime.second).padStart(2, '0')}
+                </span>
+            ) : matchTime.period;
             break;
         default:
             label = (

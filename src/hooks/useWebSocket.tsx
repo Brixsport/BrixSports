@@ -381,16 +381,19 @@ export function useTeamStats(matchId: string) {
  * Hook for subscribing to match timer updates
  */
 export function useMatchTimer(matchId: string) {
-    const [time, setTime] = useState<{ minute: number; extraTime: number; half: number; period?: string } | null>(null);
+    const [time, setTime] = useState<{ minute: number; second?: number; extraTime: number; half: number; period?: string } | null>(null);
     const [isStale, setIsStale] = useState(false);
     const { socket } = useMatchSubscription(matchId);
 
     useEffect(() => {
         if (!socket) return;
 
-        const handleTimeUpdate = (data: { matchId: string; minute: number; extraTime: number; half: number; period?: string }) => {
+        // `second` was always sent (both sports) but silently dropped here --
+        // harmless for football (never rendered), but basketball's countdown
+        // display needs it. Now threaded through for both.
+        const handleTimeUpdate = (data: { matchId: string; minute: number; second?: number; extraTime: number; half: number; period?: string }) => {
             if (data.matchId === matchId) {
-                setTime({ minute: data.minute, extraTime: data.extraTime, half: data.half, period: data.period });
+                setTime({ minute: data.minute, second: data.second, extraTime: data.extraTime, half: data.half, period: data.period });
                 setIsStale(false);
             }
         };
