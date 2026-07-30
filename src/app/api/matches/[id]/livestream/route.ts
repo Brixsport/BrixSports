@@ -2,8 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
 import { matches } from '@/db/schema';
 import { eq } from 'drizzle-orm';
-import jwt from 'jsonwebtoken';
-import { env } from '@/lib/env';
+import { getAuthUser } from '@/lib/auth';
 
 // GET /api/matches/[id]/livestream - Get livestream info
 export async function GET(
@@ -64,40 +63,27 @@ export async function PATCH(
     { params }: { params: Promise<{ id: string }> }
 ) {
     try {
-        const { id: matchId } = await params;
-        const body = await request.json();
-
-        // Admin authentication check
-        const token = request.cookies.get('authToken')?.value;
-
-        if (!token) {
+        // BACKLOG-168: was a hand-rolled jwt.verify() against the raw token role
+        // claim -- a demoted/deactivated admin's already-issued token kept working
+        // here for its full lifetime since it never re-checked the current DB row.
+        // getAuthUser() re-reads the user's current role on every request, same
+        // pattern used at 90+ other admin-gated call sites in this codebase.
+        const authUser = await getAuthUser(request);
+        if (!authUser) {
             return NextResponse.json(
                 { error: 'Unauthorized - No authentication token' },
                 { status: 401 }
             );
         }
-
-        try {
-            if (!env.jwtSecret) {
-                return NextResponse.json({ error: 'Server misconfiguration' }, { status: 500 });
-            }
-            const decoded = jwt.verify(
-                token,
-                env.jwtSecret
-            ) as { id: string; email: string; role: string };
-
-            if (decoded.role !== 'admin') {
-                return NextResponse.json(
-                    { error: 'Forbidden - Admin access required' },
-                    { status: 403 }
-                );
-            }
-        } catch (error) {
+        if (authUser.role !== 'admin') {
             return NextResponse.json(
-                { error: 'Unauthorized - Invalid token' },
-                { status: 401 }
+                { error: 'Forbidden - Admin access required' },
+                { status: 403 }
             );
         }
+
+        const { id: matchId } = await params;
+        const body = await request.json();
 
         const {
             livestreamUrl,

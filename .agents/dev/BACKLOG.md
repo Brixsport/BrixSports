@@ -341,12 +341,14 @@ BUG-001 through BUG-029, AUDIT-001/002 (partial), BACKLOG-065 — all resolved S
 
 - ~~**BUG-092**~~ _(HIGH — Real-time / Viewer UX)_: Undone events stay visible on the public Timeline tab until hard refresh. Root cause: `handleUndo` in `FootballLogger.tsx` sends `DELETE /api/matches/[id]/events/[eventId]` which removes the event from DB, but the WS server only broadcasts `match:event:new` — there is no `match:event:deleted` broadcast. The viewer page's `useMatchEvents` hook accumulates events via WS and has no mechanism to receive deletions. Fix: (a) in the event DELETE handler (`src/app/api/matches/[id]/events/[eventId]/route.ts`), after confirmed DB delete, emit `match:event:deleted` with `{ matchId, eventId }` via the WS server; (b) `useMatchEvents` in `useWebSocket.tsx` listens for `match:event:deleted` and filters the deleted event out of local state. Observed live: double-yellow undo removed the Red Card from DB correctly but Red Card and original Yellow both remained on viewer Timeline until page reload. Filed: 2026-06-30. **Status:** SHIPPED — found already fixed, session 47D. **Real fix landed silently as a side effect of `BUG-119` (`b2ffcde`, "stop firing broadcast calls unawaited on serverless"), which added `after(() => broadcastEventDeleted(matchId, eventId))` to the DELETE handler — never cross-referenced back to this entry.** `useWebSocket.tsx`'s `handleEventDeleted` (filters `setEvents(prev => prev.filter(e => e.id !== data.eventId))` on the `event:deleted` socket event) has existed since the original WS setup commit, so the listener side was never actually the gap — only the emit side was missing until BUG-119 added it. `MatchOverlay.tsx` has its own separate `event:deleted` listener too, also already wired. **Live-tested on staging, 2026-07-28 — status refined, not a clean RESOLVED.** Posted a real test event (`Timeout`) to the live match `w6o4YQAF5pem_Qa8uazAm`, confirmed it appeared, then DELETEd it and watched the same viewer tab without reloading. Console confirmed the broadcast is genuinely received: `[WS] Event deleted for Match w6o4YQAF5pem_Qa8uazAm: [object Object]`. But the event did **not** disappear from the Timeline instantly — it took roughly the length of one `BUG-108` reconciliation-poll cycle (~25s) to vanish. Root cause, confirmed by code read: `useWebSocket.tsx`'s `handleEventDeleted` correctly filters `useMatchEvents`' own internal `events` state (aliased `liveEvents` in `matches/[id]/page.tsx:50`) — but **nothing wires that deletion into `matchData.events`**, which is the state the Timeline tab actually renders from (`page.tsx:144-162` only has a one-way `useEffect` that *adds* `latestEvent` into `matchData.events` on `event:new`; there is no equivalent removal path for a deleted event id). The event only disappeared once the unrelated 25s reconciliation poll (`BUG-108`) did a full silent refetch of `matchData` from the DB, which naturally excluded the deleted row.
 
-**Status:** SHIPPED, refined — genuinely better than the original filing (no manual reload needed, self-heals within ~25s instead of requiring a hard refresh), but not the instant fix the WS listener implies. **Fix needed for true RESOLVED:** add a small `useEffect` in `matches/[id]/page.tsx` that filters `matchData.events` on the same `event:deleted` socket event (either via a new `deletedEventId` piece of state exposed from `useMatchEvents`, or a second direct `on('event:deleted', ...)` listener on the page itself, matching the pattern the page already uses for `match:score:updated`/`match:status:changed`/`match:updated`).
+**Status:** SHIPPED — the "fix needed for true RESOLVED" described immediately below was itself found already built, session 47F, by a retrospective audit agent. This entry's own status line had gone stale after the fix landed. `src/app/matches/[id]/page.tsx:266-283` has a `handleEventDeleted` listener — filters `matchData.events` on the `event:deleted` socket event, wired via `on('event:deleted', handleEventDeleted)` in the same `useEffect` as `match:score:updated`/`match:status:changed`/`match:updated` — with a comment literally citing `BUG-092`. Confirmed by direct file read, session 47F (not just the audit agent's claim). **Not yet live-tested against this specific code path** (the prior evidence block below tested the pre-fix ~25s-lag behavior, before this listener existed) — needs a fresh live two-tab test to actually confirm instant removal now, then this can move to RESOLVED with a real evidence block.
 
-**Evidence:**
+**Original problem this entry describes (kept for history):** add a small `useEffect` in `matches/[id]/page.tsx` that filters `matchData.events` on the same `event:deleted` socket event (either via a new `deletedEventId` piece of state exposed from `useMatchEvents`, or a second direct `on('event:deleted', ...)` listener on the page itself, matching the pattern the page already uses for `match:score:updated`/`match:status:changed`/`match:updated`). **This is exactly what now exists in code — see above.**
+
+**Evidence (from before the fix above existed — superseded, kept for history):**
 - Verified by: live two-tab test against staging, real event POST + DELETE via admin session, observed via the public match page without reload
 - Observed result: broadcast received immediately (console-confirmed); UI update lagged ~25s, driven by the reconciliation poll, not the WS listener
-- Pending items: wire `event:deleted` directly into `matchData.events` for a true instant fix
+- Pending items: a fresh live test against the now-existing `handleEventDeleted` listener, to confirm instant removal and move this to RESOLVED
 
 - **BUG-091** _(MEDIUM — Viewer UX)_: Favourite/heart button on match detail page turns red (optimistic UI) but no write is confirmed. The button is likely calling `POST /api/users/favorites` or `POST /api/teams/[id]/follow` — both routes are listed under BACKLOG-118 remaining work as not yet having `resolveEffectiveUserId` applied. For a viewer-only user (no logger cookie), the failure is likely a silent 401/403 with no UI feedback — the heart state is never rolled back on error. Fix: (a) apply `resolveEffectiveUserId` to `src/app/api/users/favorites/route.ts` and `src/app/api/teams/[id]/follow/route.ts` (BACKLOG-118 remaining work); (b) add error rollback to the heart button — if the API call fails, revert the optimistic toggle and show a toast. Filed: 2026-06-30. **Status:** OPEN
 
@@ -6665,41 +6667,34 @@ No `clearTimeout` exists anywhere in the file. The effect that sets `stateManage
 
 ---
 
-### BACKLOG-167 — Unauthenticated `/api/players` and `/api/search` Leak Banned/PII Fields (Same Bug Already Fixed Once, Never Ported to List/Search)
+### ~~BACKLOG-167~~ — Unauthenticated `/api/players` and `/api/search` Leak Banned/PII Fields (Same Bug Already Fixed Once, Never Ported to List/Search)
 
-**Status:** OPEN — found session 47E, not fixed
+**Status:** SHIPPED — 2026-07-30 (session 47F), not yet live-tested
 **Priority:** CRITICAL — real, live, unauthenticated PII/banned-field leak on two public routes; same bug class already fixed once on the detail route and missed here
 
-**Problem:** `GET /api/players` (`src/app/api/players/route.ts` — every branch: `ids=`, `teamId=`, default list) and `GET /api/search` (`category=players` results) have no `getAuthUser()` call and return `enrichPlayersWithAffiliations()`'s output unshaped — `{ ...player, memberships, organizationAffiliations }`, where `...player` is the full `players` row including `email` and `profileId` (both on CLAUDE.md's banned-public-fields list; `memberships`/`organizationAffiliations` also banned verbatim). `src/app/api/teams/[id]/route.ts:113` strips `team`/`memberships`/`organizationAffiliations` but still spreads `...player`, so `email`/`profileId` leak there too.
+**Problem:** `GET /api/players` (`src/app/api/players/route.ts` — every branch: `ids=`, `teamId=`, default list) and `GET /api/search` (`category=players` results) have no `getAuthUser()` call and return `enrichPlayersWithAffiliations()`'s output unshaped — `{ ...player, memberships, organizationAffiliations }`, where `...player` is the full `players` row including `email` and `profileId` (both on CLAUDE.md's banned-public-fields list; `memberships`/`organizationAffiliations` also banned verbatim). `src/app/api/teams/[id]/route.ts` had it worse than originally documented: the main `players` field (`teamPlayers`/`playersWithStats`) had **zero** stripping at all (raw row spread), and `universityPlayers` stripped `team`/`memberships`/`organizationAffiliations` but still spread `...player`, leaking `email`/`profileId` there too. That route also had **no auth check of any kind** — confirmed while fixing it.
 
 **Why this is a repeat, not a new class:** `src/app/api/players/[id]/route.ts:325-326,336` already has the correct fix (BUG-098/101, RESOLVED 2026-07-11/12) — `email`/`profileId` destructured out, `memberships`/`organizationAffiliations` gated behind `isAdmin`. That fix was scoped to the single-player detail route only; the list route, search route, and the teams-detail route's player-spread were never touched and still leak today.
 
-**Fix (not built):**
-```ts
-const authUser = await getAuthUser(request as any).catch(() => null);
-const isAdmin = authUser?.role === 'admin';
-function toPublicPlayer(p: EnrichedPlayer) {
-    if (isAdmin) return p;
-    const { email, profileId, memberships, organizationAffiliations, ...pub } = p;
-    return pub;
-}
-```
-Apply in `players/route.ts` (all branches), `search/route.ts` (players category), and finish the strip in `teams/[id]/route.ts:113` (add `email`/`profileId` to its existing destructure).
+**Fix:** added a shared `toPublicPlayer(player, isAdmin)` helper to `src/lib/player-data.ts` (same file as `enrichPlayersWithAffiliations`) — strips `email`/`profileId`/`memberships`/`organizationAffiliations` unless `isAdmin`, mirroring the already-proven detail-route shape exactly. Applied at the return boundary (after any internal filtering/search logic that legitimately still needs to read the stripped fields, e.g. `playerMatchesSearch`/`playerMatchesQuery` matching against `email`) in:
+- `src/app/api/players/route.ts` — all three branches (`ids=`, `teamId=`, default list), added `getAuthUser` check
+- `src/app/api/search/route.ts` — players category, added `getAuthUser` check
+- `src/app/api/teams/[id]/route.ts` — both `teamPlayers` (previously fully unstripped) and `universityPlayers`, added `getAuthUser` check (route had none before)
 
-**Found:** session 47E, by a background code-reviewer agent doing a read-only production-discipline sweep (API payload/PII, caching, convention consistency — explicitly scoped to not re-cover session 47D's six audit areas).
+**Found:** session 47E, by a background code-reviewer agent doing a read-only production-discipline sweep (API payload/PII, caching, convention consistency — explicitly scoped to not re-cover session 47D's six audit areas). Fixed session 47F.
 
 ---
 
-### BACKLOG-168 — Two Admin Routes Bypass `getAuthUser()`, Trust the JWT's Role Claim Directly (Privilege-Revocation Gap)
+### ~~BACKLOG-168~~ — Two Admin Routes Bypass `getAuthUser()`, Trust the JWT's Role Claim Directly (Privilege-Revocation Gap)
 
-**Status:** OPEN — found session 47E, not fixed
+**Status:** SHIPPED — 2026-07-30 (session 47F), not yet live-tested
 **Priority:** HIGH — narrow but real: a demoted/deactivated admin's already-issued token keeps working on these two routes for its full 7-day lifetime
 
 **Problem:** `src/app/api/matches/[id]/lineup/unlock/route.ts` and `src/app/api/matches/[id]/livestream/route.ts` both hand-roll `jwt.verify(token, env.jwtSecret)` and check `decoded.role !== 'admin'` straight off the token payload, instead of the standard `getAuthUser(request)` pattern used at 90+ other admin-gated call sites, which re-reads the **current** DB row. If an admin account is demoted or deactivated, every other admin route picks that up on the next request; these two keep honoring the stale token claim.
 
-**Fix (not built):** replace both hand-rolled blocks with `const authUser = await getAuthUser(request); if (!authUser || authUser.role !== 'admin') return 403;` — the standard pattern already used everywhere else.
+**Fix:** replaced both hand-rolled `jwt.verify()` blocks with `const authUser = await getAuthUser(request); if (!authUser) return 401; if (authUser.role !== 'admin') return 403;` — the standard pattern already used everywhere else. Found by a retrospective audit agent (session 47F) as the same gap class as `BUG-187` (fixed one file over, same session, in `lineup/publish/route.ts`) — this entry is the sibling-route half of that same pattern.
 
-**Found:** session 47E, same background audit as BACKLOG-167.
+**Found:** session 47E, same background audit as BACKLOG-167. Fixed session 47F.
 
 ---
 

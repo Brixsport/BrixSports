@@ -32,6 +32,21 @@ export type EnrichedPlayer = PlayerRow & {
     organizationAffiliations: EnrichedPlayerOrganizationAffiliation[];
 };
 
+// CLAUDE.md banned public fields, player-shaped: email/profileId are on the
+// players row itself; memberships/organizationAffiliations are the nested
+// admin-only relations enrichPlayersWithAffiliations() attaches. Mirrors the
+// strip already proven correct on the single-player detail route
+// (BUG-098/101, src/app/api/players/[id]/route.ts) -- this is the same shape
+// applied consistently everywhere else that returns player data (BACKLOG-167).
+export function toPublicPlayer<T extends { email?: unknown; profileId?: unknown; memberships?: unknown; organizationAffiliations?: unknown }>(
+    player: T,
+    isAdmin: boolean
+): T {
+    if (isAdmin) return player;
+    const { email: _email, profileId: _profileId, memberships: _memberships, organizationAffiliations: _organizationAffiliations, ...pub } = player;
+    return pub as T;
+}
+
 function slugifyOrganizationName(value: string): string {
     return value
         .trim()

@@ -3,15 +3,23 @@
 Scope: every item filed by the session 47D six-agent audit and session 47E's three
 follow-up audits, grouped by theme instead of filing order. Full detail/evidence for
 each lives in `.agents/dev/BACKLOG.md` under its own ID — this is an index, not a
-replacement. Updated at session 47E's close to reflect final state — everything
-shipped this session is marked as such; nothing here is stale as of 2026-07-30.
+replacement. Originally updated at session 47E's close.
+
+**Correction, session 47F:** the "nothing here is stale" claim above did not survive
+one more session — an audit agent caught `BACKLOG-167`/`168`/`178`/`180`/`183`/`177`
+all showing outdated status below after session 47F shipped fixes for them. Corrected
+in place, session 47F. New items filed session 47F (`BACKLOG-185`, `-186`, `BUG-187`)
+are out of this index's original scope (47D/47E only) and are not added here — see
+`BACKLOG.md` directly for those. Lesson learned, logged in `known-issues.md`: this
+index is a live document that goes stale the moment anything it describes changes,
+not something to write once and trust.
 
 ---
 
 ## 🔴 Still-Open, Genuinely Urgent
 
-- **BACKLOG-167** — `/api/players` and `/api/search` leak banned/PII fields (`email`, `profileId`, `memberships`, `organizationAffiliations`) to unauthenticated callers — the same bug already fixed once on the detail route (BUG-098/101), never ported to list/search. CRITICAL, filed session 47E, **not fixed** — real, live, unauthenticated leak, still standing.
-- **BACKLOG-168** — Two admin routes (`lineup/unlock`, `livestream`) bypass `getAuthUser()`, trust the JWT role claim directly — a demoted admin's token keeps working there for its full 7-day life. Not fixed.
+- ~~**BACKLOG-167**~~ — `/api/players` and `/api/search` leak banned/PII fields (`email`, `profileId`, `memberships`, `organizationAffiliations`) to unauthenticated callers — the same bug already fixed once on the detail route (BUG-098/101), never ported to list/search. CRITICAL, filed session 47E, **SHIPPED session 47F** — pending live-test verification, see `BACKLOG.md`.
+- ~~**BACKLOG-168**~~ — Two admin routes (`lineup/unlock`, `livestream`) bypass `getAuthUser()`, trust the JWT role claim directly — a demoted admin's token keeps working there for its full 7-day life. **SHIPPED session 47F** — pending live-test verification.
 
 ## ✅ Shipped This Session (pending live-test verification — none of these have been re-tested live yet)
 
@@ -56,13 +64,13 @@ shipped this session is marked as such; nothing here is stale as of 2026-07-30.
 - **BACKLOG-179** — `POST /api/teams` has zero NOT NULL validation, would 500 on any real caller (no live caller today).
 - **BACKLOG-181** — Unbounded `players` table scan in `/api/competitions/[id]/eligible-players` (not on the live-logging hot path).
 
-## ⚙️ Match/Competition Config Coupling (new theme, session 47E — genuinely not wired end-to-end)
+## ⚙️ Match/Competition Config Coupling (new theme, session 47E — SHIPPED session 47F)
 
-- **BACKLOG-178** — Lineup persistence API has no server-side cross-check against competition `playersPerSide`. Write-side of this gap.
-- **BACKLOG-183** — Admin match-lineups page hardcodes `playersPerSide: 11` for any friendly (a 5-a-side friendly has no way to configure correctly). Read-side of the same gap.
-- **BACKLOG-180** — Match-creation form defaults `competitionLevel` to `'busa-league'` even for friendlies, no UI control (currently mitigated by two independent enforced paths elsewhere, not urgent).
-- These three share one real root cause: match/competition config (`/api/matches/[id]/config`) is the correct source of truth and resolves things correctly, but neither the admin lineup UI, the lineup-write API, nor the match-creation form actually reads from it consistently. A coherent single fix should wire all three against that one source, not three independent patches.
-- **BACKLOG-177** — Predictions/Polls/FPL feature flags remain equally inert (same bug BACKLOG-155 fixed for the 5 High-Volatility flags) — not on the gating-checklist, deliberately not wired this session.
+- ~~**BACKLOG-178**~~ — Lineup persistence API has no server-side cross-check against competition `playersPerSide`. Write-side of this gap. **SHIPPED session 47F**, pending live-test.
+- ~~**BACKLOG-183**~~ — Admin match-lineups page hardcodes `playersPerSide: 11` for any friendly (a 5-a-side friendly has no way to configure correctly). Read-side of the same gap. **SHIPPED session 47F**, pending live-test.
+- ~~**BACKLOG-180**~~ — Match-creation form defaults `competitionLevel` to `'busa-league'` even for friendlies, no UI control. **SHIPPED session 47F**, pending live-test.
+- Fixed together session 47F: extracted the three-layer config merge into a shared `src/lib/matchConfig.ts`, generalized to detect custom "N-a-side" formats from sport/competition text. Both the admin lineup UI and the lineup-publish route (the real enforcement point, not the draft-save route) now read `playersPerSide` from that one source. Bonus find: `lineup/publish/route.ts` had zero server-side auth — filed and fixed as `BUG-187` in the same pass.
+- ~~**BACKLOG-177**~~ — Predictions/Polls/FPL feature flags remain equally inert (same bug BACKLOG-155 fixed for the 5 High-Volatility flags). **Closed WONT FIX session 47F** — investigated and found moot: those pages already `return notFound()` unconditionally per `BACKSCOPE.md`, nothing live exists for a flag to gate.
 
 ## 👀 Public Viewer Experience
 
@@ -90,10 +98,10 @@ shipped this session is marked as such; nothing here is stale as of 2026-07-30.
 
 ## How to use this for session picking
 
-BACKLOG-167 (unauthenticated PII leak) is the single most urgent unaddressed item
-in this whole index — genuinely live, genuinely unauthenticated, not gated by
-anything. Everything shipped this session (the large ✅ block above) still needs a
-real live-test pass before it can move from SHIPPED to RESOLVED — that's the
-natural next-session starting point alongside BACKLOG-167. The Match/Competition
-Config Coupling theme (BACKLOG-178/180/183) is newly identified and worth treating
-as one coherent fix rather than three, whenever it's picked up.
+**Session 47F update:** BACKLOG-167/168 and the Match/Competition Config Coupling
+theme (178/180/183) are now all SHIPPED, not open — see the corrected sections
+above. Nothing in this index is genuinely open-and-urgent anymore as of session
+47F; the real next-session starting point is a live-test pass across everything
+sitting at SHIPPED (this index's 47D/47E block plus session 47F's additions,
+tracked directly in `BACKLOG.md` since they're out of this index's original
+scope) — none of it can move to RESOLVED without one.

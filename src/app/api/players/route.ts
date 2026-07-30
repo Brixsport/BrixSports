@@ -3,7 +3,7 @@ import { and, eq, inArray } from 'drizzle-orm';
 import { db } from '@/db';
 import { playerTeamAffiliations, players, teams } from '@/db/schema';
 import { getAuthUser } from '@/lib/auth';
-import { enrichPlayersWithAffiliations, type EnrichedPlayer, syncPlayerOrganizationAffiliations } from '@/lib/player-data';
+import { enrichPlayersWithAffiliations, toPublicPlayer, type EnrichedPlayer, syncPlayerOrganizationAffiliations } from '@/lib/player-data';
 import { getPrimaryTeam, getResolvedInstitutionalData, playerMatchesInstitutionFilters } from '@/lib/player-affiliation-utils';
 
 function playerMatchesSearch(player: EnrichedPlayer, query: string) {
@@ -43,6 +43,9 @@ function playerMatchesSearch(player: EnrichedPlayer, query: string) {
 
 export async function GET(request: Request) {
     try {
+        const authUser = await getAuthUser(request as any).catch(() => null);
+        const isAdmin = authUser?.role === 'admin';
+
         const { searchParams } = new URL(request.url);
         const teamId = searchParams.get('teamId');
         const ids = searchParams.get('ids');
@@ -58,9 +61,10 @@ export async function GET(request: Request) {
             }
 
             const foundPlayers = await db.select().from(players).where(inArray(players.id, playerIds));
+            const enriched = await enrichPlayersWithAffiliations(foundPlayers);
             return NextResponse.json({
                 success: true,
-                players: await enrichPlayersWithAffiliations(foundPlayers),
+                players: enriched.map((p) => toPublicPlayer(p, isAdmin)),
             });
         }
 
@@ -89,9 +93,10 @@ export async function GET(request: Request) {
                 combinedMap.set(row.id, row);
             }
 
+            const enrichedTeamPlayers = await enrichPlayersWithAffiliations(Array.from(combinedMap.values()));
             return NextResponse.json({
                 success: true,
-                players: await enrichPlayersWithAffiliations(Array.from(combinedMap.values())),
+                players: enrichedTeamPlayers.map((p) => toPublicPlayer(p, isAdmin)),
             });
         }
 
@@ -108,10 +113,13 @@ export async function GET(request: Request) {
         }
 
         if (search) {
+            // Matched against email/memberships/etc. BEFORE the public strip below —
+            // search must still work over fields a non-admin caller never sees in the
+            // response (BACKLOG-167). Stripping happens only at the return boundary.
             enrichedPlayers = enrichedPlayers.filter((player) => playerMatchesSearch(player, search));
         }
 
-        return NextResponse.json({ success: true, players: enrichedPlayers });
+        return NextResponse.json({ success: true, players: enrichedPlayers.map((p) => toPublicPlayer(p, isAdmin)) });
     } catch (error) {
         console.error('Error fetching players:', error);
         return NextResponse.json({ success: false, error: 'Failed to fetch players' }, { status: 500 });
