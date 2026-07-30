@@ -6525,9 +6525,9 @@ No `clearTimeout` exists anywhere in the file. The effect that sets `stateManage
 
 ---
 
-### ~~BUG-154~~ — H2H Tab Crashes ("Cannot read properties of undefined, reading 'team1Wins'") For Any Fresh Matchup
+### BUG-154 — H2H Tab Crashes ("Cannot read properties of undefined, reading 'team1Wins'") For Any Fresh Matchup
 
-**Status:** RESOLVED — 2026-07-28 (session 47D)
+**Status:** SHIPPED — 2026-07-28 (session 47D), commit `d0c8b64`. Not RESOLVED: this entry's own evidence block admits the post-fix live case was never re-tested, which is exactly what CLAUDE.md's lifecycle table reserves RESOLVED for ("live-tested, evidence block attached") — corrected session 47E, was previously mismarked RESOLVED with a stale "commit: pending" placeholder never backfilled after the fix landed.
 **Priority:** HIGH — Flow C (Public Livescore), real live crash found by Richard on staging while verifying tonight's other fixes
 
 **Problem:** `GET /api/head-to-head` (`src/app/api/head-to-head/route.ts:75-79`) only computed a `stats` object when either a stored `headToHead` row existed OR at least one FINISHED match between the two teams existed. Two teams that have simply never played each other before — a completely normal, common case, not an edge case — left `stats` as `undefined`, and the route still returned `headToHead: undefined` in its JSON response. `HeadToHeadComparison` (`src/components/HeadToHead.tsx:38`) destructures `headToHead` from props and immediately does `headToHead.team1Wins / headToHead.totalMatches` with no guard — a hard crash on the H2H tab of `/matches/[id]` for any such matchup. Live-reproduced by Richard on staging.
@@ -6537,10 +6537,10 @@ No `clearTimeout` exists anywhere in the file. The effect that sets `stateManage
 **Fix:** the route now always returns a valid, fully-shaped `headToHead` object (zeroed defaults: `totalMatches: 0, team1Wins: 0, team2Wins: 0, draws: 0, team1GoalsFor: 0, team2GoalsFor: 0`) when there's no stored record and no finished matches, instead of `undefined`. Also hardened `HeadToHeadComparison` itself to guard all three percentage calculations against `totalMatches === 0` (would otherwise render `NaN%` even with a valid zeroed object) — belt-and-suspenders on top of the root-cause fix, not a replacement for it.
 
 **Evidence:**
-- Commit: pending (uncommitted at time of writing)
+- Commit: `d0c8b64` (`src/app/api/head-to-head/route.ts`, `src/components/HeadToHead.tsx`)
 - Verified by: `npx tsc --noEmit` clean (zero new errors from either changed file)
-- Observed result: fix addresses the exact reproduction Richard reported live on staging; not yet re-tested against that same live case post-fix (staging redeploy pending)
-- Pending items: live re-verification on staging after next deploy, confirming the H2H tab renders "0-0-0" instead of crashing for a fresh matchup
+- Observed result: fix addresses the exact reproduction Richard reported live on staging; not yet re-tested against that same live case post-fix
+- Pending items: live re-verification on staging (real fresh-matchup H2H tab load, confirming "0-0-0" renders instead of crashing) — required before this can move to RESOLVED
 
 **Found:** session 47D, live crash reported by Richard while verifying `BUG-041`/`BUG-153` on staging.
 
