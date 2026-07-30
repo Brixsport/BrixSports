@@ -497,7 +497,7 @@ export default function MatchDetailPage() {
                                                     {liveMinute}'{(liveExtraTime ?? 0) > 0 ? `+${liveExtraTime}` : ''}
                                                 </span>
                                             ) : null
-                                        ) : BASKETBALL_ACTIVE_PERIODS.includes(displayPeriod) && !isMatchTimeStale && matchTime?.second != null ? (
+                                        ) : (BASKETBALL_ACTIVE_PERIODS.includes(displayPeriod) || displayPeriod?.startsWith('OT')) && !isMatchTimeStale && matchTime?.second != null ? (
                                             // Basketball active play — quarter label + countdown
                                             // (minute/second here are remaining-in-quarter, not
                                             // elapsed, unlike football's liveMinute above).

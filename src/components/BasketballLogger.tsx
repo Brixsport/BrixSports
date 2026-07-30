@@ -112,6 +112,13 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
     const [showPeriodModal, setShowPeriodModal] = useState(false);
     const [isSemiFinal, setIsSemiFinal] = useState(true); // Matches are semi-finals
     const [isOT, setIsOT] = useState(false);
+    // BUG-135: quarter number alone can't distinguish OT1 from OT2 -- both the
+    // tie-check branch and "Add Extra Time" button used to call the identical
+    // setQuarter(periodCount + 1) every time, so a genuine second overtime never
+    // advanced past the first, and both would be stored with the same flat 'OT'
+    // period string in match_events. Tracked separately so the period label can be
+    // `OT${otNumber}` instead.
+    const [otNumber, setOtNumber] = useState(0);
 
 
     // Quarter End Handling
@@ -620,7 +627,33 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
     // logger refreshing mid-quarter restarts that quarter's elapsed-time count --
     // basketball has no mid-match-resume seeding at all yet (unlike football's
     // BUG-115/117/118), a separate, larger gap.
-    const getCurrentPeriod = () => (quarter > periodCount ? 'OT' : `Q${quarter}`);
+    const getCurrentPeriod = () => (quarter > periodCount ? `OT${otNumber || 1}` : `Q${quarter}`);
+
+    // BUG-135 fix: shared by both OT-entry buttons (tie-triggered "Start Extra Time"
+    // and the always-available "Add Extra Time") -- previously each inlined an
+    // identical setQuarter(periodCount + 1), which is why a real second overtime
+    // never advanced past the first. quarter still advances by one each real OT
+    // (keeps getElapsedMinute()'s prior-minutes accumulation distinct per period);
+    // otNumber is the human-readable OT count the period label actually uses.
+    const startNextOvertime = () => {
+        const nextOtNumber = otNumber + 1;
+        setIsOT(true);
+        setOtNumber(nextOtNumber);
+        setQuarter(prev => prev + 1);
+        setTime(`${overtimeDurationMinutes}:00`);
+        setQuarterStartedAt(Date.now());
+        setShowPeriodModal(false);
+        fetch(`/api/matches/${match.id}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ currentPeriod: `OT${nextOtNumber}` }),
+        }).then((res) => {
+            if (!res.ok) setEventSaveError(`Failed to save OT${nextOtNumber} transition (${res.status}) — period may not persist on refresh.`);
+        }).catch((e) => {
+            console.error('Failed to persist OT transition:', e);
+            setEventSaveError(`Failed to save OT${nextOtNumber} transition — offline or unreachable.`);
+        });
+    };
     const getElapsedSecondsInPeriod = () => Math.max(0, Math.floor((Date.now() - quarterStartedAt) / 1000));
     const getElapsedMinute = () => {
         const isOT = quarter > periodCount;
@@ -2099,21 +2132,7 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                                         onClick={() => {
                                             // Check for tie if knockout/semi
                                             if (homeScore === awayScore) {
-                                                setIsOT(true);
-                                                setQuarter(periodCount + 1); // one integer past regulation represents OT
-                                                setTime(`${overtimeDurationMinutes}:00`);
-                                                setQuarterStartedAt(Date.now());
-                                                setShowPeriodModal(false);
-                                                fetch(`/api/matches/${match.id}`, {
-                                                    method: 'PATCH',
-                                                    headers: { 'Content-Type': 'application/json' },
-                                                    body: JSON.stringify({ currentPeriod: 'OT' }),
-                                                }).then((res) => {
-                                                    if (!res.ok) setEventSaveError(`Failed to save OT transition (${res.status}) — period may not persist on refresh.`);
-                                                }).catch((e) => {
-                                                    console.error('Failed to persist OT transition:', e);
-                                                    setEventSaveError('Failed to save OT transition — offline or unreachable.');
-                                                });
+                                                startNextOvertime();
                                             } else {
                                                 // Real match end. This used to only call setMatchEnded(true)
                                                 // locally + a dead CustomEvent dispatch -- never the real
@@ -2130,32 +2149,15 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                                         }}
                                         className="w-full bg-primary text-black py-4 rounded-xl font-black uppercase tracking-widest hover:scale-105 transition-transform"
                                     >
-                                        {homeScore === awayScore ? 'Start Extra Time (OT)' : 'Finalize Match'}
+                                        {homeScore === awayScore ? `Start Extra Time (OT${otNumber + 1})` : 'Finalize Match'}
                                     </button>
                                 )}
 
                                 <button
-                                    onClick={() => {
-                                        // Specific user request for "Extra Time" even after first qtr
-                                        setIsOT(true);
-                                        setQuarter(periodCount + 1);
-                                        setTime(`${overtimeDurationMinutes}:00`);
-                                        setQuarterStartedAt(Date.now());
-                                        setShowPeriodModal(false);
-                                        fetch(`/api/matches/${match.id}`, {
-                                            method: 'PATCH',
-                                            headers: { 'Content-Type': 'application/json' },
-                                            body: JSON.stringify({ currentPeriod: 'OT' }),
-                                        }).then((res) => {
-                                            if (!res.ok) setEventSaveError(`Failed to save OT transition (${res.status}) — period may not persist on refresh.`);
-                                        }).catch((e) => {
-                                            console.error('Failed to persist OT transition:', e);
-                                            setEventSaveError('Failed to save OT transition — offline or unreachable.');
-                                        });
-                                    }}
+                                    onClick={startNextOvertime}
                                     className="w-full bg-white/5 border border-white/10 text-white py-4 rounded-xl font-black uppercase tracking-widest hover:bg-white/10 transition-all"
                                 >
-                                    Add Extra Time
+                                    Add Extra Time{otNumber > 0 ? ` (OT${otNumber + 1})` : ''}
                                 </button>
 
                                 <button

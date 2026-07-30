@@ -31,7 +31,12 @@ export default function LiveMatchStatus({ matchId, sport, variant = 'default', f
 
     // No WS data ever received (fresh page load before first tick) — use DB fallback period.
     if (!matchTime) {
-        const fallbackLabel = fallbackPeriod ? (PERIOD_LABELS[fallbackPeriod] ?? 'LIVE') : 'LIVE';
+        // BUG-135: a genuine second overtime is 'OT2' (etc), not the flat 'OT' this
+        // map only has -- fall back to showing the raw period rather than the
+        // generic 'LIVE' for any OT-prefixed value this map doesn't have an exact key for.
+        const fallbackLabel = fallbackPeriod
+            ? (PERIOD_LABELS[fallbackPeriod] ?? (fallbackPeriod.startsWith('OT') ? fallbackPeriod : 'LIVE'))
+            : 'LIVE';
         if (variant === 'badge') {
             return (
                 <div className="flex items-center gap-2 bg-red-600 text-white px-3 py-1 rounded-full text-xs font-bold">
@@ -53,7 +58,12 @@ export default function LiveMatchStatus({ matchId, sport, variant = 'default', f
     const minute = matchTime.minute;
     const extra = matchTime.extraTime > 0 ? `+${matchTime.extraTime}` : '';
 
-    switch (matchTime.period) {
+    // BUG-135: a real second (or later) overtime is 'OT2'/'OT3'/etc, not the flat
+    // 'OT' this switch used to match exactly -- normalize to 'OT' for the switch's
+    // discriminant only; the case body below still displays the real matchTime.period.
+    const switchPeriod = matchTime.period?.startsWith('OT') ? 'OT' : matchTime.period;
+
+    switch (switchPeriod) {
         case 'HALF_TIME':
             label = 'HT';
             break;
