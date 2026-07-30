@@ -5833,8 +5833,18 @@ Filed together, same investigation: a `code-reviewer` agent pass explicitly inde
 
 ### BUG-134 — Basketball's Foul System Is Structurally Unenforced (Disqualification, Team Fouls, Bonus, Technical-Foul Miscounting)
 
-**Status:** OPEN
+**Status:** SHIPPED — 2026-07-30 (session 47E), commit `697592e`. Minimal scope only, Richard's own explicit call: sub-finding 1 (disqualification) fixed; sub-findings 2-4 (team-foul tracking/bonus, technical-foul miscount) deliberately deferred, filed as `BACKLOG-166`.
 **Priority:** HIGH — a real basketball match cannot be officiated correctly through this logger today; this is a domain-correctness gap, not an edge case
+
+**Fix applied, sub-finding 1 only:** `getPersonalFoulCount()`/`isFouledOut()` in `BasketballLogger.tsx`, derived from local event state (`events.filter(e => e.type === 'Foul' && e.playerId === playerId).length >= foulDisqualifyAt`) — matches how all six foul button labels already collapse into one `type: 'Foul'`/`personalFouls` DB column today, so no new miscounting introduced. `foulDisqualifyAt` itself was already sitting unused in `config/route.ts`'s `SPORT_DEFAULTS.basketball` (a past session had already done the config planning, just never wired the enforcement) — now actually read into local state on mount. Wired into two enforcement points: the event player-picker disables a fouled-out player with a visible "FOULED OUT" tag instead of silently allowing more actions logged against them, and the sub-in bench pool excludes them outright (this is also `BUG-136`'s fix, see below).
+
+**Deliberately not fixed this pass (filed as `BACKLOG-166`):** team-foul accumulator + quarter-reset + bonus-state UI (sub-finding 2/3), technical-foul miscounting into `personalFouls` (sub-finding 4), and competition-level override of `foulDisqualifyAt` (currently sport-default-only, no `competitionSportSettings` column exists for it).
+
+**Evidence:**
+- Commit: `697592e`
+- Verified by: `npx tsc --noEmit` clean (zero new errors on `BasketballLogger.tsx`)
+- Observed result: not yet live-tested (no real match run against the fouled-out gate)
+- Pending items: live test — log 5 personal fouls against one player, confirm the player-picker shows them disabled/"FOULED OUT" and the sub-in modal excludes them from the bench pool
 
 **Problem, four confirmed sub-findings, same root cause (no foul system beyond a single generic counter):**
 1. **No disqualification threshold anywhere.** `BasketballLogger.tsx:988-993` — all six foul buttons (Personal/Technical/Flagrant/Offensive/Shooting/Unsportsmanlike) call the same `handleEventClick('Foul')` with no subtype. No `personalFouls` counter is compared against any threshold anywhere in the component.
@@ -5859,12 +5869,18 @@ Filed together, same investigation: a `code-reviewer` agent pass explicitly inde
 
 ### BUG-136 — Compound Risk: a Fouled-Out Player Can Be Subbed Back Onto the Court
 
-**Status:** OPEN — code-confirmed the gate is missing; the live occurrence itself is unconfirmed, needs a live test
+**Status:** SHIPPED — 2026-07-30 (session 47E), commit `697592e`, fixed in the same pass as BUG-134 (it was blocked on BUG-134's per-player foul tracking landing first, per this entry's own note)
 **Priority:** HIGH — direct consequence of BUG-134, worth its own entry since the *substitution* side is a distinct fix location
 
-**Problem:** `handleSubIn` (`BasketballLogger.tsx:434-452`) and the sub-in player-selection modal filter only by `homeSubs`/`awaySubs` bench membership — no code path anywhere checks a player's foul count before allowing them back onto the court. Since BUG-134 already establishes zero foul-out enforcement exists, there is nothing gating a disqualified (5+ personal fouls) player from re-entering. The absence of the code-level gate is confirmed by direct read; whether this has actually happened in a real logged match is not confirmed and needs a live test, not assumed either way.
+**Problem:** `handleSubIn` and the sub-in player-selection modal filtered only by `homeSubs`/`awaySubs` bench membership — no code path anywhere checked a player's foul count before allowing them back onto the court.
 
-**Fix (not built):** blocked on BUG-134's per-player foul tracking landing first — the sub-in filter needs to exclude any player at/above the disqualification threshold once that count exists to check against.
+**Fix:** the sub-in modal's `availableSubs` filter now also excludes any player where `isFouledOut(p.id)` is true (BUG-134's new helper), on top of the existing bench-membership check.
+
+**Evidence:**
+- Commit: `697592e`
+- Verified by: `npx tsc --noEmit` clean
+- Observed result: not yet live-tested
+- Pending items: live test — foul a player out, confirm they no longer appear in the sub-in bench pool
 
 ---
 
@@ -6582,5 +6598,169 @@ No `clearTimeout` exists anywhere in the file. The effect that sets `stateManage
 **Problem:** `src/app/api/admin/match-lineups/[id]/route.ts(126,57)`: `error TS2552: Cannot find name 'teamId'. Did you mean 'team'?`. Confirmed pre-existing and unrelated to any session 47E change (file has zero diff this session). Not yet read in full to determine live-request impact — flagged for the same "Pre-Existing `tsc` Errors Mapped to Critical Flow Impact" sweep BUG-154's entry calls for, not chased further this session (found incidentally while verifying an unrelated fix to `src/app/admin/match-lineups/page.tsx`, BUG-125).
 
 **Found:** session 47E, incidental `tsc --noEmit` check while verifying BUG-125's fix.
+
+---
+
+### BACKLOG-166 — Basketball Foul System: Team-Foul Bonus Tracking, Technical-Foul Miscounting, Competition-Level Threshold Override
+
+**Status:** OPEN — deliberately deferred from BUG-134, Richard's own explicit scope call (session 47E)
+**Priority:** MEDIUM — real, but BUG-134's disqualification gate (the domain-integrity-critical piece) is already shipped; this is the remaining polish/completeness layer
+
+**Deferred from BUG-134's original four sub-findings — only sub-finding 1 (disqualification) was built:**
+1. **Team-foul accumulator + quarter-reset + bonus-state UI** — no per-team, per-quarter foul counter exists anywhere; `teamFoulBonusAt: 5` is computed and returned by `config/route.ts` but still never read by `BasketballLogger.tsx`. No "team is in the bonus" indicator exists for the logger or viewer.
+2. **`technicalFouls` still miscounts into `personalFouls`** — `events/route.ts`'s `case 'Foul':` unconditionally writes to `personalFouls` regardless of which of the six foul button labels (Personal/Technical/Flagrant/Offensive/Shooting/Unsportsmanlike) triggered it; no subtype is passed through from click to DB write at all. BUG-134's disqualification fix inherited this same collapsed-to-one-type behavior deliberately (counts every foul type toward foul-out, matching the existing data shape) rather than fixing the underlying miscount — fixing this properly means deciding whether technical fouls should count toward personal disqualification at all (rule-dependent) before touching the DB write.
+3. **Competition-level override for foul thresholds** — `foulDisqualifyAt`/`teamFoulBonusAt`/`technicalFoulValue` are sport-default-only today (`SPORT_DEFAULTS.basketball` in `config/route.ts`); unlike `halfDuration`/`maxSubstitutions`/`playersPerSide`, there is no matching column on `competitionSportSettings` to let a specific competition use a non-FIBA-default rule (e.g. NBA's 6-foul disqualification). Needs a schema migration (new columns on `competitionSportSettings`) plus wiring into the same three-layer merge the other config fields already use.
+
+**Fix (not built):** each of the three above is independently scoped and can be picked up separately. (1) and (2) are logger/route changes only. (3) needs a `db:push` migration — per this project's own convention, staging first, then prod, logged in `RUNLOG.md`.
+
+**Found:** session 47D (original BUG-134 filing), scope split session 47E when only sub-finding 1 was built.
+
+---
+
+### BACKLOG-167 — Unauthenticated `/api/players` and `/api/search` Leak Banned/PII Fields (Same Bug Already Fixed Once, Never Ported to List/Search)
+
+**Status:** OPEN — found session 47E, not fixed
+**Priority:** CRITICAL — real, live, unauthenticated PII/banned-field leak on two public routes; same bug class already fixed once on the detail route and missed here
+
+**Problem:** `GET /api/players` (`src/app/api/players/route.ts` — every branch: `ids=`, `teamId=`, default list) and `GET /api/search` (`category=players` results) have no `getAuthUser()` call and return `enrichPlayersWithAffiliations()`'s output unshaped — `{ ...player, memberships, organizationAffiliations }`, where `...player` is the full `players` row including `email` and `profileId` (both on CLAUDE.md's banned-public-fields list; `memberships`/`organizationAffiliations` also banned verbatim). `src/app/api/teams/[id]/route.ts:113` strips `team`/`memberships`/`organizationAffiliations` but still spreads `...player`, so `email`/`profileId` leak there too.
+
+**Why this is a repeat, not a new class:** `src/app/api/players/[id]/route.ts:325-326,336` already has the correct fix (BUG-098/101, RESOLVED 2026-07-11/12) — `email`/`profileId` destructured out, `memberships`/`organizationAffiliations` gated behind `isAdmin`. That fix was scoped to the single-player detail route only; the list route, search route, and the teams-detail route's player-spread were never touched and still leak today.
+
+**Fix (not built):**
+```ts
+const authUser = await getAuthUser(request as any).catch(() => null);
+const isAdmin = authUser?.role === 'admin';
+function toPublicPlayer(p: EnrichedPlayer) {
+    if (isAdmin) return p;
+    const { email, profileId, memberships, organizationAffiliations, ...pub } = p;
+    return pub;
+}
+```
+Apply in `players/route.ts` (all branches), `search/route.ts` (players category), and finish the strip in `teams/[id]/route.ts:113` (add `email`/`profileId` to its existing destructure).
+
+**Found:** session 47E, by a background code-reviewer agent doing a read-only production-discipline sweep (API payload/PII, caching, convention consistency — explicitly scoped to not re-cover session 47D's six audit areas).
+
+---
+
+### BACKLOG-168 — Two Admin Routes Bypass `getAuthUser()`, Trust the JWT's Role Claim Directly (Privilege-Revocation Gap)
+
+**Status:** OPEN — found session 47E, not fixed
+**Priority:** HIGH — narrow but real: a demoted/deactivated admin's already-issued token keeps working on these two routes for its full 7-day lifetime
+
+**Problem:** `src/app/api/matches/[id]/lineup/unlock/route.ts` and `src/app/api/matches/[id]/livestream/route.ts` both hand-roll `jwt.verify(token, env.jwtSecret)` and check `decoded.role !== 'admin'` straight off the token payload, instead of the standard `getAuthUser(request)` pattern used at 90+ other admin-gated call sites, which re-reads the **current** DB row. If an admin account is demoted or deactivated, every other admin route picks that up on the next request; these two keep honoring the stale token claim.
+
+**Fix (not built):** replace both hand-rolled blocks with `const authUser = await getAuthUser(request); if (!authUser || authUser.role !== 'admin') return 403;` — the standard pattern already used everywhere else.
+
+**Found:** session 47E, same background audit as BACKLOG-167.
+
+---
+
+### BACKLOG-169 — User-Supplied `limit` Query Param Unclamped in 14+ List Routes (Shallow ".limit() Present" Without an Upper Bound)
+
+**Status:** OPEN — found session 47E, not fixed
+**Priority:** HIGH — CLAUDE.md mandates `.limit()` on every list endpoint; these technically have one but it's caller-controlled with no ceiling, `?limit=999999999` bypasses the intent entirely
+
+**Problem:** `parseInt(searchParams.get('limit') || 'N')` passed straight into `.limit()` with no `Math.min()` ceiling in: `src/app/api/news/route.ts`, `news/[id]/comments/route.ts`, `news/[id]/related/route.ts`, `transfers/route.ts`, `fixtures/route.ts`, `competitions/[id]/fixtures/route.ts`, `competitions/[id]/stats/route.ts`, `notifications/route.ts`, `users/activity/route.ts`, `predictions/leaderboard/route.ts`, `ratings/analytics/route.ts`, `teams/[id]/form/route.ts`, `search/route.ts`, `fpl/players/route.ts`, `fpl/transfers/route.ts`. `src/app/api/players/search/route.ts` already has the correct pattern in this same codebase: `Math.min(Math.max(1, parsed), 50)`.
+
+**Fix (not built):** one-line change per file, same pattern each time: `const limit = Math.min(Math.max(1, parseInt(searchParams.get('limit') || '20', 10) || 20), 100);`
+
+**Found:** session 47E, same background audit as BACKLOG-167.
+
+---
+
+### BACKLOG-170 — Internal Error Messages (`error.message`) Returned to the Client in 4 Routes, One Fully Public
+
+**Status:** OPEN — found session 47E, not fixed
+**Priority:** HIGH — direct violation of CLAUDE.md's "Never return raw database errors to the client"; one of the four (`news` GET) is unauthenticated
+
+**Problem:** `details: error instanceof Error ? error.message : String(error)` (or equivalent) returned in the JSON error body at `src/app/api/news/route.ts` (GET is fully public, no auth check), `news/[id]/route.ts`, `notifications/subscribe/route.ts`, `cloudinary/sign/route.ts`.
+
+**Fix (not built):** same shape at each site — log the real error server-side (`console.error`), return a generic message to the client: `return NextResponse.json({ error: 'Failed to fetch news articles' }, { status: 500 });`
+
+**Found:** session 47E, same background audit as BACKLOG-167.
+
+---
+
+### BACKLOG-171 — Public Matches List Embeds Full Event History for All 50 Matches in Every Response (Flow C Hot Path)
+
+**Status:** OPEN — found session 47E, not fixed
+**Priority:** MEDIUM — real payload bloat on the public livescore list, not a correctness bug
+
+**Problem:** `src/app/api/matches/route.ts` fetches up to 200 events per match and inlines the full array into every list item for all 50 matches returned. Confirmed hot path: `src/app/live/page.tsx` and `src/components/LiveUpdates.tsx` both call this endpoint. A list view needs current score/status/minute, not full event-by-event detail for 50 matches at once — that already exists separately on the detail route.
+
+**Fix (not built):** drop the embedded `events` array from the list response (or cap it to the last 2-3 events), let the detail page's existing `/api/matches/[id]` fetch carry full history.
+
+**Found:** session 47E, same background audit as BACKLOG-167.
+
+---
+
+### BACKLOG-172 — Three N+1 Query Patterns, One on the Public Livescore Hot Path
+
+**Status:** OPEN — found session 47E, not fixed
+**Priority:** MEDIUM
+
+**Problem:**
+1. `src/app/api/matches/route.ts` — one `matchEvents` query per match (up to 50 separate queries) instead of a single `inArray(matchEvents.matchId, matchIds)` batch query. Public livescore list, Flow C.
+2. `src/app/api/matches/[id]/route.ts` — a separate `players` query per event with a `relatedPlayerId` (up to 500 per match).
+3. `src/app/api/competitions/route.ts` (`includeStats=true` branch) — 3 unbatched queries × N competitions (matchCount, allMatches, standingsCount).
+
+**Fix (not built):** batch via `inArray()` + in-memory grouping, same pattern for all three — example for (1):
+```ts
+const allEvents = matchIds.length ? await db.select().from(matchEvents).where(inArray(matchEvents.matchId, matchIds)).limit(5000) : [];
+```
+
+**Found:** session 47E, same background audit as BACKLOG-167.
+
+---
+
+### BACKLOG-173 — Zero Cache-Control Headers or ISR Anywhere in the API/Page Layer
+
+**Status:** OPEN — found session 47E, not fixed (findings-only, no fix designed per audit scope)
+**Priority:** LOW — real production-discipline gap, not a correctness or security issue; live-match data legitimately can't be cached, but slow-changing public reads currently round-trip to Turso on every request with no documented rationale
+
+**Problem:** confirmed by exhaustive grep — `Cache-Control`/`revalidate` appear only in `src/app/api/llms/route.ts` and `src/app/api/health/route.ts` (neither a data route). No public GET (`matches`, `players`, `competitions`, `teams`, `universities`, `standings`, `news`) sets caching headers. Zero `export const revalidate` or `force-dynamic` anywhere in `src/app` — no page opts into ISR or static generation.
+
+**Fix (not built):** findings only, per this audit's own scope — a real fix needs a deliberate pass deciding which routes are cacheable (universities/teams/competitions — slow-changing) vs. which must stay live (matches, events).
+
+**Found:** session 47E, same background audit as BACKLOG-167.
+
+---
+
+### BACKLOG-174 — Block-List DTO Shaping Is Fragile (New Sensitive Column Leaks By Default Unless Manually Added to the Destructure)
+
+**Status:** OPEN — found session 47E, not fixed
+**Priority:** LOW — compliant today, structural fragility risk for the future
+
+**Problem:** `src/app/api/matches/route.ts`, `matches/[id]/route.ts`, `competitions/route.ts` all spread the full Drizzle row and manually subtract known-banned fields (`{ ...row, bannedField: undefined }`-style), rather than an explicit allow-list DTO. Any new sensitive column added to `matches`/`competitions` later leaks to the public API by default unless someone remembers to add it to the destructure at each of these sites.
+
+**Fix (not built):** convert to explicit allow-list DTOs next time either table's shape changes — not urgent enough to justify a standalone migration-free refactor today.
+
+**Found:** session 47E, same background audit as BACKLOG-167.
+
+---
+
+### BACKLOG-175 — `GET /api/universities` Has No `.limit()` Clause At All
+
+**Status:** OPEN — found session 47E, not fixed
+**Priority:** LOW — low exploitability (teams table is naturally small), but a literal violation of CLAUDE.md's own unbounded-query rule
+
+**Problem:** `src/app/api/universities/route.ts` — `db.select({ university: teams.university }).from(teams)` with no `.limit()` at all, unlike `BACKLOG-169`'s "present but unclamped" pattern — this one is fully absent.
+
+**Fix (not built):** add `.limit(1000)`.
+
+**Found:** session 47E, same background audit as BACKLOG-167.
+
+---
+
+### BACKLOG-176 — `cloudinary/sign` Reads `process.env.CLOUDINARY_*` Directly Instead of `src/lib/env.ts`
+
+**Status:** OPEN — found session 47E, not fixed
+**Priority:** LOW — route is auth-gated, low severity; direct violation of CLAUDE.md's env-var rule ("Never read process.env directly in application code")
+
+**Problem:** `src/app/api/cloudinary/sign/route.ts` reads `process.env.CLOUDINARY_*` directly in four places instead of importing from `src/lib/env.ts`.
+
+**Fix (not built):** add the Cloudinary vars to `env.ts` if not already present, import from there instead.
+
+**Found:** session 47E, same background audit as BACKLOG-167.
 
 ---

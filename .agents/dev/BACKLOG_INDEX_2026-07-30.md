@@ -6,16 +6,34 @@ for each lives in `.agents/dev/BACKLOG.md` under its own ID — this is an index
 a replacement. RESOLVED/SHIPPED items from the same audits (BUG-149/153/154, etc.)
 are already closed out and not repeated here.
 
-Pending: session 47E's second background audit (API payload size, PII/sensitive-field
-discipline, caching strategy, cross-route convention consistency) hasn't reported back
-yet — will be folded into this index, likely under a new "Production Discipline"
-category, once it lands.
+Session 47E's second background audit (API payload size, PII/sensitive-field
+discipline, caching strategy, cross-route convention consistency) has landed —
+folded in below under "Production Discipline / Security."
+
+Also updated: BUG-134 and BUG-136 shipped this session (minimal scope — foul-out
+disqualification + blocking re-sub of a fouled-out player). Full scope (team-foul
+bonus, technical-foul miscounting, competition-level threshold override) split out
+to BACKLOG-166.
 
 ---
 
 ## 🔴 Pre-Prod Blocker (do this before any real public match day)
 
 - **BACKLOG-155** — Admin feature flags are fully inert (read nowhere else in the codebase). CLAUDE.md's own Live Event Readiness Checklist requires all 🔴 high-volatility features (Ads, Lineup Builder, Transfers, User Management, News, `/api/auth/test`) gated/hidden before going live — there is currently **no working mechanism to do that at all**. Confirmed the single most concrete unstarted item standing in the checklist's way.
+- **BACKLOG-167** — `/api/players` and `/api/search` leak banned/PII fields (`email`, `profileId`, `memberships`, `organizationAffiliations`) to unauthenticated callers — the same bug already fixed once on the detail route (BUG-098/101), never ported to list/search. CRITICAL — real, live, unauthenticated leak.
+
+## 🔒 Production Discipline / Security (session 47E, second audit)
+
+- **BACKLOG-167** — (see Pre-Prod Blocker above)
+- **BACKLOG-168** — Two admin routes (`lineup/unlock`, `livestream`) bypass `getAuthUser()`, trust the JWT role claim directly — a demoted admin's token keeps working there for its full 7-day life.
+- **BACKLOG-169** — `limit` query param unclamped in 14+ list routes — technically has `.limit()`, but caller-controlled with no ceiling.
+- **BACKLOG-170** — Raw `error.message` returned to the client in 4 routes, one (`news` GET) fully public.
+- **BACKLOG-171** — Public matches list embeds full event history (up to 200/match × 50 matches) on the Flow C hot path.
+- **BACKLOG-172** — Three N+1 query patterns, one on the public livescore hot path.
+- **BACKLOG-173** — Zero `Cache-Control`/ISR anywhere in the API or page layer (findings only, no fix designed).
+- **BACKLOG-174** — Block-list DTO shaping is fragile — new sensitive columns leak by default unless manually excluded.
+- **BACKLOG-175** — `GET /api/universities` has no `.limit()` at all.
+- **BACKLOG-176** — `cloudinary/sign` reads `process.env` directly instead of `src/lib/env.ts`.
 
 ## 🏀 Basketball Parity / Logging Core
 
@@ -23,8 +41,10 @@ category, once it lands.
 - **BUG-151** — No server-side event dedup/idempotency check exists at all (either sport).
 - **BACKLOG-152** — Track & Field logger has zero persistence layer — confirmed worse than assumed.
 - **BACKLOG-153** — Admin match-edit modal has no score-correction fields; three dead offline-queue implementations found; other logging-system cleanup.
+- **BACKLOG-166** — Basketball foul system, remaining scope: team-foul bonus tracking, technical-foul miscounting into `personalFouls`, competition-level threshold override. Split out when BUG-134 shipped minimal-only.
 - (Not yet filed, folding in at session close per Richard: football's in-app lineup editor bypasses the admin page's own publish-lock/unlock RBAC — two lineup-editing surfaces enforce different rules.)
-- Carried from earlier sessions, still open, same theme: **BUG-134** (foul system unenforced), **BUG-142** (basketball has zero offline queue, unlike football's IndexedDB+SW), **BUG-135/136** (OT edge cases, fouled-out player re-sub bug).
+- ~~BUG-134~~ / ~~BUG-136~~ — SHIPPED session 47E (foul-out disqualification + blocked re-sub), pending live test.
+- Carried from earlier sessions, still open: **BUG-142** (basketball has zero offline queue, unlike football's IndexedDB+SW), **BUG-135** (no distinct OT2 path).
 
 ## 🔐 Auth / Identity Architecture
 
