@@ -44,7 +44,8 @@ to BACKLOG-166.
 - **BACKLOG-166** — Basketball foul system, remaining scope: team-foul bonus tracking, technical-foul miscounting into `personalFouls`, competition-level threshold override. Split out when BUG-134 shipped minimal-only.
 - (Not yet filed, folding in at session close per Richard: football's in-app lineup editor bypasses the admin page's own publish-lock/unlock RBAC — two lineup-editing surfaces enforce different rules.)
 - ~~BUG-134~~ / ~~BUG-136~~ — SHIPPED session 47E (foul-out disqualification + blocked re-sub), pending live test.
-- Carried from earlier sessions, still open: **BUG-142** (basketball has zero offline queue, unlike football's IndexedDB+SW), **BUG-135** (no distinct OT2 path).
+- ~~BUG-142~~ — SHIPPED (partial) session 47E: event-POST offline queue ported from football, shared module extracted (`src/lib/admin-offline-queue.ts`). Remaining scope (period-transition PATCH, undo DELETE, roster-load retry) still open, same entry.
+- Carried from earlier sessions, still open: **BUG-135** (no distinct OT2 path).
 
 ## 🔐 Auth / Identity Architecture
 

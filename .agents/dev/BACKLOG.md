@@ -6051,12 +6051,20 @@ Filed together, same investigation: a `code-reviewer` agent pass explicitly inde
 
 ### BUG-142 — Basketball Has No Offline-Queue/Retry Mechanism at All — Failed Writes Are Visible But Never Recovered
 
-**Status:** OPEN — mentioned in passing multiple times this session (`BACKLOG-134`, `BUG-140`), never filed as its own tracked item until now
+**Status:** SHIPPED (partial) — 2026-07-30 (session 47E), commit `212616a`. Event-POST write path only, the highest permanent-data-loss-risk path. Period-transition PATCH, undo DELETE, and roster-load retry remain OPEN, same scope as originally filed, not silently dropped.
 **Priority:** High — every write path this session gave a failure a visible banner (roster load, period-transition PATCH, event POST), but none of them can ever self-heal; a logger who doesn't notice or can't manually retry loses the write permanently
+
+**Fix applied, event-POST scope:** ports `FootballLogger.tsx`'s own proven mechanism (`BACKLOG-058`, live-tested on staging) rather than building a new one. IndexedDB helpers extracted to a new shared module, `src/lib/admin-offline-queue.ts` (was inline-only in `FootballLogger.tsx` before — extracting avoided a third ad-hoc copy of the same contract, this project's own audits have repeatedly flagged that pattern class). Same `BrixsportAdminDB.pendingMatchEvents` store `sw-admin.js` already drains — confirmed its `syncMatchEvents()` POSTs generically regardless of sport, so zero SW changes were needed. `recordEvent`'s catch block now queues on network failure (with the same 30-min token-TTL guard football uses), plus the SW message listener + `online`/`visibilitychange` drain-trigger effects basketball had none of before.
+
+**Still open, not covered by this pass:** period-transition PATCH retry-queueing, undo DELETE queueing, roster-load retry. `BUG-140` (auth-refresh, this entry's original blocking dependency) was already resolved session 47C, so nothing blocks picking the remaining scope up next.
 
 **Problem:** Confirmed live this session: forcing a period-transition PATCH to fail (mocked `fetch` returning `500` for the exact PATCH call) correctly showed `BACKLOG-134`'s new banner ("Failed to save Q2 transition (500) — quarter may not persist on refresh") and correctly left `matches.current_period` unchanged in the DB (`Q1`, confirmed via direct query) rather than writing bad data. But that's where it ends — there is no queue, no retry, no background sync. `FootballLogger.tsx` has a full mechanism for exactly this scenario: failed writes go into IndexedDB (`BrixsportAdminDB`), a service worker drains the queue on reconnect (`syncMatchEvents()` in `sw-admin.js`), and the auth token needed to replay the write is embedded in the queued row at write time (since a service worker sync event has no live session). `BasketballLogger.tsx` has zero references to `indexedDB`, `IndexedDB`, `offline`, `queue`, or `syncMatchEvents` anywhere (confirmed via grep) — every failure this session (roster load, period PATCH, event POST, undo DELETE) is a dead end once the banner is dismissed. This compounds `BUG-140` (no auth-refresh either) — even if an offline queue existed today, the token needed to replay a queued write could already be gone by the time connectivity returns.
 
-**Fix (not built):** port football's IndexedDB queue + service-worker drain mechanism to basketball's write paths (event POST, period-transition PATCH, undo DELETE, roster-load retry). Real, feature-sized scope — not a same-session patch. Should land after `BUG-140` (auth-refresh) since the queue is only as good as the token it can replay with.
+**Evidence:**
+- Commit: `212616a`
+- Verified by: `npx tsc --noEmit` clean (zero new errors on both changed files)
+- Observed result: not yet live-tested (no real network-drop-mid-event test run against the queue)
+- Pending items: live test — force an event POST to fail (DevTools offline/mocked 500), confirm the event queues, confirm it drains and posts successfully once back online, confirm `queuedOfflineCount` resets on `SYNC_COMPLETE`. Remaining scope (period-transition PATCH, undo DELETE, roster-load retry) tracked above, not yet started.
 
 **Found:** session 47B, confirmed live while testing `BACKLOG-134`'s period-transition failure banner on the PR #12 preview — the banner worked exactly as designed, which is what made the absence of any recovery path obvious.
 
