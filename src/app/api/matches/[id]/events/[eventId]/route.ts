@@ -77,6 +77,12 @@ async function revertPlayerStat(sport: string, playerId: string, eventType: stri
                 case 'Foul':
                     updates.personalFouls = Math.max(0, (stats.personalFouls || 0) - 1);
                     break;
+                case 'Technical Foul':
+                    // BACKLOG-166: mirrors events/route.ts's write-side split -- must
+                    // stay symmetric, per this project's own convention (any stat
+                    // incremented on write must be decremented on delete).
+                    updates.technicalFouls = Math.max(0, (stats.technicalFouls || 0) - 1);
+                    break;
                 default:
                     return;
             }

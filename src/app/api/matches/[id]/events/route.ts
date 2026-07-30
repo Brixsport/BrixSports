@@ -399,6 +399,12 @@ async function updatePlayerStats(
                 case 'Foul':
                     updates.personalFouls = (stats?.personalFouls || 0) + 1;
                     break;
+                case 'Technical Foul':
+                    // BACKLOG-166: this used to be indistinguishable from a regular
+                    // Foul client-side (both dispatched type: 'Foul'), so it silently
+                    // inflated personalFouls -- now its own type, own column.
+                    updates.technicalFouls = (stats?.technicalFouls || 0) + 1;
+                    break;
             }
 
             if (Object.keys(updates).length > 0) {

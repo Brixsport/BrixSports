@@ -20,7 +20,7 @@ interface BasketballLoggerProps {
     currentLogger: Logger | null;
 }
 
-type BasketballEventType = 'Field Goal' | 'Three Pointer' | 'Free Throw' | 'Rebound' | 'Assist' | 'Steal' | 'Block' | 'Turnover' | 'Foul' | 'Substitution' | 'Timeout';
+type BasketballEventType = 'Field Goal' | 'Three Pointer' | 'Free Throw' | 'Rebound' | 'Assist' | 'Steal' | 'Block' | 'Turnover' | 'Foul' | 'Technical Foul' | 'Substitution' | 'Timeout';
 
 export function BasketballLogger({ match, onExit, currentLogger }: BasketballLoggerProps) {
     const [homeScore, setHomeScore] = useState(match.homeScore || 0);
@@ -88,11 +88,12 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
     // Settings
     const [showSettingsModal, setShowSettingsModal] = useState(false);
     const [quarterDuration, setQuarterDuration] = useState(12); // minutes per quarter — overwritten by match config on mount
-    // BUG-134 (minimal scope): foul-out disqualification only. Sport-level default
-    // (config/route.ts's SPORT_DEFAULTS.basketball.foulDisqualifyAt, FIBA-style, "not
-    // confirmed against BUSA's actual rulebook") -- no competition-level override yet,
-    // no team-foul bonus tracking. Both filed as follow-up scope, not built here.
+    // BUG-134/BACKLOG-166: foul-out disqualification + team-foul-bonus tracking.
+    // Sport-level defaults (config/route.ts's SPORT_DEFAULTS.basketball, FIBA-style,
+    // "not confirmed against BUSA's actual rulebook") -- competition-level override
+    // still not built (needs a schema migration, its own separately-scoped piece).
     const [foulDisqualifyAt, setFoulDisqualifyAt] = useState(5);
+    const [teamFoulBonusAt, setTeamFoulBonusAt] = useState(5);
     const [periodCount, setPeriodCount] = useState(4); // quarters — overwritten by match config on mount
     const [overtimeDurationMinutes, setOvertimeDurationMinutes] = useState(5); // overwritten by match config on mount
 
@@ -277,6 +278,13 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                         break;
                     case 'Foul':
                         rating -= 1;
+                        break;
+                    case 'Technical Foul':
+                        // BACKLOG-166: a genuinely distinct, more serious infraction --
+                        // was previously silently unscored (fell through with no
+                        // matching case) back when every foul button dispatched the
+                        // same generic type: 'Foul'.
+                        rating -= 1.5;
                         break;
                     case 'Substitution':
                         // Substitution doesn't affect rating directly
@@ -538,6 +546,7 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                     setPeriodCount(config.periodCount);
                     setOvertimeDurationMinutes(config.overtimeDurationMinutes ?? 5);
                     setFoulDisqualifyAt(config.foulDisqualifyAt ?? 5);
+                    setTeamFoulBonusAt(config.teamFoulBonusAt ?? 5);
                 } else {
                     alert('Match config failed to load — using default duration. Check settings before starting.');
                 }
@@ -721,14 +730,24 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
         return priorMinutes + minutesElapsedInPeriod;
     };
 
-    // BUG-134 (minimal scope): personal-foul count + disqualification, derived from
-    // local event state the same way every other live stat here already is. All six
-    // foul button labels (Personal/Technical/Flagrant/Offensive/Shooting/Unsportsmanlike)
-    // dispatch the same `type: 'Foul'` today -- no sub-type distinction exists in the
-    // event model yet, so every one of them counts toward foulDisqualifyAt here, matching
-    // how they already collapse into the same `personalFouls` DB column server-side.
-    const getPersonalFoulCount = (playerId: string) => events.filter(e => e.type === 'Foul' && e.playerId === playerId).length;
+    // BUG-134 (disqualification) + BACKLOG-166 (technical-foul split): Personal and
+    // Technical Foul are now distinct types (separate DB columns server-side,
+    // `personalFouls`/`technicalFouls`), but both still count toward the same
+    // disqualification threshold here -- Richard's explicit call (session 47E):
+    // combined count is simpler and preserves the protective behavior BUG-134
+    // already shipped rather than loosening it. Flagrant/Offensive/Shooting/
+    // Unsportsmanlike still all dispatch generic `type: 'Foul'` (they're personal-foul
+    // subvarieties for stat-counting purposes, same as real box scores).
+    const getPersonalFoulCount = (playerId: string) =>
+        events.filter(e => (e.type === 'Foul' || e.type === 'Technical Foul') && e.playerId === playerId).length;
     const isFouledOut = (playerId: string) => getPersonalFoulCount(playerId) >= foulDisqualifyAt;
+
+    // BACKLOG-166 (team-foul tracking, data only -- no UI indicator this pass, per
+    // Richard's own scope call). Per-team, per-quarter count; resets naturally since
+    // it's derived from `getCurrentPeriod()`, not a separate incrementing counter.
+    const getTeamFoulCountThisQuarter = (teamId: string) =>
+        events.filter(e => (e.type === 'Foul' || e.type === 'Technical Foul') && e.teamId === teamId && e.period === getCurrentPeriod()).length;
+    const isTeamInBonus = (teamId: string) => getTeamFoulCountThisQuarter(teamId) >= teamFoulBonusAt;
 
     // Live-ticking quarter clock + WS broadcast (basketball's own analog of
     // FootballLogger's `match:time:update` effect, BUG-153's audit gap: "no WS
@@ -1384,7 +1403,7 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                                 </h3>
                                 <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                                     <SimpleActionButton label="Personal Foul" onClick={() => handleEventClick('Foul')} matchStarted={matchStarted} matchEnded={matchEnded} disabled={isRecording} />
-                                    <SimpleActionButton label="Technical Foul" onClick={() => handleEventClick('Foul')} matchStarted={matchStarted} matchEnded={matchEnded} disabled={isRecording} />
+                                    <SimpleActionButton label="Technical Foul" onClick={() => handleEventClick('Technical Foul')} matchStarted={matchStarted} matchEnded={matchEnded} disabled={isRecording} />
                                     <SimpleActionButton label="Flagrant Foul" onClick={() => handleEventClick('Foul')} matchStarted={matchStarted} matchEnded={matchEnded} disabled={isRecording} />
                                     <SimpleActionButton label="Offensive Foul" onClick={() => handleEventClick('Foul')} matchStarted={matchStarted} matchEnded={matchEnded} disabled={isRecording} />
                                     <SimpleActionButton label="Shooting Foul" onClick={() => handleEventClick('Foul')} matchStarted={matchStarted} matchEnded={matchEnded} disabled={isRecording} />
