@@ -6427,16 +6427,16 @@ No `clearTimeout` exists anywhere in the file. The effect that sets `stateManage
 
 ### BACKLOG-155 — Admin Feature Flags Are Fully Inert (Read Nowhere Else In The Codebase)
 
-**Status:** SHIPPED — 2026-07-30 (session 47E), commit `74d9a2a`. Ads/User Management/News/Transfers gated for real; Lineup Builder deliberately left ungated (Richard's call — it's one of only two real ways a lineup gets persisted, not a peripheral feature); Predictions/Polls/FPL flags remain equally inert, split out to `BACKLOG-177` rather than scope-creeping into this pass.
+**Status:** SHIPPED, server-side mechanics now live-tested — 2026-07-30, commit `74d9a2a` (session 47E), server-side pass verified session 47F. Client-side page-gating (does an admin page actually hide when its flag is off) still needs a browser test — see Evidence below. Ads/User Management/News/Transfers gated for real; Lineup Builder deliberately left ungated (Richard's call — it's one of only two real ways a lineup gets persisted, not a peripheral feature); Predictions/Polls/FPL flags remain equally inert, split out to `BACKLOG-177` (closed WONT FIX, session 47F — found moot, those pages are already fully backscoped independent of any flag).
 **Priority:** HIGH — directly undercuts the still-open Live Event Readiness Checklist item ("All 🔴 High Volatility features are disabled or hidden from the UI")
 
 **Fix:** built as a real, reusable system per Richard's explicit ask ("beyond just this live match test window"), not a one-off hide. `src/lib/featureFlags.ts` (`isFeatureEnabled(key)`, server-only, fails open on an unrecognized key or DB error), `src/app/api/feature-flags/route.ts` (thin public read surface for the gated pages, all of which are client components), `src/components/admin/FeatureGate.tsx` (shared wrapper, renders a plain disabled-state instead of children). Four new flag keys added to `DEFAULT_SETTINGS`, defaulted `false`. Caught and fixed mid-build: `admin/transfers/page.tsx` already had its own pre-existing content/wrapper split that an early version of this change blindly re-derived, introducing a duplicate function name — fixed by wrapping the existing structure instead of re-deriving it.
 
 **Evidence:**
 - Commit: `74d9a2a`
-- Verified by: `npx tsc --noEmit` clean (confirmed the only errors in the diff, 3 in `admin/news/page.tsx`, are the same pre-existing baseline shifted by this change's own added lines)
-- Observed result: not yet live-tested (no real toggle-off-and-confirm-page-hides test run)
-- Pending items: live test — toggle each of the 4 gated flags off via Settings, confirm the corresponding admin page shows the disabled state instead of its real content; confirm toggling back on restores it
+- Verified by: live test against a Vercel preview deployment (`dev/verify-staging-feature-flags.mjs`), real admin session, full detail in `RUNLOG.md`
+- Observed result: `PATCH /api/admin/settings` (real admin JWT) correctly wrote `features.ads.enabled` from `false` to `true` in `system_settings` (confirmed via direct DB read, not just trusting the API response), and `GET /api/feature-flags` (the public read surface `FeatureGate` consumes) reflected the new value immediately. Value restored to baseline (`false`) afterward. **First attempt was a false PASS, caught and corrected same session:** `PATCH` initially 404'd ("Setting not found") because the preview's `system_settings` row for this key didn't exist yet — `initializeDefaultSettings()` only runs as a side effect of the `GET` handler, never `PATCH`. The read side (`/api/feature-flags`) happened to still show the "expected" value only because its own fail-open default for an unconfigured key (`true`) coincidentally matched — not because the write actually worked. Retried after calling `GET /api/admin/settings` first to seed the row; this time `PATCH` returned `200` and the DB value genuinely changed.
+- Pending items: whether the gated admin *pages* (client components using `FeatureGate`) actually hide their content when the flag reads `false` is not verified here — `FeatureGate` only resolves after client-side hydration + its own `fetch`, not observable from a server-side script. Genuinely needs a browser test: toggle each of the 4 gated flags off, load the corresponding admin page, confirm the disabled-state message renders instead of real content.
 
 **Problem:** `src/app/admin/settings/page.tsx`'s feature-flag CRUD (fetching, editing, saving) genuinely works against a real `systemSettings` table. But all seven default settings — `system.maintenance.mode`, `system.registration.enabled`, `system.notifications.enabled`, `features.fpl.enabled`, `features.predictions.enabled`, `features.polls.enabled`, `features.transfers.enabled` (`src/app/api/admin/settings/route.ts:15-28`) — are **read nowhere else in the entire codebase**. Grepped every key string across `src/**`; only the settings page and its own API route reference them. Toggling "maintenance mode" or "Enable Transfer News" off changes a DB row with zero effect on anything a user or admin experiences — no route guard, no conditional render, no middleware check consults these values anywhere.
 
@@ -7004,7 +7004,7 @@ const allEvents = matchIds.length ? await db.select().from(matchEvents).where(in
 
 ### ~~BACKLOG-188~~ — `notifications/subscribe` DELETE Parses Request Body Before Its Auth Check, Malformed Body Masks 401 as 500
 
-**Status:** SHIPPED — 2026-07-30 (session 47F), not yet re-verified against the redeployed preview
+**Status:** RESOLVED — 2026-07-30 (session 47F)
 **Priority:** LOW — not a security gap (the route still correctly requires and verifies auth before doing anything), purely an error-ordering/UX nit found incidentally while live-testing `BUG-147`
 
 **Problem:** `src/app/api/notifications/subscribe/route.ts`'s `DELETE` handler calls `const body = await request.json()` (line 126) before `getAuthUser(request)` (line 136). A request with no body or a malformed body throws inside `request.json()`, caught by the outer `try/catch`, which returns a generic `500` — never reaching the real `401`/`403` auth gate that genuinely exists and is correctly ordered before the actual delete operation. Found while live-testing `BUG-147`'s fix against a Vercel preview: this route was the one FAIL out of 24 checked (`500` instead of the expected `401`) — confirmed by code read this is not a missing auth gate, just JSON-parse-before-auth ordering. `GET` and `POST` in the same file don't have this issue (both parse `searchParams`/read a validated body only after the auth check, or in POST's case the ordering happens to not matter since `getAuthUser` runs first there too).
@@ -7012,5 +7012,11 @@ const allEvents = matchIds.length ? await db.select().from(matchEvents).where(in
 **Fix:** moved `const authUser = await getAuthUser(request); if (!authUser) return 401;` above the `request.json()` call in `DELETE`, matching the ordering already correct in `GET`/`POST`.
 
 **Found:** session 47F, live-testing `BUG-147` against a Vercel preview deployment (`dev/verify-staging-bug147-routes.mjs`). Fixed same session.
+
+**Evidence:**
+- Commit: `2304a5c`
+- Verified by: live re-test against the redeployed Vercel preview (`brixsports-staging-pdspsljon-...`) using `dev/verify-staging-backlog188.mjs` — the exact same request shape that produced the original `500` (no body, no auth)
+- Observed result: `DELETE /api/notifications/subscribe` with no body and no auth now returns `401 {"error":"Unauthorized"}` instead of `500`
+- Pending items: none
 
 ---
