@@ -20,11 +20,17 @@ export function openAdminDB(): Promise<IDBDatabase> {
         req.onerror = () => reject(req.error);
         req.onsuccess = () => resolve(req.result as IDBDatabase);
         req.onupgradeneeded = (e) => {
-            // Mirror sw-admin.js schema so both sides agree on store shape.
+            // Mirror sw-admin.js schema so both sides agree on store shape --
+            // whichever side (this module or the SW) opens the DB first is the one
+            // that actually runs this, so both must create the same stores.
             const db = (e.target as IDBOpenDBRequest).result;
             if (!db.objectStoreNames.contains('pendingMatchEvents')) {
                 const store = db.createObjectStore('pendingMatchEvents', { keyPath: 'id', autoIncrement: true });
                 store.createIndex('matchId', 'matchId', { unique: false });
+                store.createIndex('timestamp', 'timestamp', { unique: false });
+            }
+            if (!db.objectStoreNames.contains('pendingAdminChanges')) {
+                const store = db.createObjectStore('pendingAdminChanges', { keyPath: 'id', autoIncrement: true });
                 store.createIndex('timestamp', 'timestamp', { unique: false });
             }
         };
@@ -39,6 +45,24 @@ export async function queueOfflineEvent(matchId: string, data: object, token: st
         // Row shape must match what syncMatchEvents() in sw-admin.js reads back:
         // { matchId, data, token, timestamp }
         const req = store.add({ matchId, data, token, timestamp: Date.now() });
+        req.onsuccess = () => resolve();
+        req.onerror = () => reject(req.error);
+    });
+}
+
+// BUG-142 (period-transition PATCH / undo DELETE queueing): a generic queue for
+// any authenticated write that isn't an event POST. sw-admin.js's syncAdminChanges()
+// already existed to drain this store but nothing ever wrote to it -- confirmed
+// zero references anywhere in src/ before this. Fixed a real bug found while
+// activating it: syncAdminChanges() never sent an Authorization header at all, so
+// every retry would have 401'd -- token is now required at queue-write time, same
+// convention queueOfflineEvent already uses.
+export async function queueAdminChange(url: string, method: 'PATCH' | 'DELETE', data: object, token: string): Promise<void> {
+    const db = await openAdminDB();
+    return new Promise((resolve, reject) => {
+        const tx = db.transaction('pendingAdminChanges', 'readwrite');
+        const store = tx.objectStore('pendingAdminChanges');
+        const req = store.add({ url, method, data, token, timestamp: Date.now() });
         req.onsuccess = () => resolve();
         req.onerror = () => reject(req.error);
     });

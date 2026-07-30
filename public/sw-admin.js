@@ -209,16 +209,30 @@ async function syncMatchEvents() {
     }
 }
 
-// Sync admin changes
+// Sync admin changes -- this store/drain existed but nothing ever wrote to it
+// (confirmed: zero references anywhere in src/ before BUG-142's period-transition/
+// undo scope). Fixed a real bug found while activating it: no Authorization header
+// was ever sent, same class of gap BACKLOG-058 fixed for pendingMatchEvents --
+// a background sync fires with no browser session/cookie, so every retry would
+// have 401'd. token is now required at queue-write time, same convention as
+// pendingMatchEvents.
 async function syncAdminChanges() {
     try {
         const db = await openDB();
         const pendingChanges = await idbGetAll(db, 'pendingAdminChanges');
 
         for (const change of pendingChanges) {
+            if (!change.token) {
+                console.warn('[SW Admin] Skipping admin change', change.id, '— no token stored, will retry on next sync');
+                continue;
+            }
+
             const response = await fetch(change.url, {
                 method: change.method,
-                headers: { 'Content-Type': 'application/json' },
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${change.token}`,
+                },
                 body: JSON.stringify(change.data),
             });
 
@@ -283,6 +297,7 @@ function openDB() {
             }
 
             if (!db.objectStoreNames.contains('pendingAdminChanges')) {
+                // Row shape: { id (auto), url, method, data, token (JWT — required, see syncAdminChanges), timestamp }
                 const store = db.createObjectStore('pendingAdminChanges', { keyPath: 'id', autoIncrement: true });
                 store.createIndex('timestamp', 'timestamp', { unique: false });
             }
@@ -365,6 +380,10 @@ self.addEventListener('message', (event) => {
         // FootballLogger posts this message on 'online' and 'visibilitychange'
         // so the SW drains the queue directly from the page context (BACKLOG-107).
         event.waitUntil(syncMatchEvents());
+    } else if (event.data && event.data.type === 'DRAIN_ADMIN_CHANGES') {
+        // Same iOS fallback as DRAIN_MATCH_EVENTS above, for the pendingAdminChanges
+        // queue (period-transition PATCH / undo DELETE retries, BUG-142).
+        event.waitUntil(syncAdminChanges());
     }
 });
 

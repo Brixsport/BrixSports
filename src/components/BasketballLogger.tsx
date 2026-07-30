@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { X, Activity, Save, Undo2, Clock, Users, TrendingUp, Target, Play, Settings } from 'lucide-react';
 import { useMultiLogger } from '@/hooks/useMultiLogger';
 import { useWebSocket } from '@/hooks/useWebSocket';
-import { queueOfflineEvent, jwtSecondsRemaining } from '@/lib/admin-offline-queue';
+import { queueOfflineEvent, queueAdminChange, jwtSecondsRemaining } from '@/lib/admin-offline-queue';
 import { MultiLoggerStatus } from '@/components/MultiLoggerStatus';
 import type { SyncEvent } from '@/lib/multiLogger';
 import { getPrimaryTeam } from '@/lib/player-affiliation-utils';
@@ -189,12 +189,17 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
     // same IndexedDB store sw-admin.js already drains, so no service-worker
     // change is needed, only the write side.
     const [queuedOfflineCount, setQueuedOfflineCount] = useState(0);
+    // BUG-142 (remaining scope): period-transition PATCH / undo DELETE retries,
+    // via the separate pendingAdminChanges queue (see admin-offline-queue.ts).
+    const [queuedAdminChangeCount, setQueuedAdminChangeCount] = useState(0);
 
     useEffect(() => {
         if (!('serviceWorker' in navigator)) return;
         const handleMessage = (e: MessageEvent) => {
             if (e.data?.type === 'SYNC_COMPLETE' && e.data?.tag === 'sync-match-events') {
                 setQueuedOfflineCount(0);
+            } else if (e.data?.type === 'SYNC_COMPLETE' && e.data?.tag === 'sync-admin-changes') {
+                setQueuedAdminChangeCount(0);
             }
         };
         navigator.serviceWorker.addEventListener('message', handleMessage);
@@ -210,10 +215,12 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
             if (!('serviceWorker' in navigator)) return;
             navigator.serviceWorker.ready.then((reg) => {
                 if ('sync' in reg) {
-                    (reg as ServiceWorkerRegistration & { sync: { register: (tag: string) => Promise<void> } })
-                        .sync.register('sync-match-events').catch(() => {});
+                    const syncReg = reg as ServiceWorkerRegistration & { sync: { register: (tag: string) => Promise<void> } };
+                    syncReg.sync.register('sync-match-events').catch(() => {});
+                    syncReg.sync.register('sync-admin-changes').catch(() => {});
                 } else if (navigator.serviceWorker.controller) {
                     navigator.serviceWorker.controller.postMessage({ type: 'DRAIN_MATCH_EVENTS' });
+                    navigator.serviceWorker.controller.postMessage({ type: 'DRAIN_ADMIN_CHANGES' });
                 }
             }).catch(() => {});
         };
@@ -635,6 +642,46 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
     // never advanced past the first. quarter still advances by one each real OT
     // (keeps getElapsedMinute()'s prior-minutes accumulation distinct per period);
     // otNumber is the human-readable OT count the period label actually uses.
+    // BUG-142 (remaining scope): period-transition PATCH retry-queueing. Shared by
+    // every period-transition button (Start Quarter N+1, both OT-entry points via
+    // startNextOvertime) rather than duplicating the queue logic at each call site.
+    // On a network failure, queues the PATCH via the same pendingAdminChanges
+    // mechanism undo now uses, instead of the previous fire-and-forget console.error
+    // (BACKLOG-134 already made failures visible; this makes them recoverable too).
+    const persistPeriodTransition = async (periodLabel: string) => {
+        try {
+            const res = await fetch(`/api/matches/${match.id}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ currentPeriod: periodLabel }),
+            });
+            if (!res.ok) {
+                setEventSaveError(`Failed to save ${periodLabel} transition (${res.status}) — period may not persist on refresh.`);
+            }
+        } catch (e) {
+            console.error('Failed to persist period transition:', e);
+            const token = localStorage.getItem('authToken');
+            if (!token || jwtSecondsRemaining(token) < 30 * 60) {
+                setEventSaveError(`Failed to save ${periodLabel} transition — offline or unreachable, and could not queue a retry (${!token ? 'no session' : 'session expiring soon'}).`);
+                return;
+            }
+            try {
+                await queueAdminChange(`/api/matches/${match.id}`, 'PATCH', { currentPeriod: periodLabel }, token);
+                setQueuedAdminChangeCount(prev => prev + 1);
+                setEventSaveError(`${periodLabel} transition queued — will save automatically once back online.`);
+                if ('serviceWorker' in navigator) {
+                    const reg = await navigator.serviceWorker.ready;
+                    if ('sync' in reg) {
+                        await (reg as ServiceWorkerRegistration & { sync: { register: (tag: string) => Promise<void> } }).sync.register('sync-admin-changes');
+                    }
+                }
+            } catch (queueErr) {
+                console.error('Failed to queue period transition:', queueErr);
+                setEventSaveError(`Failed to save ${periodLabel} transition — offline or unreachable, and queueing also failed.`);
+            }
+        }
+    };
+
     const startNextOvertime = () => {
         const nextOtNumber = otNumber + 1;
         setIsOT(true);
@@ -643,16 +690,7 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
         setTime(`${overtimeDurationMinutes}:00`);
         setQuarterStartedAt(Date.now());
         setShowPeriodModal(false);
-        fetch(`/api/matches/${match.id}`, {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ currentPeriod: `OT${nextOtNumber}` }),
-        }).then((res) => {
-            if (!res.ok) setEventSaveError(`Failed to save OT${nextOtNumber} transition (${res.status}) — period may not persist on refresh.`);
-        }).catch((e) => {
-            console.error('Failed to persist OT transition:', e);
-            setEventSaveError(`Failed to save OT${nextOtNumber} transition — offline or unreachable.`);
-        });
+        persistPeriodTransition(`OT${nextOtNumber}`);
     };
     const getElapsedSecondsInPeriod = () => Math.max(0, Math.floor((Date.now() - quarterStartedAt) / 1000));
     const getElapsedMinute = () => {
@@ -906,8 +944,34 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
             }
             setEventSaveError(null);
         } catch (error) {
+            // Network failure -- queue the DELETE for background retry (BUG-142),
+            // same mechanism as event POST. Deliberately does NOT touch local
+            // `events`/score state here, even though the queue means this will
+            // very likely succeed eventually -- BUG-130's own hard-won principle is
+            // never flip local state before the server has actually confirmed the
+            // write, and a queued-but-not-yet-drained delete is exactly that
+            // unconfirmed state. The event stays visible until the queued DELETE
+            // really lands; the banner tells the logger a retry is pending.
             console.error('Failed to undo event:', error);
-            setEventSaveError(`Failed to undo "${lastEvent.type}" — offline or unreachable. Event was not removed.`);
+            const token = localStorage.getItem('authToken');
+            if (!token || jwtSecondsRemaining(token) < 30 * 60) {
+                setEventSaveError(`Failed to undo "${lastEvent.type}" — offline or unreachable, and could not queue a retry (${!token ? 'no session' : 'session expiring soon'}). Event was not removed; try again once back online.`);
+                return;
+            }
+            try {
+                await queueAdminChange(`/api/matches/${match.id}/events/${lastEvent.id}`, 'DELETE', {}, token);
+                setQueuedAdminChangeCount(prev => prev + 1);
+                setEventSaveError(`Undo of "${lastEvent.type}" queued — will retry automatically once back online. Event still shown until then.`);
+                if ('serviceWorker' in navigator) {
+                    const reg = await navigator.serviceWorker.ready;
+                    if ('sync' in reg) {
+                        await (reg as ServiceWorkerRegistration & { sync: { register: (tag: string) => Promise<void> } }).sync.register('sync-admin-changes');
+                    }
+                }
+            } catch (queueErr) {
+                console.error('Failed to queue undo:', queueErr);
+                setEventSaveError(`Failed to undo "${lastEvent.type}" — offline or unreachable, and queueing also failed. Event was not removed.`);
+            }
             return;
         } finally {
             setIsUndoing(false);
@@ -2102,25 +2166,10 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                                             // Persist the transition -- BasketballLogger never wrote
                                             // currentPeriod at all before this; every basketball match's
                                             // period stayed at the schema default ('NOT_STARTED') for its
-                                            // entire lifetime regardless of real quarter. Fire-and-forget,
-                                            // same convention football's period-transition buttons use
-                                            // (TD-010) -- not the stricter PATCH-first Start/End Match
-                                            // pattern, since a failed period-label PATCH here doesn't risk
-                                            // silent data loss the way a failed status transition would.
-                                            // BACKLOG-134: this fire-and-forget PATCH only console.error'd on
-                                            // failure -- no user-facing signal if the quarter change didn't
-                                            // persist. `res.ok` was never even checked (fetch only rejects on
-                                            // network failure, not on a 4xx/5xx response).
-                                            fetch(`/api/matches/${match.id}`, {
-                                                method: 'PATCH',
-                                                headers: { 'Content-Type': 'application/json' },
-                                                body: JSON.stringify({ currentPeriod: `Q${nextQuarter}` }),
-                                            }).then((res) => {
-                                                if (!res.ok) setEventSaveError(`Failed to save Q${nextQuarter} transition (${res.status}) — quarter may not persist on refresh.`);
-                                            }).catch((e) => {
-                                                console.error('Failed to persist period transition:', e);
-                                                setEventSaveError(`Failed to save Q${nextQuarter} transition — offline or unreachable.`);
-                                            });
+                                            // entire lifetime regardless of real quarter. BUG-142: now
+                                            // queues for retry on network failure instead of the previous
+                                            // fire-and-forget console.error (see persistPeriodTransition).
+                                            persistPeriodTransition(`Q${nextQuarter}`);
                                         }}
                                         className="w-full bg-primary text-black py-4 rounded-xl font-black uppercase tracking-widest hover:scale-105 transition-transform flex items-center justify-center gap-3"
                                     >
