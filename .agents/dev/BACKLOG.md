@@ -6545,3 +6545,42 @@ No `clearTimeout` exists anywhere in the file. The effect that sets `stateManage
 **Found:** session 47D, live crash reported by Richard while verifying `BUG-041`/`BUG-153` on staging.
 
 ---
+
+### BACKLOG-163 — Homepage Round-Grouping Fallback Hardcodes 2025-26 Season's Calendar
+
+**Status:** OPEN — found session 47E, not fixed
+**Priority:** MEDIUM — will silently degrade (not crash) once the anchor date is stale; live in a Tier 0/Stable file (homepage)
+
+**Problem:** `src/app/page.tsx:278-295` — when a match's `stats.round` is missing/invalid, the homepage falls back to computing a round number from a hardcoded anchor: a `getFullYear() === 2026 && getMonth() === 0` branch with literal Jan 7/11/14 semi-final dates, and a `startDate = new Date('2025-01-15')` used to compute `calcRound = Math.floor(daysDiff / 7) + 1`, gated to `0 < calcRound < 20`.
+
+**Why this matters for the season transition:** the 2026-01 playoff-date branch simply stops matching next season (harmless no-op). But the `'2025-01-15'` anchor keeps computing `daysDiff` forward every season — `calcRound` will eventually exceed the `< 20` guard for matches played in 2027+, silently falling through to the "Ultimate fallback: use date" branch (line 300-309) instead of erroring. Net effect: any next-season match missing an explicit `stats.round` renders a date-grouped card instead of a "Round N" label, with zero warning that the fallback degraded.
+
+**Fix (not built):** derive the anchor date from the competition/season's actual start date (already modeled elsewhere per `BACKLOG-049`'s season-tracking schema work) rather than a literal string; or at minimum, log/flag when `calcRound` falls outside the guard so a future season's degradation is visible instead of silent.
+
+**Found:** session 47E, by a background code-reviewer agent doing a read-only season-transition hardcode sweep (delegated after Richard flagged "session hardcodes" from a past review as something to check before a new season starts).
+
+---
+
+### BACKLOG-164 — Admin "Create Competition" Form Defaults to `season: '2024/2025'`
+
+**Status:** OPEN — found session 47E, not fixed
+**Priority:** LOW — cosmetic default, not a crash risk, but an easy trap for an admin who doesn't notice/edit the pre-filled field
+
+**Problem:** both `src/app/admin/competitions/page.tsx:35` and `src/app/admin/competitions/page-enhanced.tsx:87` set `defaultFormData.season = '2024/2025'`. Any admin creating a new competition without manually editing the pre-filled Season field silently creates a `'2024/2025'`-tagged competition, two seasons stale.
+
+**Fix (not built):** derive the default from the current date (e.g. `` `${currentYear}/${currentYear + 1}` ``) instead of a literal string. Also worth confirming with Richard whether `page-enhanced.tsx` is the live file or a superseded duplicate of `page.tsx` — both currently carry the same stale default, which suggests they may not be kept in sync either way.
+
+**Found:** session 47E, by a background code-reviewer agent doing a read-only season-transition hardcode sweep.
+
+---
+
+### BACKLOG-165 — Pre-Existing `tsc` Error: `teamId` Undefined in Admin Match-Lineups Publish Route
+
+**Status:** OPEN — found session 47E, not fixed
+**Priority:** MEDIUM — same class BUG-154 called out ("this is exactly the kind of bug tonight's tsc baseline had already flagged, just never acted on"); worth a deliberate sweep rather than being dismissed as baseline noise
+
+**Problem:** `src/app/api/admin/match-lineups/[id]/route.ts(126,57)`: `error TS2552: Cannot find name 'teamId'. Did you mean 'team'?`. Confirmed pre-existing and unrelated to any session 47E change (file has zero diff this session). Not yet read in full to determine live-request impact — flagged for the same "Pre-Existing `tsc` Errors Mapped to Critical Flow Impact" sweep BUG-154's entry calls for, not chased further this session (found incidentally while verifying an unrelated fix to `src/app/admin/match-lineups/page.tsx`, BUG-125).
+
+**Found:** session 47E, incidental `tsc --noEmit` check while verifying BUG-125's fix.
+
+---
