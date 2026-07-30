@@ -6669,7 +6669,7 @@ No `clearTimeout` exists anywhere in the file. The effect that sets `stateManage
 
 ### ~~BACKLOG-167~~ — Unauthenticated `/api/players` and `/api/search` Leak Banned/PII Fields (Same Bug Already Fixed Once, Never Ported to List/Search)
 
-**Status:** SHIPPED — 2026-07-30 (session 47F), not yet live-tested
+**Status:** RESOLVED — 2026-07-30 (session 47F)
 **Priority:** CRITICAL — real, live, unauthenticated PII/banned-field leak on two public routes; same bug class already fixed once on the detail route and missed here
 
 **Problem:** `GET /api/players` (`src/app/api/players/route.ts` — every branch: `ids=`, `teamId=`, default list) and `GET /api/search` (`category=players` results) have no `getAuthUser()` call and return `enrichPlayersWithAffiliations()`'s output unshaped — `{ ...player, memberships, organizationAffiliations }`, where `...player` is the full `players` row including `email` and `profileId` (both on CLAUDE.md's banned-public-fields list; `memberships`/`organizationAffiliations` also banned verbatim). `src/app/api/teams/[id]/route.ts` had it worse than originally documented: the main `players` field (`teamPlayers`/`playersWithStats`) had **zero** stripping at all (raw row spread), and `universityPlayers` stripped `team`/`memberships`/`organizationAffiliations` but still spread `...player`, leaking `email`/`profileId` there too. That route also had **no auth check of any kind** — confirmed while fixing it.
@@ -6683,11 +6683,17 @@ No `clearTimeout` exists anywhere in the file. The effect that sets `stateManage
 
 **Found:** session 47E, by a background code-reviewer agent doing a read-only production-discipline sweep (API payload/PII, caching, convention consistency — explicitly scoped to not re-cover session 47D's six audit areas). Fixed session 47F.
 
+**Evidence:**
+- Commit: `1228179`
+- Verified by: live test against a Vercel preview deployment (`dev/verify-staging-preview.mjs` + `dev/verify-staging-authed.mjs`), full detail in `RUNLOG.md`
+- Observed result: unauthenticated `GET /api/players`, `GET /api/search?category=players`, and `GET /api/teams/[id]` (real team `busa-joga`) all confirmed zero `email`/`profileId`/`memberships`/`organizationAffiliations` on any player row. A freshly-generated real admin JWT confirmed the opposite path holds too — `GET /api/players` as admin still returns full data including `email`, proving the strip is role-conditional, not a blanket removal that would have broken the admin panel.
+- Pending items: none
+
 ---
 
 ### ~~BACKLOG-168~~ — Two Admin Routes Bypass `getAuthUser()`, Trust the JWT's Role Claim Directly (Privilege-Revocation Gap)
 
-**Status:** SHIPPED — 2026-07-30 (session 47F), not yet live-tested
+**Status:** RESOLVED — 2026-07-30 (session 47F)
 **Priority:** HIGH — narrow but real: a demoted/deactivated admin's already-issued token keeps working on these two routes for its full 7-day lifetime
 
 **Problem:** `src/app/api/matches/[id]/lineup/unlock/route.ts` and `src/app/api/matches/[id]/livestream/route.ts` both hand-roll `jwt.verify(token, env.jwtSecret)` and check `decoded.role !== 'admin'` straight off the token payload, instead of the standard `getAuthUser(request)` pattern used at 90+ other admin-gated call sites, which re-reads the **current** DB row. If an admin account is demoted or deactivated, every other admin route picks that up on the next request; these two keep honoring the stale token claim.
@@ -6695,6 +6701,12 @@ No `clearTimeout` exists anywhere in the file. The effect that sets `stateManage
 **Fix:** replaced both hand-rolled `jwt.verify()` blocks with `const authUser = await getAuthUser(request); if (!authUser) return 401; if (authUser.role !== 'admin') return 403;` — the standard pattern already used everywhere else. Found by a retrospective audit agent (session 47F) as the same gap class as `BUG-187` (fixed one file over, same session, in `lineup/publish/route.ts`) — this entry is the sibling-route half of that same pattern.
 
 **Found:** session 47E, same background audit as BACKLOG-167. Fixed session 47F.
+
+**Evidence:**
+- Commit: `1228179`
+- Verified by: live test against a Vercel preview deployment (`dev/verify-staging-preview.mjs` unauth pass + `dev/verify-staging-authed.mjs` authed pass), full detail in `RUNLOG.md`
+- Observed result: `POST lineup/unlock` and `PATCH livestream` both correctly 401 with zero auth. With a freshly-generated real admin JWT, `POST lineup/unlock` (on an unpublished lineup) got past the auth gate to a real `404` business-logic response instead of 401/403 — confirming `getAuthUser()` genuinely accepts a valid admin session, not just rejecting invalid ones.
+- Pending items: none
 
 ---
 
@@ -6844,7 +6856,7 @@ const allEvents = matchIds.length ? await db.select().from(matchEvents).where(in
 
 ### ~~BACKLOG-178~~ — Lineup Persistence API Has No Server-Side Cross-Check Against Competition `playersPerSide`/Match Settings
 
-**Status:** SHIPPED — 2026-07-30 (session 47F), not yet live-tested
+**Status:** RESOLVED — 2026-07-30 (session 47F)
 **Priority:** MEDIUM — real gap, not new risk (has always been this way), client-trust only
 
 **Problem:** `src/app/api/matches/[id]/lineup/route.ts` has zero reference to `competitionSportSettings`/`halfDuration`/`playersPerSide` anywhere. The competition-aware `playersPerSide` value is computed correctly by `/api/matches/[id]/config` (including this session's `BUG-125`-adjacent sport-filter fix), but enforcement of "does the submitted lineup's starter count actually match" lives only in each client component (`FootballLogger.tsx`, `BasketballLogger.tsx`, the admin match-lineups page) via their own local `STARTER_COUNT` checks. The server-side write endpoint accepts whatever starter array it's given, no count validation at all.
@@ -6856,6 +6868,12 @@ const allEvents = matchIds.length ? await db.select().from(matchEvents).where(in
 **Related to `BACKLOG-183`, same root cause, fixed together:** see that entry.
 
 **Found:** session 47E, while answering Richard's question about whether competition match settings actually couple to the rest of the lineup-publishing flow. Fixed session 47F.
+
+**Evidence:**
+- Commit: `ec83ad1`
+- Verified by: live test against a Vercel preview deployment (`dev/verify-staging-preview.mjs`, `dev/verify-staging-authed.mjs`), full detail in `RUNLOG.md`
+- Observed result: a throwaway `UPCOMING` friendly with `"9-a-side Test Cup"` in its competition text resolved `GET /api/matches/[id]/config`'s `playersPerSide` to `9` (not the old hardcoded 11). A real draft-lineup save (11 real `busa-joga` starters) followed by `POST lineup/publish` as a genuine admin succeeded end-to-end (`200`), confirming the config-sourced starter-count enforcement doesn't reject a correctly-sized real lineup.
+- Pending items: none
 
 ---
 
@@ -6887,7 +6905,7 @@ const allEvents = matchIds.length ? await db.select().from(matchEvents).where(in
 
 ### ~~BACKLOG-183~~ — Admin Match-Lineups Page Hardcodes `playersPerSide: 11` For Any Friendly Match (Same Bug Class As BUG-125, Football Side)
 
-**Status:** SHIPPED — 2026-07-30 (session 47F), not yet live-tested
+**Status:** RESOLVED — 2026-07-30 (session 47F), server-side (config endpoint) verified live; the admin UI's own fetch call is the identical pattern already proven working in BACKLOG-178/183's shared verification, not separately browser-tested
 **Priority:** MEDIUM — real, would block correctly building a 5-a-side lineup for a friendly (e.g. Saturday's own match, if it's 5-a-side); confirmed via code, not yet hit live
 
 **Problem:** `src/app/admin/match-lineups/page.tsx`'s `handleMatchSelect` looks up `matchComp = competitions.find(c => c.name === match.competition)` to resolve `playersPerSide`. A friendly match's `competition` field is typically just `"Friendly"` — not a real, configured `competitions` row with its own `competitionSportSettings`. That lookup fails, falls into the `else` branch, and `playersPerSide` is hardcoded to `11` (`page.tsx:234,238`) regardless of the match's actual format. A 5-a-side (or futsal) friendly has no way to configure the lineup builder for 5 starters — same root cause class as `BUG-125` (basketball got the identical wrong-default treatment from this same page), just the football-format-variant instead of the wrong-sport case.
@@ -6901,6 +6919,12 @@ const allEvents = matchIds.length ? await db.select().from(matchEvents).where(in
 **Also noted, same investigation, same file (`page.tsx:226-235`), not needed for Saturday's timeline — for later work:** the default-formation logic is a binary hardcode too, not genuinely config-driven — `matchComp.playersPerSide === 5 ? '1-2-1' : '4-3-3'` is the entire decision tree, regardless of how many real formations exist for either format (`FORMATIONS_11`/`FORMATIONS_5` arrays at the top of this same file already list 10 and 2 real options respectively — the initial default just never reflects that range, always picking the same one of each). Low severity — the admin can still manually pick a different formation from the dropdown afterward, this only affects what's pre-selected.
 
 **Found:** session 47E, Richard's own question about whether competition match settings actually couple through to lineup publishing for friendlies specifically. Fixed session 47F.
+
+**Evidence:**
+- Commit: `ec83ad1`
+- Verified by: live test against a Vercel preview deployment (`dev/verify-staging-preview.mjs`), full detail in `RUNLOG.md`
+- Observed result: `GET /api/matches/[id]/config` (the exact endpoint `handleMatchSelect` fetches) correctly resolved a throwaway friendly's `"9-a-side Test Cup"` competition text to `playersPerSide: 9`. **Caveat, stated plainly:** this confirms the server-side source of truth is correct; the admin page's own `fetch`/`setPlayersPerSide` wiring (a simple 3-line consumer of the same response shape `FootballLogger.tsx`/`BasketballLogger.tsx` already use in production) was not separately exercised in a browser. Flagging this rather than overclaiming a UI-level test that didn't happen.
+- Pending items: a real browser click-through on `/admin/match-lineups` selecting a 5-a-side or N-a-side friendly, confirming the starter-count UI actually reflects the fetched value — cheap to do whenever the admin UI is opened for other reasons, not blocking.
 
 ---
 
@@ -6947,7 +6971,7 @@ const allEvents = matchIds.length ? await db.select().from(matchEvents).where(in
 
 ### ~~BUG-187~~ — `POST /api/matches/[id]/lineup/publish` Had Zero Server-Side Auth — Any Unauthenticated Caller Could Publish and Lock Any Match's Lineup
 
-**Status:** SHIPPED — 2026-07-30 (session 47F), not yet live-tested
+**Status:** RESOLVED — 2026-07-30 (session 47F)
 **Priority:** CRITICAL — unauthenticated write that locks real match data and fires a real push notification to subscribers; same class as `BUG-147`, missed by that sweep
 
 **Problem:** `src/app/api/matches/[id]/lineup/publish/route.ts` manually decoded a JWT from the `authToken` cookie if present, but never returned 401/403 on a missing or invalid token, or on a non-admin/non-logger role — on any verification failure it just logged the error and continued with `userId = 'unknown'`, `userRole = 'user'`. The route then published and **locked** the lineup (`unlocked: false`, blocking further edits without an admin unlock) and fired a real push notification (`LINEUP_AVAILABLE`) to the match's subscriber base — all reachable with zero authentication. The sibling `lineup/unlock/route.ts` correctly gates on `role === 'admin'`; this route had no equivalent check at all. Not caught by `BUG-147`'s full-system sweep (session 47D) — that sweep's route list did not include `lineup/publish` or `lineup/unlock`, only the draft-save `lineup/route.ts`.
@@ -6957,6 +6981,12 @@ const allEvents = matchIds.length ? await db.select().from(matchEvents).where(in
 **Fix:** replaced the manual JWT decode with `getAuthUser(request)` + `role === 'admin' || role === 'logger'` check, matching the exact pattern already proven on `lineup/route.ts`'s POST/DELETE and `lineup/unlock/route.ts`. Rejects with 401 (no/invalid session) or 403 (wrong role) before any further processing. `publishedBy`/`publishedByName`/`publishedByRole` now source from the verified `authUser` object instead of a locally re-decoded, unverified JWT. `src/app/api/matches/[id]/lineup/publish/route.ts`.
 
 **Found:** session 47F, while fixing `BACKLOG-178` in the same file family.
+
+**Evidence:**
+- Commit: `ec83ad1`
+- Verified by: live test against a Vercel preview deployment (`dev/verify-staging-preview.mjs` + `dev/verify-staging-authed.mjs`), full detail in `RUNLOG.md`
+- Observed result: unauthenticated `POST lineup/publish` correctly 401'd with zero session. With a freshly-generated real admin JWT, a real draft-lineup save followed by `POST lineup/publish` succeeded end-to-end (`200`, `"Lineup published successfully"`) — confirming the new auth gate rejects the attack path from `BUG-147`'s pattern while leaving the legitimate admin workflow intact.
+- Pending items: none
 
 ---
 

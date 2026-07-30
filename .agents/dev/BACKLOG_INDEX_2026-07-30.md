@@ -8,18 +8,21 @@ replacement. Originally updated at session 47E's close.
 **Correction, session 47F:** the "nothing here is stale" claim above did not survive
 one more session — an audit agent caught `BACKLOG-167`/`168`/`178`/`180`/`183`/`177`
 all showing outdated status below after session 47F shipped fixes for them. Corrected
-in place, session 47F. New items filed session 47F (`BACKLOG-185`, `-186`, `BUG-187`)
-are out of this index's original scope (47D/47E only) and are not added here — see
-`BACKLOG.md` directly for those. Lesson learned, logged in `known-issues.md`: this
-index is a live document that goes stale the moment anything it describes changes,
-not something to write once and trust.
+in place, session 47F, then corrected a second time the same session once
+`BACKLOG-167`/`168`/`178`/`183` were live-tested against a Vercel preview and moved
+to RESOLVED (`180` stays SHIPPED — it's a pure client-side form default with no API
+surface to live-test the way the others were). New items filed session 47F
+(`BACKLOG-185`, `-186`, `BUG-187`) are out of this index's original scope (47D/47E
+only) and are not added here — see `BACKLOG.md` directly for those. Lesson learned,
+logged in `known-issues.md`: this index is a live document that goes stale the
+moment anything it describes changes, not something to write once and trust.
 
 ---
 
 ## 🔴 Still-Open, Genuinely Urgent
 
-- ~~**BACKLOG-167**~~ — `/api/players` and `/api/search` leak banned/PII fields (`email`, `profileId`, `memberships`, `organizationAffiliations`) to unauthenticated callers — the same bug already fixed once on the detail route (BUG-098/101), never ported to list/search. CRITICAL, filed session 47E, **SHIPPED session 47F** — pending live-test verification, see `BACKLOG.md`.
-- ~~**BACKLOG-168**~~ — Two admin routes (`lineup/unlock`, `livestream`) bypass `getAuthUser()`, trust the JWT role claim directly — a demoted admin's token keeps working there for its full 7-day life. **SHIPPED session 47F** — pending live-test verification.
+- ~~**BACKLOG-167**~~ — `/api/players` and `/api/search` leak banned/PII fields (`email`, `profileId`, `memberships`, `organizationAffiliations`) to unauthenticated callers — the same bug already fixed once on the detail route (BUG-098/101), never ported to list/search. CRITICAL, filed session 47E, **RESOLVED session 47F** — live-tested against a Vercel preview.
+- ~~**BACKLOG-168**~~ — Two admin routes (`lineup/unlock`, `livestream`) bypass `getAuthUser()`, trust the JWT role claim directly — a demoted admin's token keeps working there for its full 7-day life. **RESOLVED session 47F** — live-tested.
 
 ## ✅ Shipped This Session (pending live-test verification — none of these have been re-tested live yet)
 
@@ -64,11 +67,11 @@ not something to write once and trust.
 - **BACKLOG-179** — `POST /api/teams` has zero NOT NULL validation, would 500 on any real caller (no live caller today).
 - **BACKLOG-181** — Unbounded `players` table scan in `/api/competitions/[id]/eligible-players` (not on the live-logging hot path).
 
-## ⚙️ Match/Competition Config Coupling (new theme, session 47E — SHIPPED session 47F)
+## ⚙️ Match/Competition Config Coupling (new theme, session 47E — RESOLVED session 47F)
 
-- ~~**BACKLOG-178**~~ — Lineup persistence API has no server-side cross-check against competition `playersPerSide`. Write-side of this gap. **SHIPPED session 47F**, pending live-test.
-- ~~**BACKLOG-183**~~ — Admin match-lineups page hardcodes `playersPerSide: 11` for any friendly (a 5-a-side friendly has no way to configure correctly). Read-side of the same gap. **SHIPPED session 47F**, pending live-test.
-- ~~**BACKLOG-180**~~ — Match-creation form defaults `competitionLevel` to `'busa-league'` even for friendlies, no UI control. **SHIPPED session 47F**, pending live-test.
+- ~~**BACKLOG-178**~~ — Lineup persistence API has no server-side cross-check against competition `playersPerSide`. Write-side of this gap. **RESOLVED session 47F**, live-tested against a Vercel preview.
+- ~~**BACKLOG-183**~~ — Admin match-lineups page hardcodes `playersPerSide: 11` for any friendly (a 5-a-side friendly has no way to configure correctly). Read-side of the same gap. **RESOLVED session 47F** — server endpoint live-tested; admin page's own browser fetch not separately click-tested, noted in `BACKLOG.md`.
+- ~~**BACKLOG-180**~~ — Match-creation form defaults `competitionLevel` to `'busa-league'` even for friendlies, no UI control. **SHIPPED session 47F** — pure client-side form default, no API surface to live-test the way the others were; still needs a browser click-through.
 - Fixed together session 47F: extracted the three-layer config merge into a shared `src/lib/matchConfig.ts`, generalized to detect custom "N-a-side" formats from sport/competition text. Both the admin lineup UI and the lineup-publish route (the real enforcement point, not the draft-save route) now read `playersPerSide` from that one source. Bonus find: `lineup/publish/route.ts` had zero server-side auth — filed and fixed as `BUG-187` in the same pass.
 - ~~**BACKLOG-177**~~ — Predictions/Polls/FPL feature flags remain equally inert (same bug BACKLOG-155 fixed for the 5 High-Volatility flags). **Closed WONT FIX session 47F** — investigated and found moot: those pages already `return notFound()` unconditionally per `BACKSCOPE.md`, nothing live exists for a flag to gate.
 
@@ -98,10 +101,12 @@ not something to write once and trust.
 
 ## How to use this for session picking
 
-**Session 47F update:** BACKLOG-167/168 and the Match/Competition Config Coupling
-theme (178/180/183) are now all SHIPPED, not open — see the corrected sections
-above. Nothing in this index is genuinely open-and-urgent anymore as of session
-47F; the real next-session starting point is a live-test pass across everything
-sitting at SHIPPED (this index's 47D/47E block plus session 47F's additions,
-tracked directly in `BACKLOG.md` since they're out of this index's original
-scope) — none of it can move to RESOLVED without one.
+**Session 47F update:** BACKLOG-167/168/178/183 are now RESOLVED, live-tested against
+a Vercel preview deployment — see the corrected sections above. BACKLOG-180 is
+SHIPPED but not RESOLVED (pure client-side form default, no API surface to have
+live-tested it against). Nothing in this index is genuinely open-and-urgent
+anymore as of session 47F; the real next-session starting point is a live-test
+pass across everything still sitting at SHIPPED (this index's 47D/47E "✅ Shipped
+This Session" block below, plus session 47F's own additions, tracked directly in
+`BACKLOG.md` since they're out of this index's original scope) — none of it can
+move to RESOLVED without one.
