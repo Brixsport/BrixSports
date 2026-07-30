@@ -6832,31 +6832,35 @@ const allEvents = matchIds.length ? await db.select().from(matchEvents).where(in
 
 ---
 
-### BACKLOG-177 — Predictions/Polls/FPL Feature Flags Remain Inert (Same Underlying Bug As BACKLOG-155)
+### ~~BACKLOG-177~~ — Predictions/Polls/FPL Feature Flags Remain Inert (Same Underlying Bug As BACKLOG-155)
 
-**Status:** OPEN — found session 47E, not fixed
-**Priority:** LOW — no Live Event Readiness Checklist dependency, unlike the 5 flags BACKLOG-155 wired; these are pre-existing default settings with no urgency attached
+**Status:** WONT FIX — 2026-07-30 (session 47F), investigated and found moot, no code change needed
+**Priority:** ~~LOW~~ — closed
 
-**Problem:** `features.fpl.enabled`, `features.predictions.enabled`, `features.polls.enabled` are, like the flags `BACKLOG-155` fixed, only ever referenced in `admin/settings/route.ts` itself — never read anywhere else. Toggling them in the Settings UI has zero effect. Deliberately not wired in the same session as `BACKLOG-155` — those three features aren't on CLAUDE.md's High Volatility gating list and wiring them wasn't necessary for Saturday.
+**Problem (as originally filed):** `features.fpl.enabled`, `features.predictions.enabled`, `features.polls.enabled` are, like the flags `BACKLOG-155` fixed, only ever referenced in `admin/settings/route.ts` itself — never read anywhere else. Toggling them in the Settings UI has zero effect.
 
-**Fix (not built):** same pattern `BACKLOG-155` already established — `isFeatureEnabled()`/`FeatureGate` already exist and are reusable; this is just identifying where FPL/Predictions/Polls actually render (their own pages, not admin panels — these are public-facing features) and wrapping them the same way.
+**Why this is not the same bug as BACKLOG-155, on investigation:** `BACKLOG-155`'s five flags (Ads/User Management/News/Transfers/Lineup Builder) gate *live, reachable* admin panels — those genuinely needed a `FeatureGate` wrapper because a real user could otherwise land on them. Predictions, Polls, and FPL are different: per `.agents/dev/BACKSCOPE.md`, `/predictions/page.tsx` and all five `/fpl/*` pages already `return notFound()` unconditionally, and the Polls UI was removed from the match-detail page entirely (no dedicated route exists at all). There is nothing live left to attach a `FeatureGate` to — wrapping a page that already always 404s regardless of the flag's value would have zero observable effect either way. The Settings toggle being inert here is a symptom of a *different, already-correct* backscoping layer (page-level `notFound()`), not an unwired feature flag. Confirmed via Richard's own review, session 47F.
 
-**Found:** session 47E, while wiring `BACKLOG-155`.
+**No fix needed.** If/when Predictions, Polls, or FPL are ever un-backscoped for a real Phase 7 build (see `BACKSCOPE.md`), `FeatureGate`/`isFeatureEnabled()` are still there and reusable at that point — this entry is closed as-is, not deferred to a "later" fix.
+
+**Found:** session 47E, while wiring `BACKLOG-155`. Investigated and closed session 47F.
 
 ---
 
-### BACKLOG-178 — Lineup Persistence API Has No Server-Side Cross-Check Against Competition `playersPerSide`/Match Settings
+### ~~BACKLOG-178~~ — Lineup Persistence API Has No Server-Side Cross-Check Against Competition `playersPerSide`/Match Settings
 
-**Status:** OPEN — found session 47E, not fixed
+**Status:** SHIPPED — 2026-07-30 (session 47F), not yet live-tested
 **Priority:** MEDIUM — real gap, not new risk (has always been this way), client-trust only
 
 **Problem:** `src/app/api/matches/[id]/lineup/route.ts` has zero reference to `competitionSportSettings`/`halfDuration`/`playersPerSide` anywhere. The competition-aware `playersPerSide` value is computed correctly by `/api/matches/[id]/config` (including this session's `BUG-125`-adjacent sport-filter fix), but enforcement of "does the submitted lineup's starter count actually match" lives only in each client component (`FootballLogger.tsx`, `BasketballLogger.tsx`, the admin match-lineups page) via their own local `STARTER_COUNT` checks. The server-side write endpoint accepts whatever starter array it's given, no count validation at all.
 
-**Fix (not built):** add a server-side check in the lineup POST handler — fetch the match's config (reuse the same three-layer merge `config/route.ts` already does) and reject a `starters` array whose length doesn't match the expected `playersPerSide` for that match's sport/competition.
+**Fix:** the real enforcement point turned out to be `src/app/api/matches/[id]/lineup/publish/route.ts` (the "finalize" action, not the draft-save `lineup/route.ts` POST) — it already validated starter count, just via `match[0].sport === 'Basketball' ? 5 : 11`, a hardcoded sport binary with the same blind spot as `BACKLOG-183`. Extracted the three-layer config merge (match override → competition setting → sport default) out of `config/route.ts` into a new shared `src/lib/matchConfig.ts` (`getMatchConfig(matchId)`), generalized to also detect custom "N-a-side" formats from the sport/competition text (not just literal "5-a-side") for friendlies with no `competitionId`. `publish/route.ts` now sources `requiredStarters` from `getMatchConfig(matchId).config.playersPerSide` instead of the hardcoded binary. `config/route.ts`'s own GET is now a thin wrapper around the same shared function — one source of truth instead of two independent copies.
 
-**Related to `BACKLOG-183`, same root cause:** that entry is the read-side (admin UI hardcoding a wrong default for friendlies); this is the write-side (API accepting anything with no check). Neither surface is actually coupled to the real match/competition config system today — fix both together against the same `/api/matches/[id]/config` source of truth rather than as two independent patches.
+**Bonus fix, found while reading this route:** `lineup/publish/route.ts` had **zero server-side auth enforcement** — it decoded a JWT from the cookie if present but never rejected the request on a missing/invalid token or wrong role, so any unauthenticated caller could publish and lock any match's lineup (which also fires a real push notification). Filed and fixed as `BUG-187` in the same commit, same file family.
 
-**Found:** session 47E, while answering Richard's question about whether competition match settings actually couple to the rest of the lineup-publishing flow.
+**Related to `BACKLOG-183`, same root cause, fixed together:** see that entry.
+
+**Found:** session 47E, while answering Richard's question about whether competition match settings actually couple to the rest of the lineup-publishing flow. Fixed session 47F.
 
 ---
 
@@ -6873,33 +6877,35 @@ const allEvents = matchIds.length ? await db.select().from(matchEvents).where(in
 
 ---
 
-### BACKLOG-180 — Match-Creation Form Defaults `competitionLevel` to `'busa-league'` Even For Friendlies, No UI Control
+### ~~BACKLOG-180~~ — Match-Creation Form Defaults `competitionLevel` to `'busa-league'` Even For Friendlies, No UI Control
 
-**Status:** OPEN — found session 47E, not fixed
+**Status:** SHIPPED — 2026-07-30 (session 47F), not yet live-tested
 **Priority:** LOW — currently mitigated by two independent enforced paths (bulk-register requires `university`; admin/players auto-fills it from the selected team), not a live risk today, but a single point of failure with no visible safety net
 
 **Problem:** `src/app/admin/matches/page.tsx` defaults `competitionLevel` to `'busa-league'` for every match including friendlies, with no UI to change it. That value flows into `/api/matches/[id]/eligible-players`'s `normalizeCompetitionLevel()`, which requires a non-empty `player.university` at the `'busa-league'` eligibility level. Currently safe because both real player-creation paths (bulk-register, admin/players) always populate `university` — but if a player or team is ever created outside those two enforced paths, `eligible-players` would silently return an empty roster with no error surfaced to the logger.
 
-**Fix (not built):** add a `competitionLevel` select for friendly matches, or default friendlies to a non-filtering level (`'inter-university'`/`'external'`) instead of `'busa-league'`.
+**Fix:** the "Match Type" select's `onChange` now sets `competitionLevel: 'external'` whenever `matchType` switches to `'friendly'` — `normalizeCompetitionLevel('external')` maps to `isPlayerEligible`'s `case 'external'`, which returns `true` for every player regardless of college/department/university (confirmed in `src/lib/competition-player-eligibility.ts`). Competition matches are unaffected — their `competitionLevel` is still driven by the selected competition's own `level` field, unchanged. `src/app/admin/matches/page.tsx`.
 
-**Found:** session 47E, by the same background audit that found `BACKLOG-182`.
+**Found:** session 47E, by the same background audit that found `BACKLOG-182`. Fixed session 47F.
 
 ---
 
-### BACKLOG-183 — Admin Match-Lineups Page Hardcodes `playersPerSide: 11` For Any Friendly Match (Same Bug Class As BUG-125, Football Side)
+### ~~BACKLOG-183~~ — Admin Match-Lineups Page Hardcodes `playersPerSide: 11` For Any Friendly Match (Same Bug Class As BUG-125, Football Side)
 
-**Status:** OPEN — found session 47E, not fixed, deliberately deferred (Richard's own call)
+**Status:** SHIPPED — 2026-07-30 (session 47F), not yet live-tested
 **Priority:** MEDIUM — real, would block correctly building a 5-a-side lineup for a friendly (e.g. Saturday's own match, if it's 5-a-side); confirmed via code, not yet hit live
 
 **Problem:** `src/app/admin/match-lineups/page.tsx`'s `handleMatchSelect` looks up `matchComp = competitions.find(c => c.name === match.competition)` to resolve `playersPerSide`. A friendly match's `competition` field is typically just `"Friendly"` — not a real, configured `competitions` row with its own `competitionSportSettings`. That lookup fails, falls into the `else` branch, and `playersPerSide` is hardcoded to `11` (`page.tsx:234,238`) regardless of the match's actual format. A 5-a-side (or futsal) friendly has no way to configure the lineup builder for 5 starters — same root cause class as `BUG-125` (basketball got the identical wrong-default treatment from this same page), just the football-format-variant instead of the wrong-sport case.
 
-**Fix (not built):** the match-config system (`/api/matches/[id]/config`) already resolves `playersPerSide` correctly for a given match including format detection (5-a-side keyword matching, per `FootballLogger.tsx`'s own `is5Aside` logic) — this page should read from that same endpoint instead of doing its own competition-name lookup, the same fix direction already used to correct the config route's own sport-filter bug this session.
+**Fix:** `handleMatchSelect` now fetches `/api/matches/[id]/config` instead of doing its own `competitions.find(c => c.name === match.competition)` lookup. The config route (via the new shared `src/lib/matchConfig.ts`) resolves `playersPerSide` through the real three-layer chain (match override → competition setting → sport default) and now also parses "N-a-side"/futsal/npuga keywords out of the match's sport/competition text for friendlies with no `competitionId` — so this page, the lineup-publish route (`BACKLOG-178`), and `FootballLogger.tsx`'s own client-side `is5Aside` heuristic are no longer three independently-drifting copies of the same logic.
 
-**Related to `BACKLOG-178`, same root cause:** neither the admin lineup UI (this entry) nor the lineup-write API itself (`BACKLOG-178`) is actually coupled to the real competition/match config system for `playersPerSide` — one hardcodes a wrong default client-side, the other accepts any starter count server-side with no cross-check at all. Confirmed via Richard's own question: match/competition config is not genuinely wired end-to-end into lineup publishing today, on either the read side (this entry) or the write side (`BACKLOG-178`). Fixing both together, reading from the same `/api/matches/[id]/config` source of truth on both the UI and the API, is the coherent single fix rather than two independent patches.
+**Related to `BACKLOG-178`, same root cause, fixed together in the same commit** — both now read `playersPerSide` from the one shared `getMatchConfig()` source instead of two separate, inconsistent lookups.
 
-**Also noted, same investigation, same file (`page.tsx:226-235`), not needed for Saturday's timeline — for later work:** the default-formation logic is a binary hardcode too, not genuinely config-driven — `matchComp.playersPerSide === 5 ? '1-2-1' : '4-3-3'` is the entire decision tree, regardless of how many real formations exist for either format (`FORMATIONS_11`/`FORMATIONS_5` arrays at the top of this same file already list 10 and 2 real options respectively — the initial default just never reflects that range, always picking the same one of each). Low severity — the admin can still manually pick a different formation from the dropdown afterward, this only affects what's pre-selected. Same fix direction as the `playersPerSide` issue above: derive from actual match/competition config once that's wired, rather than a bare ternary.
+**Deliberately not changed, per this entry's own note below:** the default-formation ternary (`playersPerSide === 5 ? '1-2-1' : '4-3-3'`) still just picks index 0 of the correct list once `playersPerSide` resolves correctly — a genuinely smarter default needs a schema field this project doesn't have yet (no "default formation" column anywhere), not a quick patch. Confirmed with Richard this stays deferred.
 
-**Found:** session 47E, Richard's own question about whether competition match settings actually couple through to lineup publishing for friendlies specifically.
+**Also noted, same investigation, same file (`page.tsx:226-235`), not needed for Saturday's timeline — for later work:** the default-formation logic is a binary hardcode too, not genuinely config-driven — `matchComp.playersPerSide === 5 ? '1-2-1' : '4-3-3'` is the entire decision tree, regardless of how many real formations exist for either format (`FORMATIONS_11`/`FORMATIONS_5` arrays at the top of this same file already list 10 and 2 real options respectively — the initial default just never reflects that range, always picking the same one of each). Low severity — the admin can still manually pick a different formation from the dropdown afterward, this only affects what's pre-selected.
+
+**Found:** session 47E, Richard's own question about whether competition match settings actually couple through to lineup publishing for friendlies specifically. Fixed session 47F.
 
 ---
 
@@ -6926,5 +6932,48 @@ const allEvents = matchIds.length ? await db.select().from(matchEvents).where(in
 **Fix (not built):** add a `.limit(1000)`-style cap.
 
 **Found:** session 47E, by the same background audit that found `BACKLOG-182`.
+
+---
+
+### BACKLOG-185 — Raw-SQL `dev/*.mjs` Scripts Writing `created_at` via `Date.now()` Store Milliseconds, Corrupting Sort Order Against Drizzle's Seconds Convention
+
+**Status:** OPEN — found session 47F, not fixed (filed per Richard's explicit call, real fix deferred)
+**Priority:** MEDIUM — silent correctness bug on any `ORDER BY created_at` query touching a row written this way; not data loss, but "most recent" is unreliable wherever it hits
+
+**Problem:** `matches.created_at` (and likely other tables' `created_at`/`updated_at`) is a Drizzle `integer(col, { mode: 'timestamp' })` column — every write that goes through Drizzle's query builder with a real `Date` object (`new Date()`) gets correctly converted to Unix **seconds**. But `dev/backfill-write-busa-sf-both.mjs:39` does `const NOW = Date.now()` (JS **milliseconds**) and inserts it directly via a raw `client.execute`/`client.batch` SQL statement (`@libsql/client`, not Drizzle), bypassing the conversion entirely. Confirmed live: `matches` rows `busa-sf-kings-pirates`/`busa-sf-joga-hammers` have 13-digit `created_at` values (`1783940115189`) instead of the expected 10-digit seconds values every other row has. Found while investigating why a plain `ORDER BY created_at DESC` on `matches` returned those two BUSA semifinal rows as "most recent" ahead of two friendlies that actually happened ~17 days later in wall-clock time.
+
+**Scope not yet audited:** only confirmed on `matches` via these two specific rows, found incidentally. Any other raw-SQL `dev/*.mjs` script using `Date.now()` for a `created_at`/`updated_at`/similar timestamp column on any table has the same exposure — not checked here.
+
+**Fix (not built):** (a) audit all `dev/*.mjs` scripts that write directly via `@libsql/client` for `Date.now()` used against a Drizzle `mode: 'timestamp'` column, convert to `Math.floor(Date.now() / 1000)` for raw SQL inserts (or switch those scripts to go through Drizzle's query builder instead of raw SQL); (b) decide whether to normalize the two already-affected `matches` rows found here (a one-time `UPDATE ... SET created_at = created_at / 1000` on just those two IDs) — not done in this session, no live functional impact from the two known-affected rows besides sort order.
+
+**Found:** session 47F, while auditing "the last two matches" for a Saturday-readiness cleanup request — the wrong two matches were initially selected by a plain `ORDER BY created_at DESC` because of this bug.
+
+---
+
+### ~~BUG-187~~ — `POST /api/matches/[id]/lineup/publish` Had Zero Server-Side Auth — Any Unauthenticated Caller Could Publish and Lock Any Match's Lineup
+
+**Status:** SHIPPED — 2026-07-30 (session 47F), not yet live-tested
+**Priority:** CRITICAL — unauthenticated write that locks real match data and fires a real push notification to subscribers; same class as `BUG-147`, missed by that sweep
+
+**Problem:** `src/app/api/matches/[id]/lineup/publish/route.ts` manually decoded a JWT from the `authToken` cookie if present, but never returned 401/403 on a missing or invalid token, or on a non-admin/non-logger role — on any verification failure it just logged the error and continued with `userId = 'unknown'`, `userRole = 'user'`. The route then published and **locked** the lineup (`unlocked: false`, blocking further edits without an admin unlock) and fired a real push notification (`LINEUP_AVAILABLE`) to the match's subscriber base — all reachable with zero authentication. The sibling `lineup/unlock/route.ts` correctly gates on `role === 'admin'`; this route had no equivalent check at all. Not caught by `BUG-147`'s full-system sweep (session 47D) — that sweep's route list did not include `lineup/publish` or `lineup/unlock`, only the draft-save `lineup/route.ts`.
+
+**Found while fixing `BACKLOG-178`** (adding config-aware starter-count validation to this same route) — reading the full handler surfaced the missing auth gate.
+
+**Fix:** replaced the manual JWT decode with `getAuthUser(request)` + `role === 'admin' || role === 'logger'` check, matching the exact pattern already proven on `lineup/route.ts`'s POST/DELETE and `lineup/unlock/route.ts`. Rejects with 401 (no/invalid session) or 403 (wrong role) before any further processing. `publishedBy`/`publishedByName`/`publishedByRole` now source from the verified `authUser` object instead of a locally re-decoded, unverified JWT. `src/app/api/matches/[id]/lineup/publish/route.ts`.
+
+**Found:** session 47F, while fixing `BACKLOG-178` in the same file family.
+
+---
+
+### BACKLOG-186 — `/admin/matches` Has No Pagination, Fetches All Matches Unbounded Client-Side
+
+**Status:** OPEN — found session 47F, not fixed, not critical
+**Priority:** LOW — per Richard's own call ("not critical at all")
+
+**Problem:** `src/app/admin/matches/page.tsx` has no pagination — the admin matches list loads and renders every match row at once. Not investigated further this session (not critical, flagged for filing only).
+
+**Fix (not built):** add standard offset/limit pagination (or a "load more") to the admin matches list, matching whatever pattern other paginated admin lists in this codebase already use.
+
+**Found:** session 47F, Richard's own observation while working on match-cleanup/config-coupling tasks.
 
 ---

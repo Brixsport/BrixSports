@@ -214,16 +214,19 @@ export default function AdminMatchLineupsPage() {
 
     const handleMatchSelect = async (match: Match) => {
         setSelectedMatch(match);
-        // Fetch competition to determine playersPerSide
+        // BACKLOG-183: read playersPerSide from the same match/competition config chain
+        // the lineup-publish route now enforces server-side (src/lib/matchConfig.ts),
+        // instead of looking up `competitions.find(c => c.name === match.competition)` —
+        // that lookup silently failed for friendlies (competition is just "Friendly", not
+        // a real configured competitions row) and fell through to a hardcoded 11.
         try {
-            const compRes = await fetch(`/api/competitions`);
-            const compData = await compRes.json();
-            const competitions = Array.isArray(compData) ? compData : (compData.competitions || []);
-            const matchComp = competitions.find((c: any) => c.name === match.competition);
-            if (matchComp && matchComp.playersPerSide) {
-                setPlayersPerSide(matchComp.playersPerSide);
+            const configRes = await fetch(`/api/matches/${match.id}/config`);
+            const configData = await configRes.json();
+            const pps = configData?.config?.playersPerSide;
+            if (typeof pps === 'number' && pps > 0) {
+                setPlayersPerSide(pps);
                 // Set appropriate default formation
-                if (matchComp.playersPerSide === 5) {
+                if (pps === 5) {
                     setHomeFormation('1-2-1');
                     setAwayFormation('1-2-1');
                 } else {
@@ -234,7 +237,7 @@ export default function AdminMatchLineupsPage() {
                 setPlayersPerSide(11);
             }
         } catch (e) {
-            console.error('Could not fetch competition details:', e);
+            console.error('Could not fetch match config:', e);
             setPlayersPerSide(11);
         }
         loadRosters(match);

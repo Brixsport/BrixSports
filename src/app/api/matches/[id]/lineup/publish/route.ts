@@ -1,44 +1,31 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
 import { matches } from '@/db/schema';
 import { eq } from 'drizzle-orm';
-import jwt from 'jsonwebtoken';
-import { env } from '@/lib/env';
+import { getAuthUser } from '@/lib/auth';
+import { getMatchConfig } from '@/lib/matchConfig';
 
 // POST /api/matches/[id]/lineup/publish - Publish lineup (lock it)
 export async function POST(
-    request: Request,
+    request: NextRequest,
     props: { params: Promise<{ id: string }> }
 ) {
     try {
+        const authUser = await getAuthUser(request);
+        if (!authUser) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+        if (authUser.role !== 'admin' && authUser.role !== 'logger') {
+            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+        }
+        const userId = authUser.id;
+        const userName = authUser.name || authUser.email;
+        const userRole = authUser.role;
+
         const params = await props.params;
         const matchId = params.id;
         const body = await request.json();
         const { team } = body; // 'home' | 'away'
-
-        // Get authenticated user info
-        const token = request.headers.get('cookie')?.split('authToken=')[1]?.split(';')[0];
-        let userId = 'unknown';
-        let userName = 'Unknown User';
-        let userRole = 'user';
-
-        if (token) {
-            try {
-                if (!env.jwtSecret) {
-                    return NextResponse.json({ error: 'Server misconfiguration' }, { status: 500 });
-                }
-                const decoded = jwt.verify(
-                    token,
-                    env.jwtSecret
-                ) as { id: string; email: string; role: string; name?: string };
-
-                userId = decoded.id;
-                userName = decoded.name || decoded.email;
-                userRole = decoded.role;
-            } catch (error) {
-                console.error('Token verification failed:', error);
-            }
-        }
 
         if (!team) {
             return NextResponse.json({ error: 'Team parameter required' }, { status: 400 });
@@ -82,8 +69,12 @@ export async function POST(
         // Validate lineup before publishing
         const lineup = existingLineups[team];
 
-        // Check if lineup has required number of starters
-        const requiredStarters = match[0].sport === 'Basketball' ? 5 : 11;
+        // Check if lineup has required number of starters — sourced from the same
+        // match/competition config chain the rest of the app reads (BACKLOG-178/183),
+        // not a hardcoded sport binary. Covers competition-configured formats, 5-a-side
+        // and other "N-a-side" friendlies, and falls back to the real sport default.
+        const matchConfig = await getMatchConfig(matchId);
+        const requiredStarters = matchConfig?.config.playersPerSide ?? (match[0].sport === 'Basketball' ? 5 : 11);
         if (!lineup.starters || lineup.starters.length !== requiredStarters) {
             return NextResponse.json({
                 error: `Lineup must have exactly ${requiredStarters} starters`

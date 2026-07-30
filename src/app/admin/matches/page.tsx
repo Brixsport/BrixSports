@@ -575,7 +575,21 @@ function AdminMatchesPageContent() {
                                     <label className="block text-[10px] font-black uppercase tracking-widest text-white/40 mb-2">Match Type</label>
                                     <select
                                         value={formData.matchType}
-                                        onChange={(e) => setFormData({ ...formData, matchType: e.target.value as any })}
+                                        onChange={(e) => {
+                                            const matchType = e.target.value as 'competition' | 'friendly';
+                                            setFormData(prev => ({
+                                                ...prev,
+                                                matchType,
+                                                // BACKLOG-180: friendlies default to a non-filtering
+                                                // eligibility level instead of 'busa-league' — that
+                                                // level requires player.university to be set for
+                                                // eligible-players lookups, which only bulk-register
+                                                // and admin/players currently guarantee. A friendly
+                                                // created outside those paths would otherwise silently
+                                                // return an empty roster with no error surfaced.
+                                                competitionLevel: matchType === 'friendly' ? 'external' : prev.competitionLevel,
+                                            }));
+                                        }}
                                         className="w-full bg-[#121212] border border-white/10 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-primary transition-colors text-white hover:border-white/20"
                                     >
                                         <option value="competition" className="bg-[#0a0a0a]">Competition</option>
