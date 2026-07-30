@@ -87,6 +87,11 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
     // Settings
     const [showSettingsModal, setShowSettingsModal] = useState(false);
     const [quarterDuration, setQuarterDuration] = useState(12); // minutes per quarter — overwritten by match config on mount
+    // BUG-134 (minimal scope): foul-out disqualification only. Sport-level default
+    // (config/route.ts's SPORT_DEFAULTS.basketball.foulDisqualifyAt, FIBA-style, "not
+    // confirmed against BUSA's actual rulebook") -- no competition-level override yet,
+    // no team-foul bonus tracking. Both filed as follow-up scope, not built here.
+    const [foulDisqualifyAt, setFoulDisqualifyAt] = useState(5);
     const [periodCount, setPeriodCount] = useState(4); // quarters — overwritten by match config on mount
     const [overtimeDurationMinutes, setOvertimeDurationMinutes] = useState(5); // overwritten by match config on mount
 
@@ -451,6 +456,7 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                     setTime(`${config.halfDuration}:00`);
                     setPeriodCount(config.periodCount);
                     setOvertimeDurationMinutes(config.overtimeDurationMinutes ?? 5);
+                    setFoulDisqualifyAt(config.foulDisqualifyAt ?? 5);
                 } else {
                     alert('Match config failed to load — using default duration. Check settings before starting.');
                 }
@@ -576,6 +582,15 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
         const priorMinutes = isOT ? periodCount * quarterDuration : (quarter - 1) * quarterDuration;
         return priorMinutes + minutesElapsedInPeriod;
     };
+
+    // BUG-134 (minimal scope): personal-foul count + disqualification, derived from
+    // local event state the same way every other live stat here already is. All six
+    // foul button labels (Personal/Technical/Flagrant/Offensive/Shooting/Unsportsmanlike)
+    // dispatch the same `type: 'Foul'` today -- no sub-type distinction exists in the
+    // event model yet, so every one of them counts toward foulDisqualifyAt here, matching
+    // how they already collapse into the same `personalFouls` DB column server-side.
+    const getPersonalFoulCount = (playerId: string) => events.filter(e => e.type === 'Foul' && e.playerId === playerId).length;
+    const isFouledOut = (playerId: string) => getPersonalFoulCount(playerId) >= foulDisqualifyAt;
 
     // Live-ticking quarter clock + WS broadcast (basketball's own analog of
     // FootballLogger's `match:time:update` effect, BUG-153's audit gap: "no WS
@@ -1392,11 +1407,14 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                             <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                                 {(selectedTeam === 'home' ? homePlayers : awayPlayers)
                                     .filter(p => (selectedTeam === 'home' ? homeStarters : awayStarters).includes(p.id))
-                                    .map((player) => (
+                                    .map((player) => {
+                                        const fouledOut = isFouledOut(player.id);
+                                        return (
                                         <button
                                             key={player.id}
-                                            onClick={() => handlePlayerSelect(player.id)}
-                                            className="bg-white/5 border border-white/10 rounded-xl p-4 hover:bg-primary/20 hover:border-primary transition-all"
+                                            onClick={() => !fouledOut && handlePlayerSelect(player.id)}
+                                            disabled={fouledOut}
+                                            className={`bg-white/5 border border-white/10 rounded-xl p-4 transition-all ${fouledOut ? 'opacity-40 cursor-not-allowed' : 'hover:bg-primary/20 hover:border-primary'}`}
                                         >
                                             <div className="flex items-center gap-3">
                                                 <div
@@ -1410,15 +1428,22 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                                                 <div className="flex-1 min-w-0 text-left">
                                                     <div className="flex items-center justify-between gap-2 overflow-hidden">
                                                         <p className="text-sm font-black uppercase tracking-tight truncate">{player.name}</p>
-                                                        <span className="text-[10px] font-black bg-primary/20 text-primary px-1.5 py-0.5 rounded flex-shrink-0">
-                                                            {calculatePlayerRating(player.id)}
-                                                        </span>
+                                                        {fouledOut ? (
+                                                            <span className="text-[10px] font-black bg-red-500/20 text-red-400 px-1.5 py-0.5 rounded flex-shrink-0">
+                                                                FOULED OUT
+                                                            </span>
+                                                        ) : (
+                                                            <span className="text-[10px] font-black bg-primary/20 text-primary px-1.5 py-0.5 rounded flex-shrink-0">
+                                                                {calculatePlayerRating(player.id)}
+                                                            </span>
+                                                        )}
                                                     </div>
                                                     <p className="text-[10px] text-white/40 font-bold">{player.position}</p>
                                                 </div>
                                             </div>
                                         </button>
-                                    ))}
+                                        );
+                                    })}
                             </div>
                         </motion.div>
                     </motion.div>
@@ -1450,8 +1475,11 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                                 Select the player coming from the bench to replace <span className="text-primary font-bold">{(selectedTeam === 'home' ? homePlayers : awayPlayers).find(p => p.id === playerComingOut)?.name}</span>
                             </p>
                             {(() => {
+                                // BUG-136: a fouled-out player must never re-enter -- excluded
+                                // from the bench pool here, not just visually flagged, since
+                                // nothing previously gated this at all.
                                 const availableSubs = (selectedTeam === 'home' ? homePlayers : awayPlayers)
-                                    .filter(p => (selectedTeam === 'home' ? homeSubs : awaySubs).includes(p.id));
+                                    .filter(p => (selectedTeam === 'home' ? homeSubs : awaySubs).includes(p.id) && !isFouledOut(p.id));
                                 // BUG-141: an empty bench with no fallback message read as a
                                 // broken app mid-game (football's equivalent modal has always
                                 // had an emptyMessage prop for this exact case, see BUG-070).

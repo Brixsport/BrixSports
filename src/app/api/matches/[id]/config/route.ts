@@ -88,17 +88,33 @@ export async function GET(
             return NextResponse.json({ error: 'Match not found' }, { status: 404 });
         }
 
-        // Fetch competition sport settings separately (no relation on matchesRelations)
-        const compSettings = match.competitionId
+        const sport = (match.sport ?? 'Football').toLowerCase();
+
+        // Fetch competition sport settings separately (no relation on matchesRelations).
+        // Filtered by sport, not just competitionId -- competitionSportSettings has a
+        // dedicated `sport` column precisely because one competition can have both a
+        // football row and a basketball row (a multi-sport university tournament, the
+        // norm for this project's real data). Without any sport filter, `.limit(1)`
+        // silently returned whichever row the DB happened to return first for the
+        // competition, applying the wrong sport's halfDuration/playersPerSide/
+        // maxSubstitutions to a match -- confirmed absent, fixed here.
+        // Matched in JS, not SQL equality: real seed data (src/db/add-nesa-inter-school-
+        // festival.ts) stores category-qualified values like 'Football_Male'/
+        // 'Basketball_Male', not a clean 'Football'/'Basketball' -- a strict `eq()` would
+        // silently match nothing for those competitions. Row counts per competition are
+        // always small (a handful of sports), so fetching all and filtering here is safe.
+        const compSettingsRows = match.competitionId
             ? await db
                 .select()
                 .from(competitionSportSettings)
                 .where(eq(competitionSportSettings.competitionId, match.competitionId))
-                .limit(1)
-                .then(r => r[0] ?? null)
-            : null;
-
-        const sport = (match.sport ?? 'Football').toLowerCase();
+                .limit(20)
+            : [];
+        // Reduce to a base keyword (e.g. "3x3 basketball" -> "basketball") so it still
+        // matches category-qualified rows either direction ("Basketball_Male" contains
+        // "basketball"; a hypothetical "Basketball" row wouldn't contain "3x3 basketball").
+        const sportKeyword = sport.includes('basketball') ? 'basketball' : sport.includes('football') ? 'football' : sport;
+        const compSettings = compSettingsRows.find(r => r.sport?.toLowerCase().includes(sportKeyword)) ?? null;
         const sportDefaults = SPORT_DEFAULTS[sport] ?? DEFAULT_FALLBACK;
 
         // Three-layer merge: match override → competition setting → sport default
