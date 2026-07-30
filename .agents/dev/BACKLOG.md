@@ -6854,6 +6854,8 @@ const allEvents = matchIds.length ? await db.select().from(matchEvents).where(in
 
 **Fix (not built):** add a server-side check in the lineup POST handler — fetch the match's config (reuse the same three-layer merge `config/route.ts` already does) and reject a `starters` array whose length doesn't match the expected `playersPerSide` for that match's sport/competition.
 
+**Related to `BACKLOG-183`, same root cause:** that entry is the read-side (admin UI hardcoding a wrong default for friendlies); this is the write-side (API accepting anything with no check). Neither surface is actually coupled to the real match/competition config system today — fix both together against the same `/api/matches/[id]/config` source of truth rather than as two independent patches.
+
 **Found:** session 47E, while answering Richard's question about whether competition match settings actually couple to the rest of the lineup-publishing flow.
 
 ---
@@ -6893,7 +6895,22 @@ const allEvents = matchIds.length ? await db.select().from(matchEvents).where(in
 
 **Fix (not built):** the match-config system (`/api/matches/[id]/config`) already resolves `playersPerSide` correctly for a given match including format detection (5-a-side keyword matching, per `FootballLogger.tsx`'s own `is5Aside` logic) — this page should read from that same endpoint instead of doing its own competition-name lookup, the same fix direction already used to correct the config route's own sport-filter bug this session.
 
+**Related to `BACKLOG-178`, same root cause:** neither the admin lineup UI (this entry) nor the lineup-write API itself (`BACKLOG-178`) is actually coupled to the real competition/match config system for `playersPerSide` — one hardcodes a wrong default client-side, the other accepts any starter count server-side with no cross-check at all. Confirmed via Richard's own question: match/competition config is not genuinely wired end-to-end into lineup publishing today, on either the read side (this entry) or the write side (`BACKLOG-178`). Fixing both together, reading from the same `/api/matches/[id]/config` source of truth on both the UI and the API, is the coherent single fix rather than two independent patches.
+
 **Found:** session 47E, Richard's own question about whether competition match settings actually couple through to lineup publishing for friendlies specifically.
+
+---
+
+### BACKLOG-184 — Football's In-App Lineup Editor Bypasses the Admin Page's Own Publish-Lock/Unlock RBAC
+
+**Status:** OPEN — found session 47E, not fixed (flagged at the time, filing deferred to session close — this is that filing)
+**Priority:** MEDIUM — real RBAC inconsistency, not a privilege escalation (a logger already has legitimate write access to lineups; this is about which of two rules applies, not unauthorized access)
+
+**Problem:** `src/app/admin/match-lineups/page.tsx` enforces a real lock: if a lineup was already published by an admin and not explicitly unlocked (`homeLineupStatus?.publishedByRole === 'admin' && !homeLineupStatus?.unlocked`), a non-admin (logger) is blocked from editing it there — `isDisabled` gates the picker, and the page is also entirely inaccessible to a logger once the match is no longer `UPCOMING`. But `FootballLogger.tsx`'s own in-app lineup editor (`handleEditLineup`/`saveLineupDraft`, triggered from inside the logger's own match view) has zero equivalent check — it POSTs straight to the same `/api/matches/[id]/lineup` endpoint with no `publishedByRole`/`unlocked` awareness at all. A logger can bypass the admin's lock entirely just by using the in-app editor instead of the admin page — the two football lineup-editing surfaces enforce genuinely different rules for the exact same underlying data.
+
+**Fix (not built):** either (a) have `FootballLogger.tsx` fetch the current lineup-publish status before allowing an edit and apply the same lock check the admin page uses, or (b) if the in-app editor is meant to always be logger-writable regardless of admin lock (a legitimate design choice — the "lock" might be intended only for the dedicated admin tool, not the working logger interface), then update the admin page's own copy/UX to make that explicit instead of implying a lock that doesn't universally hold.
+
+**Found:** session 47E, while confirming the RBAC model for a Richard question about how football's admin-vs-logger lineup permissions actually work — surfaced as a byproduct, not something either surface was directly being worked on.
 
 ---
 
