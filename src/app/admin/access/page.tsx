@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
+import { FeatureGate } from '@/components/admin/FeatureGate';
 import {
     Shield,
     Users,
@@ -33,6 +34,14 @@ interface UsersData {
 }
 
 export default function AccessControlPage() {
+    return (
+        <FeatureGate flagKey="features.usermanagement.enabled" featureName="User Management">
+            <AccessControlPageContent />
+        </FeatureGate>
+    );
+}
+
+function AccessControlPageContent() {
     const [data, setData] = useState<UsersData | null>(null);
     const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');

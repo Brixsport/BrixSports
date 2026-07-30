@@ -23,6 +23,7 @@ import {
 } from '@/components/ui/select';
 import { toast } from 'sonner';
 import MobileImageUpload from '@/components/ui/mobile-image-upload';
+import { FeatureGate } from '@/components/admin/FeatureGate';
 
 // Payment tiers with allowed positions and sizes
 const PAYMENT_TIERS = {
@@ -70,6 +71,14 @@ interface Advertisement {
 }
 
 export default function AdvertisementsAdmin() {
+    return (
+        <FeatureGate flagKey="features.ads.enabled" featureName="Ads">
+            <AdvertisementsAdminContent />
+        </FeatureGate>
+    );
+}
+
+function AdvertisementsAdminContent() {
   const [ads, setAds] = useState<Advertisement[]>([]);
   const [loading, setLoading] = useState(true);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
