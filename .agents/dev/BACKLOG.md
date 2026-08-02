@@ -5834,7 +5834,7 @@ Filed together, same investigation: a `code-reviewer` agent pass explicitly inde
 
 ### BUG-134 — Basketball's Foul System Is Structurally Unenforced (Disqualification, Team Fouls, Bonus, Technical-Foul Miscounting)
 
-**Status:** SHIPPED — 2026-07-30 (session 47E), commit `697592e`. Minimal scope only, Richard's own explicit call: sub-finding 1 (disqualification) fixed; sub-findings 2-4 (team-foul tracking/bonus, technical-foul miscount) deliberately deferred, filed as `BACKLOG-166`.
+**Status:** RESOLVED — 2026-07-30, commit `697592e` (session 47E), live-tested session 47F. Minimal scope only, Richard's own explicit call: sub-finding 1 (disqualification) fixed; sub-findings 2-4 (team-foul tracking/bonus, technical-foul miscount) deliberately deferred, filed as `BACKLOG-166`.
 **Priority:** HIGH — a real basketball match cannot be officiated correctly through this logger today; this is a domain-correctness gap, not an edge case
 
 **Fix applied, sub-finding 1 only:** `getPersonalFoulCount()`/`isFouledOut()` in `BasketballLogger.tsx`, derived from local event state (`events.filter(e => e.type === 'Foul' && e.playerId === playerId).length >= foulDisqualifyAt`) — matches how all six foul button labels already collapse into one `type: 'Foul'`/`personalFouls` DB column today, so no new miscounting introduced. `foulDisqualifyAt` itself was already sitting unused in `config/route.ts`'s `SPORT_DEFAULTS.basketball` (a past session had already done the config planning, just never wired the enforcement) — now actually read into local state on mount. Wired into two enforcement points: the event player-picker disables a fouled-out player with a visible "FOULED OUT" tag instead of silently allowing more actions logged against them, and the sub-in bench pool excludes them outright (this is also `BUG-136`'s fix, see below).
@@ -5843,9 +5843,9 @@ Filed together, same investigation: a `code-reviewer` agent pass explicitly inde
 
 **Evidence:**
 - Commit: `697592e`
-- Verified by: `npx tsc --noEmit` clean (zero new errors on `BasketballLogger.tsx`)
-- Observed result: not yet live-tested (no real match run against the fouled-out gate)
-- Pending items: live test — log 5 personal fouls against one player, confirm the player-picker shows them disabled/"FOULED OUT" and the sub-in modal excludes them from the bench pool
+- Verified by: live test against a Vercel preview deployment, real logger session, a real 5-starter + bench lineup set via `/api/matches/[id]/lineup` (so the sub-in picker had a genuine bench to test against — the first attempt, before setting a real lineup, hit `BUG-139`'s "no persisted lineup = everyone's a starter, zero bench" fallback, which made a bench-exclusion test meaningless). Full detail in `RUNLOG.md`.
+- Observed result: logged 5 real Personal Foul events against a real starter (SALIMO) via the real player-picker. On the 5th, the very next picker open showed a red "FOULED OUT" tag and a disabled/greyed card for that player — confirmed via a fresh `read_page` accessibility-tree snapshot (not just a screenshot), so this is the real DOM state, not a stale render.
+- Pending items: none for sub-finding 1
 
 **Problem, four confirmed sub-findings, same root cause (no foul system beyond a single generic counter):**
 1. **No disqualification threshold anywhere.** `BasketballLogger.tsx:988-993` — all six foul buttons (Personal/Technical/Flagrant/Offensive/Shooting/Unsportsmanlike) call the same `handleEventClick('Foul')` with no subtype. No `personalFouls` counter is compared against any threshold anywhere in the component.
@@ -5859,7 +5859,7 @@ Filed together, same investigation: a `code-reviewer` agent pass explicitly inde
 
 ### BUG-135 — No Distinct Second-Overtime (OT2) Path — Quarter Number Never Advances Past `periodCount + 1`
 
-**Status:** SHIPPED — 2026-07-30 (session 47E), commit `d892b99`
+**Status:** SHIPPED — 2026-07-30 (session 47E), commit `d892b99`, still not live-tested (a genuine tied-OT1 scenario wasn't reached during session 47F's browser pass — logged fouls/subs/quarter transitions but didn't play a match through to a tied end-of-OT1)
 **Priority:** Medium — only matters for a match tied after OT1, real but rare
 
 **Problem:** both the end-of-regulation branch and the "Add Extra Time" button (`BasketballLogger.tsx:1738-1790`) unconditionally call `setQuarter(periodCount + 1)`. If OT1 ends still tied and a real OT2 is needed, re-triggering "Start Extra Time" re-runs the identical `setQuarter(periodCount + 1)` — already the current value, so quarter number never advances into a genuine OT2 state. `getCurrentPeriod()` returns the flat string `'OT'` for any `quarter > periodCount`, so OT1 and OT2 events would be stored with an identical `period` field, indistinguishable in `match_events` history.
@@ -5876,7 +5876,7 @@ Filed together, same investigation: a `code-reviewer` agent pass explicitly inde
 
 ### BUG-136 — Compound Risk: a Fouled-Out Player Can Be Subbed Back Onto the Court
 
-**Status:** SHIPPED — 2026-07-30 (session 47E), commit `697592e`, fixed in the same pass as BUG-134 (it was blocked on BUG-134's per-player foul tracking landing first, per this entry's own note)
+**Status:** RESOLVED — 2026-07-30, commit `697592e` (session 47E), live-tested session 47F. Fixed in the same pass as BUG-134 (it was blocked on BUG-134's per-player foul tracking landing first, per this entry's own note)
 **Priority:** HIGH — direct consequence of BUG-134, worth its own entry since the *substitution* side is a distinct fix location
 
 **Problem:** `handleSubIn` and the sub-in player-selection modal filtered only by `homeSubs`/`awaySubs` bench membership — no code path anywhere checked a player's foul count before allowing them back onto the court.
@@ -5885,9 +5885,9 @@ Filed together, same investigation: a `code-reviewer` agent pass explicitly inde
 
 **Evidence:**
 - Commit: `697592e`
-- Verified by: `npx tsc --noEmit` clean
-- Observed result: not yet live-tested
-- Pending items: live test — foul a player out, confirm they no longer appear in the sub-in bench pool
+- Verified by: live test against a Vercel preview deployment, same session as `BUG-134`'s evidence (real logger session, real 5-starter + bench lineup), full detail in `RUNLOG.md`
+- Observed result: the fouled-out player (SALIMO) turned out to be excluded even earlier than expected, in a stronger way than the entry's own fix description implies — his card in the sub-**out** picker (not just sub-in) was already disabled/unclickable once fouled out, so he could never even be moved to the bench in the first place, let alone selected to come back in. Confirmed by clicking his disabled card (no state change, modal stayed open) then clicking a different player successfully (modal responded normally) to rule out a broken/unresponsive modal. As a direct consequence, he correctly never appeared in the sub-in bench pool either (nothing to check there since he was never move-able to bench). A normal substitution flow (a non-fouled-out starter subbed for a real bench player) was also confirmed working correctly in the same session, to rule out this being a broken-substitution-flow false negative rather than a real exclusion.
+- Pending items: none
 
 ---
 
@@ -6011,7 +6011,7 @@ Filed together, same investigation: a `code-reviewer` agent pass explicitly inde
 
 ### ~~BACKLOG-141~~ — Real Server-Side Lineup Persistence for Basketball (Mirror Football's `/lineup` Endpoint)
 
-**Status:** SHIPPED — commit `415c5e4`, landed later the same session (47E) this entry was originally filed as deferred. **Status line never updated after the fix landed — found stale session 47F**, same failure class as `BUG-092`'s staleness (a fix landing without its own tracking entry being updated). Confirmed genuinely built via direct code read, session 47F: `BasketballLogger.tsx:437` fetches `GET /api/matches/[id]/lineup` on mount (comment explicitly cites `BACKLOG-141`), hydrates `homeStarters`/`awayStarters`/subs from the response, and `BasketballLogger.tsx:2137,2142` POSTs back to the same endpoint on lineup confirmation with visible failure-banner handling — exactly the fix this entry's own "Fix (not built)" section below describes. Not yet live-tested (verification pending, session 47F's broader pass).
+**Status:** RESOLVED — commit `415c5e4`, landed later the same session (47E) this entry was originally filed as deferred; live-tested session 47F. **Status line never updated after the fix landed — found stale session 47F**, same failure class as `BUG-092`'s staleness (a fix landing without its own tracking entry being updated). Confirmed genuinely built via direct code read, session 47F: `BasketballLogger.tsx:437` fetches `GET /api/matches/[id]/lineup` on mount (comment explicitly cites `BACKLOG-141`), hydrates `homeStarters`/`awayStarters`/subs from the response, and `BasketballLogger.tsx:2137,2142` POSTs back to the same endpoint on lineup confirmation with visible failure-banner handling — exactly the fix this entry's own "Fix (not built)" section below describes.
 **Priority:** Medium-High — the actual, complete fix for `BUG-139`'s resume-seeding gap; `BUG-139`'s shipped fix is a safe fallback, not this
 
 **Problem:** `BUG-139` (this session) fixed the immediate blocker — basketball's "Select Player" modal being permanently empty on any resumed/already-`LIVE` match — by seeding `homeStarters`/`awayStarters` from the full roster when they're empty on mount. That's a fallback, not a real fix: it means a resumed session can never distinguish the original 5 starters from the bench, for the rest of that session. Football doesn't have this problem because it persists lineups server-side: `FootballLogger.tsx` fetches `GET /api/matches/[id]/lineup` on every mount and calls `setLineups(lineupsData.lineups)`, so the real starters/bench split survives a refresh, a second logger joining, or any resume — basketball has no equivalent endpoint, no equivalent persisted column usage, and no equivalent fetch-on-mount.
@@ -6019,6 +6019,12 @@ Filed together, same investigation: a `code-reviewer` agent pass explicitly inde
 **Fix (not built):** build the basketball equivalent of football's lineup flow — persist `homeStarters`/`awayStarters` (or an equivalent starters/bench shape) to the server when a logger completes the in-app lineup wizard (the `matches.lineups` JSON column already exists and is already read by `src/lib/ratingsService.ts`'s `calculateAndSaveRatings`, so the shape is already partially spoken for — confirm compatibility before reusing it, or add a dedicated basketball lineup table/column if the shapes conflict), then fetch and seed from it on every mount, mirroring football's `GET /lineup` pattern exactly. Once this lands, `BUG-139`'s roster-fallback becomes a true last-resort (a match that was started before this feature existed) rather than the only mechanism.
 
 **Deferred:** real, separate feature-sized scope — not a same-session patch alongside tonight's critical-bug fixes. Explicitly named and filed per Richard's request, distinct from `BUG-139`'s already-shipped stopgap.
+
+**Evidence:**
+- Commit: `415c5e4`
+- Verified by: live test against a Vercel preview deployment — posted a real 5-starter + bench lineup via `POST /api/matches/[id]/lineup` for both teams, then loaded `BasketballLogger` fresh (full page navigation, not just a re-render) and opened the Foul player-picker. Full detail in `RUNLOG.md`.
+- Observed result: the picker showed exactly the 5 real posted starters (not the full 12-player roster `BUG-139`'s fallback would show), and the Substitution flow's "who's entering?" step showed the real 7-player bench — confirming both the GET-hydration and the starters/bench split genuinely work, not just the POST write path.
+- Pending items: none
 
 ---
 
@@ -6156,9 +6162,9 @@ No `clearTimeout` exists anywhere in the file. The effect that sets `stateManage
 
 ---
 
-### BACKLOG-143 — Basketball's Standalone "Assist" Event Is Invisible to the Box Score's `ast` Stat
+### ~~BACKLOG-143~~ — Basketball's Standalone "Assist" Event Is Invisible to the Box Score's `ast` Stat
 
-**Status:** SHIPPED — 2026-07-30 (session 47E), commit `4e5e76a`
+**Status:** RESOLVED — 2026-07-30, commit `4e5e76a` (session 47E), live-tested session 47F
 **Priority:** Low-Medium — rating calc is correct, box score display undercounts
 
 **Problem:** `BasketballLogger.tsx`'s standalone "Assist" button (~line 1096) creates a separate `type: 'Assist'` event. `calculatePlayerRating` correctly counts it (`+2`, ~line 190-192), but `calculateAdvancedStats`'s box-score `ast` field (~line 227) only counts embedded `assistPlayerId` fields on shot events — it never looks at standalone `Assist`-type events. A player credited with a standalone assist gets the rating bump but the box score under-reports their assist count.
@@ -6167,9 +6173,9 @@ No `clearTimeout` exists anywhere in the file. The effect that sets `stateManage
 
 **Evidence:**
 - Commit: `4e5e76a`
-- Verified by: `npx tsc --noEmit` clean (zero new errors)
-- Observed result: not yet live-tested (no real standalone-Assist-button event logged and cross-checked against the box score)
-- Pending items: live test — log a standalone Assist, confirm the box score's `ast` column increments for that player
+- Verified by: live test against a Vercel preview deployment, real logger session, real starters-only lineup, full detail in `RUNLOG.md`
+- Observed result: clicked the standalone "Assist" button for a real player (RICHARD), confirmed the event saved ("1 Events Recorded... ASSIST RICHARD" in the live event log), then switched to the Stats tab — `AST` column read `1` for that player, `PTS`/`REB` unaffected. Confirmed the increment was genuinely from the standalone-button path, not an embedded shot assist.
+- Pending items: none
 
 **Found:** session 47C, surfaced incidentally while re-investigating `BUG-143` above (tracing how basketball records assists to compare against football's chain).
 
@@ -6427,7 +6433,7 @@ No `clearTimeout` exists anywhere in the file. The effect that sets `stateManage
 
 ### BACKLOG-155 — Admin Feature Flags Are Fully Inert (Read Nowhere Else In The Codebase)
 
-**Status:** SHIPPED, server-side mechanics now live-tested — 2026-07-30, commit `74d9a2a` (session 47E), server-side pass verified session 47F. Client-side page-gating (does an admin page actually hide when its flag is off) still needs a browser test — see Evidence below. Ads/User Management/News/Transfers gated for real; Lineup Builder deliberately left ungated (Richard's call — it's one of only two real ways a lineup gets persisted, not a peripheral feature); Predictions/Polls/FPL flags remain equally inert, split out to `BACKLOG-177` (closed WONT FIX, session 47F — found moot, those pages are already fully backscoped independent of any flag).
+**Status:** RESOLVED — 2026-07-30 (session 47F), both server-side mechanics and client-side page-gating live-tested. Commit `74d9a2a` (session 47E). Ads/User Management/News/Transfers gated for real; Lineup Builder deliberately left ungated (Richard's call — it's one of only two real ways a lineup gets persisted, not a peripheral feature); Predictions/Polls/FPL flags remain equally inert, split out to `BACKLOG-177` (closed WONT FIX, session 47F — found moot, those pages are already fully backscoped independent of any flag).
 **Priority:** HIGH — directly undercuts the still-open Live Event Readiness Checklist item ("All 🔴 High Volatility features are disabled or hidden from the UI")
 
 **Fix:** built as a real, reusable system per Richard's explicit ask ("beyond just this live match test window"), not a one-off hide. `src/lib/featureFlags.ts` (`isFeatureEnabled(key)`, server-only, fails open on an unrecognized key or DB error), `src/app/api/feature-flags/route.ts` (thin public read surface for the gated pages, all of which are client components), `src/components/admin/FeatureGate.tsx` (shared wrapper, renders a plain disabled-state instead of children). Four new flag keys added to `DEFAULT_SETTINGS`, defaulted `false`. Caught and fixed mid-build: `admin/transfers/page.tsx` already had its own pre-existing content/wrapper split that an early version of this change blindly re-derived, introducing a duplicate function name — fixed by wrapping the existing structure instead of re-deriving it.
@@ -6436,7 +6442,7 @@ No `clearTimeout` exists anywhere in the file. The effect that sets `stateManage
 - Commit: `74d9a2a`
 - Verified by: live test against a Vercel preview deployment (`dev/verify-staging-feature-flags.mjs`), real admin session, full detail in `RUNLOG.md`
 - Observed result: `PATCH /api/admin/settings` (real admin JWT) correctly wrote `features.ads.enabled` from `false` to `true` in `system_settings` (confirmed via direct DB read, not just trusting the API response), and `GET /api/feature-flags` (the public read surface `FeatureGate` consumes) reflected the new value immediately. Value restored to baseline (`false`) afterward. **First attempt was a false PASS, caught and corrected same session:** `PATCH` initially 404'd ("Setting not found") because the preview's `system_settings` row for this key didn't exist yet — `initializeDefaultSettings()` only runs as a side effect of the `GET` handler, never `PATCH`. The read side (`/api/feature-flags`) happened to still show the "expected" value only because its own fail-open default for an unconfigured key (`true`) coincidentally matched — not because the write actually worked. Retried after calling `GET /api/admin/settings` first to seed the row; this time `PATCH` returned `200` and the DB value genuinely changed.
-- Pending items: whether the gated admin *pages* (client components using `FeatureGate`) actually hide their content when the flag reads `false` is not verified here — `FeatureGate` only resolves after client-side hydration + its own `fetch`, not observable from a server-side script. Genuinely needs a browser test: toggle each of the 4 gated flags off, load the corresponding admin page, confirm the disabled-state message renders instead of real content.
+- Pending items: none. Client-side gating confirmed via a real browser session against the Vercel preview (`brixsports-staging-pdspsljon-...`), a real injected admin JWT cookie, and `/admin/advertisements` (the "Ads" panel): with `features.ads.enabled: false`, the page rendered `FeatureGate`'s disabled state ("Ads is temporarily disabled... Re-enable it from Admin → Settings → Feature Flags"); toggled to `true` via a real `PATCH /api/admin/settings`, reloaded the same page, real content rendered ("Advertisements / Manage banner ads across the platform / Add Advertisement"). Both directions of the gate confirmed working. All flags reset to their documented defaults afterward (`dev/reset-feature-flags-to-defaults.mjs`) — verified via direct DB read.
 
 **Problem:** `src/app/admin/settings/page.tsx`'s feature-flag CRUD (fetching, editing, saving) genuinely works against a real `systemSettings` table. But all seven default settings — `system.maintenance.mode`, `system.registration.enabled`, `system.notifications.enabled`, `features.fpl.enabled`, `features.predictions.enabled`, `features.polls.enabled`, `features.transfers.enabled` (`src/app/api/admin/settings/route.ts:15-28`) — are **read nowhere else in the entire codebase**. Grepped every key string across `src/**`; only the settings page and its own API route reference them. Toggling "maintenance mode" or "Enable Transfer News" off changes a DB row with zero effect on anything a user or admin experiences — no route guard, no conditional render, no middleware check consults these values anywhere.
 
@@ -7018,5 +7024,47 @@ const allEvents = matchIds.length ? await db.select().from(matchEvents).where(in
 - Verified by: live re-test against the redeployed Vercel preview (`brixsports-staging-pdspsljon-...`) using `dev/verify-staging-backlog188.mjs` — the exact same request shape that produced the original `500` (no body, no auth)
 - Observed result: `DELETE /api/notifications/subscribe` with no body and no auth now returns `401 {"error":"Unauthorized"}` instead of `500`
 - Pending items: none
+
+---
+
+### ~~BUG-189~~ — Basketball Quarter Number Silently Resets to Q1 on Every Logger Remount, Despite the DB Correctly Holding the Real Period
+
+**Status:** RESOLVED — 2026-07-30 (session 47F)
+**Priority:** HIGH — a mobile logger's browser refreshing mid-match (or a second logger opening the same match) is a realistic, not edge-case, scenario; the practical effect is every event logged after the refresh gets mislabeled with the wrong `period` field
+
+**Problem:** Found live while testing the quarter-transition flow (End Quarter → Start Quarter 2 → ... → FT) on a real throwaway match. `matches.current_period` was confirmed correctly persisted server-side (`Q2`, direct DB read) after transitioning through it in the UI. But navigating away from the match and back (a full remount, same as a page refresh would trigger) showed **Quarter 1** again, clock reset to a fresh full countdown — the DB still correctly said `Q2` the whole time. Root cause, confirmed by direct code read: `BasketballLogger.tsx:35` — `const [quarter, setQuarter] = useState(1)` — a hardcoded initial value with zero hydration from the `match` prop anywhere in the file (confirmed via grep: zero occurrences of `match.currentPeriod` before this fix). The data was available the whole time — `/api/loggers/[id]/route.ts:32` uses a column-less `.select()` (full row), so `currentPeriod` was already reaching the client in the `match` object — the component just never read it. Existing code comment above `getCurrentPeriod()` already flagged a *related*, smaller gap ("quarterStartedAt resets to Date.now() on component mount... basketball has no mid-match-resume seeding at all yet") but that comment's own framing ("restarts *that* quarter's elapsed-time count") undersold the actual severity — the quarter *number* itself was also silently wrong, not just the in-quarter clock.
+
+**Fix:** added a mount-time hydration effect that parses `match.currentPeriod` (`'Qn'` or `'OTn'`) and sets `quarter`/`otNumber` accordingly, guarded by a ref to apply exactly once (and to wait until `periodCount` has loaded from match config, needed to convert an `'OTn'` label back into the internal `quarter` number: `periodCount + n`). Sentinel values (`'NOT_STARTED'`, `'FINISHED'`) and an absent field are left alone (fresh match, no hydration needed). Does **not** fix the smaller, already-documented, separately-scoped gap: the in-quarter clock still restarts a fresh full countdown on remount rather than resuming from the exact elapsed time — that needs a persisted "period started at" timestamp, a larger feature, left as-is per the existing comment's own scoping. `src/components/BasketballLogger.tsx`.
+
+**Evidence:**
+- Commit: pending (session 47F, not yet pushed at time of filing)
+- Verified by: `npx tsc --noEmit` clean (49 pre-existing errors, none new)
+- Observed result: not yet re-verified live against a fresh preview after the fix (the bug itself was caught live; the fix has only been confirmed via code read + tsc so far)
+- Pending items: live re-test — resume a mid-quarter match after remount, confirm the quarter picker shows the real current quarter, not Q1
+
+**Found:** session 47F, live-testing the quarter-transition flow (Q1→Q2→Q3→Q4→FT) against a Vercel preview deployment, per Richard's request to add it to the verification pass.
+
+---
+
+### ~~BUG-190~~ — Admin Settings Page: Every Boolean Setting's Heading Literally Read "enabled" (Key-Suffix Bug), Plus a Toggle+Save UX Redesign
+
+**Status:** RESOLVED — 2026-07-30 (session 47F)
+**Priority:** MEDIUM — real display bug affecting every boolean setting in the panel; the UX confusion it caused was mistaken for a broken toggle mid-session before being root-caused
+
+**Problem, two parts found together while investigating a "toggles don't seem to work" report:**
+1. **Real bug:** `SettingItem`'s heading rendered `{setting.key.split('.').pop()}` — for any key ending in `.enabled` (every feature flag, plus `system.registration.enabled`/`system.notifications.enabled`), that literally always evaluates to the string `"enabled"`, displayed as the heading above every single boolean row regardless of which setting it actually was. Confirmed live via screenshot: `Feature Flags` section showed eight rows each headed "enabled" with no way to tell them apart except the description text below.
+2. **Not a bug, but real root cause of the toggle-confusion report:** the toggle-click and PATCH-save mechanisms both worked correctly (confirmed via `read_page` DOM snapshots showing "Modified"/"Save" appearing correctly after a click, and a DB read confirming the write landed). The actual failure in the reported session was an **expired test-admin session** (a 5-minute test JWT), returning a real `401` on the PATCH — correct behavior for an unauthenticated caller. But the only failure feedback was a small "Error" pill at the very top of the page, easy to miss while scrolled down mid-toggle on a long settings list — a genuine, separate UX gap even though the underlying mechanism was sound.
+
+**Fix:**
+1. Removed the broken heading for boolean settings entirely (kept for number/text settings, where `key.split('.').pop()` gives a real identifier like `weight`/`decay`/`baseline`).
+2. Redesigned boolean settings to auto-save immediately on toggle click (`BooleanSettingItem`, a new self-contained component) instead of the previous two-step "toggle locally, remember to click a separate Save button" flow — standard convention for boolean settings panels, and it directly removes the missed-step failure mode. Inline pending/success/error feedback now renders right next to the toggle itself, not just in a page-top banner. Number/text settings (algorithm weights etc.) keep the existing pending-change + explicit-Save flow, since auto-saving every keystroke would be noisy.
+
+**Evidence:**
+- Commit: pending (session 47F, not yet pushed at time of filing)
+- Verified by: live test against a Vercel preview deployment, real injected admin session, full detail in `RUNLOG.md`
+- Observed result: toggled `features.ads.enabled` off on `/admin/advertisements` — `FeatureGate`'s disabled state rendered correctly (already-existing behavior, re-confirmed as a side effect of this investigation, see `BACKLOG-155`). The auto-save redesign itself was verified via `tsc` clean + code read; the specific new `BooleanSettingItem` component was not yet re-tested live after this fix landed (the investigation that found it happened against the *old* two-step UI, before the redesign).
+- Pending items: live re-test the new auto-save toggle UI specifically (click a toggle, confirm no separate Save button appears, confirm inline success/error feedback shows next to the control)
+
+**Found:** session 47F, investigating Richard's live report that toggling feature flags in `/admin/settings` "wasn't working."
 
 ---
