@@ -7070,3 +7070,22 @@ const allEvents = matchIds.length ? await db.select().from(matchEvents).where(in
 **Found:** session 47F, investigating Richard's live report that toggling feature flags in `/admin/settings` "wasn't working."
 
 ---
+
+### ~~BUG-191~~ — Every Basketball Overtime Transition Since `BUG-135` Shipped Silently Fails to Persist (`PATCH /api/matches/[id]` Rejects Numbered `OTn` With a 422)
+
+**Status:** RESOLVED — 2026-08-02 (session 47F)
+**Priority:** CRITICAL — actively blocks the OT2 live-test Richard explicitly asked for, and is a real, live regression: any tied game reaching overtime today fails to persist its period server-side, Saturday-relevant
+
+**Problem:** Found live while running the OT2 test-plan item that PR #13 had left unchecked. Progressed a throwaway match through Q1→Q4 tied 0-0, triggered "Start Extra Time (OT1)" — the UI immediately showed a real error banner: `"Failed to save OT1 transition (422) — period may not persist on refresh."` Root cause: `src/app/api/matches/[id]/route.ts`'s `VALID_PERIODS` allowlist (added later, presumably as part of `BUG-147`'s security sweep, per its own comment "currentPeriod had no enum validation at all... cheap to close") contains only the flat string `'OT'` — but `BUG-135` (session 47E) had already changed basketball's OT period label to numbered `` `OT${otNumber}` `` (`OT1`, `OT2`, ...) before this allowlist was ever written. `BasketballLogger.tsx`'s only two call sites (`persistPeriodTransition`) confirmed via grep to always send `` `OT${nextOtNumber}` `` or `` `Q${nextQuarter}` ``, never the flat `'OT'` string that was actually in the allowlist — so every real OT transition has 422'd since `BUG-135` shipped, silently (relative to a casual glance — the error banner exists per `BUG-142`'s error-visibility work, but is easy to miss) failing to update `matches.current_period` past whatever it was pre-OT. Compounds with `BUG-189`'s new hydration fix in an unfortunate way: since that fix now trusts the persisted `current_period` on mount, a page refresh during a real (broken) OT would hydrate back to the stale pre-OT quarter instead of even falling back cleanly.
+
+**Fix:** replaced the flat `'OT'` allowlist entry with a regex check (`/^OT\d+$/`) alongside the existing fixed list, matching the unbounded nature of a real OT count (a match can theoretically reach OT3+). `src/app/api/matches/[id]/route.ts`.
+
+**Evidence:**
+- Commit: pending (session 47F, not yet pushed at time of filing)
+- Verified by: `npx tsc --noEmit` clean (49 pre-existing errors, none new)
+- Observed result: caught live via the real error banner during the OT2 test; fix applied same session, not yet re-verified live post-fix (blocking finding, fixed and pushed immediately rather than completing the full OT1→OT2 tied-game test first)
+- Pending items: live re-test — resume the OT2 test end-to-end: confirm OT1 now persists without the 422 banner, confirm a second tied OT triggers `OT2` and that value also persists and round-trips correctly through `BUG-189`'s hydration on a remount
+
+**Found:** session 47F, live-testing the OT2 scenario against a fresh Vercel preview build, per Richard's explicit request to get it tested.
+
+---
