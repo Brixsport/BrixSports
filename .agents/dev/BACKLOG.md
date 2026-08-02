@@ -7037,10 +7037,12 @@ const allEvents = matchIds.length ? await db.select().from(matchEvents).where(in
 **Fix:** added a mount-time hydration effect that parses `match.currentPeriod` (`'Qn'` or `'OTn'`) and sets `quarter`/`otNumber` accordingly, guarded by a ref to apply exactly once (and to wait until `periodCount` has loaded from match config, needed to convert an `'OTn'` label back into the internal `quarter` number: `periodCount + n`). Sentinel values (`'NOT_STARTED'`, `'FINISHED'`) and an absent field are left alone (fresh match, no hydration needed). Does **not** fix the smaller, already-documented, separately-scoped gap: the in-quarter clock still restarts a fresh full countdown on remount rather than resuming from the exact elapsed time — that needs a persisted "period started at" timestamp, a larger feature, left as-is per the existing comment's own scoping. `src/components/BasketballLogger.tsx`.
 
 **Evidence:**
-- Commit: pending (session 47F, not yet pushed at time of filing)
-- Verified by: `npx tsc --noEmit` clean (49 pre-existing errors, none new)
-- Observed result: not yet re-verified live against a fresh preview after the fix (the bug itself was caught live; the fix has only been confirmed via code read + tsc so far)
-- Pending items: live re-test — resume a mid-quarter match after remount, confirm the quarter picker shows the real current quarter, not Q1
+- Commit: `4b493ec`
+- Verified by: live re-test against the branch's fresh Vercel preview (`brixsports-staging-git-feature-baske-029e09-...`, deployed from PR #13's push), reusing the exact throwaway match this bug was originally found on (still sitting at `current_period: 'Q2'` in the DB from the original repro, never having been reset)
+- Observed result: navigated to the match fresh (full remount, real logger session), screenshot confirmed Quarter **2** highlighted as active in the quarter selector — not Quarter 1. Matches the DB's `current_period` exactly.
+- Pending items: none
+
+**BUG-190 note:** filed and fixed in the same session (settings page "enabled" label + auto-save toggle redesign) — its underlying toggle/save mechanism was proven correct earlier this session (before the redesign, real PATCH + DB read confirmed), but the redesigned auto-save UI itself has not yet been re-tested live post-fix; an admin-session cookie injection attempt on this same branch preview didn't stick (logger-session injection via `localStorage` worked fine on this identical URL for this entry's own retest above, so this looks like a branch-alias-specific quirk with cookie-based admin sessions, not an app regression) — left as `not yet re-tested live` rather than force an inconclusive result.
 
 **Found:** session 47F, live-testing the quarter-transition flow (Q1→Q2→Q3→Q4→FT) against a Vercel preview deployment, per Richard's request to add it to the verification pass.
 
