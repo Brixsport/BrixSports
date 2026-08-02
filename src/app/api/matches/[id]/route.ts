@@ -520,14 +520,22 @@ export async function PATCH(
         // reachable only by an authenticated, assigned logger/admin so low exploitability,
         // but cheap to close. No DB-level constraint either (schema.ts:340, plain text
         // column), so this is the only gate.
+        // BUG-191: the flat 'OT' entry was stale the moment this list was written --
+        // BUG-135 (session 47E) already changed basketball's OT label to numbered
+        // OT1/OT2/etc, but this allowlist was added later without picking that up.
+        // Confirmed live, session 47F: every real OT transition since BUG-135 shipped
+        // has 422'd here, visibly failing to persist (BasketballLogger.tsx only ever
+        // sends `OT${n}`, never the flat string). Matched via regex instead of a fixed
+        // list since the OT number is unbounded (a match can theoretically reach OT3+).
         const VALID_PERIODS = [
             'NOT_STARTED', 'FIRST_HALF', 'HALF_TIME', 'SECOND_HALF',
             'EXTRA_TIME_1', 'EXTRA_TIME_BREAK', 'EXTRA_TIME_2', 'PENALTY_SHOOTOUT',
             'FINISHED', 'SUSPENDED',
-            'Q1', 'Q2', 'Q3', 'Q4', 'OT',
+            'Q1', 'Q2', 'Q3', 'Q4',
         ] as const;
         if (body.currentPeriod !== undefined) {
-            if (!VALID_PERIODS.includes(body.currentPeriod)) {
+            const isNumberedOT = /^OT\d+$/.test(body.currentPeriod);
+            if (!VALID_PERIODS.includes(body.currentPeriod) && !isNumberedOT) {
                 return NextResponse.json({ error: 'Invalid currentPeriod value' }, { status: 422 });
             }
             updateData.currentPeriod = body.currentPeriod;
