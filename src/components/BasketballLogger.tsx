@@ -557,6 +557,36 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
         fetchConfig();
     }, [match.id]);
 
+    // Hydrate quarter/otNumber from the persisted match.currentPeriod on mount --
+    // without this, a logger refreshing mid-match (or a second logger joining) always
+    // started back at "Quarter 1" client-side even though the DB correctly holds the
+    // real current period (confirmed live, session 47F: current_period stayed 'Q2'
+    // server-side across a remount while the UI silently reset to Q1). Worse than the
+    // already-documented clock-restart gap above `getCurrentPeriod` -- a wrong
+    // `quarter` here mislabels every event logged after the refresh with the wrong
+    // period, not just an inaccurate in-quarter clock. Guarded to apply once, after
+    // `periodCount` has loaded from config (needed to convert an 'OTn' label back to
+    // the internal quarter number), not on every periodCount change thereafter.
+    const hydratedPeriodRef = useRef(false);
+    useEffect(() => {
+        if (hydratedPeriodRef.current) return;
+        const period = match.currentPeriod;
+        if (!period || period === 'NOT_STARTED' || period === 'FINISHED') return;
+        const otMatch = period.match(/^OT(\d+)$/);
+        if (otMatch) {
+            const n = Number(otMatch[1]);
+            setOtNumber(n);
+            setQuarter(periodCount + n);
+            hydratedPeriodRef.current = true;
+        } else {
+            const qMatch = period.match(/^Q(\d+)$/);
+            if (qMatch) {
+                setQuarter(Number(qMatch[1]));
+                hydratedPeriodRef.current = true;
+            }
+        }
+    }, [match.id, periodCount]);
+
     // Sync events with other loggers periodically
     useEffect(() => {
         if (!isConnected || !currentLogger) return;
