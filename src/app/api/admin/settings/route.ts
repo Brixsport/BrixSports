@@ -33,10 +33,10 @@ const DEFAULT_SETTINGS = {
     // CLAUDE.md's own Live Event Readiness Checklist calls for these gated/hidden
     // before any public match day; defaulting to false means they gate closed
     // automatically rather than depending on someone remembering to flip them.
-    'features.ads.enabled': { value: 'false', type: 'boolean', category: 'features', description: 'Enable Ads admin panel (high volatility, untested under load)' },
-    'features.lineupbuilder.enabled': { value: 'false', type: 'boolean', category: 'features', description: 'Enable Lineup Builder admin panel (high volatility, marked NEW)' },
-    'features.usermanagement.enabled': { value: 'false', type: 'boolean', category: 'features', description: 'Enable User Management / Access Control admin panel (intersects BUG-002)' },
-    'features.news.enabled': { value: 'false', type: 'boolean', category: 'features', description: 'Enable News (admin + public pages, intersects BUG-006 XSS history)' },
+    'features.ads.enabled': { value: 'false', type: 'boolean', category: 'features', description: 'Enable Ads' },
+    'features.lineupbuilder.enabled': { value: 'false', type: 'boolean', category: 'features', description: 'Enable Lineup Builder' },
+    'features.usermanagement.enabled': { value: 'false', type: 'boolean', category: 'features', description: 'Enable User Management / Access Control admin panel' },
+    'features.news.enabled': { value: 'false', type: 'boolean', category: 'features', description: 'Enable News' },
 };
 
 // Initialize default settings in database if they don't exist
