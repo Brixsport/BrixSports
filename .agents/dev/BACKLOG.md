@@ -5940,10 +5940,10 @@ Filed together, same investigation: a `code-reviewer` agent pass explicitly inde
 **Fix:** rewrote the derivation block to match the real event-type strings, track Made vs. Attempted separately (every shot-type event counts as an attempt; `value > 0` marks a make — the same convention already correct in `calculateAdvancedStats` and in `BUG-133`'s per-player fix), and added the three percentage fields (`Math.round(made/attempted*100)`, `0` when no attempts). Field names changed from `homeFieldGoals`/`homeThreePointers`/`homeFreeThrows` to `homeFieldGoalsMade`/`homeFieldGoalsAttempted`/etc. (and equivalents for 3PT/FT) to actually distinguish made from attempted, which the old names never could. `LiveStats.tsx` (the other real consumer of these specific fields, three `StatBar`s literally labeled "Field Goals/3-Pointers/Free Throws Made") updated to read the new field names — confirmed via grep this was the only other consumer of the renamed fields; `BasketballMatchOverlay.tsx`'s percentage reads and the type declaration (`src/types/index.ts`, already declared `fieldGoalPercentage?: [number, number]` etc. — this fix was already anticipated there) needed no changes. Files: `src/app/api/matches/[id]/route.ts`, `src/components/LiveStats.tsx`.
 
 **Evidence:**
-- Commit: pending (session 47G, not yet pushed)
-- Verified by: `npx tsc --noEmit` — 49 pre-existing errors (same baseline), zero new; logic independently replicated in a throwaway script against `browser-test-47f--kwabip-`'s real `match_events` (not the live deployed route, since this fix isn't pushed/redeployed yet)
-- Observed result: computed stats cross-checked exactly against the match's real DB score — home 1-for-1 field goal (2 pts, matches `home_score: 2`), away 3-for-3 field goals including 2 threes (2+3+3=8 pts, matches `away_score: 8`), `fieldGoalPercentage: [100, 100]`, `threePointPercentage: [0, 100]` (home had zero 3PT attempts, correctly renders 0% rather than NaN)
-- Pending items: live re-test against the actual deployed route once pushed and redeployed — this session's evidence is logic-verified against real data, not yet route-verified end-to-end
+- Commit: `8f9b189`
+- Verified by: `npx tsc --noEmit` clean at fix time; logic independently replicated in a throwaway script against real data before pushing; then live-verified against the actual deployed route (`GET /api/matches/browser-test-47f--kwabip-`) on a fresh Vercel preview after redeploy
+- Observed result: the deployed route's real JSON response matched the pre-push manual computation exactly — `fieldGoalPercentage: [100, 100]`, `threePointPercentage: [0, 100]`, `homeFieldGoalsMade: 1`/`awayFieldGoalsMade: 3`, all Made/Attempted counts correct, consistent with the match's real `home_score: 2`/`away_score: 8`
+- Pending items: none
 
 **Found:** session 47D, by a background audit agent. Escalated and fixed session 47G, prompted by Richard's live report that the logger page's stats numbers needed a factual-accuracy check.
 
@@ -7114,18 +7114,18 @@ const allEvents = matchIds.length ? await db.select().from(matchEvents).where(in
 Files: `src/components/BasketballLogger.tsx`, `src/app/page.tsx`.
 
 **Evidence:**
-- Commit: pending (session 47G, not yet pushed)
-- Verified by: `npx tsc --noEmit` — 49 pre-existing errors (same baseline), zero new, zero in either changed file
-- Observed result: both bugs reproduced live pre-fix (screenshot/DOM read of the deployed preview showed `1 2 3 4` unhighlighted during a confirmed `OT2` match, and a visible orange "SEMI-FINALS" badge on the same non-semifinal friendly match); fixes applied and type-checked, not yet re-deployed to confirm visually post-fix (preview still serves the pre-fix build until pushed)
-- Pending items: visual re-confirm once pushed and preview redeploys
+- Commit: `7cd4407`
+- Verified by: `npx tsc --noEmit` clean at fix time; live re-test session 47G against a fresh Vercel preview after redeploy
+- Observed result: both bugs reproduced live pre-fix, then confirmed fixed post-deploy — no "Semi-Finals" badge on the friendly match, header correctly reads "Overtime" with a highlighted `3` badge during a confirmed `OT3` match, "End Overtime" button label correct. **One unreproduced anomaly, not escalated to a new bug:** the very first mount after a fresh token injection once showed the OT badge as `1` instead of `3` (a real screenshot) — two subsequent fresh mounts, plus Richard's own independent check, all showed `3` correctly. Not chased further given it didn't reproduce.
+- Pending items: none for the filed scope. See the note above re: the one unreproduced badge anomaly if it resurfaces.
 
 **Found:** session 47G — part 1 live-verifying `BUG-135`/`BUG-191`'s OT2 fix; part 2 via a background audit agent dispatched after Richard's live report, confirmed via direct DOM read on the same preview.
 
 ---
 
-### BUG-193 — Offline-Queue Write Can Silently Lose an Event With No Backing Anywhere, if `BrixsportAdminDB` Was Ever Opened Without Its Stores First
+### ~~BUG-193~~ — Offline-Queue Write Can Silently Lose an Event With No Backing Anywhere, if `BrixsportAdminDB` Was Ever Opened Without Its Stores First
 
-**Status:** SHIPPED — 2026-08-03 (session 47G), fix applied same session Richard gave the go-ahead, not yet live-tested (would need a redeploy to exercise the actual compiled `admin-offline-queue.ts`/`sw-admin.js`)
+**Status:** RESOLVED — 2026-08-03 (session 47G), live-tested against a fresh Vercel preview after redeploy
 **Priority:** Medium — narrow precondition, but when it hits, the failure mode is exactly the "ghost state" pattern this project's own `known-issues.md` already flags as a recurring anti-pattern (UI State Is Not DB State), and there is currently no recovery path for the logger once it happens
 
 **Problem:** while live-testing `BUG-142`'s offline queue this session, one forced-failure attempt hit `Failed to queue event: NotFoundError: Failed to execute 'transaction' on 'IDBDatabase': One of the specified object stores was not found` — the network POST correctly failed, `recordEvent`'s catch block correctly attempted to fall back to `queueOfflineEvent()`, but that write itself threw because the already-open `BrixsportAdminDB` handle had zero object stores. Root cause: IndexedDB only runs `onupgradeneeded` when the requested version is higher than the database's current stamped version — if `BrixsportAdminDB` is ever opened at version 1 by *anything* that doesn't define the `pendingMatchEvents`/`pendingAdminChanges`/`offlineMatches` stores (a stray extension, a debug script, or — as reproduced this session — a diagnostic tool calling `indexedDB.open(dbName)` with no version argument before the real app code gets there), the database is permanently stamped at v1 with no stores, and neither `admin-offline-queue.ts`'s `openAdminDB()` nor `sw-admin.js`'s `openDB()` (both correctly define the stores in their own `onupgradeneeded`, confirmed via direct source read — this is not a schema-definition bug) will ever get a chance to create them for that browser profile again.
@@ -7135,10 +7135,10 @@ Files: `src/components/BasketballLogger.tsx`, `src/app/page.tsx`.
 **Fix:** both `admin-offline-queue.ts`'s `openAdminDB()` and `sw-admin.js`'s `openDB()` now check `objectStoreNames.contains(...)` for every required store after a non-upgrade open; if any are missing, the DB is closed, deleted, and reopened fresh (forcing a real `onupgradeneeded` this time) rather than silently handing back a broken connection. Chosen over a version-bump approach because a DB missing its stores has no readable rows worth preserving anyway — delete-and-recreate is simpler and just as safe. Both files updated together (Richard's explicit call, given they must agree on the recovery behavior) with the exact same store-creation logic factored into a named helper in each file (`createStores`/`createAdminDBStores`) rather than duplicated inline. `FootballLogger.tsx`'s own separate inline copy of this same DB-open logic (documented as an intentional, not-yet-migrated duplicate — see `admin-offline-queue.ts`'s file-level comment) was deliberately left untouched — out of this fix's scope, flagged here as a known follow-up gap if the same race is ever hit there.
 
 **Evidence:**
-- Commit: pending (session 47G, not yet pushed)
-- Verified by: `npx tsc --noEmit` — 49 pre-existing errors (same baseline), zero new, zero in either changed file
-- Observed result: not live-tested — the actual missing-store race can't be forced against this session's already-deployed preview build (it serves the pre-fix compiled JS until pushed and redeployed)
-- Pending items: once deployed, force the exact repro from this session (open `BrixsportAdminDB` at version 1 with no `onupgradeneeded`, confirming a subsequent `openAdminDB()`/`openDB()` call self-heals instead of throwing `NotFoundError`)
+- Commit: `e9ecb87`
+- Verified by: `npx tsc --noEmit` clean at fix time; live re-test session 47G against a fresh Vercel preview — deliberately recreated the exact broken precondition (deleted `BrixsportAdminDB`, reopened at version 1 with no `onupgradeneeded`, confirmed via direct read it had zero stores), then triggered a real forced-failure event write through the actual app UI
+- Observed result: console logged `[admin-offline-queue] BrixsportAdminDB missing expected stores, recreating` — the fix's own diagnostic line — confirming detection fired correctly. The DB was closed, deleted, and reopened with both stores present, and the event write that followed succeeded (`pendingMatchEvents` held 1 real row) instead of throwing `NotFoundError` as it did pre-fix. Chaining this to a full drain hit a stuck IndexedDB transaction in the test tab (a leftover open connection from this session's own repeated test cycling, not an app-level issue) — not re-attempted, since the drain mechanism itself was already independently proven with real DB evidence in `BUG-142`'s own testing.
+- Pending items: none for the self-heal itself. If it matters later, a clean single-pass self-heal-then-drain chain (without prior test-script interference) would close the loop fully.
 
 **Found:** session 47G, live-testing `BUG-142`'s offline queue against the deployed preview.
 

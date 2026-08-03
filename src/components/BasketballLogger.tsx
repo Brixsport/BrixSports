@@ -1478,62 +1478,6 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                             </div>
                         </div>
 
-                        {/* Event Log - Full Width Below Actions */}
-                        <div className="bg-white/5 border border-white/10 rounded-[24px] p-4">
-                            <div className="flex items-center justify-between mb-4">
-                                <h3 className="text-sm font-black uppercase tracking-widest flex items-center gap-2">
-                                    <Activity className="text-primary" size={16} />
-                                    Event Log
-                                </h3>
-                                <span className="text-xs text-white/40 font-bold">{events.length} Events Recorded</span>
-                            </div>
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 max-h-[400px] overflow-y-auto pr-2">
-                                {events.slice().reverse().map((event, idx) => {
-                                    const allPlayers = [...homePlayers, ...awayPlayers];
-                                    const team = event.teamId === match.homeTeamId ? homeTeam : awayTeam;
-                                    const player = allPlayers.find(p => p.id === event.playerId);
-                                    const assistPlayer = event.assistPlayerId ? allPlayers.find(p => p.id === event.assistPlayerId) : null;
-                                    return (
-                                        <motion.div
-                                            key={event.id}
-                                            initial={{ opacity: 0, scale: 0.95 }}
-                                            animate={{ opacity: 1, scale: 1 }}
-                                            className="bg-white/5 border border-white/10 rounded-xl p-3 hover:bg-white/10 transition-all"
-                                        >
-                                            <div className="flex items-center justify-between mb-2">
-                                                <span className="text-[10px] font-black uppercase tracking-widest text-white/40">
-                                                    {event.period ?? 'Q?'} - {Math.floor((event.second || 0) / 60)}:{String((event.second || 0) % 60).padStart(2, '0')}
-                                                </span>
-                                                {event.value && (
-                                                    <span className="text-xs font-display italic text-primary">+{event.value}</span>
-                                                )}
-                                            </div>
-                                            <div className="flex items-center gap-2">
-                                                {team?.logo ? (
-                                                    <img src={team.logo} alt={team.name} className="w-6 h-6 object-contain flex-shrink-0" />
-                                                ) : (
-                                                    <span className="text-lg flex-shrink-0">🏀</span>
-                                                )}
-                                                <div className="flex-1 min-w-0">
-                                                    <p className="text-xs font-black uppercase tracking-tight truncate">{event.type}</p>
-                                                    <p className="text-[10px] text-white/60 truncate">
-                                                        {event.detail || player?.name || 'Unknown'}
-                                                        {event.assistDetail && <span className="text-primary"> (Ast: {event.assistDetail})</span>}
-                                                    </p>
-                                                </div>
-                                            </div>
-                                        </motion.div>
-                                    );
-                                })}
-                                {events.length === 0 && (
-                                    <div className="col-span-full text-center py-12 text-white/20">
-                                        <Activity size={48} className="mx-auto mb-4 opacity-20" />
-                                        <p className="text-sm font-black uppercase tracking-widest">No events recorded yet</p>
-                                        <p className="text-xs mt-2">Start the match and record events to see them here</p>
-                                    </div>
-                                )}
-                            </div>
-                        </div>
                     </>
                 )}
 
