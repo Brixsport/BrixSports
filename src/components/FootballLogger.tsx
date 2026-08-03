@@ -4,54 +4,15 @@ import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Activity, Save, Undo2, Clock, Play, Pause, Settings, Lock as LockIcon, MessageSquare, AlertTriangle, Send } from 'lucide-react';
 
-// ── Offline queue helpers ─────────────────────────────────────────────────────
-// Write to BrixsportAdminDB.pendingMatchEvents — the same DB sw-admin.js drains.
-// Do NOT use offline-queue.ts / brixsport-offline.events — that DB has no reader.
-
-function openAdminDB(): Promise<IDBDatabase> {
-    return new Promise((resolve, reject) => {
-        const req = indexedDB.open('BrixsportAdminDB', 1);
-        req.onerror = () => reject(req.error);
-        req.onsuccess = () => resolve(req.result as IDBDatabase);
-        req.onupgradeneeded = (e) => {
-            // Mirror sw-admin.js schema so both sides agree on store shape.
-            const db = (e.target as IDBOpenDBRequest).result;
-            if (!db.objectStoreNames.contains('pendingMatchEvents')) {
-                const store = db.createObjectStore('pendingMatchEvents', { keyPath: 'id', autoIncrement: true });
-                store.createIndex('matchId', 'matchId', { unique: false });
-                store.createIndex('timestamp', 'timestamp', { unique: false });
-            }
-        };
-    });
-}
-
-async function queueOfflineEvent(matchId: string, data: object, token: string): Promise<void> {
-    const db = await openAdminDB();
-    return new Promise((resolve, reject) => {
-        const tx = db.transaction('pendingMatchEvents', 'readwrite');
-        const store = tx.objectStore('pendingMatchEvents');
-        // Row shape must match what syncMatchEvents() in sw-admin.js reads back:
-        // { matchId, data, token, timestamp }
-        const req = store.add({ matchId, data, token, timestamp: Date.now() });
-        req.onsuccess = () => resolve();
-        req.onerror = () => reject(req.error);
-    });
-}
-
-// Returns remaining token lifetime in seconds, or 0 if unreadable / already expired.
-// JWT TTL is 7 days (src/lib/auth.ts). Threshold for queueing: 30 min (1800s).
-function jwtSecondsRemaining(token: string): number {
-    try {
-        const payloadB64 = token.split('.')[1];
-        if (!payloadB64) return 0;
-        const decoded = JSON.parse(atob(payloadB64.replace(/-/g, '+').replace(/_/g, '/')));
-        if (typeof decoded.exp !== 'number') return 0;
-        return decoded.exp - Math.floor(Date.now() / 1000);
-    } catch {
-        return 0;
-    }
-}
-// ─────────────────────────────────────────────────────────────────────────────
+// BUG-194: this file used to carry its own inline copy of the offline-queue
+// helpers below (openAdminDB/queueOfflineEvent/jwtSecondsRemaining) -- a third
+// near-duplicate of the same contract BasketballLogger.tsx's BUG-142 fix was
+// explicitly written to avoid becoming. The inline copy also predated BUG-193
+// (basketball's fix for a real missing-IndexedDB-store race that could
+// silently and permanently break the queue) and never got it, since it lived
+// in a separate file. Importing from the shared module closes that gap here
+// too, for free, and removes the duplication.
+import { queueOfflineEvent, jwtSecondsRemaining } from '@/lib/admin-offline-queue';
 import { useAuth } from '@/hooks/useAuth';
 import { useMultiLogger } from '@/hooks/useMultiLogger';
 import { useWebSocket } from '@/hooks/useWebSocket';

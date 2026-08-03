@@ -7148,7 +7148,7 @@ Files: `src/components/BasketballLogger.tsx`, `src/app/page.tsx`.
 
 ### BUG-194 — `FootballLogger.tsx`'s Own Inline Offline-Queue Copy Has the Same `BUG-193` Missing-Store Vulnerability, Unfixed
 
-**Status:** OPEN — found session 47G, not fixed
+**Status:** SHIPPED (part 1 only) — 2026-08-03 (session 47G). Part 2 (queued period-transition/undo feature parity) deliberately deferred to the offline/cache pass — Richard's explicit call, not silently dropped.
 **Priority:** Medium — same class/severity as `BUG-193`; football's exposure window is real but narrower than basketball's currently was, since football only queues event POSTs (no `pendingAdminChanges` usage at all — see below)
 
 **Problem:** `FootballLogger.tsx`'s own inline `openAdminDB()` (lines ~11-26, never migrated to the shared `src/lib/admin-offline-queue.ts` module basketball now uses) resolves unconditionally in `onsuccess` with no `objectStoreNames.contains(...)` check — the exact pre-fix shape of `BUG-193`. If `BrixsportAdminDB` is ever stamped at version 1 without its stores (same triggers as `BUG-193`: a stray script, a stale SW version, diagnostic tooling), football's `queueOfflineEvent` will throw `NotFoundError` on every future offline event write forever, with the same "ghost state" consequence (local optimistic state never rolled back).
@@ -7157,11 +7157,15 @@ Files: `src/components/BasketballLogger.tsx`, `src/app/page.tsx`.
 - Football's inline copy also has **no `pendingAdminChanges` support at all** — no `queueAdminChange` equivalent, no store creation for it. Only event POSTs get offline-queue protection; period-transition PATCH (clock checkpoints, half/OT/penalty starts) and undo DELETE are all fire-and-forget with zero retry — undo specifically shows a blocking `alert()` and gives up on network failure, unlike basketball's queued-with-banner pattern.
 - DB version, store names, and row shapes otherwise agree between football's inline copy and the shared module (`BrixsportAdminDB` v1, matching `pendingMatchEvents` shape) — no other schema drift found beyond the `offlineMatches` gap already fixed under `BUG-193`.
 
-**Fix (not built — two-part recommendation from the audit):**
-1. **Small, low-risk piece**: swap football's inline `openAdminDB`/`queueOfflineEvent`/`jwtSecondsRemaining` for imports from `src/lib/admin-offline-queue.ts` — signatures already match exactly, only 2 call sites to change (`jwtSecondsRemaining` and `queueOfflineEvent` calls in the event-record catch block). Closes this bug and removes one of the three "parallel implementations" this project's own comments already flag as a maintenance trap. Estimated under an hour.
-2. **Larger, deferred piece**: bringing football to basketball's actual feature parity (queued period-transition/undo via `queueAdminChange`, drain-trigger wiring, non-blocking banners replacing the `alert()`) touches ~8-9 more call sites and is a real behavior change to the 🟡 Caution-tier "Match status transitions" flow — needs its own live-test session, not bundled into the mechanical part-1 swap.
+**Fix, part 1 (done):** removed `FootballLogger.tsx`'s inline `openAdminDB`/`queueOfflineEvent`/`jwtSecondsRemaining` (lines 11-54) entirely, replaced with `import { queueOfflineEvent, jwtSecondsRemaining } from '@/lib/admin-offline-queue'` — identical signatures at both of the file's 2 call sites (the token-TTL check and the queue call in the event-record catch block), no other changes needed. Closes this bug's exposure and removes one of the three "parallel implementations" this project's own comments already flag as a maintenance trap — `admin-offline-queue.ts` is now genuinely the single source of truth for both loggers' event-POST offline queueing, including `BUG-193`'s missing-store recovery.
 
-**Recommendation, per the audit:** do part 1 now (or in the next football-focused session), defer part 2 to a dedicated session with live re-testing of the match-status-transition flow afterward.
+**Fix, part 2 (deferred, Richard's explicit call):** bringing football to basketball's actual feature parity (queued period-transition/undo via `queueAdminChange`, drain-trigger wiring, non-blocking banners replacing the current blocking `alert()`) touches ~8-9 more call sites and is a real behavior change to the 🟡 Caution-tier "Match status transitions" flow — needs its own live-test session. Explicitly routed to the planned "offline/cache strategy pass, both sports together" / next football-focused session, not bundled into this mechanical swap.
+
+**Evidence (part 1):**
+- Commit: pending (session 47G, not yet pushed)
+- Verified by: `npx tsc --noEmit` — 49 pre-existing errors (same baseline), zero new, zero in `FootballLogger.tsx`
+- Observed result: import resolves to the exact same shared module `BasketballLogger.tsx` already uses (`@/lib/admin-offline-queue`), confirmed identical import path via grep. Not yet live-tested — this is a same-signature drop-in swap on already-proven code (the shared module itself was live-tested this session under `BUG-142`/`BUG-193`), so `tsc`-clean is treated as sufficient for this specific change; a live football event-queue test is still worth doing whenever football's own live-verification pass happens.
+- Pending items: live re-test of football's offline event queue specifically, whenever the football tier-0 pass runs.
 
 **Found:** session 47G, background audit dispatched to scope the football/basketball offline-queue consolidation ahead of the next session's planned "offline/cache strategy, both sports together" pass.
 
