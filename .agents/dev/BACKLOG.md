@@ -3955,9 +3955,9 @@ two SWs fight over the same registration scope.
 
 ---
 
-### BACKLOG-060 — SW Architecture Cleanup
+### ~~BACKLOG-060~~ — SW Architecture Cleanup
 
-**Status:** OPEN
+**Status:** SHIPPED — 2026-08-03 (session 47G), not yet live-tested (both files are plain `.js` outside the TS project, so `tsc` doesn't cover them — verified via `node --check` only)
 **Priority:** MEDIUM — quality improvement, not blocking
 **Filed:** 2026-06-16
 
@@ -3966,15 +3966,22 @@ Current SWs use blanket API caching — volatile data (live events) treated
 same as static data (team rosters). Cloudinary requests intercepted by SW
 unnecessarily, wasting Cache Storage quota.
 
-#### Fix
-- Skip res.cloudinary.com requests in both sw-user.js and sw-admin.js
-- Per-route API TTL strategy:
-  - Never cache: /api/matches/[id]/events (POST), /api/auth/*, /api/matches/[id]/config
-  - Network-first 30s stale: /api/matches, /api/competitions
-  - Stale-while-revalidate: /api/players, /api/teams
-- Retire sw.js after BACKLOG-059 audit confirms it's safe to remove
+#### Fix (done)
+- Both `sw-user.js` and `sw-admin.js`: added `isNeverCacheApi`/`isShortTtlApi`/`isStaleWhileRevalidateApi`/`isFreshEnough` helpers (identical in both files, mirroring the same the-two-sides-must-agree convention `BUG-193`'s own follow-up fix established for the shared IndexedDB schema) and rewrote the `/api/*` fetch branch into four buckets:
+  - **Never cache** (`/api/matches/[id]/events`, `/api/matches/[id]/config`, `/api/auth/*`): straight `fetch(request)`, no cache read or write at all.
+  - **Short-TTL network-first** (`/api/matches`, `/api/competitions`): network first; on failure, only serve a cached response if the cached `Response`'s own `Date` header is within 30s (`isFreshEnough`) — otherwise falls through to the existing offline/error response rather than silently serving stale livescore data.
+  - **Stale-while-revalidate** (`/api/players`, `/api/teams`): serves a cached copy instantly if present while refreshing it in the background (`event.waitUntil`); falls through to network directly on a cold cache.
+  - **Everything else under `/api/*`**: unchanged prior behavior (network-first, cache-fallback, no staleness check) — nothing uncategorized regresses.
+  - Order-sensitive: the never-cache patterns are checked before the short-TTL `/api/matches` pattern, since `/api/matches/[id]/events`/`/config` would otherwise also match the broader `/api/matches` prefix.
+- Both files: `res.cloudinary.com` requests now skip the SW's fetch handler entirely (`return` before the image-cache/static-asset logic), letting Cloudinary's own CDN serve them natively instead of double-caching through Cache Storage.
+- `sw.js` retirement: moot — the session 47D PWA audit already confirmed `public/sw.js` does not exist in this checkout (repo-wide search, zero matches), so there was nothing to retire.
 
-#### Depends on: BACKLOG-059
+#### Evidence
+- Verified by: `node --check` clean on both files (plain `.js`, not covered by `tsc`)
+- Observed result: not yet live-tested — needs a real preview with a genuine cold/warm cache cycle to confirm the never-cache/short-TTL/stale-while-revalidate branches each behave as designed, and to confirm Cloudinary requests no longer appear in the SW's Cache Storage entries
+- Pending items: live re-test on next preview redeploy — check Application → Cache Storage for `res.cloudinary.com` absence, and confirm a `/api/matches/[id]/events` GET never gets a cached response even when offline
+
+#### Depends on: BACKLOG-059 (already RESOLVED)
 
 
 ---
@@ -5630,16 +5637,22 @@ A skewed black "B" on the theme's `bg-primary` blue — never replaced with the 
 
 ---
 
-### BACKLOG-131 — PWA Install-Prompt System: Confirmed Bugs + Deferred Design Question
+### ~~BACKLOG-131~~ — PWA Install-Prompt System: Confirmed Bugs + Deferred Design Question
 
-**Status:** OPEN
+**Status:** SHIPPED (items 1-3) — 2026-08-03 (session 47G), not yet live-tested. The design question (below) remains genuinely deferred, not part of this fix.
 **Priority:** Medium (the confirmed bug) / not scoped (the design question)
 **Filed:** 2026-07-23 (session 47), Richard asked how the install-prompt trigger logic works today and whether a proper reminder system/algorithm is needed
 
-**Confirmed via code, not fixed (deliberately deferred to avoid scope creep):**
-1. `InstallPrompt.tsx`'s dismiss timestamp (`localStorage['pwa-install-dismissed']`) is **not namespaced per app type** — unlike the "installed" flag (`brix-${appType}-installed`), which is correctly scoped. Dismissing the install prompt on the viewer suppresses it for admin and logger too (and vice versa) for the full 7-day window. Directly undercuts this session's own work making the three roles feel like distinct apps.
-2. Stale comment/code mismatch: comment says "Show prompt after 30 seconds," actual code is `setTimeout(..., 5000)` (5s). Cosmetic, but misleading to a future reader.
-3. **Added session 47D (PWA audit):** `IOSInstallPrompt.tsx`/`IOSInstallBanner` have the identical un-namespaced bug for their own dismissal keys (`ios-install-dismissed`, `ios-banner-dismissed`) — not previously named in this ticket, which only called out `InstallPrompt.tsx`. Their "already installed" check (`brix-${appType}-installed`) is correctly namespaced, matching item 1's pattern exactly — same fix (namespace every dismissal/cooldown key by `appType`, not just the installed flag) closes both at once.
+**Confirmed via code, fixed this session:**
+1. `InstallPrompt.tsx`'s dismiss timestamp (`localStorage['pwa-install-dismissed']`) is **not namespaced per app type** — unlike the "installed" flag (`brix-${appType}-installed`), which is correctly scoped. Dismissing the install prompt on the viewer suppresses it for admin and logger too (and vice versa) for the full 7-day window. Directly undercuts this session's own work making the three roles feel like distinct apps. **Fixed:** key renamed to `brix-${appType}-install-dismissed`, matching the installed flag's own scoping.
+2. Stale comment/code mismatch: comment says "Show prompt after 30 seconds," actual code is `setTimeout(..., 5000)` (5s). Cosmetic, but misleading to a future reader. **Fixed:** comment corrected to "5 seconds."
+3. **Added session 47D (PWA audit):** `IOSInstallPrompt.tsx`/`IOSInstallBanner` have the identical un-namespaced bug for their own dismissal keys (`ios-install-dismissed`, `ios-banner-dismissed`) — not previously named in this ticket, which only called out `InstallPrompt.tsx`. Their "already installed" check (`brix-${appType}-installed`) is correctly namespaced, matching item 1's pattern exactly — same fix (namespace every dismissal/cooldown key by `appType`, not just the installed flag) closes both at once. **Fixed:** keys renamed to `brix-${appType}-ios-install-dismissed` and `brix-${appType}-ios-banner-dismissed`.
+
+**Evidence:**
+- Commit: pending (session 47G, not yet pushed)
+- Verified by: `npx tsc --noEmit` — 49 pre-existing errors (same baseline), zero new, zero in any `InstallPrompt`/`IOSInstallPrompt` file
+- Observed result: not yet live-tested — needs a real dismiss-on-one-role/confirm-still-shows-on-another walkthrough on a redeployed preview (logger and admin share `appType="admin"` already, by existing pre-BACKLOG-131 design — not a new gap this fix introduces, matches the pre-existing "installed" flag's own granularity)
+- Pending items: live re-test — dismiss the prompt on `/` (viewer), confirm it still shows on `/admin` and `/logger` afterward, and vice versa
 
 **Deferred, not scoped — Richard's broader design question:** should there be a dedicated system (e.g. a sliding-window reminder strategy — show once, escalate/re-show on a schedule if dismissed, per-role tuning) rather than the current flat "5s after event, 7-day dismiss cooldown" logic? Real product/UX design work, not a quick fix — needs its own session to actually design, not sketched under time pressure here.
 

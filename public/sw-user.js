@@ -34,6 +34,42 @@ const limitCacheSize = async (cacheName, maxSize) => {
     }
 };
 
+// BACKLOG-060: per-route API caching strategy. The fetch handler used to treat
+// every /api/* GET identically (network-first, cache-fallback, no staleness
+// check) -- fine for near-static data, actively wrong for a live match's
+// events/config, and wasteful for auth checks that must never read stale.
+const NEVER_CACHE_API_PATTERNS = [
+    /^\/api\/matches\/[^/]+\/events(\/|$|\?)/,
+    /^\/api\/matches\/[^/]+\/config(\/|$|\?)/,
+    /^\/api\/auth\//,
+];
+const SHORT_TTL_API_PATTERNS = [
+    /^\/api\/matches(\/|$|\?)/,
+    /^\/api\/competitions(\/|$|\?)/,
+];
+const STALE_WHILE_REVALIDATE_API_PATTERNS = [
+    /^\/api\/players(\/|$|\?)/,
+    /^\/api\/teams(\/|$|\?)/,
+];
+const SHORT_API_TTL_MS = 30 * 1000;
+
+const isNeverCacheApi = (pathname) => NEVER_CACHE_API_PATTERNS.some((re) => re.test(pathname));
+// Order matters: check NEVER_CACHE_API_PATTERNS first at the call site --
+// `/api/matches/[id]/events`/`/config` also match the broader
+// `/api/matches` short-TTL pattern below, and must be excluded from it.
+const isShortTtlApi = (pathname) => SHORT_TTL_API_PATTERNS.some((re) => re.test(pathname));
+const isStaleWhileRevalidateApi = (pathname) => STALE_WHILE_REVALIDATE_API_PATTERNS.some((re) => re.test(pathname));
+
+// A cached Response's own `Date` header (set by the original fetch, not by
+// this SW) is used as its staleness clock -- avoids needing a separate
+// timestamp metadata store just to answer "how old is this."
+const isFreshEnough = (cachedResponse, maxAgeMs) => {
+    if (!cachedResponse) return false;
+    const dateHeader = cachedResponse.headers.get('date');
+    if (!dateHeader) return false;
+    return (Date.now() - new Date(dateHeader).getTime()) <= maxAgeMs;
+};
+
 // Install event - cache static assets
 self.addEventListener('install', (event) => {
     console.log('[SW User] Installing Service Worker');
@@ -86,29 +122,95 @@ self.addEventListener('fetch', (event) => {
         return;
     }
 
-    // API requests - Network first, cache fallback
+    // API requests - per-route TTL strategy (BACKLOG-060). Volatile live-match
+    // data was previously cached identically to near-static data (teams,
+    // players), and a stale cache read on a match's live events/config could
+    // show a logger or viewer minutes-old state with no way to tell.
     if (url.pathname.startsWith('/api/')) {
+        // Never cache: always hit the network, no fallback read from cache.
+        // A stale read here is actively wrong, not just outdated -- auth state
+        // and a match's live config must reflect the current request, not a
+        // cached one, and event data is handled by its own dedicated logger
+        // offline-queue path (BUG-142/BUG-193), not this generic API cache.
+        if (isNeverCacheApi(url.pathname)) {
+            event.respondWith(fetch(request));
+            return;
+        }
+
+        // Stale-while-revalidate: near-static reference data (teams, players).
+        // Serve the cached copy instantly if present, refresh it in the
+        // background for next time; only hit the network directly on a cold
+        // cache.
+        if (isStaleWhileRevalidateApi(url.pathname)) {
+            event.respondWith(
+                caches.open(API_CACHE).then(async (cache) => {
+                    const cached = await cache.match(request);
+                    const networkFetch = fetch(request).then((response) => {
+                        if (response.status === 200) {
+                            cache.put(request, response.clone());
+                            limitCacheSize(API_CACHE, MAX_API_CACHE_SIZE);
+                        }
+                        return response;
+                    });
+                    if (cached) {
+                        event.waitUntil(networkFetch.catch(() => {}));
+                        return cached;
+                    }
+                    return networkFetch.catch(() => cached);
+                })
+            );
+            return;
+        }
+
+        // Short-TTL network-first (matches, competitions): prefer a live
+        // network read; on failure, only serve a cached response if it's
+        // still within SHORT_API_TTL_MS -- otherwise this is genuinely wrong
+        // data for a livescore page, not just "a bit old."
+        if (isShortTtlApi(url.pathname)) {
+            event.respondWith(
+                fetch(request)
+                    .then((response) => {
+                        const responseClone = response.clone();
+                        if (response.status === 200) {
+                            caches.open(API_CACHE).then((cache) => {
+                                cache.put(request, responseClone);
+                                limitCacheSize(API_CACHE, MAX_API_CACHE_SIZE);
+                            });
+                        }
+                        return response;
+                    })
+                    .catch(async () => {
+                        const cached = await caches.match(request);
+                        return isFreshEnough(cached, SHORT_API_TTL_MS) ? cached : undefined;
+                    })
+            );
+            return;
+        }
+
+        // Everything else under /api/ -- unchanged prior behavior (network
+        // first, cache fallback with no staleness check).
         event.respondWith(
             fetch(request)
                 .then((response) => {
-                    // Clone the response
                     const responseClone = response.clone();
-
-                    // Cache successful responses
                     if (response.status === 200) {
                         caches.open(API_CACHE).then((cache) => {
                             cache.put(request, responseClone);
                             limitCacheSize(API_CACHE, MAX_API_CACHE_SIZE);
                         });
                     }
-
                     return response;
                 })
-                .catch(() => {
-                    // Return cached version if network fails
-                    return caches.match(request);
-                })
+                .catch(() => caches.match(request))
         );
+        return;
+    }
+
+    // Cloudinary-hosted images are served from Cloudinary's own CDN with its
+    // own caching/optimization -- intercepting them through the SW only wastes
+    // Cache Storage quota and adds a redundant caching layer on top of one
+    // that already exists. Let the browser handle these requests natively.
+    if (url.hostname.endsWith('res.cloudinary.com')) {
         return;
     }
 
