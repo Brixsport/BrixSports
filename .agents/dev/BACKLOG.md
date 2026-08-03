@@ -7161,7 +7161,7 @@ Files: `src/components/BasketballLogger.tsx`, `src/app/page.tsx`.
 
 ### ~~BUG-194~~ — `FootballLogger.tsx`'s Own Inline Offline-Queue Copy Has the Same `BUG-193` Missing-Store Vulnerability, Unfixed
 
-**Status:** SHIPPED (both parts) — 2026-08-03 (session 47G). Part 2 built same session, immediately after part 1 (Richard's own call to proceed straight through rather than defer). Neither part live-tested yet.
+**Status:** RESOLVED (both parts) — 2026-08-03 (session 47G), live-tested against a fresh Vercel preview using a real throwaway LIVE football match with a published lineup.
 **Priority:** Medium — same class/severity as `BUG-193`; football's exposure window is real but narrower than basketball's currently was, since football only queues event POSTs (no `pendingAdminChanges` usage at all — see below)
 
 **Problem:** `FootballLogger.tsx`'s own inline `openAdminDB()` (lines ~11-26, never migrated to the shared `src/lib/admin-offline-queue.ts` module basketball now uses) resolves unconditionally in `onsuccess` with no `objectStoreNames.contains(...)` check — the exact pre-fix shape of `BUG-193`. If `BrixsportAdminDB` is ever stamped at version 1 without its stores (same triggers as `BUG-193`: a stray script, a stale SW version, diagnostic tooling), football's `queueOfflineEvent` will throw `NotFoundError` on every future offline event write forever, with the same "ghost state" consequence (local optimistic state never rolled back).
@@ -7180,10 +7180,10 @@ Files: `src/components/BasketballLogger.tsx`, `src/app/page.tsx`.
 - New error banner (identical JSX to `BasketballLogger.tsx`'s) and a `queuedAdminChangeCount` header badge, replacing what used to be silent failures or blocking alerts.
 
 **Evidence:**
-- Commit: pending (session 47G, not yet pushed)
-- Verified by: `npx tsc --noEmit` — 49 pre-existing errors (same baseline), zero new, zero in `FootballLogger.tsx`, for both part 1 and part 2
-- Observed result: not yet live-tested — this is a real behavior change to the 🟡 Caution-tier "Match status transitions" flow, exactly as the originating audit warned. Needs the same forced-failure → queue → drain → DB live-test cycle this session already ran against basketball's equivalent paths (`BUG-142`'s evidence) before this can move to RESOLVED.
-- Pending items: live re-test of football's offline event queue (part 1) and the period-transition/undo queueing (part 2) — both, whenever football's own tier-0 live-verification pass runs next.
+- Commits: `e282901` (part 1), `d352645` (part 2), `3657db3` (the schema-drift follow-up under `BUG-193`, which this deployment also carries)
+- Verified by: `npx tsc --noEmit` clean at fix time; live re-test session 47G against a fresh Vercel preview (`dev/setup-football-browser-test.mjs` — a real throwaway LIVE match, `busa-joga` vs `busa-wolves`, real published 11-a-side lineups via the actual `/api/matches/[id]/lineup` endpoint), forced-failure → queue → drain → DB cycles for both the period-transition PATCH and the undo DELETE
+- Observed result: **period-transition** — forced a body-aware fetch interception (had to distinguish the real `currentPeriod` PATCH from the 15s clock-checkpoint PATCH sharing the identical URL, a real test-methodology gotcha worth remembering) on "Start 2nd Half," confirmed a real `pendingAdminChanges` row queued (`{currentPeriod: "SECOND_HALF"}`, correct URL/token), drained via `DRAIN_ADMIN_CHANGES`, confirmed `matches.current_period` moved `HALF_TIME → SECOND_HALF` in the DB. **Undo** — logged a real Goal+Assist, forced the undo DELETE to fail, confirmed a real queued row (correct event URL), confirmed both events and the score stayed untouched in the DB while queued (`BUG-130`'s principle held), drained, confirmed the Assist event was actually deleted from `match_events` and the score correctly stayed `1-0` (assists carry no point value, nothing to revert). Also spot-checked the `BUG-193` schema-drift fix on this same deployment: a fresh `BrixsportAdminDB` open showed all 3 stores (`pendingMatchEvents`, `pendingAdminChanges`, `offlineMatches`) created together, confirming that fix too.
+- Pending items: none.
 
 **Found:** session 47G, background audit dispatched to scope the football/basketball offline-queue consolidation ahead of the next session's planned "offline/cache strategy, both sports together" pass.
 
