@@ -14,7 +14,17 @@
 // it's proven, live-tested code (BACKLOG-058's Live Test 3 evidence). Migrating
 // it to import from here instead is safe follow-up work, not done in this pass.
 
-const REQUIRED_STORES = ['pendingMatchEvents', 'pendingAdminChanges'];
+// BUG-193 follow-up: this list must stay in exact sync with sw-admin.js's own
+// ADMIN_DB_REQUIRED_STORES -- this module previously listed only the 2 stores
+// it directly reads/writes, omitting 'offlineMatches' (sw-admin.js-only, used
+// by cacheMatchData()). If this module's openAdminDB() won the race to open
+// the DB first, it would create only 2 stores; sw-admin.js's own missing-store
+// check would then see 'offlineMatches' absent and trigger ITS OWN delete+
+// recreate recovery, discarding whatever this module had just queued. All 3
+// stores are created here even though 'offlineMatches' is never read/written
+// from this file, purely so neither side ever has grounds to consider the
+// other's freshly-created DB "broken".
+const REQUIRED_STORES = ['pendingMatchEvents', 'pendingAdminChanges', 'offlineMatches'];
 
 function createStores(db: IDBDatabase) {
     // Mirror sw-admin.js schema so both sides agree on store shape -- whichever
@@ -28,6 +38,9 @@ function createStores(db: IDBDatabase) {
     if (!db.objectStoreNames.contains('pendingAdminChanges')) {
         const store = db.createObjectStore('pendingAdminChanges', { keyPath: 'id', autoIncrement: true });
         store.createIndex('timestamp', 'timestamp', { unique: false });
+    }
+    if (!db.objectStoreNames.contains('offlineMatches')) {
+        db.createObjectStore('offlineMatches', { keyPath: 'id' });
     }
 }
 
