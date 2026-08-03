@@ -46,6 +46,11 @@ const NEVER_CACHE_API_PATTERNS = [
 ];
 const SHORT_TTL_API_PATTERNS = [
     /^\/api\/matches(\/|$|\?)/,
+    // Live-verified gap: the homepage's actual live-match list calls these
+    // sport-specific list endpoints (src/app/page.tsx), not a bare
+    // /api/matches -- confirmed via a real Cache Storage read that they were
+    // falling through to the generic bucket (no 30s staleness check) instead.
+    /^\/api\/(basketball|football|other)\/matches(\/|$|\?)/,
     /^\/api\/competitions(\/|$|\?)/,
 ];
 const STALE_WHILE_REVALIDATE_API_PATTERNS = [

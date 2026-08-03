@@ -3957,7 +3957,7 @@ two SWs fight over the same registration scope.
 
 ### ~~BACKLOG-060~~ — SW Architecture Cleanup
 
-**Status:** SHIPPED — 2026-08-03 (session 47G), not yet live-tested (both files are plain `.js` outside the TS project, so `tsc` doesn't cover them — verified via `node --check` only)
+**Status:** RESOLVED — 2026-08-03 (session 47G), live-tested against a fresh Vercel preview via a direct Cache Storage read (both files are plain `.js` outside the TS project, so `tsc` doesn't cover them — verified via `node --check` for syntax)
 **Priority:** MEDIUM — quality improvement, not blocking
 **Filed:** 2026-06-16
 
@@ -3977,9 +3977,9 @@ unnecessarily, wasting Cache Storage quota.
 - `sw.js` retirement: moot — the session 47D PWA audit already confirmed `public/sw.js` does not exist in this checkout (repo-wide search, zero matches), so there was nothing to retire.
 
 #### Evidence
-- Verified by: `node --check` clean on both files (plain `.js`, not covered by `tsc`)
-- Observed result: not yet live-tested — needs a real preview with a genuine cold/warm cache cycle to confirm the never-cache/short-TTL/stale-while-revalidate branches each behave as designed, and to confirm Cloudinary requests no longer appear in the SW's Cache Storage entries
-- Pending items: live re-test on next preview redeploy — check Application → Cache Storage for `res.cloudinary.com` absence, and confirm a `/api/matches/[id]/events` GET never gets a cached response even when offline
+- Verified by: `node --check` clean on both files at fix time; live re-test session 47G — a direct `caches.keys()`/`cache.keys()` read of every Cache Storage bucket on a real Vercel preview after a genuine session of app usage (basketball + football logger sessions, homepage load, teams/players pages)
+- Observed result: **never-cache confirmed** — zero `/api/matches/[id]/events`, `/api/matches/[id]/config`, or `/api/auth/*` entries in any cache, despite those endpoints genuinely being fetched multiple times during the session (event fetch on mount, undo DELETE, config fetch). **Stale-while-revalidate confirmed** — `/api/players`/`/api/teams` present in both admin and user API caches, as expected. **Cloudinary confirmed** — zero `res.cloudinary.com` entries anywhere; team logos in this dataset route through `/assests/Logos/*` (local static) and Next.js's own `/_next/image` optimizer, not raw Cloudinary URLs, so this also rules out the skip having silently no-opped. **Real gap found and fixed via this same live check**: the short-TTL bucket's `/^\/api\/matches(\/|$|\?)/` pattern never matched the homepage's actual live-match list calls — `src/app/page.tsx` fetches `/api/basketball/matches`, `/api/football/matches`, `/api/other/matches` (sport-specific list endpoints), not a bare `/api/matches` — confirmed via the cache read showing them sitting in the generic "everything else" bucket (cached, but with no 30s staleness check) instead of the intended short-TTL bucket. Added `/^\/api\/(basketball|football|other)\/matches(\/|$|\?)/` to `SHORT_TTL_API_PATTERNS` in both files to close it.
+- Pending items: none — the one gap this live test surfaced was fixed in the same pass.
 
 #### Depends on: BACKLOG-059 (already RESOLVED)
 
