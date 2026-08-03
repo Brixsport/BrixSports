@@ -7140,6 +7140,29 @@ Files: `src/components/BasketballLogger.tsx`, `src/app/page.tsx`.
 - Observed result: console logged `[admin-offline-queue] BrixsportAdminDB missing expected stores, recreating` — the fix's own diagnostic line — confirming detection fired correctly. The DB was closed, deleted, and reopened with both stores present, and the event write that followed succeeded (`pendingMatchEvents` held 1 real row) instead of throwing `NotFoundError` as it did pre-fix. Chaining this to a full drain hit a stuck IndexedDB transaction in the test tab (a leftover open connection from this session's own repeated test cycling, not an app-level issue) — not re-attempted, since the drain mechanism itself was already independently proven with real DB evidence in `BUG-142`'s own testing.
 - Pending items: none for the self-heal itself. If it matters later, a clean single-pass self-heal-then-drain chain (without prior test-script interference) would close the loop fully.
 
+**Follow-up bug found and fixed in this same fix, same session:** a background audit scoping football's own exposure to this same class of bug (filed as `BUG-194`) caught that `admin-offline-queue.ts`'s `REQUIRED_STORES` only listed `pendingMatchEvents`/`pendingAdminChanges` — omitting `offlineMatches` (an `sw-admin.js`-only store, used by `cacheMatchData()`, that this module never reads or writes). If this module won the race to open `BrixsportAdminDB` first, it would create only 2 of the 3 real stores; `sw-admin.js`'s own missing-store check would then see `offlineMatches` absent and trigger *its own* delete+recreate recovery — discarding whatever this module had just queued, the exact ghost-state failure this whole fix exists to prevent. Fixed same session, commit `3657db3`: `REQUIRED_STORES` and `createStores()` in `admin-offline-queue.ts` now include all 3 stores, matching `sw-admin.js`'s `ADMIN_DB_REQUIRED_STORES` exactly. Verified via `npx tsc --noEmit` clean; not yet live-tested (found and fixed while a live WS-outage test for `BUG-137` was in progress, deprioritized to not lose that window — needs its own live re-test next session).
+
 **Found:** session 47G, live-testing `BUG-142`'s offline queue against the deployed preview.
+
+---
+
+### BUG-194 — `FootballLogger.tsx`'s Own Inline Offline-Queue Copy Has the Same `BUG-193` Missing-Store Vulnerability, Unfixed
+
+**Status:** OPEN — found session 47G, not fixed
+**Priority:** Medium — same class/severity as `BUG-193`; football's exposure window is real but narrower than basketball's currently was, since football only queues event POSTs (no `pendingAdminChanges` usage at all — see below)
+
+**Problem:** `FootballLogger.tsx`'s own inline `openAdminDB()` (lines ~11-26, never migrated to the shared `src/lib/admin-offline-queue.ts` module basketball now uses) resolves unconditionally in `onsuccess` with no `objectStoreNames.contains(...)` check — the exact pre-fix shape of `BUG-193`. If `BrixsportAdminDB` is ever stamped at version 1 without its stores (same triggers as `BUG-193`: a stray script, a stale SW version, diagnostic tooling), football's `queueOfflineEvent` will throw `NotFoundError` on every future offline event write forever, with the same "ghost state" consequence (local optimistic state never rolled back).
+
+**Found by:** a background audit dispatched this session to scope a planned migration of football's offline-queue logic onto the shared module (part of the "do the offline/cache strategy pass across both sports together" plan, since basketball and football were about to diverge on `BUG-193`'s fix otherwise). Full audit findings, condensed:
+- Football's inline copy also has **no `pendingAdminChanges` support at all** — no `queueAdminChange` equivalent, no store creation for it. Only event POSTs get offline-queue protection; period-transition PATCH (clock checkpoints, half/OT/penalty starts) and undo DELETE are all fire-and-forget with zero retry — undo specifically shows a blocking `alert()` and gives up on network failure, unlike basketball's queued-with-banner pattern.
+- DB version, store names, and row shapes otherwise agree between football's inline copy and the shared module (`BrixsportAdminDB` v1, matching `pendingMatchEvents` shape) — no other schema drift found beyond the `offlineMatches` gap already fixed under `BUG-193`.
+
+**Fix (not built — two-part recommendation from the audit):**
+1. **Small, low-risk piece**: swap football's inline `openAdminDB`/`queueOfflineEvent`/`jwtSecondsRemaining` for imports from `src/lib/admin-offline-queue.ts` — signatures already match exactly, only 2 call sites to change (`jwtSecondsRemaining` and `queueOfflineEvent` calls in the event-record catch block). Closes this bug and removes one of the three "parallel implementations" this project's own comments already flag as a maintenance trap. Estimated under an hour.
+2. **Larger, deferred piece**: bringing football to basketball's actual feature parity (queued period-transition/undo via `queueAdminChange`, drain-trigger wiring, non-blocking banners replacing the `alert()`) touches ~8-9 more call sites and is a real behavior change to the 🟡 Caution-tier "Match status transitions" flow — needs its own live-test session, not bundled into the mechanical part-1 swap.
+
+**Recommendation, per the audit:** do part 1 now (or in the next football-focused session), defer part 2 to a dedicated session with live re-testing of the match-status-transition flow afterward.
+
+**Found:** session 47G, background audit dispatched to scope the football/basketball offline-queue consolidation ahead of the next session's planned "offline/cache strategy, both sports together" pass.
 
 ---
