@@ -5928,14 +5928,24 @@ Filed together, same investigation: a `code-reviewer` agent pass explicitly inde
 
 ---
 
-### BACKLOG-139 — `BasketballMatchOverlay.tsx`'s Shooting-Percentage Fields Are Never Written by Any Code Path (Worse Than the Known Casing Mismatch)
+### ~~BACKLOG-139~~ — `BasketballMatchOverlay.tsx`'s Shooting-Percentage Fields Are Never Written by Any Code Path (Worse Than the Known Casing Mismatch)
 
-**Status:** OPEN
-**Priority:** Medium — silently renders flat 0% for every basketball match's overlay percentages, not a crash, but always wrong
+**Status:** RESOLVED — 2026-08-03 (session 47G)
+**Priority:** Medium — silently renders flat 0% for every basketball match's overlay percentages, not a crash, but always wrong. **Escalated during the fix**: the underlying derivation block wasn't just missing the percentage fields, its event-type casing was completely dead — every basketball team stat in `matches.stats` (not just percentages) was always zero.
 
-**Problem:** `BasketballMatchOverlay.tsx:377-378,385-386,393-394` reads `match.stats.fieldGoalPercentage`/`threePointPercentage`/`freeThrowPercentage`, each guarded with `|| 0`. Traced every writer of `match.stats` for basketball (`matches/[id]/route.ts:318-368`) — its derived-from-events object's own keys never include `fieldGoalPercentage`/`threePointPercentage`/`freeThrowPercentage` at all (confirmed via project-wide grep: the only other references are the type declaration and an unrelated per-player/per-season schema column with a different shape). **This is a separate, deeper gap from the already-known `'2PT_MADE'` vs `'Field Goal'` casing mismatch in the same derivation block** (also confirmed present here, same file) — even if the casing matched, these specific percentage fields would still never be produced by any writer. Net effect confirmed as silently-incomplete data (always renders 0%), not a visible crash/NaN — no live division against the already-known-zero `fieldGoalsAttempted`-family counters (BUG-133) actually happens anywhere in the codebase.
+**Problem:** `BasketballMatchOverlay.tsx:377-378,385-386,393-394` reads `match.stats.fieldGoalPercentage`/`threePointPercentage`/`freeThrowPercentage`, each guarded with `|| 0`. Traced every writer of `match.stats` for basketball (`matches/[id]/route.ts:318-368`) — its derived-from-events object's own keys never include `fieldGoalPercentage`/`threePointPercentage`/`freeThrowPercentage` at all. **Found while fixing, worse than originally scoped:** the derivation block's `switch (event.type)` matched on `'2PT_MADE'`/`'3PT_MADE'`/`'FREE_THROW'`/`'REBOUND'`/`'ASSIST'`/`'STEAL'`/`'BLOCK'` — but `BasketballLogger.tsx`'s own `BasketballEventType` union has only ever dispatched `'Field Goal'`/`'Three Pointer'`/`'Free Throw'`/`'Rebound'`/`'Assist'`/`'Steal'`/`'Block'`. Every case was dead on arrival — `homeFieldGoals`, `homeRebounds`, `homeAssists`, etc. were always `0` for every real basketball match, not just the percentage fields originally filed. This block is not a rarely-hit fallback either: `matches.stats` is only ever written by the legacy, uncalled `/api/events/route.ts` route (same dead pipeline `BACKLOG-159` already documents) and by backfill scripts — the real live logging route (`/api/matches/[id]/events/route.ts`, used by both loggers) never writes it — so this derive-from-events fallback is the actual live path for basketball's team-stats display on every real match.
 
-**Fix (not built):** add the three percentage fields to the basketball stats-derivation block in `matches/[id]/route.ts`, computed from the same made/attempted counts once BUG-133 lands (attempts need to be tracked before a percentage can be computed at all).
+**Not affected — checked separately and confirmed already correct:** `BasketballLogger.tsx`'s own logger-facing "Stats" tab (`calculateAdvancedStats`, per-player FG%/eFG%/3P%) already uses the correct real event types and the correct made/attempt convention (`value === 2/3/1` for a make). This bug was isolated to the server-side team-stats blob feeding the public match overlay.
+
+**Fix:** rewrote the derivation block to match the real event-type strings, track Made vs. Attempted separately (every shot-type event counts as an attempt; `value > 0` marks a make — the same convention already correct in `calculateAdvancedStats` and in `BUG-133`'s per-player fix), and added the three percentage fields (`Math.round(made/attempted*100)`, `0` when no attempts). Field names changed from `homeFieldGoals`/`homeThreePointers`/`homeFreeThrows` to `homeFieldGoalsMade`/`homeFieldGoalsAttempted`/etc. (and equivalents for 3PT/FT) to actually distinguish made from attempted, which the old names never could. `LiveStats.tsx` (the other real consumer of these specific fields, three `StatBar`s literally labeled "Field Goals/3-Pointers/Free Throws Made") updated to read the new field names — confirmed via grep this was the only other consumer of the renamed fields; `BasketballMatchOverlay.tsx`'s percentage reads and the type declaration (`src/types/index.ts`, already declared `fieldGoalPercentage?: [number, number]` etc. — this fix was already anticipated there) needed no changes. Files: `src/app/api/matches/[id]/route.ts`, `src/components/LiveStats.tsx`.
+
+**Evidence:**
+- Commit: pending (session 47G, not yet pushed)
+- Verified by: `npx tsc --noEmit` — 49 pre-existing errors (same baseline), zero new; logic independently replicated in a throwaway script against `browser-test-47f--kwabip-`'s real `match_events` (not the live deployed route, since this fix isn't pushed/redeployed yet)
+- Observed result: computed stats cross-checked exactly against the match's real DB score — home 1-for-1 field goal (2 pts, matches `home_score: 2`), away 3-for-3 field goals including 2 threes (2+3+3=8 pts, matches `away_score: 8`), `fieldGoalPercentage: [100, 100]`, `threePointPercentage: [0, 100]` (home had zero 3PT attempts, correctly renders 0% rather than NaN)
+- Pending items: live re-test against the actual deployed route once pushed and redeployed — this session's evidence is logic-verified against real data, not yet route-verified end-to-end
+
+**Found:** session 47D, by a background audit agent. Escalated and fixed session 47G, prompted by Richard's live report that the logger page's stats numbers needed a factual-accuracy check.
 
 ---
 
@@ -6501,8 +6511,8 @@ No `clearTimeout` exists anywhere in the file. The effect that sets `stateManage
 
 ### BACKLOG-159 — `players.rating` (Shown On Every Player Profile) Is a Dead, Never-Live-Updated Field
 
-**Status:** OPEN — found session 47D, not fixed
-**Priority:** HIGH — this is the rating number every viewer actually sees; it is stale for 100% of players, both sports, always
+**Status:** OPEN — found session 47D, not fixed. **Tier classification, Richard's explicit call (session 47G):** this is Tier 1/2 work (a real rating-system redesign/consolidation, not a bug fix), deliberately deferred to a future dedicated session rather than folded into any tier-0 close-out. Filed here so it's on record for that agenda, not lost.
+**Priority:** HIGH — this is the rating number every viewer actually sees; it is stale for 100% of players, both sports, always. High-priority-but-deferred: severity and scheduling tier are tracked separately here.
 
 **Problem:** the platform runs two completely disconnected rating pipelines. `players.rating` (`schema.ts:59`, `default(7.0)`) — the number shown on every player profile, comparison card, and the `/xi` Build-Your-XI tool — is only ever mutated by a legacy route, `src/app/api/events/route.ts` (a different, older `POST /api/events`, NOT the real match-logging route). Confirmed via grep: no logger component (`FootballLogger.tsx`, `BasketballLogger.tsx`, `TrackLogger.tsx`, `MatchLoggerUI.tsx`) has ever called this route — all of them POST to `/api/matches/[id]/events` instead. The only other reference to `/api/events` anywhere is an infrastructure health-check pinger. **`players.rating` is not live-updated by any match a logger ever logs today, for either sport** — it reflects whatever a seed/backfill script set it to, frozen from that point on.
 
