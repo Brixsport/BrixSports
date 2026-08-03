@@ -5891,20 +5891,20 @@ Filed together, same investigation: a `code-reviewer` agent pass explicitly inde
 
 ---
 
-### BUG-137 — Retry-Interval Leak on `SocketProvider` Remount, Confirmed in Current Code (Mechanism Has Changed Since `ARCHITECTURE.md` Was Written)
+### ~~BUG-137~~ — Retry-Interval Leak on `SocketProvider` Remount, Confirmed in Current Code (Mechanism Has Changed Since `ARCHITECTURE.md` Was Written)
 
-**Status:** SHIPPED — 2026-07-30 (session 47E), commit `7cb44d3`, prioritized ahead of schedule given the Saturday football beta-test-on-staging deadline (real WS-affecting bug, shared/generic code)
+**Status:** RESOLVED — 2026-08-03 (session 47G), commit `7cb44d3` (fix), live-tested against a real Railway restart this session. **Entry was stale**: the "Fix (not built)" line below was never updated after the fix actually landed same session it was filed — same recurring pattern this project's own `known-issues.md` already documents (a fix landing without its tracking entry being updated). The fix has been live in `useWebSocket.tsx` since `7cb44d3`.
 **Priority:** Medium — shared/generic code (`useWebSocket.tsx`), applies to every sport's WS connection, not basketball-specific
 
 **Evidence:**
 - Commit: `7cb44d3`
-- Verified by: `npx tsc --noEmit` clean
-- Observed result: not yet live-tested (no real unmount-during-active-retry-loop scenario forced and confirmed to recover)
-- Pending items: live test — force a WS disconnect long enough to enter the manual retry loop, then unmount/remount `SocketProvider` (e.g. full page navigation), confirm a fresh retry loop can still start afterward instead of being permanently blocked
+- Verified by: `npx tsc --noEmit` clean at fix time; live re-test session 47G against a real Railway restart on the shared staging WS instance (Richard's own call to trigger it, same precedent as `BUG-123`)
+- Observed result: full resilience chain confirmed end-to-end on a genuine outage — `[WS] Disconnected: transport close` → 5 built-in Socket.IO reconnection attempts, each logged → `Max reconnection attempts reached` → `reconnect_failed — starting manual retry loop` → 7 manual attempts with correctly-growing exponential backoff (~6s → ~59s → ~67s, capped near `MAX_MS`, consistent with jitter) → `[WS] Connected` once the server genuinely came back. The retry loop correctly self-terminated on success (no further manual-retry logs after the successful connect). **Caveat, not fully closed**: `SocketProvider` is mounted at the root layout (`src/app/layout.tsx`) and never unmounts during normal in-app navigation — the only way it unmounts is a full page reload, which resets all module-level state (`sharedSocket`, `manualRetryLoopActive`, the pending timeout handle) regardless of whether the fix is correct, so a full-reload test can't actually distinguish "fix works" from "fix broken." The specific unmount-cleanup code path (`clearTimeout(manualRetryTimeoutHandle)` + `manualRetryLoopActive = false` in `SocketProvider`'s cleanup, confirmed present via direct source read) is treated as code-reviewed-correct rather than independently runtime-provable in this app's current architecture — same evidentiary bar already accepted for `BUG-143`.
+- Pending items: none, given the architectural constraint above. If a genuine non-reload unmount trigger is ever found (e.g. if `SocketProvider` is ever moved off the root layout, or a secondary nested instance is added elsewhere using the same `connectionCount` multi-instance design already in the code), that would be the moment to retry a true unmount/remount test.
 
 **Problem:** `ARCHITECTURE.md` describes this as a plain `setInterval` leak — that description is itself stale. The actual current mechanism (post-BUG-114) is a recursive `setTimeout` chain (`scheduleRetry()`) guarded by a module-level `manualRetryLoopActive` flag. Neither the pending `setTimeout` handle nor the `reconnect_failed` listener is cleared on `SocketProvider` unmount or `sharedSocket.disconnect()` — `SocketProvider`'s cleanup nulls `sharedSocket` but never touches the pending retry timeout or resets the flag. Once a retry loop starts and the socket later tears down, `manualRetryLoopActive` can stay `true` forever (the loop's own self-clearing check reads `sharedSocket?.connected` on a now-null socket, always falsy, so it never fires) — permanently blocking any genuinely new retry loop from starting for a future socket.
 
-**Fix (not built):** clear the pending `scheduleRetry` timeout and reset `manualRetryLoopActive` explicitly in `SocketProvider`'s unmount cleanup, not just null the socket reference.
+**Fix:** `SocketProvider`'s unmount cleanup now tracks the pending `scheduleRetry` timeout at module scope (`manualRetryTimeoutHandle`) and explicitly calls `clearTimeout()` + resets `manualRetryLoopActive = false` on cleanup, not just nulling the socket reference. Confirmed present in the current source.
 
 **Inheritance note (Part B of this audit):** shared, sport-agnostic code — inherited automatically by basketball's future WS-emit port with zero basketball-side work, for better or worse. See the `SYSTEM_CRITICALITY_MAP.md` WS-emit gap entry for the full inheritance determination across all 7 checked football-WS gaps.
 
