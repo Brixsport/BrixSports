@@ -264,14 +264,26 @@ export default function Home() {
     let groupKey: string = '';
 
     if (match.sport === 'Basketball') {
+      // BACKLOG: prefer the real matches.round column (freeform text, e.g.
+      // "Semi-Finals", "Round 6") over the numeric stats-blob parse and the
+      // hardcoded-date-table fallback below -- that fallback assumed one
+      // specific 2026 playoff calendar and silently mislabeled every other
+      // basketball match (any other season, any friendly, any competition)
+      // with a fabricated "Round N" or wrong semifinal-game label.
+      if (match.round) {
+        groupKey = match.round;
+      }
+
       let roundNum: number | undefined;
-      try {
+      if (!groupKey) try {
         // Try to get round from stats
         const stats = typeof match.stats === 'string' ? JSON.parse(match.stats) : match.stats;
         roundNum = stats?.round;
       } catch (e) { }
 
-      if (!roundNum || isNaN(roundNum) || roundNum > 100 || roundNum < 1) {
+      if (groupKey) {
+        // already set from match.round above
+      } else if (!roundNum || isNaN(roundNum) || roundNum > 100 || roundNum < 1) {
         // Fallback to date-based calculation
         const matchDate = new Date(match.startTime);
 

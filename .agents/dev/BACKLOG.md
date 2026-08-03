@@ -5857,9 +5857,9 @@ Filed together, same investigation: a `code-reviewer` agent pass explicitly inde
 
 ---
 
-### BUG-135 — No Distinct Second-Overtime (OT2) Path — Quarter Number Never Advances Past `periodCount + 1`
+### ~~BUG-135~~ — No Distinct Second-Overtime (OT2) Path — Quarter Number Never Advances Past `periodCount + 1`
 
-**Status:** SHIPPED — 2026-07-30 (session 47E), commit `d892b99`, still not live-tested (a genuine tied-OT1 scenario wasn't reached during session 47F's browser pass — logged fouls/subs/quarter transitions but didn't play a match through to a tied end-of-OT1)
+**Status:** RESOLVED — 2026-08-03 (session 47G), commit `d892b99` (fix), live-verified this session against the `browser-test-47f--kwabip-` throwaway match (real tied game forced through OT1→OT2 in an earlier part of this same session, confirmed via fresh DB query + live browser walkthrough this pass)
 **Priority:** Medium — only matters for a match tied after OT1, real but rare
 
 **Problem:** both the end-of-regulation branch and the "Add Extra Time" button (`BasketballLogger.tsx:1738-1790`) unconditionally call `setQuarter(periodCount + 1)`. If OT1 ends still tied and a real OT2 is needed, re-triggering "Start Extra Time" re-runs the identical `setQuarter(periodCount + 1)` — already the current value, so quarter number never advances into a genuine OT2 state. `getCurrentPeriod()` returns the flat string `'OT'` for any `quarter > periodCount`, so OT1 and OT2 events would be stored with an identical `period` field, indistinguishable in `match_events` history.
@@ -5868,9 +5868,9 @@ Filed together, same investigation: a `code-reviewer` agent pass explicitly inde
 
 **Evidence:**
 - Commit: `d892b99`
-- Verified by: `npx tsc --noEmit` clean (zero new errors across all three changed files)
-- Observed result: not yet live-tested (no real match forced into a tied-OT1 scenario)
-- Pending items: live test — force a match to end OT1 tied, confirm "Add Extra Time"/"Start Extra Time" shows "OT2", confirm the resulting event's `period` field is `OT2` not `OT`, confirm the public page's live clock still renders correctly during OT2
+- Verified by: direct DB query (`dev/check-browser-test-47f-match.mjs`, `dev/check-browser-test-47f-events.mjs`) + live browser walkthrough (logger session injection, matched React state against DB, then the public viewer page)
+- Observed result: `matches.current_period = 'OT2'` (not the flat `'OT'`); a real `match_events` row for this match is tagged `period: 'OT2'` (type `Field Goal`); logger UI event log independently displays `"OT2 - 0:51"` for the same event; public `/matches/[id]` page's status badge and Overview tab both read `OT2`, not a stale pre-OT quarter or the flat `'OT'` — confirms the full round-trip: write → persist → hydrate-on-remount (`BUG-189`'s fix) → public broadcast, all correctly OT-numbered, not just the write path in isolation
+- Pending items: none for this entry. Found live in the same pass: the logger's own "Quarter" header box still renders the old flat `1 2 3 4` button grid during OT (nothing highlighted, dead controls) and "End Quarter"/"End of Quarter {N}" labels don't read as OT either — filed separately as `BUG-192` (fixed same session, not yet pushed/deployed to this preview).
 
 ---
 
@@ -6068,9 +6068,9 @@ Filed together, same investigation: a `code-reviewer` agent pass explicitly inde
 
 ---
 
-### BUG-142 — Basketball Has No Offline-Queue/Retry Mechanism at All — Failed Writes Are Visible But Never Recovered
+### ~~BUG-142~~ — Basketball Has No Offline-Queue/Retry Mechanism at All — Failed Writes Are Visible But Never Recovered
 
-**Status:** SHIPPED — 2026-07-30 (session 47E), commits `212616a` (event POST), `2f581a2` (period-transition PATCH + undo DELETE), `c447eb6` (roster-load retry). All four write/read paths named in the original filing are now covered.
+**Status:** RESOLVED — 2026-08-03 (session 47G), commits `212616a` (event POST), `2f581a2` (period-transition PATCH + undo DELETE), `c447eb6` (roster-load retry). Event-POST path live-verified end-to-end this session; period-transition/undo/roster-load paths still SHIPPED-only (see Pending items).
 **Priority:** High — every write path this session gave a failure a visible banner (roster load, period-transition PATCH, event POST), but none of them could self-heal; a logger who doesn't notice or can't manually retry loses the write permanently
 
 **Fix, event-POST scope (`212616a`):** ports `FootballLogger.tsx`'s own proven mechanism (`BACKLOG-058`, live-tested on staging) rather than building a new one. IndexedDB helpers extracted to a new shared module, `src/lib/admin-offline-queue.ts` (was inline-only in `FootballLogger.tsx` before — extracting avoided a third ad-hoc copy of the same contract, this project's own audits have repeatedly flagged that pattern class). Same `BrixsportAdminDB.pendingMatchEvents` store `sw-admin.js` already drains — confirmed its `syncMatchEvents()` POSTs generically regardless of sport, so zero SW changes were needed. `recordEvent`'s catch block now queues on network failure (with the same 30-min token-TTL guard football uses), plus the SW message listener + `online`/`visibilitychange` drain-trigger effects basketball had none of before.
@@ -6083,9 +6083,9 @@ Filed together, same investigation: a `code-reviewer` agent pass explicitly inde
 
 **Evidence:**
 - Commits: `212616a`, `2f581a2`, `c447eb6`
-- Verified by: `npx tsc --noEmit` clean on all changed files across all three commits
-- Observed result: not yet live-tested (no real network-drop test run against any of the four paths)
-- Pending items: live test for each path — (1) event POST: force a failure, confirm it queues and drains once back online, confirm `queuedOfflineCount` resets on `SYNC_COMPLETE`; (2) period-transition PATCH: same, confirm `queuedAdminChangeCount` resets on the `sync-admin-changes` tag; (3) undo DELETE: confirm the event stays visible while queued, then disappears once the queued delete actually lands; (4) roster-load retry: force the initial load to fail, go back online, confirm it re-fetches automatically without a manual page reload
+- Verified by: direct DB query before/after a real forced-failure + drain cycle against `browser-test-47f--kwabip-` on the deployed preview (`dev/check-browser-test-47f-events.mjs`, `dev/check-browser-test-47f-match.mjs`), plus IndexedDB inspection via injected browser JS
+- Observed result (event-POST path, full cycle): `window.fetch` patched to force one `/events` POST to fail → banner correctly showed queued state → `pendingMatchEvents` store had 2 real rows (correct payload shape, embedded JWT) → SW drain triggered via `postMessage({type:'DRAIN_MATCH_EVENTS'})` → queue count `2 → 0` → `match_events` gained 2 new rows tagged `OT2` with the correct player/type → `matches.away_score` correctly incremented DB-side to match (`0 → 2 → 8` across the full test sequence, real Field Goal + 2 drained Three Pointers, arithmetic checks out exactly). Also confirmed server-side: `sw-admin.js`'s `syncMatchEvents()` POSTs to the identical `/api/matches/[id]/events` route a live write uses, so a successful drain fires the same WS `event:new` broadcast other viewers/loggers see live — not a silent background catch-up.
+- Pending items: period-transition PATCH, undo DELETE, and roster-load retry paths (3 of the original 4 write/read paths) still need the same live forced-failure-then-drain cycle — only the event-POST path was exercised this session. Also see `BUG-193` (filed this session): a narrow but real sub-case where the queue write itself can fail if `BrixsportAdminDB` was ever previously stamped at version 1 without its expected object stores (observed once during this session's own testing, self-diagnosed as a test-methodology race rather than a reproducible app bug, but the missing-store guard `BUG-193` recommends is still worth adding defensively).
 
 **Found:** session 47B, confirmed live while testing `BACKLOG-134`'s period-transition failure banner on the PR #12 preview — the banner worked exactly as designed, which is what made the absence of any recovery path obvious.
 
@@ -7081,11 +7081,49 @@ const allEvents = matchIds.length ? await db.select().from(matchEvents).where(in
 **Fix:** replaced the flat `'OT'` allowlist entry with a regex check (`/^OT\d+$/`) alongside the existing fixed list, matching the unbounded nature of a real OT count (a match can theoretically reach OT3+). `src/app/api/matches/[id]/route.ts`.
 
 **Evidence:**
-- Commit: pending (session 47F, not yet pushed at time of filing)
-- Verified by: `npx tsc --noEmit` clean (49 pre-existing errors, none new)
-- Observed result: caught live via the real error banner during the OT2 test; fix applied same session, not yet re-verified live post-fix (blocking finding, fixed and pushed immediately rather than completing the full OT1→OT2 tied-game test first)
-- Pending items: live re-test — resume the OT2 test end-to-end: confirm OT1 now persists without the 422 banner, confirm a second tied OT triggers `OT2` and that value also persists and round-trips correctly through `BUG-189`'s hydration on a remount
+- Commit: `a3e14c2`
+- Verified by: `npx tsc --noEmit` clean (49 pre-existing errors, none new) at fix time; live re-test session 47G against the deployed preview + direct DB query
+- Observed result: the OT2 test resumed and completed end-to-end — `matches.current_period = 'OT2'` persisted with zero 422, a real `match_events` row landed tagged `period: 'OT2'`, and `BUG-189`'s hydration held on a full remount (logger UI independently showed the same `OT2` event on fresh load, not a stale pre-OT quarter). Full detail cross-referenced in `BUG-135`'s evidence block (same test, same match).
+- Pending items: none
 
 **Found:** session 47F, live-testing the OT2 scenario against a fresh Vercel preview build, per Richard's explicit request to get it tested.
+
+---
+
+### ~~BUG-192~~ — Logger Header Shows Stale/Fabricated Match Context: Dead OT Quarter-Box Buttons + Hardcoded "Semi-Finals" Badge on Every Match
+
+**Status:** RESOLVED — 2026-08-03 (session 47G)
+**Priority:** Medium — cosmetic/UX and misleading-info, not data-correctness (underlying `current_period`/`otNumber`/score state is correct per `BUG-135`/`BUG-142`'s evidence), but confirmed live and directly confusing/misleading to a logger
+
+**Problem, part 1 (Quarter box):** found live while re-verifying `BUG-135`/`BUG-191`'s OT2 fix on the deployed preview: `BasketballLogger.tsx`'s scoreboard "Quarter" box (~line 1279) always rendered a fixed `[1, 2, 3, 4]` button grid highlighting `quarter === q` — during OT, `quarter` is `periodCount + otNumber` (e.g. `6` for OT2 with `periodCount = 4`), which never matches any of the four buttons, so none highlight and the box gives the logger zero indication they're in OT at all, let alone which OT. Same root cause hit two sibling labels: the "End Quarter" button and the end-of-period modal's heading (`End of Quarter {quarter}`, e.g. literally "End of Quarter 6") both used the raw internal `quarter` counter instead of the human-legible period label.
+
+**Problem, part 2 (hardcoded "Semi-Finals" badge):** found by a background audit agent dispatched this session per Richard's report of seeing "SEMI-FINALS" on a real friendly test match ("Browser Verify Cup", no `competitionId`) — confirmed live in the same session via direct DOM read. `BasketballLogger.tsx:114` had `const [isSemiFinal, setIsSemiFinal] = useState(true)` with the stale comment `// Matches are semi-finals` — `setIsSemiFinal` was never called anywhere else in the file, so every basketball match, of every round and competition, unconditionally showed a "Semi-Finals" badge in the sticky header and a false "Semi-Final Match — Stats and MVP ratings contribute immediately. No standings points awarded." notice in the end-of-quarter modal. Purely a display flag — never sent to the server or checked by `finalizeMatch()`/standings logic — so it didn't corrupt any real standings data, but it actively told loggers false information about a live match's stakes. The audit agent also found a second, separate instance of the same root pattern: the homepage's match-grouping headers (`src/app/page.tsx:262-317`) fabricated round/stage labels from a hardcoded 2026-playoff date table instead of the real `matches.round` column, wrong for any match outside that one specific bracket — fixed in the same pass.
+
+**Fix, part 1:** `quarter > periodCount` now renders a single highlighted `OT{otNumber}` badge in place of the dead button grid (regular `Q1`-`Q4` buttons unchanged, including their existing manual-jump `onClick`). "End Quarter"/modal heading now read "End Overtime"/"End of Overtime {otNumber}" during OT, "End Quarter"/"End of Quarter {quarter}" otherwise.
+**Fix, part 2:** `isSemiFinal` now derived as `(match.round || '').toLowerCase().includes('semi')` — a substring check (matching the same freeform-text convention `page.tsx`'s own `groupKey` logic already uses for `round`, since it's not an enum) instead of a hardcoded literal; both the header badge and the modal notice are now gated on it. `page.tsx`'s grouping logic now tries the real `match.round` field first, falling back to the old stats-parse/date-table heuristics only when `round` is genuinely unset.
+Files: `src/components/BasketballLogger.tsx`, `src/app/page.tsx`.
+
+**Evidence:**
+- Commit: pending (session 47G, not yet pushed)
+- Verified by: `npx tsc --noEmit` — 49 pre-existing errors (same baseline), zero new, zero in either changed file
+- Observed result: both bugs reproduced live pre-fix (screenshot/DOM read of the deployed preview showed `1 2 3 4` unhighlighted during a confirmed `OT2` match, and a visible orange "SEMI-FINALS" badge on the same non-semifinal friendly match); fixes applied and type-checked, not yet re-deployed to confirm visually post-fix (preview still serves the pre-fix build until pushed)
+- Pending items: visual re-confirm once pushed and preview redeploys
+
+**Found:** session 47G — part 1 live-verifying `BUG-135`/`BUG-191`'s OT2 fix; part 2 via a background audit agent dispatched after Richard's live report, confirmed via direct DOM read on the same preview.
+
+---
+
+### BUG-193 — Offline-Queue Write Can Silently Lose an Event With No Backing Anywhere, if `BrixsportAdminDB` Was Ever Opened Without Its Stores First
+
+**Status:** OPEN — found live this session, root cause understood, no code fix proposed yet (needs a design decision — see below)
+**Priority:** Medium — narrow precondition, but when it hits, the failure mode is exactly the "ghost state" pattern this project's own `known-issues.md` already flags as a recurring anti-pattern (UI State Is Not DB State), and there is currently no recovery path for the logger once it happens
+
+**Problem:** while live-testing `BUG-142`'s offline queue this session, one forced-failure attempt hit `Failed to queue event: NotFoundError: Failed to execute 'transaction' on 'IDBDatabase': One of the specified object stores was not found` — the network POST correctly failed, `recordEvent`'s catch block correctly attempted to fall back to `queueOfflineEvent()`, but that write itself threw because the already-open `BrixsportAdminDB` handle had zero object stores. Root cause: IndexedDB only runs `onupgradeneeded` when the requested version is higher than the database's current stamped version — if `BrixsportAdminDB` is ever opened at version 1 by *anything* that doesn't define the `pendingMatchEvents`/`pendingAdminChanges`/`offlineMatches` stores (a stray extension, a debug script, or — as reproduced this session — a diagnostic tool calling `indexedDB.open(dbName)` with no version argument before the real app code gets there), the database is permanently stamped at v1 with no stores, and neither `admin-offline-queue.ts`'s `openAdminDB()` nor `sw-admin.js`'s `openDB()` (both correctly define the stores in their own `onupgradeneeded`, confirmed via direct source read — this is not a schema-definition bug) will ever get a chance to create them for that browser profile again.
+**Consequence when it happens:** `recordEvent`'s optimistic local score/event-count update (which fires before the network attempt, same architecture confirmed in `FootballLogger.tsx` too — not basketball-specific) is never rolled back when both the network write AND the queue write fail. The error banner is honest ("queueing also failed. Event kept locally only") but the local state has zero backing in the DB or the queue — reproduced live: DB `home_score` stayed `2` while the logger UI showed `4`.
+**Reachability, this session:** self-diagnosed as very likely caused by the diagnostic testing process itself (repeated `indexedDB.open()`/`deleteDatabase()` cycling without letting the real app code be the first opener) rather than a defect reachable through normal app usage — a clean re-test (delete DB, touch nothing, let `queueOfflineEvent()` be the genuine first opener) correctly created all 3 stores and the full fail→queue→drain→persist cycle worked end-to-end (see `BUG-142`'s evidence). Not fully ruled out for real users: any other opener of the same DB name at version 1 without the schema (a browser extension, a stale service worker version from before these stores existed) would hit the identical permanent lockout, with no error surfaced to the logger beyond a single failed write.
+
+**Fix (not built — needs a design call):** the robust pattern is to defensively check `db.objectStoreNames.contains(...)` after any *non-upgrade* open, not just rely on `onupgradeneeded` firing — if a required store is missing post-open, either (a) bump the DB version programmatically and re-open to force a real upgrade transaction, or (b) delete and recreate the database outright, surfacing a clear one-time warning to the logger rather than a silent per-write `NotFoundError`. This touches both `admin-offline-queue.ts` and `sw-admin.js` (both must agree on the recovery behavior) — flagging for Richard's go-ahead rather than changing shared offline-queue infrastructure inline.
+
+**Found:** session 47G, live-testing `BUG-142`'s offline queue against the deployed preview.
 
 ---

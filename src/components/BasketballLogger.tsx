@@ -111,7 +111,13 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
 
     // Period Transitions
     const [showPeriodModal, setShowPeriodModal] = useState(false);
-    const [isSemiFinal, setIsSemiFinal] = useState(true); // Matches are semi-finals
+    // BUG-192: was hardcoded `useState(true)` ("Matches are semi-finals") for every
+    // basketball match regardless of actual round -- every match, including group
+    // stage/finals/friendlies, showed a false "Semi-Final Match" banner claiming "No
+    // standings points awarded". `round` is freeform text (not an enum), so this
+    // mirrors the same substring-check convention already used elsewhere (e.g.
+    // src/app/page.tsx's groupKey logic) rather than an exact-match comparison.
+    const isSemiFinal = (match.round || '').toLowerCase().includes('semi');
     const [isOT, setIsOT] = useState(false);
     // BUG-135: quarter number alone can't distinguish OT1 from OT2 -- both the
     // tie-check branch and "Add Extra Time" button used to call the identical
@@ -1128,7 +1134,11 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                             <div>
                                 <div className="flex items-center gap-2">
                                     <p className="text-[10px] font-black uppercase tracking-widest text-white/40">Basketball Logger</p>
-                                    <span className="px-1.5 py-0.5 bg-orange-500/20 text-orange-500 border border-orange-500/30 rounded text-[8px] font-black uppercase tracking-tighter">Semi-Finals</span>
+                                    {/* BUG-192: was an unconditional "Semi-Finals" literal -- every
+                                        match's header showed it regardless of actual round. */}
+                                    {isSemiFinal && (
+                                        <span className="px-1.5 py-0.5 bg-orange-500/20 text-orange-500 border border-orange-500/30 rounded text-[8px] font-black uppercase tracking-tighter">Semi-Finals</span>
+                                    )}
                                 </div>
                                 <h1 className="text-2xl font-display italic uppercase">{match.competition}</h1>
                             </div>
@@ -1278,19 +1288,33 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                         {/* Quarter & Time */}
                         <div className="text-center">
                             <div className="bg-white/10 rounded-xl p-3 mb-2">
-                                <p className="text-[9px] font-black uppercase tracking-widest text-white/60 mb-1">Quarter</p>
-                                <div className="flex justify-center gap-1">
-                                    {[1, 2, 3, 4].map((q) => (
-                                        <button
-                                            key={q}
-                                            onClick={() => setQuarter(q)}
-                                            className={`w-12 h-12 rounded-xl font-display text-xl transition-all ${quarter === q ? 'bg-primary text-black' : 'bg-white/5 text-white/40'
-                                                }`}
-                                        >
-                                            {q}
-                                        </button>
-                                    ))}
-                                </div>
+                                {/* BUG-192: quarter box previously always rendered fixed 1-4 buttons,
+                                    which highlighted nothing and gave the logger zero visual indication
+                                    of being in OT (BUG-135's OT numbering only ever surfaced in the
+                                    end-of-period modal's button text, never in the persistent header). */}
+                                <p className="text-[9px] font-black uppercase tracking-widest text-white/60 mb-1">
+                                    {quarter > periodCount ? 'Overtime' : 'Quarter'}
+                                </p>
+                                {quarter > periodCount ? (
+                                    <div className="flex justify-center">
+                                        <div className="w-12 h-12 rounded-xl font-display text-xl bg-primary text-black flex items-center justify-center">
+                                            {otNumber || 1}
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <div className="flex justify-center gap-1">
+                                        {[1, 2, 3, 4].map((q) => (
+                                            <button
+                                                key={q}
+                                                onClick={() => setQuarter(q)}
+                                                className={`w-12 h-12 rounded-xl font-display text-xl transition-all ${quarter === q ? 'bg-primary text-black' : 'bg-white/5 text-white/40'
+                                                    }`}
+                                            >
+                                                {q}
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
                             </div>
                             <div className="flex flex-col items-center gap-2">
                                 <div className="flex items-center justify-center gap-2 text-4xl font-display italic">
@@ -1302,7 +1326,7 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                                     className="px-4 py-1.5 bg-white/5 border border-white/10 rounded-full text-[10px] font-black uppercase tracking-widest hover:bg-white/10 transition-all flex items-center gap-2 mt-1"
                                 >
                                     <Activity size={10} className="text-primary" />
-                                    End Quarter
+                                    {quarter > periodCount ? 'End Overtime' : 'End Quarter'}
                                 </button>
                             </div>
                         </div>
@@ -2216,7 +2240,12 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                                 <Clock size={40} className="text-primary" />
                             </div>
 
-                            <h2 className="text-3xl font-display italic uppercase mb-2">End of Quarter {quarter}</h2>
+                            {/* BUG-192: was `End of Quarter {quarter}` using the raw internal
+                                counter, so a real OT read "End of Quarter 5"/"6" instead of a
+                                logger-legible OT label. */}
+                            <h2 className="text-3xl font-display italic uppercase mb-2">
+                                End of {quarter > periodCount ? `Overtime ${otNumber || 1}` : `Quarter ${quarter}`}
+                            </h2>
                             <p className="text-sm text-white/40 mb-8">
                                 Current Score: <span className="text-white font-bold">{homeScore} - {awayScore}</span>
                                 <br />
