@@ -14,25 +14,55 @@
 // it's proven, live-tested code (BACKLOG-058's Live Test 3 evidence). Migrating
 // it to import from here instead is safe follow-up work, not done in this pass.
 
+const REQUIRED_STORES = ['pendingMatchEvents', 'pendingAdminChanges'];
+
+function createStores(db: IDBDatabase) {
+    // Mirror sw-admin.js schema so both sides agree on store shape -- whichever
+    // side (this module or the SW) opens the DB first is the one that actually
+    // runs this, so both must create the same stores.
+    if (!db.objectStoreNames.contains('pendingMatchEvents')) {
+        const store = db.createObjectStore('pendingMatchEvents', { keyPath: 'id', autoIncrement: true });
+        store.createIndex('matchId', 'matchId', { unique: false });
+        store.createIndex('timestamp', 'timestamp', { unique: false });
+    }
+    if (!db.objectStoreNames.contains('pendingAdminChanges')) {
+        const store = db.createObjectStore('pendingAdminChanges', { keyPath: 'id', autoIncrement: true });
+        store.createIndex('timestamp', 'timestamp', { unique: false });
+    }
+}
+
 export function openAdminDB(): Promise<IDBDatabase> {
     return new Promise((resolve, reject) => {
         const req = indexedDB.open('BrixsportAdminDB', 1);
         req.onerror = () => reject(req.error);
-        req.onsuccess = () => resolve(req.result as IDBDatabase);
-        req.onupgradeneeded = (e) => {
-            // Mirror sw-admin.js schema so both sides agree on store shape --
-            // whichever side (this module or the SW) opens the DB first is the one
-            // that actually runs this, so both must create the same stores.
-            const db = (e.target as IDBOpenDBRequest).result;
-            if (!db.objectStoreNames.contains('pendingMatchEvents')) {
-                const store = db.createObjectStore('pendingMatchEvents', { keyPath: 'id', autoIncrement: true });
-                store.createIndex('matchId', 'matchId', { unique: false });
-                store.createIndex('timestamp', 'timestamp', { unique: false });
+        req.onupgradeneeded = (e) => createStores((e.target as IDBOpenDBRequest).result);
+        req.onsuccess = () => {
+            const db = req.result as IDBDatabase;
+            const missingStores = REQUIRED_STORES.some((s) => !db.objectStoreNames.contains(s));
+            if (!missingStores) {
+                resolve(db);
+                return;
             }
-            if (!db.objectStoreNames.contains('pendingAdminChanges')) {
-                const store = db.createObjectStore('pendingAdminChanges', { keyPath: 'id', autoIncrement: true });
-                store.createIndex('timestamp', 'timestamp', { unique: false });
-            }
+            // BUG-193: if anything else (a stray script, a stale SW version from
+            // before these stores existed) ever opened 'BrixsportAdminDB' at
+            // version 1 without defining the schema, it stays permanently
+            // stamped at v1 with no stores -- onupgradeneeded never fires again
+            // for the same version, so every future write throws NotFoundError
+            // forever, with the queue silently unable to save anything. Recover
+            // by deleting and recreating the DB from scratch; any rows in a
+            // broken DB are unreachable anyway, since reading them would hit the
+            // same NotFoundError.
+            console.warn('[admin-offline-queue] BrixsportAdminDB missing expected stores, recreating');
+            db.close();
+            const delReq = indexedDB.deleteDatabase('BrixsportAdminDB');
+            delReq.onerror = () => reject(delReq.error);
+            delReq.onblocked = () => reject(new Error('BrixsportAdminDB recovery blocked — close other tabs and retry'));
+            delReq.onsuccess = () => {
+                const reopenReq = indexedDB.open('BrixsportAdminDB', 1);
+                reopenReq.onerror = () => reject(reopenReq.error);
+                reopenReq.onupgradeneeded = (e) => createStores((e.target as IDBOpenDBRequest).result);
+                reopenReq.onsuccess = () => resolve(reopenReq.result as IDBDatabase);
+            };
         };
     });
 }

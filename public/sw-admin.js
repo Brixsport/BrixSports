@@ -277,34 +277,59 @@ function idbDelete(db, storeName, key) {
     });
 }
 
+const ADMIN_DB_REQUIRED_STORES = ['pendingMatchEvents', 'pendingAdminChanges', 'offlineMatches'];
+
+function createAdminDBStores(db) {
+    if (!db.objectStoreNames.contains('pendingMatchEvents')) {
+        // Row shape: { id (auto), matchId, data (event payload), token (JWT — stored at write time), timestamp }
+        // token is required for Authorization header in syncMatchEvents() — see BACKLOG-058 for write-side wiring
+        const store = db.createObjectStore('pendingMatchEvents', { keyPath: 'id', autoIncrement: true });
+        store.createIndex('matchId', 'matchId', { unique: false });
+        store.createIndex('timestamp', 'timestamp', { unique: false });
+    }
+
+    if (!db.objectStoreNames.contains('pendingAdminChanges')) {
+        // Row shape: { id (auto), url, method, data, token (JWT — required, see syncAdminChanges), timestamp }
+        const store = db.createObjectStore('pendingAdminChanges', { keyPath: 'id', autoIncrement: true });
+        store.createIndex('timestamp', 'timestamp', { unique: false });
+    }
+
+    if (!db.objectStoreNames.contains('offlineMatches')) {
+        db.createObjectStore('offlineMatches', { keyPath: 'id' });
+    }
+}
+
 // Open IndexedDB
 function openDB() {
     return new Promise((resolve, reject) => {
         const request = indexedDB.open('BrixsportAdminDB', 1);
 
         request.onerror = () => reject(request.error);
-        request.onsuccess = () => resolve(request.result);
-
-        request.onupgradeneeded = (event) => {
-            const db = event.target.result;
-
-            if (!db.objectStoreNames.contains('pendingMatchEvents')) {
-                // Row shape: { id (auto), matchId, data (event payload), token (JWT — stored at write time), timestamp }
-                // token is required for Authorization header in syncMatchEvents() — see BACKLOG-058 for write-side wiring
-                const store = db.createObjectStore('pendingMatchEvents', { keyPath: 'id', autoIncrement: true });
-                store.createIndex('matchId', 'matchId', { unique: false });
-                store.createIndex('timestamp', 'timestamp', { unique: false });
+        request.onupgradeneeded = (event) => createAdminDBStores(event.target.result);
+        request.onsuccess = () => {
+            const db = request.result;
+            const missingStores = ADMIN_DB_REQUIRED_STORES.some((s) => !db.objectStoreNames.contains(s));
+            if (!missingStores) {
+                resolve(db);
+                return;
             }
-
-            if (!db.objectStoreNames.contains('pendingAdminChanges')) {
-                // Row shape: { id (auto), url, method, data, token (JWT — required, see syncAdminChanges), timestamp }
-                const store = db.createObjectStore('pendingAdminChanges', { keyPath: 'id', autoIncrement: true });
-                store.createIndex('timestamp', 'timestamp', { unique: false });
-            }
-
-            if (!db.objectStoreNames.contains('offlineMatches')) {
-                db.createObjectStore('offlineMatches', { keyPath: 'id' });
-            }
+            // BUG-193: if the DB was ever stamped at version 1 without these stores
+            // (e.g. by src/lib/admin-offline-queue.ts's own openAdminDB() before its
+            // matching fix, or any other stray opener), onupgradeneeded never fires
+            // again for the same version -- every queued write/read then throws
+            // NotFoundError forever. Recover by deleting and recreating; a DB
+            // missing its stores has no readable rows to lose.
+            console.warn('[SW Admin] BrixsportAdminDB missing expected stores, recreating');
+            db.close();
+            const delReq = indexedDB.deleteDatabase('BrixsportAdminDB');
+            delReq.onerror = () => reject(delReq.error);
+            delReq.onblocked = () => reject(new Error('BrixsportAdminDB recovery blocked'));
+            delReq.onsuccess = () => {
+                const reopenReq = indexedDB.open('BrixsportAdminDB', 1);
+                reopenReq.onerror = () => reject(reopenReq.error);
+                reopenReq.onupgradeneeded = (event) => createAdminDBStores(event.target.result);
+                reopenReq.onsuccess = () => resolve(reopenReq.result);
+            };
         };
     });
 }
