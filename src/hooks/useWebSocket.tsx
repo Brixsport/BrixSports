@@ -442,9 +442,19 @@ export function useMatchTimer(matchId: string) {
 /**
  * Hook for subscribing to match status updates
  */
-export function useMatchStatus(matchId: string, initialStatus: string = 'UPCOMING', initialScore = { home: 0, away: 0 }) {
+export function useMatchStatus(
+    matchId: string,
+    initialStatus: string = 'UPCOMING',
+    initialScore = { home: 0, away: 0 },
+    // BACKLOG-105: penalty shootout score, kept undefined until a real shootout
+    // kick fires — undefined (not {home:0,away:0}) is what tells the consumer
+    // "no shootout happened" vs. "shootout is 0-0 so far", so the (X-Y pens) line
+    // only ever renders once a real kick has landed.
+    initialShootoutScore?: { home: number; away: number }
+) {
     const [status, setStatus] = useState<string>(initialStatus);
     const [score, setScore] = useState<{ home: number; away: number }>(initialScore);
+    const [shootoutScore, setShootoutScore] = useState<{ home: number; away: number } | undefined>(initialShootoutScore);
     const { socket } = useMatchSubscription(matchId);
 
     useEffect(() => {
@@ -454,8 +464,12 @@ export function useMatchStatus(matchId: string, initialStatus: string = 'UPCOMIN
             if (data.matchId === matchId) setStatus(data.status);
         };
 
-        const handleScoreUpdate = (data: { matchId: string; homeScore: number; awayScore: number }) => {
-            if (data.matchId === matchId) setScore({ home: data.homeScore, away: data.awayScore });
+        const handleScoreUpdate = (data: { matchId: string; homeScore: number; awayScore: number; shootoutHomeScore?: number; shootoutAwayScore?: number }) => {
+            if (data.matchId !== matchId) return;
+            setScore({ home: data.homeScore, away: data.awayScore });
+            if (data.shootoutHomeScore !== undefined && data.shootoutAwayScore !== undefined) {
+                setShootoutScore({ home: data.shootoutHomeScore, away: data.shootoutAwayScore });
+            }
         };
 
         const handleMatchUpdate = (data: { matchId: string; status?: string; homeScore?: number; awayScore?: number }) => {
@@ -478,7 +492,7 @@ export function useMatchStatus(matchId: string, initialStatus: string = 'UPCOMIN
         };
     }, [socket, matchId]);
 
-    return { status, score };
+    return { status, score, shootoutScore };
 }
 
 /**

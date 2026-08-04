@@ -54,6 +54,9 @@ export interface Match {
     awayTeamId: string;
     homeScore: number;
     awayScore: number;
+    // BACKLOG-105: undefined means "no shootout," never "0-0 so far."
+    shootoutHomeScore?: number;
+    shootoutAwayScore?: number;
     status: MatchStatus;
     startTime: string;
     venue: string;

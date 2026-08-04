@@ -26,6 +26,10 @@ interface MatchCardProps {
         };
         homeScore: number;
         awayScore: number;
+        // BACKLOG-105: only present once a real shootout kick has landed —
+        // undefined means "no shootout," never "0-0 so far."
+        shootoutHomeScore?: number;
+        shootoutAwayScore?: number;
         status: 'LIVE' | 'FINISHED' | 'UPCOMING' | 'HALF_TIME';
         currentPeriod?: string | null;
         startTime: string;
@@ -42,6 +46,14 @@ export default function MatchCard({ match, variant = 'compact', showCompetition 
     const isLive = match.status === 'LIVE' || match.status === 'HALF_TIME';
     const isFinished = match.status === 'FINISHED';
     const isUpcoming = match.status === 'UPCOMING';
+
+    // BACKLOG-105: a shootout only ever ends decisively (sudden death continues
+    // until it isn't tied), so equal scores only ever happen mid-shootout, never
+    // as a final stored result — treating them as unequal is what marks "a real result exists."
+    const hasShootoutResult = match.shootoutHomeScore != null && match.shootoutAwayScore != null
+        && match.shootoutHomeScore !== match.shootoutAwayScore;
+    const shootoutHomeWon = hasShootoutResult && (match.shootoutHomeScore ?? 0) > (match.shootoutAwayScore ?? 0);
+    const shootoutAwayWon = hasShootoutResult && (match.shootoutAwayScore ?? 0) > (match.shootoutHomeScore ?? 0);
 
     const getStatusColor = () => {
         switch (match.status) {
@@ -107,9 +119,13 @@ export default function MatchCard({ match, variant = 'compact', showCompetition 
                                 </div>
                             ) : (
                                 <div className="flex items-center gap-2">
-                                    <div className="text-2xl font-bold text-white font-mono">{match.homeScore}</div>
+                                    <div className={`text-2xl font-bold font-mono ${shootoutHomeWon ? 'text-blue-400' : 'text-white'}`}>
+                                        {match.homeScore}{hasShootoutResult && <span className="text-sm ml-1">({match.shootoutHomeScore})</span>}
+                                    </div>
                                     <div className="text-gray-500">-</div>
-                                    <div className="text-2xl font-bold text-white font-mono">{match.awayScore}</div>
+                                    <div className={`text-2xl font-bold font-mono ${shootoutAwayWon ? 'text-blue-400' : 'text-white'}`}>
+                                        {match.awayScore}{hasShootoutResult && <span className="text-sm ml-1">({match.shootoutAwayScore})</span>}
+                                    </div>
                                 </div>
                             )}
                             {isLive && (
@@ -173,7 +189,9 @@ export default function MatchCard({ match, variant = 'compact', showCompetition 
                                     <p className="text-sm text-gray-400">Home</p>
                                 </div>
                             </div>
-                            <div className="text-4xl font-bold text-white font-mono">{match.homeScore}</div>
+                            <div className={`text-4xl font-bold font-mono ${shootoutHomeWon ? 'text-blue-400' : 'text-white'}`}>
+                                {match.homeScore}{hasShootoutResult && <span className="text-lg ml-1.5">({match.shootoutHomeScore})</span>}
+                            </div>
                         </div>
 
                         {/* Away Team */}
@@ -185,7 +203,9 @@ export default function MatchCard({ match, variant = 'compact', showCompetition 
                                     <p className="text-sm text-gray-400">Away</p>
                                 </div>
                             </div>
-                            <div className="text-4xl font-bold text-white font-mono">{match.awayScore}</div>
+                            <div className={`text-4xl font-bold font-mono ${shootoutAwayWon ? 'text-blue-400' : 'text-white'}`}>
+                                {match.awayScore}{hasShootoutResult && <span className="text-lg ml-1.5">({match.shootoutAwayScore})</span>}
+                            </div>
                         </div>
                     </div>
 
@@ -249,11 +269,18 @@ export default function MatchCard({ match, variant = 'compact', showCompetition 
                         {isUpcoming ? (
                             <div className="text-gray-400 text-lg font-semibold">VS</div>
                         ) : (
-                            <div className="flex items-center gap-3">
-                                <div className="text-5xl font-bold text-white font-mono">{match.homeScore}</div>
-                                <div className="text-3xl text-gray-600">:</div>
-                                <div className="text-5xl font-bold text-white font-mono">{match.awayScore}</div>
-                            </div>
+                            <>
+                                <div className="flex items-center gap-3">
+                                    <div className={`text-5xl font-bold font-mono ${shootoutHomeWon ? 'text-blue-400' : 'text-white'}`}>{match.homeScore}</div>
+                                    <div className="text-3xl text-gray-600">:</div>
+                                    <div className={`text-5xl font-bold font-mono ${shootoutAwayWon ? 'text-blue-400' : 'text-white'}`}>{match.awayScore}</div>
+                                </div>
+                                {hasShootoutResult && (
+                                    <div className="text-xs text-gray-400 font-bold uppercase tracking-wider mt-1">
+                                        PEN {match.shootoutHomeScore}-{match.shootoutAwayScore}
+                                    </div>
+                                )}
+                            </>
                         )}
                     </div>
 
