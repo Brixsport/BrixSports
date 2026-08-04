@@ -634,9 +634,11 @@ export default function Home() {
                                         {match.homeTeam?.name || 'Home Team'}
                                       </span>
                                       {match.status !== 'UPCOMING' && (
-                                        <span className={`ml-auto text-sm font-bold ${match.homeScore > match.awayScore || (match.homeScore === match.awayScore && match.shootoutHomeScore != null && match.shootoutAwayScore != null && match.shootoutHomeScore > match.shootoutAwayScore) ? 'text-primary' : 'text-white/60'}`}>
+                                        <span className={`ml-auto text-sm font-bold ${match.homeScore > match.awayScore ? 'text-primary' : 'text-white/60'}`}>
                                           {match.homeScore}
-                                          {match.shootoutHomeScore != null && match.shootoutAwayScore != null && match.shootoutHomeScore !== match.shootoutAwayScore && <span className="ml-1 text-xs font-normal">({match.shootoutHomeScore})</span>}
+                                          {match.shootoutHomeScore != null && match.shootoutAwayScore != null && match.shootoutHomeScore !== match.shootoutAwayScore && (
+                                            <span className={`ml-1 text-xs font-normal ${match.shootoutHomeScore > match.shootoutAwayScore ? 'text-primary' : ''}`}>({match.shootoutHomeScore})</span>
+                                          )}
                                         </span>
                                       )}
                                     </div>
@@ -661,9 +663,11 @@ export default function Home() {
                                         {match.awayTeam?.name || 'Away Team'}
                                       </span>
                                       {match.status !== 'UPCOMING' && (
-                                        <span className={`ml-auto text-sm font-bold ${match.awayScore > match.homeScore || (match.awayScore === match.homeScore && match.shootoutAwayScore != null && match.shootoutHomeScore != null && match.shootoutAwayScore > match.shootoutHomeScore) ? 'text-primary' : 'text-white/60'}`}>
+                                        <span className={`ml-auto text-sm font-bold ${match.awayScore > match.homeScore ? 'text-primary' : 'text-white/60'}`}>
                                           {match.awayScore}
-                                          {match.shootoutHomeScore != null && match.shootoutAwayScore != null && match.shootoutHomeScore !== match.shootoutAwayScore && <span className="ml-1 text-xs font-normal">({match.shootoutAwayScore})</span>}
+                                          {match.shootoutHomeScore != null && match.shootoutAwayScore != null && match.shootoutHomeScore !== match.shootoutAwayScore && (
+                                            <span className={`ml-1 text-xs font-normal ${match.shootoutAwayScore > match.shootoutHomeScore ? 'text-primary' : ''}`}>({match.shootoutAwayScore})</span>
+                                          )}
                                         </span>
                                       )}
                                     </div>

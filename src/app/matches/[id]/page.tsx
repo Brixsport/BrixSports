@@ -375,8 +375,6 @@ export default function MatchDetailPage() {
     // treating them as unequal is what actually marks "a real result exists."
     const hasShootoutResult = match.shootoutHomeScore != null && match.shootoutAwayScore != null
         && match.shootoutHomeScore !== match.shootoutAwayScore;
-    const shootoutHomeWon = hasShootoutResult && match.shootoutHomeScore > match.shootoutAwayScore;
-    const shootoutAwayWon = hasShootoutResult && match.shootoutAwayScore > match.shootoutHomeScore;
 
     // Period/clock — WS value takes priority, but only while it's actually fresh.
     // BUG-109: once useMatchTimer marks the WS value stale (socket disconnected), it
@@ -496,10 +494,13 @@ export default function MatchDetailPage() {
 
                         {/* Score */}
                         <div className="text-center">
+                            {/* BACKLOG-105/Richard's call: this is a single-match detail view, not a
+                                scanned list -- the PEN X-Y line already makes the result unambiguous,
+                                so no winner-color treatment here (that's a homepage/list-view thing). */}
                             <div className="flex items-center gap-4">
-                                <div className={`text-4xl font-black ${shootoutHomeWon ? 'text-blue-400' : ''}`}>{match.homeScore}</div>
+                                <div className="text-4xl font-black">{match.homeScore}</div>
                                 <div className="text-2xl text-white/40">-</div>
-                                <div className={`text-4xl font-black ${shootoutAwayWon ? 'text-blue-400' : ''}`}>{match.awayScore}</div>
+                                <div className="text-4xl font-black">{match.awayScore}</div>
                             </div>
                             {hasShootoutResult && (
                                 <div className="text-xs text-white/50 font-bold uppercase tracking-wider mt-0.5">
