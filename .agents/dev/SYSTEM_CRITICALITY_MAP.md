@@ -181,6 +181,18 @@ Six parallel background agents traced the entire platform (logging system, publi
 
 ---
 
+## Update — Sessions 47E-47G, Basketball Tier 0 Closed Out (2026-08-04)
+
+Several items above are now stale — corrected here rather than edited in place, per this project's own convention of not rewriting old entries. This is a live-verified update (DB queries + real preview testing this session), not a code-review-only claim.
+
+- ~~**Basketball has zero WS broadcast wired up**~~ (line ~37) — **RESOLVED.** `BUG-153` (session 47D) fixed period/status broadcast for both sports on a shared listener; session 47E's live-clock work wired real `match:time:update` broadcasts for basketball specifically. Confirmed working this session as a side effect of unrelated testing (public `/matches/[id]` page correctly showed live OT period updates with zero manual refresh).
+- ~~**Basketball has no mid-match-resume seeding at all**~~ (line ~51) — **RESOLVED.** `BACKLOG-141` (session 47E) added real server-side lineup persistence for basketball (same `/api/matches/[id]/lineup` endpoint football already used). `BUG-189` (session 47F) separately fixed the quarter/period hydration gap on remount. Both live-tested this session and 47F — a basketball logger can now refresh mid-match and correctly resume, lineup and period both intact.
+- **`BUG-137`** (retry-interval leak on `SocketProvider` remount, referenced in the inherited-WS-gaps table at line ~47) — **RESOLVED**, live-verified session 47G against a real Richard-triggered Railway restart. Full reconnection resilience chain confirmed end-to-end on genuine infrastructure failure, not just a code read.
+- ~~**`BACKLOG-155` — all 7 admin feature flags are inert**~~ (line ~178) — **RESOLVED**, built for real session 47E. Directly closes the "All 🔴 High Volatility features are disabled or hidden from the UI" Live Event Readiness Checklist item this row itself says it undercuts — confirmed via a direct DB query session 47G: `ads`, `transfers`, `lineupbuilder`, `usermanagement`, `news` are all correctly flagged `false`, and `src/app/api/auth/test/route.ts` (`BUG-003`) is deleted. That checklist item in `CLAUDE.md` is itself stale (still shown `OPEN`) and should be updated separately.
+- **Basketball Tier 0, broadly**: as of session 47G, every basketball-specific item that was open in this document (WS broadcast, resume-seeding, offline queue/`BUG-142`, OT numbering/`BUG-135`, WS reconnect/`BUG-137`) has been live-verified RESOLVED against a real deployed preview — DB ground truth, not UI-inferred. Basketball's remaining open items are genuinely new findings from that verification pass (`BUG-192` display bugs, `BUG-193` offline-queue missing-store race — both also RESOLVED same session) rather than anything on this original map. **Football has not had the equivalent systematic live-verification pass** — `BUG-194` (football's own version of `BUG-193`) was found as a side effect of an offline-queue audit, not a dedicated football sweep, meaning football tier 0's actual completeness is currently unknown, not confirmed-clean. This is explicitly the next session's planned focus.
+
+---
+
 ## Locked Decisions (do not relitigate)
 
 These were explicitly decided in planning sessions and are not open questions.
