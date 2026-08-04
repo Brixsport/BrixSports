@@ -7188,3 +7188,37 @@ Files: `src/components/BasketballLogger.tsx`, `src/app/page.tsx`.
 **Found:** session 47G, background audit dispatched to scope the football/basketball offline-queue consolidation ahead of the next session's planned "offline/cache strategy, both sports together" pass.
 
 ---
+
+## Post-Deployment / SEO & Growth
+
+<!-- Category for real launch-adjacent work that isn't a Tier 0-3 platform bug -- analytics,
+search visibility, discoverability. Deliberately kept separate from the main bug/feature
+backlog so it doesn't compete for priority against live-match-integrity work, but isn't lost
+either. Nothing in this section blocks a live match; nothing above this section should be
+deprioritized in its favor. -->
+
+### BACKLOG-189 — GA4 Analytics Never Wired, Search Console Verification Malformed, Sitemap Has Zero Dynamic Routes (Every Match/Team/Player Page Invisible to Search Engines)
+
+**Status:** OPEN — filed session 47G, not fixed. Filed at Richard's request after recalling this project's own prior SEO research (`SEO_IMPLEMENTATION_GUIDE.md`, `GOOGLE_INDEXING_GUIDE.md`, repo root) — this entry operationalizes that research's own "Next Steps" list against what's actually implemented today, confirmed via direct code read, not just re-stating the guide.
+**Priority:** Medium — real, but explicitly post-deployment/growth work, not a platform-integrity bug. Does not touch any of the Three Critical Flows.
+
+**Problem, three parts, all confirmed via direct code read this session:**
+
+1. **GA4 (Google Analytics) was never wired at all.** Confirmed via grep across `src/app` and `src/lib/env.ts`: zero references to `gtag`, `googletagmanager`, `GoogleAnalytics`, or any `NEXT_PUBLIC_GA*` env var anywhere in the codebase. There is no analytics of any kind on this platform today — no pageview tracking, no event tracking, nothing to measure launch traffic, feature usage, or drop-off with.
+
+2. **Google Search Console verification is inconsistent — one method genuinely done, the other left malformed.** The *file-based* verification method is real and working: `public/googlefd0ce86c5ed02ba9.html` exists on disk, confirmed. But `src/app/layout.tsx:92`'s `google-site-verification` **meta tag** also has that same filename (`'googlefd0ce86c5ed02ba9.html'`) stuffed into its `content` value — that meta tag's content should be a verification *token* (the HTML-tag method's own credential), not a filename; this looks like the file-based verification token got pasted into the wrong field, or copy-pasted without understanding the two methods are separate. Not necessarily broken (the file-based method already established ownership independently), but it's a real, confirmable inconsistency worth cleaning up rather than leaving stale/misleading in the codebase. `msvalidate.01` (Bing Webmaster Tools verification) is still a bare empty string (`layout.tsx:93`) — never done at all.
+
+3. **The real headline gap, matching what Richard specifically flagged**: `src/app/sitemap.ts` has **zero dynamic routes**. Every individual match page (`/matches/[id]`), team page (`/teams/[id]`), player page (`/players/[id]`), news article (`/news/[slug]`), and competition page (`/competitions/[id]`) is entirely absent from the sitemap — only the static top-level listing pages (`/`, `/news`, `/matches`, `/teams`, etc.) are included. The file's own comment (`sitemap.ts:116-118`) says this out loud: *"Dynamic routes... would be fetched from the database in a production implementation... For now, we're including the main listing pages above"* — with the actual DB-fetch code left commented out (`sitemap.ts:120-135`), never implemented. **Compounding this**: `src/app/matches/[id]/page.tsx` is a `'use client'` component with no `generateMetadata` export — client components can't export one in Next.js App Router — so even if a match page WERE discovered by a crawler (e.g. via an internal link, since it's not in the sitemap), every single match page would show the exact same generic root-layout title/description/OG image, not a real per-match title like "UNILAG vs UI — Live Score, NUGA Finals." Same likely applies to team/player pages — not independently re-checked this session, flagged as probably-the-same-pattern rather than confirmed.
+
+**Also confirmed, lower severity — the AEO/structured-data utilities described in `SEO_IMPLEMENTATION_GUIDE.md` are pure dead scaffolding.** `src/lib/utils/aeo.ts`'s schema generators (`generateSportsEventSchema`, `generateSportsTeamSchema`, `generateAthleteSchema`, etc.) and the `<StructuredData>`/`<PageSEO>` components exist and are documented in detail in the guide, but a grep for their actual usage on `src/app/matches/**` returns zero matches — they were built, documented as "how to use," and never actually wired into any real page. Same shape as this project's own recurring "guide describes an integration that nobody actually built" pattern (e.g. `BACKLOG-159`'s dead rating pipeline).
+
+**Fix (not built — scoping only, this is a filing, not an implementation):**
+1. Wire GA4: add `NEXT_PUBLIC_GA_MEASUREMENT_ID` to `src/lib/env.ts` (per this project's own "never read `process.env` directly" rule) and a `gtag.js` script injection in the root layout, gated on the env var being present so local/staging doesn't pollute production analytics.
+2. Fix the Search Console meta tag: replace the misplaced filename in `google-site-verification` with a real HTML-tag verification token (or remove the meta tag entirely and rely solely on the already-working file-based method — either is valid, just pick one deliberately). Add the Bing `msvalidate.01` token if Bing visibility is wanted.
+3. Wire `sitemap.ts`'s commented-out dynamic-route code for real: fetch matches/teams/players/news/competitions from the DB (respecting `.limit()` per this project's own anti-pattern rule — a sitemap with tens of thousands of URLs needs pagination or a reasonable cap, not an unbounded query) and generate real per-entity URLs with real `lastModified` timestamps.
+4. Convert `matches/[id]/page.tsx` (and likely `teams/[id]`/`players/[id]`, not yet independently checked) to support real per-page metadata — either via `generateMetadata` on a server-component wrapper, or Next.js's dynamic `<head>` injection pattern for client components — so each match/team/player page gets a real, unique, search-relevant title and description instead of inheriting the generic site-wide default.
+5. Actually wire the already-built AEO structured-data components (`StructuredData`, `generateSportsEventSchema` etc.) into the real match/team/player pages per `SEO_IMPLEMENTATION_GUIDE.md`'s own documented usage examples, now that there's real per-page metadata to pair them with.
+
+**Found:** session 47G, Richard's own recall of prior SEO research in this repo, confirmed against actual current implementation state via direct code read (not just re-stating the existing guides).
+
+---
