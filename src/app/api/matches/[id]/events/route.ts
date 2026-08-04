@@ -249,6 +249,8 @@ export async function POST(
         // regardless of how many concurrent writers there are, not just the common case.
         let newHomeScore: number | undefined;
         let newAwayScore: number | undefined;
+        let newShootoutHomeScore: number | undefined;
+        let newShootoutAwayScore: number | undefined;
 
         // BUG-131: `points = typeof value === 'number' ? value : 1` trusted the
         // client-supplied `value` verbatim for the atomic score increment — a POST
@@ -287,6 +289,27 @@ export async function POST(
                 newHomeScore = updated.homeScore ?? 0;
                 newAwayScore = updated.awayScore ?? 0;
             }
+
+            // BACKLOG-105: penalty shootout score, isolated from homeScore/awayScore.
+            // Only PEN_SCORED increments; PEN_MISSED/PEN_SAVED are logged (for the
+            // shootout sequence display) but never touch any score. No player-stat
+            // write happens for any PEN_* type -- they simply have no case in
+            // updatePlayerStats' switch below, so it's a no-op by construction, not a guard.
+            if (upperType === 'PEN_SCORED' && isPenaltyShootout) {
+                const isHomeTeam = teamId === match.homeTeamId;
+                const [updated] = isHomeTeam
+                    ? await tx.update(matches)
+                        .set({ shootoutHomeScore: sql`COALESCE(${matches.shootoutHomeScore}, 0) + 1`, updatedAt: new Date() })
+                        .where(eq(matches.id, matchId))
+                        .returning({ shootoutHomeScore: matches.shootoutHomeScore, shootoutAwayScore: matches.shootoutAwayScore })
+                    : await tx.update(matches)
+                        .set({ shootoutAwayScore: sql`COALESCE(${matches.shootoutAwayScore}, 0) + 1`, updatedAt: new Date() })
+                        .where(eq(matches.id, matchId))
+                        .returning({ shootoutHomeScore: matches.shootoutHomeScore, shootoutAwayScore: matches.shootoutAwayScore });
+
+                newShootoutHomeScore = updated.shootoutHomeScore ?? 0;
+                newShootoutAwayScore = updated.shootoutAwayScore ?? 0;
+            }
         });
 
         // BUG-108/BUG-116: broadcast to live viewers now that the DB write has actually
@@ -307,6 +330,10 @@ export async function POST(
 
         if (newHomeScore !== undefined && newAwayScore !== undefined) {
             after(() => broadcastScoreUpdate(matchId, newHomeScore!, newAwayScore!));
+        }
+
+        if (newShootoutHomeScore !== undefined && newShootoutAwayScore !== undefined) {
+            after(() => broadcastScoreUpdate(matchId, match.homeScore ?? 0, match.awayScore ?? 0, newShootoutHomeScore, newShootoutAwayScore));
         }
 
         // Update player stats for competitive matches only — friendlies and shootout events do not count
@@ -349,6 +376,8 @@ export async function POST(
             success: true,
             message: 'Event created successfully',
             event: newEvent,
+            ...(newShootoutHomeScore !== undefined ? { shootoutHomeScore: newShootoutHomeScore } : {}),
+            ...(newShootoutAwayScore !== undefined ? { shootoutAwayScore: newShootoutAwayScore } : {}),
         }, { status: 201 });
     } catch (error) {
         console.error('Error creating match event:', error);

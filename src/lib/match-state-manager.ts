@@ -40,7 +40,12 @@ export type FootballEventType =
     // General
     | 'Shot' | 'Shot on Target' | 'Shot off Target' | 'Offside' | 'Substitution'
     // Penalty outcomes
-    | 'Penalty Saved' | 'Penalty Missed';
+    | 'Penalty Saved' | 'Penalty Missed'
+    // BACKLOG-105: penalty shootout kicks — distinct from 'Penalty'/'Penalty Saved'/
+    // 'Penalty Missed' on purpose. Those write career stats and the main score;
+    // these must not (updatePlayerStats has no case for them, so it's a no-op by
+    // construction — see events/route.ts). Shootout score is tracked separately.
+    | 'PEN_SCORED' | 'PEN_MISSED' | 'PEN_SAVED';
 
 export interface PlayerSnapshot {
     name: string;
