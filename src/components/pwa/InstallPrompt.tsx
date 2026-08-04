@@ -24,8 +24,11 @@ export function InstallPrompt({ appType = 'user' }: { appType?: 'user' | 'admin'
             return;
         }
 
-        // Check if user dismissed the prompt before
-        const dismissed = localStorage.getItem('pwa-install-dismissed');
+        // BACKLOG-131: this key was un-namespaced ('pwa-install-dismissed'),
+        // unlike the "installed" flag above -- dismissing on one app type
+        // suppressed the prompt for every other app type too, for the full
+        // 7-day cooldown. Namespaced to match.
+        const dismissed = localStorage.getItem(`brix-${appType}-install-dismissed`);
         if (dismissed) {
             const dismissedTime = parseInt(dismissed);
             const daysSinceDismissed = (Date.now() - dismissedTime) / (1000 * 60 * 60 * 24);
@@ -39,14 +42,14 @@ export function InstallPrompt({ appType = 'user' }: { appType?: 'user' | 'admin'
         // Setup install prompt listener
         const cleanup = setupInstallPrompt((prompt) => {
             setDeferredPrompt(prompt);
-            // Show prompt after 30 seconds
+            // Show prompt after 5 seconds
             setTimeout(() => {
                 setShowPrompt(true);
             }, 5000);
         });
 
         return cleanup;
-    }, []);
+    }, [appType]);
 
     const handleInstall = async () => {
         if (!deferredPrompt) return;
@@ -65,7 +68,7 @@ export function InstallPrompt({ appType = 'user' }: { appType?: 'user' | 'admin'
 
     const handleDismiss = () => {
         setShowPrompt(false);
-        localStorage.setItem('pwa-install-dismissed', Date.now().toString());
+        localStorage.setItem(`brix-${appType}-install-dismissed`, Date.now().toString());
     };
 
     if (isInstalled || !showPrompt) {

@@ -34,6 +34,45 @@ const limitCacheSize = async (cacheName, maxSize) => {
     }
 };
 
+// BACKLOG-060: per-route API caching strategy, mirroring sw-user.js exactly
+// (both files must agree -- see the DB-schema-drift lesson from BUG-193's own
+// follow-up fix this session). Every /api/* GET used to be treated
+// identically here too -- worse for admin/logger, since a stale read on a
+// match's live config or events is actively wrong, not just outdated.
+const NEVER_CACHE_API_PATTERNS = [
+    /^\/api\/matches\/[^/]+\/events(\/|$|\?)/,
+    /^\/api\/matches\/[^/]+\/config(\/|$|\?)/,
+    /^\/api\/auth\//,
+];
+const SHORT_TTL_API_PATTERNS = [
+    /^\/api\/matches(\/|$|\?)/,
+    // Live-verified gap: the homepage's actual live-match list calls these
+    // sport-specific list endpoints (src/app/page.tsx), not a bare
+    // /api/matches -- confirmed via a real Cache Storage read that they were
+    // falling through to the generic bucket (no 30s staleness check) instead.
+    /^\/api\/(basketball|football|other)\/matches(\/|$|\?)/,
+    /^\/api\/competitions(\/|$|\?)/,
+];
+const STALE_WHILE_REVALIDATE_API_PATTERNS = [
+    /^\/api\/players(\/|$|\?)/,
+    /^\/api\/teams(\/|$|\?)/,
+];
+const SHORT_API_TTL_MS = 30 * 1000;
+
+const isNeverCacheApi = (pathname) => NEVER_CACHE_API_PATTERNS.some((re) => re.test(pathname));
+// Order matters: check NEVER_CACHE_API_PATTERNS first at the call site --
+// `/api/matches/[id]/events`/`/config` also match the broader
+// `/api/matches` short-TTL pattern below, and must be excluded from it.
+const isShortTtlApi = (pathname) => SHORT_TTL_API_PATTERNS.some((re) => re.test(pathname));
+const isStaleWhileRevalidateApi = (pathname) => STALE_WHILE_REVALIDATE_API_PATTERNS.some((re) => re.test(pathname));
+
+const isFreshEnough = (cachedResponse, maxAgeMs) => {
+    if (!cachedResponse) return false;
+    const dateHeader = cachedResponse.headers.get('date');
+    if (!dateHeader) return false;
+    return (Date.now() - new Date(dateHeader).getTime()) <= maxAgeMs;
+};
+
 // Install event
 self.addEventListener('install', (event) => {
     console.log('[SW Admin] Installing Service Worker');
@@ -83,12 +122,71 @@ self.addEventListener('fetch', (event) => {
         return;
     }
 
-    // API requests - Network first with short cache fallback
+    // API requests - per-route TTL strategy (BACKLOG-060), same rules as
+    // sw-user.js.
     if (url.pathname.startsWith('/api/')) {
+        const offlineJsonResponse = () => new Response(
+            JSON.stringify({ error: 'Offline', offline: true }),
+            { status: 503, headers: { 'Content-Type': 'application/json' } }
+        );
+
+        // Never cache: auth checks and a match's live events/config must
+        // always reflect the current request, never a cached one.
+        if (isNeverCacheApi(url.pathname)) {
+            event.respondWith(fetch(request));
+            return;
+        }
+
+        // Stale-while-revalidate: near-static reference data (teams, players).
+        if (isStaleWhileRevalidateApi(url.pathname)) {
+            event.respondWith(
+                caches.open(API_CACHE).then(async (cache) => {
+                    const cached = await cache.match(request);
+                    const networkFetch = fetch(request).then((response) => {
+                        if (response.status === 200) {
+                            cache.put(request, response.clone());
+                            limitCacheSize(API_CACHE, MAX_API_CACHE_SIZE);
+                        }
+                        return response;
+                    });
+                    if (cached) {
+                        event.waitUntil(networkFetch.catch(() => {}));
+                        return cached;
+                    }
+                    return networkFetch.catch(offlineJsonResponse);
+                })
+            );
+            return;
+        }
+
+        // Short-TTL network-first (matches, competitions): only serve a
+        // cached response on network failure if it's still within
+        // SHORT_API_TTL_MS.
+        if (isShortTtlApi(url.pathname)) {
+            event.respondWith(
+                fetch(request)
+                    .then((response) => {
+                        if (response.status === 200) {
+                            const responseClone = response.clone();
+                            caches.open(API_CACHE).then((cache) => {
+                                cache.put(request, responseClone);
+                                limitCacheSize(API_CACHE, MAX_API_CACHE_SIZE);
+                            });
+                        }
+                        return response;
+                    })
+                    .catch(async () => {
+                        const cached = await caches.match(request);
+                        return isFreshEnough(cached, SHORT_API_TTL_MS) ? cached : offlineJsonResponse();
+                    })
+            );
+            return;
+        }
+
+        // Everything else under /api/ -- unchanged prior behavior.
         event.respondWith(
             fetch(request)
                 .then((response) => {
-                    // Only cache GET requests with successful responses
                     if (response.status === 200) {
                         const responseClone = response.clone();
                         caches.open(API_CACHE).then((cache) => {
@@ -98,23 +196,15 @@ self.addEventListener('fetch', (event) => {
                     }
                     return response;
                 })
-                .catch(() => {
-                    // Return cached version if network fails
-                    return caches.match(request).then((cachedResponse) => {
-                        if (cachedResponse) {
-                            return cachedResponse;
-                        }
-                        // Return offline response for critical endpoints
-                        return new Response(
-                            JSON.stringify({ error: 'Offline', offline: true }),
-                            {
-                                status: 503,
-                                headers: { 'Content-Type': 'application/json' }
-                            }
-                        );
-                    });
-                })
+                .catch(() => caches.match(request).then((cachedResponse) => cachedResponse || offlineJsonResponse()))
         );
+        return;
+    }
+
+    // Cloudinary-hosted images are served from Cloudinary's own CDN with its
+    // own caching/optimization -- intercepting them through the SW only
+    // wastes Cache Storage quota. Let the browser handle these natively.
+    if (url.hostname.endsWith('res.cloudinary.com')) {
         return;
     }
 
@@ -209,16 +299,30 @@ async function syncMatchEvents() {
     }
 }
 
-// Sync admin changes
+// Sync admin changes -- this store/drain existed but nothing ever wrote to it
+// (confirmed: zero references anywhere in src/ before BUG-142's period-transition/
+// undo scope). Fixed a real bug found while activating it: no Authorization header
+// was ever sent, same class of gap BACKLOG-058 fixed for pendingMatchEvents --
+// a background sync fires with no browser session/cookie, so every retry would
+// have 401'd. token is now required at queue-write time, same convention as
+// pendingMatchEvents.
 async function syncAdminChanges() {
     try {
         const db = await openDB();
         const pendingChanges = await idbGetAll(db, 'pendingAdminChanges');
 
         for (const change of pendingChanges) {
+            if (!change.token) {
+                console.warn('[SW Admin] Skipping admin change', change.id, '— no token stored, will retry on next sync');
+                continue;
+            }
+
             const response = await fetch(change.url, {
                 method: change.method,
-                headers: { 'Content-Type': 'application/json' },
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${change.token}`,
+                },
                 body: JSON.stringify(change.data),
             });
 
@@ -263,33 +367,59 @@ function idbDelete(db, storeName, key) {
     });
 }
 
+const ADMIN_DB_REQUIRED_STORES = ['pendingMatchEvents', 'pendingAdminChanges', 'offlineMatches'];
+
+function createAdminDBStores(db) {
+    if (!db.objectStoreNames.contains('pendingMatchEvents')) {
+        // Row shape: { id (auto), matchId, data (event payload), token (JWT — stored at write time), timestamp }
+        // token is required for Authorization header in syncMatchEvents() — see BACKLOG-058 for write-side wiring
+        const store = db.createObjectStore('pendingMatchEvents', { keyPath: 'id', autoIncrement: true });
+        store.createIndex('matchId', 'matchId', { unique: false });
+        store.createIndex('timestamp', 'timestamp', { unique: false });
+    }
+
+    if (!db.objectStoreNames.contains('pendingAdminChanges')) {
+        // Row shape: { id (auto), url, method, data, token (JWT — required, see syncAdminChanges), timestamp }
+        const store = db.createObjectStore('pendingAdminChanges', { keyPath: 'id', autoIncrement: true });
+        store.createIndex('timestamp', 'timestamp', { unique: false });
+    }
+
+    if (!db.objectStoreNames.contains('offlineMatches')) {
+        db.createObjectStore('offlineMatches', { keyPath: 'id' });
+    }
+}
+
 // Open IndexedDB
 function openDB() {
     return new Promise((resolve, reject) => {
         const request = indexedDB.open('BrixsportAdminDB', 1);
 
         request.onerror = () => reject(request.error);
-        request.onsuccess = () => resolve(request.result);
-
-        request.onupgradeneeded = (event) => {
-            const db = event.target.result;
-
-            if (!db.objectStoreNames.contains('pendingMatchEvents')) {
-                // Row shape: { id (auto), matchId, data (event payload), token (JWT — stored at write time), timestamp }
-                // token is required for Authorization header in syncMatchEvents() — see BACKLOG-058 for write-side wiring
-                const store = db.createObjectStore('pendingMatchEvents', { keyPath: 'id', autoIncrement: true });
-                store.createIndex('matchId', 'matchId', { unique: false });
-                store.createIndex('timestamp', 'timestamp', { unique: false });
+        request.onupgradeneeded = (event) => createAdminDBStores(event.target.result);
+        request.onsuccess = () => {
+            const db = request.result;
+            const missingStores = ADMIN_DB_REQUIRED_STORES.some((s) => !db.objectStoreNames.contains(s));
+            if (!missingStores) {
+                resolve(db);
+                return;
             }
-
-            if (!db.objectStoreNames.contains('pendingAdminChanges')) {
-                const store = db.createObjectStore('pendingAdminChanges', { keyPath: 'id', autoIncrement: true });
-                store.createIndex('timestamp', 'timestamp', { unique: false });
-            }
-
-            if (!db.objectStoreNames.contains('offlineMatches')) {
-                db.createObjectStore('offlineMatches', { keyPath: 'id' });
-            }
+            // BUG-193: if the DB was ever stamped at version 1 without these stores
+            // (e.g. by src/lib/admin-offline-queue.ts's own openAdminDB() before its
+            // matching fix, or any other stray opener), onupgradeneeded never fires
+            // again for the same version -- every queued write/read then throws
+            // NotFoundError forever. Recover by deleting and recreating; a DB
+            // missing its stores has no readable rows to lose.
+            console.warn('[SW Admin] BrixsportAdminDB missing expected stores, recreating');
+            db.close();
+            const delReq = indexedDB.deleteDatabase('BrixsportAdminDB');
+            delReq.onerror = () => reject(delReq.error);
+            delReq.onblocked = () => reject(new Error('BrixsportAdminDB recovery blocked'));
+            delReq.onsuccess = () => {
+                const reopenReq = indexedDB.open('BrixsportAdminDB', 1);
+                reopenReq.onerror = () => reject(reopenReq.error);
+                reopenReq.onupgradeneeded = (event) => createAdminDBStores(event.target.result);
+                reopenReq.onsuccess = () => resolve(reopenReq.result);
+            };
         };
     });
 }
@@ -365,6 +495,10 @@ self.addEventListener('message', (event) => {
         // FootballLogger posts this message on 'online' and 'visibilitychange'
         // so the SW drains the queue directly from the page context (BACKLOG-107).
         event.waitUntil(syncMatchEvents());
+    } else if (event.data && event.data.type === 'DRAIN_ADMIN_CHANGES') {
+        // Same iOS fallback as DRAIN_MATCH_EVENTS above, for the pendingAdminChanges
+        // queue (period-transition PATCH / undo DELETE retries, BUG-142).
+        event.waitUntil(syncAdminChanges());
     }
 });
 

@@ -19,8 +19,9 @@ export function IOSInstallPrompt({ appType = 'user' }: { appType?: 'user' | 'adm
         const isStandalone = (window.navigator as any).standalone === true;
         setIsInstalled(isStandalone);
 
-        // Check if user dismissed the prompt before
-        const dismissed = localStorage.getItem('ios-install-dismissed');
+        // BACKLOG-131: was un-namespaced ('ios-install-dismissed'), same bug
+        // class as InstallPrompt.tsx's own dismiss key.
+        const dismissed = localStorage.getItem(`brix-${appType}-ios-install-dismissed`);
         if (dismissed) {
             const dismissedTime = parseInt(dismissed);
             const daysSinceDismissed = (Date.now() - dismissedTime) / (1000 * 60 * 60 * 24);
@@ -48,7 +49,7 @@ export function IOSInstallPrompt({ appType = 'user' }: { appType?: 'user' | 'adm
 
     const handleDismiss = () => {
         setShowPrompt(false);
-        localStorage.setItem('ios-install-dismissed', Date.now().toString());
+        localStorage.setItem(`brix-${appType}-ios-install-dismissed`, Date.now().toString());
     };
 
     // Only show for iOS devices that haven't installed
@@ -165,8 +166,9 @@ export function IOSInstallBanner({ appType = 'user' }: { appType?: 'user' | 'adm
         const isStandalone = (window.navigator as any).standalone === true;
         setIsInstalled(isStandalone);
 
-        // Check if banner was dismissed
-        const bannerDismissed = localStorage.getItem('ios-banner-dismissed');
+        // BACKLOG-131: was un-namespaced ('ios-banner-dismissed'), same bug
+        // class as the other two dismiss keys in this file/InstallPrompt.tsx.
+        const bannerDismissed = localStorage.getItem(`brix-${appType}-ios-banner-dismissed`);
 
         // Check if any part of the app is already installed (persisted flag)
         const persistentInstall = localStorage.getItem(`brix-${appType}-installed`) === 'true';
@@ -179,7 +181,7 @@ export function IOSInstallBanner({ appType = 'user' }: { appType?: 'user' | 'adm
 
     const handleDismiss = () => {
         setShowBanner(false);
-        localStorage.setItem('ios-banner-dismissed', 'true');
+        localStorage.setItem(`brix-${appType}-ios-banner-dismissed`, 'true');
     };
 
     if (!isIOS || isInstalled || !showBanner) {

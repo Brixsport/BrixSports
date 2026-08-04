@@ -139,23 +139,23 @@ export default function LiveStats({ stats, sport, homeTeam, awayTeam }: LiveStat
         <div className="space-y-6">
             <StatBar
                 label="Field Goals Made"
-                homeValue={stats.homeFieldGoals || 0}
-                awayValue={stats.awayFieldGoals || 0}
-                max={Math.max(stats.homeFieldGoals || 0, stats.awayFieldGoals || 0, 40)}
+                homeValue={stats.homeFieldGoalsMade || 0}
+                awayValue={stats.awayFieldGoalsMade || 0}
+                max={Math.max(stats.homeFieldGoalsMade || 0, stats.awayFieldGoalsMade || 0, 40)}
                 icon={<Target className="w-4 h-4" />}
             />
             <StatBar
                 label="3-Pointers Made"
-                homeValue={stats.homeThreePointers || 0}
-                awayValue={stats.awayThreePointers || 0}
-                max={Math.max(stats.homeThreePointers || 0, stats.awayThreePointers || 0, 15)}
+                homeValue={stats.homeThreePointersMade || 0}
+                awayValue={stats.awayThreePointersMade || 0}
+                max={Math.max(stats.homeThreePointersMade || 0, stats.awayThreePointersMade || 0, 15)}
                 icon={<Target className="w-4 h-4" />}
             />
             <StatBar
                 label="Free Throws Made"
-                homeValue={stats.homeFreeThrows || 0}
-                awayValue={stats.awayFreeThrows || 0}
-                max={Math.max(stats.homeFreeThrows || 0, stats.awayFreeThrows || 0, 20)}
+                homeValue={stats.homeFreeThrowsMade || 0}
+                awayValue={stats.awayFreeThrowsMade || 0}
+                max={Math.max(stats.homeFreeThrowsMade || 0, stats.awayFreeThrowsMade || 0, 20)}
                 icon={<Target className="w-4 h-4" />}
             />
             <StatBar

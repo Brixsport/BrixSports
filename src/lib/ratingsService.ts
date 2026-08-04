@@ -29,6 +29,23 @@ export async function calculateAndSaveRatings(matchId: string) {
         throw new Error('Match not found');
     }
 
+    // BACKLOG-146/159: this function's entire stat-extraction model below (goals,
+    // tackles, corners, dribbles, offsides) is football-shaped -- it has zero
+    // basketball-aware event mapping (Field Goal/Three Pointer/Free Throw/Rebound/
+    // Assist/Steal/Block/Turnover). It never ran for basketball before tonight only
+    // because match.lineups was always empty (BACKLOG-146's original blocker,
+    // resolved by BACKLOG-141's real lineup persistence, session 47E). Without this
+    // guard, basketball matches would now silently compute and write near-meaningless
+    // ratings (almost every football-specific stat reads as 0, only 'Foul' happens
+    // to coincidentally match) the moment a lineup is confirmed -- worse than the
+    // previous "throws, does nothing" state, since it looks like real data. Real fix
+    // needs basketball-aware stat extraction (own scope, tracked in BACKLOG-159's
+    // "two disconnected rating pipelines" finding), not built here.
+    const sport = (match[0].sport ?? 'Football').toLowerCase();
+    if (!sport.includes('football')) {
+        throw new Error(`calculateAndSaveRatings: no rating model exists for sport "${match[0].sport}" yet (BACKLOG-159)`);
+    }
+
     const events = await db
         .select()
         .from(matchEvents)

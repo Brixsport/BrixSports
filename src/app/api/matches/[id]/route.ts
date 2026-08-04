@@ -315,15 +315,30 @@ export async function GET(
             };
         }
 
-        // If stats are not available and this is a basketball match, calculate from events
+        // If stats are not available and this is a basketball match, calculate from events.
+        // BACKLOG-139: this switch previously matched on '2PT_MADE'/'3PT_MADE'/'FREE_THROW'/
+        // 'REBOUND'/'ASSIST'/'STEAL'/'BLOCK' -- BasketballLogger.tsx has only ever dispatched
+        // 'Field Goal'/'Three Pointer'/'Free Throw'/'Rebound'/'Assist'/'Steal'/'Block' (see its
+        // own BasketballEventType union). Every case here was dead on arrival, so every
+        // basketball team stat (not just the percentage fields originally filed) was always
+        // zero for every real match. Attempt/made distinction now uses the same convention
+        // already correct in BasketballLogger.tsx's own calculateAdvancedStats: `value` holds
+        // the point value on a make (2/3/1) and 0 on a miss; every shot-type event counts as
+        // an attempt regardless of outcome.
         if (!stats && match.match.sport === 'Basketball' && events.length > 0) {
             stats = {
-                homeFieldGoals: 0,
-                awayFieldGoals: 0,
-                homeThreePointers: 0,
-                awayThreePointers: 0,
-                homeFreeThrows: 0,
-                awayFreeThrows: 0,
+                homeFieldGoalsMade: 0,
+                awayFieldGoalsMade: 0,
+                homeFieldGoalsAttempted: 0,
+                awayFieldGoalsAttempted: 0,
+                homeThreePointersMade: 0,
+                awayThreePointersMade: 0,
+                homeThreePointersAttempted: 0,
+                awayThreePointersAttempted: 0,
+                homeFreeThrowsMade: 0,
+                awayFreeThrowsMade: 0,
+                homeFreeThrowsAttempted: 0,
+                awayFreeThrowsAttempted: 0,
                 homeRebounds: 0,
                 awayRebounds: 0,
                 homeAssists: 0,
@@ -340,32 +355,51 @@ export async function GET(
             events.forEach((event: any) => {
                 const isHomeTeam = event.teamId === match.match.homeTeamId;
                 const prefix = isHomeTeam ? 'home' : 'away';
+                const made = Number(event.value) > 0;
 
                 switch (event.type) {
-                    case '2PT_MADE':
-                        stats[`${prefix}FieldGoals`]++;
+                    case 'Field Goal':
+                        stats[`${prefix}FieldGoalsAttempted`]++;
+                        if (made) stats[`${prefix}FieldGoalsMade`]++;
                         break;
-                    case '3PT_MADE':
-                        stats[`${prefix}FieldGoals`]++;
-                        stats[`${prefix}ThreePointers`]++;
+                    case 'Three Pointer':
+                        stats[`${prefix}FieldGoalsAttempted`]++;
+                        stats[`${prefix}ThreePointersAttempted`]++;
+                        if (made) {
+                            stats[`${prefix}FieldGoalsMade`]++;
+                            stats[`${prefix}ThreePointersMade`]++;
+                        }
                         break;
-                    case 'FREE_THROW':
-                        stats[`${prefix}FreeThrows`]++;
+                    case 'Free Throw':
+                        stats[`${prefix}FreeThrowsAttempted`]++;
+                        if (made) stats[`${prefix}FreeThrowsMade`]++;
                         break;
-                    case 'REBOUND':
+                    case 'Rebound':
                         stats[`${prefix}Rebounds`]++;
                         break;
-                    case 'ASSIST':
+                    case 'Assist':
                         stats[`${prefix}Assists`]++;
                         break;
-                    case 'STEAL':
+                    case 'Steal':
                         stats[`${prefix}Steals`]++;
                         break;
-                    case 'BLOCK':
+                    case 'Block':
                         stats[`${prefix}Blocks`]++;
+                        break;
+                    case 'Turnover':
+                        stats[`${prefix}Turnovers`]++;
                         break;
                 }
             });
+
+            // BACKLOG-139: the actual originally-filed gap -- percentage fields were never
+            // computed at all, so BasketballMatchOverlay.tsx's Field Goal %/3-Point %/Free
+            // Throw % bars always rendered a flat 0% regardless of the (now-fixed) counters
+            // above.
+            const pct = (made: number, attempted: number) => attempted > 0 ? Math.round((made / attempted) * 100) : 0;
+            stats.fieldGoalPercentage = [pct(stats.homeFieldGoalsMade, stats.homeFieldGoalsAttempted), pct(stats.awayFieldGoalsMade, stats.awayFieldGoalsAttempted)];
+            stats.threePointPercentage = [pct(stats.homeThreePointersMade, stats.homeThreePointersAttempted), pct(stats.awayThreePointersMade, stats.awayThreePointersAttempted)];
+            stats.freeThrowPercentage = [pct(stats.homeFreeThrowsMade, stats.homeFreeThrowsAttempted), pct(stats.awayFreeThrowsMade, stats.awayFreeThrowsAttempted)];
         }
 
         // Note: Viewer count feature not yet implemented in schema
@@ -520,14 +554,22 @@ export async function PATCH(
         // reachable only by an authenticated, assigned logger/admin so low exploitability,
         // but cheap to close. No DB-level constraint either (schema.ts:340, plain text
         // column), so this is the only gate.
+        // BUG-191: the flat 'OT' entry was stale the moment this list was written --
+        // BUG-135 (session 47E) already changed basketball's OT label to numbered
+        // OT1/OT2/etc, but this allowlist was added later without picking that up.
+        // Confirmed live, session 47F: every real OT transition since BUG-135 shipped
+        // has 422'd here, visibly failing to persist (BasketballLogger.tsx only ever
+        // sends `OT${n}`, never the flat string). Matched via regex instead of a fixed
+        // list since the OT number is unbounded (a match can theoretically reach OT3+).
         const VALID_PERIODS = [
             'NOT_STARTED', 'FIRST_HALF', 'HALF_TIME', 'SECOND_HALF',
             'EXTRA_TIME_1', 'EXTRA_TIME_BREAK', 'EXTRA_TIME_2', 'PENALTY_SHOOTOUT',
             'FINISHED', 'SUSPENDED',
-            'Q1', 'Q2', 'Q3', 'Q4', 'OT',
+            'Q1', 'Q2', 'Q3', 'Q4',
         ] as const;
         if (body.currentPeriod !== undefined) {
-            if (!VALID_PERIODS.includes(body.currentPeriod)) {
+            const isNumberedOT = /^OT\d+$/.test(body.currentPeriod);
+            if (!VALID_PERIODS.includes(body.currentPeriod) && !isNumberedOT) {
                 return NextResponse.json({ error: 'Invalid currentPeriod value' }, { status: 422 });
             }
             updateData.currentPeriod = body.currentPeriod;

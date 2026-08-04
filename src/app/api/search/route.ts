@@ -7,8 +7,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { and, desc, eq, like, or, sql } from 'drizzle-orm';
 import { db } from '@/db';
 import { competitions, matches, players, teams } from '@/db/schema';
-import { enrichPlayersWithAffiliations } from '@/lib/player-data';
+import { enrichPlayersWithAffiliations, toPublicPlayer } from '@/lib/player-data';
 import { getPrimaryTeam, getResolvedInstitutionalData } from '@/lib/player-affiliation-utils';
+import { getAuthUser } from '@/lib/auth';
 
 function playerMatchesQuery(
     player: Awaited<ReturnType<typeof enrichPlayersWithAffiliations>>[number],
@@ -43,6 +44,9 @@ function playerMatchesQuery(
 
 export async function GET(request: NextRequest) {
     try {
+        const authUser = await getAuthUser(request).catch(() => null);
+        const isAdmin = authUser?.role === 'admin';
+
         const { searchParams } = new URL(request.url);
 
         const query = searchParams.get('q') || '';
@@ -114,13 +118,16 @@ export async function GET(request: NextRequest) {
                         return false;
                     }
 
+                    // Matched against email/memberships/etc. before the public strip
+                    // below — search must still work over fields a non-admin caller
+                    // never sees in the response (BACKLOG-167).
                     return playerMatchesQuery(player, query);
                 })
                 .slice(0, limit)
-                .map((player) => ({
+                .map((player) => toPublicPlayer({
                     ...player,
                     team: getPrimaryTeam(player),
-                }));
+                }, isAdmin));
         }
 
         if (!category || category === 'all' || category === 'matches') {

@@ -39,6 +39,16 @@ let stableFallback: SocketContextValue | null = null;
 let sharedSocket: Socket | null = null;
 let connectionCount = 0;
 let manualRetryLoopActive = false; // guards against a second parallel post-exhaustion retry loop
+// BUG-137: the pending setTimeout handle inside scheduleRetry() had no reference
+// reachable outside its own closure, so SocketProvider's unmount cleanup could
+// null sharedSocket but never actually cancel a queued retry or reset the flag
+// above. Once a retry loop started and the socket later tore down (unmount, not
+// just disconnect), manualRetryLoopActive could get stuck true forever -- its own
+// self-clearing check reads sharedSocket?.connected on a now-null socket, always
+// false, so it never fires -- permanently blocking any future retry loop for a
+// new socket. Tracked at module scope specifically so the unmount cleanup can
+// reach in and cancel it.
+let manualRetryTimeoutHandle: ReturnType<typeof setTimeout> | null = null;
 
 function getOrCreateSocket(): Socket | null {
     if (sharedSocket?.connected || sharedSocket?.active) {
@@ -160,7 +170,8 @@ function getOrCreateSocket(): Socket | null {
             const jitter = raw * JITTER_RATIO * (Math.random() * 2 - 1); // ± JITTER_RATIO
             const delay = Math.max(1000, Math.round(raw + jitter));
 
-            setTimeout(() => {
+            manualRetryTimeoutHandle = setTimeout(() => {
+                manualRetryTimeoutHandle = null;
                 if (sharedSocket?.connected) {
                     manualRetryLoopActive = false;
                     return;
@@ -221,6 +232,17 @@ export function SocketProvider({ children }: { children: ReactNode }) {
                 socket.disconnect();
                 sharedSocket = null;
                 connectionCount = 0;
+                // BUG-137: cancel any pending manual-retry timeout and reset its guard
+                // flag here -- previously only the socket reference was nulled, leaving
+                // a queued scheduleRetry() timeout to fire against a dead socket later,
+                // and manualRetryLoopActive stuck true forever (its own self-clearing
+                // check reads sharedSocket?.connected on a now-null socket, always
+                // false), permanently blocking any future retry loop for a new socket.
+                if (manualRetryTimeoutHandle) {
+                    clearTimeout(manualRetryTimeoutHandle);
+                    manualRetryTimeoutHandle = null;
+                }
+                manualRetryLoopActive = false;
             }
         };
     }, []);
@@ -381,16 +403,19 @@ export function useTeamStats(matchId: string) {
  * Hook for subscribing to match timer updates
  */
 export function useMatchTimer(matchId: string) {
-    const [time, setTime] = useState<{ minute: number; extraTime: number; half: number; period?: string } | null>(null);
+    const [time, setTime] = useState<{ minute: number; second?: number; extraTime: number; half: number; period?: string } | null>(null);
     const [isStale, setIsStale] = useState(false);
     const { socket } = useMatchSubscription(matchId);
 
     useEffect(() => {
         if (!socket) return;
 
-        const handleTimeUpdate = (data: { matchId: string; minute: number; extraTime: number; half: number; period?: string }) => {
+        // `second` was always sent (both sports) but silently dropped here --
+        // harmless for football (never rendered), but basketball's countdown
+        // display needs it. Now threaded through for both.
+        const handleTimeUpdate = (data: { matchId: string; minute: number; second?: number; extraTime: number; half: number; period?: string }) => {
             if (data.matchId === matchId) {
-                setTime({ minute: data.minute, extraTime: data.extraTime, half: data.half, period: data.period });
+                setTime({ minute: data.minute, second: data.second, extraTime: data.extraTime, half: data.half, period: data.period });
                 setIsStale(false);
             }
         };

@@ -18,13 +18,7 @@ const PERIOD_LABELS: Record<string, string> = {
     EXTRA_TIME_BREAK: 'ET HT',
     PENALTY_SHOOTOUT: 'PK',
     FINISHED: 'FT',
-    // Basketball -- this is the branch that actually matters for basketball today.
-    // BasketballLogger never emits a WS match:time:update tick (no live-clock
-    // broadcast exists for basketball at all), so `matchTime` stays null and every
-    // basketball match renders via the `!matchTime` fallback path below, keyed off
-    // this same map. The switch further down is effectively unreachable for
-    // basketball until a live broadcast is built, but is extended too in case that
-    // changes.
+    // Basketball
     Q1: 'Q1',
     Q2: 'Q2',
     Q3: 'Q3',
@@ -37,7 +31,12 @@ export default function LiveMatchStatus({ matchId, sport, variant = 'default', f
 
     // No WS data ever received (fresh page load before first tick) — use DB fallback period.
     if (!matchTime) {
-        const fallbackLabel = fallbackPeriod ? (PERIOD_LABELS[fallbackPeriod] ?? 'LIVE') : 'LIVE';
+        // BUG-135: a genuine second overtime is 'OT2' (etc), not the flat 'OT' this
+        // map only has -- fall back to showing the raw period rather than the
+        // generic 'LIVE' for any OT-prefixed value this map doesn't have an exact key for.
+        const fallbackLabel = fallbackPeriod
+            ? (PERIOD_LABELS[fallbackPeriod] ?? (fallbackPeriod.startsWith('OT') ? fallbackPeriod : 'LIVE'))
+            : 'LIVE';
         if (variant === 'badge') {
             return (
                 <div className="flex items-center gap-2 bg-red-600 text-white px-3 py-1 rounded-full text-xs font-bold">
@@ -59,7 +58,12 @@ export default function LiveMatchStatus({ matchId, sport, variant = 'default', f
     const minute = matchTime.minute;
     const extra = matchTime.extraTime > 0 ? `+${matchTime.extraTime}` : '';
 
-    switch (matchTime.period) {
+    // BUG-135: a real second (or later) overtime is 'OT2'/'OT3'/etc, not the flat
+    // 'OT' this switch used to match exactly -- normalize to 'OT' for the switch's
+    // discriminant only; the case body below still displays the real matchTime.period.
+    const switchPeriod = matchTime.period?.startsWith('OT') ? 'OT' : matchTime.period;
+
+    switch (switchPeriod) {
         case 'HALF_TIME':
             label = 'HT';
             break;
@@ -87,10 +91,16 @@ export default function LiveMatchStatus({ matchId, sport, variant = 'default', f
         case 'Q3':
         case 'Q4':
         case 'OT':
-            // Quarter label only, no {minute}' -- minute here would be elapsed
-            // match-time, not a quarter countdown, and showing "12'" during Q1 reads
-            // as a football-style clock rather than a quarter indicator.
-            label = matchTime.period;
+            // BasketballLogger now emits a real per-second countdown (mm/second =
+            // remaining time in the quarter, not elapsed -- opposite semantics from
+            // football's minute field). Render it once live data actually exists;
+            // fall back to the bare quarter label if a viewer's socket hasn't
+            // received a tick yet (fresh page load) or the value's gone stale.
+            label = matchTime.second != null && !isStale ? (
+                <span>
+                    {matchTime.period} {minute}:{String(matchTime.second).padStart(2, '0')}
+                </span>
+            ) : matchTime.period;
             break;
         default:
             label = (

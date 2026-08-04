@@ -1,53 +1,37 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
 import { matches } from '@/db/schema';
 import { eq } from 'drizzle-orm';
-import jwt from 'jsonwebtoken';
-import { env } from '@/lib/env';
+import { getAuthUser } from '@/lib/auth';
 
 // POST /api/matches/[id]/lineup/unlock - Unlock published lineup (Admin only)
 export async function POST(
-    request: Request,
+    request: NextRequest,
     props: { params: Promise<{ id: string }> }
 ) {
     try {
-        const params = await props.params;
-        const matchId = params.id;
-        const body = await request.json();
-        const { team } = body; // 'home' | 'away'
-
-        // Admin authentication check
-        const token = request.headers.get('cookie')?.split('authToken=')[1]?.split(';')[0];
-
-        if (!token) {
+        // BACKLOG-168: was a hand-rolled jwt.verify() against the raw token role
+        // claim -- a demoted/deactivated admin's already-issued token kept working
+        // here for its full lifetime since it never re-checked the current DB row.
+        // getAuthUser() re-reads the user's current role on every request, same
+        // pattern used at 90+ other admin-gated call sites in this codebase.
+        const authUser = await getAuthUser(request);
+        if (!authUser) {
             return NextResponse.json(
                 { error: 'Unauthorized - No authentication token' },
                 { status: 401 }
             );
         }
-
-        let decoded: { id: string; email: string; role: string; name?: string };
-        try {
-            if (!env.jwtSecret) {
-                return NextResponse.json({ error: 'Server misconfiguration' }, { status: 500 });
-            }
-            decoded = jwt.verify(
-                token,
-                env.jwtSecret
-            ) as { id: string; email: string; role: string; name?: string };
-
-            if (decoded.role !== 'admin') {
-                return NextResponse.json(
-                    { error: 'Forbidden - Admin access required to unlock lineups' },
-                    { status: 403 }
-                );
-            }
-        } catch (error) {
+        if (authUser.role !== 'admin') {
             return NextResponse.json(
-                { error: 'Unauthorized - Invalid token' },
-                { status: 401 }
+                { error: 'Forbidden - Admin access required to unlock lineups' },
+                { status: 403 }
             );
         }
+        const params = await props.params;
+        const matchId = params.id;
+        const body = await request.json();
+        const { team } = body; // 'home' | 'away'
 
         if (!team) {
             return NextResponse.json({ error: 'Team parameter required' }, { status: 400 });
@@ -79,8 +63,8 @@ export async function POST(
         existingLineups[team] = {
             ...existingLineups[team],
             unlocked: true,
-            unlockedBy: decoded.id,
-            unlockedByName: decoded.name || decoded.email,
+            unlockedBy: authUser.id,
+            unlockedByName: authUser.name || authUser.email,
             unlockedAt: new Date().toISOString(),
             updatedAt: new Date().toISOString()
         };

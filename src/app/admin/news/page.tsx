@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { FeatureGate } from '@/components/admin/FeatureGate';
 import {
     Newspaper,
     Plus,
@@ -529,6 +530,14 @@ function AdminNewsPageContent() {
 }
 
 export default function AdminNewsPageEnhanced() {
+    return (
+        <FeatureGate flagKey="features.news.enabled" featureName="News">
+            <AdminNewsPageEnhancedContent />
+        </FeatureGate>
+    );
+}
+
+function AdminNewsPageEnhancedContent() {
     return (
         <ErrorBoundary>
             <AdminNewsPageContent />

@@ -28,6 +28,15 @@ const DEFAULT_SETTINGS = {
     'features.predictions.enabled': { value: 'true', type: 'boolean', category: 'features', description: 'Enable match predictions' },
     'features.polls.enabled': { value: 'true', type: 'boolean', category: 'features', description: 'Enable polls' },
     'features.transfers.enabled': { value: 'true', type: 'boolean', category: 'features', description: 'Enable transfer news' },
+
+    // High-Volatility Feature Gates (BACKLOG-155) -- defaulted OFF deliberately.
+    // CLAUDE.md's own Live Event Readiness Checklist calls for these gated/hidden
+    // before any public match day; defaulting to false means they gate closed
+    // automatically rather than depending on someone remembering to flip them.
+    'features.ads.enabled': { value: 'false', type: 'boolean', category: 'features', description: 'Enable Ads' },
+    'features.lineupbuilder.enabled': { value: 'false', type: 'boolean', category: 'features', description: 'Enable Lineup Builder' },
+    'features.usermanagement.enabled': { value: 'false', type: 'boolean', category: 'features', description: 'Enable User Management / Access Control admin panel' },
+    'features.news.enabled': { value: 'false', type: 'boolean', category: 'features', description: 'Enable News' },
 };
 
 // Initialize default settings in database if they don't exist

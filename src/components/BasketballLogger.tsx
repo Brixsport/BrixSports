@@ -4,6 +4,8 @@ import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Activity, Save, Undo2, Clock, Users, TrendingUp, Target, Play, Settings } from 'lucide-react';
 import { useMultiLogger } from '@/hooks/useMultiLogger';
+import { useWebSocket } from '@/hooks/useWebSocket';
+import { queueOfflineEvent, queueAdminChange, jwtSecondsRemaining } from '@/lib/admin-offline-queue';
 import { MultiLoggerStatus } from '@/components/MultiLoggerStatus';
 import type { SyncEvent } from '@/lib/multiLogger';
 import { getPrimaryTeam } from '@/lib/player-affiliation-utils';
@@ -18,7 +20,7 @@ interface BasketballLoggerProps {
     currentLogger: Logger | null;
 }
 
-type BasketballEventType = 'Field Goal' | 'Three Pointer' | 'Free Throw' | 'Rebound' | 'Assist' | 'Steal' | 'Block' | 'Turnover' | 'Foul' | 'Substitution' | 'Timeout';
+type BasketballEventType = 'Field Goal' | 'Three Pointer' | 'Free Throw' | 'Rebound' | 'Assist' | 'Steal' | 'Block' | 'Turnover' | 'Foul' | 'Technical Foul' | 'Substitution' | 'Timeout';
 
 export function BasketballLogger({ match, onExit, currentLogger }: BasketballLoggerProps) {
     const [homeScore, setHomeScore] = useState(match.homeScore || 0);
@@ -86,6 +88,12 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
     // Settings
     const [showSettingsModal, setShowSettingsModal] = useState(false);
     const [quarterDuration, setQuarterDuration] = useState(12); // minutes per quarter — overwritten by match config on mount
+    // BUG-134/BACKLOG-166: foul-out disqualification + team-foul-bonus tracking.
+    // Sport-level defaults (config/route.ts's SPORT_DEFAULTS.basketball, FIBA-style,
+    // "not confirmed against BUSA's actual rulebook") -- competition-level override
+    // still not built (needs a schema migration, its own separately-scoped piece).
+    const [foulDisqualifyAt, setFoulDisqualifyAt] = useState(5);
+    const [teamFoulBonusAt, setTeamFoulBonusAt] = useState(5);
     const [periodCount, setPeriodCount] = useState(4); // quarters — overwritten by match config on mount
     const [overtimeDurationMinutes, setOvertimeDurationMinutes] = useState(5); // overwritten by match config on mount
 
@@ -103,8 +111,21 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
 
     // Period Transitions
     const [showPeriodModal, setShowPeriodModal] = useState(false);
-    const [isSemiFinal, setIsSemiFinal] = useState(true); // Matches are semi-finals
+    // BUG-192: was hardcoded `useState(true)` ("Matches are semi-finals") for every
+    // basketball match regardless of actual round -- every match, including group
+    // stage/finals/friendlies, showed a false "Semi-Final Match" banner claiming "No
+    // standings points awarded". `round` is freeform text (not an enum), so this
+    // mirrors the same substring-check convention already used elsewhere (e.g.
+    // src/app/page.tsx's groupKey logic) rather than an exact-match comparison.
+    const isSemiFinal = (match.round || '').toLowerCase().includes('semi');
     const [isOT, setIsOT] = useState(false);
+    // BUG-135: quarter number alone can't distinguish OT1 from OT2 -- both the
+    // tie-check branch and "Add Extra Time" button used to call the identical
+    // setQuarter(periodCount + 1) every time, so a genuine second overtime never
+    // advanced past the first, and both would be stored with the same flat 'OT'
+    // period string in match_events. Tracked separately so the period label can be
+    // `OT${otNumber}` instead.
+    const [otNumber, setOtNumber] = useState(0);
 
 
     // Quarter End Handling
@@ -125,6 +146,15 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
         loggerId: currentLogger?.id || 'unknown',
         loggerName: currentLogger?.name || 'Unknown Logger',
         enabled: !!currentLogger,
+    });
+
+    // WebSocket -- BasketballLogger never had this at all before (BUG-153's audit
+    // note: "no WS emit wired for basketball at all"). Mirrors FootballLogger's own
+    // setup exactly, same shared-socket singleton, so this doesn't open a second
+    // connection alongside useMultiLogger's (which is polling-based, not socket-based).
+    const { emit, isConnected: isSocketConnected } = useWebSocket({
+        matchId: match.id,
+        autoConnect: true,
     });
 
     // Debug: Monitor lineup modal state
@@ -157,6 +187,59 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
             }
         };
         ensureLocalToken();
+    }, []);
+
+    // BUG-142: basketball had no offline-queue/retry mechanism at all -- a failed
+    // event write during a network drop was visible (BACKLOG-134's error banner)
+    // but never recoverable. Ports FootballLogger's own proven mechanism
+    // (BACKLOG-058, live-tested on staging) rather than building a new one --
+    // same IndexedDB store sw-admin.js already drains, so no service-worker
+    // change is needed, only the write side.
+    const [queuedOfflineCount, setQueuedOfflineCount] = useState(0);
+    // BUG-142 (remaining scope): period-transition PATCH / undo DELETE retries,
+    // via the separate pendingAdminChanges queue (see admin-offline-queue.ts).
+    const [queuedAdminChangeCount, setQueuedAdminChangeCount] = useState(0);
+
+    useEffect(() => {
+        if (!('serviceWorker' in navigator)) return;
+        const handleMessage = (e: MessageEvent) => {
+            if (e.data?.type === 'SYNC_COMPLETE' && e.data?.tag === 'sync-match-events') {
+                setQueuedOfflineCount(0);
+            } else if (e.data?.type === 'SYNC_COMPLETE' && e.data?.tag === 'sync-admin-changes') {
+                setQueuedAdminChangeCount(0);
+            }
+        };
+        navigator.serviceWorker.addEventListener('message', handleMessage);
+        return () => navigator.serviceWorker.removeEventListener('message', handleMessage);
+    }, []);
+
+    // iOS drain fallback -- Background Sync API is a no-op on iOS (BACKLOG-107).
+    // When the page comes online or becomes visible, trigger a drain directly:
+    // Android/desktop: re-register the sync tag (idempotent).
+    // iOS: postMessage DRAIN_MATCH_EVENTS to the SW, which calls syncMatchEvents().
+    useEffect(() => {
+        const triggerDrain = () => {
+            if (!('serviceWorker' in navigator)) return;
+            navigator.serviceWorker.ready.then((reg) => {
+                if ('sync' in reg) {
+                    const syncReg = reg as ServiceWorkerRegistration & { sync: { register: (tag: string) => Promise<void> } };
+                    syncReg.sync.register('sync-match-events').catch(() => {});
+                    syncReg.sync.register('sync-admin-changes').catch(() => {});
+                } else if (navigator.serviceWorker.controller) {
+                    navigator.serviceWorker.controller.postMessage({ type: 'DRAIN_MATCH_EVENTS' });
+                    navigator.serviceWorker.controller.postMessage({ type: 'DRAIN_ADMIN_CHANGES' });
+                }
+            }).catch(() => {});
+        };
+        const handleVisibility = () => {
+            if (document.visibilityState === 'visible') triggerDrain();
+        };
+        window.addEventListener('online', triggerDrain);
+        document.addEventListener('visibilitychange', handleVisibility);
+        return () => {
+            window.removeEventListener('online', triggerDrain);
+            document.removeEventListener('visibilitychange', handleVisibility);
+        };
     }, []);
 
     // Dynamic Player Rating Calculation
@@ -202,6 +285,13 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                     case 'Foul':
                         rating -= 1;
                         break;
+                    case 'Technical Foul':
+                        // BACKLOG-166: a genuinely distinct, more serious infraction --
+                        // was previously silently unscored (fell through with no
+                        // matching case) back when every foul button dispatched the
+                        // same generic type: 'Foul'.
+                        rating -= 1.5;
+                        break;
                     case 'Substitution':
                         // Substitution doesn't affect rating directly
                         break;
@@ -224,7 +314,13 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
         const stats = {
             pts: 0,
             reb: 0,
-            ast: events.filter(e => e.assistPlayerId === playerId).length,
+            // BACKLOG-143: standalone "Assist" button events (type: 'Assist', the
+            // assisting player as e.playerId) were invisible here -- only embedded
+            // assistPlayerId on shot events counted, even though calculatePlayerRating
+            // already credits both paths. A player using the standalone button got
+            // the rating bump but the box score undercounted their real assist total.
+            ast: events.filter(e => e.assistPlayerId === playerId).length
+                + events.filter(e => e.type === 'Assist' && e.playerId === playerId).length,
             stl: 0,
             blk: 0,
             tov: 0,
@@ -336,24 +432,43 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                 setHomePlayers(homePlayersList);
                 setAwayPlayers(awayPlayersList);
 
-                // Resume-seeding gap (SYSTEM_CRITICALITY_MAP.md Tier 0, tracked since
-                // session 46, confirmed live this session): homeStarters/awayStarters
-                // are only ever populated by the in-app lineup-selection wizard --
-                // there is no server-side lineup persistence for basketball at all
-                // (unlike football's GET /api/matches/[id]/lineup). Since matchStarted
-                // initializes straight to true whenever match.status === 'LIVE' on
-                // mount, any already-live match (a refresh, a second logger, or simply
-                // reopening the app) skips the wizard entirely -- homeStarters/
-                // awayStarters stay permanently [], and the "Select Player" modal
-                // (filtered to just those arrays) is permanently empty, blocking every
-                // new event from ever being logged. Building full lineup persistence
-                // to mirror football exactly is real, separate scope -- this seeds
-                // starters from the full roster instead, which unblocks logging
-                // completely at the cost of not distinguishing on-court from bench
-                // for a resumed session specifically (a resumed session can select any
-                // rostered player, not just the original 5 starters -- acceptable
-                // given the alternative is a permanently unusable logger).
-                if (match.status === 'LIVE') {
+                // BACKLOG-141: real server-side lineup persistence, mirroring football's
+                // GET /api/matches/[id]/lineup exactly -- that endpoint was always
+                // sport-agnostic (generic team/lineup JSON on the matches row), basketball
+                // just never called it. Try the real persisted lineup first; only fall
+                // back to BUG-139's full-roster seed (doesn't distinguish on-court from
+                // bench) if nothing was ever actually published for this match.
+                let hydratedFromServer = false;
+                try {
+                    const lineupRes = await fetch(`/api/matches/${match.id}/lineup`);
+                    if (lineupRes.ok) {
+                        const lineupData = await lineupRes.json();
+                        const homeLineup = lineupData?.lineups?.home;
+                        const awayLineup = lineupData?.lineups?.away;
+                        if (lineupData.success && (homeLineup || awayLineup)) {
+                            const idsFrom = (l: any) => (l?.starters || l?.players || [])
+                                .map((p: any) => p.playerId || p.id || p)
+                                .filter(Boolean);
+                            const subsFrom = (l: any) => (l?.substitutes || [])
+                                .map((p: any) => p.playerId || p.id || p)
+                                .filter(Boolean);
+                            if (homeLineup) {
+                                setHomeStarters(idsFrom(homeLineup));
+                                setHomeSubs(subsFrom(homeLineup));
+                            }
+                            if (awayLineup) {
+                                setAwayStarters(idsFrom(awayLineup));
+                                setAwaySubs(subsFrom(awayLineup));
+                            }
+                            setLineupSet(true);
+                            hydratedFromServer = true;
+                        }
+                    }
+                } catch (e) {
+                    console.error('Failed to fetch persisted lineup:', e);
+                }
+
+                if (!hydratedFromServer && match.status === 'LIVE') {
                     setHomeStarters(prev => prev.length > 0 ? prev : homePlayersList.map((p: Player) => p.id));
                     setAwayStarters(prev => prev.length > 0 ? prev : awayPlayersList.map((p: Player) => p.id));
                     setLineupSet(true);
@@ -390,6 +505,7 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                 }
 
                 setIsLoading(false);
+                didFail = false;
             } catch (error) {
                 // BACKLOG-134: this outer catch only console.error'd -- a failed
                 // teams/players/eligible-players fetch left the roster empty with zero
@@ -398,10 +514,23 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                 console.error('Error fetching data:', error);
                 setEventSaveError('Failed to load teams/roster — check connection and reload. Player lists may be empty or incomplete.');
                 setIsLoading(false);
+                didFail = true;
             }
         };
 
+        // BUG-142 (roster-load retry, the last remaining piece of this entry's
+        // original scope): a failed initial load was visible (BACKLOG-134) but
+        // otherwise a dead end -- the logger had to manually reload the whole page.
+        // `didFail` is a plain closure variable, not React state -- it only needs to
+        // gate this one effect instance's own retry listener, not trigger a re-render.
+        let didFail = false;
         fetchData();
+
+        const retryOnReconnect = () => {
+            if (didFail) fetchData();
+        };
+        window.addEventListener('online', retryOnReconnect);
+        return () => window.removeEventListener('online', retryOnReconnect);
     }, [match.homeTeamId, match.awayTeamId, match.id]);
 
     // Fetch match config on mount -- mirrors FootballLogger's halfDuration/
@@ -422,6 +551,8 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                     setTime(`${config.halfDuration}:00`);
                     setPeriodCount(config.periodCount);
                     setOvertimeDurationMinutes(config.overtimeDurationMinutes ?? 5);
+                    setFoulDisqualifyAt(config.foulDisqualifyAt ?? 5);
+                    setTeamFoulBonusAt(config.teamFoulBonusAt ?? 5);
                 } else {
                     alert('Match config failed to load — using default duration. Check settings before starting.');
                 }
@@ -431,6 +562,36 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
         };
         fetchConfig();
     }, [match.id]);
+
+    // Hydrate quarter/otNumber from the persisted match.currentPeriod on mount --
+    // without this, a logger refreshing mid-match (or a second logger joining) always
+    // started back at "Quarter 1" client-side even though the DB correctly holds the
+    // real current period (confirmed live, session 47F: current_period stayed 'Q2'
+    // server-side across a remount while the UI silently reset to Q1). Worse than the
+    // already-documented clock-restart gap above `getCurrentPeriod` -- a wrong
+    // `quarter` here mislabels every event logged after the refresh with the wrong
+    // period, not just an inaccurate in-quarter clock. Guarded to apply once, after
+    // `periodCount` has loaded from config (needed to convert an 'OTn' label back to
+    // the internal quarter number), not on every periodCount change thereafter.
+    const hydratedPeriodRef = useRef(false);
+    useEffect(() => {
+        if (hydratedPeriodRef.current) return;
+        const period = match.currentPeriod;
+        if (!period || period === 'NOT_STARTED' || period === 'FINISHED') return;
+        const otMatch = period.match(/^OT(\d+)$/);
+        if (otMatch) {
+            const n = Number(otMatch[1]);
+            setOtNumber(n);
+            setQuarter(periodCount + n);
+            hydratedPeriodRef.current = true;
+        } else {
+            const qMatch = period.match(/^Q(\d+)$/);
+            if (qMatch) {
+                setQuarter(Number(qMatch[1]));
+                hydratedPeriodRef.current = true;
+            }
+        }
+    }, [match.id, periodCount]);
 
     // Sync events with other loggers periodically
     useEffect(() => {
@@ -538,7 +699,64 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
     // logger refreshing mid-quarter restarts that quarter's elapsed-time count --
     // basketball has no mid-match-resume seeding at all yet (unlike football's
     // BUG-115/117/118), a separate, larger gap.
-    const getCurrentPeriod = () => (quarter > periodCount ? 'OT' : `Q${quarter}`);
+    const getCurrentPeriod = () => (quarter > periodCount ? `OT${otNumber || 1}` : `Q${quarter}`);
+
+    // BUG-135 fix: shared by both OT-entry buttons (tie-triggered "Start Extra Time"
+    // and the always-available "Add Extra Time") -- previously each inlined an
+    // identical setQuarter(periodCount + 1), which is why a real second overtime
+    // never advanced past the first. quarter still advances by one each real OT
+    // (keeps getElapsedMinute()'s prior-minutes accumulation distinct per period);
+    // otNumber is the human-readable OT count the period label actually uses.
+    // BUG-142 (remaining scope): period-transition PATCH retry-queueing. Shared by
+    // every period-transition button (Start Quarter N+1, both OT-entry points via
+    // startNextOvertime) rather than duplicating the queue logic at each call site.
+    // On a network failure, queues the PATCH via the same pendingAdminChanges
+    // mechanism undo now uses, instead of the previous fire-and-forget console.error
+    // (BACKLOG-134 already made failures visible; this makes them recoverable too).
+    const persistPeriodTransition = async (periodLabel: string) => {
+        try {
+            const res = await fetch(`/api/matches/${match.id}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ currentPeriod: periodLabel }),
+            });
+            if (!res.ok) {
+                setEventSaveError(`Failed to save ${periodLabel} transition (${res.status}) — period may not persist on refresh.`);
+            }
+        } catch (e) {
+            console.error('Failed to persist period transition:', e);
+            const token = localStorage.getItem('authToken');
+            if (!token || jwtSecondsRemaining(token) < 30 * 60) {
+                setEventSaveError(`Failed to save ${periodLabel} transition — offline or unreachable, and could not queue a retry (${!token ? 'no session' : 'session expiring soon'}).`);
+                return;
+            }
+            try {
+                await queueAdminChange(`/api/matches/${match.id}`, 'PATCH', { currentPeriod: periodLabel }, token);
+                setQueuedAdminChangeCount(prev => prev + 1);
+                setEventSaveError(`${periodLabel} transition queued — will save automatically once back online.`);
+                if ('serviceWorker' in navigator) {
+                    const reg = await navigator.serviceWorker.ready;
+                    if ('sync' in reg) {
+                        await (reg as ServiceWorkerRegistration & { sync: { register: (tag: string) => Promise<void> } }).sync.register('sync-admin-changes');
+                    }
+                }
+            } catch (queueErr) {
+                console.error('Failed to queue period transition:', queueErr);
+                setEventSaveError(`Failed to save ${periodLabel} transition — offline or unreachable, and queueing also failed.`);
+            }
+        }
+    };
+
+    const startNextOvertime = () => {
+        const nextOtNumber = otNumber + 1;
+        setIsOT(true);
+        setOtNumber(nextOtNumber);
+        setQuarter(prev => prev + 1);
+        setTime(`${overtimeDurationMinutes}:00`);
+        setQuarterStartedAt(Date.now());
+        setShowPeriodModal(false);
+        persistPeriodTransition(`OT${nextOtNumber}`);
+    };
     const getElapsedSecondsInPeriod = () => Math.max(0, Math.floor((Date.now() - quarterStartedAt) / 1000));
     const getElapsedMinute = () => {
         const isOT = quarter > periodCount;
@@ -547,6 +765,67 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
         const priorMinutes = isOT ? periodCount * quarterDuration : (quarter - 1) * quarterDuration;
         return priorMinutes + minutesElapsedInPeriod;
     };
+
+    // BUG-134 (disqualification) + BACKLOG-166 (technical-foul split): Personal and
+    // Technical Foul are now distinct types (separate DB columns server-side,
+    // `personalFouls`/`technicalFouls`), but both still count toward the same
+    // disqualification threshold here -- Richard's explicit call (session 47E):
+    // combined count is simpler and preserves the protective behavior BUG-134
+    // already shipped rather than loosening it. Flagrant/Offensive/Shooting/
+    // Unsportsmanlike still all dispatch generic `type: 'Foul'` (they're personal-foul
+    // subvarieties for stat-counting purposes, same as real box scores).
+    const getPersonalFoulCount = (playerId: string) =>
+        events.filter(e => (e.type === 'Foul' || e.type === 'Technical Foul') && e.playerId === playerId).length;
+    const isFouledOut = (playerId: string) => getPersonalFoulCount(playerId) >= foulDisqualifyAt;
+
+    // BACKLOG-166 (team-foul tracking, data only -- no UI indicator this pass, per
+    // Richard's own scope call). Per-team, per-quarter count; resets naturally since
+    // it's derived from `getCurrentPeriod()`, not a separate incrementing counter.
+    const getTeamFoulCountThisQuarter = (teamId: string) =>
+        events.filter(e => (e.type === 'Foul' || e.type === 'Technical Foul') && e.teamId === teamId && e.period === getCurrentPeriod()).length;
+    const isTeamInBonus = (teamId: string) => getTeamFoulCountThisQuarter(teamId) >= teamFoulBonusAt;
+
+    // Live-ticking quarter clock + WS broadcast (basketball's own analog of
+    // FootballLogger's `match:time:update` effect, BUG-153's audit gap: "no WS
+    // emit wired for basketball at all"). `time` was previously a manual display
+    // string only ever set on quarter transitions, never auto-decrementing -- real
+    // per-second countdown now derived from quarterStartedAt, same source the
+    // event-timestamp helpers above already use. Deliberately reuses the exact
+    // `match:time:update` channel football uses: ws-server's clock-authority
+    // single-writer enforcement (index.js) keys off that event name generically,
+    // not per-sport, so basketball gets the same dual-logger clock-collision
+    // protection for free. Payload semantics differ from football on purpose --
+    // minute/second here are countdown-remaining, not elapsed -- LiveMatchStatus
+    // renders the two sports differently already.
+    useEffect(() => {
+        if (!matchStarted || matchEnded || quarterEnded) return;
+
+        const isOT = quarter > periodCount;
+        const periodLengthSeconds = (isOT ? overtimeDurationMinutes : quarterDuration) * 60;
+
+        const tick = () => {
+            const remaining = Math.max(0, periodLengthSeconds - getElapsedSecondsInPeriod());
+            const mm = Math.floor(remaining / 60);
+            const ss = remaining % 60;
+            setTime(`${mm}:${String(ss).padStart(2, '0')}`);
+
+            if (isSocketConnected) {
+                emit('match:time:update', {
+                    matchId: match.id,
+                    minute: mm,
+                    second: ss,
+                    half: quarter,
+                    extraTime: 0,
+                    period: getCurrentPeriod(),
+                });
+            }
+        };
+
+        tick();
+        const interval = setInterval(tick, 1000);
+        return () => clearInterval(interval);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [matchStarted, matchEnded, quarterEnded, quarter, periodCount, quarterDuration, overtimeDurationMinutes, quarterStartedAt, isSocketConnected, emit, match.id]);
 
     // Record the actual event
     const recordEvent = async (type: BasketballEventType, playerId: string, points?: number, assistPlayerId?: string | null) => {
@@ -623,24 +902,25 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
         // nothing shown, the event just sat in local state looking "saved." Violates
         // this project's own rule that logging errors must never appear to succeed
         // silently.
+        const eventPayload = {
+            type,
+            minute: newEvent.minute,
+            second: newEvent.second,
+            period: newEvent.period,
+            teamId: selectedTeam === 'home' ? match.homeTeamId : match.awayTeamId,
+            playerId,
+            relatedPlayerId: assistPlayerId || null,
+            detail: newEvent.detail,
+            value: points ?? null,
+            made,
+            loggerId: currentLogger?.id,
+            loggerName: currentLogger?.name,
+        };
         try {
             const res = await fetch(`/api/matches/${match.id}/events`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    type,
-                    minute: newEvent.minute,
-                    second: newEvent.second,
-                    period: newEvent.period,
-                    teamId: selectedTeam === 'home' ? match.homeTeamId : match.awayTeamId,
-                    playerId,
-                    relatedPlayerId: assistPlayerId || null,
-                    detail: newEvent.detail,
-                    value: points ?? null,
-                    made,
-                    loggerId: currentLogger?.id,
-                    loggerName: currentLogger?.name,
-                }),
+                body: JSON.stringify(eventPayload),
             });
             if (!res.ok) {
                 setEventSaveError(`Failed to save "${type}" (${res.status}) — event kept locally only. Check connection and retry logging it if needed.`);
@@ -659,8 +939,35 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                 }
             }
         } catch (error) {
+            // Network failure -- server never received the event. Queue for
+            // background sync (BUG-142), mirroring FootballLogger's own mechanism
+            // exactly rather than leaving this the silent-loss dead end it was.
             console.error('Failed to persist event:', error);
-            setEventSaveError(`Failed to save "${type}" — offline or unreachable. Event kept locally only.`);
+            const token = localStorage.getItem('authToken');
+            if (!token) {
+                setEventSaveError(`Failed to save "${type}" — offline and no session found. Event NOT queued; please re-login and re-log this event manually.`);
+                return;
+            }
+            const QUEUE_MIN_TTL_SECONDS = 30 * 60;
+            if (jwtSecondsRemaining(token) < QUEUE_MIN_TTL_SECONDS) {
+                setEventSaveError(`Session expiring soon — "${type}" was NOT queued for offline sync. Please re-login before continuing offline, then re-log this event.`);
+                return;
+            }
+            try {
+                await queueOfflineEvent(match.id, eventPayload, token);
+                setQueuedOfflineCount(prev => prev + 1);
+                setEventSaveError(`"${type}" queued for offline sync — will save automatically once back online.`);
+                if ('serviceWorker' in navigator) {
+                    const reg = await navigator.serviceWorker.ready;
+                    if ('sync' in reg) {
+                        await (reg as ServiceWorkerRegistration & { sync: { register: (tag: string) => Promise<void> } }).sync.register('sync-match-events');
+                    }
+                }
+                console.log('[BasketballLogger] Event queued for background sync');
+            } catch (queueErr) {
+                console.error('Failed to queue event:', queueErr);
+                setEventSaveError(`Failed to save "${type}" — offline or unreachable, and queueing also failed. Event kept locally only.`);
+            }
         }
 
         // Dispatch WebSocket event for live updates
@@ -712,8 +1019,34 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
             }
             setEventSaveError(null);
         } catch (error) {
+            // Network failure -- queue the DELETE for background retry (BUG-142),
+            // same mechanism as event POST. Deliberately does NOT touch local
+            // `events`/score state here, even though the queue means this will
+            // very likely succeed eventually -- BUG-130's own hard-won principle is
+            // never flip local state before the server has actually confirmed the
+            // write, and a queued-but-not-yet-drained delete is exactly that
+            // unconfirmed state. The event stays visible until the queued DELETE
+            // really lands; the banner tells the logger a retry is pending.
             console.error('Failed to undo event:', error);
-            setEventSaveError(`Failed to undo "${lastEvent.type}" — offline or unreachable. Event was not removed.`);
+            const token = localStorage.getItem('authToken');
+            if (!token || jwtSecondsRemaining(token) < 30 * 60) {
+                setEventSaveError(`Failed to undo "${lastEvent.type}" — offline or unreachable, and could not queue a retry (${!token ? 'no session' : 'session expiring soon'}). Event was not removed; try again once back online.`);
+                return;
+            }
+            try {
+                await queueAdminChange(`/api/matches/${match.id}/events/${lastEvent.id}`, 'DELETE', {}, token);
+                setQueuedAdminChangeCount(prev => prev + 1);
+                setEventSaveError(`Undo of "${lastEvent.type}" queued — will retry automatically once back online. Event still shown until then.`);
+                if ('serviceWorker' in navigator) {
+                    const reg = await navigator.serviceWorker.ready;
+                    if ('sync' in reg) {
+                        await (reg as ServiceWorkerRegistration & { sync: { register: (tag: string) => Promise<void> } }).sync.register('sync-admin-changes');
+                    }
+                }
+            } catch (queueErr) {
+                console.error('Failed to queue undo:', queueErr);
+                setEventSaveError(`Failed to undo "${lastEvent.type}" — offline or unreachable, and queueing also failed. Event was not removed.`);
+            }
             return;
         } finally {
             setIsUndoing(false);
@@ -801,7 +1134,11 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                             <div>
                                 <div className="flex items-center gap-2">
                                     <p className="text-[10px] font-black uppercase tracking-widest text-white/40">Basketball Logger</p>
-                                    <span className="px-1.5 py-0.5 bg-orange-500/20 text-orange-500 border border-orange-500/30 rounded text-[8px] font-black uppercase tracking-tighter">Semi-Finals</span>
+                                    {/* BUG-192: was an unconditional "Semi-Finals" literal -- every
+                                        match's header showed it regardless of actual round. */}
+                                    {isSemiFinal && (
+                                        <span className="px-1.5 py-0.5 bg-orange-500/20 text-orange-500 border border-orange-500/30 rounded text-[8px] font-black uppercase tracking-tighter">Semi-Finals</span>
+                                    )}
                                 </div>
                                 <h1 className="text-2xl font-display italic uppercase">{match.competition}</h1>
                             </div>
@@ -951,19 +1288,33 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                         {/* Quarter & Time */}
                         <div className="text-center">
                             <div className="bg-white/10 rounded-xl p-3 mb-2">
-                                <p className="text-[9px] font-black uppercase tracking-widest text-white/60 mb-1">Quarter</p>
-                                <div className="flex justify-center gap-1">
-                                    {[1, 2, 3, 4].map((q) => (
-                                        <button
-                                            key={q}
-                                            onClick={() => setQuarter(q)}
-                                            className={`w-12 h-12 rounded-xl font-display text-xl transition-all ${quarter === q ? 'bg-primary text-black' : 'bg-white/5 text-white/40'
-                                                }`}
-                                        >
-                                            {q}
-                                        </button>
-                                    ))}
-                                </div>
+                                {/* BUG-192: quarter box previously always rendered fixed 1-4 buttons,
+                                    which highlighted nothing and gave the logger zero visual indication
+                                    of being in OT (BUG-135's OT numbering only ever surfaced in the
+                                    end-of-period modal's button text, never in the persistent header). */}
+                                <p className="text-[9px] font-black uppercase tracking-widest text-white/60 mb-1">
+                                    {quarter > periodCount ? 'Overtime' : 'Quarter'}
+                                </p>
+                                {quarter > periodCount ? (
+                                    <div className="flex justify-center">
+                                        <div className="w-12 h-12 rounded-xl font-display text-xl bg-primary text-black flex items-center justify-center">
+                                            {otNumber || 1}
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <div className="flex justify-center gap-1">
+                                        {[1, 2, 3, 4].map((q) => (
+                                            <button
+                                                key={q}
+                                                onClick={() => setQuarter(q)}
+                                                className={`w-12 h-12 rounded-xl font-display text-xl transition-all ${quarter === q ? 'bg-primary text-black' : 'bg-white/5 text-white/40'
+                                                    }`}
+                                            >
+                                                {q}
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
                             </div>
                             <div className="flex flex-col items-center gap-2">
                                 <div className="flex items-center justify-center gap-2 text-4xl font-display italic">
@@ -975,7 +1326,7 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                                     className="px-4 py-1.5 bg-white/5 border border-white/10 rounded-full text-[10px] font-black uppercase tracking-widest hover:bg-white/10 transition-all flex items-center gap-2 mt-1"
                                 >
                                     <Activity size={10} className="text-primary" />
-                                    End Quarter
+                                    {quarter > periodCount ? 'End Overtime' : 'End Quarter'}
                                 </button>
                             </div>
                         </div>
@@ -1106,7 +1457,7 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                                 </h3>
                                 <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                                     <SimpleActionButton label="Personal Foul" onClick={() => handleEventClick('Foul')} matchStarted={matchStarted} matchEnded={matchEnded} disabled={isRecording} />
-                                    <SimpleActionButton label="Technical Foul" onClick={() => handleEventClick('Foul')} matchStarted={matchStarted} matchEnded={matchEnded} disabled={isRecording} />
+                                    <SimpleActionButton label="Technical Foul" onClick={() => handleEventClick('Technical Foul')} matchStarted={matchStarted} matchEnded={matchEnded} disabled={isRecording} />
                                     <SimpleActionButton label="Flagrant Foul" onClick={() => handleEventClick('Foul')} matchStarted={matchStarted} matchEnded={matchEnded} disabled={isRecording} />
                                     <SimpleActionButton label="Offensive Foul" onClick={() => handleEventClick('Foul')} matchStarted={matchStarted} matchEnded={matchEnded} disabled={isRecording} />
                                     <SimpleActionButton label="Shooting Foul" onClick={() => handleEventClick('Foul')} matchStarted={matchStarted} matchEnded={matchEnded} disabled={isRecording} />
@@ -1127,62 +1478,6 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                             </div>
                         </div>
 
-                        {/* Event Log - Full Width Below Actions */}
-                        <div className="bg-white/5 border border-white/10 rounded-[24px] p-4">
-                            <div className="flex items-center justify-between mb-4">
-                                <h3 className="text-sm font-black uppercase tracking-widest flex items-center gap-2">
-                                    <Activity className="text-primary" size={16} />
-                                    Event Log
-                                </h3>
-                                <span className="text-xs text-white/40 font-bold">{events.length} Events Recorded</span>
-                            </div>
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 max-h-[400px] overflow-y-auto pr-2">
-                                {events.slice().reverse().map((event, idx) => {
-                                    const allPlayers = [...homePlayers, ...awayPlayers];
-                                    const team = event.teamId === match.homeTeamId ? homeTeam : awayTeam;
-                                    const player = allPlayers.find(p => p.id === event.playerId);
-                                    const assistPlayer = event.assistPlayerId ? allPlayers.find(p => p.id === event.assistPlayerId) : null;
-                                    return (
-                                        <motion.div
-                                            key={event.id}
-                                            initial={{ opacity: 0, scale: 0.95 }}
-                                            animate={{ opacity: 1, scale: 1 }}
-                                            className="bg-white/5 border border-white/10 rounded-xl p-3 hover:bg-white/10 transition-all"
-                                        >
-                                            <div className="flex items-center justify-between mb-2">
-                                                <span className="text-[10px] font-black uppercase tracking-widest text-white/40">
-                                                    {event.period ?? 'Q?'} - {Math.floor((event.second || 0) / 60)}:{String((event.second || 0) % 60).padStart(2, '0')}
-                                                </span>
-                                                {event.value && (
-                                                    <span className="text-xs font-display italic text-primary">+{event.value}</span>
-                                                )}
-                                            </div>
-                                            <div className="flex items-center gap-2">
-                                                {team?.logo ? (
-                                                    <img src={team.logo} alt={team.name} className="w-6 h-6 object-contain flex-shrink-0" />
-                                                ) : (
-                                                    <span className="text-lg flex-shrink-0">🏀</span>
-                                                )}
-                                                <div className="flex-1 min-w-0">
-                                                    <p className="text-xs font-black uppercase tracking-tight truncate">{event.type}</p>
-                                                    <p className="text-[10px] text-white/60 truncate">
-                                                        {event.detail || player?.name || 'Unknown'}
-                                                        {event.assistDetail && <span className="text-primary"> (Ast: {event.assistDetail})</span>}
-                                                    </p>
-                                                </div>
-                                            </div>
-                                        </motion.div>
-                                    );
-                                })}
-                                {events.length === 0 && (
-                                    <div className="col-span-full text-center py-12 text-white/20">
-                                        <Activity size={48} className="mx-auto mb-4 opacity-20" />
-                                        <p className="text-sm font-black uppercase tracking-widest">No events recorded yet</p>
-                                        <p className="text-xs mt-2">Start the match and record events to see them here</p>
-                                    </div>
-                                )}
-                            </div>
-                        </div>
                     </>
                 )}
 
@@ -1321,11 +1616,14 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                             <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                                 {(selectedTeam === 'home' ? homePlayers : awayPlayers)
                                     .filter(p => (selectedTeam === 'home' ? homeStarters : awayStarters).includes(p.id))
-                                    .map((player) => (
+                                    .map((player) => {
+                                        const fouledOut = isFouledOut(player.id);
+                                        return (
                                         <button
                                             key={player.id}
-                                            onClick={() => handlePlayerSelect(player.id)}
-                                            className="bg-white/5 border border-white/10 rounded-xl p-4 hover:bg-primary/20 hover:border-primary transition-all"
+                                            onClick={() => !fouledOut && handlePlayerSelect(player.id)}
+                                            disabled={fouledOut}
+                                            className={`bg-white/5 border border-white/10 rounded-xl p-4 transition-all ${fouledOut ? 'opacity-40 cursor-not-allowed' : 'hover:bg-primary/20 hover:border-primary'}`}
                                         >
                                             <div className="flex items-center gap-3">
                                                 <div
@@ -1339,15 +1637,22 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                                                 <div className="flex-1 min-w-0 text-left">
                                                     <div className="flex items-center justify-between gap-2 overflow-hidden">
                                                         <p className="text-sm font-black uppercase tracking-tight truncate">{player.name}</p>
-                                                        <span className="text-[10px] font-black bg-primary/20 text-primary px-1.5 py-0.5 rounded flex-shrink-0">
-                                                            {calculatePlayerRating(player.id)}
-                                                        </span>
+                                                        {fouledOut ? (
+                                                            <span className="text-[10px] font-black bg-red-500/20 text-red-400 px-1.5 py-0.5 rounded flex-shrink-0">
+                                                                FOULED OUT
+                                                            </span>
+                                                        ) : (
+                                                            <span className="text-[10px] font-black bg-primary/20 text-primary px-1.5 py-0.5 rounded flex-shrink-0">
+                                                                {calculatePlayerRating(player.id)}
+                                                            </span>
+                                                        )}
                                                     </div>
                                                     <p className="text-[10px] text-white/40 font-bold">{player.position}</p>
                                                 </div>
                                             </div>
                                         </button>
-                                    ))}
+                                        );
+                                    })}
                             </div>
                         </motion.div>
                     </motion.div>
@@ -1379,8 +1684,11 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                                 Select the player coming from the bench to replace <span className="text-primary font-bold">{(selectedTeam === 'home' ? homePlayers : awayPlayers).find(p => p.id === playerComingOut)?.name}</span>
                             </p>
                             {(() => {
+                                // BUG-136: a fouled-out player must never re-enter -- excluded
+                                // from the bench pool here, not just visually flagged, since
+                                // nothing previously gated this at all.
                                 const availableSubs = (selectedTeam === 'home' ? homePlayers : awayPlayers)
-                                    .filter(p => (selectedTeam === 'home' ? homeSubs : awaySubs).includes(p.id));
+                                    .filter(p => (selectedTeam === 'home' ? homeSubs : awaySubs).includes(p.id) && !isFouledOut(p.id));
                                 // BUG-141: an empty bench with no fallback message read as a
                                 // broken app mid-game (football's equivalent modal has always
                                 // had an emptyMessage prop for this exact case, see BUG-070).
@@ -1793,13 +2101,55 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                                     </div>
                                 </div>
                                 <button
-                                    onClick={() => {
+                                    onClick={async () => {
                                         if (homeStarters.length === STARTER_COUNT && awayStarters.length === STARTER_COUNT) {
-                                            // Set remaining players as subs
-                                            setHomeSubs(homePlayers.filter(p => !homeStarters.includes(p.id)).map(p => p.id));
-                                            setAwaySubs(awayPlayers.filter(p => !awayStarters.includes(p.id)).map(p => p.id));
+                                            const homeSubIds = homePlayers.filter(p => !homeStarters.includes(p.id)).map(p => p.id);
+                                            const awaySubIds = awayPlayers.filter(p => !awayStarters.includes(p.id)).map(p => p.id);
+                                            setHomeSubs(homeSubIds);
+                                            setAwaySubs(awaySubIds);
                                             setLineupSet(true);
                                             setShowLineupModal(false);
+
+                                            // BACKLOG-141: persist to the server, mirroring FootballLogger's
+                                            // saveLineupDraft -- same endpoint (already sport-agnostic), same
+                                            // payload shape. Fire-and-forget-with-visible-failure, not blocking
+                                            // the UI: the wizard has already been completed locally, so a save
+                                            // failure shouldn't trap the logger back in the modal, but it must
+                                            // be surfaced, not silently lost (CLAUDE.md: no silent failures).
+                                            const toLineupPayload = (starterIds: string[], subIds: string[], allPlayers: Player[]) => {
+                                                const byId = new Map(allPlayers.map(p => [p.id, p]));
+                                                const toEntry = (id: string) => {
+                                                    const p = byId.get(id);
+                                                    return { playerId: id, id, name: p?.name, number: p?.number, position: p?.position };
+                                                };
+                                                return {
+                                                    starters: starterIds.map(toEntry),
+                                                    substitutes: subIds.map(toEntry),
+                                                    players: starterIds.map(toEntry), // legacy key, mirrors football
+                                                    status: 'published',
+                                                };
+                                            };
+
+                                            try {
+                                                const [homeRes, awayRes] = await Promise.all([
+                                                    fetch(`/api/matches/${match.id}/lineup`, {
+                                                        method: 'POST',
+                                                        headers: { 'Content-Type': 'application/json' },
+                                                        body: JSON.stringify({ team: 'home', lineup: toLineupPayload(homeStarters, homeSubIds, homePlayers) }),
+                                                    }),
+                                                    fetch(`/api/matches/${match.id}/lineup`, {
+                                                        method: 'POST',
+                                                        headers: { 'Content-Type': 'application/json' },
+                                                        body: JSON.stringify({ team: 'away', lineup: toLineupPayload(awayStarters, awaySubIds, awayPlayers) }),
+                                                    }),
+                                                ]);
+                                                if (!homeRes.ok || !awayRes.ok) {
+                                                    setEventSaveError('Lineup confirmed locally but failed to save to the server — it will not survive a refresh or be visible to other loggers.');
+                                                }
+                                            } catch (e) {
+                                                console.error('Failed to persist lineup:', e);
+                                                setEventSaveError('Lineup confirmed locally but failed to save to the server — offline or unreachable. It will not survive a refresh.');
+                                            }
                                         }
                                     }}
                                     disabled={homeStarters.length !== STARTER_COUNT || awayStarters.length !== STARTER_COUNT}
@@ -1834,7 +2184,12 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                                 <Clock size={40} className="text-primary" />
                             </div>
 
-                            <h2 className="text-3xl font-display italic uppercase mb-2">End of Quarter {quarter}</h2>
+                            {/* BUG-192: was `End of Quarter {quarter}` using the raw internal
+                                counter, so a real OT read "End of Quarter 5"/"6" instead of a
+                                logger-legible OT label. */}
+                            <h2 className="text-3xl font-display italic uppercase mb-2">
+                                End of {quarter > periodCount ? `Overtime ${otNumber || 1}` : `Quarter ${quarter}`}
+                            </h2>
                             <p className="text-sm text-white/40 mb-8">
                                 Current Score: <span className="text-white font-bold">{homeScore} - {awayScore}</span>
                                 <br />
@@ -1853,25 +2208,10 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                                             // Persist the transition -- BasketballLogger never wrote
                                             // currentPeriod at all before this; every basketball match's
                                             // period stayed at the schema default ('NOT_STARTED') for its
-                                            // entire lifetime regardless of real quarter. Fire-and-forget,
-                                            // same convention football's period-transition buttons use
-                                            // (TD-010) -- not the stricter PATCH-first Start/End Match
-                                            // pattern, since a failed period-label PATCH here doesn't risk
-                                            // silent data loss the way a failed status transition would.
-                                            // BACKLOG-134: this fire-and-forget PATCH only console.error'd on
-                                            // failure -- no user-facing signal if the quarter change didn't
-                                            // persist. `res.ok` was never even checked (fetch only rejects on
-                                            // network failure, not on a 4xx/5xx response).
-                                            fetch(`/api/matches/${match.id}`, {
-                                                method: 'PATCH',
-                                                headers: { 'Content-Type': 'application/json' },
-                                                body: JSON.stringify({ currentPeriod: `Q${nextQuarter}` }),
-                                            }).then((res) => {
-                                                if (!res.ok) setEventSaveError(`Failed to save Q${nextQuarter} transition (${res.status}) — quarter may not persist on refresh.`);
-                                            }).catch((e) => {
-                                                console.error('Failed to persist period transition:', e);
-                                                setEventSaveError(`Failed to save Q${nextQuarter} transition — offline or unreachable.`);
-                                            });
+                                            // entire lifetime regardless of real quarter. BUG-142: now
+                                            // queues for retry on network failure instead of the previous
+                                            // fire-and-forget console.error (see persistPeriodTransition).
+                                            persistPeriodTransition(`Q${nextQuarter}`);
                                         }}
                                         className="w-full bg-primary text-black py-4 rounded-xl font-black uppercase tracking-widest hover:scale-105 transition-transform flex items-center justify-center gap-3"
                                     >
@@ -1883,21 +2223,7 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                                         onClick={() => {
                                             // Check for tie if knockout/semi
                                             if (homeScore === awayScore) {
-                                                setIsOT(true);
-                                                setQuarter(periodCount + 1); // one integer past regulation represents OT
-                                                setTime(`${overtimeDurationMinutes}:00`);
-                                                setQuarterStartedAt(Date.now());
-                                                setShowPeriodModal(false);
-                                                fetch(`/api/matches/${match.id}`, {
-                                                    method: 'PATCH',
-                                                    headers: { 'Content-Type': 'application/json' },
-                                                    body: JSON.stringify({ currentPeriod: 'OT' }),
-                                                }).then((res) => {
-                                                    if (!res.ok) setEventSaveError(`Failed to save OT transition (${res.status}) — period may not persist on refresh.`);
-                                                }).catch((e) => {
-                                                    console.error('Failed to persist OT transition:', e);
-                                                    setEventSaveError('Failed to save OT transition — offline or unreachable.');
-                                                });
+                                                startNextOvertime();
                                             } else {
                                                 // Real match end. This used to only call setMatchEnded(true)
                                                 // locally + a dead CustomEvent dispatch -- never the real
@@ -1914,32 +2240,15 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                                         }}
                                         className="w-full bg-primary text-black py-4 rounded-xl font-black uppercase tracking-widest hover:scale-105 transition-transform"
                                     >
-                                        {homeScore === awayScore ? 'Start Extra Time (OT)' : 'Finalize Match'}
+                                        {homeScore === awayScore ? `Start Extra Time (OT${otNumber + 1})` : 'Finalize Match'}
                                     </button>
                                 )}
 
                                 <button
-                                    onClick={() => {
-                                        // Specific user request for "Extra Time" even after first qtr
-                                        setIsOT(true);
-                                        setQuarter(periodCount + 1);
-                                        setTime(`${overtimeDurationMinutes}:00`);
-                                        setQuarterStartedAt(Date.now());
-                                        setShowPeriodModal(false);
-                                        fetch(`/api/matches/${match.id}`, {
-                                            method: 'PATCH',
-                                            headers: { 'Content-Type': 'application/json' },
-                                            body: JSON.stringify({ currentPeriod: 'OT' }),
-                                        }).then((res) => {
-                                            if (!res.ok) setEventSaveError(`Failed to save OT transition (${res.status}) — period may not persist on refresh.`);
-                                        }).catch((e) => {
-                                            console.error('Failed to persist OT transition:', e);
-                                            setEventSaveError('Failed to save OT transition — offline or unreachable.');
-                                        });
-                                    }}
+                                    onClick={startNextOvertime}
                                     className="w-full bg-white/5 border border-white/10 text-white py-4 rounded-xl font-black uppercase tracking-widest hover:bg-white/10 transition-all"
                                 >
-                                    Add Extra Time
+                                    Add Extra Time{otNumber > 0 ? ` (OT${otNumber + 1})` : ''}
                                 </button>
 
                                 <button

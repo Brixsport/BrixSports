@@ -223,16 +223,30 @@ export async function POST(request: NextRequest) {
                 continue;
             }
 
-            // Pre-flight dedup: skip if a player with the same name+college already exists.
-            // Exempt: NPUGA email-reuse path (shouldReuseByEmail) — that path intentionally
-            // finds and reuses an existing player, so dedup would be a false positive there.
+            // Pre-flight dedup: skip if a player with the same name+college already exists
+            // ON THIS TEAM. Exempt: NPUGA email-reuse path (shouldReuseByEmail) — that path
+            // intentionally finds and reuses an existing player, so dedup would be a false
+            // positive there.
+            //
+            // Previously matched against the ENTIRE players table (hundreds of legacy rows),
+            // not scoped to this team -- a brand-new team's players typically have no college
+            // set (the field doesn't apply to an external team), so the match condition
+            // became "same name, college IS NULL/empty" against every player in the whole
+            // database. Any name collision with an unrelated existing player who also has no
+            // college on file silently skipped the new player -- no error, no crash, just
+            // never created, invisible to the logger, with no in-UI way to force-create them.
+            // Scoping to this team's actual roster (via playerTeamAffiliations) means a name
+            // collision against a totally unrelated team is no longer treated as a duplicate.
             const inputCollege = isExternalTeam ? null : playerInput.college || null;
             const dupCheck = await db
                 .select({ id: players.id, name: players.name })
                 .from(players)
+                .innerJoin(playerTeamAffiliations, eq(playerTeamAffiliations.playerId, players.id))
                 .where(
                     and(
                         sql`LOWER(${players.name}) = LOWER(${playerInput.name})`,
+                        eq(playerTeamAffiliations.teamId, resolvedTeamId!),
+                        eq(playerTeamAffiliations.isActive, true),
                         inputCollege
                             ? eq(players.college, inputCollege)
                             : sql`(${players.college} IS NULL OR ${players.college} = '')`

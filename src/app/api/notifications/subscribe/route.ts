@@ -123,6 +123,14 @@ export async function POST(request: NextRequest) {
  */
 export async function DELETE(request: NextRequest) {
     try {
+        // BACKLOG-188: auth check moved above the body parse -- a malformed/empty
+        // body used to throw inside request.json() before ever reaching getAuthUser(),
+        // masking a real 401 as a generic 500.
+        const authUser = await getAuthUser(request);
+        if (!authUser) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+
         const body = await request.json();
         const { userId } = body;
 
@@ -133,10 +141,6 @@ export async function DELETE(request: NextRequest) {
             );
         }
 
-        const authUser = await getAuthUser(request);
-        if (!authUser) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-        }
         if (authUser.id !== userId && authUser.role !== 'admin') {
             return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
         }

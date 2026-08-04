@@ -4,54 +4,15 @@ import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Activity, Save, Undo2, Clock, Play, Pause, Settings, Lock as LockIcon, MessageSquare, AlertTriangle, Send } from 'lucide-react';
 
-// ── Offline queue helpers ─────────────────────────────────────────────────────
-// Write to BrixsportAdminDB.pendingMatchEvents — the same DB sw-admin.js drains.
-// Do NOT use offline-queue.ts / brixsport-offline.events — that DB has no reader.
-
-function openAdminDB(): Promise<IDBDatabase> {
-    return new Promise((resolve, reject) => {
-        const req = indexedDB.open('BrixsportAdminDB', 1);
-        req.onerror = () => reject(req.error);
-        req.onsuccess = () => resolve(req.result as IDBDatabase);
-        req.onupgradeneeded = (e) => {
-            // Mirror sw-admin.js schema so both sides agree on store shape.
-            const db = (e.target as IDBOpenDBRequest).result;
-            if (!db.objectStoreNames.contains('pendingMatchEvents')) {
-                const store = db.createObjectStore('pendingMatchEvents', { keyPath: 'id', autoIncrement: true });
-                store.createIndex('matchId', 'matchId', { unique: false });
-                store.createIndex('timestamp', 'timestamp', { unique: false });
-            }
-        };
-    });
-}
-
-async function queueOfflineEvent(matchId: string, data: object, token: string): Promise<void> {
-    const db = await openAdminDB();
-    return new Promise((resolve, reject) => {
-        const tx = db.transaction('pendingMatchEvents', 'readwrite');
-        const store = tx.objectStore('pendingMatchEvents');
-        // Row shape must match what syncMatchEvents() in sw-admin.js reads back:
-        // { matchId, data, token, timestamp }
-        const req = store.add({ matchId, data, token, timestamp: Date.now() });
-        req.onsuccess = () => resolve();
-        req.onerror = () => reject(req.error);
-    });
-}
-
-// Returns remaining token lifetime in seconds, or 0 if unreadable / already expired.
-// JWT TTL is 7 days (src/lib/auth.ts). Threshold for queueing: 30 min (1800s).
-function jwtSecondsRemaining(token: string): number {
-    try {
-        const payloadB64 = token.split('.')[1];
-        if (!payloadB64) return 0;
-        const decoded = JSON.parse(atob(payloadB64.replace(/-/g, '+').replace(/_/g, '/')));
-        if (typeof decoded.exp !== 'number') return 0;
-        return decoded.exp - Math.floor(Date.now() / 1000);
-    } catch {
-        return 0;
-    }
-}
-// ─────────────────────────────────────────────────────────────────────────────
+// BUG-194: this file used to carry its own inline copy of the offline-queue
+// helpers below (openAdminDB/queueOfflineEvent/jwtSecondsRemaining) -- a third
+// near-duplicate of the same contract BasketballLogger.tsx's BUG-142 fix was
+// explicitly written to avoid becoming. The inline copy also predated BUG-193
+// (basketball's fix for a real missing-IndexedDB-store race that could
+// silently and permanently break the queue) and never got it, since it lived
+// in a separate file. Importing from the shared module closes that gap here
+// too, for free, and removes the duplication.
+import { queueOfflineEvent, queueAdminChange, jwtSecondsRemaining } from '@/lib/admin-offline-queue';
 import { useAuth } from '@/hooks/useAuth';
 import { useMultiLogger } from '@/hooks/useMultiLogger';
 import { useWebSocket } from '@/hooks/useWebSocket';
@@ -168,6 +129,11 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
     const { user } = useAuth();
     const [showLineupEditModal, setShowLineupEditModal] = useState(false);
     const [queuedOfflineCount, setQueuedOfflineCount] = useState(0);
+    // BUG-194 part 2: period-transition PATCH / undo DELETE retries, via the
+    // separate pendingAdminChanges queue (mirrors BasketballLogger.tsx's own
+    // BUG-142 fix exactly, same admin-offline-queue.ts module).
+    const [queuedAdminChangeCount, setQueuedAdminChangeCount] = useState(0);
+    const [eventSaveError, setEventSaveError] = useState<string | null>(null);
 
     // Listen for background-sync completion from sw-admin.js
     useEffect(() => {
@@ -175,6 +141,8 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
         const handleMessage = (e: MessageEvent) => {
             if (e.data?.type === 'SYNC_COMPLETE' && e.data?.tag === 'sync-match-events') {
                 setQueuedOfflineCount(0);
+            } else if (e.data?.type === 'SYNC_COMPLETE' && e.data?.tag === 'sync-admin-changes') {
+                setQueuedAdminChangeCount(0);
             }
         };
         navigator.serviceWorker.addEventListener('message', handleMessage);
@@ -190,10 +158,12 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
             if (!('serviceWorker' in navigator)) return;
             navigator.serviceWorker.ready.then((reg) => {
                 if ('sync' in reg) {
-                    (reg as ServiceWorkerRegistration & { sync: { register: (tag: string) => Promise<void> } })
-                        .sync.register('sync-match-events').catch(() => {});
+                    const syncReg = reg as ServiceWorkerRegistration & { sync: { register: (tag: string) => Promise<void> } };
+                    syncReg.sync.register('sync-match-events').catch(() => {});
+                    syncReg.sync.register('sync-admin-changes').catch(() => {});
                 } else if (navigator.serviceWorker.controller) {
                     navigator.serviceWorker.controller.postMessage({ type: 'DRAIN_MATCH_EVENTS' });
+                    navigator.serviceWorker.controller.postMessage({ type: 'DRAIN_ADMIN_CHANGES' });
                 }
             }).catch(() => {});
         };
@@ -1021,6 +991,52 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
         setShowStoppageModal(false);
     };
 
+    // BUG-194 part 2: shared by every period-transition PATCH (half/OT/penalty
+    // starts, end-of-period transitions, including the final-whistle combined
+    // patch). Was fire-and-forget (`.catch(e => console.error(...))`) at every
+    // call site, same gap BasketballLogger.tsx's BUG-142 fix closed there --
+    // on a network failure this now queues the PATCH via the same
+    // pendingAdminChanges mechanism undo below uses, instead of silently
+    // dropping the write with no recovery path. Deliberately NOT applied to
+    // the 15s clock-checkpoint PATCH (BUG-109) -- that one is a frequent,
+    // best-effort update where only the latest value matters, and queueing
+    // every 15s tick while offline would flood the queue with superseded data.
+    const persistMatchPatch = async (body: Record<string, unknown>, label: string) => {
+        try {
+            const res = await fetch(`/api/matches/${match.id}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body),
+            });
+            if (!res.ok) {
+                setEventSaveError(`Failed to save ${label} (${res.status}) — may not persist on refresh.`);
+                return;
+            }
+            setEventSaveError(null);
+        } catch (e) {
+            console.error(`Failed to persist ${label}:`, e);
+            const token = localStorage.getItem('authToken');
+            if (!token || jwtSecondsRemaining(token) < 30 * 60) {
+                setEventSaveError(`Failed to save ${label} — offline or unreachable, and could not queue a retry (${!token ? 'no session' : 'session expiring soon'}).`);
+                return;
+            }
+            try {
+                await queueAdminChange(`/api/matches/${match.id}`, 'PATCH', body, token);
+                setQueuedAdminChangeCount(prev => prev + 1);
+                setEventSaveError(`${label} queued — will save automatically once back online.`);
+                if ('serviceWorker' in navigator) {
+                    const reg = await navigator.serviceWorker.ready;
+                    if ('sync' in reg) {
+                        await (reg as ServiceWorkerRegistration & { sync: { register: (tag: string) => Promise<void> } }).sync.register('sync-admin-changes');
+                    }
+                }
+            } catch (queueErr) {
+                console.error(`Failed to queue ${label}:`, queueErr);
+                setEventSaveError(`Failed to save ${label} — offline or unreachable, and queueing also failed.`);
+            }
+        }
+    };
+
     const handlePeriodEndConfirm = () => {
         if (!stateManager.current || !pendingPeriodTransition) return;
 
@@ -1035,15 +1051,12 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
         // When scores are equal we leave status as LIVE so the ET/Penalties flow can continue.
         const isFinalWhistle = nextPeriod === 'FINISHED' && homeScore !== awayScore;
 
-        fetch(`/api/matches/${match.id}`, {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(
-                isFinalWhistle
-                    ? { currentPeriod: nextPeriod, status: 'FINISHED', homeScore, awayScore, stats: matchState?.stats }
-                    : { currentPeriod: nextPeriod }
-            ),
-        }).catch((e) => console.error('[TD-010] Failed to persist period/status:', e));
+        persistMatchPatch(
+            isFinalWhistle
+                ? { currentPeriod: nextPeriod, status: 'FINISHED', homeScore, awayScore, stats: matchState?.stats }
+                : { currentPeriod: nextPeriod },
+            isFinalWhistle ? 'match finalization' : `${nextPeriod} transition`
+        );
 
         // Close modal and reset state
         setShowPeriodEndModal(false);
@@ -1056,6 +1069,51 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
             stateManager.current.stopClock();
         } else {
             stateManager.current.startClock();
+        }
+    };
+
+    // BUG-194 part 2: shared by both delete calls in handleUndo below (the
+    // main event, plus the preceding Yellow Card on a second-yellow undo).
+    // Was previously a single try/catch around both fetches ending in a
+    // blocking alert() with no recovery path -- on a genuine network failure
+    // this now queues the DELETE via the same pendingAdminChanges mechanism
+    // BasketballLogger.tsx's BUG-142 fix uses. Never touches local state
+    // itself (BUG-130's principle: never flip local state before the server,
+    // or a confirmed queue write, actually reflects it) -- the caller decides
+    // what to do with each outcome.
+    const deleteEventWithQueue = async (eventId: string): Promise<
+        { status: 'ok' } | { status: 'rejected'; detail: string } | { status: 'queued'; detail: string } | { status: 'failed'; detail: string }
+    > => {
+        try {
+            const res = await fetch(`/api/matches/${match.id}/events/${eventId}`, {
+                method: 'DELETE',
+                credentials: 'include',
+            });
+            if (!res.ok) {
+                const data = await res.json().catch(() => ({}));
+                return { status: 'rejected', detail: String(data.error || res.status) };
+            }
+            return { status: 'ok' };
+        } catch (e) {
+            console.error('Failed to undo event:', e);
+            const token = localStorage.getItem('authToken');
+            if (!token || jwtSecondsRemaining(token) < 30 * 60) {
+                return { status: 'failed', detail: `offline or unreachable, and could not queue a retry (${!token ? 'no session' : 'session expiring soon'})` };
+            }
+            try {
+                await queueAdminChange(`/api/matches/${match.id}/events/${eventId}`, 'DELETE', {}, token);
+                setQueuedAdminChangeCount(prev => prev + 1);
+                if ('serviceWorker' in navigator) {
+                    const reg = await navigator.serviceWorker.ready;
+                    if ('sync' in reg) {
+                        await (reg as ServiceWorkerRegistration & { sync: { register: (tag: string) => Promise<void> } }).sync.register('sync-admin-changes');
+                    }
+                }
+                return { status: 'queued', detail: 'queued — will retry automatically once back online' };
+            } catch (queueErr) {
+                console.error('Failed to queue undo:', queueErr);
+                return { status: 'failed', detail: 'offline or unreachable, and queueing also failed' };
+            }
         }
     };
 
@@ -1081,29 +1139,40 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
 
         setIsUndoing(true);
         try {
-            // Delete the Red Card (or any last event) from DB
-            const res = await fetch(`/api/matches/${match.id}/events/${eventToUndo.id}`, {
-                method: 'DELETE',
-                credentials: 'include',
-            });
-
-            if (!res.ok) {
-                const data = await res.json().catch(() => ({}));
-                alert(`Failed to undo event: ${data.error || res.status}`);
+            const redResult = await deleteEventWithQueue(eventToUndo.id);
+            if (redResult.status === 'rejected') {
+                alert(`Failed to undo event: ${redResult.detail}`);
+                return;
+            }
+            if (redResult.status === 'failed') {
+                setEventSaveError(`Failed to undo "${eventToUndo.type}" — ${redResult.detail}. Event was not removed; try again once back online.`);
+                return;
+            }
+            if (redResult.status === 'queued') {
+                setEventSaveError(`Undo of "${eventToUndo.type}" ${redResult.detail}. Event still shown until then.`);
                 return;
             }
 
             // Second yellow: also delete the Yellow Card that triggered it
             if (isSecondYellow && precedingYellow) {
-                const yellowRes = await fetch(`/api/matches/${match.id}/events/${precedingYellow.id}`, {
-                    method: 'DELETE',
-                    credentials: 'include',
-                });
-                if (!yellowRes.ok) {
-                    const data = await yellowRes.json().catch(() => ({}));
+                const yellowResult = await deleteEventWithQueue(precedingYellow.id);
+                if (yellowResult.status === 'rejected') {
                     // Red is already gone from DB — remove it from local state before surfacing error
                     manager.undoLastEvent();
-                    alert(`Red card removed but yellow card could not be undone: ${data.error || yellowRes.status}`);
+                    alert(`Red card removed but yellow card could not be undone: ${yellowResult.detail}`);
+                    return;
+                }
+                if (yellowResult.status === 'failed') {
+                    manager.undoLastEvent();
+                    setEventSaveError(`Red card removed, but Yellow Card undo failed — ${yellowResult.detail}. Yellow Card was not removed; try again once back online.`);
+                    return;
+                }
+                if (yellowResult.status === 'queued') {
+                    // Red confirmed gone — remove it locally. The Yellow Card's own
+                    // removal stays unconfirmed, so it stays visible until the queued
+                    // DELETE actually lands.
+                    manager.undoLastEvent();
+                    setEventSaveError(`Red card removed. Yellow Card undo ${yellowResult.detail}. Yellow Card still shown until then.`);
                     return;
                 }
             }
@@ -1113,6 +1182,7 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
             if (isSecondYellow && precedingYellow) {
                 manager.undoLastEvent(); // Yellow Card is now last — remove it too
             }
+            setEventSaveError(null);
 
             if (isSocketConnected) {
                 const fullState = manager.getState();
@@ -1138,8 +1208,6 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                     });
                 }
             }
-        } catch {
-            alert('Network error — could not undo event. Try again.');
         } finally {
             setIsUndoing(false);
         }
@@ -1530,6 +1598,14 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                                 </span>
                             </div>
                         )}
+                        {queuedAdminChangeCount > 0 && (
+                            <div className="flex items-center gap-1.5 px-2 py-1 bg-orange-500/10 rounded-lg border border-orange-500/30 shrink-0">
+                                <span className="w-1.5 h-1.5 rounded-full bg-orange-500 animate-pulse" />
+                                <span className="text-[8px] font-black uppercase tracking-tighter text-orange-400">
+                                    {queuedAdminChangeCount} Pending
+                                </span>
+                            </div>
+                        )}
                         {/* BACKSCOPED: 2026-07-27 (session 47C) — BACKLOG-142. Reinstate when: /api/staff-comms is auth-gated. */}
                         {/* <button onClick={() => setShowCommsModal(true)} className="p-1.5 bg-white/5 rounded-lg hover:bg-white/10 shrink-0 relative">
                             <MessageSquare size={16} />
@@ -1543,6 +1619,24 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                     </div>
                 </div>
             </div>
+
+            {/* BUG-194 part 2: mirrors BasketballLogger.tsx's own eventSaveError banner
+                exactly -- visible, dismissible feedback for period-transition/undo
+                failures and queue confirmations, instead of a blocking alert() or
+                nothing at all. */}
+            {eventSaveError && (
+                <div className="px-3 pt-3">
+                    <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-3 flex items-center justify-between gap-3">
+                        <p className="text-xs font-bold text-red-400">{eventSaveError}</p>
+                        <button
+                            onClick={() => setEventSaveError(null)}
+                            className="text-red-400 hover:text-red-300 text-xs font-black uppercase tracking-widest shrink-0"
+                        >
+                            Dismiss
+                        </button>
+                    </div>
+                </div>
+            )}
 
             <div className="px-3 pt-3">
                 {/* ===== SCOREBOARD ===== */}
@@ -1654,11 +1748,7 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                                     // PATCH confirmed — now transition local state and start the clock
                                     stateManager.current.transitionStatus('FIRST_HALF');
                                     // Persist period to DB — non-blocking
-                                    fetch(`/api/matches/${match.id}`, {
-                                        method: 'PATCH',
-                                        headers: { 'Content-Type': 'application/json' },
-                                        body: JSON.stringify({ currentPeriod: 'FIRST_HALF' }),
-                                    }).catch((e) => console.error('[TD-010] Failed to persist currentPeriod:', e));
+                                    persistMatchPatch({ currentPeriod: 'FIRST_HALF' }, 'First Half start');
                                     try { await fetch('/api/notifications/match-event', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ matchId: match.id, homeTeamId: match.homeTeamId, awayTeamId: match.awayTeamId, eventType: 'MATCH_START', teamName: `${homeTeam?.name || 'Home'} vs ${awayTeam?.name || 'Away'}` }) }); } catch (e) { console.error('Notification failed (non-blocking):', e); }
                                 } catch (e) {
                                     console.error('Failed to start match:', e);
@@ -1701,7 +1791,7 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                     )}
 
                     {currentPeriod === 'HALF_TIME' && (
-                        <button onClick={() => { stateManager.current?.transitionStatus('SECOND_HALF'); fetch(`/api/matches/${match.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ currentPeriod: 'SECOND_HALF' }) }).catch(e => console.error('[TD-010] Failed to persist period:', e)); }}
+                        <button onClick={() => { stateManager.current?.transitionStatus('SECOND_HALF'); persistMatchPatch({ currentPeriod: 'SECOND_HALF' }, 'Second Half start'); }}
                             className="flex-1 py-3 bg-green-500 text-black font-black uppercase tracking-widest rounded-xl text-sm animate-pulse shadow-lg shadow-green-500/20 active:scale-95 transition-transform">
                             ▶ Start 2nd Half
                         </button>
@@ -1709,11 +1799,11 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
 
                     {currentPeriod === 'FINISHED' && homeScore === awayScore && (
                         <>
-                            <button onClick={() => { if (confirm('Start Extra Time?')) { stateManager.current?.transitionStatus('EXTRA_TIME_1'); fetch(`/api/matches/${match.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ currentPeriod: 'EXTRA_TIME_1' }) }).catch(e => console.error('[TD-010] Failed to persist period:', e)); } }}
+                            <button onClick={() => { if (confirm('Start Extra Time?')) { stateManager.current?.transitionStatus('EXTRA_TIME_1'); persistMatchPatch({ currentPeriod: 'EXTRA_TIME_1' }, 'Extra Time start'); } }}
                                 className="flex-1 py-2.5 bg-amber-500 text-black font-bold uppercase tracking-widest rounded-xl text-xs active:scale-95 transition-transform">
                                 ⏱ Extra Time
                             </button>
-                            <button onClick={() => { if (confirm('Start Penalties?')) { stateManager.current?.transitionStatus('PENALTY_SHOOTOUT'); fetch(`/api/matches/${match.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ currentPeriod: 'PENALTY_SHOOTOUT' }) }).catch(e => console.error('[TD-010] Failed to persist period:', e)); } }}
+                            <button onClick={() => { if (confirm('Start Penalties?')) { stateManager.current?.transitionStatus('PENALTY_SHOOTOUT'); persistMatchPatch({ currentPeriod: 'PENALTY_SHOOTOUT' }, 'Penalties start'); } }}
                                 className="flex-1 py-2.5 bg-purple-500 text-black font-bold uppercase tracking-widest rounded-xl text-xs active:scale-95 transition-transform">
                                 🎯 Penalties
                             </button>

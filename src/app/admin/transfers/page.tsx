@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { motion, AnimatePresence } from 'framer-motion';
+import { FeatureGate } from '@/components/admin/FeatureGate';
 import {
     TrendingUp,
     Plus,
@@ -374,9 +375,11 @@ function AdminTransfersPageContent() {
 
 export default function AdminTransfersPage() {
     return (
-        <ErrorBoundary>
-            <AdminTransfersPageContent />
-        </ErrorBoundary>
+        <FeatureGate flagKey="features.transfers.enabled" featureName="Transfers">
+            <ErrorBoundary>
+                <AdminTransfersPageContent />
+            </ErrorBoundary>
+        </FeatureGate>
     );
 }
 
