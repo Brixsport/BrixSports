@@ -1,0 +1,104 @@
+# Audit — Live Notification Pipeline (Tier 1), Full Trigger→Delivery Trace
+
+**Session:** 48 &nbsp;|&nbsp; **Date:** 2026-08-04 &nbsp;|&nbsp; **Scope:** the full push-notification pipeline for live match events (goal/card/period-transition), per `SYSTEM_CRITICALITY_MAP.md`'s Tier 1 entry ("Live notifications ... currently non-functional end-to-end, NOTIF-1/enrollment gap").
+
+**Method:** static code read only, no live/DB testing, no code changes. This is a FINDINGS-ONLY audit per explicit instruction — Tier 0 is not yet confirmed fully closed for football (`SYSTEM_CRITICALITY_MAP.md`'s own session 47G update: "Football has not had the equivalent systematic live-verification pass... explicitly the next session's planned focus"), so no Tier 1 fixes were built here, only documented.
+
+**Cross-referenced, not duplicated:** `BUG-150` (BACKLOG.md ~line 6348), `BUG-084/085/086/087/088/089` (BACKLOG.md ~line 318-338), the Tier 1 "push subscriptions table missing fields" row (`SYSTEM_CRITICALITY_MAP.md` line 141), and `.agents/dev/AUDITS/audit_auth_account_notifications_47D.md` §6-7 (prior session's pass over the same enrollment/delivery files — this audit re-verifies against current code, extends into the trigger side that 47D's audit didn't cover, and finds the basketball-specific and cron-scheduling gaps below that no prior entry names).
+
+---
+
+## 1. Trigger side — where notifications are supposed to fire from
+
+**Files:** `src/lib/match-state-manager.ts` (lines 940-994), `src/lib/notifications/event-driven-notifier.ts`, `src/components/FootballLogger.tsx`, `src/components/BasketballLogger.tsx`
+
+**Architecture, as built:** `MatchStateManager` (football-only — its own `notifiableEvents` array is typed `FootballEventType[]`) dispatches a `window.dispatchEvent(new CustomEvent('MATCH_NOTIFICATION_TRIGGER', ...))` from two private methods:
+- `triggerNotification(event)` — fires for `Goal`, `Penalty`, `Penalty Saved`, `Penalty Missed`, `Red Card`
+- `triggerPeriodNotification(period)` — fires for `MATCH_START`, `HALF_TIME`, `MATCH_END`
+
+`EventDrivenNotifier` (`event-driven-notifier.ts`) is a singleton that self-initializes on import (`if (typeof window !== 'undefined') getNotifier();`) and listens for that same `window` event, then queues and POSTs to `/api/notifications/match-event`, which calls `sendMatchEventNotification()` in `match-notification-service.ts`, which sends real Web Push via `webpush.sendNotification()`.
+
+**Confirmed WIRED — football only.** `EventDrivenNotifier` is imported exactly once in the entire `src/components` tree: `FootballLogger.tsx:25` (`import '@/lib/notifications/event-driven-notifier';`). Since both halves of this pipeline (the dispatcher in `match-state-manager.ts` and the listener in `event-driven-notifier.ts`) run client-side in the *same browser tab* — the logger's own tab — the design depends entirely on a `FootballLogger` instance being mounted and its `MatchStateManager` staying alive in that tab for the duration of the match.
+
+**Confirmed NOT WIRED — basketball. This is a new finding, not covered by any existing BACKLOG/BUG entry** (grepped `BACKLOG.md` for "basketball" + "notif" in proximity — no hits). `BasketballLogger.tsx` has zero references to `notification`, `event-driven-notifier`, or `MATCH_NOTIFICATION_TRIGGER` (confirmed by grep), and does not use `match-state-manager.ts` at all (that class is football-typed). A basketball goal, technical foul, flagrant foul, or quarter transition today **never fires the `MATCH_NOTIFICATION_TRIGGER` event, full stop** — the notifier is never invoked for basketball at any layer, independent of enrollment or delivery correctness. Given `SYSTEM_CRITICALITY_MAP.md`'s session 47G note that basketball's Tier 0 gaps are now closed and football is the outstanding Tier 0 unknown, this basketball notification gap sits entirely in Tier 1 territory (the match itself is correctly logged/broadcast — see the map's own resolved WS-broadcast entry — only the *notification* layer never engages for this sport).
+
+**Secondary trigger path — lineup publish.** `src/app/api/matches/[id]/lineup/publish/route.ts` also calls into `webpush.sendNotification` (confirmed by grep) as its own independent trigger, unrelated to `EventDrivenNotifier`/`MATCH_NOTIFICATION_TRIGGER` — a `LINEUP_AVAILABLE` push. Not deep-dived here (out of the goal/card/period-transition scope named in the brief), but worth noting the pipeline is not a single funnel — there are at least two independent trigger mechanisms into the same `pushSubscriptions` delivery layer.
+
+**Verdict:** trigger side is real, functional code for football, single-point-of-failure (one browser tab, no server-side redundancy — if the logger's tab closes or crashes, no further notifications fire for that match regardless of enrollment/delivery health), and **completely absent for basketball**.
+
+---
+
+## 2. Enrollment side — how a user subscribes
+
+**Files:** `src/components/SettingsOverlay.tsx`, `src/components/OnboardingModal.tsx`, `src/components/NotificationPermission.tsx`, `src/components/notifications/NotificationPrompt.tsx`, `src/hooks/useNotificationPrompt.ts`, `src/app/api/notifications/subscribe/route.ts`, `src/db/schema.ts` (`pushSubscriptions` table)
+
+This matches `BUG-150`'s already-filed finding exactly — re-verified against current code, not re-filing:
+
+- **`SettingsOverlay.tsx`** (mounted from `src/app/page.tsx`, reachable via the homepage bell icon by any visitor, including anonymous ones) — the only enrollment surface that is actually clickable by a real user today. But `handleEnablePush()` (line 83-87) opens with `if (!user) { toast.error('Please sign in to enable notifications'); return; }` — an anonymous viewer sees the toggle UI, clicks Enable, and gets an error toast. **The browser's own permission prompt is never even requested for an anonymous viewer** — this is a client-side early return, before `Notification.requestPermission()` is called.
+- **`OnboardingModal.tsx`** — works, but only reachable from `/signup`, i.e. post-account-creation. Confirmed by `audit_auth_account_notifications_47D.md` §6 as functional for signed-up users.
+- **`NotificationPermission.tsx`** and **`NotificationPrompt.tsx`** — both take a `userId` prop and are the two components that *could* work for an anonymous device-scoped flow if built out, but neither is imported anywhere outside their own file (confirmed by grep — no JSX usage, no `layout.tsx` mount, no provider mount). Dead code today.
+- **`useNotificationPrompt.ts`** — also never called anywhere, and its own internal logic additionally gates on `isAuthenticated && user?.id` even if it were wired up — so mounting it as-is would not actually solve the anonymous case without a further code change, not just a mount-site change.
+
+**Server-side confirms the client-side gate is not incidental.** `POST /api/notifications/subscribe` (`subscribe/route.ts:16-21`) calls `getAuthUser(request)` and 401s if absent — there is no path to create a subscription without an authenticated session today. The `pushSubscriptions` table itself (`schema.ts:794-803`) has `userId: text('user_id').notNull().references(() => users.id, ...)` — **not nullable, FK-bound to a real user row.** Even if the UI gate were removed, the current schema physically cannot store an anonymous/device-scoped subscription without a migration (adding a nullable `userId` or a `deviceId` fallback column) — confirming `BUG-150`'s own fix note ("not confirmed either way whether that's already possible") in the negative: it is not possible without a schema change.
+
+**Also confirmed, matches the Tier 1 row already in `SYSTEM_CRITICALITY_MAP.md` (line 141):** the `pushSubscriptions` table has no `platform`, `isActive`, `lastUsedAt`, or `deviceLabel` columns — only `endpoint`, `p256dh`, `auth`, `userAgent`, timestamps. Stale-subscription pruning (beyond the reactive 410/404-on-send cleanup already coded into `match-notification-service.ts`) and per-platform delivery debugging are both structurally unsupported today.
+
+**Verdict:** enrollment works for signed-in users (both `SettingsOverlay` and `OnboardingModal` paths are live, POST/DELETE/GET on `/api/notifications/subscribe` are all correctly auth-gated as of this read — `BUG-021`'s original no-auth finding is confirmed resolved, matches `BACKLOG.md`'s own resolved note). It is completely unreachable for anonymous viewers — both the UI (no reachable anonymous-capable component is mounted) and the backend (auth-required route, non-nullable `userId` FK) block it. This is `BUG-150`, unchanged, HIGH priority, still OPEN.
+
+---
+
+## 3. Delivery side — service worker, VAPID config, and real-world proof
+
+**Files:** `public/sw-user.js`, `src/lib/notifications/push-service.ts`, `src/lib/notifications/match-notification-service.ts`, `src/lib/env.ts`, `.env.example`
+
+**Service worker push handling — solid, no issues found.** `sw-user.js`'s `push` event handler (lines 275-352) correctly parses the payload, falls back gracefully on missing/malformed data, builds notification options with event-type-specific vibration/`requireInteraction` behavior (GOAL gets `requireInteraction: true` and a distinct vibrate pattern, RED_CARD similarly), and the `notificationclick` handler (355-384) correctly focuses an existing tab or opens a new one to the right match URL. This is the one part of the pipeline that reads as fully built and correct.
+
+**VAPID config — functional but architecturally noncompliant with this project's own rule.** CLAUDE.md states explicitly: *"Never read `process.env` directly in application code. Always import from `src/lib/env.ts` instead... `validateEnv()` fails fast at startup if required vars are absent."* Confirmed by reading `env.ts` in full: **VAPID keys are absent from `env.ts` entirely** — no `vapidPublicKey`/`vapidPrivateKey`/`vapidSubject` field exists in the `env` object, and `validateEnv()`'s `required` array (JWT_SECRET, TURSO_CONNECTION_URL, TURSO_AUTH_TOKEN, NEXT_PUBLIC_APP_URL) does not include any VAPID var. Instead, three separate files read `process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY` / `process.env.VAPID_PRIVATE_KEY` / `process.env.VAPID_SUBJECT` directly: `push-service.ts:18`, `match-notification-service.ts:12-14`, and `api/notifications/send/route.ts:10-12`. The vars **are** documented in `.env.example` (lines 39-48), so this isn't an undocumented-var problem — it's a "never fails fast, never centralized" problem. `match-notification-service.ts`'s own handling if the keys are missing is a silent no-op: `if (vapidPublicKey && vapidPrivateKey) { webpush.setVapidDetails(...) }` — no `else`, no thrown error, no log. A misconfigured environment (keys absent or wrong on a fresh staging/prod deploy) would not fail startup; it would silently degrade to every `webpush.sendNotification()` call throwing at send time, caught per-subscription in `sendMatchEventNotification`'s try/catch and merely logged to server console — nothing surfaces to an admin. (`api/notifications/send/route.ts` is the one file that does validate defensively — format and length checks on the keys — but only for that one admin-broadcast route, not for the actual live-event pipeline.)
+
+**Real-world proof of delivery — genuinely happened, but dated and narrow.** Per `BUILD_JOURNAL.md` (session ~40, 2026-07-01): a live goal notification ("Yanko scored a goal") was confirmed delivered to a real prod subscriber's iPad via Apple's push infrastructure during a staging test match, content matching the exact GOAL payload template — this is real, specific, end-to-end proof the pipeline **can** work for an authenticated subscriber on iOS 16.4+/Home Screen PWA (the one iOS push-capable configuration per `PWA_LIMITATIONS.md`). No comparable live-verification entry exists in `RUNLOG.md` or `BUILD_JOURNAL.md` for Android, for card events, for period-transition events, or for anything since 2026-07-01 — meaning the one successful real-world proof point is over a month old (relative to this session's 2026-08-04 date) and covers exactly one event type on exactly one platform.
+
+---
+
+## 4. Platform limitation factor (`PWA_LIMITATIONS.md`)
+
+Read in full. The relevant constraint for this audit: **push notifications from a browser tab do not work at all on iOS Safari, on any iOS version** — only the installed Home Screen PWA on iOS 16.4+ can receive push. This is a hard platform ceiling, not a BrixSports bug, and it compounds every gap above:
+- Even if `BUG-150` were fixed and anonymous enrollment worked, an anonymous iOS Safari-tab viewer still could not receive push under any circumstance — the realistic anonymous-enrollment fix has to assume Android Chrome + installed iOS PWA as the achievable target, not "works everywhere."
+- The one proven live-delivery data point (the July 1 iPad goal notification) is itself evidence *for* this constraint, not against it — it worked because that subscriber had the Home Screen PWA installed, which is the narrow case the platform allows, not the common case.
+
+This should temper any Tier 1 sequencing decision: fixing `BUG-150` maximizes reach on Android (where it removes a real, avoidable block) but has a structurally capped ceiling on iOS regardless of how well it's built.
+
+---
+
+## 5. Gap list — ordered, trigger through delivery
+
+1. **Enrollment is auth-gated end to end, contradicting the actor model (`BUG-150`, OPEN, HIGH).** No anonymous viewer can ever subscribe — UI gate, dead anonymous-capable components, auth-required API, non-nullable `userId` FK. **This is the most blocking single gap.** It sits upstream of every other issue in the sense that even a perfectly-firing trigger and perfectly-configured delivery layer produces zero notifications for the majority of BrixSports' actual audience (per the actor model, "Viewer" — unauthenticated — is the default and expected state for most traffic; CLAUDE.md is explicit that viewers never have a session). Fixing this one gap is what unblocks the largest population of users from ever being reachable, regardless of what else is fixed.
+2. **Basketball has zero trigger wiring (new finding, not tracked anywhere).** No goal, foul, or period-transition event in a basketball match can ever fire `MATCH_NOTIFICATION_TRIGGER`. This is a full sport-wide gap, not a bug in an existing path — basketball notifications do not exist as a feature today, independent of enrollment or delivery.
+3. **Single-tab, single-point-of-failure trigger architecture (football).** The entire live-notification trigger for football depends on one specific browser tab (the logger's) staying open with its `MatchStateManager` instance alive. No server-side trigger exists as a fallback — an event written via any other path (admin manual entry, the offline-queue replay, a hypothetical future API-only ingestion) does not notify anyone. This is architecturally the same class of gap `BUG-108`/`BUG-116` already fixed for the separate WS-broadcast pipeline (DB write decoupled from broadcast) — notifications never received the equivalent fix.
+4. **`BUG-085` (dedup key) appears already fixed in code but the BACKLOG entry still reads OPEN — a stale-backlog finding, not a live bug.** Confirmed by direct read: `event-driven-notifier.ts`'s dedup key is `${matchId}_${event.id}` / `${matchId}_${periodEventType}`, no `Date.now()` suffix — this matches exactly what `audit_auth_account_notifications_47D.md` §7 already independently confirmed ("BUG-085 fix confirmed sound, no regression"). `BACKLOG.md` line 330 still shows `**Status:** OPEN`. Recommend the next backlog-maintenance pass close this out with the 47D audit's own confirmation as evidence, rather than re-verifying a third time.
+5. **VAPID config bypasses `env.ts`/`validateEnv()` entirely — a process-compliance gap, not a currently-observed functional break.** Three files read `process.env.VAPID_*` directly; a missing/misconfigured var degrades silently (per-subscription caught error, logged only) instead of failing the deploy loudly. Low current severity (keys are documented and, per the July 1 proof, correctly set on at least prod) but a real risk the next time these keys need rotating per-environment (the `.env.example` comment itself already flags "MUST be different per environment... shared VAPID keys mean [risk]" — worth checking VAPID keys are in fact staging/prod-separated the same way `JWT_SECRET`/`CRON_SECRET` already are, not confirmed either way by this read).
+6. **`/api/reminders/check` (30/15-minute-before match-start push) has no scheduling trigger at all — a new finding.** `vercel.json` has zero `crons` configuration; nothing else in the repo invokes this route automatically (confirmed by grep for the route path and for any cron config). The route itself is correctly built (checks `CRON_SECRET`, queries upcoming matches, calls `sendMatchReminderNotification`) but is dead without an external caller. Distinct from the already-tracked `BUG-XXX`-style entry at `BACKLOG.md` line 4585 (`/api/reminders/route.ts` POST/DELETE auth gap — a different route, the CRUD endpoint, not the cron-check endpoint).
+7. **`BUG-086`/`BUG-087`/`BUG-088`/`BUG-089` — all confirmed still OPEN by direct code read, consistent with the existing BACKLOG entries and 47D's audit.** `BUG-088` specifically re-confirmed line-for-line: `notifications/route.ts:185` still hardcodes `unreadCount: 0`, PATCH still `// Mock success for now` (line 219-222), and the `'GOAL'`-vs-`'Goal'` casing mismatch is still present at line 105. These affect the in-app notification history/read-state UI, not the push pipeline itself — lower blocking priority than items 1-3.
+8. **Push subscription table lacks `platform`/`isActive`/`lastUsedAt`/`deviceLabel`** — already tracked in `SYSTEM_CRITICALITY_MAP.md` line 141, re-confirmed against current `schema.ts`. Correctly scoped there as "acceptable now, blocking before multi-campus," not urgent for the current single-pilot scale.
+9. **iOS platform ceiling** (`PWA_LIMITATIONS.md`) — not a BrixSports defect, but caps the achievable outcome of fixing any of the above for the iOS Safari-tab audience specifically. Factor into sequencing/expectations, not into the fix-priority ordering itself.
+
+**If only one thing could be fixed first:** gap #1 (anonymous enrollment). It's the one gap that, left unfixed, makes every other fix in this list deliver notifications to a near-zero fraction of actual viewers — BrixSports' own actor model defines the unauthenticated Viewer as the default, expected state for the audience this product is built for.
+
+---
+
+## What's next in line for Tier 1 (per `SYSTEM_CRITICALITY_MAP.md`'s own tier breakdown, brief scope only)
+
+- **Match event timeline display** (icon/color/description rendering) — `BUG-083` SHIPPED (`efb0081`) but never got its visual verify; `BACKLOG-154` (session 47D) additionally found the live-styling fix only reached 1 of 4 surfaces that show match status, with 3 independent timeline implementations at uneven parity.
+- **Lineup/squad display for the match in progress** — not separately audited this session; no dedicated open BUG/BACKLOG item found in this pass, status unconfirmed.
+- **Live notifications** — this audit. Multiple OPEN items (`BUG-150` highest priority) plus the new basketball/cron findings above.
+- **Offline queue / PWA resilience for the logger** — largely addressed for basketball (`BUG-142`/`BUG-193` both RESOLVED per `SYSTEM_CRITICALITY_MAP.md`'s session 47G update); football's equivalent (`BUG-194`) was only found as a side effect of an unrelated audit and has not had its own dedicated sweep — explicitly called out as "next session's planned focus" in the criticality map, i.e. this may need to happen before or alongside any of the above.
+
+---
+
+## Summary of new findings from this audit (not previously filed anywhere)
+
+1. Basketball has zero notification-trigger wiring for any event type (goal, foul, period-transition) — a full sport-wide gap in `EventDrivenNotifier`'s reach, distinct from `BUG-150`.
+2. `/api/reminders/check` (match-starting-soon push) has no cron/scheduler invoking it — `vercel.json` has no `crons` block, and no other invocation site was found.
+3. VAPID env vars bypass `src/lib/env.ts`/`validateEnv()` entirely, read via raw `process.env` in three separate files — a process-compliance gap per CLAUDE.md's own stated rule, current functional severity low but silent-failure risk on future key rotation.
+4. `BUG-085`'s BACKLOG entry still reads OPEN despite the fix being present and correct in code (independently confirmed twice now — this audit and `audit_auth_account_notifications_47D.md`) — a backlog-hygiene item, not a code gap.
+
+None of these were built or fixed in this session, per the FINDINGS-ONLY constraint — flagging for a future session's backlog-filing pass.

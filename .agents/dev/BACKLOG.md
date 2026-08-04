@@ -7189,6 +7189,30 @@ Files: `src/components/BasketballLogger.tsx`, `src/app/page.tsx`.
 
 ---
 
+### BUG-195 — Deleting a Match Never Reverses Its Contribution to `football_player_stats`/`basketball_player_stats` (True of the Real Admin API, Not Just Raw SQL)
+
+**Status:** RESOLVED (this specific incident) — 2026-08-04 (session 48), root cause not fixed platform-wide
+**Priority:** Medium — real data-integrity gap, but requires a `match_type !== 'friendly'` match with real events being deleted (test-data cleanup, or an admin correcting a mis-created match) to trigger; does not affect any of the Three Critical Flows for a live match in progress
+
+**Problem:** Found while cleaning up two stale `LIVE`-status test matches left over from session 47F/47G (`browser-test-football-47f-*`, `browser-test-47f--kwabip-`). Both were `match_type: 'competition'` (not `'friendly'`), and I incorrectly concluded — based on `football_player_stats`/`basketball_player_stats.updated_at` predating the matches' `created_at` — that their events had never reached the stats pipeline, so a plain `DELETE FROM match_events; DELETE FROM matches` was safe. **That conclusion was wrong**, caught by Richard questioning it directly. Live-verified the real mechanism instead: `updated_at` on both stat tables is a plain column, never touched by `updatePlayerStats()`'s `.update()` calls in `src/app/api/matches/[id]/events/route.ts` — a real, confirmed stat write (personal_fouls `9 → 10` via a live POST against the staging admin session) left `updated_at` completely unchanged. **`updated_at` is not reliable evidence of "no write occurred" anywhere `updatePlayerStats()` is the writer.**
+
+**Actual root cause, broader than the immediate cleanup mistake:** neither the raw-SQL deletion I initially ran, nor the real `DELETE /api/matches/[id]` admin endpoint (`src/app/api/matches/[id]/route.ts:655-716`), reverses any player-stat contribution before deleting a match's events. The real endpoint clears `bracketNodes`/`headToHead` FKs and deletes `teamForm` rows, then relies on DB-level cascade delete for `match_events` — with zero call to any stat-decrement logic. This is the same bug class `BUG-060` already fixed, but `BUG-060`'s `decrementPlayerStats()` is only wired into the *single-event* `DELETE /api/matches/[id]/events/[eventId]` route — whole-match deletion has never had the equivalent.
+
+**This incident's correction (done):** reconstructed the exact stat deltas from the events captured before deletion (`dev/audit-browser-test-matches-48.mjs`'s output) and reverse-applied them via `dev/correct-stat-inflation-48.mjs`: `busa-joga-player-17` (football) goals/shots_on_target −1 each; `i7VBmo4RZkk5Q6_Zixw2I` (basketball) field_goals_attempted/made −1, total_points −2; `tX0zxQTavQwD3zZDc7wvb` (basketball) field_goals_attempted/made −1, three_pointers_attempted/made −2, total_points −8; `-SESd9Jia0oBKZ47n7fgJ` (basketball) personal_fouls −6 (5 from the original test, 1 from this session's own live-pipeline verification POST). All four players confirmed back to their pre-test-contamination values.
+
+**Fix (not built — real gap, needs its own scoping):** `DELETE /api/matches/[id]` should either (a) refuse to delete a non-friendly match with existing events without an explicit force/confirm step, or (b) run the same per-event stat-reversal `decrementPlayerStats()` already proven correct in the single-event DELETE route, looped over every event on the match, inside the same transaction, before the cascade delete. Richard's own framing when this was caught: there should be a real "trace and decrement" approach, not manual reconstruction after the fact every time. Given this is a low-frequency path (deleting whole matches is rare, mostly test-data cleanup and admin corrections) it doesn't need Tier 0 urgency, but it's a real, repeatable data-corruption risk any time someone (a dev script or a future admin UI "delete match" button) removes a competitive match with real events already logged.
+
+**Also file this as a lesson:** `updated_at` columns in this codebase are not universally auto-maintained — several write paths (`updatePlayerStats()` confirmed here) never set them. Do not use `updated_at` as evidence a row wasn't touched; check the actual mutated fields directly, or re-derive expected state from the real event log.
+
+**Evidence:**
+- Verified by: live POST against `https://brixsports-staging.vercel.app` using a real admin session (Richard manually signed in after Vercel preview cookie-injection failed, same known quirk as session 47F), direct DB re-query before/after
+- Observed result: `personal_fouls` for `-SESd9Jia0oBKZ47n7fgJ` went `9 → 10` on a real event POST with `updated_at` unchanged, proving the write happened despite the stale timestamp; correction script's before/after values confirmed exact expected deltas for all 4 affected players
+- Pending items: the platform-level fix (stat-safe match deletion) is not built — filed here for a future session, not urgent enough to block the football Tier 0 sweep this was found during
+
+**Found:** session 48, cleaning up stale test matches ahead of a planned football Tier 0 live-verification pass; caught by Richard questioning the "why" behind an unverified conclusion rather than accepting it at face value.
+
+---
+
 ## Post-Deployment / SEO & Growth
 
 <!-- Category for real launch-adjacent work that isn't a Tier 0-3 platform bug -- analytics,
