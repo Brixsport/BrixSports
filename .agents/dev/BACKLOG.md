@@ -1585,6 +1585,8 @@ player stats can be stale or inconsistent after a match ends.
 
 **Deferred:** Richard's call — file now, return to it after the BUSA League backfill (BACKLOG-018) is further along. As of 2026-07-13, backfill is past the halfway point (17 of 32).
 
+**Update, 2026-08-04 (session 48):** raised again mid-session while resuming the backfill — Richard's framing matches the "Proposed fix" above exactly (an uncaptured stat category should not render at all for these matches, not show a real-looking `0`). Not built this session (time-boxed to close on other work), but the deferral condition is close to being met: backfill is now at 24 of 32 matches with events (up from 17), only 7 remain plus this session's 2 newly-deferred card-attribution problems on `busa-match-24`. **Good candidate for the actual next session's first task**, alongside continuing the remaining matches.
+
 ---
 
 ### ~~BACKLOG-124~~ — Live Auto-Ratings Silently Broken Since Written (No Auth Forwarded)
