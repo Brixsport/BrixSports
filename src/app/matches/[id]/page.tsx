@@ -223,6 +223,10 @@ export default function MatchDetailPage() {
                         ...prev!.match,
                         homeScore: data.homeScore,
                         awayScore: data.awayScore,
+                        // BACKLOG-105: optional -- only present on a shootout kick broadcast,
+                        // left untouched (spread from prev) for every other score update.
+                        ...(data.shootoutHomeScore !== undefined ? { shootoutHomeScore: data.shootoutHomeScore } : {}),
+                        ...(data.shootoutAwayScore !== undefined ? { shootoutAwayScore: data.shootoutAwayScore } : {}),
                     },
                 }));
             }
@@ -257,6 +261,8 @@ export default function MatchDetailPage() {
                 if (data.currentPeriod !== undefined) nextMatch.currentPeriod = data.currentPeriod;
                 if (data.homeScore !== undefined) nextMatch.homeScore = data.homeScore;
                 if (data.awayScore !== undefined) nextMatch.awayScore = data.awayScore;
+                if (data.shootoutHomeScore !== undefined) nextMatch.shootoutHomeScore = data.shootoutHomeScore;
+                if (data.shootoutAwayScore !== undefined) nextMatch.shootoutAwayScore = data.shootoutAwayScore;
                 if (data.minute !== undefined) nextMatch.minute = data.minute;
                 if (data.extraTime !== undefined) nextMatch.extraTime = data.extraTime;
                 return { ...prev, match: nextMatch };
@@ -362,6 +368,13 @@ export default function MatchDetailPage() {
     // never ported to this full detail page header.
     const homeRedCardsCount = (events || []).filter(e => e.type === 'Red Card' && e.teamId === match.homeTeamId).length;
     const awayRedCardsCount = (events || []).filter(e => e.type === 'Red Card' && e.teamId === match.awayTeamId).length;
+
+    // BACKLOG-105/BACKLOG-120: a shootout only ever ends decisively (sudden death
+    // continues until it isn't tied), so a genuine equal shootoutHomeScore/
+    // shootoutAwayScore only happens mid-shootout, never as the final stored result —
+    // treating them as unequal is what actually marks "a real result exists."
+    const hasShootoutResult = match.shootoutHomeScore != null && match.shootoutAwayScore != null
+        && match.shootoutHomeScore !== match.shootoutAwayScore;
 
     // Period/clock — WS value takes priority, but only while it's actually fresh.
     // BUG-109: once useMatchTimer marks the WS value stale (socket disconnected), it
@@ -481,11 +494,19 @@ export default function MatchDetailPage() {
 
                         {/* Score */}
                         <div className="text-center">
+                            {/* BACKLOG-105/Richard's call: this is a single-match detail view, not a
+                                scanned list -- the PEN X-Y line already makes the result unambiguous,
+                                so no winner-color treatment here (that's a homepage/list-view thing). */}
                             <div className="flex items-center gap-4">
                                 <div className="text-4xl font-black">{match.homeScore}</div>
                                 <div className="text-2xl text-white/40">-</div>
                                 <div className="text-4xl font-black">{match.awayScore}</div>
                             </div>
+                            {hasShootoutResult && (
+                                <div className="text-xs text-white/50 font-bold uppercase tracking-wider mt-0.5">
+                                    PEN {match.shootoutHomeScore}-{match.shootoutAwayScore}
+                                </div>
+                            )}
                             <div className="text-sm text-white/60 mt-1 uppercase font-bold tracking-wider">
                                 {isLive ? (
                                     <span className="flex items-center gap-1.5 justify-center">

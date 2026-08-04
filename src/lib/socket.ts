@@ -103,11 +103,21 @@ export function broadcastMatchEvent(matchId: string, event: any): Promise<void> 
 /**
  * Broadcast a score update
  */
-export function broadcastScoreUpdate(matchId: string, homeScore: number, awayScore: number): Promise<void> {
+export function broadcastScoreUpdate(
+    matchId: string,
+    homeScore: number,
+    awayScore: number,
+    // BACKLOG-105: optional shootout score, backward compatible -- existing
+    // listeners that don't know about these fields simply ignore them.
+    shootoutHomeScore?: number,
+    shootoutAwayScore?: number
+): Promise<void> {
     return broadcastToMatch(matchId, 'match:score:updated', {
         matchId,
         homeScore,
         awayScore,
+        ...(shootoutHomeScore !== undefined ? { shootoutHomeScore } : {}),
+        ...(shootoutAwayScore !== undefined ? { shootoutAwayScore } : {}),
     });
 }
 

@@ -98,6 +98,10 @@ export default function Home() {
             awayTeamId: match.awayTeamId,
             homeScore: match.homeScore || 0,
             awayScore: match.awayScore || 0,
+            // BACKLOG-105: explicit transform map, same class as the already-documented
+            // "round silently dropped" bug — any field MatchCard reads must be listed here.
+            shootoutHomeScore: match.shootoutHomeScore ?? undefined,
+            shootoutAwayScore: match.shootoutAwayScore ?? undefined,
             status: match.status,
             startTime: match.startTime,
             venue: match.venue,
@@ -139,6 +143,10 @@ export default function Home() {
             awayTeamId: match.awayTeamId,
             homeScore: match.homeScore || 0,
             awayScore: match.awayScore || 0,
+            // BACKLOG-105: explicit transform map, same class as the already-documented
+            // "round silently dropped" bug — any field MatchCard reads must be listed here.
+            shootoutHomeScore: match.shootoutHomeScore ?? undefined,
+            shootoutAwayScore: match.shootoutAwayScore ?? undefined,
             status: match.status,
             currentPeriod: match.currentPeriod ?? null,
             startTime: match.startTime,
@@ -628,6 +636,9 @@ export default function Home() {
                                       {match.status !== 'UPCOMING' && (
                                         <span className={`ml-auto text-sm font-bold ${match.homeScore > match.awayScore ? 'text-primary' : 'text-white/60'}`}>
                                           {match.homeScore}
+                                          {match.shootoutHomeScore != null && match.shootoutAwayScore != null && match.shootoutHomeScore !== match.shootoutAwayScore && (
+                                            <span className={`ml-1 text-xs font-normal ${match.shootoutHomeScore > match.shootoutAwayScore ? 'text-primary' : ''}`}>({match.shootoutHomeScore})</span>
+                                          )}
                                         </span>
                                       )}
                                     </div>
@@ -654,6 +665,9 @@ export default function Home() {
                                       {match.status !== 'UPCOMING' && (
                                         <span className={`ml-auto text-sm font-bold ${match.awayScore > match.homeScore ? 'text-primary' : 'text-white/60'}`}>
                                           {match.awayScore}
+                                          {match.shootoutHomeScore != null && match.shootoutAwayScore != null && match.shootoutHomeScore !== match.shootoutAwayScore && (
+                                            <span className={`ml-1 text-xs font-normal ${match.shootoutAwayScore > match.shootoutHomeScore ? 'text-primary' : ''}`}>({match.shootoutAwayScore})</span>
+                                          )}
                                         </span>
                                       )}
                                     </div>

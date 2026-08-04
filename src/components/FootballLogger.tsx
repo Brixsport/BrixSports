@@ -115,6 +115,11 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
     const [showPeriodEndModal, setShowPeriodEndModal] = useState(false);
     const [pendingPeriodTransition, setPendingPeriodTransition] = useState<{ current: string; next: string } | null>(null);
     const [showPenaltyModal, setShowPenaltyModal] = useState(false);
+    // BACKLOG-105: local running tally for the logger's own UI, hydrated from
+    // the real server response after each kick (never client-derived) so it can
+    // never drift from the DB-authoritative shootoutHomeScore/shootoutAwayScore.
+    const [showShootoutModal, setShowShootoutModal] = useState(false);
+    const [shootoutScore, setShootoutScore] = useState<{ home: number; away: number } | null>(null);
     const [showReasonModal, setShowReasonModal] = useState(false);
     const [pendingReasonEvent, setPendingReasonEvent] = useState<{ type: FootballEventType; playerId: string } | null>(null);
     const [showFoulOutcomeModal, setShowFoulOutcomeModal] = useState(false);
@@ -1854,17 +1859,23 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                         </div>
                     </div>
                 ) : currentPeriod === 'PENALTY_SHOOTOUT' ? (
-                    // Penalty Shootout Buttons
+                    // BACKLOG-105: dedicated shootout flow — PEN_SCORED/PEN_MISSED/PEN_SAVED,
+                    // never the regular Penalty/Penalty Missed/Penalty Saved types (those write
+                    // career stats and the main score; shootout kicks must not).
                     <div className="space-y-4 mb-8">
-                        <div className="bg-purple-500/10 border border-purple-500/30 rounded-xl p-4 mb-4">
+                        <div className="bg-purple-500/10 border border-purple-500/30 rounded-xl p-4 mb-4 text-center">
                             <h3 className="text-sm font-black uppercase tracking-widest text-purple-400 mb-2">Penalty Shootout</h3>
-                            <p className="text-xs text-white/60">Select team, then log each penalty</p>
+                            {shootoutScore && (
+                                <p className="text-2xl font-black text-white mb-1">{shootoutScore.home} – {shootoutScore.away}</p>
+                            )}
+                            <p className="text-xs text-white/60">Tap to log each kick</p>
                         </div>
-                        <div className="grid grid-cols-3 gap-4">
-                            <EventButton type="Penalty" icon="⚽" label="Scored" onClick={() => handleEventClick('Penalty', true)} />
-                            <EventButton type="Penalty Missed" icon="❌" label="Missed" onClick={() => handleEventClick('Penalty Missed')} />
-                            <EventButton type="Penalty Saved" icon="🧤" label="Saved" onClick={() => handleEventClick('Penalty Saved')} />
-                        </div>
+                        <button
+                            onClick={() => setShowShootoutModal(true)}
+                            className="w-full py-6 bg-purple-500/10 border-2 border-purple-500/30 text-purple-300 font-black uppercase tracking-widest rounded-2xl hover:bg-purple-500/20 transition-colors"
+                        >
+                            Log Kick
+                        </button>
                     </div>
                 ) : (
                     // Regular Match Buttons — mobile-first 4-col grid
@@ -2035,6 +2046,60 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                             }, 300);
 
                             setShowPenaltyModal(false);
+                        }}
+                    />
+                )
+            }
+
+            {
+                showShootoutModal && (
+                    <ShootoutModal
+                        homeTeamName={homeTeam?.name || 'Home'}
+                        awayTeamName={awayTeam?.name || 'Away'}
+                        homePlayers={getOnPitchPlayers('home')}
+                        awayPlayers={getOnPitchPlayers('away')}
+                        onClose={() => setShowShootoutModal(false)}
+                        onSubmit={async (team, takerId, outcome, keeperId) => {
+                            setShowShootoutModal(false);
+                            const teamId = team === 'home' ? match.homeTeamId : match.awayTeamId;
+                            const type = outcome === 'Scored' ? 'PEN_SCORED' : outcome === 'Saved' ? 'PEN_SAVED' : 'PEN_MISSED';
+                            try {
+                                const res = await fetch(`/api/matches/${match.id}/events`, {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({
+                                        type,
+                                        minute: matchState?.clock.absoluteMinute ?? 0,
+                                        teamId,
+                                        playerId: takerId,
+                                        relatedPlayerId: outcome === 'Saved' ? keeperId : null,
+                                        period: currentPeriod,
+                                        loggerName: currentLogger?.name,
+                                    }),
+                                });
+                                if (res.ok) {
+                                    const saved = await res.json();
+                                    if (saved.shootoutHomeScore !== undefined && saved.shootoutAwayScore !== undefined) {
+                                        setShootoutScore({ home: saved.shootoutHomeScore, away: saved.shootoutAwayScore });
+                                    } else {
+                                        // Response didn't carry the score (e.g. a miss/save, which
+                                        // doesn't change it) — re-fetch match state to stay in sync.
+                                        const matchRes = await fetch(`/api/matches/${match.id}`);
+                                        if (matchRes.ok) {
+                                            const matchData = await matchRes.json();
+                                            const m = matchData.match || matchData;
+                                            if (m.shootoutHomeScore !== undefined) {
+                                                setShootoutScore({ home: m.shootoutHomeScore ?? 0, away: m.shootoutAwayScore ?? 0 });
+                                            }
+                                        }
+                                    }
+                                } else {
+                                    alert(`Shootout kick failed to save (${res.status}) — check connection and retry.`);
+                                }
+                            } catch (e) {
+                                console.error('[FootballLogger] Shootout kick POST failed:', e);
+                                alert('Network error: could not save this kick. Please retry.');
+                            }
                         }}
                     />
                 )
@@ -2599,6 +2664,132 @@ function PenaltySequenceModal({
                         onClick={() => setStep(step - 1)}
                         className="p-4 text-xs font-bold text-white/30 uppercase tracking-widest hover:text-white transition-colors"
                     >
+                        ← Back
+                    </button>
+                )}
+            </div>
+        </div>
+    );
+}
+
+// BACKLOG-105: simplified 3-step shootout logger. Deliberately NOT a reuse of
+// PenaltySequenceModal — that flow's fouler-picker step is wrong UX under real
+// shootout time pressure (10+ kicks, no fouls to attribute). Team -> taker -> outcome only.
+function ShootoutModal({
+    homeTeamName,
+    awayTeamName,
+    homePlayers,
+    awayPlayers,
+    onClose,
+    onSubmit,
+}: {
+    homeTeamName: string,
+    awayTeamName: string,
+    homePlayers: Player[],
+    awayPlayers: Player[],
+    onClose: () => void,
+    onSubmit: (team: 'home' | 'away', takerId: string | null, outcome: 'Scored' | 'Missed' | 'Saved', keeperId: string | null) => void,
+}) {
+    const [step, setStep] = useState(1);
+    const [team, setTeam] = useState<'home' | 'away' | null>(null);
+    const [takerId, setTakerId] = useState<string | null>(null);
+    const [outcome, setOutcome] = useState<'Scored' | 'Missed' | 'Saved' | null>(null);
+    const [keeperId, setKeeperId] = useState<string | null>(null);
+
+    const takers = team === 'home' ? homePlayers : team === 'away' ? awayPlayers : [];
+    const keeperCandidates = team === 'home' ? awayPlayers : homePlayers;
+
+    const reset = () => { setStep(1); setTeam(null); setTakerId(null); setOutcome(null); setKeeperId(null); };
+
+    return (
+        <div className="fixed inset-0 bg-black/95 backdrop-blur-md z-50 flex items-center justify-center p-4 overflow-y-auto">
+            <div className="bg-zinc-900 border border-white/10 w-full max-w-md rounded-3xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
+                <div className="p-4 border-b border-white/10 flex justify-between items-center bg-black/40">
+                    <div>
+                        <h3 className="font-black uppercase tracking-widest text-purple-400 italic">Penalty Shootout</h3>
+                        <p className="text-[10px] text-white/40 uppercase">Step {step} of 3</p>
+                    </div>
+                    <button onClick={onClose} className="p-2 hover:bg-white/10 rounded-full"><X size={20} /></button>
+                </div>
+
+                <div className="flex-1 overflow-y-auto p-4">
+                    {step === 1 && (
+                        <div className="space-y-4">
+                            <h4 className="text-sm font-bold text-center mb-4">Which team is shooting?</h4>
+                            <div className="grid grid-cols-2 gap-3">
+                                <button onClick={() => { setTeam('home'); setStep(2); }} className="p-6 rounded-2xl border-2 border-primary/20 bg-primary/10 text-primary font-black uppercase tracking-widest hover:scale-105 transition-transform">{homeTeamName}</button>
+                                <button onClick={() => { setTeam('away'); setStep(2); }} className="p-6 rounded-2xl border-2 border-white/10 bg-white/5 text-white font-black uppercase tracking-widest hover:scale-105 transition-transform">{awayTeamName}</button>
+                            </div>
+                        </div>
+                    )}
+
+                    {step === 2 && (
+                        <div className="space-y-4">
+                            <h4 className="text-sm font-bold text-center mb-4">Who is taking the kick?</h4>
+                            <div className="grid grid-cols-1 gap-2">
+                                {takers.map((p: Player) => (
+                                    <button
+                                        key={p.id}
+                                        onClick={() => { setTakerId(p.id); setStep(3); }}
+                                        className="p-3 text-left hover:bg-white/5 bg-black/20 border border-primary/20 rounded-xl flex items-center gap-3"
+                                    >
+                                        <div className="w-8 h-8 bg-primary/20 text-primary rounded-full flex items-center justify-center text-xs font-black border border-primary/20">{p.number}</div>
+                                        <div className="font-bold text-sm">{p.name}</div>
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {step === 3 && (
+                        <div className="space-y-6 flex flex-col items-center justify-center py-8">
+                            <h4 className="text-sm font-bold text-center">Outcome?</h4>
+                            <div className="grid grid-cols-3 gap-4 w-full">
+                                <button onClick={() => setOutcome('Scored')} className={`aspect-square rounded-2xl border-2 flex flex-col items-center justify-center gap-2 transition-all ${outcome === 'Scored' ? 'bg-green-500 text-black border-green-400' : 'bg-green-500/10 border-green-500/20 text-green-400'}`}>
+                                    <span className="text-3xl">⚽</span>
+                                    <span className="font-black text-[10px] uppercase">Scored</span>
+                                </button>
+                                <button onClick={() => setOutcome('Saved')} className={`aspect-square rounded-2xl border-2 flex flex-col items-center justify-center gap-2 transition-all ${outcome === 'Saved' ? 'bg-amber-500 text-black border-amber-400' : 'bg-amber-500/10 border-amber-500/20 text-amber-400'}`}>
+                                    <span className="text-3xl">🧤</span>
+                                    <span className="font-black text-[10px] uppercase">Saved</span>
+                                </button>
+                                <button onClick={() => setOutcome('Missed')} className={`aspect-square rounded-2xl border-2 flex flex-col items-center justify-center gap-2 transition-all ${outcome === 'Missed' ? 'bg-red-500 text-black border-red-400' : 'bg-red-500/10 border-red-500/20 text-red-400'}`}>
+                                    <span className="text-3xl">❌</span>
+                                    <span className="font-black text-[10px] uppercase">Missed</span>
+                                </button>
+                            </div>
+
+                            {outcome === 'Saved' && (
+                                <div className="w-full mt-2 space-y-2">
+                                    <p className="text-[10px] font-black uppercase tracking-widest text-white/40 text-center">Goalkeeper? (optional)</p>
+                                    <div className="grid grid-cols-1 gap-2 max-h-40 overflow-y-auto">
+                                        <button onClick={() => setKeeperId(null)} className={`p-2.5 rounded-xl text-xs font-bold text-center transition-all ${keeperId === null ? 'bg-white/10 border border-white/20 text-white' : 'bg-white/5 border border-white/5 text-white/30'}`}>
+                                            Skip / Unknown
+                                        </button>
+                                        {keeperCandidates.slice(0, 5).map((p: Player) => (
+                                            <button key={p.id} onClick={() => setKeeperId(p.id)} className={`p-2.5 text-left rounded-xl flex items-center gap-2 text-xs transition-all ${keeperId === p.id ? 'bg-amber-500/20 border border-amber-500/40 text-amber-300' : 'bg-white/5 border border-white/5 text-white/60 hover:bg-white/10'}`}>
+                                                <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black ${keeperId === p.id ? 'bg-amber-500/30 text-amber-300' : 'bg-white/10 text-white/40'}`}>{p.number}</div>
+                                                <span className="font-bold">{p.name}</span>
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            {outcome && (
+                                <button
+                                    onClick={() => { onSubmit(team!, takerId, outcome, outcome === 'Saved' ? keeperId : null); reset(); }}
+                                    className="w-full mt-4 py-4 bg-purple-500 text-black font-black uppercase tracking-widest rounded-xl hover:scale-105 transition-transform shadow-lg shadow-purple-500/20"
+                                >
+                                    Confirm & Log Kick
+                                </button>
+                            )}
+                        </div>
+                    )}
+                </div>
+
+                {step > 1 && (
+                    <button onClick={() => setStep(step - 1)} className="p-4 text-xs font-bold text-white/30 uppercase tracking-widest hover:text-white transition-colors">
                         ← Back
                     </button>
                 )}

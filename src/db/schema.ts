@@ -346,6 +346,11 @@ export const matches = sqliteTable('matches', {
     currentPeriod: text('current_period').default('NOT_STARTED'),
     minute: integer('minute'),
     extraTime: integer('extra_time'),
+    // BACKLOG-105: penalty shootout score, isolated from homeScore/awayScore --
+    // the official result stays the ET score per FIFA convention. Only PEN_SCORED
+    // events increment these, via SQL atomic COALESCE(col, 0) + 1.
+    shootoutHomeScore: integer('shootout_home_score').default(0),
+    shootoutAwayScore: integer('shootout_away_score').default(0),
     createdAt: integer('created_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
     updatedAt: integer('updated_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
 });

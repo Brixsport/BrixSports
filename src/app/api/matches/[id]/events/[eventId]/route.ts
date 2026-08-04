@@ -328,6 +328,8 @@ export async function DELETE(
         // score ends up permanently 1 point short of correct after any basketball undo.
         let newHomeScore: number | undefined;
         let newAwayScore: number | undefined;
+        let newShootoutHomeScore: number | undefined;
+        let newShootoutAwayScore: number | undefined;
 
         await db.transaction(async (tx) => {
             await tx.delete(matchEvents).where(eq(matchEvents.id, eventId));
@@ -352,6 +354,25 @@ export async function DELETE(
                 newHomeScore = updated.homeScore ?? 0;
                 newAwayScore = updated.awayScore ?? 0;
             }
+
+            // BACKLOG-105: undoing a PEN_SCORED must decrement the isolated shootout
+            // score — mirrors the POST route's credit exactly, same team-attribution
+            // (shootout kicks always credit the shooter's own team, no own-goal flip).
+            if (upperType === 'PEN_SCORED' && match) {
+                const isHomeTeam = event.teamId === match.homeTeamId;
+                const [updated] = isHomeTeam
+                    ? await tx.update(matches)
+                        .set({ shootoutHomeScore: sql`MAX(COALESCE(${matches.shootoutHomeScore}, 0) - 1, 0)`, updatedAt: new Date() })
+                        .where(eq(matches.id, matchId))
+                        .returning({ shootoutHomeScore: matches.shootoutHomeScore, shootoutAwayScore: matches.shootoutAwayScore })
+                    : await tx.update(matches)
+                        .set({ shootoutAwayScore: sql`MAX(COALESCE(${matches.shootoutAwayScore}, 0) - 1, 0)`, updatedAt: new Date() })
+                        .where(eq(matches.id, matchId))
+                        .returning({ shootoutHomeScore: matches.shootoutHomeScore, shootoutAwayScore: matches.shootoutAwayScore });
+
+                newShootoutHomeScore = updated.shootoutHomeScore ?? 0;
+                newShootoutAwayScore = updated.shootoutAwayScore ?? 0;
+            }
         });
 
         // BUG-108/BUG-116: broadcast the deletion now that it's actually committed — same
@@ -362,6 +383,10 @@ export async function DELETE(
 
         if (newHomeScore !== undefined && newAwayScore !== undefined) {
             after(() => broadcastScoreUpdate(matchId, newHomeScore!, newAwayScore!));
+        }
+
+        if (newShootoutHomeScore !== undefined && newShootoutAwayScore !== undefined && match) {
+            after(() => broadcastScoreUpdate(matchId, match.homeScore ?? 0, match.awayScore ?? 0, newShootoutHomeScore, newShootoutAwayScore));
         }
 
         // Revert player stats — same guards as POST: skip friendlies and shootout events
