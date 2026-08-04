@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse, after } from 'next/server';
 import { db } from '@/db';
 import { matchEvents, matches, matchLoggerAssignments } from '@/db/schema';
-import { eq, asc, and, sql } from 'drizzle-orm';
+import { eq, asc, and, sql, gt } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { getAuthUser } from '@/lib/auth';
 import { broadcastMatchEvent, broadcastScoreUpdate } from '@/lib/socket';
@@ -128,6 +128,41 @@ export async function POST(
                 { error: 'Match not found' },
                 { status: 404 }
             );
+        }
+
+        // BUG-196: duplicate-submission guard. Found live during session 48's football
+        // Tier 0 sweep -- two concurrent identical POSTs (a double-tap, or a client retry
+        // after a slow/lost ack) each created a genuine, separate match_events row and,
+        // for a scoring type, each incremented the score independently -- confirmed live,
+        // a real Goal double-submit inflated away_score by 2 instead of 1. Player-attributed
+        // events only (playerId required): a repeat of the identical (match, type, minute,
+        // player) within a short window is treated as the same real-world event and the
+        // original is returned instead of inserting a second row. Player-less event types
+        // (corner, offside, etc.) are intentionally excluded -- those can legitimately repeat
+        // with identical fields moments apart and a false-positive dedup there would silently
+        // drop a real event.
+        if (playerId) {
+            const dedupWindowStart = new Date(Date.now() - 10_000);
+            const [existingEvent] = await db
+                .select()
+                .from(matchEvents)
+                .where(
+                    and(
+                        eq(matchEvents.matchId, matchId),
+                        eq(matchEvents.type, type),
+                        eq(matchEvents.minute, minute),
+                        eq(matchEvents.playerId, playerId),
+                        gt(matchEvents.createdAt, dedupWindowStart)
+                    )
+                )
+                .limit(1);
+            if (existingEvent) {
+                return NextResponse.json({
+                    success: true,
+                    message: 'Duplicate submission ignored — event already recorded',
+                    event: existingEvent,
+                }, { status: 200 });
+            }
         }
 
         // Create event
