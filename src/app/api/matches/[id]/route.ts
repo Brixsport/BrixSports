@@ -253,14 +253,20 @@ export async function GET(
         const statsEmpty = !stats || Object.keys(stats).length === 0;
         // BACKLOG-122: goals-only backfilled matches (no team logsheet) only ever write
         // Goal/Penalty/Own Goal/Assist/Yellow Card/Red Card events -- every other category
-        // below always computes to a literal 0-0 (or a lopsided percentage from partial
-        // sheet coverage), which reads as real analysis rather than "not captured." Flag it
-        // so the frontend can suppress those categories instead of rendering a false stat.
+        // below always computes to a literal 0-0. Worse, and easy to miss: some matches have
+        // ASYMMETRIC coverage (e.g. busa-match-16 -- Hammers has a real full-stat logsheet,
+        // Santos has almost nothing), which produces a fabricated-looking lopsided stat line
+        // (100%-0% possession, 26-0 shots) rather than a neutral 0-0. A per-match "does any
+        // event anywhere have a full-stat type" check misses this entirely, since Hammers'
+        // real events pass it. The real test is per-team: both sides must have logged at
+        // least one full-stat-only event for the comparison to mean anything.
         const FULL_STAT_ONLY_EVENT_TYPES = new Set([
             'Shot on Target', 'Shot off Target', 'Corner', 'Foul', 'Push', 'Handball',
             'Offside', 'Free Kick', 'Save', 'Catch', 'Block', 'Interception', 'Clearance',
         ]);
-        const isGoalsOnlyCapture = events.length > 0 && !events.some((e: any) => FULL_STAT_ONLY_EVENT_TYPES.has(e.type));
+        const homeHasFullStatCoverage = events.some((e: any) => e.teamId === match.match.homeTeamId && FULL_STAT_ONLY_EVENT_TYPES.has(e.type));
+        const awayHasFullStatCoverage = events.some((e: any) => e.teamId !== match.match.homeTeamId && FULL_STAT_ONLY_EVENT_TYPES.has(e.type));
+        const isGoalsOnlyCapture = events.length > 0 && !(homeHasFullStatCoverage && awayHasFullStatCoverage);
         if (statsEmpty && isFootball && events.length > 0) {
             const homeIdx = 0; // home = index 0
             const awayIdx = 1; // away = index 1
