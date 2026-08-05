@@ -20,6 +20,23 @@ import { HeadToHeadComparison } from '@/components/HeadToHead';
 // import { MatchPredictionCard, MatchVotePoll } from '@/components/predictions';
 import { LivestreamView } from '@/components/livestream/LivestreamView';
 import { useNotifications } from '@/components/Notifications';
+import { getPushService } from '@/lib/notifications/push-service';
+import { getDeviceId } from '@/lib/notifications/device-id';
+
+// BACKLOG-150: which matchIds this device has an active anonymous "notify me"
+// subscription for. localStorage is the right store here -- device-scoped by
+// definition, no account to persist server-side preferences against.
+const NOTIFY_STORAGE_KEY = 'brixsports_notify_matches';
+function getNotifiedMatchIds(): Set<string> {
+    try {
+        return new Set(JSON.parse(localStorage.getItem(NOTIFY_STORAGE_KEY) || '[]'));
+    } catch {
+        return new Set();
+    }
+}
+function setNotifiedMatchIds(ids: Set<string>) {
+    localStorage.setItem(NOTIFY_STORAGE_KEY, JSON.stringify(Array.from(ids)));
+}
 
 // All status values that represent an in-progress match (WS timer overwrites match.status
 // with period values like 'SECOND_HALF', so isLive must cover the full set).
@@ -41,6 +58,8 @@ export default function MatchDetailPage() {
     const [loading, setLoading] = useState(true);
     const [activeTab, setActiveTab] = useState<'overview' | 'timeline' | 'stats' | 'lineups' | 'h2h'>('overview');
     const [isFavorited, setIsFavorited] = useState(false);
+    const [isNotifySubscribed, setIsNotifySubscribed] = useState(false);
+    const [notifyLoading, setNotifyLoading] = useState(false);
     const [h2hData, setH2hData] = useState<any>(null);
     const [scrollY, setScrollY] = useState(0);
     const [lastScrollY, setLastScrollY] = useState(0);
@@ -83,6 +102,65 @@ export default function MatchDetailPage() {
             }
         } catch (err) {
             console.error('Share failed:', err);
+        }
+    };
+
+    // BACKLOG-150: anonymous, no-login "notify me about this match" -- device-scoped
+    // via localStorage + deviceId, no account required. Reachable by every viewer,
+    // matching this project's own actor model (viewers never have a session).
+    useEffect(() => {
+        setIsNotifySubscribed(getNotifiedMatchIds().has(matchId));
+    }, [matchId]);
+
+    const handleNotifyToggle = async () => {
+        if (!('Notification' in window) || !('serviceWorker' in navigator)) {
+            warning('Push notifications are not supported on this browser.');
+            return;
+        }
+
+        setNotifyLoading(true);
+        try {
+            const pushService = getPushService();
+            const deviceId = getDeviceId();
+            const notified = getNotifiedMatchIds();
+
+            if (isNotifySubscribed) {
+                const ok = await pushService.unsubscribe(null, { deviceId, matchId });
+                if (ok) {
+                    notified.delete(matchId);
+                    setNotifiedMatchIds(notified);
+                    setIsNotifySubscribed(false);
+                    success('You will no longer be notified about this match.');
+                } else {
+                    warning('Could not turn off notifications for this match.');
+                }
+                return;
+            }
+
+            await pushService.init();
+            const permission = pushService.getPermission() === 'granted'
+                ? 'granted'
+                : await pushService.requestPermission();
+
+            if (permission !== 'granted') {
+                warning('Notification permission was not granted.');
+                return;
+            }
+
+            const subscription = await pushService.subscribe(null, { deviceId, matchId });
+            if (subscription) {
+                notified.add(matchId);
+                setNotifiedMatchIds(notified);
+                setIsNotifySubscribed(true);
+                success('You will be notified about goals and key moments in this match.');
+            } else {
+                warning('Could not enable notifications for this match.');
+            }
+        } catch (err) {
+            console.error('[MatchPage] Notify toggle failed:', err);
+            warning('Something went wrong enabling notifications.');
+        } finally {
+            setNotifyLoading(false);
         }
     };
 
@@ -451,6 +529,17 @@ export default function MatchDetailPage() {
                         </button>
 
                         <div className="flex items-center gap-3">
+                            <button
+                                onClick={handleNotifyToggle}
+                                disabled={notifyLoading}
+                                aria-label={isNotifySubscribed ? 'Turn off notifications for this match' : 'Notify me about this match'}
+                                title={isNotifySubscribed ? 'Turn off notifications for this match' : 'Notify me about this match'}
+                                className={`p-2 rounded-lg transition-colors disabled:opacity-50 ${isNotifySubscribed ? 'bg-blue-500/20 text-blue-400' : 'bg-white/5 text-white/60 hover:bg-white/10'
+                                    }`}
+                            >
+                                <Bell className={`w-5 h-5 ${isNotifySubscribed ? 'fill-current' : ''}`} />
+                            </button>
+
                             <button
                                 onClick={() => setIsFavorited(!isFavorited)}
                                 className={`p-2 rounded-lg transition-colors ${isFavorited ? 'bg-red-500/20 text-red-500' : 'bg-white/5 text-white/60 hover:bg-white/10'

@@ -88,9 +88,14 @@ class PushNotificationService {
     }
 
     /**
-     * Subscribe to push notifications
+     * Subscribe to push notifications.
+     *
+     * BACKLOG-150: pass `anon` (deviceId + matchId) instead of a real userId
+     * for an anonymous, no-login "notify me about this match" subscription.
+     * Every existing authenticated call site is unaffected -- `anon` is
+     * optional and only changes what saveSubscription() sends to the server.
      */
-    async subscribe(userId: string): Promise<PushSubscriptionData | null> {
+    async subscribe(userId: string | null, anon?: { deviceId: string; matchId: string }): Promise<PushSubscriptionData | null> {
         if (!this.registration) {
             await this.init();
         }
@@ -124,7 +129,7 @@ class PushNotificationService {
             };
 
             // Send subscription to server
-            await this.saveSubscription(userId, subscriptionData);
+            await this.saveSubscription(userId, subscriptionData, anon);
 
             console.log('[PushService] Subscribed successfully');
             return subscriptionData;
@@ -135,9 +140,9 @@ class PushNotificationService {
     }
 
     /**
-     * Unsubscribe from push notifications
+     * Unsubscribe from push notifications. See subscribe() for `anon`.
      */
-    async unsubscribe(userId: string): Promise<boolean> {
+    async unsubscribe(userId: string | null, anon?: { deviceId: string; matchId: string }): Promise<boolean> {
         if (!this.registration) {
             return false;
         }
@@ -146,8 +151,14 @@ class PushNotificationService {
             const subscription = await this.registration.pushManager.getSubscription();
 
             if (subscription) {
-                await subscription.unsubscribe();
-                await this.removeSubscription(userId);
+                if (!anon) {
+                    // Authenticated path unsubscribes the browser entirely, matching
+                    // existing behavior. Anonymous unsubscribe is per-match (see
+                    // removeSubscription) -- the underlying push subscription stays
+                    // registered in case the device is still following another match.
+                    await subscription.unsubscribe();
+                }
+                await this.removeSubscription(userId, anon);
                 console.log('[PushService] Unsubscribed successfully');
                 return true;
             }
@@ -207,13 +218,12 @@ class PushNotificationService {
     /**
      * Save subscription to server
      */
-    private async saveSubscription(userId: string, subscription: PushSubscriptionData): Promise<void> {
+    private async saveSubscription(userId: string | null, subscription: PushSubscriptionData, anon?: { deviceId: string; matchId: string }): Promise<void> {
         try {
-            const requestBody = {
-                userId,
-                subscription,
-            };
-            
+            const requestBody = anon
+                ? { deviceId: anon.deviceId, matchId: anon.matchId, subscription }
+                : { userId, subscription };
+
             console.log('[PushService] Sending subscription request:', requestBody);
 
             const response = await fetch('/api/notifications/subscribe', {
@@ -242,14 +252,16 @@ class PushNotificationService {
     /**
      * Remove subscription from server
      */
-    private async removeSubscription(userId: string): Promise<void> {
+    private async removeSubscription(userId: string | null, anon?: { deviceId: string; matchId: string }): Promise<void> {
         try {
+            const requestBody = anon ? { deviceId: anon.deviceId, matchId: anon.matchId } : { userId };
+
             const response = await fetch('/api/notifications/subscribe', {
                 method: 'DELETE',
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify({ userId }),
+                body: JSON.stringify(requestBody),
             });
 
             if (!response.ok) {

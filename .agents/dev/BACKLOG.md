@@ -6404,6 +6404,10 @@ No `clearTimeout` exists anywhere in the file. The effect that sets `stateManage
 
 **Found:** session 47D, by a background audit agent doing a full read-only trace of the public viewer experience.
 
+**Update, 2026-08-04 (session 49) — schema + API landed, UI still to build.** Richard's call: device-scoped, no-login-required, per-match "notify me about this match" targeting (not a device-scoped mirror of the full team-follow system — see the audit's own option comparison). `pushSubscriptions.deviceId` (new nullable column) plus a sentinel `anonymous-push-subscriber` user row (chosen over a nullable `userId` FK to avoid a SQLite table-rebuild migration) plus a new `pushSubscriptionMatches` table for the per-match opt-in. `POST`/`DELETE /api/notifications/subscribe` now serve both the authenticated and anonymous paths; `match-notification-service.ts`'s send logic merges anonymous per-match subscribers into the existing team-follower query. Migration applied to staging (`dev/migrate-anonymous-push-subscriptions-49.mjs`). PR #17, branch `feat/backlog-150-anonymous-push-enrollment`. **UI (the actual "notify me about this match" control on the match page) not built yet — next step, same session.**
+
+**Follow-up filed, not built:** no automatic anonymous-to-authenticated subscription handoff. The schema supports it for free if a re-subscribe happens (`endpoint` is already globally unique, so a same-browser authenticated re-subscribe correctly flips `userId` from the sentinel to the real account on the existing row, and `pushSubscriptionMatches` rows survive the flip since they're keyed to the subscription id, not `userId`) — but nothing currently triggers that re-subscribe call. Needs a small login/signup-time hook ("do I already have an active push subscription in this browser? re-POST it now that there's a session") — not built this session, flagged for whenever the anonymous UI ships.
+
 ---
 
 ### BACKLOG-151 — Multi-Logger Sync Is Poll-Only: Real-Time Broadcast and Conflict Resolution Are Both No-Ops
