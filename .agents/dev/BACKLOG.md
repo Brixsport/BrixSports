@@ -6387,7 +6387,22 @@ No `clearTimeout` exists anywhere in the file. The effect that sets `stateManage
 
 ### BUG-150 — Anonymous Viewers Cannot Enable Push Notifications Through Any Reachable UI Path
 
-**Status:** SHIPPED — session 49 (schema + API + UI all landed, PR #17, migration applied to staging, tsc clean throughout). **Not live-tested end-to-end yet** — verification was interrupted mid-session by other work; the Bell button has not actually been clicked on a real deployed preview to confirm a subscription row gets written. Do not treat as RESOLVED or working until that happens. Full flow documented in `.agents/dev/NOTIFICATION_SYSTEM_FLOW.md`.
+**Status:** RESOLVED — 2026-08-06 (session 49, commits `de7ff24`, `feb695a`). Full flow documented in `.agents/dev/NOTIFICATION_SYSTEM_FLOW.md`.
+
+**Evidence:**
+- Commit: `de7ff24` (per-match link keyed on `matchId` presence, not auth state), `feb695a` (unsubscribe lazy-init fix)
+- Verified by: live test on staging preview (both `NEXT_PUBLIC_ENV=staging` with a signed-in admin session, and a per-branch `NEXT_PUBLIC_ENV=development` override for the genuine no-cookie anonymous case), each followed by a direct read-only DB query against the staging Turso instance
+- Observed result:
+  - Authenticated Bell click → `push_subscriptions` row `sub-1785969570219-mgmmj7ib8` (`user_id: admin-001`) + `push_subscription_matches` row linking it to `_lkHo5y1m6ArqvLsi1ixe` — confirmed via `SELECT`, not inferred from the UI toast.
+  - Genuine anonymous Bell click (no auth cookie, confirmed via console: `Cookie auth response status: 401`, `localStorage token exists: false`) → `push_subscriptions` row `sub-1785970835247-26c72mb81` with `user_id: anonymous-push-subscriber` (the sentinel row, not a real account) + a correctly linked `push_subscription_matches` row.
+  - Unsubscribe (authenticated) → re-queried after clicking an already-filled Bell: `push_subscription_matches` row removed, underlying `push_subscriptions` row preserved (correct — an authenticated subscription must survive losing one match link).
+  - Real push delivery → sent directly via `web-push` to the real FCM endpoint captured in the DB row above; FCM accepted with `201`; user confirmed the notification rendered on-device.
+  - Pending items: real-device delivery was confirmed for the authenticated-path subscription only (FCM `201` + on-device screenshot); the anonymous-path subscription's endpoint was not separately push-tested (same code path, not considered a gap, but noting the asymmetry for the record).
+
+**Two real bugs found and fixed during this verification, not present in the original session-49 build description below:**
+1. **`POST`/`DELETE /api/notifications/subscribe` gated the per-match link on `isAnonymous` (`!authUser`) instead of on whether the request carried a `matchId`.** A signed-in browser clicking the match-detail Bell got routed into the authenticated branch, which never touched `pushSubscriptionMatches` at all — the UI showed a success toast, a generic `pushSubscriptions` row was created, but nothing was actually linked to that match. Silent no-op for any signed-in visitor using the anonymous-designed Bell button. Fixed in `de7ff24`: the per-match link (and, on `DELETE`, the per-match unlink) is now keyed on `matchId` being present in the body, independent of auth state.
+2. **`DELETE`'s authenticated branch deleted *all* of that user's push subscriptions on any per-match unsubscribe** — a signed-in user turning off notifications for one match would have silently killed their account-wide team-follow push subscription too. Fixed in the same commit: authenticated per-match `DELETE` now only removes that one `pushSubscriptionMatches` link.
+3. **`push-service.ts`'s `unsubscribe()` never lazily called `this.init()`** the way `subscribe()` does — on a page load where `init()` hadn't already run, clicking an already-filled Bell to turn notifications off silently failed client-side (`Could not turn off notifications for this match`) without ever reaching the server. Confirmed via DB read: the `push_subscription_matches` row was untouched after the failed attempt. Fixed in `feb695a`.
 **Priority:** HIGH — directly contradicts CLAUDE.md's own actor model rule ("Viewers NEVER have a session")
 **Filed:** 2026-07-27
 
