@@ -64,6 +64,18 @@ export async function POST(request: NextRequest) {
             if (userExists.length === 0) {
                 return NextResponse.json({ error: 'User not found. Please log in first.' }, { status: 400 });
             }
+
+            // BACKLOG-150 follow-up (found during live verification): the match-detail
+            // Bell button sends matchId regardless of auth state -- a signed-in user
+            // visiting one match's page and tapping "notify me" wants that match linked
+            // too, not just their standing team-follow targeting. Validate it here since
+            // the isAnonymous branch above only checks match existence on its own path.
+            if (matchId) {
+                const matchExists = await db.select({ id: matches.id }).from(matches).where(eq(matches.id, matchId)).limit(1);
+                if (matchExists.length === 0) {
+                    return NextResponse.json({ error: 'Match not found' }, { status: 404 });
+                }
+            }
         }
 
         // Check if subscription already exists for this endpoint
@@ -104,7 +116,10 @@ export async function POST(request: NextRequest) {
             });
         }
 
-        if (isAnonymous) {
+        // Keyed on matchId being present, not on isAnonymous -- an authenticated
+        // user's Bell click carries matchId too and needs the same per-match link,
+        // or it silently does nothing beyond their existing team-follow targeting.
+        if (matchId) {
             const linked = await db
                 .select({ matchId: pushSubscriptionMatches.matchId })
                 .from(pushSubscriptionMatches)
@@ -155,32 +170,50 @@ export async function DELETE(request: NextRequest) {
         const body = await request.json();
         const { userId, deviceId, matchId } = body;
 
-        if (!authUser) {
-            if (!deviceId || !matchId) {
-                return NextResponse.json({ error: 'Missing deviceId or matchId' }, { status: 400 });
+        // Per-match unlink -- keyed on matchId being present (same fix as POST),
+        // not on auth state. Works for anonymous (looked up by deviceId) and
+        // authenticated (looked up by the caller's own userId) callers alike.
+        // Never deletes the underlying subscription for an authenticated caller
+        // just because one match link was removed -- their account-level push
+        // (team-follow targeting) must stay intact; only anonymous subscriptions
+        // are inert, and therefore cleaned up, at zero remaining links.
+        if (matchId) {
+            let subs: { id: string }[];
+            if (authUser) {
+                const targetUserId = userId || authUser.id;
+                if (targetUserId !== authUser.id && authUser.role !== 'admin') {
+                    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+                }
+                subs = await db.select({ id: pushSubscriptions.id }).from(pushSubscriptions).where(eq(pushSubscriptions.userId, targetUserId));
+            } else {
+                if (!deviceId) {
+                    return NextResponse.json({ error: 'Missing deviceId' }, { status: 400 });
+                }
+                subs = await db.select({ id: pushSubscriptions.id }).from(pushSubscriptions).where(eq(pushSubscriptions.deviceId, deviceId));
             }
-
-            const subs = await db
-                .select({ id: pushSubscriptions.id })
-                .from(pushSubscriptions)
-                .where(eq(pushSubscriptions.deviceId, deviceId));
 
             for (const sub of subs) {
                 await db
                     .delete(pushSubscriptionMatches)
                     .where(and(eq(pushSubscriptionMatches.subscriptionId, sub.id), eq(pushSubscriptionMatches.matchId, matchId)));
 
-                const remaining = await db
-                    .select({ id: pushSubscriptionMatches.id })
-                    .from(pushSubscriptionMatches)
-                    .where(eq(pushSubscriptionMatches.subscriptionId, sub.id))
-                    .limit(1);
-                if (remaining.length === 0) {
-                    await db.delete(pushSubscriptions).where(eq(pushSubscriptions.id, sub.id));
+                if (!authUser) {
+                    const remaining = await db
+                        .select({ id: pushSubscriptionMatches.id })
+                        .from(pushSubscriptionMatches)
+                        .where(eq(pushSubscriptionMatches.subscriptionId, sub.id))
+                        .limit(1);
+                    if (remaining.length === 0) {
+                        await db.delete(pushSubscriptions).where(eq(pushSubscriptions.id, sub.id));
+                    }
                 }
             }
 
             return NextResponse.json({ success: true, message: 'Unsubscribed from match' });
+        }
+
+        if (!authUser) {
+            return NextResponse.json({ error: 'Missing deviceId or matchId' }, { status: 400 });
         }
 
         if (!userId) {
@@ -194,7 +227,8 @@ export async function DELETE(request: NextRequest) {
             return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
         }
 
-        // Remove all subscriptions for this user
+        // Remove all subscriptions for this user (account-level disable-all-push,
+        // no matchId in the request -- unrelated to the per-match path above).
         await db
             .delete(pushSubscriptions)
             .where(eq(pushSubscriptions.userId, userId));
