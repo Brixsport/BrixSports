@@ -7308,7 +7308,7 @@ deprioritized in its favor. -->
 
 ### BUG-198 — Login Page Shows Raw Browser Error Strings ("Failed to fetch") Directly to Users
 
-**Status:** OPEN — found session 49, not fixed
+**Status:** SHIPPED — session 49 (`9d23ecf`, PR #18, targeting `dev`). `tsc --noEmit` clean (49 baseline errors, none new). **Not live-tested yet** — no manual network-failure repro run against a real preview. Do not treat as RESOLVED until that happens.
 **Priority:** Medium — real UX/trust issue on the highest-stakes auth surface, not a security or data-integrity bug
 **Filed:** 2026-08-05
 
@@ -7316,7 +7316,7 @@ deprioritized in its favor. -->
 
 **Why this matters:** dev/technical error messages and user-facing error messages are different audiences with different needs — a user doesn't know what "fetch" means and can't act on it, whereas a real network-failure state should say something like "Couldn't reach the server, check your connection and try again."
 
-**Fix (not built):** wrap the catch block to distinguish network/fetch-level failures (the `fetch()` call itself throwing, before any response is received) from real server-returned error messages (already-thrown `Error` from the `!response.ok` branch, which correctly carries `data.error`). Show a friendly, generic "Couldn't reach the server — check your connection and try again" for the former; keep showing the real server message for the latter. Worth checking whether the same pattern (raw `error.message` shown as-is) exists on `signup/page.tsx` or other auth-adjacent forms — not checked this session.
+**Fix, landed 2026-08-06 (session 49, `9d23ecf`):** `catch` block now distinguishes `TypeError` (a real `fetch()`-level network failure — friendly "Unable to reach the server..." message) and `SyntaxError` (malformed/non-JSON response — friendly "Unexpected response..." message) from a real thrown `Error` (the `!response.ok` branch's already-server-authored `data.error`, shown unchanged). **Broader question — is this pattern repeated elsewhere?** Raised directly by Richard; a read-only audit agent is scoped to answer that across the whole app (auth-adjacent forms, logger UI, admin forms, and API routes returning raw `error.message`/DB errors), writing findings to `.agents/dev/USER_FACING_ERROR_MESSAGES_AUDIT.md` — BACKLOG entries to be filed from that report in a separate pass, not assumed here.
 
 **Found:** session 49, Richard directly hit this live while signing in on a Vercel preview deployment during unrelated verification work.
 
