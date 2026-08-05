@@ -4,7 +4,7 @@
  */
 
 import { db } from '@/db';
-import { pushSubscriptions, userFollows, userFavorites, teams, players, users, userPreferences } from '@/db/schema';
+import { pushSubscriptions, pushSubscriptionMatches, userFollows, userFavorites, teams, players, users, userPreferences } from '@/db/schema';
 import { eq, and, or, inArray } from 'drizzle-orm';
 import webpush from 'web-push';
 
@@ -105,39 +105,49 @@ export async function sendMatchEventNotification(event: MatchEventNotification):
             ...primaryTeamFans.map(f => f.userId)
         ]));
 
-        if (potentialUserIds.length === 0) {
-            console.log('[MatchNotificationService] No users following these teams');
-            return { success: true, sentCount: 0, totalSubscriptions: 0 };
-        }
-
         // Filter out users who have disabled matchAlerts in their preferences
         // Note: If no preference record exists, we assume TRUE as per schema default
-        const disabledPrefUsers = await db
-            .select({ userId: userPreferences.userId })
-            .from(userPreferences)
-            .where(
-                and(
-                    inArray(userPreferences.userId, potentialUserIds),
-                    eq(userPreferences.matchAlerts, false)
-                )
-            );
+        let teamFollowerSubscriptions: (typeof pushSubscriptions.$inferSelect)[] = [];
+        if (potentialUserIds.length > 0) {
+            const disabledPrefUsers = await db
+                .select({ userId: userPreferences.userId })
+                .from(userPreferences)
+                .where(
+                    and(
+                        inArray(userPreferences.userId, potentialUserIds),
+                        eq(userPreferences.matchAlerts, false)
+                    )
+                );
 
-        const disabledUserIds = new Set(disabledPrefUsers.map(p => p.userId));
-        const allUserIds = potentialUserIds.filter(id => !disabledUserIds.has(id));
+            const disabledUserIds = new Set(disabledPrefUsers.map(p => p.userId));
+            const allUserIds = potentialUserIds.filter(id => !disabledUserIds.has(id));
 
-        if (allUserIds.length === 0) {
-            console.log('[MatchNotificationService] All interested users have disabled alerts');
-            return { success: true, sentCount: 0, totalSubscriptions: 0 };
+            if (allUserIds.length > 0) {
+                teamFollowerSubscriptions = await db
+                    .select()
+                    .from(pushSubscriptions)
+                    .where(inArray(pushSubscriptions.userId, allUserIds));
+            }
         }
 
-        // Get push subscriptions for these users
-        const subscriptions = await db
-            .select()
-            .from(pushSubscriptions)
-            .where(inArray(pushSubscriptions.userId, allUserIds));
+        // BACKLOG-150: anonymous viewers have no team-follow row to be found by
+        // above -- they opted into this specific match directly. Merge their
+        // subscriptions in, deduped by subscription id (a device could
+        // theoretically match both paths if it later creates an account on the
+        // same browser, though that's not wired up here).
+        const anonymousMatchSubscriptions = await db
+            .select({ subscription: pushSubscriptions })
+            .from(pushSubscriptionMatches)
+            .innerJoin(pushSubscriptions, eq(pushSubscriptionMatches.subscriptionId, pushSubscriptions.id))
+            .where(eq(pushSubscriptionMatches.matchId, event.matchId));
+
+        const subscriptionsById = new Map<string, typeof pushSubscriptions.$inferSelect>();
+        for (const s of teamFollowerSubscriptions) subscriptionsById.set(s.id, s);
+        for (const { subscription: s } of anonymousMatchSubscriptions) subscriptionsById.set(s.id, s);
+        const subscriptions = Array.from(subscriptionsById.values());
 
         if (subscriptions.length === 0) {
-            console.log('[MatchNotificationService] No push subscriptions found for followers');
+            console.log('[MatchNotificationService] No push subscriptions found for followers or match-specific anonymous subscribers');
             return { success: true, sentCount: 0, totalSubscriptions: 0 };
         }
 
