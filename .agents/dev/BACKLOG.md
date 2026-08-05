@@ -1587,6 +1587,34 @@ player stats can be stale or inconsistent after a match ends.
 
 **Update, 2026-08-04 (session 48):** raised again mid-session while resuming the backfill — Richard's framing matches the "Proposed fix" above exactly (an uncaptured stat category should not render at all for these matches, not show a real-looking `0`). Not built this session (time-boxed to close on other work), but the deferral condition is close to being met: backfill is now at 24 of 32 matches with events (up from 17), only 7 remain plus this session's 2 newly-deferred card-attribution problems on `busa-match-24`. **Good candidate for the actual next session's first task**, alongside continuing the remaining matches.
 
+**Update, 2026-08-04 (session 49): deferral condition now met.** The `busa-match-N` series (1-27) is fully backfilled — every goals-only match this entry describes now exists in its final state. Only Deadline-Quantum remains outside the `matches` table entirely (a different problem, not more goals-only Stats-tab pollution). **This is now the top candidate for the next session's first task** — not built this session (time-boxed to finish the backfill itself).
+
+**Fix built and live-verified, 2026-08-04 (session 49).** `GET /api/matches/[id]` (`src/app/api/matches/[id]/route.ts`) now checks **per-team** stat coverage, not per-match — the first version of this fix used a per-match check ("does any event anywhere have a full-stat type") and was caught live-testing against `busa-match-16` on a Vercel preview: it missed the asymmetric-coverage case entirely (Hammers has a real full-stat logsheet, Santos never had one), so the fabricated `100%-0%` possession / `26-0` shots line stayed visible. Corrected to require both teams to have logged at least one full-stat-only event type before rendering Possession/Shots/Shots on Target/Corners/Fouls/Saves; Yellow/Red Cards always render since they're real captured data in both goals-only and full-capture matches. `LiveStats.tsx` suppresses the categories silently — no explanatory caveat text, matching SofaScore-style omission per Richard's explicit call.
+
+**Evidence:**
+- Commits: `7e729a1` (initial per-match version), `43afee2` (per-team correction)
+- Verified by: live test against a Vercel preview deployment (`brixsports-staging-fpi1p99k5-brixsports-projects.vercel.app`), both via a real signed-in session
+- Observed result: `busa-match-16` (asymmetric coverage) now shows only `Yellow Cards 2-1` / `Red Cards 1-0` on its Stats tab — Possession/Shots/Shots on Target/Corners/Fouls/Saves all correctly absent, no fake `0-0` or lopsided percentage. `busa-match-10` (both sides fully tracked, spot-checked as a regression guard) still renders every category normally: `Possession 33%-67%`, `Shots 4-8`, `Shots on Target 0-4`, `Corners 0-0`, `Fouls 0-2`, `Yellow Cards 1-2`, `Saves 5-11` — confirming the fix doesn't over-suppress real data.
+- Pending items: PR #16 (`fix/backlog-122-stats-tab-uncaptured-categories` → `dev`) not yet merged.
+
+**Status:** SHIPPED — 2026-08-04 (session 49), live-tested on Vercel preview. Pending merge.
+
+---
+
+### BACKLOG-192 — Football Possession % Is an Attacking-Event Proxy, Not Real Possession, Even on Fully-Tracked Matches
+
+**Status:** OPEN
+**Priority:** Low — a real accuracy gap, but not a data-integrity bug; the number shown is a documented approximation, not corrupted data
+**Filed:** 2026-08-04 (session 49)
+
+**Problem:** `GET /api/matches/[id]`'s computed-from-events possession formula (`src/app/api/matches/[id]/route.ts`) is `homePossession = shots + corners + freeKicks` (an attacking-event count), never actual time-in-possession. This is true even for matches where **both** teams have full, real stat coverage — `BACKLOG-122`'s fix (same session) only addresses matches where the underlying event counts themselves are missing/asymmetric; it does nothing for the deeper issue that the possession % shown is always a proxy metric, not a measurement of what it claims to represent. There is no event type anywhere in the logger (`FootballLogger.tsx`, `match-state-manager.ts`) that captures a possession change or duration — the platform has never had a mechanism to track real possession, only to approximate it after the fact from unrelated event counts.
+
+**Why this matters:** unlike goals-only matches (where a viewer might reasonably suspect "0" means "not tracked"), a fully-logged match's possession percentage looks exactly as authoritative as a real one — there's no visual or data-shape difference between "true possession" and "attacking-event ratio dressed up as possession." A viewer has no way to know the number is an approximation.
+
+**Fix (not built — scoping only, this is a filing):** Two real options, not mutually exclusive: (a) relabel the stat honestly (e.g. "Attacking Play %" instead of "Possession") so the UI stops claiming to measure something it doesn't, or (b) add a real possession-tracking mechanism to the logger (a "possession change" event type, timestamped, that the backend can integrate over match duration) for matches where a logger is willing to track it live — a bigger lift, only worth it if match-level possession accuracy is a real product priority. Richard's call needed on which direction (or whether to leave the proxy as-is with better labeling only).
+
+**Found:** session 49, raised by Richard directly while reviewing `BACKLOG-122`'s fix — noted the possession model "isn't rigid" and would be inaccurate even where data exists.
+
 ---
 
 ### ~~BACKLOG-124~~ — Live Auto-Ratings Silently Broken Since Written (No Auth Forwarded)
@@ -1756,7 +1784,9 @@ player stats can be stale or inconsistent after a match ends.
 
 ### BACKLOG-018 — Game Event Logsheets (BUSALYMPICS + BUSA League match events)
 
-**Status:** IN PROGRESS — BUSALYMPICS portion COMPLETE (7 of 7 matches, 2026-07-09). BUSA League: 20 matches now APPLIED, DB-verified — busa-match-13, -16, -15, -10, -12, -14, -final-2026, -11, -1, -2, -3, -4, -5, -6, -7, -17, -8, -9, plus both semifinals (`busa-sf-joga-hammers`, `busa-sf-kings-pirates`, both zero-deferred). 1078 total match_events written. Zero deferred items remain across all 20. A full platform-wide collision audit of all 84 session-41 stub players (2026-07-11) closed clean — 1 real merge found and applied (Abdulazeez Jolaoye ↔ his own unlinked COLNAS identity), 2 false alarms investigated and closed (Charles, Peter — both ruled out by active-club-affiliation-to-different-clubs). **11 matches remain in the full 32-match structure: 7 group-stage, 4 QF (QF1-3 bracket-confirmed, QF4 pending FA verification).** 3rd Place excluded from remaining count — already live-logged.
+**Status:** IN PROGRESS — BUSALYMPICS portion COMPLETE (7 of 7 matches, 2026-07-09). BUSA League: **the entire `busa-match-N` series (1 through 27) is now COMPLETE, 2026-08-04 (session 49)** — every one of those 27 rows has `match_events`, plus both semifinals and 3rd Place already live-logged/applied, plus the Final. **Only one match in the full 32-match structure remains: Deadline FC vs Quantum FC (Group D, GW3) — never inserted into the `matches` table at all, date known (Sat 22 Nov 2025 per the GW3 image) but score never sourced (no FA report, not yet supplied by Richard).** Full session-49 detail in RUNLOG.md 2026-08-04 and `dev/busa-group-qf-goal-data-consolidated.md`.
+
+**Progress note (2026-08-04, session 49) — closed out the remaining 7 matches (busa-match-18/19/20/22/23/25/26).** Full per-match detail in RUNLOG.md. Headline items: busa-match-22 (Allianz 3-0 Legacy) surfaced a real discrepancy between the canonical schedule doc and the live DB row's own home/away/score — the DB was correct (Allianz is the real home/winner), the doc was stale, now fixed in `busa-league-canonical-schedule.md`. busa-match-18 (Kings 15-0 Cruise) was the most involved write of the whole backfill — Richard supplied the real FA sheet text directly plus a ratings graphic for cross-check, resolving two real jersey-number ambiguities (Kings has two different real players both wearing #17 in the DB) via Richard's direct calls, full reconciliation trail preserved in `dev/busa-match-18-fa-vs-graphic-reconciliation.md`. Also fixed busa-match-18's known 1-day date bug in the same batch. Every new player created this session got a platform-wide name cross-check in addition to the team+jersey-slot check, after Richard flagged the gap mid-session.
 
 **GW1 COMPLETE (2026-07-13): all 7 GW1 matches (busa-match-1 through -7) now applied and DB-verified.** (Correction: GW1 actually has 7 matches, not 6 — busa-match-7/Cruise-Santos was initially missed.)
 
