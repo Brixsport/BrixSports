@@ -146,6 +146,10 @@ class PushNotificationService {
      */
     async unsubscribe(userId: string | null, anon?: { deviceId: string; matchId: string }): Promise<boolean> {
         if (!this.registration) {
+            await this.init();
+        }
+
+        if (!this.registration) {
             return false;
         }
 
