@@ -796,15 +796,39 @@ export const staffComms = sqliteTable('staff_comms', {
 });
 
 // Push Subscriptions table
+// BACKLOG-150: anonymous (unauthenticated) viewers can subscribe too -- their
+// row's userId points at ANONYMOUS_PUSH_USER_ID (a single well-known sentinel
+// user row, see src/lib/notifications/anonymous-subscriber.ts), not a real
+// person. deviceId (client-generated, localStorage-persisted) is the real
+// per-device identity for anonymous rows; endpoint's own uniqueness prevents
+// duplicate rows on re-subscribe either way. Chosen over making userId
+// nullable to avoid a SQLite table-rebuild migration (ALTER COLUMN DROP NOT
+// NULL isn't supported) -- functionally equivalent, lower migration risk.
 export const pushSubscriptions = sqliteTable('push_subscriptions', {
     id: text('id').primaryKey(),
     userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    deviceId: text('device_id'),
     endpoint: text('endpoint').notNull().unique(),
     p256dh: text('p256dh').notNull(),
     auth: text('auth').notNull(),
     userAgent: text('user_agent'),
     createdAt: integer('created_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
     updatedAt: integer('updated_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
+});
+
+// Push Subscription <-> Match links table
+// Anonymous subscribers have no userFollows/favoriteTeamId row to target by
+// team, so they instead opt into specific matches directly ("notify me about
+// this match") from the match detail page. Authenticated subscribers keep
+// using the existing team-follow targeting in match-notification-service.ts
+// unchanged -- this table is anonymous-path-only, but not restricted to it at
+// the schema level in case an authenticated user ever wants ad-hoc
+// single-match alerts too.
+export const pushSubscriptionMatches = sqliteTable('push_subscription_matches', {
+    id: text('id').primaryKey(),
+    subscriptionId: text('subscription_id').notNull().references(() => pushSubscriptions.id, { onDelete: 'cascade' }),
+    matchId: text('match_id').notNull().references(() => matches.id, { onDelete: 'cascade' }),
+    createdAt: integer('created_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
 });
 
 // Match Reminders table

@@ -6387,7 +6387,22 @@ No `clearTimeout` exists anywhere in the file. The effect that sets `stateManage
 
 ### BUG-150 — Anonymous Viewers Cannot Enable Push Notifications Through Any Reachable UI Path
 
-**Status:** OPEN — found session 47D, not fixed
+**Status:** RESOLVED — 2026-08-06 (session 49, commits `de7ff24`, `feb695a`). Full flow documented in `.agents/dev/NOTIFICATION_SYSTEM_FLOW.md`.
+
+**Evidence:**
+- Commit: `de7ff24` (per-match link keyed on `matchId` presence, not auth state), `feb695a` (unsubscribe lazy-init fix)
+- Verified by: live test on staging preview (both `NEXT_PUBLIC_ENV=staging` with a signed-in admin session, and a per-branch `NEXT_PUBLIC_ENV=development` override for the genuine no-cookie anonymous case), each followed by a direct read-only DB query against the staging Turso instance
+- Observed result:
+  - Authenticated Bell click → `push_subscriptions` row `sub-1785969570219-mgmmj7ib8` (`user_id: admin-001`) + `push_subscription_matches` row linking it to `_lkHo5y1m6ArqvLsi1ixe` — confirmed via `SELECT`, not inferred from the UI toast.
+  - Genuine anonymous Bell click (no auth cookie, confirmed via console: `Cookie auth response status: 401`, `localStorage token exists: false`) → `push_subscriptions` row `sub-1785970835247-26c72mb81` with `user_id: anonymous-push-subscriber` (the sentinel row, not a real account) + a correctly linked `push_subscription_matches` row.
+  - Unsubscribe (authenticated) → re-queried after clicking an already-filled Bell: `push_subscription_matches` row removed, underlying `push_subscriptions` row preserved (correct — an authenticated subscription must survive losing one match link).
+  - Real push delivery → sent directly via `web-push` to the real FCM endpoint captured in the DB row above; FCM accepted with `201`; user confirmed the notification rendered on-device.
+  - Pending items: real-device delivery was confirmed for the authenticated-path subscription only (FCM `201` + on-device screenshot); the anonymous-path subscription's endpoint was not separately push-tested (same code path, not considered a gap, but noting the asymmetry for the record).
+
+**Two real bugs found and fixed during this verification, not present in the original session-49 build description below:**
+1. **`POST`/`DELETE /api/notifications/subscribe` gated the per-match link on `isAnonymous` (`!authUser`) instead of on whether the request carried a `matchId`.** A signed-in browser clicking the match-detail Bell got routed into the authenticated branch, which never touched `pushSubscriptionMatches` at all — the UI showed a success toast, a generic `pushSubscriptions` row was created, but nothing was actually linked to that match. Silent no-op for any signed-in visitor using the anonymous-designed Bell button. Fixed in `de7ff24`: the per-match link (and, on `DELETE`, the per-match unlink) is now keyed on `matchId` being present in the body, independent of auth state.
+2. **`DELETE`'s authenticated branch deleted *all* of that user's push subscriptions on any per-match unsubscribe** — a signed-in user turning off notifications for one match would have silently killed their account-wide team-follow push subscription too. Fixed in the same commit: authenticated per-match `DELETE` now only removes that one `pushSubscriptionMatches` link.
+3. **`push-service.ts`'s `unsubscribe()` never lazily called `this.init()`** the way `subscribe()` does — on a page load where `init()` hadn't already run, clicking an already-filled Bell to turn notifications off silently failed client-side (`Could not turn off notifications for this match`) without ever reaching the server. Confirmed via DB read: the `push_subscription_matches` row was untouched after the failed attempt. Fixed in `feb695a`.
 **Priority:** HIGH — directly contradicts CLAUDE.md's own actor model rule ("Viewers NEVER have a session")
 **Filed:** 2026-07-27
 
@@ -6403,6 +6418,10 @@ No `clearTimeout` exists anywhere in the file. The effect that sets `stateManage
 **Fix (not built):** mount `NotificationPermission.tsx` (or wire `useNotificationPrompt`) somewhere reachable in the anonymous viewer flow, with a device-scoped (not user-scoped) subscription path — the push-subscription backend (`pushSubscriptions` table) would need to support a null/anonymous `userId` or a device-id fallback for this to work end to end; not confirmed either way whether that's already possible.
 
 **Found:** session 47D, by a background audit agent doing a full read-only trace of the public viewer experience.
+
+**Update, 2026-08-04 (session 49) — schema + API landed, UI still to build.** Richard's call: device-scoped, no-login-required, per-match "notify me about this match" targeting (not a device-scoped mirror of the full team-follow system — see the audit's own option comparison). `pushSubscriptions.deviceId` (new nullable column) plus a sentinel `anonymous-push-subscriber` user row (chosen over a nullable `userId` FK to avoid a SQLite table-rebuild migration) plus a new `pushSubscriptionMatches` table for the per-match opt-in. `POST`/`DELETE /api/notifications/subscribe` now serve both the authenticated and anonymous paths; `match-notification-service.ts`'s send logic merges anonymous per-match subscribers into the existing team-follower query. Migration applied to staging (`dev/migrate-anonymous-push-subscriptions-49.mjs`). PR #17, branch `feat/backlog-150-anonymous-push-enrollment`. **UI (the actual "notify me about this match" control on the match page) not built yet — next step, same session.**
+
+**Follow-up filed, not built:** no automatic anonymous-to-authenticated subscription handoff. The schema supports it for free if a re-subscribe happens (`endpoint` is already globally unique, so a same-browser authenticated re-subscribe correctly flips `userId` from the sentinel to the real account on the existing row, and `pushSubscriptionMatches` rows survive the flip since they're keyed to the subscription id, not `userId`) — but nothing currently triggers that re-subscribe call. Needs a small login/signup-time hook ("do I already have an active push subscription in this browser? re-POST it now that there's a session") — not built this session, flagged for whenever the anonymous UI ships.
 
 ---
 
@@ -7284,5 +7303,34 @@ deprioritized in its favor. -->
 5. Actually wire the already-built AEO structured-data components (`StructuredData`, `generateSportsEventSchema` etc.) into the real match/team/player pages per `SEO_IMPLEMENTATION_GUIDE.md`'s own documented usage examples, now that there's real per-page metadata to pair them with.
 
 **Found:** session 47G, Richard's own recall of prior SEO research in this repo, confirmed against actual current implementation state via direct code read (not just re-stating the existing guides).
+
+---
+
+### BUG-198 — Login Page Shows Raw Browser Error Strings ("Failed to fetch") Directly to Users
+
+**Status:** OPEN — found session 49, not fixed
+**Priority:** Medium — real UX/trust issue on the highest-stakes auth surface, not a security or data-integrity bug
+**Filed:** 2026-08-05
+
+**Problem:** `src/app/login/page.tsx:96-98` — `catch (error) { const errorMessage = error instanceof Error ? error.message : "Invalid email or password"; setServerError(errorMessage); }`. If `fetch('/api/auth/login')` itself throws (a real network failure, CORS issue, or server unreachable) rather than the request completing with a 4xx, the raw browser-native error message (e.g. `TypeError: Failed to fetch`) is shown verbatim in the user-facing error banner — confirmed live via a real screenshot this session. This is a generic technical string with zero actionable meaning to a real user, indistinguishable in the UI from an intentional, friendly message like "Invalid email or password."
+
+**Why this matters:** dev/technical error messages and user-facing error messages are different audiences with different needs — a user doesn't know what "fetch" means and can't act on it, whereas a real network-failure state should say something like "Couldn't reach the server, check your connection and try again."
+
+**Fix (not built):** wrap the catch block to distinguish network/fetch-level failures (the `fetch()` call itself throwing, before any response is received) from real server-returned error messages (already-thrown `Error` from the `!response.ok` branch, which correctly carries `data.error`). Show a friendly, generic "Couldn't reach the server — check your connection and try again" for the former; keep showing the real server message for the latter. Worth checking whether the same pattern (raw `error.message` shown as-is) exists on `signup/page.tsx` or other auth-adjacent forms — not checked this session.
+
+**Found:** session 49, Richard directly hit this live while signing in on a Vercel preview deployment during unrelated verification work.
+
+---
+
+### BUG-199 — `YELLOW_CARD` Notification Type Is Fully Built But Never Actually Triggered
+
+**Status:** OPEN — found session 49, not fixed
+**Priority:** Low — the delivery/type layer is genuinely correct; only the trigger allowlist is incomplete, and yellow cards are a lower-stakes event than the ones already wired
+
+**Problem:** `event-driven-notifier.ts`'s `getNotificationType()` correctly maps `'Yellow Card'` → `'YELLOW_CARD'`, and `match-notification-service.ts` has a complete, correct notification payload template for `YELLOW_CARD`. But `MatchStateManager.triggerNotification()`'s own `notifiableEvents` allowlist (`match-state-manager.ts:986`) is `['Goal', 'Penalty', 'Penalty Saved', 'Penalty Missed', 'Red Card']` — `'Yellow Card'` is simply not in that list, so the client-side trigger event is never dispatched for a yellow card, and the otherwise-complete delivery pipeline downstream never gets a chance to run for this event type.
+
+**Fix (not built):** add `'Yellow Card'` to `notifiableEvents` in `match-state-manager.ts:986`. Mechanical, one-line — the hard part (delivery, payload template, dedup) is already correct and doesn't need touching.
+
+**Found:** session 49, by a read-only documentation agent tracing the full notification system for `.agents/dev/NOTIFICATION_SYSTEM_FLOW.md`.
 
 ---
