@@ -1589,6 +1589,32 @@ player stats can be stale or inconsistent after a match ends.
 
 **Update, 2026-08-04 (session 49): deferral condition now met.** The `busa-match-N` series (1-27) is fully backfilled — every goals-only match this entry describes now exists in its final state. Only Deadline-Quantum remains outside the `matches` table entirely (a different problem, not more goals-only Stats-tab pollution). **This is now the top candidate for the next session's first task** — not built this session (time-boxed to finish the backfill itself).
 
+**Fix built and live-verified, 2026-08-04 (session 49).** `GET /api/matches/[id]` (`src/app/api/matches/[id]/route.ts`) now checks **per-team** stat coverage, not per-match — the first version of this fix used a per-match check ("does any event anywhere have a full-stat type") and was caught live-testing against `busa-match-16` on a Vercel preview: it missed the asymmetric-coverage case entirely (Hammers has a real full-stat logsheet, Santos never had one), so the fabricated `100%-0%` possession / `26-0` shots line stayed visible. Corrected to require both teams to have logged at least one full-stat-only event type before rendering Possession/Shots/Shots on Target/Corners/Fouls/Saves; Yellow/Red Cards always render since they're real captured data in both goals-only and full-capture matches. `LiveStats.tsx` suppresses the categories silently — no explanatory caveat text, matching SofaScore-style omission per Richard's explicit call.
+
+**Evidence:**
+- Commits: `7e729a1` (initial per-match version), `43afee2` (per-team correction)
+- Verified by: live test against a Vercel preview deployment (`brixsports-staging-fpi1p99k5-brixsports-projects.vercel.app`), both via a real signed-in session
+- Observed result: `busa-match-16` (asymmetric coverage) now shows only `Yellow Cards 2-1` / `Red Cards 1-0` on its Stats tab — Possession/Shots/Shots on Target/Corners/Fouls/Saves all correctly absent, no fake `0-0` or lopsided percentage. `busa-match-10` (both sides fully tracked, spot-checked as a regression guard) still renders every category normally: `Possession 33%-67%`, `Shots 4-8`, `Shots on Target 0-4`, `Corners 0-0`, `Fouls 0-2`, `Yellow Cards 1-2`, `Saves 5-11` — confirming the fix doesn't over-suppress real data.
+- Pending items: PR #16 (`fix/backlog-122-stats-tab-uncaptured-categories` → `dev`) not yet merged.
+
+**Status:** SHIPPED — 2026-08-04 (session 49), live-tested on Vercel preview. Pending merge.
+
+---
+
+### BACKLOG-192 — Football Possession % Is an Attacking-Event Proxy, Not Real Possession, Even on Fully-Tracked Matches
+
+**Status:** OPEN
+**Priority:** Low — a real accuracy gap, but not a data-integrity bug; the number shown is a documented approximation, not corrupted data
+**Filed:** 2026-08-04 (session 49)
+
+**Problem:** `GET /api/matches/[id]`'s computed-from-events possession formula (`src/app/api/matches/[id]/route.ts`) is `homePossession = shots + corners + freeKicks` (an attacking-event count), never actual time-in-possession. This is true even for matches where **both** teams have full, real stat coverage — `BACKLOG-122`'s fix (same session) only addresses matches where the underlying event counts themselves are missing/asymmetric; it does nothing for the deeper issue that the possession % shown is always a proxy metric, not a measurement of what it claims to represent. There is no event type anywhere in the logger (`FootballLogger.tsx`, `match-state-manager.ts`) that captures a possession change or duration — the platform has never had a mechanism to track real possession, only to approximate it after the fact from unrelated event counts.
+
+**Why this matters:** unlike goals-only matches (where a viewer might reasonably suspect "0" means "not tracked"), a fully-logged match's possession percentage looks exactly as authoritative as a real one — there's no visual or data-shape difference between "true possession" and "attacking-event ratio dressed up as possession." A viewer has no way to know the number is an approximation.
+
+**Fix (not built — scoping only, this is a filing):** Two real options, not mutually exclusive: (a) relabel the stat honestly (e.g. "Attacking Play %" instead of "Possession") so the UI stops claiming to measure something it doesn't, or (b) add a real possession-tracking mechanism to the logger (a "possession change" event type, timestamped, that the backend can integrate over match duration) for matches where a logger is willing to track it live — a bigger lift, only worth it if match-level possession accuracy is a real product priority. Richard's call needed on which direction (or whether to leave the proxy as-is with better labeling only).
+
+**Found:** session 49, raised by Richard directly while reviewing `BACKLOG-122`'s fix — noted the possession model "isn't rigid" and would be inaccurate even where data exists.
+
 ---
 
 ### ~~BACKLOG-124~~ — Live Auto-Ratings Silently Broken Since Written (No Auth Forwarded)
