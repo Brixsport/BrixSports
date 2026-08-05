@@ -251,6 +251,16 @@ export async function GET(
         const isFootball = !match.match.sport || match.match.sport === 'Football' ||
             (match.match.sport as string) === '5-a-side' || (match.match.sport as string) === 'Five-a-side';
         const statsEmpty = !stats || Object.keys(stats).length === 0;
+        // BACKLOG-122: goals-only backfilled matches (no team logsheet) only ever write
+        // Goal/Penalty/Own Goal/Assist/Yellow Card/Red Card events -- every other category
+        // below always computes to a literal 0-0 (or a lopsided percentage from partial
+        // sheet coverage), which reads as real analysis rather than "not captured." Flag it
+        // so the frontend can suppress those categories instead of rendering a false stat.
+        const FULL_STAT_ONLY_EVENT_TYPES = new Set([
+            'Shot on Target', 'Shot off Target', 'Corner', 'Foul', 'Push', 'Handball',
+            'Offside', 'Free Kick', 'Save', 'Catch', 'Block', 'Interception', 'Clearance',
+        ]);
+        const isGoalsOnlyCapture = events.length > 0 && !events.some((e: any) => FULL_STAT_ONLY_EVENT_TYPES.has(e.type));
         if (statsEmpty && isFootball && events.length > 0) {
             const homeIdx = 0; // home = index 0
             const awayIdx = 1; // away = index 1
@@ -312,6 +322,7 @@ export async function GET(
                 throwIns: [0, 0],
                 goalKicks: [0, 0],
                 substitutions: [0, 0],
+                statsCaptureMode: isGoalsOnlyCapture ? 'goals-only' : 'full',
             };
         }
 

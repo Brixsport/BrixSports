@@ -70,44 +70,60 @@ export default function LiveStats({ stats, sport, homeTeam, awayTeam }: LiveStat
         const redCards     = Array.isArray(stats.redCards)     ? stats.redCards     : [stats.homeRedCards ?? 0,     stats.awayRedCards ?? 0];
         const saves        = Array.isArray(stats.saves)        ? stats.saves        : [stats.homeSaves ?? 0,        stats.awaySaves ?? 0];
 
+        // BACKLOG-122: goals-only backfilled matches (no team logsheet) never captured
+        // possession/shots/corners/fouls/saves -- those categories are not real 0-0s, they
+        // were simply never tracked. Suppress them instead of rendering a false stat line.
+        // Yellow/Red Cards are always real captured data in both modes, so they stay.
+        const isGoalsOnly = stats.statsCaptureMode === 'goals-only';
+
         return (
         <div className="space-y-6">
-            <StatBar
-                label="Possession"
-                homeValue={homePossession}
-                awayValue={awayPossession}
-                max={100}
-                unit="%"
-                icon={<Activity className="w-4 h-4" />}
-            />
-            <StatBar
-                label="Shots"
-                homeValue={shots[0]}
-                awayValue={shots[1]}
-                max={Math.max(shots[0], shots[1], 20)}
-                icon={<Target className="w-4 h-4" />}
-            />
-            <StatBar
-                label="Shots on Target"
-                homeValue={shotsOnTarget[0]}
-                awayValue={shotsOnTarget[1]}
-                max={Math.max(shotsOnTarget[0], shotsOnTarget[1], 10)}
-                icon={<Target className="w-4 h-4" />}
-            />
-            <StatBar
-                label="Corners"
-                homeValue={corners[0]}
-                awayValue={corners[1]}
-                max={Math.max(corners[0], corners[1], 10)}
-                icon={<Zap className="w-4 h-4" />}
-            />
-            <StatBar
-                label="Fouls"
-                homeValue={fouls[0]}
-                awayValue={fouls[1]}
-                max={Math.max(fouls[0], fouls[1], 20)}
-                icon={<Shield className="w-4 h-4" />}
-            />
+            {!isGoalsOnly && (
+                <StatBar
+                    label="Possession"
+                    homeValue={homePossession}
+                    awayValue={awayPossession}
+                    max={100}
+                    unit="%"
+                    icon={<Activity className="w-4 h-4" />}
+                />
+            )}
+            {!isGoalsOnly && (
+                <StatBar
+                    label="Shots"
+                    homeValue={shots[0]}
+                    awayValue={shots[1]}
+                    max={Math.max(shots[0], shots[1], 20)}
+                    icon={<Target className="w-4 h-4" />}
+                />
+            )}
+            {!isGoalsOnly && (
+                <StatBar
+                    label="Shots on Target"
+                    homeValue={shotsOnTarget[0]}
+                    awayValue={shotsOnTarget[1]}
+                    max={Math.max(shotsOnTarget[0], shotsOnTarget[1], 10)}
+                    icon={<Target className="w-4 h-4" />}
+                />
+            )}
+            {!isGoalsOnly && (
+                <StatBar
+                    label="Corners"
+                    homeValue={corners[0]}
+                    awayValue={corners[1]}
+                    max={Math.max(corners[0], corners[1], 10)}
+                    icon={<Zap className="w-4 h-4" />}
+                />
+            )}
+            {!isGoalsOnly && (
+                <StatBar
+                    label="Fouls"
+                    homeValue={fouls[0]}
+                    awayValue={fouls[1]}
+                    max={Math.max(fouls[0], fouls[1], 20)}
+                    icon={<Shield className="w-4 h-4" />}
+                />
+            )}
             <StatBar
                 label="Yellow Cards"
                 homeValue={yellowCards[0]}
@@ -124,13 +140,15 @@ export default function LiveStats({ stats, sport, homeTeam, awayTeam }: LiveStat
                     icon={<div className="w-3 h-4 bg-red-500 rounded-sm" />}
                 />
             )}
-            <StatBar
-                label="Saves"
-                homeValue={saves[0]}
-                awayValue={saves[1]}
-                max={Math.max(saves[0], saves[1], 10)}
-                icon={<Shield className="w-4 h-4" />}
-            />
+            {!isGoalsOnly && (
+                <StatBar
+                    label="Saves"
+                    homeValue={saves[0]}
+                    awayValue={saves[1]}
+                    max={Math.max(saves[0], saves[1], 10)}
+                    icon={<Shield className="w-4 h-4" />}
+                />
+            )}
         </div>
         );
     };
