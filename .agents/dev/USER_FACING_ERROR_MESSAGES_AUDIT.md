@@ -1,0 +1,86 @@
+# User-Facing Error Messages Audit — BrixSports
+
+**Written:** session 49, 2026-08-06, by a read-only research agent, prompted directly by `BUG-198` (login page showing a raw `"Failed to fetch"` browser string to users). Scope: how widespread is that pattern across the rest of the app? Research only — no fixes applied, no BACKLOG.md entries filed by this pass.
+
+---
+
+## 1. Summary
+
+This is a systemic pattern, not an isolated login-page bug. The exact shape of BUG-198 — `catch (error) { setX(error instanceof Error ? error.message : fallback) }` after a `fetch()` → `response.json()` → `throw new Error(data.error)` sequence — is copy-pasted across **at least 9 client-side flows**, including three other auth pages (signup, forgot-password, reset-password) that are essentially sibling copies of the buggy login page. A parallel, *correctly-written* implementation of the same login/register flow already exists in `src/contexts/AuthContext.tsx` (used by the header's `AuthModal`) — it catches network exceptions and returns a static `'Network error'` string instead of `error.message`. That is the pattern the rest of the app should be converged onto; **no shared utility needs inventing, it needs extracting** from `AuthContext.tsx` (or a thin wrapper standardized around its approach) and applied to the other flows.
+
+On the server side, roughly a dozen `catch` blocks across `/api/**` return `error.message` / `error.stack` / `String(error)` directly in the JSON body, in violation of CLAUDE.md's "Never return raw database errors to the client" rule. Severity varies a lot: most of these are never actually rendered by any current client caller (the client only reads a separate, safe `data.error` field and ignores the raw `details`/`message` field) — a real violation, but not a live user-facing leak today. Two are High severity:
+- `/api/matches/[id]/ratings/adjust` (GET) — its raw `error.message` **is** read and rendered in the admin/logger ratings UI (`src/app/admin/match-ratings/[id]/page.tsx`).
+- `/api/notifications/diagnose` — has **no auth check at all** (unlike every sibling notifications route), so its raw stack traces / DB errors / VAPID config details are reachable by anyone, unauthenticated. This is arguably as much a missing-auth bug as an error-leak bug, but it makes the leak High severity regardless of client rendering, since anyone can just curl it directly.
+
+No shared client-side error-translation utility (e.g. `getUserFacingError()`) exists anywhere in `src/lib` or `src/hooks` today — confirmed via grep for that shape of name. The fix pattern later is "promote `AuthContext.tsx`'s inline pattern into a small shared helper and use it everywhere," not "invent something new."
+
+Rough counts:
+- Client-side instances found: **13** (4 auth pages/pages using the exact BUG-198 pattern, 1 profile settings page with an even weaker version with no `instanceof` guard at all, ~6 admin pages, 1 diagnostics-only component that's arguably fine as-is)
+- Server-side instances found: **~15 catch blocks across 11 route files** returning raw `error.message`/`.stack`/`String(error)` in the response body
+- Existing shared utility: **none** — but a good reference pattern already exists in `AuthContext.tsx`
+
+---
+
+## 2. Instance-by-instance findings
+
+### Client-side — exact BUG-198 pattern (fetch → throw new Error(data.error) → `error instanceof Error ? error.message : fallback`)
+
+| File:Line | Trigger | Current behavior | Severity |
+|---|---|---|---|
+| `src/app/login/page.tsx:97` | `fetch()` network failure (`TypeError`) or bad JSON (`SyntaxError`) on `/api/auth/login` | **Fixed session 49, `9d23ecf` (BUG-198)** — now distinguishes `TypeError`/`SyntaxError` from a real thrown `Error` before display | Resolved |
+| `src/app/signup/page.tsx:125` | Same, on `/api/auth/register` | Raw `error.message` shown inside a `toast.error` description | High |
+| `src/app/forgot-password/page.tsx:60` | Same, on `/api/auth/forgot-password` (POST) | Raw `error.message` shown in `serverError` banner | High |
+| `src/app/reset-password/page.tsx:102` | Same, on `/api/auth/forgot-password` (PATCH) | Raw `error.message` shown in `serverError` banner | High |
+| `src/app/admin/organizations/page.tsx:135` | Same, on `GET /api/admin/organizations` | Raw `error.message` in `errorMessage` state, rendered in UI | High (admin-only, but real user hits this on any transient network blip) |
+| `src/app/admin/organizations/page.tsx:228` | Same, on `POST /api/admin/organizations` | Same pattern | High |
+| `src/app/admin/match-ratings/page.tsx:54` | Same, on `GET /api/matches?status=FINISHED...` | Raw `err.message` in `error` state, rendered | High |
+| `src/app/admin/match-ratings/[id]/page.tsx:126` | Same, on `GET /api/matches/[id]/ratings/adjust` — **and** this is the one place a server-side raw leak (see below) is actually consumed and rendered | Raw message (client `TypeError`/`SyntaxError`, or server's leaked `error.message` via `errorData.message` fallback) shown in `error` state, rendered at line 581 | High |
+| `src/app/admin/match-ratings/[id]/page.tsx:149` | Same, on `POST /api/matches/[id]/ratings` (calculate) | Raw `err.message` in `error` state | High |
+| `src/app/admin/match-lineups/page.tsx:343` | Same, on `POST /api/admin/match-lineups/[id]` (publish home/away) | Raw `error.message` in a browser `alert()` | Medium (admin-only, alert() is jarring but not seen by public) |
+| `src/app/profile/settings/page.tsx:513` | Same, on `POST /api/auth/change-password` — **no `instanceof Error` guard at all** | `toast.error(error.message)` unconditionally; if error isn't an `Error` instance this shows the literal string `"undefined"` | High — a real, currently-logged-in-user-facing settings page, and the weakest version of the pattern in the codebase (no guard whatsoever) |
+
+### Client-side — related but distinct (file-parsing / library errors, not fetch)
+
+| File:Line | Trigger | Current behavior | Severity |
+|---|---|---|---|
+| `src/app/admin/past-matches/import/page.tsx:395` | CSV/XLSX parse failure in `FileReader` callback | `err.message` (parsing-library internal message) shown via toast | Low-Medium — admin-only, file-upload debugging context where some technical detail is arguably acceptable, but still unfiltered library internals |
+
+### Client-side — false positives / already-correct patterns worth noting
+
+- `src/components/auth/AuthModal.tsx:153` — `{error.message}` here refers to a **local, hand-built** `{message, code}` state object, not a caught exception's `.message`. The `catch` block at line 88-89 sets a static `'An unexpected error occurred'` string. This is the correct pattern.
+- `src/contexts/AuthContext.tsx` (`login`, `register` — lines ~120-190) — `catch (error) { console.error(...); return { success: false, error: 'Network error', code: 'AUTH_NETWORK_ERROR' } }`. This is the **model pattern** other flows should converge on. It's used by the header's `AuthModal`, but not by the standalone `/login`, `/signup`, `/forgot-password`, `/reset-password` pages — those are a separate, older implementation that duplicates (and mishandles) the same logic.
+- `src/app/admin/news/page.tsx:242-244` and `src/app/admin/past-matches/import/page.tsx:461-462` — both correctly catch the outer network-level exception with a static `'Network error. Please check your connection.'` / `'Network error. Please try again.'` message, and only read the server's `data.error` field (never a raw `.message`/`.details`). Good examples already in the codebase.
+- `src/components/ui/field.tsx:216` — `error?.message` here is a react-hook-form/Zod validation error, not an exception. Not applicable.
+- `src/components/notifications/PushDiagnosticPage.tsx` (4 instances, lines 106/133/162/193) — this is the client half of a dedicated `/admin/push-diagnose` diagnostics screen; showing raw `error.message` in an on-screen log panel is arguably the intended purpose of a diagnostics tool. Low severity / likely by design, though worth confirming the route is actually gated to admins (see server-side note on `/api/notifications/diagnose` below, which is NOT gated).
+- `src/components/FootballLogger.tsx`, `src/components/BasketballLogger.tsx`, `src/components/TrackLogger.tsx`, `src/components/MatchLoggerUI.tsx` — none of these leak raw error text to the UI. **Different problem, worth flagging separately**: several catches (e.g. `BasketballLogger.tsx:463-466`, event persistence; `BasketballLogger.tsx:608-610`, match-status-to-LIVE update) only `console.error` and silently continue with no `alert`/`toast` at all — the opposite failure mode. CLAUDE.md's PWA rules explicitly require "clear feedback: saved / saving / failed" and "never silently lose data" for logger actions; these spots currently give the logger no feedback that a save failed. Not in scope for this specific audit (raw-error-leak), but adjacent and worth a follow-up look.
+
+### Server-side — raw error detail returned in JSON response body
+
+| File:Line | Trigger | Returns to client | Logged server-side? | Consumed/rendered by any current client? | Severity |
+|---|---|---|---|---|---|
+| `src/app/api/notifications/diagnose/route.ts` (lines 54, 92, 146, 156-157, 230, 237) | Various — VAPID config errors, DB errors, webpush send errors | `error.message`, `error.stack`, `error.body` directly | Partial (`console.error` on send-failure path only, not on outer catch) | Only by `PushDiagnosticPage.tsx`, which is itself a diagnostics UI | **High** — route has **no `getAuthUser` check at all** (confirmed via grep — every other `/api/notifications/*` route imports and calls `getAuthUser`, this one doesn't), so anyone unauthenticated can hit it directly and get stack traces, VAPID key length/presence, and DB error internals. This is really an auth-gap bug wearing an error-leak costume. |
+| `src/app/api/matches/[id]/ratings/adjust/route.ts:273` | Any thrown error while building the ratings-adjustment view (DB query failure, etc.) | `message: error instanceof Error ? error.message : 'Failed to fetch ratings'` | Yes (`console.error`) | **Yes** — `src/app/admin/match-ratings/[id]/page.tsx:96` explicitly does `throw new Error(errorData.message || ...)` and renders it | **High** — confirmed live client-rendered leak, admin/logger-facing |
+| `src/app/api/notifications/subscribe/route.ts:110-115` | DB insert/update failure saving a push subscription | `details: error.message` (plus `message`/`stack` logged) | Yes | No — `src/lib/notifications/push-service.ts:228` only reads `errorData.error` (the safe static string), never `.details` | Medium |
+| `src/app/api/cloudinary/sign/route.ts:55` | Signature generation failure | `details: error instanceof Error ? error.message : String(error)` | Yes | No client call site found for this route's error path in `src/**` | Medium |
+| `src/app/api/news/route.ts:74, 200` and `src/app/api/news/[id]/route.ts:205 (stack log), 208` | DB failure fetching/creating/updating news articles | `details: error instanceof Error ? error.message : String(error)` | Yes (including `error.stack` logged, good) | No — `src/app/admin/news/page.tsx` only reads `data.error`, ignores `.details` | Medium |
+| `src/app/api/competitions/register/approve/route.ts:186` | Failure approving a team registration (multi-step DB writes) | `details: String(error)` | Yes | No client call site found in `src/**` for this route | Medium (also: `String(error)` on a raw Error object typically yields `"Error: <message>"`, so this is a slightly sloppier variant of the same leak) |
+| `src/app/api/players/create-individual/route.ts:98` | Player creation failure | `details: String(error)` | Yes (implied — not fully re-verified line-by-line, but pattern matches siblings) | No client call site found in `src/**` | Low-Medium — route exists but nothing in the app currently calls it |
+| `src/app/api/matches/backfill/route.ts:336` | Transaction failure during match backfill | `message: error.message \|\| 'An internal database error occurred'` | Yes | No — `src/app/admin/past-matches/import/page.tsx:459` only reads `data.error`, ignores `.message` | Medium |
+| `src/app/api/admin/infrastructure/route.ts:87` | Health-check ping to an internal endpoint times out/fails | `error: error instanceof Error ? error.message : 'Connection failed'` | No explicit `console.error` at this inner catch (it's a per-endpoint health probe, failure is the expected/handled case) | This is arguably intended: it's an admin infrastructure dashboard whose whole job is to show endpoint health/error detail | Low — different category, semi-intentional diagnostic surface, admin-gated (confirmed `getAuthUser` + `role !== 'admin'` check present) |
+| `src/app/api/notifications/match-reminders/route.ts:86, 132` and `src/app/api/reminders/check/route.ts:139` | Per-item failure while looping over matches/reminders to send notifications | `error.message` interpolated into an `errors` array in the JSON response | Yes (implied by surrounding pattern) | No browser UI calls these — both routes are `CRON_SECRET`-gated (confirmed) and meant to be hit by a cron job, not rendered anywhere | Low — technically still "returns raw error to a client," but the client is a cron caller, not an end user |
+| `src/app/api/notifications/send/route.ts:58, 236` | VAPID config error / per-subscription send failure | `error: \`VAPID configuration error: ${error.message}\`` and a `console.error` with `error.message` | Yes (the second instance is purely a server log, not a response body) | Need to double check the first (`send/route.ts:58`) is only in a helper's return value, not necessarily the top-level HTTP response — flagged for a double-check border case | Low-Medium |
+
+### Anti-pattern also worth flagging (found while reading these files, adjacent to CLAUDE.md's rules)
+
+- `src/app/api/notifications/diagnose/route.ts` has zero auth check, unlike every sibling route in `src/app/api/notifications/*`. CLAUDE.md's admin-route rule technically only covers `/api/admin/*`, but this route dumps enough operational detail (VAPID key presence/length, DB errors) that it should almost certainly be admin-gated or removed/disabled outside local dev.
+
+---
+
+## 3. Patterns observed
+
+1. **One dominant root cause, copy-pasted:** the `fetch()` → `await response.json()` → `if (!response.ok) throw new Error(data.error)` → `catch (error) { setX(error instanceof Error ? error.message : fallback) }` block is the same handful of lines, pasted into at least 8 different files (4 standalone auth pages + 4 admin pages). None of them distinguish a real thrown `Error` (server-authored, safe) from a `TypeError`/`SyntaxError` thrown by `fetch()`/`.json()` itself (raw, unsafe) — exactly BUG-198's root cause, unfixed everywhere else it was pasted.
+2. **A correct version of the same logic already exists** in `AuthContext.tsx` and is simply not used by the pages that need it — this isn't a case of no one on the team knowing the right pattern, it's a case of two parallel, divergent implementations of login/register.
+3. **Server-side leaks are a second, independent root cause**: `catch (error) { ...details: error.message... }` in API routes, largely harmless *today* only because the corresponding client code happens to read a different, safer field (`data.error`) and ignore the leaking one (`data.details`/`data.message`). This is fragile — a future refactor of any of those client call sites that naively does `data.details || data.error` would instantly turn a Medium into a High with no server-side change at all.
+4. **One clear high-severity case ties both root causes together**: `ratings/adjust`'s server-side leak is the one server leak that's actually consumed client-side, because that particular client `throw`s `errorData.message` by name in its `default:` branch.
+5. **`/api/notifications/diagnose`'s issue is really a missing-auth-check bug**, not fundamentally an error-message-hygiene bug — it just happens to manifest as one, and is worth flagging to whoever owns notifications infrastructure separately from the general error-message cleanup.
+6. **The opposite failure mode also exists** in the live-logger components (silent `console.error`-only catches with no user feedback), which is arguably worse for BUG-198's specific domain (PWA loggers during a live match) than a leaked string, per CLAUDE.md's explicit "never silently lose data" / "clear feedback: saved / saving / failed" rules. Flagged for awareness, not counted in the error-leak tallies above.
