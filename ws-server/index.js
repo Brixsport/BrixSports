@@ -581,6 +581,49 @@ function broadcastInfrastructureUpdate() {
 // Start periodic broadcasts
 const infrastructureInterval = setInterval(broadcastInfrastructureUpdate, INFRASTRUCTURE_INTERVAL);
 
+// ─── Match Reminder Trigger ───────────────────────────────────
+// /api/reminders/check (30/15-minute-before-kickoff push) has always existed
+// on the Vercel app but had no scheduler invoking it -- vercel.json has no
+// crons block, and Vercel Cron on non-Pro plans is capped at once-daily
+// anyway, too coarse for a "starting in 15 minutes" check. This already-
+// always-on Railway process can run a real interval with no such limit, the
+// same way it already does for broadcastInfrastructureUpdate above. Same
+// staging/prod split this file already uses everywhere else (BUG-074) --
+// CRON_SECRET is per-environment (CLAUDE.md), so both must be called
+// separately with their own secret, not one shared value.
+const REMINDER_CHECK_INTERVAL = 5 * 60 * 1000; // 5 minutes -- frequent enough to catch a 15-min-before window without excessive load
+const CRON_SECRETS = {
+    staging: process.env.CRON_SECRET_STAGING,
+    prod: process.env.CRON_SECRET_PROD,
+};
+
+async function checkMatchReminders(env) {
+    const secret = CRON_SECRETS[env];
+    if (!secret) {
+        console.warn(`[Reminders] CRON_SECRET_${env.toUpperCase()} not set -- skipping ${env} reminder check`);
+        return;
+    }
+    try {
+        const res = await fetch(`${APP_URLS[env]}/api/reminders/check`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${secret}` },
+        });
+        const data = await res.json();
+        if (data.sent > 0) {
+            console.log(`[Reminders] ${env}: sent ${data.sent}/${data.processed} reminders`);
+        }
+    } catch (err) {
+        console.warn(`[Reminders] ${env} check failed: ${err.message}`);
+    }
+}
+
+function checkAllMatchReminders() {
+    checkMatchReminders('staging');
+    checkMatchReminders('prod');
+}
+
+const reminderInterval = setInterval(checkAllMatchReminders, REMINDER_CHECK_INTERVAL);
+
 // ─── Start Server ───────────────────────────────────────────────
 httpServer.listen(PORT, () => {
     console.log(`\n🚀 BrixSports WebSocket Server`);
@@ -596,6 +639,7 @@ httpServer.listen(PORT, () => {
 const shutdown = (signal) => {
     console.log(`\n[WS] ${signal} received, shutting down...`);
     clearInterval(infrastructureInterval);
+    clearInterval(reminderInterval);
     io.close(() => {
         httpServer.close(() => {
             console.log('[WS] Server closed.');

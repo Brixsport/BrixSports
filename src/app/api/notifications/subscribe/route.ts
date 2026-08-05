@@ -73,6 +73,11 @@ export async function POST(request: NextRequest) {
             .where(eq(pushSubscriptions.endpoint, subscription.endpoint))
             .limit(1);
 
+        // deviceId is captured for authenticated subscribers too when the client sends
+        // one (not just the anonymous path) -- this is what makes the anon-to-auth
+        // handoff (see BUG-150's follow-up note) able to recognize "this is the same
+        // browser that subscribed anonymously earlier" once a login-time hook is built,
+        // rather than relying on endpoint matching alone.
         let subscriptionId: string;
         if (existing.length > 0) {
             subscriptionId = existing[0].id;
@@ -80,7 +85,7 @@ export async function POST(request: NextRequest) {
                 .update(pushSubscriptions)
                 .set({
                     userId: effectiveUserId,
-                    deviceId: isAnonymous ? deviceId : existing[0].deviceId,
+                    deviceId: deviceId || existing[0].deviceId,
                     p256dh: subscription.keys.p256dh,
                     auth: subscription.keys.auth,
                     userAgent: request.headers.get('user-agent') || undefined,
@@ -91,7 +96,7 @@ export async function POST(request: NextRequest) {
             await db.insert(pushSubscriptions).values({
                 id: subscriptionId,
                 userId: effectiveUserId,
-                deviceId: isAnonymous ? deviceId : null,
+                deviceId: deviceId || null,
                 endpoint: subscription.endpoint,
                 p256dh: subscription.keys.p256dh,
                 auth: subscription.keys.auth,

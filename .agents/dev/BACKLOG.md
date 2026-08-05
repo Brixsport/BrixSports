@@ -6387,7 +6387,7 @@ No `clearTimeout` exists anywhere in the file. The effect that sets `stateManage
 
 ### BUG-150 — Anonymous Viewers Cannot Enable Push Notifications Through Any Reachable UI Path
 
-**Status:** OPEN — found session 47D, not fixed
+**Status:** SHIPPED — session 49 (schema + API + UI all landed, PR #17, migration applied to staging, tsc clean throughout). **Not live-tested end-to-end yet** — verification was interrupted mid-session by other work; the Bell button has not actually been clicked on a real deployed preview to confirm a subscription row gets written. Do not treat as RESOLVED or working until that happens. Full flow documented in `.agents/dev/NOTIFICATION_SYSTEM_FLOW.md`.
 **Priority:** HIGH — directly contradicts CLAUDE.md's own actor model rule ("Viewers NEVER have a session")
 **Filed:** 2026-07-27
 
@@ -7288,5 +7288,34 @@ deprioritized in its favor. -->
 5. Actually wire the already-built AEO structured-data components (`StructuredData`, `generateSportsEventSchema` etc.) into the real match/team/player pages per `SEO_IMPLEMENTATION_GUIDE.md`'s own documented usage examples, now that there's real per-page metadata to pair them with.
 
 **Found:** session 47G, Richard's own recall of prior SEO research in this repo, confirmed against actual current implementation state via direct code read (not just re-stating the existing guides).
+
+---
+
+### BUG-198 — Login Page Shows Raw Browser Error Strings ("Failed to fetch") Directly to Users
+
+**Status:** OPEN — found session 49, not fixed
+**Priority:** Medium — real UX/trust issue on the highest-stakes auth surface, not a security or data-integrity bug
+**Filed:** 2026-08-05
+
+**Problem:** `src/app/login/page.tsx:96-98` — `catch (error) { const errorMessage = error instanceof Error ? error.message : "Invalid email or password"; setServerError(errorMessage); }`. If `fetch('/api/auth/login')` itself throws (a real network failure, CORS issue, or server unreachable) rather than the request completing with a 4xx, the raw browser-native error message (e.g. `TypeError: Failed to fetch`) is shown verbatim in the user-facing error banner — confirmed live via a real screenshot this session. This is a generic technical string with zero actionable meaning to a real user, indistinguishable in the UI from an intentional, friendly message like "Invalid email or password."
+
+**Why this matters:** dev/technical error messages and user-facing error messages are different audiences with different needs — a user doesn't know what "fetch" means and can't act on it, whereas a real network-failure state should say something like "Couldn't reach the server, check your connection and try again."
+
+**Fix (not built):** wrap the catch block to distinguish network/fetch-level failures (the `fetch()` call itself throwing, before any response is received) from real server-returned error messages (already-thrown `Error` from the `!response.ok` branch, which correctly carries `data.error`). Show a friendly, generic "Couldn't reach the server — check your connection and try again" for the former; keep showing the real server message for the latter. Worth checking whether the same pattern (raw `error.message` shown as-is) exists on `signup/page.tsx` or other auth-adjacent forms — not checked this session.
+
+**Found:** session 49, Richard directly hit this live while signing in on a Vercel preview deployment during unrelated verification work.
+
+---
+
+### BUG-199 — `YELLOW_CARD` Notification Type Is Fully Built But Never Actually Triggered
+
+**Status:** OPEN — found session 49, not fixed
+**Priority:** Low — the delivery/type layer is genuinely correct; only the trigger allowlist is incomplete, and yellow cards are a lower-stakes event than the ones already wired
+
+**Problem:** `event-driven-notifier.ts`'s `getNotificationType()` correctly maps `'Yellow Card'` → `'YELLOW_CARD'`, and `match-notification-service.ts` has a complete, correct notification payload template for `YELLOW_CARD`. But `MatchStateManager.triggerNotification()`'s own `notifiableEvents` allowlist (`match-state-manager.ts:986`) is `['Goal', 'Penalty', 'Penalty Saved', 'Penalty Missed', 'Red Card']` — `'Yellow Card'` is simply not in that list, so the client-side trigger event is never dispatched for a yellow card, and the otherwise-complete delivery pipeline downstream never gets a chance to run for this event type.
+
+**Fix (not built):** add `'Yellow Card'` to `notifiableEvents` in `match-state-manager.ts:986`. Mechanical, one-line — the hard part (delivery, payload template, dedup) is already correct and doesn't need touching.
+
+**Found:** session 49, by a read-only documentation agent tracing the full notification system for `.agents/dev/NOTIFICATION_SYSTEM_FLOW.md`.
 
 ---

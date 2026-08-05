@@ -5,6 +5,8 @@
 
 'use client';
 
+import { getDeviceId } from './device-id';
+
 interface PushSubscriptionData {
     endpoint: string;
     keys: {
