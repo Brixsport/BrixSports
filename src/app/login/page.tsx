@@ -94,7 +94,22 @@ function LoginPageContent() {
             }, 1000);
 
         } catch (error) {
-            const errorMessage = error instanceof Error ? error.message : "Invalid email or password";
+            // BUG-198: fetch() itself rejects with a TypeError for a real network
+            // failure (offline, DNS, server unreachable) -- distinct from the plain
+            // Error thrown above for a real API error response, whose .message is
+            // already a server-authored, user-facing string. A raw TypeError's
+            // .message ("Failed to fetch" / "NetworkError..." / "Load failed",
+            // browser-dependent) is a dev-facing string, not something to show a user.
+            let errorMessage: string;
+            if (error instanceof TypeError) {
+                errorMessage = "Unable to reach the server. Please check your connection and try again.";
+            } else if (error instanceof SyntaxError) {
+                errorMessage = "Unexpected response from the server. Please try again.";
+            } else if (error instanceof Error) {
+                errorMessage = error.message;
+            } else {
+                errorMessage = "Invalid email or password";
+            }
             setServerError(errorMessage);
         } finally {
             if (!success) setIsLoading(false);
