@@ -30,12 +30,17 @@ interface MatchEventNotification {
     matchId: string;
     homeTeamId: string;
     awayTeamId: string;
-    eventType: 'MATCH_START' | 'GOAL' | 'RED_CARD' | 'YELLOW_CARD' | 'LINEUP_AVAILABLE' | 'MATCH_END' | 'HALF_TIME' | 'PENALTY_SAVED' | 'PENALTY_MISSED';
+    eventType: 'MATCH_START' | 'GOAL' | 'RED_CARD' | 'YELLOW_CARD' | 'LINEUP_AVAILABLE' | 'MATCH_END' | 'HALF_TIME' | 'PENALTY_SAVED' | 'PENALTY_MISSED' | 'TECHNICAL_FOUL';
     playerName?: string;
     teamName?: string;
     minute?: number;
     homeScore?: number;
     awayScore?: number;
+    // Not yet used for targeting (roadmap item 4, NOTIFICATION_SYSTEM_ROADMAP_PROPOSAL.md) --
+    // added now while the call sites already have both IDs in scope, so a future
+    // followed-player audience query doesn't need touching every call site again.
+    playerId?: string;
+    relatedPlayerId?: string;
 }
 
 /**
@@ -316,6 +321,18 @@ function createNotificationPayload(event: MatchEventNotification): NotificationP
             return {
                 title: '⏹️ Full Time!',
                 body: `Match finished: ${event.homeScore}-${event.awayScore}`,
+                icon: '/icons/icon-192x192.png',
+                badge: '/icons/icon-192x192.png',
+                data: baseData,
+                actions: baseActions,
+            };
+
+        case 'TECHNICAL_FOUL':
+            return {
+                title: '🟨 Technical Foul',
+                body: event.playerName
+                    ? `${event.playerName} called for a technical foul`
+                    : `Technical foul called (${event.teamName || 'unknown team'})`,
                 icon: '/icons/icon-192x192.png',
                 badge: '/icons/icon-192x192.png',
                 data: baseData,

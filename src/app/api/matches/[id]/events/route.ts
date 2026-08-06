@@ -16,13 +16,26 @@ import { sendMatchEventNotification } from '@/lib/notifications/match-notificati
 // BUG-108/BUG-116 already fixed for the WS broadcast. Moved server-side, same
 // after() pattern as the broadcast calls below. Includes the BUG-199 fix
 // ('Yellow Card' was fully wired for delivery but missing from this allowlist).
-const NOTIFIABLE_EVENT_TYPES: Record<string, 'GOAL' | 'RED_CARD' | 'YELLOW_CARD' | 'PENALTY_SAVED' | 'PENALTY_MISSED'> = {
+//
+// Phase 2 (basketball): deliberately minimal -- only 'Technical Foul' is wired for
+// basketball here. Every routine scoring/foul type (Field Goal, Three Pointer, Free
+// Throw, Rebound, Assist, Steal, Block, Turnover, plain Foul, Substitution, Timeout)
+// is intentionally left out to avoid the spam a 100+-event game would produce --
+// see NOTIFICATION_SYSTEM_ROADMAP_PROPOSAL.md thread 3. A close-game/buzzer-beater
+// scoring alert is a real future idea, explicitly backlogged there, not built here.
+//
+// This flat map is a football-shaped structure basketball is now sharing rather than
+// a true sport-keyed rules table (the roadmap proposal's thread 5 recommends the
+// latter, as the cheaper-to-fix-now shape) -- kept minimal for this phase; revisit
+// if a third sport needs wiring before that redesign happens.
+const NOTIFIABLE_EVENT_TYPES: Record<string, 'GOAL' | 'RED_CARD' | 'YELLOW_CARD' | 'PENALTY_SAVED' | 'PENALTY_MISSED' | 'TECHNICAL_FOUL'> = {
     'Goal': 'GOAL',
     'Penalty': 'GOAL',
     'Red Card': 'RED_CARD',
     'Yellow Card': 'YELLOW_CARD',
     'Penalty Saved': 'PENALTY_SAVED',
     'Penalty Missed': 'PENALTY_MISSED',
+    'Technical Foul': 'TECHNICAL_FOUL',
 };
 
 // GET /api/matches/[id]/events - Get all events for a match
@@ -378,6 +391,11 @@ export async function POST(
                         minute,
                         homeScore: newHomeScore ?? match.homeScore ?? undefined,
                         awayScore: newAwayScore ?? match.awayScore ?? undefined,
+                        // Not used for targeting yet -- see MatchEventNotification's own
+                        // comment (roadmap item 4). Carried through now so a future
+                        // followed-player audience query doesn't need this call site again.
+                        playerId: notifyPlayerId || undefined,
+                        relatedPlayerId: relatedPlayerId || undefined,
                     });
                 } catch (error) {
                     console.error('Error sending match event notification:', error);

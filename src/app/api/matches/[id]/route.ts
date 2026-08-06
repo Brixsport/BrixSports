@@ -659,9 +659,19 @@ export async function PATCH(
         // transitions used to notify only via MatchStateManager.triggerPeriodNotification()
         // dispatching a window CustomEvent from the logger's own tab. Moved server-side.
         if (body.currentPeriod !== undefined) {
+            // Phase 2 (basketball): 'Q1' -> MATCH_START and 'Q3' -> HALF_TIME added
+            // deliberately, mirroring football's exactly-one-mid-game-notification
+            // shape rather than firing on every quarter boundary (Q2/Q4 starts are
+            // intentionally excluded -- see NOTIFICATION_SYSTEM_ROADMAP_PROPOSAL.md
+            // thread 3 for the full spam-avoidance reasoning). 'FINISHED' already
+            // matched generically before this change and was firing for basketball's
+            // finalizeMatch() PATCH unintentionally (same roadmap doc, thread 3) --
+            // now a consciously-kept, not accidental, behavior.
             const periodEventType =
                 body.currentPeriod === 'FIRST_HALF' ? 'MATCH_START' as const :
+                body.currentPeriod === 'Q1' ? 'MATCH_START' as const :
                 body.currentPeriod === 'HALF_TIME' ? 'HALF_TIME' as const :
+                body.currentPeriod === 'Q3' ? 'HALF_TIME' as const :
                 body.currentPeriod === 'FINISHED' ? 'MATCH_END' as const :
                 null;
             if (periodEventType) {
