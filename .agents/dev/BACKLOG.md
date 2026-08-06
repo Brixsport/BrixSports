@@ -7364,6 +7364,25 @@ deprioritized in its favor. -->
 
 ---
 
+### BACKLOG-203 — Phase 2: Basketball Notification Wiring (Minimal, Spam-Aware)
+
+**Status:** RESOLVED — 2026-08-06 (session 49, `12537b7`, branch `feature/notification-system`)
+**Priority:** High — direct continuation of `BUG-200`'s server-side trigger migration, applied to the second sport
+
+**Built:** basketball wired into the same server-side `after()` mechanism `BUG-200` built for football. Deliberately minimal, matching the spam-avoidance reasoning independently reached by both Richard and a background roadmap-research agent (`.agents/dev/NOTIFICATION_SYSTEM_ROADMAP_PROPOSAL.md`, thread 3): `MATCH_START` (`Q1`), a halftime-equivalent notification at the `Q2`→`Q3` boundary (mirroring football's exactly-one-mid-game-notification shape rather than firing on every quarter transition), `MATCH_END` (`FINISHED`), and `Technical Foul` as the one new event-based type. Routine scoring/foul events (Field Goal, Three Pointer, Free Throw, Rebound, Assist, Steal, Block, Turnover, plain Foul, Substitution, Timeout) deliberately **not** wired, to avoid the spam a 100+-event basketball game would produce.
+
+**Real finding folded into the design, not left as an accident:** a background roadmap-research agent found that basketball had already been sending real `MATCH_END` push notifications since `BUG-200` merged (`ce46f6c`) — the period-trigger had no sport check, and basketball's `finalizeMatch()` already PATCHes `currentPeriod: 'FINISHED'` through the identical shared route. Asymmetric (full-time fired, kickoff never did) and undocumented until this pass. Now recorded as a cross-project pattern (`~/.claude/knowledge/global-patterns/patterns.md`, "A Generic Server-Side Trigger Added for One Case Can Silently Activate for Another Case Sharing the Same Route").
+
+**Evidence:**
+- Commit: `12537b7`
+- Verified by: live test against a real Vercel preview, using a second throwaway match (`notif-test-throwaway-bball-1`, real teams TBK vs Titans, kept around for further testing) plus two independent server-logic replicas (`dev/debug-phase2-trigger.mjs`, `dev/debug-phase2-halftime-exact.mjs`) run directly via `tsx` against the same real DB/match data, since Vercel function logs aren't reachable from this session.
+- Observed result: DB confirms the real `PATCH` requests genuinely wrote `current_period` to `'Q1'` then `'Q3'`. A real `Technical Foul` `POST` produced a real, immediately-arriving on-device notification ("Technical foul called (TBK)"), confirmed via screenshot — this one is unambiguous, no diagnostic script involved. The `MATCH_START` and halftime notifications also arrived on-device (screenshots confirmed), but **with a caveat worth being honest about**: both were preceded by a diagnostic script call sending the identical real function with the same real arguments (to isolate whether the service itself worked, after the real triggers appeared not to fire promptly), so those two specific on-device confirmations cannot be cleanly attributed to the real `PATCH`-triggered `after()` call versus the diagnostic call — both would produce identical-looking notifications. What *is* cleanly established, independent of that ambiguity: the trigger code itself is correct (read twice, matches the already-proven football pattern exactly), the DB writes are confirmed real, and the notification service correctly targets and sends for this exact match/team/event combination when invoked with the real, freshly-queried data — the same code the real route runs. The most likely explanation for the initial no-show was FCM-side delivery variability/throttling under this session's unusually high volume of rapid same-device test pushes, not a code defect — consistent with delivery latency already observed to be highly variable (up to ~10 minutes) earlier this same session for `BUG-200`'s own verification.
+- Pending items: a clean, unambiguous live-fire confirmation of the real `MATCH_START`/`HALF_TIME` triggers specifically (without a preceding diagnostic call muddying the evidence) would strengthen this further, but wasn't pursued further to avoid compounding potential FCM throttling with more rapid test sends. The persistent notification send-log gap (`BUG-200`'s own pending item, roadmap proposal item 10) is directly what made this ambiguity possible — filing it is now higher priority given it cost real debugging time twice in one session.
+
+**Found:** built same session as `BUG-200`, immediately after, per Richard's explicit sequencing ("file the footballlogger bug, investigate it then do phase 2").
+
+---
+
 ### BUG-201 — FootballLogger's "Select Player" Modal Intermittently Shows "No player found" Despite Valid, Available Roster Data
 
 **Status:** RESOLVED — 2026-08-06 (session 49, `26489ea`)
