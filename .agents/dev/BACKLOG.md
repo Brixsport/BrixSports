@@ -7366,15 +7366,42 @@ deprioritized in its favor. -->
 
 ### BUG-201 — FootballLogger's "Select Player" Modal Intermittently Shows "No player found" Despite Valid, Available Roster Data
 
-**Status:** OPEN — found session 49, not fixed. Investigation assigned to a background agent, not yet complete.
+**Status:** RESOLVED — 2026-08-06 (session 49, `26489ea`)
 **Priority:** Medium — blocks a real logger from completing a player-attributed event (Goal/Card/etc.) through the actual UI when it happens; workaround exists (direct API call) but that's not something a real logger can do mid-match.
 
 **Problem:** on a freshly created LIVE match (`notif-test-throwaway-1`, real teams `busa-kings`/`busa-cruise`, real players with confirmed-active `player_team_affiliations` rows), clicking "GOAL" opened the `PlayerSelectionModal` showing "No player found," repeatably — including after a full hard page reload. Confirmed via direct network inspection that `/api/matches/[id]/eligible-players` genuinely returns the correct data (`success: true`, 38 total players, 23 correctly filtering to the home team via the exact same `memberships`/`getPlayerTeam` logic `FootballLogger.tsx` uses) — manually re-running that exact client-side filter against the live API response confirms 23 valid players. So the data pipeline (API + affiliations) is correct; something in the component's own state/lifecycle (`homePlayers`/`awayPlayers`, populated from this same fetch around `FootballLogger.tsx:330-354`) is not reflecting that data by the time `getOnPitchPlayers()` runs for the modal. Not resolved by a fresh reload, so this isn't simple fetch-before-mount timing.
 
-**Workaround used this session:** bypassed the modal entirely, submitting the event via a direct authenticated `fetch()` POST to `/api/matches/[id]/events` from within the same logged-in browser tab (same session, same cookies — a real browser-originated request, not a script). Confirmed this reaches the real route correctly; not a substitute for fixing the actual UI path a real logger depends on.
+**Root cause (found by a background debugger agent):** `getOnPitchPlayers()`/`getActiveRoster()` was never the problem — it already correctly falls back to the full roster when no lineup exists. `PlayerSelectionModal` (`FootballLogger.tsx:2821-2856`) independently re-derives its own `starterIds` from the same (possibly-null) lineup with no equivalent fallback: when `teamLineup` is absent, `starterIds` is an empty `Set`, and `filterStartersOnly`'s `!starterIds.has(p.id)` is then true for every player — filtering the entire roster out. A secondary consumer of the same nullable data silently skipped the primary computation's defensive guard (now a recorded cross-project pattern, see `~/.claude/knowledge/global-patterns/patterns.md`).
 
-**Fix:** not yet investigated. Candidate causes to check: a stale closure in whatever `useEffect` populates `homePlayers`/`awayPlayers` (dependency array missing something, or running once and never re-running when it should); a race between this fetch and some other effect that resets the state after the fact; or a difference between how a genuinely fresh sign-in navigates into this component versus how a JWT-injected session (this session's testing method) does, if that path skips some initialization step a normal login triggers.
+**Fix:** added a `hasLineup` guard so the starters/subs distinction in `PlayerSelectionModal` only applies when a lineup genuinely exists, matching `getOnPitchPlayers()`'s own contract (`FootballLogger.tsx:2834-2845`).
+
+**Evidence:**
+- Commit: `26489ea`
+- Verified by: `tsc --noEmit` clean (49 baseline errors, none new). Not separately re-verified live via the UI after the fix (the workaround path was already proven live-functional this session; the fix directly addresses the confirmed root cause with no other variables changed) — worth a quick UI click-through confirmation next time a logger session is set up.
+- Observed result: `hasLineup` check added, both `filterStartersOnly`/`filterSubsOnly` branches now gated on it.
+- Pending items: a broader audit of the same file (see `BUG-202` below) found two more instances of this exact bug class in adjacent code, filed separately rather than bundled here since they're different specific manifestations.
+
+**Workaround used this session (superseded by the fix above):** bypassed the modal entirely, submitting the event via a direct authenticated `fetch()` POST to `/api/matches/[id]/events` from within the same logged-in browser tab (same session, same cookies — a real browser-originated request, not a script). Confirmed this reaches the real route correctly.
 
 **Found:** session 49, live, while setting up `notif-test-throwaway-1` for `BUG-200`'s verification — unrelated to the notification work itself, surfaced by chance.
+
+---
+
+### BUG-202 — Two More Instances of BUG-201's Bug Class: Secondary Consumers of a Nullable Lineup With No Defensive Fallback
+
+**Status:** OPEN — found session 49, not fixed
+**Priority:** Medium (Finding 1) / Medium (Finding 2) — same severity class as `BUG-201`: each silently breaks a whole picker for the affected team/match state, no error surfaced
+
+**Found by:** a background debugger agent, explicitly tasked with auditing `FootballLogger.tsx`/`BasketballLogger.tsx`/`match-state-manager.ts` for the same bug class as `BUG-201` after it was fixed, per Richard's direct request ("run an agent to do a sweep on that section area for any other edge cases... across related sections, modules, func, feature, class of the loggers section").
+
+**Finding 1 — `PenaltySequenceModal`'s taker-selection step, `FootballLogger.tsx:2503-2511` (root cause) → `:2556-2583` (manifests).** Same exact pattern as `BUG-201`: `attackerStarterIds`/`defenderStarterIds` are built directly from `attackerLineup`/`defenderLineup` with no fallback for a missing lineup. When the attacking team has no published lineup, `attackerOnPitchIds` is empty, and the "Who is taking the penalty?" step (line 2558) filters out the *entire* attacking roster — worse than `BUG-201`, since the excluded players render as plain, non-clickable `<div>`s in a "Players on Bench" section with no explanatory message at all (not even a "No player found" empty state). Reachable on any live match at any time — the "Penalty" button has no lineup-existence gate.
+
+**Finding 2 — Basketball's asymmetric lineup hydration, `BasketballLogger.tsx:441-465` (root cause) → `:1616-1656`, `:1769-1799` (manifests).** Different trigger than `BUG-201`/Finding 1 (partial, not absent, lineup data): `if (lineupData.success && (homeLineup || awayLineup)) { ...; setLineupSet(true); }` fires `setLineupSet(true)` as soon as *either* side has a lineup — if only one team's lineup was ever published/persisted, the other team's `homeStarters`/`awayStarters` state stays `[]` forever, and both the main player-select modal and the assist modal filter on that array with no empty-state handling — a silent, permanently-empty player grid for that team's entire event log going forward. Notably, the sibling sub-in modal *already has* the correct guard for this exact case (its own `BUG-141` comment: "an empty bench with no fallback message read as a broken app mid-game") — direct in-file evidence the main modals are the inconsistent ones, not a case where the right pattern doesn't exist yet.
+
+**Checked and ruled out (no bug found), for the record:** `getAvailableBench()` (already correctly messaged at its one call site), the lineup-builder's own "seed from first 11" default (intentional, not a data-hiding bug), the confirm-lineup display screen (already has an explicit empty-state), `match.stats` (not referenced anywhere in these three files — `BUG-195`'s issue lives elsewhere), `match-state-manager.ts`'s clock/period reads (always safe by construction — `initializeState()` fully defaults the shape before anything reads it), football's `redCardedPlayerIds`/`subbedOnPlayerIds`/`subbedOffPlayerIds` (consistently guarded everywhere), `TrackLogger.tsx`/`MatchLoggerUI.tsx` (no lineup/starters concept at all — bug class doesn't apply).
+
+**Fix (not built):** Finding 1 needs the same `hasLineup`-style guard `BUG-201` just added, applied to `PenaltySequenceModal`'s taker-selection filter. Finding 2 needs `setLineupSet(true)` to not fire (or to fire per-side, not globally) until *both* sides have a lineup, or the player-select/assist modals need the same defensive empty-state `BUG-141`'s sub-in modal already has.
+
+**Prevention, recorded as a cross-project pattern:** whenever multiple places in a component read the same optional/nullable field to gate a list or decision, grep for every other read site of that same conceptual data and confirm each implements the identical "absent" fallback — a guard written in one place does not automatically protect every other consumer.
 
 ---
