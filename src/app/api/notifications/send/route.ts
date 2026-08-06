@@ -1,9 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import webpush from 'web-push';
 import { db } from '@/db';
-import { pushSubscriptions, userFollows, userFavorites, users } from '@/db/schema';
+import { pushSubscriptions, pushSubscriptionMatches, userFollows, userFavorites, users, matches } from '@/db/schema';
 import { eq, inArray, and, or } from 'drizzle-orm';
 import { getAuthUser } from '@/lib/auth';
+
+// BUG-204: a bounded ceiling on the "send to all" query -- CLAUDE.md requires a
+// .limit() on every list endpoint with no exceptions. This is not a targeting
+// change (the audience is still genuinely "everyone"), just a hard cap so this
+// can never become a truly unbounded scan as the subscriber base grows.
+const MAX_BROADCAST_SUBSCRIPTIONS = 5000;
 
 // Configure web-push with VAPID keys for each request (serverless-safe)
 function configureVAPID(): { success: boolean; error?: string } {
@@ -60,62 +66,67 @@ function configureVAPID(): { success: boolean; error?: string } {
     }
 }
 
-// Helper function to get target user IDs based on audience selection
+// Users following/favoriting/primary-supporting any of a set of teams.
+async function getTeamFollowerUserIds(teamIds: string[]): Promise<string[]> {
+  const [teamFollowers, teamFavorites, primaryTeamFans] = await Promise.all([
+    db.select({ userId: userFollows.userId }).from(userFollows).where(
+      and(eq(userFollows.followType, 'team'), inArray(userFollows.followId, teamIds))
+    ),
+    db.select({ userId: userFavorites.userId }).from(userFavorites).where(
+      and(eq(userFavorites.favoriteType, 'team'), inArray(userFavorites.favoriteId, teamIds))
+    ),
+    db.select({ userId: users.id }).from(users).where(inArray(users.favoriteTeamId, teamIds)),
+  ]);
+
+  return Array.from(new Set([
+    ...teamFollowers.map(f => f.userId),
+    ...teamFavorites.map(f => f.userId),
+    ...primaryTeamFans.map(f => f.userId),
+  ]));
+}
+
+// BUG-204: previously returned [] for both "no filter, send to everyone" (audience
+// 'all') and "filtered down to nobody" (empty team selection; match_specific was
+// literally unimplemented and always fell into this branch). Both were then
+// treated identically as "no filter" at the call site, so selecting a specific
+// match or an empty team list silently sent to every subscriber with no warning.
+// Now returns `null` to mean "no filter" (only 'all' means this) and a `string[]`
+// (possibly empty) to mean "exactly these users, and only these" for every
+// audience-scoped case -- an empty array must never fall back to "everyone".
 async function getTargetUserIds(
   targetAudience: string,
   selectedTeams?: string[],
   selectedMatch?: string
-): Promise<string[]> {
+): Promise<string[] | null> {
   switch (targetAudience) {
     case 'team_followers': {
       if (!selectedTeams || selectedTeams.length === 0) {
+        return []; // nothing selected -> nobody, not everybody
+      }
+      return getTeamFollowerUserIds(selectedTeams);
+    }
+
+    case 'match_specific': {
+      if (!selectedMatch) {
         return [];
       }
-      
-      // Get users who follow any of the selected teams
-      const teamFollowers = await db
-        .select({ userId: userFollows.userId })
-        .from(userFollows)
-        .where(
-          and(
-            eq(userFollows.followType, 'team'),
-            inArray(userFollows.followId, selectedTeams)
-          )
-        );
-      
-      const teamFavorites = await db
-        .select({ userId: userFavorites.userId })
-        .from(userFavorites)
-        .where(
-          and(
-            eq(userFavorites.favoriteType, 'team'),
-            inArray(userFavorites.favoriteId, selectedTeams)
-          )
-        );
-      
-      const primaryTeamFans = await db
-        .select({ userId: users.id })
-        .from(users)
-        .where(inArray(users.favoriteTeamId, selectedTeams));
-      
-      const allUserIds = new Set([
-        ...teamFollowers.map(f => f.userId),
-        ...teamFavorites.map(f => f.userId),
-        ...primaryTeamFans.map(f => f.userId),
-      ]);
-      
-      return Array.from(allUserIds);
+      const match = await db
+        .select({ homeTeamId: matches.homeTeamId, awayTeamId: matches.awayTeamId })
+        .from(matches)
+        .where(eq(matches.id, selectedMatch))
+        .get();
+      if (!match) {
+        return [];
+      }
+      // Followers of either team in this specific match. Anonymous per-match
+      // subscribers (BACKLOG-150, no userId at all) are merged in separately
+      // at the call site via pushSubscriptionMatches, not through this path.
+      return getTeamFollowerUserIds([match.homeTeamId, match.awayTeamId]);
     }
-    
-    case 'match_specific': {
-      // For match-specific, we'd need match data to get team IDs
-      // For now, return all users (fallback)
-      return [];
-    }
-    
+
     case 'all':
     default:
-      return []; // Empty means all subscribers
+      return null; // explicit "no filter" -- the only case this should mean everyone
   }
 }
 
@@ -178,9 +189,23 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        // Get target user IDs if filtering by audience
+        // Get target user IDs if filtering by audience. `null` = no filter (send to
+        // all); a `string[]` (possibly empty) = exactly these users, full stop.
         const targetUserIds = await getTargetUserIds(targetAudience, selectedTeams, selectedMatch);
-        
+
+        // BACKLOG-150 anonymous per-match subscribers have no userId at all, so they
+        // can never appear in targetUserIds -- merge them in by subscription id for
+        // match_specific specifically, same pattern sendMatchEventNotification() uses.
+        let matchAnonymousSubscriptionIds: string[] = [];
+        if (targetAudience === 'match_specific' && selectedMatch) {
+            const anon = await db
+                .select({ id: pushSubscriptions.id })
+                .from(pushSubscriptionMatches)
+                .innerJoin(pushSubscriptions, eq(pushSubscriptionMatches.subscriptionId, pushSubscriptions.id))
+                .where(eq(pushSubscriptionMatches.matchId, selectedMatch));
+            matchAnonymousSubscriptionIds = anon.map(a => a.id);
+        }
+
         // Build notification payload with all options
         const payloadObj: any = {
             title,
@@ -207,20 +232,28 @@ export async function POST(request: NextRequest) {
 
         const payload = JSON.stringify(payloadObj);
 
-        // Fetch subscriptions based on target audience
-        const allSubscriptions = await (targetUserIds.length > 0
-            ? db.select().from(pushSubscriptions).where(
-                inArray(pushSubscriptions.userId, targetUserIds)
-            )
-            : db.select().from(pushSubscriptions)
-        );
-        
+        // Fetch subscriptions based on target audience. See getTargetUserIds's own
+        // comment (BUG-204) -- null is the only case that means "everyone"; a
+        // resolved-but-empty audience must send to nobody, not fall back to all.
+        let allSubscriptions: (typeof pushSubscriptions.$inferSelect)[];
+        if (targetUserIds === null) {
+            allSubscriptions = await db.select().from(pushSubscriptions).limit(MAX_BROADCAST_SUBSCRIPTIONS);
+        } else {
+            const idConditions = [];
+            if (targetUserIds.length > 0) idConditions.push(inArray(pushSubscriptions.userId, targetUserIds));
+            if (matchAnonymousSubscriptionIds.length > 0) idConditions.push(inArray(pushSubscriptions.id, matchAnonymousSubscriptionIds));
+
+            allSubscriptions = idConditions.length > 0
+                ? await db.select().from(pushSubscriptions).where(or(...idConditions)).limit(MAX_BROADCAST_SUBSCRIPTIONS)
+                : [];
+        }
+
         // Log unique user IDs with subscriptions for debugging
         const uniqueUserIds = [...new Set(allSubscriptions.map(s => s.userId))];
         console.log('[Notifications API] Found subscriptions:', {
             total: allSubscriptions.length,
             targetAudience,
-            targetUserCount: targetUserIds.length,
+            targetUserCount: targetUserIds === null ? 'all' : targetUserIds.length,
             uniqueUsersWithSubscriptions: uniqueUserIds.length,
             userIds: uniqueUserIds, // List all user IDs that have subscriptions
         });
