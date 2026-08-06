@@ -7408,7 +7408,7 @@ deprioritized in its favor. -->
 
 ### BUG-202 — Two More Instances of BUG-201's Bug Class: Secondary Consumers of a Nullable Lineup With No Defensive Fallback
 
-**Status:** OPEN — found session 49, not fixed
+**Status:** RESOLVED — 2026-08-06 (session 50, `a7467e4`, branch `feature/notification-system`)
 **Priority:** Medium (Finding 1) / Medium (Finding 2) — same severity class as `BUG-201`: each silently breaks a whole picker for the affected team/match state, no error surfaced
 
 **Found by:** a background debugger agent, explicitly tasked with auditing `FootballLogger.tsx`/`BasketballLogger.tsx`/`match-state-manager.ts` for the same bug class as `BUG-201` after it was fixed, per Richard's direct request ("run an agent to do a sweep on that section area for any other edge cases... across related sections, modules, func, feature, class of the loggers section").
@@ -7419,8 +7419,162 @@ deprioritized in its favor. -->
 
 **Checked and ruled out (no bug found), for the record:** `getAvailableBench()` (already correctly messaged at its one call site), the lineup-builder's own "seed from first 11" default (intentional, not a data-hiding bug), the confirm-lineup display screen (already has an explicit empty-state), `match.stats` (not referenced anywhere in these three files — `BUG-195`'s issue lives elsewhere), `match-state-manager.ts`'s clock/period reads (always safe by construction — `initializeState()` fully defaults the shape before anything reads it), football's `redCardedPlayerIds`/`subbedOnPlayerIds`/`subbedOffPlayerIds` (consistently guarded everywhere), `TrackLogger.tsx`/`MatchLoggerUI.tsx` (no lineup/starters concept at all — bug class doesn't apply).
 
-**Fix (not built):** Finding 1 needs the same `hasLineup`-style guard `BUG-201` just added, applied to `PenaltySequenceModal`'s taker-selection filter. Finding 2 needs `setLineupSet(true)` to not fire (or to fire per-side, not globally) until *both* sides have a lineup, or the player-select/assist modals need the same defensive empty-state `BUG-141`'s sub-in modal already has.
+**Fix:** Finding 1 — added the same `hasLineup`-style guard `BUG-201` used, applied to `PenaltySequenceModal`'s `attackerOnPitchIds`/`defenderOnPitchIds` (`FootballLogger.tsx`): falls back to the full attacker/defender roster when that side has no published lineup, instead of an empty on-pitch set. Finding 2 — `BasketballLogger.tsx`'s lineup-hydration block now falls back per-side (not globally) to that side's full roster when only the other side has a persisted lineup, so `homeStarters`/`awayStarters` no longer gets stuck at `[]` for the un-published side.
 
 **Prevention, recorded as a cross-project pattern:** whenever multiple places in a component read the same optional/nullable field to gate a list or decision, grep for every other read site of that same conceptual data and confirm each implements the identical "absent" fallback — a guard written in one place does not automatically protect every other consumer.
+
+**Evidence:**
+- Commit: `a7467e4`
+- Verified by: `tsc --noEmit` clean (49 baseline errors, same baseline as `BUG-201`'s own verification, none new in either `FootballLogger.tsx` or `BasketballLogger.tsx`).
+- Observed result: Finding 1's guard added at the exact root-cause lines identified by the sweep agent; Finding 2's per-side fallback added at the exact root-cause lines identified. Both mirror the already-proven `BUG-201` fix shape.
+- Pending items: neither finding has been re-verified live via an actual UI click-through (no lineup-missing live match was set up this pass) — same open item `BUG-201` itself still carries. Worth a combined UI pass next time a logger session is set up for either bug.
+
+**Found:** session 49, background debugger sweep (see above). **Fixed:** session 50, immediately after Richard flagged this fix was still outstanding mid-review of the notification roadmap proposal.
+
+---
+
+### BUG-204 — Admin Push-Campaign Composer's `match_specific`/`team_followers` Targeting Silently Sent to All Subscribers
+
+**Status:** RESOLVED — 2026-08-06 (session 50, `9ce03ae`, branch `feature/notification-system`)
+**Priority:** High — an admin selecting "Match Viewers" for one match, or leaving team selection empty, blasted the entire subscriber base with no warning; unfiled until surfaced by `NOTIFICATION_SYSTEM_ROADMAP_PROPOSAL.md` thread 1
+
+**Problem:** `src/app/api/notifications/send/route.ts`'s `getTargetUserIds()` returned `[]` for two genuinely different situations — `match_specific` (never implemented: `// For now, return all users (fallback)`) and `team_followers` with nothing selected. The call site interpreted any empty array as "no filter" and fell through to `db.select().from(pushSubscriptions)` with no `where` clause at all — every subscriber, regardless of what the admin actually selected. Also had no `.limit()` at all on that query (CLAUDE.md architecture-rule violation, flagged separately in the roadmap doc as item 2).
+
+**Fix:** `getTargetUserIds()` now returns `null` to mean "no filter" (only audience `'all'` produces this) and a `string[]` — possibly empty — to mean "exactly these users, full stop" for every other case. `match_specific` resolves the selected match's `homeTeamId`/`awayTeamId` and reuses the same team-follower/favorite/primary-fan resolution `team_followers` uses (extracted into a shared `getTeamFollowerUserIds()` helper), merged with `BACKLOG-150`'s anonymous per-match subscribers via `pushSubscriptionMatches` — same pattern `sendMatchEventNotification()` already uses. Added `MAX_BROADCAST_SUBSCRIPTIONS = 5000` as a hard ceiling on the genuine "send to all" query.
+
+**Scope decision (Richard, session 50):** fix the bug now regardless of the composer's in/out-of-scope status; defer the "is this an officially supported feature" question (CLAUDE.md lists push campaigns as explicitly out of scope) to a separate conversation rather than bundling a charter change with an urgent fix. **This scope question is still open** — see `BACKLOG-212` below.
+
+**Evidence:**
+- Commit: `9ce03ae`
+- Verified by: `tsc --noEmit` clean (49 baseline errors, none new).
+- Observed result: `getTargetUserIds()`'s new nullable-array contract compiles and is consumed correctly at the call site (verified the one new type error from the nullable return — `targetUserCount: targetUserIds.length` — was caught and fixed by `tsc`, not missed).
+- Pending items: not live-tested against the real admin composer UI (no admin session with real team-follow/anonymous-match-subscriber data was set up this pass to confirm `match_specific` actually resolves to the *correct* audience, only that it no longer silently falls back to *everyone*). Worth a live composer send test next time notification testing infrastructure is set up. Deferred hardening (user-preference filtering, anonymous-subscriber exclusion from `'all'`, send-history persistence) tracked in `BACKLOG-212`.
+
+**Found:** session 49, `NOTIFICATION_SYSTEM_ROADMAP_PROPOSAL.md` thread 1 (background architect-agent research). **Fixed:** session 50, per Richard's explicit "fix now, defer scope" decision.
+
+---
+
+### BUG-205 — FootballLogger Double-Sent Every Push Notification via a Leftover Client-Side Trigger
+
+**Status:** RESOLVED — 2026-08-06 (session 50, `a7467e4`, branch `feature/notification-system`)
+**Priority:** High — every real subscriber received two copies of every GOAL/RED_CARD/YELLOW_CARD/PENALTY_SAVED/PENALTY_MISSED/MATCH_START/MATCH_END push since `BUG-200` merged (`ce46f6c`), directly contradicting that fix's own explicit "remove entirely, don't keep as fallback — would double-send" decision
+
+**Problem:** `BUG-200`'s migration deleted the `EventDrivenNotifier` singleton and `MatchStateManager.triggerNotification()`/`triggerPeriodNotification()`, but missed a second, separate client-side trigger mechanism already living directly inside `FootballLogger.tsx`: three inline `fetch('/api/notifications/match-event')` calls (line ~974 for goal/card/penalty-outcome events, line ~1251 for `MATCH_END`, line ~1755 for `MATCH_START`). These fired in parallel with the new server-side `after()` triggers in `events/route.ts` and `matches/[id]/route.ts`, so every one of those event types was sent twice per real match event since `ce46f6c`. Found by chance while reading `FootballLogger.tsx` to build the sport-keyed rules table (`BACKLOG-206`), not by a dedicated audit.
+
+**Fix:** removed all three `fetch()` call sites. The server-side triggers already fully cover these cases with the authoritative saved data (minute, score) and don't depend on the tab staying open.
+
+**Evidence:**
+- Commit: `a7467e4`
+- Verified by: `tsc --noEmit` clean (49 baseline, none new). Confirmed via `grep` that `/api/notifications/match-event` has no remaining callers in `FootballLogger.tsx` (its other two legitimate callers — `lineup/publish/route.ts` and `admin/match-lineups/[id]/route.ts`, both server-side, for `LINEUP_AVAILABLE` — are untouched and still correct).
+- Observed result: three call sites removed, replaced with comments pointing to the server-side equivalent.
+- Pending items: not live-tested against a real match to directly observe a single (not double) notification arriving — this was found and fixed via code reading, not a live repro. Worth confirming next time a throwaway test match is set up for notification work. **Retroactively affects `BUG-200`'s and `BACKLOG-203`'s own evidence blocks**: any on-device notification confirmed during those verifications that went through the real `FootballLogger` UI (not a direct API call or diagnostic script) would have arrived as two identical pushes, not one — doesn't invalidate that the mechanism worked, but means "one notification arrived" observations from those sessions likely undercounted.
+
+**Found & fixed:** session 50, while building `BACKLOG-206`.
+
+---
+
+### BACKLOG-206 — Sport-Keyed `NOTIFICATION_RULES` Table (Roadmap Thread 5/7)
+
+**Status:** RESOLVED — 2026-08-06 (session 50, `d05be20`, branch `feature/notification-system`)
+**Priority:** Medium — no user-facing bug, a structural cleanup Richard explicitly approved doing now rather than after a third sport needs wiring
+
+**Built:** new `src/lib/notifications/notification-rules.ts` — `NOTIFICATION_RULES: Record<Sport, { events, periods }>` plus `getNotifiableEventType()`/`getNotifiablePeriodType()` lookups, replacing `events/route.ts`'s flat `NOTIFIABLE_EVENT_TYPES` map and `matches/[id]/route.ts`'s `currentPeriod` if-chain. `NotificationKey` (the closed union with a `createNotificationPayload()` template) now lives in this one file as the single source of truth, imported by `match-notification-service.ts` and `notifications/match-event/route.ts` instead of each redeclaring its own copy. Basketball's `MATCH_END` mapping (previously an accidental match on a football-shaped generic `FINISHED` check, per `BACKLOG-203`'s own findings) is now its own explicit table row.
+
+**Deliberately not done (per roadmap doc's own "backlog for later" split):** `notifications/match-event/route.ts`'s validation list still duplicates the key set manually (now type-checked against `NotificationKey`, but not derived from `NOTIFICATION_RULES` itself, since that table is keyed by sport, not a flat list) — left as-is per the roadmap doc's explicit backlog-for-later classification of that specific item.
+
+**Evidence:**
+- Commit: `d05be20`
+- Verified by: `tsc --noEmit` clean (49 baseline, none new).
+- Observed result: no behavior change intended or observed — football's five event mappings and three period mappings, and basketball's one event mapping and three period mappings, moved across unchanged into the new table.
+- Pending items: not separately live-fire tested post-refactor (relies on `BUG-200`'s and `BACKLOG-203`'s own live verification of the underlying mechanism, which this refactor doesn't touch — only the lookup shape changed). Worth a quick live sanity check next time either sport is tested.
+
+**Found:** roadmap doc thread 5/7 (background architect-agent research), session 49. **Decision + build:** Richard confirmed "do it now" during roadmap review, session 50.
+
+---
+
+### BACKLOG-207 — Two Team-Follow Stars Replacing the Dead Heart Button (Closes `BUG-152`)
+
+**Status:** OPEN — filed session 50, not built
+**Priority:** Medium — small feature, targeting already fully supports it; closes a previously-filed bug
+
+**What:** replace the single non-functional Heart button on the match-detail page (`matches/[id]/page.tsx:543-549` — pure local `useState`, no API call, resets on reload) with two per-team follow stars beside each team badge, wired to `useFavorites.toggleTeam(teamId)` — already working, already the exact thing `sendMatchEventNotification()` targets (team-follow rule: either team having a follower makes the match notification-active — already the shipped behavior, not a new rule). Keep the Bell (anonymous, device-scoped, per-match push opt-in) visually and functionally distinct — different mechanism, different audience, must keep working for a viewer with zero team follows per the actor model ("Viewers NEVER have a session").
+
+**Known gap to state honestly in the UI:** `useFavorites.toggleTeam()` writes to `userFavorites`, which the notification service queries unconditionally — unlike `userFollows`, which respects a per-row `notificationsEnabled` flag. So tapping a star silently enrolls the user in push for every match that team plays. Label the star's tooltip honestly ("Follow — get alerts for this team's matches") rather than presenting it as a bookmark with no consequence.
+
+**Backlog for later (not part of this item):** decide whether "favorite" and "notify" should split into two separate states (would need a `notificationsEnabled` column on `userFavorites`), or stay fused as they are today.
+
+**Found:** `NOTIFICATION_SYSTEM_ROADMAP_PROPOSAL.md` thread 5, session 49.
+
+---
+
+### BACKLOG-208 — Unblock the Notification Scheduler: `vercel.json` Crons + Consolidate the Two Dead Reminder Routes
+
+**Status:** OPEN — filed session 50, not built
+**Priority:** High (unblocker) — every operational/reminder idea in the roadmap doc's thread 2 is blocked on this existing first
+
+**What:** `vercel.json` has no `crons` block at all — neither `POST /api/notifications/match-reminders` (scans for T-30/T-15, unfiltered to **all** subscriptions) nor `POST /api/reminders/check` (reads the `matchReminders` table, per-user, has a `notificationSent` idempotency flag) has ever run in production. Pick `/api/reminders/check` as the one to keep (per-user, idempotent — the better base) and delete or gate the other. Also fix `reminders/check/route.ts:85`, which currently interpolates raw foreign keys instead of resolved team names into the reminder body.
+
+**Unlocks, in priority order once this exists (not built now):** "match going LIVE with no assigned logger" admin alert (highest value — silent Flow B/C failure); assigned-logger T-60/T-15 reminder; logger session-expiry warning; lineup-not-published reminder; the rest of thread 2's table.
+
+**Found:** `NOTIFICATION_SYSTEM_ROADMAP_PROPOSAL.md` thread 2, session 49.
+
+---
+
+### BUG-209 — `/assets/` vs `/assests/` Typo Breaks OG Share Images and AEO Structured Data (3 Files)
+
+**Status:** OPEN — filed session 50, not fixed
+**Priority:** Low-medium — currently 404ing on every social share preview and structured-data logo reference, but cosmetic, not functional
+
+**Problem:** only `public/assests/Logos/` exists (the typo spelling) — confirmed, that's the real directory. Three files reference the correctly-spelled `/assets/` path instead, which 404s: `src/lib/utils/aeo.ts:589`, `src/components/seo/PageSEO.tsx:41` (default `ogImage`), `src/app/page.tsx:356` (homepage `ogImage`). `src/lib/email.ts:217,297` and `src/app/reset-password/page.tsx:301` already correctly use `/assests/`.
+
+**Fix (not built):** point the three broken files at `/assests/` (matching the actual directory), or rename the directory and update all five references consistently — either works, the broken three are the minimum fix.
+
+**Found:** `NOTIFICATION_SYSTEM_ROADMAP_PROPOSAL.md` thread 9, session 49 (surfaced incidentally while checking competition-logo/Cloudinary groundwork).
+
+---
+
+### BUG-210 — In-App WebSocket Toasts Still Have `BUG-200`'s Single-Tab Dependency
+
+**Status:** OPEN — filed session 50, not fixed
+**Priority:** Medium — same reliability gap `BUG-200` fixed for push, left unfixed for the separate in-app toast layer; basketball produces zero in-app toasts under any circumstances
+
+**Problem:** `GlobalNotificationListener.tsx`'s toasts only fire in response to `notification:global`, emitted from `ws-server/index.js:313` only when it receives a `socket.on('event:log')` — which is emitted from the logger's own browser tab (`FootballLogger.tsx:734`). If the logger's tab closes, in-app toasts stop, exactly as push did before `BUG-200`. `BasketballLogger.tsx` never emits `event:log` at all, so basketball produces no in-app toasts, period — a gap independent of anything `BACKLOG-203` wired for push.
+
+**Fix (not built):** natural extension of the same `after()` hook in `events/route.ts` that now calls `sendMatchEventNotification()` — emit the WS broadcast server-side from there too, for both sports.
+
+**Found:** `NOTIFICATION_SYSTEM_ROADMAP_PROPOSAL.md`, "Also worth flagging" section A, session 49.
+
+---
+
+### BACKLOG-211 — No Persistent Server-Side Log of Notification Send Attempts/Successes/Failures
+
+**Status:** OPEN — filed session 50, not built
+**Priority:** High (tooling) — has now directly cost real debugging time in both `BUG-200`'s and `BACKLOG-203`'s own verification passes (both evidence blocks flag this same gap)
+
+**Problem:** `sendMatchEventNotification()` only `console.log`s (lines 51, 150, 195) — nothing persists past that request's logs. Separately, the campaign composer's own "Recent History" panel has never worked at all: `send/route.ts`'s history write is a server-side self-`fetch()` to `/api/notifications/history` that forwards no auth headers, while that route requires admin — it 401s every time, silently swallowed by the surrounding try/catch (`BACKLOG-124`-class bug). `history/route.ts` stores rows in a module-level in-memory array that evaporates per serverless invocation regardless.
+
+**Fix (not built):** a real notification-send-log table (matchId, eventType, audience size, sent/failed counts, timestamp), written from `sendMatchEventNotification()` directly; replace the composer's self-`fetch()` history write with a direct function call (same fix shape as `BACKLOG-124`) writing to the same table.
+
+**Found:** `NOTIFICATION_SYSTEM_ROADMAP_PROPOSAL.md` thread 1 + "Also worth flagging" section B, session 49. Already flagged in `BUG-200`'s and `BACKLOG-203`'s own evidence blocks as a recurring cost.
+
+---
+
+### BACKLOG-212 — Notification System: Remaining Backlog-for-Later Items (Bundled)
+
+**Status:** OPEN — filed session 50, not built, not all near-term
+**Priority:** Low-medium, varies by line item — bundled per repo convention for low-priority/deferred items (see `BACKLOG-153`/`158`/`161` for precedent)
+
+Everything below is explicitly **not** being built now — captured from `NOTIFICATION_SYSTEM_ROADMAP_PROPOSAL.md` so none of it gets lost, per Richard's own "batch, review/confirm, file" instruction.
+
+1. **Campaign composer scope decision** — still open (see `BUG-204`): is the admin push-campaign composer officially in scope (contradicts CLAUDE.md's "push notification campaigns" exclusion) or should it be hidden behind the same gate as Ads/Lineup Builder/etc.? Blocks: composer hardening below.
+2. **Campaign composer hardening** (blocked on #1) — add `userPreferences.matchAlerts` filtering to the campaign send path (currently ignores it entirely, unlike `sendMatchEventNotification()`); exclude `BACKLOG-150` anonymous per-match subscribers from `targetAudience: 'all'` campaigns (a consent problem, not just UX).
+3. **Close-game/buzzer-beater alerts (basketball)** — fire only on a made shot under tight-game conditions (final seconds + margin ≤3, or a late lead change). Needs a real per-event game clock (currently wall-clock-derived from `quarterStartedAt`) and a lead-change/margin evaluator — neither exists. Natural home for a per-match notification budget (hard cap of N pushes per match, all types, all sports), worth designing once.
+4. **Followed-player notification send path** — `MatchEventNotification.playerId`/`relatedPlayerId` already added (roadmap item 4, shipped as part of `BUG-200`'s original fields). Still needed: the actual `userFollows`/`userFavorites` `followType: 'player'` audience query merged into the existing dedup set; player-specific payload templates ("Your player scored" vs. generic team copy); confirm a UI surface actually calls `useFavorites.togglePlayer()` before building the notification side (the hook exists, no page appears to call it yet).
+5. **Competition-level following with match alerts** — follow plumbing already exists and works (`/api/users/follows` accepts `followType: 'competition'`, `competitions.followersCount` increments/decrements correctly) but nothing consumes it for targeting. Blocked on #3's per-sport event-set policy (a competition-follow multiplies volume across every concurrent match in that competition — could be 5-10x a team-follow on a busy fixture day) and a per-user daily notification cap. Recommended v1 event set if built: start/HT/FT only, not goals.
+6. **Overview-tab empty-state redesign** — separate from the livestream embed itself (which is already fully built and just needs an admin to populate one match's fields to verify end-to-end). The "lots of unused white/black space" complaint is actually the placeholder shown for the ~100% of matches with no livestream configured — a real UI design task, independent of the livestream feature.
+7. **Livestream embed source allowlist** — `LivestreamPlayer` renders third-party embeds validated only as http/https; deserves an allowlist before any public match day (adjacent to the `BUG-006` XSS class).
+8. **Competition logos + Cloudinary migration** — `competitions` has no `logo` column at all (schema migration needed, staging-first per convention); `TeamLogo`'s fallback pattern generalizes near-free to an `EntityLogo`; migration should use the working signed-upload path (`/api/cloudinary/sign`), not the broken, dead `src/lib/cloudinary.ts` (never appends `publicId` to the URL at all — delete rather than fix); existing `teams.logo` rows are local repo paths (`seed-busa-football.ts`) that would need rewriting.
+
+**Found:** `NOTIFICATION_SYSTEM_ROADMAP_PROPOSAL.md`, all threads, session 49. Reviewed and batch-classified with Richard session 50.
 
 ---

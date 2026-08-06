@@ -4,9 +4,12 @@
 `feature/notification-system` @ `aa3e8f0`, triggered by Richard's brain-dump after Phase 1
 (server-side football triggers, `ce46f6c`).
 
-**Nothing in this document is filed or built.** No `BACKLOG.md` entry was created or edited.
-No code was written. This is a triage pass for Richard to review, edit, and approve before
-anything becomes a real backlog item.
+**Reviewed and batch-filed session 50 (2026-08-06).** See `BACKLOG.md`: `BUG-204`
+(composer send-to-everyone, fixed), `BACKLOG-206` (sport-keyed rules table, built),
+`BACKLOG-207` (team stars), `BACKLOG-208` (crons/reminders unblocker), `BUG-209`
+(`/assets/` typo), `BUG-210` (in-app toast single-tab gap), `BACKLOG-211` (send-log),
+`BACKLOG-212` (bundled backlog-for-later items). `BUG-205` (FootballLogger double-send)
+was a new finding surfaced while building `BACKLOG-206`, not originally in this doc.
 
 **Phase 2 (basketball wiring) is explicitly out of scope for this document** — it is already
 being implemented in parallel. Where a finding is relevant to Phase 2, it is called out as an
