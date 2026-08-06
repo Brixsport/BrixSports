@@ -2831,6 +2831,15 @@ function PlayerSelectionModal({
     subbedOnPlayerIds,
     emptyMessage = 'No player found',
 }: any) {
+    // BUG-201: no guard here meant an absent lineup (starters/players both empty)
+    // made starterIds an empty Set, and filterStartersOnly's `!starterIds.has(p.id)`
+    // was then true for every player -- the whole roster got filtered out, showing
+    // "No player found" even though the roster itself (homePlayers/awayPlayers,
+    // built in getActiveRoster) was correct. getActiveRoster already treats a
+    // missing lineup as "no restriction" (`if (!teamLineup) return roster`) --
+    // this filter needs the same fallback, since it re-derives the same distinction
+    // independently rather than reusing that already-correct roster.
+    const hasLineup = !!(teamLineup?.starters?.length || teamLineup?.players?.length);
     const starterIds = new Set((teamLineup?.starters || teamLineup?.players || []).map((p: any) => p.playerId || p.id));
 
     // Filter players: remove red-carded players and optionally only show goalkeepers
@@ -2838,8 +2847,10 @@ function PlayerSelectionModal({
         // Always exclude red-carded players
         if (redCardedPlayerIds && redCardedPlayerIds.has(p.id)) return false;
 
-        if (filterStartersOnly && !starterIds.has(p.id) && !subbedOnPlayerIds?.has(p.id)) return false;
-        if (filterSubsOnly && starterIds.has(p.id)) return false;
+        if (hasLineup) {
+            if (filterStartersOnly && !starterIds.has(p.id) && !subbedOnPlayerIds?.has(p.id)) return false;
+            if (filterSubsOnly && starterIds.has(p.id)) return false;
+        }
 
         if (filterGoalkeepersOnly) {
             const pos = p.position?.toLowerCase() || '';
