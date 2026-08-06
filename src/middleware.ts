@@ -26,15 +26,25 @@ export async function middleware(request: NextRequest) {
     // while still being fully functional for internal testing.
     //
     // Exceptions:
-    //   /api/auth/*  — login endpoints must remain accessible
-    //   /login       — the login page itself (avoids redirect loop)
-    //   /_next/*     — Next.js internals (handled by matcher exclusion)
+    //   /api/auth/*         — login endpoints must remain accessible
+    //   /login              — the login page itself (avoids redirect loop)
+    //   /_next/*            — Next.js internals (handled by matcher exclusion)
+    //   /api/reminders/check — cron-authenticated (Bearer CRON_SECRET, checked
+    //     by the route itself), never carries a session cookie. Missing this
+    //     exemption meant Railway's real 5-minute reminder poller had been
+    //     silently redirected to /login on every single call since this
+    //     feature shipped -- confirmed live via Railway's own deploy logs
+    //     repeatedly showing "Unexpected end of JSON input" (a redirect
+    //     response, not the expected JSON), and zero match_reminders rows
+    //     ever marked notification_sent across the DB's entire history.
+    //     Any future CRON_SECRET-authenticated route needs the same exemption.
     if (env.isStaging) {
         const isStagingExempt =
             pathname.startsWith('/api/auth/') ||
             pathname.startsWith('/api/loggers/auth') ||
             pathname === '/login' ||
-            pathname === '/logger';
+            pathname === '/logger' ||
+            pathname === '/api/reminders/check';
 
         if (!isStagingExempt) {
             const token = request.cookies.get('authToken')?.value;
