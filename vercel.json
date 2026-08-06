@@ -15,5 +15,11 @@
             "source": "/admin/:path*",
             "destination": "/admin/:path*"
         }
+    ],
+    "crons": [
+        {
+            "path": "/api/reminders/check",
+            "schedule": "*/5 * * * *"
+        }
     ]
 }

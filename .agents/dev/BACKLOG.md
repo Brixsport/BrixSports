@@ -7516,14 +7516,25 @@ deprioritized in its favor. -->
 
 ### BACKLOG-208 — Unblock the Notification Scheduler: `vercel.json` Crons + Consolidate the Two Dead Reminder Routes
 
-**Status:** OPEN — filed session 50, not built
+**Status:** SHIPPED — 2026-08-06 (session 50, branch `feature/notification-system`), pending live cron-trigger confirmation
 **Priority:** High (unblocker) — every operational/reminder idea in the roadmap doc's thread 2 is blocked on this existing first
 
-**What:** `vercel.json` has no `crons` block at all — neither `POST /api/notifications/match-reminders` (scans for T-30/T-15, unfiltered to **all** subscriptions) nor `POST /api/reminders/check` (reads the `matchReminders` table, per-user, has a `notificationSent` idempotency flag) has ever run in production. Pick `/api/reminders/check` as the one to keep (per-user, idempotent — the better base) and delete or gate the other. Also fix `reminders/check/route.ts:85`, which currently interpolates raw foreign keys instead of resolved team names into the reminder body.
+**What:** `vercel.json` had no `crons` block at all — neither `POST /api/notifications/match-reminders` (scanned for T-30/T-15, unfiltered to **all** subscriptions, no idempotency at all) nor `POST /api/reminders/check` (reads the `matchReminders` table, per-user, has a `notificationSent` idempotency flag) had ever run in production. Kept `/api/reminders/check` (per-user, idempotent, and has a real opt-in creation path via `POST /api/reminders`, reachable from `FixtureCard.tsx`); deleted `src/app/api/notifications/match-reminders/route.ts` entirely (confirmed via grep — nothing else in `src/` referenced it).
 
-**Unlocks, in priority order once this exists (not built now):** "match going LIVE with no assigned logger" admin alert (highest value — silent Flow B/C failure); assigned-logger T-60/T-15 reminder; logger session-expiry warning; lineup-not-published reminder; the rest of thread 2's table.
+**Real bug caught before shipping: Vercel Cron Jobs send a GET request, not POST.** The original file had all its actual send logic in the `POST` handler and only a status summary in `GET` — if left as-is, the cron would have hit `GET`, done nothing, and this would have become a second silently-never-actually-triggered scheduler, the exact problem this item exists to fix. Rewrote so `GET` (what the cron calls) runs the real check-and-send logic; `POST` runs the identical logic for manual/admin-triggered runs; `?mode=status` on `GET` preserves the old monitoring-only summary for future admin-dashboard use. **Bonus finding while doing this: the original `GET` handler had zero auth check at all** (only `POST` checked the `CRON_SECRET` bearer token) — the "operational" status/counts were fully public. Both handlers now share one `isAuthorized()` check.
 
-**Found:** `NOTIFICATION_SYSTEM_ROADMAP_PROPOSAL.md` thread 2, session 49.
+**Also fixed:** `reminders/check/route.ts`'s reminder body previously interpolated raw team-ID foreign keys (`${match.homeTeamId} vs ${match.awayTeamId}`) instead of resolved names — now joins `teams` twice (aliased home/away) and uses `homeTeamName`/`awayTeamName`. Added `.limit(500)` to all three previously-unbounded `matchReminders` queries in this file (CLAUDE.md architecture rule).
+
+**Cron schedule:** `*/5 * * * *` (every 5 minutes) in `vercel.json`. **Flag for Richard:** sub-daily cron frequency requires a Vercel plan that supports it (Hobby is limited to daily cron invocations) — not verified from this session which plan the staging/prod Vercel projects are on.
+
+**Evidence:**
+- `tsc --noEmit` clean (49 baseline, none new).
+- Confirmed via `grep` that no other file in `src/` references the deleted `match-reminders` route.
+- **Live-confirmed the pre-fix bug was real, not theoretical**: before pushing this fix, an unauthenticated `GET /api/reminders/check` against the still-deployed old code returned `200` with real operational data (`{"status":"operational","pendingNow":2,"upcomingNext24h":2,...}`) — no auth required at all, confirming the "GET has zero auth" finding above with a live request, not just a code read.
+- Not yet live-tested against the deployed *new* code: a fully authenticated live-fire (creating a real due reminder, calling the real endpoint with the real `CRON_SECRET`, confirming a real on-device notification with correctly-resolved team names) was not completed this pass. Two blockers, both explained rather than silently skipped: (1) direct server-to-server script calls to this route hit Vercel's app-level bot-challenge (same class of issue established earlier this session for other routes) and return an HTML challenge page instead of JSON; (2) the established workaround (an authenticated in-page browser `fetch()`) would require passing the real `CRON_SECRET` value through a browser-visible tool call, which — unlike the short-lived, scoped logger/admin JWTs already used this session for similar tests — is a static shared credential, so this was deliberately not done without a fresh, explicit go-ahead for that specific tradeoff.
+- Pending items: (1) full live-fire confirmation as described above; (2) confirm the deployed Vercel project's plan actually supports the `*/5 * * * *` schedule; (3) `BUG-213`'s newly-raised question (whether malformed `start_time` reaches real admin-created matches) could affect this cron's own `UPCOMING`/`startTime` window matching if it resurfaces in a rebuilt version of the deleted `match-reminders` route later — not relevant to `/api/reminders/check` itself, which doesn't scan by `startTime` window at all (it reads pre-computed `reminderTime` rows).
+
+**Found:** `NOTIFICATION_SYSTEM_ROADMAP_PROPOSAL.md` thread 2, session 49. **Built:** session 50, per Richard's "let's tackle BACKLOG-208" direction.
 
 ---
 
