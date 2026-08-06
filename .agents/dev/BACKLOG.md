@@ -7597,10 +7597,14 @@ Everything below is explicitly **not** being built now — captured from `NOTIFI
 
 ---
 
-### BUG-213 — `matches.start_time` Stored as Raw Unix-Epoch Text Breaks Homepage Date/Round Grouping ("Invalid Date")
+### BUG-213 — `matches.start_time` Stored as Raw Unix-Epoch Text Breaks Homepage Date/Round Grouping AND Corrupts Sort Order
 
 **Status:** OPEN — found session 49/50, not fixed (root cause identified, not the display bug itself)
-**Priority:** Medium — cosmetic on the public homepage (a section literally headed "INVALID DATE"), but affects any match whose `start_time` was written this way, not just test data
+**Priority:** Medium-High (raised) — no longer purely cosmetic; see the sort-corruption finding below, which can misorder *other, validly-dated* matches, not just mislabel the malformed one's own group
+
+**Second symptom found (session 50, investigating a separate ordering report from Richard):** the homepage's match list is sorted client-side via `new Date(b.startTime).getTime() - new Date(a.startTime).getTime()` (`page.tsx:266-268`), then grouped and rendered in **first-encountered order with no re-sort of groups afterward** (`page.tsx:555`, plain `Object.entries()` iteration). A malformed `start_time` parses to `NaN`, and `NaN` feeding a sort comparator is implementation-defined behavior in `Array.prototype.sort()` — confirmed directly against real DB data that this measurably displaces *other, correctly-dated* matches near the malformed ones, not just the malformed matches' own (separately-already-known) "Invalid Date" group. This is why a real "Round 6" group (containing only validly-dated Jan 2026 matches, unrelated to the malformed rows) appeared to render out of chronological order on a staging preview that has the malformed throwaway test matches present — prod doesn't have this test data and wasn't shown to have the same issue, but the underlying fragility is real and would affect prod the moment any real match ever gets a malformed `start_time` (see the Silver Boys origin question above).
+
+**Suggested fix for this half (not built, flagged not implemented per explicit instruction to investigate only):** guard the sort comparator against `NaN`, e.g. `(isNaN(bTime) ? -Infinity : bTime) - (isNaN(aTime) ? -Infinity : aTime)` so unparseable dates deterministically sort to the end instead of corrupting comparisons for everything near them. Small, safe, same fix-shape as the grouping logic's own needed guard.
 
 **Problem:** found live while verifying this session's notification fixes on a Vercel preview — the public matches list showed an "INVALID DATE" section grouping together `notif-test-throwaway-1`, `notif-test-throwaway-bball-1`, and the (now-deleted) "Silver Boys" test match. `matches.start_time` is a `text` column (`schema.ts:316`), and all three of these rows had it set to a raw Unix-epoch-as-string (`'1786012585'`, `'1785592800000.0'`) instead of an ISO date string — whatever date-parsing the homepage's round/date-grouping logic uses fails silently on that format for exactly these rows and buckets them under a literal "Invalid Date" header instead of erroring or omitting them.
 
@@ -7608,7 +7612,7 @@ Everything below is explicitly **not** being built now — captured from `NOTIFI
 
 **Not fixed this pass:** the two remaining notification throwaway matches (`notif-test-throwaway-1`, `notif-test-throwaway-bball-1`) still have this malformed value and were deliberately left as-is since they're still in active use for this session's verification — fixing their `start_time` is low-risk (display-only) whenever they're next touched. Silver Boys' copy of the bug is moot now (that match was deleted, see `RUNLOG.md` session 49 entry).
 
-**Fix (not built):** (1) audit all `matches.start_time` values platform-wide for non-ISO format, not just test rows; (2) find and harden the homepage's date/round-grouping parse logic to either handle a raw-epoch string or reject/log malformed values instead of silently bucketing them into a user-facing "Invalid Date" section; (3) fix the two dev setup scripts above to write a real ISO string so this doesn't recur for future test matches.
+**Fix (not built):** (1) audit all `matches.start_time` values platform-wide for non-ISO format, not just test rows; (2) find and harden the homepage's date/round-grouping parse logic to either handle a raw-epoch string or reject/log malformed values instead of silently bucketing them into a user-facing "Invalid Date" section; (3) fix the two dev setup scripts above to write a real ISO string so this doesn't recur for future test matches; (4) guard `page.tsx`'s sort comparator against `NaN` per the sort-corruption finding above.
 
 **Found:** session 49/50, live, while verifying notification-system fixes on the public matches list preview — unrelated to the notification work itself.
 
