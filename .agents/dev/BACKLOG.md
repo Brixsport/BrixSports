@@ -7324,13 +7324,42 @@ deprioritized in its favor. -->
 
 ### BUG-199 — `YELLOW_CARD` Notification Type Is Fully Built But Never Actually Triggered
 
-**Status:** OPEN — found session 49, not fixed
+**Status:** RESOLVED — 2026-08-06 (session 49, `ce46f6c`, branch `feature/notification-system`)
 **Priority:** Low — the delivery/type layer is genuinely correct; only the trigger allowlist is incomplete, and yellow cards are a lower-stakes event than the ones already wired
 
 **Problem:** `event-driven-notifier.ts`'s `getNotificationType()` correctly maps `'Yellow Card'` → `'YELLOW_CARD'`, and `match-notification-service.ts` has a complete, correct notification payload template for `YELLOW_CARD`. But `MatchStateManager.triggerNotification()`'s own `notifiableEvents` allowlist (`match-state-manager.ts:986`) is `['Goal', 'Penalty', 'Penalty Saved', 'Penalty Missed', 'Red Card']` — `'Yellow Card'` is simply not in that list, so the client-side trigger event is never dispatched for a yellow card, and the otherwise-complete delivery pipeline downstream never gets a chance to run for this event type.
 
-**Fix (not built):** add `'Yellow Card'` to `notifiableEvents` in `match-state-manager.ts:986`. Mechanical, one-line — the hard part (delivery, payload template, dedup) is already correct and doesn't need touching.
+**Fix:** bundled into the notification-system server-side trigger migration (see the new entry below) — `'Yellow Card'` is included in `events/route.ts`'s new `NOTIFIABLE_EVENT_TYPES` map. The old client-side `notifiableEvents` array (and `MatchStateManager.triggerNotification()` itself) was deleted entirely as part of that same change, not just amended.
+
+**Evidence:**
+- Commit: `ce46f6c`
+- Verified by: live test on a real preview deployment — real `GOAL` events triggered real on-device notifications (see the reliability-fix entry below for full evidence). `YELLOW_CARD` itself uses the identical code path (same `NOTIFIABLE_EVENT_TYPES` map, same `after()` call) and was not separately live-fired this session, but the map entry and the proven-working mechanism together are sufficient — the previously-broken piece was purely the allowlist omission, which is now fixed and structurally identical to the proven `GOAL`/`RED_CARD` cases.
+- Observed result: `'Yellow Card'` now present in `NOTIFIABLE_EVENT_TYPES` (`events/route.ts`), mapped to `'YELLOW_CARD'`.
+- Pending items: none.
 
 **Found:** session 49, by a read-only documentation agent tracing the full notification system for `.agents/dev/NOTIFICATION_SYSTEM_FLOW.md`.
+
+---
+
+### BUG-200 — Football Notification Triggers Depended Entirely on the Logger's Own Browser Tab Staying Open
+
+**Status:** RESOLVED — 2026-08-06 (session 49, `ce46f6c`, branch `feature/notification-system`)
+**Priority:** High — silent, total notification failure for a match any time the logger's tab closed, crashed, or lost network, with no error surfaced anywhere (violates CLAUDE.md's "no silent failures" rule)
+
+**Problem:** every football notification trigger (`MatchStateManager.triggerNotification()`/`triggerPeriodNotification()`) fired from a `window.dispatchEvent(new CustomEvent('MATCH_NOTIFICATION_TRIGGER'))` inside the logger's own browser tab, picked up by a singleton `EventDrivenNotifier` imported only in `FootballLogger.tsx`. The event itself always saved to the DB correctly via the normal API route — but if that specific tab closed, crashed, or lost network at any point, no further notifications fired for that match, indefinitely, with nothing in the UI or logs indicating anything was wrong. Same class of gap `BUG-108`/`BUG-116` already fixed for the separate WebSocket live-score broadcast (moved server-side at the time; notifications never received the equivalent fix). Documented as a known gap in `.agents/dev/NOTIFICATION_SYSTEM_FLOW.md` §3/§8, not previously filed with its own number.
+
+**Fix:** moved server-side, using the exact `after()` pattern already proven for the WS broadcast fix:
+- `src/app/api/matches/[id]/events/route.ts` (`POST`): fires for `GOAL`/`RED_CARD`/`YELLOW_CARD`/`PENALTY_SAVED`/`PENALTY_MISSED` right after the event-save transaction commits, calling `sendMatchEventNotification()` directly in-process (no HTTP round-trip through `/api/notifications/match-event`).
+- `src/app/api/matches/[id]/route.ts` (`PATCH`): fires `MATCH_START`/`HALF_TIME`/`MATCH_END` on the corresponding `currentPeriod` transition.
+- Old client-side trigger path removed entirely (not kept as a fallback — running both would double-send real pushes, and `EventDrivenNotifier`'s dedup was `localStorage`-keyed, client-side only, so it couldn't have prevented that): deleted `event-driven-notifier.ts` and its one import site, removed `triggerNotification()`/`triggerPeriodNotification()` and their call sites from `match-state-manager.ts`.
+- Incidentally fixed two latent copy bugs in the deleted client code while rebuilding the equivalent logic server-side: `teamName` was previously set to the *player's* name (copy-paste bug in `event-driven-notifier.ts`) for event-based notifications, and period-transition notifications never had a `teamName` at all (rendered as the literal string `"undefined"` in the `MATCH_START` body). Both now resolved via real DB lookups.
+
+**Evidence:**
+- Commit: `ce46f6c`
+- Verified by: live test against a real Vercel preview deployment (`brixsports-staging-ji35yq7yt-brixsports-projects.vercel.app`), using a throwaway LIVE test match (`notif-test-throwaway-1`, kept around for further session testing) with a real anonymous push subscription linked to it. Real events posted directly through the actual deployed routes (a real browser session, injected via a signed logger JWT — established `dev/gen-token-*.mjs` pattern, no password involved) with zero manual notification-service calls.
+- Observed result: two real `GOAL` events (`minute: 12` → "Victor Ememe scores! 1-0 (12')", `minute: 77` → "Victor Ememe scores! 2-0 (77')") and one real `HALF_TIME` period transition ("Half time: 2-0") each produced a real on-device push notification, confirmed via screenshots from the subscriber's actual device — not inferred from a 200 response or a UI toast. Delivery had noticeable latency in this environment (several minutes in some cases) but was not blocked on any tab: the logger's browser tab was not touched between posting each event and the notification arriving.
+- Pending items: `YELLOW_CARD` (`BUG-199`, same code path) and the basketball-equivalent wiring (basketball still has zero notification trigger wiring at all, a separate, larger, explicitly out-of-scope-for-this-phase item) were not separately live-fired. A real gap surfaced during this verification, not yet fixed: there is no persistent server-side log of notification send attempts/successes/failures (`sendMatchEventNotification()` only `console.log`s), which made this debugging pass slower than necessary — worth its own follow-up if notification debugging remains frequent.
+
+**Found:** gap documented session 49 in `.agents/dev/NOTIFICATION_SYSTEM_FLOW.md`; filed with its own number and fixed same session after Richard chose to prioritize wiring the full notification system to production stability.
 
 ---
