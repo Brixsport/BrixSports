@@ -12,6 +12,7 @@ import { getAuthUser } from '@/lib/auth';
 import { isLoggerAssigned } from '@/lib/match-logger-helpers';
 import { broadcastToMatch } from '@/lib/socket';
 import { sendMatchEventNotification } from '@/lib/notifications/match-notification-service';
+import { getNotifiablePeriodType } from '@/lib/notifications/notification-rules';
 
 export async function GET(
     request: NextRequest,
@@ -658,53 +659,51 @@ export async function PATCH(
         // see that file's comment for the full BUG-108/116-class rationale): period
         // transitions used to notify only via MatchStateManager.triggerPeriodNotification()
         // dispatching a window CustomEvent from the logger's own tab. Moved server-side.
+        //
+        // Which currentPeriod values are notifiable, per sport, now lives in
+        // notification-rules.ts's NOTIFICATION_RULES table (roadmap thread 5/7) --
+        // basketball's 'FINISHED' -> MATCH_END entry there is now an explicit,
+        // consciously-kept table row rather than an accidental match on a
+        // football-shaped if-chain (it was firing unintentionally before Phase 2
+        // formalized it — NOTIFICATION_SYSTEM_ROADMAP_PROPOSAL.md thread 3).
         if (body.currentPeriod !== undefined) {
-            // Phase 2 (basketball): 'Q1' -> MATCH_START and 'Q3' -> HALF_TIME added
-            // deliberately, mirroring football's exactly-one-mid-game-notification
-            // shape rather than firing on every quarter boundary (Q2/Q4 starts are
-            // intentionally excluded -- see NOTIFICATION_SYSTEM_ROADMAP_PROPOSAL.md
-            // thread 3 for the full spam-avoidance reasoning). 'FINISHED' already
-            // matched generically before this change and was firing for basketball's
-            // finalizeMatch() PATCH unintentionally (same roadmap doc, thread 3) --
-            // now a consciously-kept, not accidental, behavior.
-            const periodEventType =
-                body.currentPeriod === 'FIRST_HALF' ? 'MATCH_START' as const :
-                body.currentPeriod === 'Q1' ? 'MATCH_START' as const :
-                body.currentPeriod === 'HALF_TIME' ? 'HALF_TIME' as const :
-                body.currentPeriod === 'Q3' ? 'HALF_TIME' as const :
-                body.currentPeriod === 'FINISHED' ? 'MATCH_END' as const :
-                null;
-            if (periodEventType) {
-                after(async () => {
-                    try {
-                        const [current] = await db
-                            .select({
-                                homeTeamId: matches.homeTeamId,
-                                awayTeamId: matches.awayTeamId,
-                                homeScore: matches.homeScore,
-                                awayScore: matches.awayScore,
-                            })
-                            .from(matches)
-                            .where(eq(matches.id, matchId));
-                        if (!current) return;
-                        const [homeTeam, awayTeam] = await Promise.all([
-                            db.select({ name: teams.name }).from(teams).where(eq(teams.id, current.homeTeamId)).get(),
-                            db.select({ name: teams.name }).from(teams).where(eq(teams.id, current.awayTeamId)).get(),
-                        ]);
-                        await sendMatchEventNotification({
-                            matchId,
-                            homeTeamId: current.homeTeamId,
-                            awayTeamId: current.awayTeamId,
-                            eventType: periodEventType,
-                            teamName: homeTeam && awayTeam ? `${homeTeam.name} vs ${awayTeam.name}` : undefined,
-                            homeScore: current.homeScore ?? undefined,
-                            awayScore: current.awayScore ?? undefined,
-                        });
-                    } catch (error) {
-                        console.error('Error sending period notification:', error);
-                    }
-                });
-            }
+            after(async () => {
+                try {
+                    const [current] = await db
+                        .select({
+                            sport: matches.sport,
+                            homeTeamId: matches.homeTeamId,
+                            awayTeamId: matches.awayTeamId,
+                            homeScore: matches.homeScore,
+                            awayScore: matches.awayScore,
+                        })
+                        .from(matches)
+                        .where(eq(matches.id, matchId));
+                    if (!current) return;
+
+                    // Sport-keyed lookup (notification-rules.ts) -- resolved here, not
+                    // synchronously before scheduling after(), since it needs the match's
+                    // sport and this avoids an extra query on the hot PATCH request path.
+                    const periodEventType = getNotifiablePeriodType(current.sport, body.currentPeriod);
+                    if (!periodEventType) return;
+
+                    const [homeTeam, awayTeam] = await Promise.all([
+                        db.select({ name: teams.name }).from(teams).where(eq(teams.id, current.homeTeamId)).get(),
+                        db.select({ name: teams.name }).from(teams).where(eq(teams.id, current.awayTeamId)).get(),
+                    ]);
+                    await sendMatchEventNotification({
+                        matchId,
+                        homeTeamId: current.homeTeamId,
+                        awayTeamId: current.awayTeamId,
+                        eventType: periodEventType,
+                        teamName: homeTeam && awayTeam ? `${homeTeam.name} vs ${awayTeam.name}` : undefined,
+                        homeScore: current.homeScore ?? undefined,
+                        awayScore: current.awayScore ?? undefined,
+                    });
+                } catch (error) {
+                    console.error('Error sending period notification:', error);
+                }
+            });
         }
 
         return NextResponse.json({

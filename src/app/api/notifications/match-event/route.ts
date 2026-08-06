@@ -5,6 +5,16 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { sendMatchEventNotification } from '@/lib/notifications/match-notification-service';
+import type { NotificationKey } from '@/lib/notifications/notification-rules';
+
+// Kept in sync with NotificationKey (notification-rules.ts) rather than the sport
+// event/period tables themselves -- this route's callers (lineup publish) send
+// LINEUP_AVAILABLE directly, not through a sport/eventType lookup, so it validates
+// against the same closed key set createNotificationPayload() has templates for.
+const VALID_EVENT_TYPES: NotificationKey[] = [
+    'MATCH_START', 'GOAL', 'RED_CARD', 'YELLOW_CARD', 'LINEUP_AVAILABLE',
+    'MATCH_END', 'HALF_TIME', 'PENALTY_SAVED', 'PENALTY_MISSED', 'TECHNICAL_FOUL',
+];
 
 export async function POST(request: NextRequest) {
     try {
@@ -30,19 +40,7 @@ export async function POST(request: NextRequest) {
         }
 
         // Validate event type
-        const validEventTypes = [
-            'MATCH_START',
-            'GOAL',
-            'RED_CARD',
-            'YELLOW_CARD',
-            'LINEUP_AVAILABLE',
-            'MATCH_END',
-            'HALF_TIME',
-            'PENALTY_SAVED',
-            'PENALTY_MISSED',
-        ];
-
-        if (!validEventTypes.includes(eventType)) {
+        if (!VALID_EVENT_TYPES.includes(eventType)) {
             return NextResponse.json(
                 { error: 'Invalid event type' },
                 { status: 400 }

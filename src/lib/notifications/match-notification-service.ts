@@ -7,6 +7,7 @@ import { db } from '@/db';
 import { pushSubscriptions, pushSubscriptionMatches, userFollows, userFavorites, teams, players, users, userPreferences } from '@/db/schema';
 import { eq, and, or, inArray } from 'drizzle-orm';
 import webpush from 'web-push';
+import type { NotificationKey } from './notification-rules';
 
 // Configure web-push with VAPID keys
 const vapidPublicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || '';
@@ -30,7 +31,7 @@ interface MatchEventNotification {
     matchId: string;
     homeTeamId: string;
     awayTeamId: string;
-    eventType: 'MATCH_START' | 'GOAL' | 'RED_CARD' | 'YELLOW_CARD' | 'LINEUP_AVAILABLE' | 'MATCH_END' | 'HALF_TIME' | 'PENALTY_SAVED' | 'PENALTY_MISSED' | 'TECHNICAL_FOUL';
+    eventType: NotificationKey;
     playerName?: string;
     teamName?: string;
     minute?: number;

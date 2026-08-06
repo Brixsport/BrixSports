@@ -8,6 +8,7 @@ import { broadcastMatchEvent, broadcastScoreUpdate } from '@/lib/socket';
 import { SCORING_POINT_VALUES } from '@/lib/scoring';
 import { calculateAndSaveRatings } from '@/lib/ratingsService';
 import { sendMatchEventNotification } from '@/lib/notifications/match-notification-service';
+import { getNotifiableEventType } from '@/lib/notifications/notification-rules';
 
 // Notification-reliability fix: this trigger used to fire from the logger's own
 // browser tab only (MatchStateManager.triggerNotification -> window CustomEvent ->
@@ -17,26 +18,10 @@ import { sendMatchEventNotification } from '@/lib/notifications/match-notificati
 // after() pattern as the broadcast calls below. Includes the BUG-199 fix
 // ('Yellow Card' was fully wired for delivery but missing from this allowlist).
 //
-// Phase 2 (basketball): deliberately minimal -- only 'Technical Foul' is wired for
-// basketball here. Every routine scoring/foul type (Field Goal, Three Pointer, Free
-// Throw, Rebound, Assist, Steal, Block, Turnover, plain Foul, Substitution, Timeout)
-// is intentionally left out to avoid the spam a 100+-event game would produce --
-// see NOTIFICATION_SYSTEM_ROADMAP_PROPOSAL.md thread 3. A close-game/buzzer-beater
-// scoring alert is a real future idea, explicitly backlogged there, not built here.
-//
-// This flat map is a football-shaped structure basketball is now sharing rather than
-// a true sport-keyed rules table (the roadmap proposal's thread 5 recommends the
-// latter, as the cheaper-to-fix-now shape) -- kept minimal for this phase; revisit
-// if a third sport needs wiring before that redesign happens.
-const NOTIFIABLE_EVENT_TYPES: Record<string, 'GOAL' | 'RED_CARD' | 'YELLOW_CARD' | 'PENALTY_SAVED' | 'PENALTY_MISSED' | 'TECHNICAL_FOUL'> = {
-    'Goal': 'GOAL',
-    'Penalty': 'GOAL',
-    'Red Card': 'RED_CARD',
-    'Yellow Card': 'YELLOW_CARD',
-    'Penalty Saved': 'PENALTY_SAVED',
-    'Penalty Missed': 'PENALTY_MISSED',
-    'Technical Foul': 'TECHNICAL_FOUL',
-};
+// Which raw event types are notifiable, per sport, now lives in
+// notification-rules.ts's NOTIFICATION_RULES table (roadmap thread 5/7) rather than
+// a flat map here -- that table is what basketball's 'Technical Foul' entry and
+// football's five entries both come from.
 
 // GET /api/matches/[id]/events - Get all events for a match
 export async function GET(
@@ -366,7 +351,7 @@ export async function POST(
             after(() => broadcastScoreUpdate(matchId, match.homeScore ?? 0, match.awayScore ?? 0, newShootoutHomeScore, newShootoutAwayScore));
         }
 
-        const notificationEventType = NOTIFIABLE_EVENT_TYPES[type];
+        const notificationEventType = getNotifiableEventType(match.sport, type);
         if (notificationEventType && !isPenaltyShootout) {
             after(async () => {
                 try {
