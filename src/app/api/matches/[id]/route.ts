@@ -11,6 +11,7 @@ import { playerRatings } from '@/db/schema-ratings';
 import { getAuthUser } from '@/lib/auth';
 import { isLoggerAssigned } from '@/lib/match-logger-helpers';
 import { broadcastToMatch } from '@/lib/socket';
+import { sendMatchEventNotification } from '@/lib/notifications/match-notification-service';
 
 export async function GET(
     request: NextRequest,
@@ -652,6 +653,49 @@ export async function PATCH(
         // after() rather than a bare fire-and-forget call — see events/route.ts's POST
         // handler for why (traced root cause of BUG-108/116's multi-second broadcast delay).
         after(() => broadcastToMatch(matchId, 'match:updated', { matchId, ...updateData }));
+
+        // Notification-reliability fix (same as events/route.ts's POST handler,
+        // see that file's comment for the full BUG-108/116-class rationale): period
+        // transitions used to notify only via MatchStateManager.triggerPeriodNotification()
+        // dispatching a window CustomEvent from the logger's own tab. Moved server-side.
+        if (body.currentPeriod !== undefined) {
+            const periodEventType =
+                body.currentPeriod === 'FIRST_HALF' ? 'MATCH_START' as const :
+                body.currentPeriod === 'HALF_TIME' ? 'HALF_TIME' as const :
+                body.currentPeriod === 'FINISHED' ? 'MATCH_END' as const :
+                null;
+            if (periodEventType) {
+                after(async () => {
+                    try {
+                        const [current] = await db
+                            .select({
+                                homeTeamId: matches.homeTeamId,
+                                awayTeamId: matches.awayTeamId,
+                                homeScore: matches.homeScore,
+                                awayScore: matches.awayScore,
+                            })
+                            .from(matches)
+                            .where(eq(matches.id, matchId));
+                        if (!current) return;
+                        const [homeTeam, awayTeam] = await Promise.all([
+                            db.select({ name: teams.name }).from(teams).where(eq(teams.id, current.homeTeamId)).get(),
+                            db.select({ name: teams.name }).from(teams).where(eq(teams.id, current.awayTeamId)).get(),
+                        ]);
+                        await sendMatchEventNotification({
+                            matchId,
+                            homeTeamId: current.homeTeamId,
+                            awayTeamId: current.awayTeamId,
+                            eventType: periodEventType,
+                            teamName: homeTeam && awayTeam ? `${homeTeam.name} vs ${awayTeam.name}` : undefined,
+                            homeScore: current.homeScore ?? undefined,
+                            awayScore: current.awayScore ?? undefined,
+                        });
+                    } catch (error) {
+                        console.error('Error sending period notification:', error);
+                    }
+                });
+            }
+        }
 
         return NextResponse.json({
             success: true,

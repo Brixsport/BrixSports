@@ -472,7 +472,6 @@ export class MatchStateManager {
         this.notifyListeners();
         this.persistState();
         this.broadcastStatusChange(from, to);
-        this.triggerPeriodNotification(to);
     }
 
     /**
@@ -896,9 +895,6 @@ export class MatchStateManager {
                 status: this.state.clock.period,
             }
         }));
-
-        // Trigger notification
-        this.triggerNotification(event);
     }
 
     private broadcastUndo(event: MatchEvent): void {
@@ -957,44 +953,6 @@ export class MatchStateManager {
                 nextPeriod,
                 clock: this.state.clock,
                 requiresExtraTime: currentPeriod === 'FIRST_HALF' || currentPeriod === 'SECOND_HALF',
-            }
-        }));
-    }
-
-    private triggerPeriodNotification(period: MatchPeriod): void {
-        if (typeof window === 'undefined') return;
-
-        let eventType: 'MATCH_START' | 'HALF_TIME' | 'MATCH_END' | null = null;
-        if (period === 'FIRST_HALF') eventType = 'MATCH_START';
-        else if (period === 'HALF_TIME') eventType = 'HALF_TIME';
-        else if (period === 'FINISHED') eventType = 'MATCH_END';
-
-        if (!eventType) return;
-
-        window.dispatchEvent(new CustomEvent('MATCH_NOTIFICATION_TRIGGER', {
-            detail: {
-                matchId: this.state.matchId,
-                homeTeamId: this.state.homeTeamId,
-                awayTeamId: this.state.awayTeamId,
-                periodEventType: eventType,
-                score: this.state.score,
-            }
-        }));
-    }
-
-    private triggerNotification(event: MatchEvent): void {
-        const notifiableEvents: FootballEventType[] = ['Goal', 'Penalty', 'Penalty Saved', 'Penalty Missed', 'Red Card'];
-        console.log('[MatchStateManager] triggerNotification called for:', event.type, 'Notifiable:', notifiableEvents.includes(event.type));
-        if (!notifiableEvents.includes(event.type)) return;
-
-        console.log('[MatchStateManager] Dispatching MATCH_NOTIFICATION_TRIGGER:', { matchId: this.state.matchId, eventType: event.type });
-        window.dispatchEvent(new CustomEvent('MATCH_NOTIFICATION_TRIGGER', {
-            detail: {
-                matchId: this.state.matchId,
-                homeTeamId: this.state.homeTeamId,
-                awayTeamId: this.state.awayTeamId,
-                event,
-                score: this.state.score,
             }
         }));
     }

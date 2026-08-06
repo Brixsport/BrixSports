@@ -1,12 +1,29 @@
 import { NextRequest, NextResponse, after } from 'next/server';
 import { db } from '@/db';
-import { matchEvents, matches, matchLoggerAssignments } from '@/db/schema';
+import { matchEvents, matches, matchLoggerAssignments, players, teams } from '@/db/schema';
 import { eq, asc, and, sql, gt } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { getAuthUser } from '@/lib/auth';
 import { broadcastMatchEvent, broadcastScoreUpdate } from '@/lib/socket';
 import { SCORING_POINT_VALUES } from '@/lib/scoring';
 import { calculateAndSaveRatings } from '@/lib/ratingsService';
+import { sendMatchEventNotification } from '@/lib/notifications/match-notification-service';
+
+// Notification-reliability fix: this trigger used to fire from the logger's own
+// browser tab only (MatchStateManager.triggerNotification -> window CustomEvent ->
+// EventDrivenNotifier), so a closed/crashed tab silently stopped all notifications
+// for that match even though the event still saved fine -- same class of gap
+// BUG-108/BUG-116 already fixed for the WS broadcast. Moved server-side, same
+// after() pattern as the broadcast calls below. Includes the BUG-199 fix
+// ('Yellow Card' was fully wired for delivery but missing from this allowlist).
+const NOTIFIABLE_EVENT_TYPES: Record<string, 'GOAL' | 'RED_CARD' | 'YELLOW_CARD' | 'PENALTY_SAVED' | 'PENALTY_MISSED'> = {
+    'Goal': 'GOAL',
+    'Penalty': 'GOAL',
+    'Red Card': 'RED_CARD',
+    'Yellow Card': 'YELLOW_CARD',
+    'Penalty Saved': 'PENALTY_SAVED',
+    'Penalty Missed': 'PENALTY_MISSED',
+};
 
 // GET /api/matches/[id]/events - Get all events for a match
 export async function GET(
@@ -334,6 +351,38 @@ export async function POST(
 
         if (newShootoutHomeScore !== undefined && newShootoutAwayScore !== undefined) {
             after(() => broadcastScoreUpdate(matchId, match.homeScore ?? 0, match.awayScore ?? 0, newShootoutHomeScore, newShootoutAwayScore));
+        }
+
+        const notificationEventType = NOTIFIABLE_EVENT_TYPES[type];
+        if (notificationEventType && !isPenaltyShootout) {
+            after(async () => {
+                try {
+                    // Penalty Saved credits the keeper (relatedPlayerId), not the taker --
+                    // same distinction the player-stats update above already makes.
+                    const notifyPlayerId = notificationEventType === 'PENALTY_SAVED' ? relatedPlayerId : playerId;
+                    const [player, team] = await Promise.all([
+                        notifyPlayerId
+                            ? db.select({ name: players.name }).from(players).where(eq(players.id, notifyPlayerId)).get()
+                            : null,
+                        teamId
+                            ? db.select({ name: teams.name }).from(teams).where(eq(teams.id, teamId)).get()
+                            : null,
+                    ]);
+                    await sendMatchEventNotification({
+                        matchId,
+                        homeTeamId: match.homeTeamId,
+                        awayTeamId: match.awayTeamId,
+                        eventType: notificationEventType,
+                        playerName: player?.name,
+                        teamName: team?.name,
+                        minute,
+                        homeScore: newHomeScore ?? match.homeScore ?? undefined,
+                        awayScore: newAwayScore ?? match.awayScore ?? undefined,
+                    });
+                } catch (error) {
+                    console.error('Error sending match event notification:', error);
+                }
+            });
         }
 
         // Update player stats for competitive matches only — friendlies and shootout events do not count

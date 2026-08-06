@@ -21,8 +21,6 @@ import { getMatchStateManager, destroyMatchStateManager, MatchStateManager, Matc
 import type { SyncEvent } from '@/lib/multiLogger';
 import { getPrimaryTeam } from '@/lib/player-affiliation-utils';
 import { TeamLogo } from '@/lib/utils/team-logo';
-// Import to initialize match event notification listener
-import '@/lib/notifications/event-driven-notifier';
 
 import { Match, Logger, Player, Team } from '@/db/schema';
 
