@@ -7363,3 +7363,18 @@ deprioritized in its favor. -->
 **Found:** gap documented session 49 in `.agents/dev/NOTIFICATION_SYSTEM_FLOW.md`; filed with its own number and fixed same session after Richard chose to prioritize wiring the full notification system to production stability.
 
 ---
+
+### BUG-201 — FootballLogger's "Select Player" Modal Intermittently Shows "No player found" Despite Valid, Available Roster Data
+
+**Status:** OPEN — found session 49, not fixed. Investigation assigned to a background agent, not yet complete.
+**Priority:** Medium — blocks a real logger from completing a player-attributed event (Goal/Card/etc.) through the actual UI when it happens; workaround exists (direct API call) but that's not something a real logger can do mid-match.
+
+**Problem:** on a freshly created LIVE match (`notif-test-throwaway-1`, real teams `busa-kings`/`busa-cruise`, real players with confirmed-active `player_team_affiliations` rows), clicking "GOAL" opened the `PlayerSelectionModal` showing "No player found," repeatably — including after a full hard page reload. Confirmed via direct network inspection that `/api/matches/[id]/eligible-players` genuinely returns the correct data (`success: true`, 38 total players, 23 correctly filtering to the home team via the exact same `memberships`/`getPlayerTeam` logic `FootballLogger.tsx` uses) — manually re-running that exact client-side filter against the live API response confirms 23 valid players. So the data pipeline (API + affiliations) is correct; something in the component's own state/lifecycle (`homePlayers`/`awayPlayers`, populated from this same fetch around `FootballLogger.tsx:330-354`) is not reflecting that data by the time `getOnPitchPlayers()` runs for the modal. Not resolved by a fresh reload, so this isn't simple fetch-before-mount timing.
+
+**Workaround used this session:** bypassed the modal entirely, submitting the event via a direct authenticated `fetch()` POST to `/api/matches/[id]/events` from within the same logged-in browser tab (same session, same cookies — a real browser-originated request, not a script). Confirmed this reaches the real route correctly; not a substitute for fixing the actual UI path a real logger depends on.
+
+**Fix:** not yet investigated. Candidate causes to check: a stale closure in whatever `useEffect` populates `homePlayers`/`awayPlayers` (dependency array missing something, or running once and never re-running when it should); a race between this fetch and some other effect that resets the state after the fact; or a difference between how a genuinely fresh sign-in navigates into this component versus how a JWT-injected session (this session's testing method) does, if that path skips some initialization step a normal login triggers.
+
+**Found:** session 49, live, while setting up `notif-test-throwaway-1` for `BUG-200`'s verification — unrelated to the notification work itself, surfaced by chance.
+
+---
