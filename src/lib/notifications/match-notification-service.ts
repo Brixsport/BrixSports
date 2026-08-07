@@ -305,7 +305,7 @@ function createNotificationPayload(event: MatchEventNotification): NotificationP
         case 'GOAL':
             return {
                 title: '⚽ GOAL!',
-                body: `${event.playerName} scores! ${event.homeScore}-${event.awayScore} (${event.minute}')`,
+                body: `${event.playerName || 'A player'} scores! ${event.homeScore}-${event.awayScore} (${event.minute}')`,
                 icon: '/icons/icon-192x192.png',
                 badge: '/icons/icon-192x192.png',
                 data: { ...baseData, playerName: event.playerName, minute: event.minute },
@@ -315,7 +315,7 @@ function createNotificationPayload(event: MatchEventNotification): NotificationP
         case 'RED_CARD':
             return {
                 title: '🟥 Red Card!',
-                body: `${event.playerName} has been sent off! (${event.minute}')`,
+                body: `${event.playerName || 'A player'} has been sent off! (${event.minute}')`,
                 icon: '/icons/icon-192x192.png',
                 badge: '/icons/icon-192x192.png',
                 data: { ...baseData, playerName: event.playerName, minute: event.minute },
@@ -325,7 +325,7 @@ function createNotificationPayload(event: MatchEventNotification): NotificationP
         case 'YELLOW_CARD':
             return {
                 title: '🟨 Yellow Card',
-                body: `${event.playerName} has been booked (${event.minute}')`,
+                body: `${event.playerName || 'A player'} has been booked (${event.minute}')`,
                 icon: '/icons/icon-192x192.png',
                 badge: '/icons/icon-192x192.png',
                 data: { ...baseData, playerName: event.playerName, minute: event.minute },
