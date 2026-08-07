@@ -18,13 +18,15 @@ MVP → moving toward PRODUCTION
 - Competition and fixture management
 - Logger assignment to matches
 - Match status lifecycle (PENDING → LIVE → FINISHED)
+- Match/team push notifications — event-triggered (goals, cards, match start/end), reminders,
+  and the admin campaign composer (session 50 decision: brought in scope, hardened — see
+  `BACKLOG.md` entries `BUG-204`/`BACKLOG-211`/`BACKLOG-212`)
 
 ## Explicit Out of Scope
 - Payment, sponsorship, or financial processing
 - Social features (comments, reactions, follows, DMs)
 - External league API integrations
 - Automated video or AI-based score detection
-- Push notification campaigns
 - Advanced analytics dashboards
 - Role-based access beyond: Super Admin → Competition Admin → Team Manager → Logger → Viewer
 

@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import webpush from 'web-push';
 import { db } from '@/db';
-import { pushSubscriptions, pushSubscriptionMatches, userFollows, userFavorites, users, matches } from '@/db/schema';
-import { eq, inArray, and, or } from 'drizzle-orm';
+import { pushSubscriptions, pushSubscriptionMatches, userFollows, userFavorites, users, matches, userPreferences } from '@/db/schema';
+import { eq, inArray, and, or, ne } from 'drizzle-orm';
 import { getAuthUser } from '@/lib/auth';
 import { logNotificationSend } from '@/lib/notifications/match-notification-service';
 
@@ -68,6 +68,10 @@ function configureVAPID(): { success: boolean; error?: string } {
 }
 
 // Users following/favoriting/primary-supporting any of a set of teams.
+// BACKLOG-212 item 2: previously ignored userPreferences.matchAlerts entirely,
+// unlike sendMatchEventNotification() -- same filter, same "no record = TRUE
+// per schema default" reasoning, applied here now that the composer is
+// officially in scope.
 async function getTeamFollowerUserIds(teamIds: string[]): Promise<string[]> {
   const [teamFollowers, teamFavorites, primaryTeamFans] = await Promise.all([
     db.select({ userId: userFollows.userId }).from(userFollows).where(
@@ -79,11 +83,20 @@ async function getTeamFollowerUserIds(teamIds: string[]): Promise<string[]> {
     db.select({ userId: users.id }).from(users).where(inArray(users.favoriteTeamId, teamIds)),
   ]);
 
-  return Array.from(new Set([
+  const potentialUserIds = Array.from(new Set([
     ...teamFollowers.map(f => f.userId),
     ...teamFavorites.map(f => f.userId),
     ...primaryTeamFans.map(f => f.userId),
   ]));
+  if (potentialUserIds.length === 0) return [];
+
+  const disabledPrefUsers = await db
+    .select({ userId: userPreferences.userId })
+    .from(userPreferences)
+    .where(and(inArray(userPreferences.userId, potentialUserIds), eq(userPreferences.matchAlerts, false)));
+  const disabledUserIds = new Set(disabledPrefUsers.map(p => p.userId));
+
+  return potentialUserIds.filter(id => !disabledUserIds.has(id));
 }
 
 // BUG-204: previously returned [] for both "no filter, send to everyone" (audience
@@ -238,7 +251,15 @@ export async function POST(request: NextRequest) {
         // resolved-but-empty audience must send to nobody, not fall back to all.
         let allSubscriptions: (typeof pushSubscriptions.$inferSelect)[];
         if (targetUserIds === null) {
-            allSubscriptions = await db.select().from(pushSubscriptions).limit(MAX_BROADCAST_SUBSCRIPTIONS);
+            // BACKLOG-212 item 2: BACKLOG-150's anonymous per-match subscribers
+            // consented to alerts for ONE specific match, not a general broadcast --
+            // including them in 'all' was a real consent problem, not just a UX one.
+            // Excluded by the sentinel user id their rows are always keyed under.
+            allSubscriptions = await db
+                .select()
+                .from(pushSubscriptions)
+                .where(ne(pushSubscriptions.userId, 'anonymous-push-subscriber'))
+                .limit(MAX_BROADCAST_SUBSCRIPTIONS);
         } else {
             const idConditions = [];
             if (targetUserIds.length > 0) idConditions.push(inArray(pushSubscriptions.userId, targetUserIds));
