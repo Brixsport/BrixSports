@@ -563,17 +563,21 @@ export default function MatchDetailPage() {
                                 alt={match.homeTeam.name}
                                 className="w-12 h-12 object-contain"
                             />
+                            {/* Star sits outside the sm:block name wrapper below -- it's an
+                                interactive control, not space-saving decorative text, and must
+                                stay visible at every viewport width (BUG-214: was nested inside
+                                "hidden sm:block", making it invisible on any real phone). */}
+                            <button
+                                onClick={() => toggleTeam(match.homeTeam.id)}
+                                aria-label={isFavoriteTeam(match.homeTeam.id) ? `Unfollow ${match.homeTeam.name}` : `Follow ${match.homeTeam.name} — get alerts for this team's matches`}
+                                title={isFavoriteTeam(match.homeTeam.id) ? 'Unfollow' : "Follow — get alerts for this team's matches"}
+                                className={`transition-colors ${isFavoriteTeam(match.homeTeam.id) ? 'text-yellow-400' : 'text-white/30 hover:text-white/60'}`}
+                            >
+                                <Star className={`w-4 h-4 ${isFavoriteTeam(match.homeTeam.id) ? 'fill-current' : ''}`} />
+                            </button>
                             <div className="hidden sm:block">
                                 <div className="font-bold text-lg flex items-center gap-1.5">
                                     {match.homeTeam.name}
-                                    <button
-                                        onClick={() => toggleTeam(match.homeTeam.id)}
-                                        aria-label={isFavoriteTeam(match.homeTeam.id) ? `Unfollow ${match.homeTeam.name}` : `Follow ${match.homeTeam.name} — get alerts for this team's matches`}
-                                        title={isFavoriteTeam(match.homeTeam.id) ? 'Unfollow' : "Follow — get alerts for this team's matches"}
-                                        className={`transition-colors ${isFavoriteTeam(match.homeTeam.id) ? 'text-yellow-400' : 'text-white/30 hover:text-white/60'}`}
-                                    >
-                                        <Star className={`w-4 h-4 ${isFavoriteTeam(match.homeTeam.id) ? 'fill-current' : ''}`} />
-                                    </button>
                                     {homeRedCardsCount > 0 && (
                                         <span className="flex gap-0.5">
                                             {Array.from({ length: homeRedCardsCount }).map((_, i) => (
@@ -641,18 +645,20 @@ export default function MatchDetailPage() {
                                             ))}
                                         </span>
                                     )}
-                                    <button
-                                        onClick={() => toggleTeam(match.awayTeam.id)}
-                                        aria-label={isFavoriteTeam(match.awayTeam.id) ? `Unfollow ${match.awayTeam.name}` : `Follow ${match.awayTeam.name} — get alerts for this team's matches`}
-                                        title={isFavoriteTeam(match.awayTeam.id) ? 'Unfollow' : "Follow — get alerts for this team's matches"}
-                                        className={`transition-colors ${isFavoriteTeam(match.awayTeam.id) ? 'text-yellow-400' : 'text-white/30 hover:text-white/60'}`}
-                                    >
-                                        <Star className={`w-4 h-4 ${isFavoriteTeam(match.awayTeam.id) ? 'fill-current' : ''}`} />
-                                    </button>
                                     {match.awayTeam.name}
                                 </div>
                                 <div className="text-sm text-white/60">{match.awayTeam.shortName}</div>
                             </div>
+                            {/* Star sits outside the sm:block name wrapper above -- see the
+                                matching comment on the home-team side (BUG-214). */}
+                            <button
+                                onClick={() => toggleTeam(match.awayTeam.id)}
+                                aria-label={isFavoriteTeam(match.awayTeam.id) ? `Unfollow ${match.awayTeam.name}` : `Follow ${match.awayTeam.name} — get alerts for this team's matches`}
+                                title={isFavoriteTeam(match.awayTeam.id) ? 'Unfollow' : "Follow — get alerts for this team's matches"}
+                                className={`transition-colors ${isFavoriteTeam(match.awayTeam.id) ? 'text-yellow-400' : 'text-white/30 hover:text-white/60'}`}
+                            >
+                                <Star className={`w-4 h-4 ${isFavoriteTeam(match.awayTeam.id) ? 'fill-current' : ''}`} />
+                            </button>
                             <img
                                 src={match.awayTeam.logo}
                                 alt={match.awayTeam.name}
