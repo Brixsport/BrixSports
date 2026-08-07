@@ -4,10 +4,43 @@
  */
 
 import { db } from '@/db';
-import { pushSubscriptions, pushSubscriptionMatches, userFollows, userFavorites, teams, players, users, userPreferences } from '@/db/schema';
+import { pushSubscriptions, pushSubscriptionMatches, userFollows, userFavorites, teams, players, users, userPreferences, notificationSendLog } from '@/db/schema';
 import { eq, and, or, inArray } from 'drizzle-orm';
 import webpush from 'web-push';
+import { nanoid } from 'nanoid';
 import type { NotificationKey } from './notification-rules';
+
+// BACKLOG-211: persistent record of every send attempt -- console.log alone
+// isn't reachable outside a live Vercel function invocation, which cost real
+// debugging time twice in one session (BUG-200's and BACKLOG-203's own
+// verification passes). Best-effort: a logging failure must never break the
+// actual notification send, so this never throws into its caller.
+export async function logNotificationSend(entry: {
+    source: 'match_event' | 'match_reminder' | 'campaign';
+    matchId?: string | null;
+    eventType?: string | null;
+    targetAudience?: string | null;
+    totalSubscriptions: number;
+    sentCount: number;
+    failedCount: number;
+    errors?: string[];
+}): Promise<void> {
+    try {
+        await db.insert(notificationSendLog).values({
+            id: nanoid(),
+            source: entry.source,
+            matchId: entry.matchId || null,
+            eventType: entry.eventType || null,
+            targetAudience: entry.targetAudience || null,
+            totalSubscriptions: entry.totalSubscriptions,
+            sentCount: entry.sentCount,
+            failedCount: entry.failedCount,
+            errors: entry.errors && entry.errors.length > 0 ? JSON.stringify(entry.errors) : null,
+        });
+    } catch (error) {
+        console.error('[NotificationSendLog] Failed to write log row (non-fatal):', error);
+    }
+}
 
 // Configure web-push with VAPID keys
 const vapidPublicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || '';
@@ -154,6 +187,10 @@ export async function sendMatchEventNotification(event: MatchEventNotification):
 
         if (subscriptions.length === 0) {
             console.log('[MatchNotificationService] No push subscriptions found for followers or match-specific anonymous subscribers');
+            await logNotificationSend({
+                source: 'match_event', matchId: event.matchId, eventType: event.eventType,
+                totalSubscriptions: 0, sentCount: 0, failedCount: 0,
+            });
             return { success: true, sentCount: 0, totalSubscriptions: 0 };
         }
 
@@ -200,6 +237,12 @@ export async function sendMatchEventNotification(event: MatchEventNotification):
 
         console.log(`[MatchNotificationService] Sent ${sentCount}/${subscriptions.length} notifications`);
 
+        await logNotificationSend({
+            source: 'match_event', matchId: event.matchId, eventType: event.eventType,
+            totalSubscriptions: subscriptions.length, sentCount, failedCount: failedSubscriptions.length,
+            errors,
+        });
+
         return {
             success: true,
             sentCount,
@@ -208,11 +251,16 @@ export async function sendMatchEventNotification(event: MatchEventNotification):
         };
     } catch (error) {
         console.error('[MatchNotificationService] Error sending notifications:', error);
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        await logNotificationSend({
+            source: 'match_event', matchId: event.matchId, eventType: event.eventType,
+            totalSubscriptions: 0, sentCount: 0, failedCount: 0, errors: [errorMessage],
+        });
         return {
             success: false,
             sentCount: 0,
             totalSubscriptions: 0,
-            errors: [error instanceof Error ? error.message : 'Unknown error'],
+            errors: [errorMessage],
         };
     }
 }
@@ -367,13 +415,21 @@ export async function sendMatchReminderNotification(
     try {
         console.log(`[MatchNotificationService] Sending ${minutesBefore}-minute reminder for match ${matchId}`);
 
-        // Get ALL push subscriptions (send to everyone, not just team followers)
+        // Get ALL push subscriptions (send to everyone, not just team followers).
+        // No current caller (BACKLOG-208 deleted the only route that called this),
+        // but CLAUDE.md's .limit()-on-every-list-query rule applies regardless of
+        // whether something calls it today.
         const subscriptions = await db
             .select()
-            .from(pushSubscriptions);
+            .from(pushSubscriptions)
+            .limit(5000);
 
         if (subscriptions.length === 0) {
             console.log('[MatchNotificationService] No push subscriptions found');
+            await logNotificationSend({
+                source: 'match_reminder', matchId, eventType: `${minutesBefore}min`,
+                totalSubscriptions: 0, sentCount: 0, failedCount: 0,
+            });
             return { success: true, sentCount: 0 };
         }
 
@@ -433,9 +489,19 @@ export async function sendMatchReminderNotification(
 
         console.log(`[MatchNotificationService] Sent ${sentCount}/${subscriptions.length} notifications`);
 
+        await logNotificationSend({
+            source: 'match_reminder', matchId, eventType: `${minutesBefore}min`,
+            totalSubscriptions: subscriptions.length, sentCount, failedCount: failedSubscriptions.length,
+        });
+
         return { success: true, sentCount };
     } catch (error) {
         console.error('[MatchNotificationService] Error sending reminder:', error);
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        await logNotificationSend({
+            source: 'match_reminder', matchId, eventType: `${minutesBefore}min`,
+            totalSubscriptions: 0, sentCount: 0, failedCount: 0, errors: [errorMessage],
+        });
         return { success: false, sentCount: 0 };
     }
 }

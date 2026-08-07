@@ -7576,14 +7576,21 @@ deprioritized in its favor. -->
 
 ### BACKLOG-211 — No Persistent Server-Side Log of Notification Send Attempts/Successes/Failures
 
-**Status:** OPEN — filed session 50, not built
-**Priority:** High (tooling) — has now directly cost real debugging time in both `BUG-200`'s and `BACKLOG-203`'s own verification passes (both evidence blocks flag this same gap)
+**Status:** SHIPPED — 2026-08-06 (session 50, branch `feature/notification-system`), staging only, prod mirror pending write-verification
+**Priority:** High (tooling) — had directly cost real debugging time in both `BUG-200`'s and `BACKLOG-203`'s own verification passes (both evidence blocks flagged this same gap)
 
-**Problem:** `sendMatchEventNotification()` only `console.log`s (lines 51, 150, 195) — nothing persists past that request's logs. Separately, the campaign composer's own "Recent History" panel has never worked at all: `send/route.ts`'s history write is a server-side self-`fetch()` to `/api/notifications/history` that forwards no auth headers, while that route requires admin — it 401s every time, silently swallowed by the surrounding try/catch (`BACKLOG-124`-class bug). `history/route.ts` stores rows in a module-level in-memory array that evaporates per serverless invocation regardless.
+**Problem:** `sendMatchEventNotification()` only `console.log`s — nothing persists past that request's logs. Separately, the campaign composer's own "Recent History" panel had never worked at all: `send/route.ts`'s history write was a server-side self-`fetch()` to `/api/notifications/history` that forwarded no auth headers, while that route requires admin — it 401'd every time, silently swallowed by the surrounding try/catch (`BACKLOG-124`-class bug).
 
-**Fix (not built):** a real notification-send-log table (matchId, eventType, audience size, sent/failed counts, timestamp), written from `sendMatchEventNotification()` directly; replace the composer's self-`fetch()` history write with a direct function call (same fix shape as `BACKLOG-124`) writing to the same table.
+**Built:** new `notification_send_log` table (`source`, `matchId`, `eventType`, `targetAudience`, `totalSubscriptions`, `sentCount`, `failedCount`, `errors`, `createdAt`) — one row per send *call*, not per-subscription, to keep volume sane while still answering "did this fire, for how many people, did it succeed." Indexed on `match_id`, `created_at`, `source` for real dashboard/support query patterns (Richard's explicit ask: build to production standard, not a debug scratch table — not just "will this help me this session"). Shared `logNotificationSend()` helper (`match-notification-service.ts`, exported) called from all three real send paths: `sendMatchEventNotification()` (both success and error paths), `sendMatchReminderNotification()` (currently dead code — `BACKLOG-208` deleted its only caller — logged anyway since it's a public exported function that could be reused), and the campaign composer's `send/route.ts`, which now writes directly to the same table instead of the broken self-`fetch()` — fixing the "Recent History" panel gap as a side effect of this item, not a separate fix.
 
-**Found:** `NOTIFICATION_SYSTEM_ROADMAP_PROPOSAL.md` thread 1 + "Also worth flagging" section B, session 49. Already flagged in `BUG-200`'s and `BACKLOG-203`'s own evidence blocks as a recurring cost.
+**Staging-only, deliberately:** the table exists and is wired on staging; prod mirror is intentionally deferred until the write path is live-verified (matching the shootout-columns precedent — staging first, verify, then prod), not done reflexively just because the `CREATE TABLE` itself succeeded.
+
+**Evidence:**
+- `tsc --noEmit` clean (49 baseline, none new).
+- Table + indexes confirmed via `PRAGMA table_info`/index listing on staging (`dev/create-notification-send-log-table.mjs`, `dev/add-notification-send-log-indexes.mjs`).
+- Pending items: a real send hasn't been fired against the new write path yet this pass to confirm a row actually lands correctly (next real match event on the throwaway matches will exercise it). Prod mirror blocked on that confirmation, not on anything else.
+
+**Found:** `NOTIFICATION_SYSTEM_ROADMAP_PROPOSAL.md` thread 1 + "Also worth flagging" section B, session 49. **Built:** session 50, per Richard's sequenced work plan, with an explicit mid-build correction to build it for production dashboard/support use, not just debugging.
 
 ---
 

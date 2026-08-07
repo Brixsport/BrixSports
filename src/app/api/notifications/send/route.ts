@@ -4,6 +4,7 @@ import { db } from '@/db';
 import { pushSubscriptions, pushSubscriptionMatches, userFollows, userFavorites, users, matches } from '@/db/schema';
 import { eq, inArray, and, or } from 'drizzle-orm';
 import { getAuthUser } from '@/lib/auth';
+import { logNotificationSend } from '@/lib/notifications/match-notification-service';
 
 // BUG-204: a bounded ceiling on the "send to all" query -- CLAUDE.md requires a
 // .limit() on every list endpoint with no exceptions. This is not a targeting
@@ -293,27 +294,21 @@ export async function POST(request: NextRequest) {
             }
         }
 
-        // Save to history
-        const historyEntry = {
-            title,
-            body: notificationBody,
+        // BACKLOG-211/roadmap-doc bonus finding: this used to be a self-`fetch()`
+        // to /api/notifications/history with no auth headers, which 401'd every
+        // single time against that route's own admin gate and was silently
+        // swallowed by the surrounding try/catch -- the composer's "Recent
+        // History" panel has therefore always been empty. Direct write instead,
+        // same shared log table/helper every other send path now uses.
+        await logNotificationSend({
+            source: 'campaign',
+            matchId: matchId || null,
+            eventType: type || null,
             targetAudience,
-            sentTo: successCount,
             totalSubscriptions: allSubscriptions.length,
-            failedSubscriptions: failedSubscriptions.length,
-            sentAt: new Date().toISOString(),
-        };
-        
-        // Save to history API (fire and forget)
-        try {
-            await fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/notifications/history`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(historyEntry),
-            });
-        } catch (e) {
-            console.log('[Notifications API] Failed to save history:', e);
-        }
+            sentCount: successCount,
+            failedCount: failedSubscriptions.length,
+        });
 
         console.log('[Notifications API] Final result:', {
             success: true,
