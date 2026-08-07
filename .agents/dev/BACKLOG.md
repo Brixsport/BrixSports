@@ -7572,7 +7572,7 @@ deprioritized in its favor. -->
 
 ### BUG-210 — In-App WebSocket Toasts Still Had `BUG-200`'s Single-Tab Dependency
 
-**Status:** SHIPPED — 2026-08-06 (session 50, branch `feature/notification-system`) — **Vercel side live, `ws-server/index.js` change needs a `dev`-branch merge to actually deploy to Railway**
+**Status:** RESOLVED — 2026-08-07 (session 50), merged to `dev` via PR #20, live-verified on the real deployed stack
 **Priority:** Medium — same reliability gap `BUG-200` fixed for push, now fixed for the separate in-app toast layer; basketball previously produced zero in-app toasts under any circumstances
 
 **Problem:** `GlobalNotificationListener.tsx`'s toasts only fired in response to `notification:global`, emitted from `ws-server/index.js:313` only when it received a `socket.on('event:log')` — which was emitted from the logger's own browser tab (`FootballLogger.tsx:734`). If the logger's tab closed, in-app toasts stopped, exactly as push did before `BUG-200`. `BasketballLogger.tsx` never emitted `event:log` at all, so basketball produced no in-app toasts, period.
@@ -7585,7 +7585,17 @@ deprioritized in its favor. -->
 
 **Considered and explicitly rejected: a partial cherry-pick of just `ws-server/index.js` to `dev`, the same shape as `BACKLOG-208`'s hotfix.** Checked `dev`'s actual current state before attempting it: `dev`'s `events/route.ts` already has the server-side `event:new` broadcast (the `BUG-108`/`116` fix, already merged), so the double-render half of this bug **is confirmed already live on production right now** — but `dev` has no `broadcastGlobalNotification()` anywhere yet (not in `socket.ts`, not called from `events/route.ts` — that function is new to this branch). A `ws-server/index.js`-only cherry-pick would make `event:log` ack-only, which stops the duplicate `event:new`/toast broadcast — but since `dev`'s Vercel side has no replacement `broadcastGlobalNotification()` call, it would also delete `dev`'s only current toast mechanism entirely, trading "1 toast + duplicate render" for "0 toasts, single render." Richard's call: hold, do not cherry-pick partially — wait for this branch's full PR to `dev` instead, since a full 4-file cherry-pick's clean applicability against `dev`'s divergent state (it lacks `BACKLOG-206`'s `notification-rules.ts` abstraction that this branch's `events/route.ts` now depends on) was never verified and carries more risk than the isolated `BACKLOG-208` middleware fix did.
 
-**Found:** `NOTIFICATION_SYSTEM_ROADMAP_PROPOSAL.md`, "Also worth flagging" section A, session 49. **Fixed:** session 50. **Duplication side-finding:** session 50, discovered while implementing this fix, not separately audited for.
+**Merged via PR #20** (squash-merged to `dev`, `4bd8dee`) rather than the partial `ws-server`-only cherry-pick considered and rejected earlier in this same entry — the full 4-file change landed together, so the toast-loss regression that partial approach would have caused never happened.
+
+**Live-verified on the real deployed stack, not the feature-branch preview:** logged in as the real test logger (`logger_1767968844029`) against `brixsports-staging.vercel.app` (the domain Railway's `ws-server` actually calls, now running the merged `dev` code) and submitted a real Yellow Card through the actual `FootballLogger` UI — triggering a second-yellow auto-red in the same action, two real events. A second browser tab, open on the match-detail page's Timeline with its own live WS connection (the exact scenario this bug was found in), showed both events exactly once each, no duplicates. Console log confirms precisely: **two** `[WS] New event received]` messages for **two** real events — 1:1, not 2:1. Before this fix, the same scenario would have logged/rendered each event twice.
+
+**Evidence:**
+- `tsc --noEmit` clean (48-49 baseline, none new).
+- Live Timeline (separate viewer tab, real WS connection) showed 2 new events after firing 2 real logger-UI actions — not 4.
+- Browser console log showed exactly 2 `[WS] New event received]` entries for the 2 real events fired.
+- Toast rendering itself not directly observed (auto-dismiss timing missed during the check) — the underlying broadcast path is the same `broadcastGlobalNotification()` call already confirmed firing correctly in `BACKLOG-211`'s send-log evidence for this exact event type; what this pass specifically confirms is that it no longer fires *twice*.
+
+**Found:** `NOTIFICATION_SYSTEM_ROADMAP_PROPOSAL.md`, "Also worth flagging" section A, session 49. **Fixed:** session 50. **Duplication side-finding:** session 50, discovered while implementing this fix, not separately audited for. **Merged + live-verified:** session 50 (2026-08-07).
 
 ---
 
