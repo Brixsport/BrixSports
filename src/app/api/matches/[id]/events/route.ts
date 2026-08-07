@@ -4,7 +4,7 @@ import { matchEvents, matches, matchLoggerAssignments, players, teams } from '@/
 import { eq, asc, and, sql, gt } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { getAuthUser } from '@/lib/auth';
-import { broadcastMatchEvent, broadcastScoreUpdate } from '@/lib/socket';
+import { broadcastMatchEvent, broadcastScoreUpdate, broadcastGlobalNotification } from '@/lib/socket';
 import { SCORING_POINT_VALUES } from '@/lib/scoring';
 import { calculateAndSaveRatings } from '@/lib/ratingsService';
 import { sendMatchEventNotification } from '@/lib/notifications/match-notification-service';
@@ -382,6 +382,31 @@ export async function POST(
                         playerId: notifyPlayerId || undefined,
                         relatedPlayerId: relatedPlayerId || undefined,
                     });
+
+                    // BUG-210: in-app toast, server-side, same trigger point as the push
+                    // send above -- no longer dependent on the logger's tab staying open,
+                    // and now fires for basketball too (previously never did, since
+                    // BasketballLogger.tsx never emitted the client-side event:log this
+                    // used to depend on). Only the toast-listener-recognized subset --
+                    // PENALTY_SAVED/PENALTY_MISSED/TECHNICAL_FOUL aren't in
+                    // GlobalNotificationListener.tsx's accepted type list, so skip
+                    // broadcasting those rather than emitting a silent no-op.
+                    if (notificationEventType === 'GOAL' || notificationEventType === 'RED_CARD' || notificationEventType === 'YELLOW_CARD') {
+                        const toastMessage = notificationEventType === 'GOAL'
+                            ? `GOAL! ${player?.name ? player.name + ' scores!' : 'Goal scored!'}`
+                            : notificationEventType === 'RED_CARD'
+                                ? `${player?.name || 'A player'} has been sent off!`
+                                : `${player?.name || 'A player'} has been booked`;
+                        await broadcastGlobalNotification({
+                            type: notificationEventType,
+                            message: toastMessage,
+                            matchId,
+                            teamId: teamId || undefined,
+                            homeTeamId: match.homeTeamId,
+                            awayTeamId: match.awayTeamId,
+                            playerId: notifyPlayerId || undefined,
+                        });
+                    }
                 } catch (error) {
                     console.error('Error sending match event notification:', error);
                 }

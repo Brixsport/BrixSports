@@ -10,7 +10,7 @@ import { eq, desc, sql } from 'drizzle-orm';
 import { playerRatings } from '@/db/schema-ratings';
 import { getAuthUser } from '@/lib/auth';
 import { isLoggerAssigned } from '@/lib/match-logger-helpers';
-import { broadcastToMatch } from '@/lib/socket';
+import { broadcastToMatch, broadcastGlobalNotification } from '@/lib/socket';
 import { sendMatchEventNotification } from '@/lib/notifications/match-notification-service';
 import { getNotifiablePeriodType } from '@/lib/notifications/notification-rules';
 
@@ -699,6 +699,31 @@ export async function PATCH(
                         teamName: homeTeam && awayTeam ? `${homeTeam.name} vs ${awayTeam.name}` : undefined,
                         homeScore: current.homeScore ?? undefined,
                         awayScore: current.awayScore ?? undefined,
+                    });
+
+                    // BUG-210: same in-app toast fix as events/route.ts's POST handler --
+                    // server-side, no logger-tab dependency, works for basketball too.
+                    // HALF_TIME maps to GlobalNotificationListener.tsx's 'PERIOD_CHANGE'
+                    // type (its accepted-type list predates this sport-keyed HALF_TIME
+                    // notion and was never updated -- mapped here rather than touching
+                    // the listener's own vocabulary).
+                    // periodEventType is narrowed to MATCH_START/HALF_TIME/MATCH_END at
+                    // runtime (the only three values NOTIFICATION_RULES' periods maps
+                    // produce for either sport) but typed as the full NotificationKey
+                    // union, so TS can't see that -- explicit cast, not a real widening risk.
+                    const toastType: 'MATCH_START' | 'MATCH_END' | 'PERIOD_CHANGE' =
+                        periodEventType === 'HALF_TIME' ? 'PERIOD_CHANGE' : periodEventType as 'MATCH_START' | 'MATCH_END';
+                    const toastMessage = periodEventType === 'MATCH_START'
+                        ? `Match started: ${homeTeam?.name || 'Home'} vs ${awayTeam?.name || 'Away'}`
+                        : periodEventType === 'HALF_TIME'
+                            ? `Half time: ${current.homeScore ?? 0}-${current.awayScore ?? 0}`
+                            : `Full time: ${current.homeScore ?? 0}-${current.awayScore ?? 0}`;
+                    await broadcastGlobalNotification({
+                        type: toastType,
+                        message: toastMessage,
+                        matchId,
+                        homeTeamId: current.homeTeamId,
+                        awayTeamId: current.awayTeamId,
                     });
                 } catch (error) {
                     console.error('Error sending period notification:', error);
