@@ -7589,22 +7589,23 @@ deprioritized in its favor. -->
 
 ### BACKLOG-211 — No Persistent Server-Side Log of Notification Send Attempts/Successes/Failures
 
-**Status:** RESOLVED (staging) — 2026-08-07 (session 50, branch `feature/notification-system`); prod mirror still deliberately deferred, see below
+**Status:** RESOLVED — 2026-08-07 (session 50, branch `feature/notification-system`), staging + prod both mirrored and verified
 **Priority:** High (tooling) — had directly cost real debugging time in both `BUG-200`'s and `BACKLOG-203`'s own verification passes (both evidence blocks flagged this same gap)
 
 **Problem:** `sendMatchEventNotification()` only `console.log`s — nothing persists past that request's logs. Separately, the campaign composer's own "Recent History" panel had never worked at all: `send/route.ts`'s history write was a server-side self-`fetch()` to `/api/notifications/history` that forwarded no auth headers, while that route requires admin — it 401'd every time, silently swallowed by the surrounding try/catch (`BACKLOG-124`-class bug).
 
 **Built:** new `notification_send_log` table (`source`, `matchId`, `eventType`, `targetAudience`, `totalSubscriptions`, `sentCount`, `failedCount`, `errors`, `createdAt`) — one row per send *call*, not per-subscription, to keep volume sane while still answering "did this fire, for how many people, did it succeed." Indexed on `match_id`, `created_at`, `source` for real dashboard/support query patterns (Richard's explicit ask: build to production standard, not a debug scratch table — not just "will this help me this session"). Shared `logNotificationSend()` helper (`match-notification-service.ts`, exported) called from all three real send paths: `sendMatchEventNotification()` (both success and error paths), `sendMatchReminderNotification()` (currently dead code — `BACKLOG-208` deleted its only caller — logged anyway since it's a public exported function that could be reused), and the campaign composer's `send/route.ts`, which now writes directly to the same table instead of the broken self-`fetch()` — fixing the "Recent History" panel gap as a side effect of this item, not a separate fix.
 
-**Staging-only, deliberately:** the table exists and is wired on staging; prod mirror was deferred until the write path was live-verified (matching the shootout-columns precedent — staging first, verify, then prod). That verification is now done (see evidence) — prod mirror is the only remaining step, not yet done.
+**Correction to an earlier evidence claim in this same entry:** the original evidence block said the three query-pattern indexes were "confirmed via index listing" on staging. That was wrong — re-checked while pulling DDL to mirror to prod, and only the primary-key autoindex actually existed; the three `CREATE INDEX` statements had never actually landed. Re-ran `add-notification-send-log-indexes.mjs` (idempotent) and confirmed via a fresh `sqlite_master` read this time before trusting it again.
 
 **Evidence:**
 - `tsc --noEmit` clean (49 baseline, none new).
-- Table + indexes confirmed via `PRAGMA table_info`/index listing on staging (`dev/create-notification-send-log-table.mjs`, `dev/add-notification-send-log-indexes.mjs`).
 - **Live-verified the write path end to end**: fired a real `Yellow Card` event on `notif-test-throwaway-1` via `POST /api/matches/{id}/events` against the current preview (`brixsports-staging-2d8rnfd65-brixsports-projects.vercel.app`) → 201 → **DB-confirmed** the `after()` hook's `logNotificationSend()` call landed a real row (`source='match_event', match_id='notif-test-throwaway-1', event_type='YELLOW_CARD', total_subscriptions=2, sent_count=2, failed_count=0`), correctly mapped from the human-readable event type via `getNotifiableEventType()`, not just a 201 status code.
-- Pending items: prod mirror (blocked only on this confirmation, which is now done — ready to migrate).
+- Table + all 3 indexes actually confirmed present on staging this time (`dev/add-notification-send-log-indexes.mjs` re-run, `sqlite_master` read).
+- **Prod mirror complete**: DDL pulled verbatim from staging's own `sqlite_master`, host-fingerprint-guarded (`brixsportv2-brixsports`) before writing, table + all 3 indexes created and confirmed via `PRAGMA table_info` matching staging exactly (`dev/migrate-notification-send-log-prod.mjs`).
+- Pending items: none.
 
-**Found:** `NOTIFICATION_SYSTEM_ROADMAP_PROPOSAL.md` thread 1 + "Also worth flagging" section B, session 49. **Built:** session 50, per Richard's sequenced work plan, with an explicit mid-build correction to build it for production dashboard/support use, not just debugging. **Live-verified:** session 50 (2026-08-07).
+**Found:** `NOTIFICATION_SYSTEM_ROADMAP_PROPOSAL.md` thread 1 + "Also worth flagging" section B, session 49. **Built:** session 50, per Richard's sequenced work plan, with an explicit mid-build correction to build it for production dashboard/support use, not just debugging. **Live-verified + prod-mirrored:** session 50 (2026-08-07).
 
 ---
 
@@ -7664,5 +7665,25 @@ Everything below is explicitly **not** being built now — captured from `NOTIFI
 - Confirmed the buttons are NOT dead — clicking via ref at either width correctly fired the `POST`/`DELETE /api/users/favorites` calls verified in `BACKLOG-207`'s own evidence block.
 
 **Found:** session 50 (2026-08-07), live UI verification of `BACKLOG-207`, flagged by Richard directly from the screenshot. **Fixed:** not yet — filed for a dedicated follow-up pass.
+
+---
+
+### BUG-215 — GOAL/RED_CARD/YELLOW_CARD Push Body Rendered Literal "undefined" When `playerId` Was Null
+
+**Status:** RESOLVED — 2026-08-07 (session 50, branch `feature/notification-system`)
+**Priority:** Medium-High — a real device push, not just a log line; user-facing and directly seen mid-session
+
+**Problem:** found live — Richard's own device received two real push notifications reading `"undefined has been booked (61')"` in response to `BACKLOG-211`'s verification event (a Yellow Card fired without a `playerId`). Root cause: `events/route.ts:374` passes `playerName: player?.name` into `sendMatchEventNotification()` unguarded; `match-notification-service.ts`'s `GOAL`/`RED_CARD`/`YELLOW_CARD` template cases interpolated `event.playerName` directly with no fallback, producing the literal string `"undefined"` when the player lookup came back null. Same bug class as `BUG-201`/`BUG-202` (nullable field, no defensive fallback) — just at the push-template layer instead of the lineup layer. Notably, the in-app toast body built two lines below in the same `route.ts` block (`BUG-210`'s addition) already guards this exact value with `player?.name || 'A player'` — the push template just never got the same treatment, and `PENALTY_SAVED`/`PENALTY_MISSED`/`TECHNICAL_FOUL` cases in the same file already had the guard too, making `GOAL`/`RED_CARD`/`YELLOW_CARD` the odd ones out, not a novel gap.
+
+**Reachability:** confirmed not purely a test-script artifact — `events/route.ts:417`'s own `if (playerId && ...)` gate treats a card/goal event with no `playerId` as an expected, handled case elsewhere in the same file, so this is a real path a live logger could hit, not just this session's synthetic verification call.
+
+**Fix:** `match-notification-service.ts`'s `GOAL`/`RED_CARD`/`YELLOW_CARD` bodies now use `event.playerName || 'A player'`, matching the toast's existing wording and the other three cases' existing pattern.
+
+**Evidence:**
+- `tsc --noEmit` clean (49 baseline, none new; error is not in the edited file).
+- Root cause confirmed by reading `events/route.ts:355-409` directly — the toast/push asymmetry is visible in the same `after()` block, not inferred.
+- Not yet re-verified via a fresh real device push post-fix (would need a new event fired against the next preview deploy) — code-level fix directly mirrors the already-working, already-live toast fallback one code path away.
+
+**Found:** session 50 (2026-08-07), live — a real push notification screenshot shared by Richard mid-verification of `BACKLOG-211`. **Fixed:** session 50, same session.
 
 ---
