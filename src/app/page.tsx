@@ -262,10 +262,29 @@ export default function Home() {
     return true;
   });
 
-  // Sort matches by start time in reverse chronological order (most recent first)
-  const sortedMatches = [...filteredMatches].sort((a, b) =>
-    new Date(b.startTime).getTime() - new Date(a.startTime).getTime()
-  );
+  // Sort matches by start time in reverse chronological order (most recent first).
+  // BUG-213: a malformed start_time (raw epoch-as-text instead of an ISO string --
+  // known to come from a couple of dev/test-setup scripts, root cause not yet
+  // fully traced platform-wide) parses to NaN, and NaN feeding this comparator
+  // is implementation-defined in Array.prototype.sort() -- confirmed live to
+  // measurably displace other, validly-dated matches near it, not just mislabel
+  // its own group. Guard: unparseable dates sort to the end (oldest), never let
+  // NaN reach the comparator at all.
+  const sortedMatches = [...filteredMatches].sort((a, b) => {
+    const aTime = new Date(a.startTime).getTime();
+    const bTime = new Date(b.startTime).getTime();
+    return (isNaN(bTime) ? -Infinity : bTime) - (isNaN(aTime) ? -Infinity : aTime);
+  });
+
+  // BUG-213: `toLocaleDateString()` on an unparseable date returns the literal
+  // string "Invalid Date" -- which then rendered as a real, user-facing section
+  // header. A clearly-labeled fallback communicates "we don't know" honestly
+  // instead of looking like the app itself is broken.
+  const formatGroupDate = (startTime: string) => {
+    const d = new Date(startTime);
+    if (isNaN(d.getTime())) return 'Date Unknown';
+    return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+  };
 
   // Group matches by round (for basketball) or date (for other sports)
   const groupedMatches = sortedMatches.reduce((groups: any, match: any) => {
@@ -321,19 +340,11 @@ export default function Home() {
         groupKey = `Round ${roundNum}`;
       } else {
         // Ultimate fallback: Use date
-        groupKey = new Date(match.startTime).toLocaleDateString('en-US', {
-          weekday: 'short',
-          month: 'short',
-          day: 'numeric'
-        });
+        groupKey = formatGroupDate(match.startTime);
       }
     } else {
       // For other sports, group by date
-      groupKey = new Date(match.startTime).toLocaleDateString('en-US', {
-        weekday: 'short',
-        month: 'short',
-        day: 'numeric'
-      });
+      groupKey = formatGroupDate(match.startTime);
     }
 
     if (!groups[groupKey]) {
@@ -353,7 +364,7 @@ export default function Home() {
           'BRIXSPORTS', 'Nigerian university sports', 'NUGA', 'NPUGA', 'BUSA LEAGUE', 'live scores',
           'university football', 'university basketball', 'campus sports Nigeria'
         ]}
-        ogImage="/assets/Logos/BRIX-SPORT-LOGO.png"
+        ogImage="/assests/Logos/BRIX-SPORT-LOGO.png"
         ogType="website"
       />
       

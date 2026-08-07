@@ -843,6 +843,28 @@ export const matchReminders = sqliteTable('match_reminders', {
     createdAt: integer('created_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
 });
 
+// BACKLOG-211: persistent record of every notification send attempt.
+// sendMatchEventNotification()/sendMatchReminderNotification()/the campaign
+// composer previously only console.log'd -- Vercel function logs aren't
+// reachable from a dev session, which cost real debugging time twice in one
+// session (BUG-200's and BACKLOG-203's own verification passes both had to
+// fall back to direct tsx-run diagnostics instead of just reading a log).
+// One row per send *call* (not per-subscription) -- enough to answer "did
+// this fire, for how many people, did it succeed" without the row count
+// exploding on a large audience.
+export const notificationSendLog = sqliteTable('notification_send_log', {
+    id: text('id').primaryKey(),
+    source: text('source').notNull(), // 'match_event' | 'match_reminder' | 'campaign'
+    matchId: text('match_id'), // nullable -- campaigns aren't always match-scoped
+    eventType: text('event_type'), // e.g. 'GOAL', 'MATCH_START', or the campaign's own `type` field
+    targetAudience: text('target_audience'), // campaign-only: 'all' | 'team_followers' | 'match_specific'
+    totalSubscriptions: integer('total_subscriptions').notNull().default(0),
+    sentCount: integer('sent_count').notNull().default(0),
+    failedCount: integer('failed_count').notNull().default(0),
+    errors: text('errors'), // JSON array of error strings, nullable
+    createdAt: integer('created_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
+});
+
 // Password Reset Tokens table
 export const passwordResetTokens = sqliteTable('password_reset_tokens', {
     id: text('id').primaryKey(),

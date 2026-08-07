@@ -10,7 +10,9 @@ import { eq, desc, sql } from 'drizzle-orm';
 import { playerRatings } from '@/db/schema-ratings';
 import { getAuthUser } from '@/lib/auth';
 import { isLoggerAssigned } from '@/lib/match-logger-helpers';
-import { broadcastToMatch } from '@/lib/socket';
+import { broadcastToMatch, broadcastGlobalNotification } from '@/lib/socket';
+import { sendMatchEventNotification } from '@/lib/notifications/match-notification-service';
+import { getNotifiablePeriodType } from '@/lib/notifications/notification-rules';
 
 export async function GET(
     request: NextRequest,
@@ -652,6 +654,82 @@ export async function PATCH(
         // after() rather than a bare fire-and-forget call — see events/route.ts's POST
         // handler for why (traced root cause of BUG-108/116's multi-second broadcast delay).
         after(() => broadcastToMatch(matchId, 'match:updated', { matchId, ...updateData }));
+
+        // Notification-reliability fix (same as events/route.ts's POST handler,
+        // see that file's comment for the full BUG-108/116-class rationale): period
+        // transitions used to notify only via MatchStateManager.triggerPeriodNotification()
+        // dispatching a window CustomEvent from the logger's own tab. Moved server-side.
+        //
+        // Which currentPeriod values are notifiable, per sport, now lives in
+        // notification-rules.ts's NOTIFICATION_RULES table (roadmap thread 5/7) --
+        // basketball's 'FINISHED' -> MATCH_END entry there is now an explicit,
+        // consciously-kept table row rather than an accidental match on a
+        // football-shaped if-chain (it was firing unintentionally before Phase 2
+        // formalized it — NOTIFICATION_SYSTEM_ROADMAP_PROPOSAL.md thread 3).
+        if (body.currentPeriod !== undefined) {
+            after(async () => {
+                try {
+                    const [current] = await db
+                        .select({
+                            sport: matches.sport,
+                            homeTeamId: matches.homeTeamId,
+                            awayTeamId: matches.awayTeamId,
+                            homeScore: matches.homeScore,
+                            awayScore: matches.awayScore,
+                        })
+                        .from(matches)
+                        .where(eq(matches.id, matchId));
+                    if (!current) return;
+
+                    // Sport-keyed lookup (notification-rules.ts) -- resolved here, not
+                    // synchronously before scheduling after(), since it needs the match's
+                    // sport and this avoids an extra query on the hot PATCH request path.
+                    const periodEventType = getNotifiablePeriodType(current.sport, body.currentPeriod);
+                    if (!periodEventType) return;
+
+                    const [homeTeam, awayTeam] = await Promise.all([
+                        db.select({ name: teams.name }).from(teams).where(eq(teams.id, current.homeTeamId)).get(),
+                        db.select({ name: teams.name }).from(teams).where(eq(teams.id, current.awayTeamId)).get(),
+                    ]);
+                    await sendMatchEventNotification({
+                        matchId,
+                        homeTeamId: current.homeTeamId,
+                        awayTeamId: current.awayTeamId,
+                        eventType: periodEventType,
+                        teamName: homeTeam && awayTeam ? `${homeTeam.name} vs ${awayTeam.name}` : undefined,
+                        homeScore: current.homeScore ?? undefined,
+                        awayScore: current.awayScore ?? undefined,
+                    });
+
+                    // BUG-210: same in-app toast fix as events/route.ts's POST handler --
+                    // server-side, no logger-tab dependency, works for basketball too.
+                    // HALF_TIME maps to GlobalNotificationListener.tsx's 'PERIOD_CHANGE'
+                    // type (its accepted-type list predates this sport-keyed HALF_TIME
+                    // notion and was never updated -- mapped here rather than touching
+                    // the listener's own vocabulary).
+                    // periodEventType is narrowed to MATCH_START/HALF_TIME/MATCH_END at
+                    // runtime (the only three values NOTIFICATION_RULES' periods maps
+                    // produce for either sport) but typed as the full NotificationKey
+                    // union, so TS can't see that -- explicit cast, not a real widening risk.
+                    const toastType: 'MATCH_START' | 'MATCH_END' | 'PERIOD_CHANGE' =
+                        periodEventType === 'HALF_TIME' ? 'PERIOD_CHANGE' : periodEventType as 'MATCH_START' | 'MATCH_END';
+                    const toastMessage = periodEventType === 'MATCH_START'
+                        ? `Match started: ${homeTeam?.name || 'Home'} vs ${awayTeam?.name || 'Away'}`
+                        : periodEventType === 'HALF_TIME'
+                            ? `Half time: ${current.homeScore ?? 0}-${current.awayScore ?? 0}`
+                            : `Full time: ${current.homeScore ?? 0}-${current.awayScore ?? 0}`;
+                    await broadcastGlobalNotification({
+                        type: toastType,
+                        message: toastMessage,
+                        matchId,
+                        homeTeamId: current.homeTeamId,
+                        awayTeamId: current.awayTeamId,
+                    });
+                } catch (error) {
+                    console.error('Error sending period notification:', error);
+                }
+            });
+        }
 
         return NextResponse.json({
             success: true,

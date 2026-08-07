@@ -297,29 +297,20 @@ io.on('connection', (socket) => {
     });
 
     // ── Event Logging (from Logger client) ──────────────────────
+    // Found session 50 (BUG-210 investigation): this handler used to ALSO
+    // broadcast 'event:new' to the match room and (for goals) 'notification:global'
+    // -- both now genuinely duplicate what already happens server-side: 'event:new'
+    // via events/route.ts's after(broadcastMatchEvent(...)) (the BUG-108/116 fix),
+    // and 'notification:global' via the same route's after() now also calling
+    // broadcastGlobalNotification() (BUG-210's fix). Left in place, every real
+    // football event with an active WS connection would have double-rendered in
+    // viewers' live feeds and double-toasted for goals -- same double-send class
+    // as BUG-205, just at the WS layer instead of push. This handler is now purely
+    // an ack back to the sending logger; the server-side REST-triggered broadcasts
+    // are the single source of truth for what viewers actually see.
     socket.on('event:log', requireLogger((data) => {
         try {
-            console.log(`[WS] Event logged: ${data.type} in match ${data.matchId}`);
-
-            // Broadcast to all subscribers of this match
-            io.to(room(`match:${data.matchId}`)).emit('event:new', {
-                ...data,
-                timestamp: Date.now(),
-            });
-
-            // Global goal notification — scoped to this connection's environment,
-            // not truly global (BUG-074), so a staging test goal never pages prod viewers
-            if (data.type === 'Goal' || data.type === 'GOAL') {
-                io.to(env).emit('notification:global', {
-                    type: 'GOAL',
-                    matchId: data.matchId,
-                    detail: data.detail,
-                    teamId: data.teamId,
-                    message: `GOAL! ${data.detail || 'Goal scored'}!`,
-                });
-            }
-
-            // Acknowledge to sender
+            console.log(`[WS] Event logged (ack only, broadcast is server-side): ${data.type} in match ${data.matchId}`);
             socket.emit('event:logged', {
                 success: true,
                 eventId: data.id || `evt_${Date.now()}`,

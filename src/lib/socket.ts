@@ -162,3 +162,25 @@ export function broadcastEventDeleted(matchId: string, eventId: string): Promise
         eventId,
     });
 }
+
+/**
+ * BUG-210: the in-app WS toast (`GlobalNotificationListener.tsx`) previously
+ * only fired from `ws-server/index.js`'s `event:log` handler -- emitted from
+ * the logger's own browser tab (`FootballLogger.tsx`), so a closed/crashed
+ * tab silently stopped toasts exactly the way it stopped push before
+ * `BUG-200`. Basketball never emitted `event:log` at all, so it produced
+ * zero in-app toasts under any circumstances. Server-side broadcast instead,
+ * same `after()` call sites already doing the equivalent push send -- no
+ * room (global), same env-scoping `broadcast()` already handles.
+ */
+export function broadcastGlobalNotification(payload: {
+    type: 'GOAL' | 'RED_CARD' | 'YELLOW_CARD' | 'MATCH_START' | 'MATCH_END' | 'PERIOD_CHANGE';
+    message: string;
+    matchId?: string;
+    teamId?: string;
+    homeTeamId?: string;
+    awayTeamId?: string;
+    playerId?: string;
+}): Promise<void> {
+    return broadcast(null, 'notification:global', payload);
+}

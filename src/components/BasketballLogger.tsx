@@ -452,13 +452,24 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                             const subsFrom = (l: any) => (l?.substitutes || [])
                                 .map((p: any) => p.playerId || p.id || p)
                                 .filter(Boolean);
+                            // BUG-202 Finding 2: previously, if only one side had a persisted
+                            // lineup, the other side's starters/subs state stayed [] forever
+                            // (this whole block only ran when *either* side existed, and the
+                            // full-roster fallback below never runs once hydratedFromServer is
+                            // true) -- a silent, permanent empty player grid for that team in
+                            // every player-select/assist modal. Same fallback BUG-141's sub-in
+                            // modal already has for this exact case, applied per-side here too.
                             if (homeLineup) {
                                 setHomeStarters(idsFrom(homeLineup));
                                 setHomeSubs(subsFrom(homeLineup));
+                            } else if (match.status === 'LIVE') {
+                                setHomeStarters(homePlayersList.map((p: Player) => p.id));
                             }
                             if (awayLineup) {
                                 setAwayStarters(idsFrom(awayLineup));
                                 setAwaySubs(subsFrom(awayLineup));
+                            } else if (match.status === 'LIVE') {
+                                setAwayStarters(awayPlayersList.map((p: Player) => p.id));
                             }
                             setLineupSet(true);
                             hydratedFromServer = true;

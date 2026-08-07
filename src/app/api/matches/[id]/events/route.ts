@@ -1,12 +1,27 @@
 import { NextRequest, NextResponse, after } from 'next/server';
 import { db } from '@/db';
-import { matchEvents, matches, matchLoggerAssignments } from '@/db/schema';
+import { matchEvents, matches, matchLoggerAssignments, players, teams } from '@/db/schema';
 import { eq, asc, and, sql, gt } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { getAuthUser } from '@/lib/auth';
-import { broadcastMatchEvent, broadcastScoreUpdate } from '@/lib/socket';
+import { broadcastMatchEvent, broadcastScoreUpdate, broadcastGlobalNotification } from '@/lib/socket';
 import { SCORING_POINT_VALUES } from '@/lib/scoring';
 import { calculateAndSaveRatings } from '@/lib/ratingsService';
+import { sendMatchEventNotification } from '@/lib/notifications/match-notification-service';
+import { getNotifiableEventType } from '@/lib/notifications/notification-rules';
+
+// Notification-reliability fix: this trigger used to fire from the logger's own
+// browser tab only (MatchStateManager.triggerNotification -> window CustomEvent ->
+// EventDrivenNotifier), so a closed/crashed tab silently stopped all notifications
+// for that match even though the event still saved fine -- same class of gap
+// BUG-108/BUG-116 already fixed for the WS broadcast. Moved server-side, same
+// after() pattern as the broadcast calls below. Includes the BUG-199 fix
+// ('Yellow Card' was fully wired for delivery but missing from this allowlist).
+//
+// Which raw event types are notifiable, per sport, now lives in
+// notification-rules.ts's NOTIFICATION_RULES table (roadmap thread 5/7) rather than
+// a flat map here -- that table is what basketball's 'Technical Foul' entry and
+// football's five entries both come from.
 
 // GET /api/matches/[id]/events - Get all events for a match
 export async function GET(
@@ -334,6 +349,68 @@ export async function POST(
 
         if (newShootoutHomeScore !== undefined && newShootoutAwayScore !== undefined) {
             after(() => broadcastScoreUpdate(matchId, match.homeScore ?? 0, match.awayScore ?? 0, newShootoutHomeScore, newShootoutAwayScore));
+        }
+
+        const notificationEventType = getNotifiableEventType(match.sport, type);
+        if (notificationEventType && !isPenaltyShootout) {
+            after(async () => {
+                try {
+                    // Penalty Saved credits the keeper (relatedPlayerId), not the taker --
+                    // same distinction the player-stats update above already makes.
+                    const notifyPlayerId = notificationEventType === 'PENALTY_SAVED' ? relatedPlayerId : playerId;
+                    const [player, team] = await Promise.all([
+                        notifyPlayerId
+                            ? db.select({ name: players.name }).from(players).where(eq(players.id, notifyPlayerId)).get()
+                            : null,
+                        teamId
+                            ? db.select({ name: teams.name }).from(teams).where(eq(teams.id, teamId)).get()
+                            : null,
+                    ]);
+                    await sendMatchEventNotification({
+                        matchId,
+                        homeTeamId: match.homeTeamId,
+                        awayTeamId: match.awayTeamId,
+                        eventType: notificationEventType,
+                        playerName: player?.name,
+                        teamName: team?.name,
+                        minute,
+                        homeScore: newHomeScore ?? match.homeScore ?? undefined,
+                        awayScore: newAwayScore ?? match.awayScore ?? undefined,
+                        // Not used for targeting yet -- see MatchEventNotification's own
+                        // comment (roadmap item 4). Carried through now so a future
+                        // followed-player audience query doesn't need this call site again.
+                        playerId: notifyPlayerId || undefined,
+                        relatedPlayerId: relatedPlayerId || undefined,
+                    });
+
+                    // BUG-210: in-app toast, server-side, same trigger point as the push
+                    // send above -- no longer dependent on the logger's tab staying open,
+                    // and now fires for basketball too (previously never did, since
+                    // BasketballLogger.tsx never emitted the client-side event:log this
+                    // used to depend on). Only the toast-listener-recognized subset --
+                    // PENALTY_SAVED/PENALTY_MISSED/TECHNICAL_FOUL aren't in
+                    // GlobalNotificationListener.tsx's accepted type list, so skip
+                    // broadcasting those rather than emitting a silent no-op.
+                    if (notificationEventType === 'GOAL' || notificationEventType === 'RED_CARD' || notificationEventType === 'YELLOW_CARD') {
+                        const toastMessage = notificationEventType === 'GOAL'
+                            ? `GOAL! ${player?.name ? player.name + ' scores!' : 'Goal scored!'}`
+                            : notificationEventType === 'RED_CARD'
+                                ? `${player?.name || 'A player'} has been sent off!`
+                                : `${player?.name || 'A player'} has been booked`;
+                        await broadcastGlobalNotification({
+                            type: notificationEventType,
+                            message: toastMessage,
+                            matchId,
+                            teamId: teamId || undefined,
+                            homeTeamId: match.homeTeamId,
+                            awayTeamId: match.awayTeamId,
+                            playerId: notifyPlayerId || undefined,
+                        });
+                    }
+                } catch (error) {
+                    console.error('Error sending match event notification:', error);
+                }
+            });
         }
 
         // Update player stats for competitive matches only — friendlies and shootout events do not count

@@ -8,8 +8,9 @@ import { useToast } from '@/hooks/useToast';
 import { ToastContainer } from '@/components/admin/Toast';
 import {
     ArrowLeft, Clock, MapPin, Users, TrendingUp, Eye,
-    Activity, BarChart3, Share2, Heart, Bell, Trophy, Play
+    Activity, BarChart3, Share2, Star, Bell, Trophy, Play
 } from 'lucide-react';
+import { useFavorites } from '@/hooks/useFavorites';
 import MatchStatusBadge from '@/components/MatchStatusBadge';
 import LiveMatchTimeline from '@/components/LiveMatchTimeline';
 import LiveStats from '@/components/LiveStats';
@@ -57,7 +58,11 @@ export default function MatchDetailPage() {
     const [matchData, setMatchData] = useState<MatchData | null>(null);
     const [loading, setLoading] = useState(true);
     const [activeTab, setActiveTab] = useState<'overview' | 'timeline' | 'stats' | 'lineups' | 'h2h'>('overview');
-    const [isFavorited, setIsFavorited] = useState(false);
+    // BACKLOG-207: replaces the dead single Heart (pure local useState, no API
+    // call, reset on reload) with two real per-team follow stars -- toggleTeam()
+    // already works and is already the exact thing sendMatchEventNotification()
+    // targets (either team followed -> match is notification-active).
+    const { toggleTeam, isFavoriteTeam } = useFavorites();
     const [isNotifySubscribed, setIsNotifySubscribed] = useState(false);
     const [notifyLoading, setNotifyLoading] = useState(false);
     const [h2hData, setH2hData] = useState<any>(null);
@@ -541,14 +546,6 @@ export default function MatchDetailPage() {
                             </button>
 
                             <button
-                                onClick={() => setIsFavorited(!isFavorited)}
-                                className={`p-2 rounded-lg transition-colors ${isFavorited ? 'bg-red-500/20 text-red-500' : 'bg-white/5 text-white/60 hover:bg-white/10'
-                                    }`}
-                            >
-                                <Heart className={`w-5 h-5 ${isFavorited ? 'fill-current' : ''}`} />
-                            </button>
-
-                            <button
                                 onClick={handleShare}
                                 className="p-2 rounded-lg bg-white/5 text-white/60 hover:bg-white/10 transition-colors"
                             >
@@ -566,6 +563,18 @@ export default function MatchDetailPage() {
                                 alt={match.homeTeam.name}
                                 className="w-12 h-12 object-contain"
                             />
+                            {/* Star sits outside the sm:block name wrapper below -- it's an
+                                interactive control, not space-saving decorative text, and must
+                                stay visible at every viewport width (BUG-214: was nested inside
+                                "hidden sm:block", making it invisible on any real phone). */}
+                            <button
+                                onClick={() => toggleTeam(match.homeTeam.id)}
+                                aria-label={isFavoriteTeam(match.homeTeam.id) ? `Unfollow ${match.homeTeam.name}` : `Follow ${match.homeTeam.name} — get alerts for this team's matches`}
+                                title={isFavoriteTeam(match.homeTeam.id) ? 'Unfollow' : "Follow — get alerts for this team's matches"}
+                                className={`transition-colors ${isFavoriteTeam(match.homeTeam.id) ? 'text-yellow-400' : 'text-white/30 hover:text-white/60'}`}
+                            >
+                                <Star className={`w-4 h-4 ${isFavoriteTeam(match.homeTeam.id) ? 'fill-current' : ''}`} />
+                            </button>
                             <div className="hidden sm:block">
                                 <div className="font-bold text-lg flex items-center gap-1.5">
                                     {match.homeTeam.name}
@@ -640,6 +649,16 @@ export default function MatchDetailPage() {
                                 </div>
                                 <div className="text-sm text-white/60">{match.awayTeam.shortName}</div>
                             </div>
+                            {/* Star sits outside the sm:block name wrapper above -- see the
+                                matching comment on the home-team side (BUG-214). */}
+                            <button
+                                onClick={() => toggleTeam(match.awayTeam.id)}
+                                aria-label={isFavoriteTeam(match.awayTeam.id) ? `Unfollow ${match.awayTeam.name}` : `Follow ${match.awayTeam.name} — get alerts for this team's matches`}
+                                title={isFavoriteTeam(match.awayTeam.id) ? 'Unfollow' : "Follow — get alerts for this team's matches"}
+                                className={`transition-colors ${isFavoriteTeam(match.awayTeam.id) ? 'text-yellow-400' : 'text-white/30 hover:text-white/60'}`}
+                            >
+                                <Star className={`w-4 h-4 ${isFavoriteTeam(match.awayTeam.id) ? 'fill-current' : ''}`} />
+                            </button>
                             <img
                                 src={match.awayTeam.logo}
                                 alt={match.awayTeam.name}

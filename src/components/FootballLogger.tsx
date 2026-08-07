@@ -21,8 +21,6 @@ import { getMatchStateManager, destroyMatchStateManager, MatchStateManager, Matc
 import type { SyncEvent } from '@/lib/multiLogger';
 import { getPrimaryTeam } from '@/lib/player-affiliation-utils';
 import { TeamLogo } from '@/lib/utils/team-logo';
-// Import to initialize match event notification listener
-import '@/lib/notifications/event-driven-notifier';
 
 import { Match, Logger, Player, Team } from '@/db/schema';
 
@@ -955,40 +953,12 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
             pendingAssistTimeouts.current.push(timeoutId);
         }
 
-        // 2. Send Push Notifications for key discipline and scoring events
-        const isGoalEvent = type === 'Goal' || type === 'Penalty' || type === 'Own Goal';
-        const isCardEvent = type === 'Yellow Card' || type === 'Red Card';
-        const isPenaltyOutcome = type === 'Penalty Saved' || type === 'Penalty Missed';
-        if (isGoalEvent || isCardEvent || isPenaltyOutcome) {
-            const currentState = manager.getState();
-            const notifEventType = (type === 'Goal' || type === 'Penalty' || type === 'Own Goal') ? 'GOAL' :
-                type === 'Red Card' ? 'RED_CARD' :
-                type === 'Penalty Saved' ? 'PENALTY_SAVED' :
-                type === 'Penalty Missed' ? 'PENALTY_MISSED' :
-                'YELLOW_CARD';
-            // For Penalty Saved: show keeper name as headline (relatedPlayerId is keeper)
-            const relatedSnapshot = relatedPlayerId ? manager.createPlayerSnapshot(relatedPlayerId) : null;
-            const playerName = type === 'Penalty Saved'
-                ? (relatedSnapshot?.name || playerSnapshot?.name || 'Unknown')
-                : (playerSnapshot?.name || 'Unknown Player');
-            const teamName = selectedTeam === 'home' ? (homeTeam?.name || 'Home') : (awayTeam?.name || 'Away');
-
-            fetch('/api/notifications/match-event', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    matchId: match.id,
-                    homeTeamId: match.homeTeamId,
-                    awayTeamId: match.awayTeamId,
-                    eventType: notifEventType,
-                    playerName,
-                    teamName,
-                    minute: currentState.clock.displayMinute,
-                    homeScore: currentState.score.home,
-                    awayScore: currentState.score.away,
-                })
-            }).catch(e => console.warn('[FootballLogger] Push notification failed:', e));
-        }
+        // Push notifications for goal/card/penalty-outcome events are sent server-side
+        // now (BUG-200/BUG-204 sweep) from events/route.ts's after() hook, right after
+        // the event save above actually commits. This client-side fetch used to run in
+        // parallel with that and was double-sending every one of these notifications —
+        // removed, not merged, since the server-side path already has the authoritative
+        // saved data (minute, score) and doesn't depend on this tab staying open.
     };
 
     const handleSetStoppage = (minutes: number) => {
@@ -1248,22 +1218,9 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                 });
             }
 
-            // Send MATCH_END push notification
-            try {
-                await fetch('/api/notifications/match-event', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        matchId: match.id,
-                        homeTeamId: match.homeTeamId,
-                        awayTeamId: match.awayTeamId,
-                        eventType: 'MATCH_END',
-                        teamName: `${homeTeam?.name || 'Home'} vs ${awayTeam?.name || 'Away'}`,
-                        homeScore,
-                        awayScore,
-                    }),
-                });
-            } catch (e) { console.error('Failed to send match end notification:', e); }
+            // MATCH_END notification now sent server-side from matches/[id]/route.ts's
+            // PATCH handler when currentPeriod transitions to FINISHED — this client
+            // fetch was double-sending it (BUG-204 sweep), removed.
             alert('Match finalized.');
         } catch (e) {
             console.error(e);
@@ -1754,7 +1711,9 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                                     stateManager.current.transitionStatus('FIRST_HALF');
                                     // Persist period to DB — non-blocking
                                     persistMatchPatch({ currentPeriod: 'FIRST_HALF' }, 'First Half start');
-                                    try { await fetch('/api/notifications/match-event', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ matchId: match.id, homeTeamId: match.homeTeamId, awayTeamId: match.awayTeamId, eventType: 'MATCH_START', teamName: `${homeTeam?.name || 'Home'} vs ${awayTeam?.name || 'Away'}` }) }); } catch (e) { console.error('Notification failed (non-blocking):', e); }
+                                    // MATCH_START notification now sent server-side from matches/[id]/route.ts's
+                                    // PATCH handler when currentPeriod transitions to FIRST_HALF — this client
+                                    // fetch was double-sending it (BUG-204 sweep), removed.
                                 } catch (e) {
                                     console.error('Failed to start match:', e);
                                     alert('Couldn\'t start match — check connection and try again.');
@@ -2507,10 +2466,20 @@ function PenaltySequenceModal({
     const attackerSubbedOnIds = attackingTeam === 'home' ? homeSubbedOnIds : awaySubbedOnIds;
     const defenderSubbedOnIds = attackingTeam === 'home' ? awaySubbedOnIds : homeSubbedOnIds;
 
+    // BUG-202 Finding 1: same bug class as BUG-201 -- no fallback for a missing
+    // lineup meant the entire attacking roster got excluded ("Who is taking the
+    // penalty?" showed zero clickable players). Mirrors getOnPitchPlayers()'s own
+    // contract: no published lineup -> everyone is a valid on-pitch candidate.
+    const attackerHasLineup = !!(attackerLineup?.starters?.length || attackerLineup?.players?.length);
+    const defenderHasLineup = !!(defenderLineup?.starters?.length || defenderLineup?.players?.length);
     const attackerStarterIds = new Set((attackerLineup?.starters || attackerLineup?.players || []).map((p: any) => p.playerId || p.id));
     const defenderStarterIds = new Set((defenderLineup?.starters || defenderLineup?.players || []).map((p: any) => p.playerId || p.id));
-    const attackerOnPitchIds = new Set([...attackerStarterIds, ...attackerSubbedOnIds]);
-    const defenderOnPitchIds = new Set([...defenderStarterIds, ...defenderSubbedOnIds]);
+    const attackerOnPitchIds = attackerHasLineup
+        ? new Set([...attackerStarterIds, ...attackerSubbedOnIds])
+        : new Set(attackers.map((p: Player) => p.id));
+    const defenderOnPitchIds = defenderHasLineup
+        ? new Set([...defenderStarterIds, ...defenderSubbedOnIds])
+        : new Set(defenders.map((p: Player) => p.id));
 
     return (
         <div className="fixed inset-0 bg-black/95 backdrop-blur-md z-50 flex items-center justify-center p-4 overflow-y-auto">
@@ -2833,6 +2802,15 @@ function PlayerSelectionModal({
     subbedOnPlayerIds,
     emptyMessage = 'No player found',
 }: any) {
+    // BUG-201: no guard here meant an absent lineup (starters/players both empty)
+    // made starterIds an empty Set, and filterStartersOnly's `!starterIds.has(p.id)`
+    // was then true for every player -- the whole roster got filtered out, showing
+    // "No player found" even though the roster itself (homePlayers/awayPlayers,
+    // built in getActiveRoster) was correct. getActiveRoster already treats a
+    // missing lineup as "no restriction" (`if (!teamLineup) return roster`) --
+    // this filter needs the same fallback, since it re-derives the same distinction
+    // independently rather than reusing that already-correct roster.
+    const hasLineup = !!(teamLineup?.starters?.length || teamLineup?.players?.length);
     const starterIds = new Set((teamLineup?.starters || teamLineup?.players || []).map((p: any) => p.playerId || p.id));
 
     // Filter players: remove red-carded players and optionally only show goalkeepers
@@ -2840,8 +2818,10 @@ function PlayerSelectionModal({
         // Always exclude red-carded players
         if (redCardedPlayerIds && redCardedPlayerIds.has(p.id)) return false;
 
-        if (filterStartersOnly && !starterIds.has(p.id) && !subbedOnPlayerIds?.has(p.id)) return false;
-        if (filterSubsOnly && starterIds.has(p.id)) return false;
+        if (hasLineup) {
+            if (filterStartersOnly && !starterIds.has(p.id) && !subbedOnPlayerIds?.has(p.id)) return false;
+            if (filterSubsOnly && starterIds.has(p.id)) return false;
+        }
 
         if (filterGoalkeepersOnly) {
             const pos = p.position?.toLowerCase() || '';
