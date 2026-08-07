@@ -7504,16 +7504,20 @@ deprioritized in its favor. -->
 
 ### BACKLOG-207 — Two Team-Follow Stars Replacing the Dead Heart Button (Closes `BUG-152`)
 
-**Status:** OPEN — filed session 50, not built
+**Status:** SHIPPED — 2026-08-06 (session 50, branch `feature/notification-system`), pending live UI verification
 **Priority:** Medium — small feature, targeting already fully supports it; closes a previously-filed bug
 
-**What:** replace the single non-functional Heart button on the match-detail page (`matches/[id]/page.tsx:543-549` — pure local `useState`, no API call, resets on reload) with two per-team follow stars beside each team badge, wired to `useFavorites.toggleTeam(teamId)` — already working, already the exact thing `sendMatchEventNotification()` targets (team-follow rule: either team having a follower makes the match notification-active — already the shipped behavior, not a new rule). Keep the Bell (anonymous, device-scoped, per-match push opt-in) visually and functionally distinct — different mechanism, different audience, must keep working for a viewer with zero team follows per the actor model ("Viewers NEVER have a session").
+**Built:** removed the single non-functional Heart button on the match-detail page (`matches/[id]/page.tsx` — pure local `useState`, no API call, resets on reload) and replaced it with two per-team follow stars, one beside each team's name in the header, wired to `useFavorites.toggleTeam(teamId)`/`isFavoriteTeam(teamId)` — already-working hook, already the exact thing `sendMatchEventNotification()` targets (team-follow rule: either team having a follower makes the match notification-active — already the shipped behavior, not a new rule). Kept the Bell (anonymous, device-scoped, per-match push opt-in) untouched, visually and functionally distinct — different mechanism, different audience, still works for a viewer with zero team follows per the actor model ("Viewers NEVER have a session"). Tooltip states the consequence honestly per the known gap below: "Follow — get alerts for this team's matches", not presented as a no-consequence bookmark.
 
-**Known gap to state honestly in the UI:** `useFavorites.toggleTeam()` writes to `userFavorites`, which the notification service queries unconditionally — unlike `userFollows`, which respects a per-row `notificationsEnabled` flag. So tapping a star silently enrolls the user in push for every match that team plays. Label the star's tooltip honestly ("Follow — get alerts for this team's matches") rather than presenting it as a bookmark with no consequence.
+**Known gap, stated honestly in the UI, not fixed:** `useFavorites.toggleTeam()` writes to `userFavorites`, which the notification service queries unconditionally — unlike `userFollows`, which respects a per-row `notificationsEnabled` flag. So tapping a star silently enrolls the user in push for every match that team plays. The tooltip/aria-label makes this explicit rather than hiding it.
 
 **Backlog for later (not part of this item):** decide whether "favorite" and "notify" should split into two separate states (would need a `notificationsEnabled` column on `userFavorites`), or stay fused as they are today.
 
-**Found:** `NOTIFICATION_SYSTEM_ROADMAP_PROPOSAL.md` thread 5, session 49.
+**Evidence:**
+- `tsc --noEmit` clean (49 baseline, none new).
+- Not yet live-verified via the actual UI (star toggling, persistence across reload, correct highlight state) — code-complete, verification pending next deployment.
+
+**Found:** `NOTIFICATION_SYSTEM_ROADMAP_PROPOSAL.md` thread 5, session 49. **Built:** session 50.
 
 ---
 
@@ -7561,16 +7565,20 @@ deprioritized in its favor. -->
 
 ---
 
-### BUG-210 — In-App WebSocket Toasts Still Have `BUG-200`'s Single-Tab Dependency
+### BUG-210 — In-App WebSocket Toasts Still Had `BUG-200`'s Single-Tab Dependency
 
-**Status:** OPEN — filed session 50, not fixed
-**Priority:** Medium — same reliability gap `BUG-200` fixed for push, left unfixed for the separate in-app toast layer; basketball produces zero in-app toasts under any circumstances
+**Status:** SHIPPED — 2026-08-06 (session 50, branch `feature/notification-system`) — **Vercel side live, `ws-server/index.js` change needs a `dev`-branch merge to actually deploy to Railway**
+**Priority:** Medium — same reliability gap `BUG-200` fixed for push, now fixed for the separate in-app toast layer; basketball previously produced zero in-app toasts under any circumstances
 
-**Problem:** `GlobalNotificationListener.tsx`'s toasts only fire in response to `notification:global`, emitted from `ws-server/index.js:313` only when it receives a `socket.on('event:log')` — which is emitted from the logger's own browser tab (`FootballLogger.tsx:734`). If the logger's tab closes, in-app toasts stop, exactly as push did before `BUG-200`. `BasketballLogger.tsx` never emits `event:log` at all, so basketball produces no in-app toasts, period — a gap independent of anything `BACKLOG-203` wired for push.
+**Problem:** `GlobalNotificationListener.tsx`'s toasts only fired in response to `notification:global`, emitted from `ws-server/index.js:313` only when it received a `socket.on('event:log')` — which was emitted from the logger's own browser tab (`FootballLogger.tsx:734`). If the logger's tab closed, in-app toasts stopped, exactly as push did before `BUG-200`. `BasketballLogger.tsx` never emitted `event:log` at all, so basketball produced no in-app toasts, period.
 
-**Fix (not built):** natural extension of the same `after()` hook in `events/route.ts` that now calls `sendMatchEventNotification()` — emit the WS broadcast server-side from there too, for both sports.
+**Fix:** new `broadcastGlobalNotification()` in `src/lib/socket.ts`, called from the same `after()` hooks that already send push (`events/route.ts` for GOAL/RED_CARD/YELLOW_CARD, `matches/[id]/route.ts` for MATCH_START/HALF_TIME/MATCH_END). `HALF_TIME` maps to `GlobalNotificationListener.tsx`'s existing `'PERIOD_CHANGE'` type rather than touching the listener's own vocabulary. Server-side, sport-agnostic, no tab dependency — basketball now produces in-app toasts for the first time.
 
-**Found:** `NOTIFICATION_SYSTEM_ROADMAP_PROPOSAL.md`, "Also worth flagging" section A, session 49.
+**Real duplication found and fixed while wiring this — a second, previously-undiscovered instance of `BUG-205`'s bug class, at the WS layer instead of push:** `FootballLogger.tsx:734` still emits `event:log` over the live WS connection (for its own local ack), and `ws-server/index.js`'s `event:log` handler was independently re-broadcasting `event:new` to the same match room `events/route.ts`'s `after(broadcastMatchEvent(...))` already broadcasts (the `BUG-108`/`116` fix) — meaning every real football event with an active WS connection was rendering **twice** in viewers' live feeds, not just once. Same handler's GOAL-only block also duplicated the new `notification:global` broadcast. Fixed in the same pass: `event:log`'s handler now only acks the sender; the REST-triggered server-side broadcasts are the single source of truth for both `event:new` and `notification:global`.
+
+**Deploy caveat, explicit:** unlike every other fix this session (Vercel auto-deploys the preview from a push to this branch), `ws-server/index.js` only deploys to Railway from the `dev` branch (Richard's own earlier confirmation this session). The Vercel-side halves of this fix (the two `after()` hooks calling `broadcastGlobalNotification()`) are live on the next preview deploy; the `ws-server/index.js` de-duplication fix will not take effect on the actual running Railway service until this branch merges to `dev`. Until then, the WS-layer double-broadcast (`event:new` and the GOAL toast) is **still live in production/staging** — the code fix exists but isn't deployed.
+
+**Found:** `NOTIFICATION_SYSTEM_ROADMAP_PROPOSAL.md`, "Also worth flagging" section A, session 49. **Fixed:** session 50. **Duplication side-finding:** session 50, discovered while implementing this fix, not separately audited for.
 
 ---
 
