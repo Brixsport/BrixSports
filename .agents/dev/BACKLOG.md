@@ -7554,14 +7554,16 @@ deprioritized in its favor. -->
 
 ### BUG-209 — `/assets/` vs `/assests/` Typo Breaks OG Share Images and AEO Structured Data (3 Files)
 
-**Status:** OPEN — filed session 50, not fixed
-**Priority:** Low-medium — currently 404ing on every social share preview and structured-data logo reference, but cosmetic, not functional
+**Status:** RESOLVED — 2026-08-06 (session 50, branch `feature/notification-system`)
+**Priority:** Low-medium — was 404ing on every social share preview and structured-data logo reference, cosmetic, not functional
 
-**Problem:** only `public/assests/Logos/` exists (the typo spelling) — confirmed, that's the real directory. Three files reference the correctly-spelled `/assets/` path instead, which 404s: `src/lib/utils/aeo.ts:589`, `src/components/seo/PageSEO.tsx:41` (default `ogImage`), `src/app/page.tsx:356` (homepage `ogImage`). `src/lib/email.ts:217,297` and `src/app/reset-password/page.tsx:301` already correctly use `/assests/`.
+**Problem:** only `public/assests/Logos/` exists (the typo spelling) — confirmed, that's the real directory. Three files referenced the correctly-spelled `/assets/` path instead, which 404s: `src/lib/utils/aeo.ts:589`, `src/components/seo/PageSEO.tsx:41` (default `ogImage`), `src/app/page.tsx` (homepage `ogImage`). `src/lib/email.ts:217,297` and `src/app/reset-password/page.tsx:301` already correctly used `/assests/`.
 
-**Fix (not built):** point the three broken files at `/assests/` (matching the actual directory), or rename the directory and update all five references consistently — either works, the broken three are the minimum fix.
+**Fix:** pointed all three at `/assests/`, matching the actual directory and the other five already-correct references — minimum fix, directory rename not pursued (bigger blast radius for the same outcome).
 
-**Found:** `NOTIFICATION_SYSTEM_ROADMAP_PROPOSAL.md` thread 9, session 49 (surfaced incidentally while checking competition-logo/Cloudinary groundwork).
+**Evidence:** `tsc --noEmit` clean (49 baseline, none new). Not live-verified via an actual social share preview tool this pass — the path now matches the real directory, same shape as the already-working references.
+
+**Found:** `NOTIFICATION_SYSTEM_ROADMAP_PROPOSAL.md` thread 9, session 49 (surfaced incidentally while checking competition-logo/Cloudinary groundwork). **Fixed:** session 50.
 
 ---
 
@@ -7622,23 +7624,23 @@ Everything below is explicitly **not** being built now — captured from `NOTIFI
 
 ---
 
-### BUG-213 — `matches.start_time` Stored as Raw Unix-Epoch Text Breaks Homepage Date/Round Grouping AND Corrupts Sort Order
+### BUG-213 — `matches.start_time` Stored as Raw Unix-Epoch Text Broke Homepage Date/Round Grouping AND Corrupted Sort Order
 
-**Status:** OPEN — found session 49/50, not fixed (root cause identified, not the display bug itself)
-**Priority:** Medium-High (raised) — no longer purely cosmetic; see the sort-corruption finding below, which can misorder *other, validly-dated* matches, not just mislabel the malformed one's own group
+**Status:** RESOLVED — 2026-08-06 (session 50, branch `feature/notification-system`)
+**Priority:** Medium-High — was no longer purely cosmetic; the sort-corruption half could misorder *other, validly-dated* matches, not just mislabel the malformed one's own group
 
-**Second symptom found (session 50, investigating a separate ordering report from Richard):** the homepage's match list is sorted client-side via `new Date(b.startTime).getTime() - new Date(a.startTime).getTime()` (`page.tsx:266-268`), then grouped and rendered in **first-encountered order with no re-sort of groups afterward** (`page.tsx:555`, plain `Object.entries()` iteration). A malformed `start_time` parses to `NaN`, and `NaN` feeding a sort comparator is implementation-defined behavior in `Array.prototype.sort()` — confirmed directly against real DB data that this measurably displaces *other, correctly-dated* matches near the malformed ones, not just the malformed matches' own (separately-already-known) "Invalid Date" group. This is why a real "Round 6" group (containing only validly-dated Jan 2026 matches, unrelated to the malformed rows) appeared to render out of chronological order on a staging preview that has the malformed throwaway test matches present — prod doesn't have this test data and wasn't shown to have the same issue, but the underlying fragility is real and would affect prod the moment any real match ever gets a malformed `start_time` (see the Silver Boys origin question above).
+**Problem:** found live while verifying this session's notification fixes on a Vercel preview — the public matches list showed an "INVALID DATE" section grouping `notif-test-throwaway-1`, `notif-test-throwaway-bball-1`, and the (deleted) "Silver Boys" test match. `matches.start_time` is a `text` column expected to hold an ISO string; all three rows had a raw Unix-epoch-as-string instead, which broke the homepage's date-grouping and — a second symptom found investigating a separate ordering report from Richard — fed `NaN` into the sort comparator (`new Date(b.startTime).getTime() - new Date(a.startTime).getTime()`), which is implementation-defined behavior in `Array.prototype.sort()`. Confirmed directly against real DB data that this measurably displaced *other, correctly-dated* matches near the malformed ones, explaining why a real "Round 6" group (validly-dated Jan 2026 matches, unrelated to the malformed rows) rendered out of chronological order.
 
-**Suggested fix for this half (not built, flagged not implemented per explicit instruction to investigate only):** guard the sort comparator against `NaN`, e.g. `(isNaN(bTime) ? -Infinity : bTime) - (isNaN(aTime) ? -Infinity : aTime)` so unparseable dates deterministically sort to the end instead of corrupting comparisons for everything near them. Small, safe, same fix-shape as the grouping logic's own needed guard.
+**Root cause:** the two throwaway matches' values came from `dev/setup-notif-test-throwaway-match.mjs`/`-basketball.mjs` writing `start_time` via SQL `unixepoch()` directly. Silver Boys' value was a different shape (`'1785592800000.0'`, millisecond-epoch-as-text) — its origin predates this session and wasn't traced before it was deleted, so whether it came from a real admin code path or another one-off script is unresolved. **Platform-wide audit run after this fix: zero non-ISO `start_time` rows remain anywhere in the table** — so whatever produced Silver Boys' pattern isn't currently live/reachable, though it can't be fully ruled out as a historical one-off given the entry was deleted before being traced.
 
-**Problem:** found live while verifying this session's notification fixes on a Vercel preview — the public matches list showed an "INVALID DATE" section grouping together `notif-test-throwaway-1`, `notif-test-throwaway-bball-1`, and the (now-deleted) "Silver Boys" test match. `matches.start_time` is a `text` column (`schema.ts:316`), and all three of these rows had it set to a raw Unix-epoch-as-string (`'1786012585'`, `'1785592800000.0'`) instead of an ISO date string — whatever date-parsing the homepage's round/date-grouping logic uses fails silently on that format for exactly these rows and buckets them under a literal "Invalid Date" header instead of erroring or omitting them.
+**Fix:** (1) `page.tsx`'s sort comparator now guards against `NaN` — unparseable dates sort to the end instead of corrupting comparisons for everything near them (`(isNaN(bTime) ? -Infinity : bTime) - (isNaN(aTime) ? -Infinity : aTime)`); (2) the grouping fallback now renders `'Date Unknown'` instead of the literal `toLocaleDateString()` output `"Invalid Date"` for any unparseable row — honest about not knowing, not looking like the app itself is broken; (3) both dev setup scripts now write a real `new Date().toISOString()` instead of raw `unixepoch()`; (4) the two existing throwaway matches' `start_time` corrected in place (display-only field, safe to fix, confirmed via before/after read).
 
-**Root cause confirmed, not yet fully traced:** the two throwaway notification test matches' malformed values came from `dev/setup-notif-test-throwaway-match.mjs`/`-basketball.mjs`, which wrote `start_time` via SQL `unixepoch()` directly (an integer epoch, coerced to text). **Silver Boys' value was a different shape — `'1785592800000.0'` (millisecond-epoch-as-text, with a trailing `.0`) — not the same integer-seconds pattern the dev scripts produce.** That specific format looks more consistent with a real JS code path (something computing `.getTime()` and stringifying it without ISO-formatting) than a raw SQL `unixepoch()` call. Silver Boys was not created by this session's dev scripts — its origin predates this session and wasn't traced before it was deleted. **This raises the real possibility that `BUG-213` is reachable through an actual admin/match-creation code path, not just ad-hoc test scripts — priority should be reassessed upward pending confirmation.** Worth a full-table audit of `matches.start_time` for the `.0`-suffixed millisecond pattern specifically (distinct from the dev-script integer-seconds pattern) to find any other real matches affected, and tracing which admin/API code path could produce that exact shape.
+**Evidence:**
+- `tsc --noEmit` clean (49 baseline, none new).
+- Platform-wide audit (`dev/audit-platform-start-time-format.mjs`) confirms 0 non-ISO `start_time` rows remain on staging.
+- Throwaway matches' `start_time` confirmed corrected via direct before/after DB read (`dev/fix-throwaway-start-times.mjs`).
+- Not live-verified via the actual homepage UI this pass (whether the "Round 6" group now sorts correctly relative to real date-grouped sections) — code-level fix is straightforward and directly addresses the confirmed root cause, but worth a visual confirmation next deployment.
 
-**Not fixed this pass:** the two remaining notification throwaway matches (`notif-test-throwaway-1`, `notif-test-throwaway-bball-1`) still have this malformed value and were deliberately left as-is since they're still in active use for this session's verification — fixing their `start_time` is low-risk (display-only) whenever they're next touched. Silver Boys' copy of the bug is moot now (that match was deleted, see `RUNLOG.md` session 49 entry).
-
-**Fix (not built):** (1) audit all `matches.start_time` values platform-wide for non-ISO format, not just test rows; (2) find and harden the homepage's date/round-grouping parse logic to either handle a raw-epoch string or reject/log malformed values instead of silently bucketing them into a user-facing "Invalid Date" section; (3) fix the two dev setup scripts above to write a real ISO string so this doesn't recur for future test matches; (4) guard `page.tsx`'s sort comparator against `NaN` per the sort-corruption finding above.
-
-**Found:** session 49/50, live, while verifying notification-system fixes on the public matches list preview — unrelated to the notification work itself.
+**Found:** session 49/50, live, while verifying notification-system fixes on the public matches list preview — unrelated to the notification work itself. **Fixed:** session 50.
 
 ---
