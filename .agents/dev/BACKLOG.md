@@ -7504,7 +7504,7 @@ deprioritized in its favor. -->
 
 ### BACKLOG-207 — Two Team-Follow Stars Replacing the Dead Heart Button (Closes `BUG-152`)
 
-**Status:** SHIPPED — 2026-08-06 (session 50, branch `feature/notification-system`), pending live UI verification
+**Status:** RESOLVED — 2026-08-07 (session 50, branch `feature/notification-system`)
 **Priority:** Medium — small feature, targeting already fully supports it; closes a previously-filed bug
 
 **Built:** removed the single non-functional Heart button on the match-detail page (`matches/[id]/page.tsx` — pure local `useState`, no API call, resets on reload) and replaced it with two per-team follow stars, one beside each team's name in the header, wired to `useFavorites.toggleTeam(teamId)`/`isFavoriteTeam(teamId)` — already-working hook, already the exact thing `sendMatchEventNotification()` targets (team-follow rule: either team having a follower makes the match notification-active — already the shipped behavior, not a new rule). Kept the Bell (anonymous, device-scoped, per-match push opt-in) untouched, visually and functionally distinct — different mechanism, different audience, still works for a viewer with zero team follows per the actor model ("Viewers NEVER have a session"). Tooltip states the consequence honestly per the known gap below: "Follow — get alerts for this team's matches", not presented as a no-consequence bookmark.
@@ -7513,11 +7513,14 @@ deprioritized in its favor. -->
 
 **Backlog for later (not part of this item):** decide whether "favorite" and "notify" should split into two separate states (would need a `notificationsEnabled` column on `userFavorites`), or stay fused as they are today.
 
+**New bug found during live verification, filed separately — see `BUG-214`:** the follow stars are not visible at narrow/mobile viewport widths (~314-375px CSS), though the buttons are present in the DOM and fully functional. Desktop-width verification below was unaffected; the display bug does not change this item's own resolution.
+
 **Evidence:**
 - `tsc --noEmit` clean (49 baseline, none new).
-- Not yet live-verified via the actual UI (star toggling, persistence across reload, correct highlight state) — code-complete, verification pending next deployment.
+- **Live-verified end to end against the current preview** (`brixsports-staging-2d8rnfd65-brixsports-projects.vercel.app`), authenticated as a real admin user (correct `userId` JWT claim, confirmed via `/api/auth/me` → 200): clicked "Follow Kings FC" on `notif-test-throwaway-1` → `POST /api/users/favorites` → 201 → **DB-confirmed** a new `user_favorites` row (`user_id='admin-001', favorite_type='team', favorite_id='busa-kings'`) landed with correct values, not just the 201 status code. Clicked again → `DELETE` → 200 → **DB-confirmed** the row was actually removed, restoring the account's original favorites unchanged.
+- Pending items: none.
 
-**Found:** `NOTIFICATION_SYSTEM_ROADMAP_PROPOSAL.md` thread 5, session 49. **Built:** session 50.
+**Found:** `NOTIFICATION_SYSTEM_ROADMAP_PROPOSAL.md` thread 5, session 49. **Built:** session 50. **Live-verified:** session 50 (2026-08-07).
 
 ---
 
@@ -7586,21 +7589,22 @@ deprioritized in its favor. -->
 
 ### BACKLOG-211 — No Persistent Server-Side Log of Notification Send Attempts/Successes/Failures
 
-**Status:** SHIPPED — 2026-08-06 (session 50, branch `feature/notification-system`), staging only, prod mirror pending write-verification
+**Status:** RESOLVED (staging) — 2026-08-07 (session 50, branch `feature/notification-system`); prod mirror still deliberately deferred, see below
 **Priority:** High (tooling) — had directly cost real debugging time in both `BUG-200`'s and `BACKLOG-203`'s own verification passes (both evidence blocks flagged this same gap)
 
 **Problem:** `sendMatchEventNotification()` only `console.log`s — nothing persists past that request's logs. Separately, the campaign composer's own "Recent History" panel had never worked at all: `send/route.ts`'s history write was a server-side self-`fetch()` to `/api/notifications/history` that forwarded no auth headers, while that route requires admin — it 401'd every time, silently swallowed by the surrounding try/catch (`BACKLOG-124`-class bug).
 
 **Built:** new `notification_send_log` table (`source`, `matchId`, `eventType`, `targetAudience`, `totalSubscriptions`, `sentCount`, `failedCount`, `errors`, `createdAt`) — one row per send *call*, not per-subscription, to keep volume sane while still answering "did this fire, for how many people, did it succeed." Indexed on `match_id`, `created_at`, `source` for real dashboard/support query patterns (Richard's explicit ask: build to production standard, not a debug scratch table — not just "will this help me this session"). Shared `logNotificationSend()` helper (`match-notification-service.ts`, exported) called from all three real send paths: `sendMatchEventNotification()` (both success and error paths), `sendMatchReminderNotification()` (currently dead code — `BACKLOG-208` deleted its only caller — logged anyway since it's a public exported function that could be reused), and the campaign composer's `send/route.ts`, which now writes directly to the same table instead of the broken self-`fetch()` — fixing the "Recent History" panel gap as a side effect of this item, not a separate fix.
 
-**Staging-only, deliberately:** the table exists and is wired on staging; prod mirror is intentionally deferred until the write path is live-verified (matching the shootout-columns precedent — staging first, verify, then prod), not done reflexively just because the `CREATE TABLE` itself succeeded.
+**Staging-only, deliberately:** the table exists and is wired on staging; prod mirror was deferred until the write path was live-verified (matching the shootout-columns precedent — staging first, verify, then prod). That verification is now done (see evidence) — prod mirror is the only remaining step, not yet done.
 
 **Evidence:**
 - `tsc --noEmit` clean (49 baseline, none new).
 - Table + indexes confirmed via `PRAGMA table_info`/index listing on staging (`dev/create-notification-send-log-table.mjs`, `dev/add-notification-send-log-indexes.mjs`).
-- Pending items: a real send hasn't been fired against the new write path yet this pass to confirm a row actually lands correctly (next real match event on the throwaway matches will exercise it). Prod mirror blocked on that confirmation, not on anything else.
+- **Live-verified the write path end to end**: fired a real `Yellow Card` event on `notif-test-throwaway-1` via `POST /api/matches/{id}/events` against the current preview (`brixsports-staging-2d8rnfd65-brixsports-projects.vercel.app`) → 201 → **DB-confirmed** the `after()` hook's `logNotificationSend()` call landed a real row (`source='match_event', match_id='notif-test-throwaway-1', event_type='YELLOW_CARD', total_subscriptions=2, sent_count=2, failed_count=0`), correctly mapped from the human-readable event type via `getNotifiableEventType()`, not just a 201 status code.
+- Pending items: prod mirror (blocked only on this confirmation, which is now done — ready to migrate).
 
-**Found:** `NOTIFICATION_SYSTEM_ROADMAP_PROPOSAL.md` thread 1 + "Also worth flagging" section B, session 49. **Built:** session 50, per Richard's sequenced work plan, with an explicit mid-build correction to build it for production dashboard/support use, not just debugging.
+**Found:** `NOTIFICATION_SYSTEM_ROADMAP_PROPOSAL.md` thread 1 + "Also worth flagging" section B, session 49. **Built:** session 50, per Richard's sequenced work plan, with an explicit mid-build correction to build it for production dashboard/support use, not just debugging. **Live-verified:** session 50 (2026-08-07).
 
 ---
 
@@ -7639,8 +7643,26 @@ Everything below is explicitly **not** being built now — captured from `NOTIFI
 - `tsc --noEmit` clean (49 baseline, none new).
 - Platform-wide audit (`dev/audit-platform-start-time-format.mjs`) confirms 0 non-ISO `start_time` rows remain on staging.
 - Throwaway matches' `start_time` confirmed corrected via direct before/after DB read (`dev/fix-throwaway-start-times.mjs`).
-- Not live-verified via the actual homepage UI this pass (whether the "Round 6" group now sorts correctly relative to real date-grouped sections) — code-level fix is straightforward and directly addresses the confirmed root cause, but worth a visual confirmation next deployment.
+- **Live-verified via the actual homepage UI**: current preview's matches list renders in correct reverse-chronological order end to end (Aug 2026 → Jan 2026 → Nov 2025), no "INVALID DATE"/"Date Unknown" groups present, real "Round 6"/"Round 9" basketball groups sit correctly among validly-dated sections.
 
-**Found:** session 49/50, live, while verifying notification-system fixes on the public matches list preview — unrelated to the notification work itself. **Fixed:** session 50.
+**Found:** session 49/50, live, while verifying notification-system fixes on the public matches list preview — unrelated to the notification work itself. **Fixed:** session 50. **Live-verified:** session 50 (2026-08-07).
+
+---
+
+### BUG-214 — Team-Follow Stars (`BACKLOG-207`) Not Visible at Mobile/Narrow Viewport Widths
+
+**Status:** OPEN — filed 2026-08-07 (session 50, branch `feature/notification-system`)
+**Priority:** Medium — the buttons are fully functional (confirmed via `BACKLOG-207`'s live verification, DOM presence + working click handlers at every width tested), but invisible to the majority of real users given loggers/viewers are primarily mobile per this project's own PWA rules
+
+**Problem:** found live while verifying `BACKLOG-207` against the current preview. At the default mobile viewport (~314-375px CSS width), the two team-follow stars next to each team name in the match-detail header render with no visible team-name text or star icon at all — only the team logos and score are visible. The accessibility tree confirms both buttons exist in the DOM (`"Follow Kings FC — get alerts for this team's matches"`, ref present, clickable, click handler fires correctly) — this is a **display-only** bug, not a functional regression. At desktop width (641px+ CSS) the buttons are still not visually rendering as expected either (team name text present in the a11y tree but not appearing in the rendered screenshot), suggesting the issue isn't purely a mobile breakpoint problem — likely a CSS class or flex/overflow issue in the match-header component affecting the team-name-plus-star row across viewport sizes, not isolated to one breakpoint.
+
+**Not yet root-caused:** which component/class is responsible (`matches/[id]/page.tsx`'s header row is the prime suspect, added as part of `BACKLOG-207`) — needs a dedicated pass with browser devtools open against the live layout, not just the accessibility tree.
+
+**Evidence:**
+- Confirmed via `read_page` (accessibility tree) at both mobile (314x598) and desktop (641x598) viewports: buttons present, correctly labeled, clickable.
+- Confirmed via screenshot at both widths: no team-name text or star icon visible in the rendered output at either width.
+- Confirmed the buttons are NOT dead — clicking via ref at either width correctly fired the `POST`/`DELETE /api/users/favorites` calls verified in `BACKLOG-207`'s own evidence block.
+
+**Found:** session 50 (2026-08-07), live UI verification of `BACKLOG-207`, flagged by Richard directly from the screenshot. **Fixed:** not yet — filed for a dedicated follow-up pass.
 
 ---
