@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Play, Pause, Volume2, VolumeX, Maximize, Minimize, Settings, Users, Radio } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { isAllowedLivestreamEmbedHost } from '@/lib/livestream-allowlist';
 
 interface LivestreamPlayerProps {
     streamUrl: string;
@@ -75,7 +76,17 @@ export function LivestreamPlayer({
                 case 'hls':
                 case 'dash':
                 case 'custom':
-                    // For HLS/DASH, return the URL directly - will need a proper player
+                    // BACKLOG-212 item 7: this URL goes straight into the iframe src with
+                    // no transformation, unlike youtube/twitch/facebook above which only
+                    // ever extract an ID/channel against a fixed trusted domain. Defense
+                    // in depth alongside the server-side check in the PATCH route --
+                    // reject here too in case this URL ever reaches the player some other
+                    // way than that route (e.g. a future direct-DB read path).
+                    if (!isAllowedLivestreamEmbedHost(url)) {
+                        console.error('Livestream URL host is not on the approved embed allowlist:', url);
+                        setHasError(true);
+                        return '';
+                    }
                     return url;
                 default:
                     return url;

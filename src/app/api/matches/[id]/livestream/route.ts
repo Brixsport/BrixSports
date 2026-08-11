@@ -3,6 +3,7 @@ import { db } from '@/db';
 import { matches } from '@/db/schema';
 import { eq } from 'drizzle-orm';
 import { getAuthUser } from '@/lib/auth';
+import { isAllowedLivestreamEmbedHost } from '@/lib/livestream-allowlist';
 
 // GET /api/matches/[id]/livestream - Get livestream info
 export async function GET(
@@ -110,6 +111,31 @@ export async function PATCH(
                 { error: 'Invalid livestream URL' },
                 { status: 400 }
             );
+        }
+
+        // BACKLOG-212 item 7: 'youtube'/'twitch'/'facebook' always embed against a
+        // fixed trusted domain regardless of the pasted URL (only an ID/channel is
+        // extracted). 'custom'/'hls'/'dash' pass the raw URL straight through to the
+        // player's iframe src -- gate those against an explicit host allowlist so an
+        // arbitrary third-party page can't be embedded to viewers. The admin UI always
+        // sends both fields together, but a raw API call could update the URL alone --
+        // fall back to the row's current type so the check can't be bypassed that way.
+        if (livestreamUrl) {
+            let effectiveType = livestreamType;
+            if (effectiveType === undefined) {
+                const existing = await db.query.matches.findFirst({
+                    where: eq(matches.id, matchId),
+                    columns: { livestreamType: true },
+                });
+                effectiveType = existing?.livestreamType ?? undefined;
+            }
+            const isPassthroughType = effectiveType === 'custom' || effectiveType === 'hls' || effectiveType === 'dash';
+            if (isPassthroughType && !isAllowedLivestreamEmbedHost(livestreamUrl)) {
+                return NextResponse.json(
+                    { error: 'Livestream URL host is not on the approved embed list. Contact an engineer to add it.' },
+                    { status: 400 }
+                );
+            }
         }
 
         // Update match
