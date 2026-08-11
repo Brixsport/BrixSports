@@ -173,7 +173,7 @@ export default function SettingsPage() {
     };
 
     return (
-        <div className="min-h-screen bg-[#050505] text-white p-6 md:p-12">
+        <div className="min-h-screen bg-background text-foreground p-6 md:p-12">
             {/* ... (Header and other sections remain the same) */}
 
             <div className="max-w-5xl mx-auto space-y-8">
@@ -181,7 +181,7 @@ export default function SettingsPage() {
                 <div>
                     <div className="flex items-center gap-3 mb-2">
                         <Settings size={16} className="text-primary" />
-                        <span className="text-[10px] font-black uppercase tracking-widest text-white/40">Preferences</span>
+                        <span className="text-[10px] font-black uppercase tracking-widest text-foreground/40">Preferences</span>
                     </div>
                     <h1 className="font-display text-5xl tracking-tighter italic uppercase leading-none">Settings</h1>
                 </div>
@@ -199,7 +199,7 @@ export default function SettingsPage() {
                                 type="text"
                                 value={settings.name}
                                 onChange={(e) => updateSetting('name', e.target.value)}
-                                className="bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-sm font-bold outline-none focus:border-primary transition-all w-full max-w-xs"
+                                className="bg-muted border border-border rounded-xl px-4 py-2 text-sm font-bold outline-none focus:border-primary transition-all w-full max-w-xs"
                             />
                         </SettingRow>
                         <SettingRow label="Email Address">
@@ -207,7 +207,7 @@ export default function SettingsPage() {
                                 type="email"
                                 value={settings.email}
                                 disabled
-                                className="bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-sm font-bold outline-none opacity-50 cursor-not-allowed w-full max-w-xs"
+                                className="bg-muted border border-border rounded-xl px-4 py-2 text-sm font-bold outline-none opacity-50 cursor-not-allowed w-full max-w-xs"
                                 title="Email cannot be changed"
                             />
                         </SettingRow>
@@ -265,7 +265,7 @@ export default function SettingsPage() {
                             <select
                                 value={settings.language}
                                 onChange={(e) => updateSetting('language', e.target.value)}
-                                className="bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-sm font-bold outline-none focus:border-primary transition-all"
+                                className="bg-muted border border-border rounded-xl px-4 py-2 text-sm font-bold outline-none focus:border-primary transition-all"
                             >
                                 <option value="en">English</option>
                                 <option value="fr">Français</option>
@@ -276,7 +276,7 @@ export default function SettingsPage() {
                             <select
                                 value={settings.timezone}
                                 onChange={(e) => updateSetting('timezone', e.target.value)}
-                                className="bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-sm font-bold outline-none focus:border-primary transition-all"
+                                className="bg-muted border border-border rounded-xl px-4 py-2 text-sm font-bold outline-none focus:border-primary transition-all"
                             >
                                 <option value="Africa/Lagos">Lagos (GMT+1)</option>
                                 <option value="UTC">UTC</option>
@@ -289,7 +289,7 @@ export default function SettingsPage() {
                             <select
                                 value={settings.defaultView}
                                 onChange={(e) => updateSetting('defaultView', e.target.value)}
-                                className="bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-sm font-bold outline-none focus:border-primary transition-all"
+                                className="bg-muted border border-border rounded-xl px-4 py-2 text-sm font-bold outline-none focus:border-primary transition-all"
                             >
                                 <option value="standings">Standings</option>
                                 <option value="brackets">Brackets</option>
@@ -348,7 +348,7 @@ export default function SettingsPage() {
                             <select
                                 value={settings.profileVisibility}
                                 onChange={(e) => updateSetting('profileVisibility', e.target.value)}
-                                className="bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-sm font-bold outline-none focus:border-primary transition-all"
+                                className="bg-muted border border-border rounded-xl px-4 py-2 text-sm font-bold outline-none focus:border-primary transition-all"
                             >
                                 <option value="public">Public</option>
                                 <option value="friends">Friends Only</option>
@@ -370,7 +370,7 @@ export default function SettingsPage() {
                         <SettingRow label="Change Password">
                             <button
                                 onClick={() => setShowPasswordModal(true)}
-                                className="px-4 py-2 bg-white/5 border border-white/10 rounded-xl hover:bg-white/10 transition-all text-sm font-bold flex items-center gap-2"
+                                className="px-4 py-2 bg-muted border border-border rounded-xl hover:bg-muted/70 transition-all text-sm font-bold flex items-center gap-2"
                             >
                                 <Lock size={14} />
                                 Update
@@ -384,7 +384,7 @@ export default function SettingsPage() {
                     <button
                         onClick={handleSave}
                         disabled={saving}
-                        className="px-8 py-4 bg-primary text-black rounded-2xl hover:scale-105 transition-all flex items-center gap-2 font-black uppercase tracking-widest shadow-lg shadow-primary/20 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
+                        className="px-8 py-4 bg-primary text-primary-foreground rounded-2xl hover:scale-105 transition-all flex items-center gap-2 font-black uppercase tracking-widest shadow-lg shadow-primary/20 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
                     >
                         {saving ? (
                             <>
@@ -418,14 +418,14 @@ function SettingsSection({ id, icon, title, description, children }: {
 }) {
     // ... (implementation remains same)
     return (
-        <div id={id} className="bg-white/5 border border-white/10 rounded-[32px] p-6 md:p-8 scroll-mt-24">
+        <div id={id} className="bg-muted border border-border rounded-[32px] p-6 md:p-8 scroll-mt-24">
             <div className="flex items-start gap-4 mb-6">
                 <div className="w-12 h-12 bg-primary/20 rounded-2xl flex items-center justify-center text-primary">
                     {icon}
                 </div>
                 <div className="flex-1">
                     <h2 className="text-xl font-display italic uppercase tracking-tight mb-1">{title}</h2>
-                    <p className="text-sm text-white/60">{description}</p>
+                    <p className="text-sm text-foreground/60">{description}</p>
                 </div>
             </div>
             <div className="space-y-4">
@@ -438,8 +438,8 @@ function SettingsSection({ id, icon, title, description, children }: {
 function SettingRow({ label, children }: { label: string; children: React.ReactNode }) {
     // ... (implementation remains same)
     return (
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 py-3 border-b border-white/5 last:border-0">
-            <span className="text-sm font-bold text-white/80">{label}</span>
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 py-3 border-b border-border/50 last:border-0">
+            <span className="text-sm font-bold text-foreground/80">{label}</span>
             <div>{children}</div>
         </div>
     );
@@ -450,7 +450,7 @@ function Toggle({ enabled, onChange }: { enabled: boolean; onChange: (val: boole
     return (
         <button
             onClick={() => onChange(!enabled)}
-            className={`relative w-14 h-8 rounded-full transition-all ${enabled ? 'bg-primary' : 'bg-white/10'
+            className={`relative w-14 h-8 rounded-full transition-all ${enabled ? 'bg-primary' : 'bg-muted'
                 }`}
         >
             <motion.div
@@ -473,8 +473,8 @@ function ThemeButton({ icon, label, active, onClick }: {
         <button
             onClick={onClick}
             className={`flex items-center gap-2 px-4 py-2 rounded-xl transition-all ${active
-                ? 'bg-primary text-black'
-                : 'bg-white/5 border border-white/10 text-white/60 hover:bg-white/10'
+                ? 'bg-primary text-primary-foreground'
+                : 'bg-muted border border-border text-foreground/60 hover:bg-muted/70'
                 }`}
         >
             {icon}
@@ -530,45 +530,45 @@ function ChangePasswordModal({ onClose }: { onClose: () => void }) {
             <motion.div
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
-                className="bg-[#050505] border border-white/10 rounded-2xl p-6 w-full max-w-md shadow-2xl space-y-6"
+                className="bg-card border border-border rounded-2xl p-6 w-full max-w-md shadow-2xl space-y-6"
             >
                 <div className="flex justify-between items-center">
                     <h2 className="text-xl font-display uppercase tracking-tight">Change Password</h2>
-                    <button onClick={onClose} className="text-white/40 hover:text-white">
+                    <button onClick={onClose} className="text-foreground/40 hover:text-foreground">
                         <VolumeX className="w-5 h-5" style={{ transform: 'rotate(45deg)' }} /> {/* Using VolumeX as generic close icon - or check imports */}
                     </button>
                 </div>
 
                 <form onSubmit={handleSubmit} className="space-y-4">
                     <div>
-                        <label className="block text-xs font-bold uppercase tracking-wider text-white/40 mb-1">Current Password</label>
+                        <label className="block text-xs font-bold uppercase tracking-wider text-foreground/40 mb-1">Current Password</label>
                         <input
                             type="password"
                             value={currentPassword}
                             onChange={(e) => setCurrentPassword(e.target.value)}
-                            className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm font-bold outline-none focus:border-primary transition-all"
+                            className="w-full bg-muted border border-border rounded-xl px-4 py-3 text-sm font-bold outline-none focus:border-primary transition-all"
                             placeholder="Enter current password"
                             required
                         />
                     </div>
                     <div>
-                        <label className="block text-xs font-bold uppercase tracking-wider text-white/40 mb-1">New Password</label>
+                        <label className="block text-xs font-bold uppercase tracking-wider text-foreground/40 mb-1">New Password</label>
                         <input
                             type="password"
                             value={newPassword}
                             onChange={(e) => setNewPassword(e.target.value)}
-                            className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm font-bold outline-none focus:border-primary transition-all"
+                            className="w-full bg-muted border border-border rounded-xl px-4 py-3 text-sm font-bold outline-none focus:border-primary transition-all"
                             placeholder="Enter new password"
                             required
                         />
                     </div>
                     <div>
-                        <label className="block text-xs font-bold uppercase tracking-wider text-white/40 mb-1">Confirm New Password</label>
+                        <label className="block text-xs font-bold uppercase tracking-wider text-foreground/40 mb-1">Confirm New Password</label>
                         <input
                             type="password"
                             value={confirmPassword}
                             onChange={(e) => setConfirmPassword(e.target.value)}
-                            className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm font-bold outline-none focus:border-primary transition-all"
+                            className="w-full bg-muted border border-border rounded-xl px-4 py-3 text-sm font-bold outline-none focus:border-primary transition-all"
                             placeholder="Confirm new password"
                             required
                         />
@@ -578,14 +578,14 @@ function ChangePasswordModal({ onClose }: { onClose: () => void }) {
                         <button
                             type="button"
                             onClick={onClose}
-                            className="flex-1 py-3 rounded-xl bg-white/5 hover:bg-white/10 text-sm font-bold transition-all"
+                            className="flex-1 py-3 rounded-xl bg-muted hover:bg-muted/70 text-sm font-bold transition-all"
                         >
                             Cancel
                         </button>
                         <button
                             type="submit"
                             disabled={loading}
-                            className="flex-1 py-3 rounded-xl bg-primary text-black hover:bg-primary/90 text-sm font-bold transition-all disabled:opacity-50"
+                            className="flex-1 py-3 rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 text-sm font-bold transition-all disabled:opacity-50"
                         >
                             {loading ? 'Updating...' : 'Update Password'}
                         </button>
