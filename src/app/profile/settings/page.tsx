@@ -33,7 +33,12 @@ export default function SettingsPage() {
         // Notifications
         emailNotifications: true,
         pushNotifications: true,
-        matchReminders: true,
+        // BUG (session 51 audit): this page's toggle used to write matchReminders --
+        // a column nothing ever reads (and confusingly named after the *unrelated*
+        // per-match matchReminders table). The real send paths
+        // (match-notification-service.ts, notifications/send/route.ts) gate on
+        // userPreferences.matchAlerts. matchAlerts is now the source of truth here.
+        matchAlerts: true,
         favoriteTeamUpdates: true,
         weeklyDigest: false,
 
@@ -87,7 +92,7 @@ export default function SettingsPage() {
                             defaultView: prefsData.preferences.defaultView || 'standings',
                             emailNotifications: prefsData.preferences.emailNotifications ?? true,
                             pushNotifications: prefsData.preferences.notifications ?? true,
-                            matchReminders: prefsData.preferences.matchReminders ?? true,
+                            matchAlerts: prefsData.preferences.matchAlerts ?? true,
                             favoriteTeamUpdates: prefsData.preferences.favoriteTeamUpdates ?? true,
                             weeklyDigest: prefsData.preferences.weeklyDigest ?? false,
                             profileVisibility: prefsData.preferences.profileVisibility || 'public',
@@ -147,7 +152,7 @@ export default function SettingsPage() {
                     defaultView: settings.defaultView,
                     notifications: settings.pushNotifications,
                     emailNotifications: settings.emailNotifications,
-                    matchReminders: settings.matchReminders,
+                    matchAlerts: settings.matchAlerts,
                     favoriteTeamUpdates: settings.favoriteTeamUpdates,
                     weeklyDigest: settings.weeklyDigest,
                     profileVisibility: settings.profileVisibility,
@@ -207,7 +212,7 @@ export default function SettingsPage() {
                                 type="email"
                                 value={settings.email}
                                 disabled
-                                className="bg-muted border border-border rounded-xl px-4 py-2 text-sm font-bold outline-none opacity-50 cursor-not-allowed w-full max-w-xs"
+                                className="bg-muted/60 border border-border rounded-xl px-4 py-2 text-sm font-bold outline-none text-muted-foreground cursor-not-allowed w-full max-w-xs"
                                 title="Email cannot be changed"
                             />
                         </SettingRow>
@@ -317,10 +322,10 @@ export default function SettingsPage() {
                                 onChange={(val) => updateSetting('pushNotifications', val)}
                             />
                         </SettingRow>
-                        <SettingRow label="Match Reminders">
+                        <SettingRow label="Match Event Alerts">
                             <Toggle
-                                enabled={settings.matchReminders}
-                                onChange={(val) => updateSetting('matchReminders', val)}
+                                enabled={settings.matchAlerts}
+                                onChange={(val) => updateSetting('matchAlerts', val)}
                             />
                         </SettingRow>
                         <SettingRow label="Favorite Team Updates">
@@ -384,7 +389,7 @@ export default function SettingsPage() {
                     <button
                         onClick={handleSave}
                         disabled={saving}
-                        className="px-8 py-4 bg-primary text-primary-foreground rounded-2xl hover:scale-105 transition-all flex items-center gap-2 font-black uppercase tracking-widest shadow-lg shadow-primary/20 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
+                        className="px-8 py-4 bg-primary text-primary-foreground rounded-2xl hover:scale-105 transition-all flex items-center gap-2 font-black uppercase tracking-widest shadow-lg shadow-primary/20 disabled:bg-primary/60 disabled:cursor-not-allowed disabled:hover:scale-100"
                     >
                         {saving ? (
                             <>
@@ -585,7 +590,7 @@ function ChangePasswordModal({ onClose }: { onClose: () => void }) {
                         <button
                             type="submit"
                             disabled={loading}
-                            className="flex-1 py-3 rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 text-sm font-bold transition-all disabled:opacity-50"
+                            className="flex-1 py-3 rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 text-sm font-bold transition-all disabled:bg-primary/60"
                         >
                             {loading ? 'Updating...' : 'Update Password'}
                         </button>

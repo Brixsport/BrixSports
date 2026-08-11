@@ -90,10 +90,16 @@ async function getTeamFollowerUserIds(teamIds: string[]): Promise<string[]> {
   ]));
   if (potentialUserIds.length === 0) return [];
 
+  // Session 51: also excludes userPreferences.notifications === false, the same
+  // master-mute fix applied to match-notification-service.ts's identical query --
+  // keeps this composer path consistent with the real event-notification path.
   const disabledPrefUsers = await db
     .select({ userId: userPreferences.userId })
     .from(userPreferences)
-    .where(and(inArray(userPreferences.userId, potentialUserIds), eq(userPreferences.matchAlerts, false)));
+    .where(and(
+      inArray(userPreferences.userId, potentialUserIds),
+      or(eq(userPreferences.matchAlerts, false), eq(userPreferences.notifications, false))
+    ));
   const disabledUserIds = new Set(disabledPrefUsers.map(p => p.userId));
 
   return potentialUserIds.filter(id => !disabledUserIds.has(id));

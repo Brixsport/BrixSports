@@ -145,7 +145,11 @@ export async function sendMatchEventNotification(event: MatchEventNotification):
         ]));
 
         // Filter out users who have disabled matchAlerts in their preferences
-        // Note: If no preference record exists, we assume TRUE as per schema default
+        // Note: If no preference record exists, we assume TRUE as per schema default.
+        // Also excludes userPreferences.notifications === false (session 51 fix) --
+        // the profile/settings page's "Push Notifications" toggle previously wrote
+        // this column correctly but nothing ever read it, so it had zero effect;
+        // this is the master mute this toggle was always supposed to control.
         let teamFollowerSubscriptions: (typeof pushSubscriptions.$inferSelect)[] = [];
         if (potentialUserIds.length > 0) {
             const disabledPrefUsers = await db
@@ -154,7 +158,10 @@ export async function sendMatchEventNotification(event: MatchEventNotification):
                 .where(
                     and(
                         inArray(userPreferences.userId, potentialUserIds),
-                        eq(userPreferences.matchAlerts, false)
+                        or(
+                            eq(userPreferences.matchAlerts, false),
+                            eq(userPreferences.notifications, false)
+                        )
                     )
                 );
 
