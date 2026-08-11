@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import ErrorReporter from "@/components/ErrorReporter";
 import Script from "next/script";
+import { ThemeProvider } from "@/components/providers/ThemeProvider";
 import { BottomNav } from "@/components/BottomNav";
 import { PWAProvider } from "@/components/pwa/PWAProvider";
 import SessionProvider from "@/components/providers/SessionProvider";
@@ -108,7 +109,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <head>
         {/* Favicon (app/icon.png) and apple-touch-icon (metadata.icons.apple
             above) are both handled by Next.js's metadata API -- no manual
@@ -220,22 +221,24 @@ export default function RootLayout({
       </head>
       <body className="antialiased">
         <ErrorReporter />
-        <PWAProvider swPath="/sw-user.js">
-          <SessionProvider>
-            <AuthProvider>
-              <NotificationProvider>
-                <SocketProvider>
-                  <GlobalNotificationListener />
-                  <AdBanner position="top" />
-                  {children}
-                  <AdBanner position="bottom" />
-                  <BottomNav />
-                  <AuthModal />
-                </SocketProvider>
-              </NotificationProvider>
-            </AuthProvider>
-          </SessionProvider>
-        </PWAProvider>
+        <ThemeProvider>
+          <PWAProvider swPath="/sw-user.js">
+            <SessionProvider>
+              <AuthProvider>
+                <NotificationProvider>
+                  <SocketProvider>
+                    <GlobalNotificationListener />
+                    <AdBanner position="top" />
+                    {children}
+                    <AdBanner position="bottom" />
+                    <BottomNav />
+                    <AuthModal />
+                  </SocketProvider>
+                </NotificationProvider>
+              </AuthProvider>
+            </SessionProvider>
+          </PWAProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

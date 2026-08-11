@@ -7714,3 +7714,27 @@ Everything below is explicitly **not** being built now — captured from `NOTIFI
 **Found:** session 50 (2026-08-07), live — a real push notification screenshot shared by Richard mid-verification of `BACKLOG-211`. **Fixed:** session 50, same session. **Code re-confirmed, still no fresh device push:** session 51 (2026-08-11).
 
 ---
+
+### BACKLOG-216 — Light/Dark Theme Mechanism Wiring (Phase 1 of the Theme Initiative)
+
+**Status:** SHIPPED — 2026-08-11 (session 51), mechanism live-verified; per-screen visual retrofit is separate, ongoing work (Phase 2, folded into the UI-refinement sprint)
+**Priority:** Medium — foundational for the theme initiative Richard requested; not a bug, a new capability
+
+**Problem:** the app had all the *pieces* of a light/dark theme system already in place but none of them were connected: `next-themes` was an installed dependency but never mounted as a provider; `globals.css` already had a full shadcn-style light/dark CSS variable pair set (`--background`, `--foreground`, `--card`, `--border`, etc., switched via a `.dark` class per `@custom-variant dark (&:is(.dark *))`); `userPreferences.theme` existed in the DB schema with a working API; `profile/settings/page.tsx` already had a Light/Dark toggle UI. But with no `ThemeProvider` in `layout.tsx`, the `.dark` class never actually toggled, and the settings page's toggle only wrote to local state / the DB on Save — it never called `next-themes`' `setTheme()`, so clicking it did nothing visually. Separately (not part of this item, scoped as Phase 2): almost none of the actual custom-built pages use the semantic tokens anyway — they're built with hardcoded dark-only classes (`bg-[#050505]`, `text-white/60`, `bg-white/5`), so even a working toggle wouldn't visibly re-theme most screens yet.
+
+**Built (Phase 1 — mechanism only):**
+- New `src/components/providers/ThemeProvider.tsx` — thin client wrapper around `next-themes`' `ThemeProvider`, matching the existing `SessionProvider.tsx` pattern. `attribute="class"` (matches `globals.css`'s selector strategy), `defaultTheme="dark"` (preserves current behavior for every not-yet-retrofitted page), `enableSystem={false}` (auto-following OS light mode before screens are retrofitted would look broken, not themed).
+- `src/app/layout.tsx` — mounted the new provider around the existing provider stack; added `suppressHydrationWarning` to `<html>` (standard next-themes requirement, since the class is set client-side before hydration completes).
+- `src/app/profile/settings/page.tsx` — the Light/Dark `ThemeButton`s now call `next-themes`' `setTheme()` live (in addition to the existing local-state update that feeds the Save-button DB write); loading a signed-in user's saved DB preference also calls `setTheme()` once, so their choice actually applies on visiting Settings rather than just sitting in the DB. `next-themes`' own `localStorage` persistence already covers same-browser return visits for every user, including anonymous viewers who have no DB row at all.
+
+**Deliberately not done this pass:** app-wide sync of a signed-in user's DB preference outside the Settings page itself (e.g. on login, before Settings is ever visited) — `localStorage` persistence already covers the common case; a full cross-device-on-login sync is a small, separable follow-up if it turns out to matter in practice. The actual visual retrofit of hardcoded-dark screens to the semantic tokens is explicitly Phase 2, folded into the UI-refinement sprint rather than done blind here.
+
+**Evidence:**
+- `tsc --noEmit`: 49 baseline errors, none new.
+- **Live-verified the mechanism end to end** against the running dev server: initial load confirmed `<html class="dark" style="color-scheme: dark;">` (the wired default). Set `localStorage.theme = 'light'` and reloaded: `<html>` correctly flipped to `class="light" style="color-scheme: light;"`, and `getComputedStyle(document.body).backgroundColor` resolved to `oklch(0.98 0 0)` — the exact light-mode `--background` value from `globals.css`'s `:root` block — confirming the CSS variable cascade and the class toggle are genuinely wired together, not just present in isolation. Screenshot taken in this state: the app still renders fully dark visually, exactly as expected, since no page has been retrofitted to the semantic tokens yet (that's Phase 2) — no crash, no visual break, just not yet re-themed. `localStorage` reset to unset afterward so default dark behavior isn't left altered for later testing.
+- Settings-page-specific click-through (toggling via the actual UI while signed in) not done this pass — requires an authenticated non-logger user session, not quickly available in this environment; the underlying `setTheme()` wiring is the same call proven to work above, and the code path was confirmed via direct read, not just assumed.
+- Pending items: Phase 2 (per-screen retrofit), a real UI click-through as a signed-in user, and the optional app-wide DB-preference sync on login.
+
+**Found/Requested:** session 51 (2026-08-11), Richard's explicit ask to build light mode for the whole system as part of the broader roadmap sequencing conversation. **Phase 1 built and live-verified:** session 51, same session.
+
+---

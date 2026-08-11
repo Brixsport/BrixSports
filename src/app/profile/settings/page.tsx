@@ -6,11 +6,13 @@ import {
     Settings, User, Bell, Lock, Globe, Palette, Eye, Shield,
     Mail, Smartphone, Moon, Sun, Volume2, VolumeX, Save, ChevronRight, Loader2
 } from 'lucide-react';
+import { useTheme } from 'next-themes';
 import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';
 
 export default function SettingsPage() {
     const { user, loading: authLoading } = useAuth();
+    const { setTheme } = useTheme();
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
 
@@ -70,6 +72,13 @@ export default function SettingsPage() {
                 if (prefsResponse.ok) {
                     const prefsData = await prefsResponse.json();
                     if (prefsData.preferences) {
+                        // Sync the saved DB preference into next-themes so a signed-in
+                        // user's own choice actually applies live, not just locally in
+                        // this settings form -- localStorage (next-themes' own default
+                        // persistence) already covers same-browser return visits; this
+                        // covers a signed-in user's preference following them across
+                        // devices/browsers once they load this page.
+                        setTheme(prefsData.preferences.theme || 'dark');
                         setSettings(prev => ({
                             ...prev,
                             theme: prefsData.preferences.theme || 'dark',
@@ -216,13 +225,13 @@ export default function SettingsPage() {
                                     icon={<Moon size={16} />}
                                     label="Dark"
                                     active={settings.theme === 'dark'}
-                                    onClick={() => updateSetting('theme', 'dark')}
+                                    onClick={() => { setTheme('dark'); updateSetting('theme', 'dark'); }}
                                 />
                                 <ThemeButton
                                     icon={<Sun size={16} />}
                                     label="Light"
                                     active={settings.theme === 'light'}
-                                    onClick={() => updateSetting('theme', 'light')}
+                                    onClick={() => { setTheme('light'); updateSetting('theme', 'light'); }}
                                 />
                             </div>
                         </SettingRow>
