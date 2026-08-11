@@ -31,7 +31,6 @@ export default function SettingsPage() {
         defaultView: 'standings',
 
         // Notifications
-        emailNotifications: true,
         pushNotifications: true,
         // BUG (session 51 audit): this page's toggle used to write matchReminders --
         // a column nothing ever reads (and confusingly named after the *unrelated*
@@ -39,6 +38,10 @@ export default function SettingsPage() {
         // (match-notification-service.ts, notifications/send/route.ts) gate on
         // userPreferences.matchAlerts. matchAlerts is now the source of truth here.
         matchAlerts: true,
+        // BACKSCOPED session 51: no backing system anywhere (no email pipeline, no
+        // per-team filtering, no digest job) -- UI hidden below, not deleted. State
+        // kept so the fields still round-trip if the UI is ever reinstated.
+        emailNotifications: true,
         favoriteTeamUpdates: true,
         weeklyDigest: false,
 
@@ -90,9 +93,9 @@ export default function SettingsPage() {
                             language: prefsData.preferences.language || 'en',
                             timezone: prefsData.preferences.timezone || 'Africa/Lagos',
                             defaultView: prefsData.preferences.defaultView || 'standings',
-                            emailNotifications: prefsData.preferences.emailNotifications ?? true,
                             pushNotifications: prefsData.preferences.notifications ?? true,
                             matchAlerts: prefsData.preferences.matchAlerts ?? true,
+                            emailNotifications: prefsData.preferences.emailNotifications ?? true,
                             favoriteTeamUpdates: prefsData.preferences.favoriteTeamUpdates ?? true,
                             weeklyDigest: prefsData.preferences.weeklyDigest ?? false,
                             profileVisibility: prefsData.preferences.profileVisibility || 'public',
@@ -151,8 +154,8 @@ export default function SettingsPage() {
                     timezone: settings.timezone,
                     defaultView: settings.defaultView,
                     notifications: settings.pushNotifications,
-                    emailNotifications: settings.emailNotifications,
                     matchAlerts: settings.matchAlerts,
+                    emailNotifications: settings.emailNotifications,
                     favoriteTeamUpdates: settings.favoriteTeamUpdates,
                     weeklyDigest: settings.weeklyDigest,
                     profileVisibility: settings.profileVisibility,
@@ -310,22 +313,19 @@ export default function SettingsPage() {
                         title="Notifications"
                         description="Control what notifications you receive"
                     >
+                        {/* BACKSCOPED session 51: Email Notifications / Favorite Team Updates /
+                            Weekly Digest. Confirmed via a full audit (grep across src/) that
+                            none of these three have any backing system anywhere: no email
+                            pipeline, no per-team notification filtering, no digest job. They
+                            wrote to the DB but nothing ever read them -- pure decoration that
+                            misled users into thinking they controlled a real feature.
+                            Richard's call: hide rather than fake-wire. State/load/save left
+                            intact above -- reinstate by uncommenting below once the backing
+                            feature actually exists.
                         <SettingRow label="Email Notifications">
                             <Toggle
                                 enabled={settings.emailNotifications}
                                 onChange={(val) => updateSetting('emailNotifications', val)}
-                            />
-                        </SettingRow>
-                        <SettingRow label="Push Notifications">
-                            <Toggle
-                                enabled={settings.pushNotifications}
-                                onChange={(val) => updateSetting('pushNotifications', val)}
-                            />
-                        </SettingRow>
-                        <SettingRow label="Match Event Alerts">
-                            <Toggle
-                                enabled={settings.matchAlerts}
-                                onChange={(val) => updateSetting('matchAlerts', val)}
                             />
                         </SettingRow>
                         <SettingRow label="Favorite Team Updates">
@@ -338,6 +338,19 @@ export default function SettingsPage() {
                             <Toggle
                                 enabled={settings.weeklyDigest}
                                 onChange={(val) => updateSetting('weeklyDigest', val)}
+                            />
+                        </SettingRow>
+                        */}
+                        <SettingRow label="Push Notifications">
+                            <Toggle
+                                enabled={settings.pushNotifications}
+                                onChange={(val) => updateSetting('pushNotifications', val)}
+                            />
+                        </SettingRow>
+                        <SettingRow label="Match Event Alerts">
+                            <Toggle
+                                enabled={settings.matchAlerts}
+                                onChange={(val) => updateSetting('matchAlerts', val)}
                             />
                         </SettingRow>
                     </SettingsSection>
