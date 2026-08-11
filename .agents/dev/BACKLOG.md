@@ -7745,3 +7745,20 @@ Everything below is explicitly **not** being built now — captured from `NOTIFI
 **Found/Requested:** session 51 (2026-08-11), Richard's explicit ask to build light mode for the whole system as part of the broader roadmap sequencing conversation. **Phase 1 built and live-verified:** session 51, same session.
 
 ---
+
+### BUG-217 — `AuthContext.checkAuth()` Treats Network Failure the Same as Confirmed Logout, and Deletes a Still-Possibly-Valid Token on Any Non-2xx Response
+
+**Status:** OPEN — filed session 51 (2026-08-11), not fixed
+**Priority:** High — this app is explicitly mobile-first for Nigerian campus/university network conditions (`PWA / Mobile Rules` in `CLAUDE.md`); a transient network blip forcing a real logout is a realistic, recurring scenario, not an edge case
+
+**Problem:** `src/contexts/AuthContext.tsx`'s `checkAuth()` (called on every mount via `AuthProvider`) has two collapsed failure paths that should be distinct:
+1. **Genuine fetch failure** (offline, DNS failure, dropped connection) throws inside the `try` block → caught by the outer `catch` → `setUser(null)`. A "couldn't verify" state is treated identically to "confirmed logged out."
+2. **Any non-2xx response** from `/api/auth/me` — including a transient 5xx, a gateway timeout, or any other server-side hiccup unrelated to the token's actual validity — hits the `else` branch (`checkAuth()`, lines 71-75): `setUser(null)` **and** `localStorage.removeItem('authToken')`. This is the more damaging half: it doesn't just show the user as logged out for a moment, it **destroys the locally stored token**, so once connectivity/the server recovers, the user is not automatically re-authenticated — they have to log in again from scratch. There is no branch anywhere in this function that distinguishes "the server explicitly said 401, this token is genuinely invalid" from "we don't actually know, the request itself failed or errored."
+
+**Reachability:** not a contrived scenario — `checkAuth()` runs unconditionally on every app mount (`useEffect(() => { checkAuth(); }, [checkAuth])`), so any real-world flaky-connection window during that initial load (or during the 15-minute `refreshSession` interval, which has its own related issue: `refreshSession()` calls `setUser(null)` on any non-ok response too, with no distinction) hits this path.
+
+**Fix (not built — scoping only, this is a filing):** distinguish the two cases explicitly. A caught exception (network/fetch failure) should NOT clear `user` state or the stored token — leave the previous auth state as-is (optimistically assume still-logged-in) and let the next periodic check or an explicit user action resolve it, rather than forcing an immediate logout. Only an actual `401`/`403` HTTP response from `/api/auth/me` should be treated as "genuinely logged out" and trigger the `localStorage.removeItem('authToken')` + `setUser(null)` path. A `5xx` or other unexpected status should probably be treated like the network-failure case (retry-worthy, not a confirmed logout) rather than lumped in with `401`.
+
+**Found:** session 51 (2026-08-11), Richard asked directly whether a bad connection would show the app as anonymous — confirmed via direct code read of `checkAuth()`, not inferred.
+
+---
