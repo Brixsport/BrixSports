@@ -78,7 +78,13 @@ export default function LiveStats({ stats, sport, homeTeam, awayTeam }: LiveStat
 
         return (
         <div className="space-y-6">
-            {!isGoalsOnly && (
+            {/* BACKLOG-192: possession is computed as an attacking-event-count proxy
+                (shots + corners + free kicks), not real time-based possession -- even on
+                fully-tracked matches this reads as authoritative but isn't. Richard's call:
+                hide it rather than ship a misleading number; real tracking or honest
+                relabeling is a later, separate decision. Commented out, not deleted --
+                homePossession/awayPossession above still compute correctly if reinstated. */}
+            {false && !isGoalsOnly && (
                 <StatBar
                     label="Possession"
                     homeValue={homePossession}

@@ -213,6 +213,12 @@ export default function LineupBuilderPage() {
             });
 
             const data = await response.json();
+            if (!response.ok) {
+                alert(response.status === 401 || response.status === 403
+                    ? 'You need to be signed in as an admin or logger to save a lineup.'
+                    : (data.error || 'Failed to save lineup'));
+                return;
+            }
             if (data.success) {
                 alert('Lineup saved as draft!');
             }
@@ -255,6 +261,12 @@ export default function LineupBuilderPage() {
             });
 
             const data = await response.json();
+            if (!response.ok) {
+                alert(response.status === 401 || response.status === 403
+                    ? 'You need to be signed in as an admin or logger to delete a lineup.'
+                    : (data.error || 'Failed to delete lineup'));
+                return;
+            }
             if (data.success) {
                 const sport = selectedMatch.sport as 'Football' | 'Basketball';
                 setLineup(createEmptyLineup(formation, sport));

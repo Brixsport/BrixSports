@@ -1571,9 +1571,9 @@ player stats can be stale or inconsistent after a match ends.
 
 ---
 
-### BACKLOG-122 — Stats Tab Shows Misleading "0" for Categories Never Tracked in Goals-Only Backfills
+### ~~BACKLOG-122~~ — Stats Tab Shows Misleading "0" for Categories Never Tracked in Goals-Only Backfills
 
-**Status:** OPEN
+**Status:** RESOLVED — see full evidence block below (fixed + live-tested session 49, merged to `dev` PR #16, merge confirmed session 51)
 **Priority:** Low → **worth re-rating, see 2026-07-13 update below**
 **Filed:** 2026-07-13
 
@@ -1595,17 +1595,24 @@ player stats can be stale or inconsistent after a match ends.
 - Commits: `7e729a1` (initial per-match version), `43afee2` (per-team correction)
 - Verified by: live test against a Vercel preview deployment (`brixsports-staging-fpi1p99k5-brixsports-projects.vercel.app`), both via a real signed-in session
 - Observed result: `busa-match-16` (asymmetric coverage) now shows only `Yellow Cards 2-1` / `Red Cards 1-0` on its Stats tab — Possession/Shots/Shots on Target/Corners/Fouls/Saves all correctly absent, no fake `0-0` or lopsided percentage. `busa-match-10` (both sides fully tracked, spot-checked as a regression guard) still renders every category normally: `Possession 33%-67%`, `Shots 4-8`, `Shots on Target 0-4`, `Corners 0-0`, `Fouls 0-2`, `Yellow Cards 1-2`, `Saves 5-11` — confirming the fix doesn't over-suppress real data.
-- Pending items: PR #16 (`fix/backlog-122-stats-tab-uncaptured-categories` → `dev`) not yet merged.
+- Pending items: none — PR #16 merged to `dev` (`c75380b`), confirmed via `git log origin/dev`.
 
-**Status:** SHIPPED — 2026-08-04 (session 49), live-tested on Vercel preview. Pending merge.
+**Status:** RESOLVED — 2026-08-04 (session 49), live-tested on Vercel preview; PR #16 merged to `dev` (`c75380b`), merge confirmed session 51 (2026-08-11).
 
 ---
 
 ### BACKLOG-192 — Football Possession % Is an Attacking-Event Proxy, Not Real Possession, Even on Fully-Tracked Matches
 
-**Status:** OPEN
+**Status:** SHIPPED (interim mitigation) — 2026-08-11 (session 51). Real fix (relabel vs. real tracking) still OPEN, deferred by Richard's explicit call.
 **Priority:** Low — a real accuracy gap, but not a data-integrity bug; the number shown is a documented approximation, not corrupted data
 **Filed:** 2026-08-04 (session 49)
+
+**Interim mitigation, session 51:** rather than relabel or build real tracking now, Richard's call was to hide the stat entirely until one of those two directions is chosen — a wrong-looking number is worse than a temporarily missing one. `src/components/LiveStats.tsx`'s `StatBar` for Possession is now gated behind `false &&` (commented out via a hard-disable flag, not deleted — `homePossession`/`awayPossession` computation is untouched so reinstating is a one-line flip once a direction is chosen).
+
+**Evidence:**
+- `tsc --noEmit`: 49 baseline errors, none new, zero in `LiveStats.tsx`.
+- **Live-verified against the local dev server** (staging DB, `busa-sf-kings-pirates`, a fully-tracked match — the exact case this entry is about, where possession looks authoritative but isn't): Stats tab renders Shots (11-3), Shots on Target (1-1), Corners (0-0), Fouls (1-7), Yellow Cards (1-0), Saves (5-6) — Possession is absent, confirmed both via DOM text extraction and a screenshot. No other category was affected.
+- Pending items: the real direction decision (relabel vs. build tracking) is still open — this is a hide-only mitigation.
 
 **Problem:** `GET /api/matches/[id]`'s computed-from-events possession formula (`src/app/api/matches/[id]/route.ts`) is `homePossession = shots + corners + freeKicks` (an attacking-event count), never actual time-in-possession. This is true even for matches where **both** teams have full, real stat coverage — `BACKLOG-122`'s fix (same session) only addresses matches where the underlying event counts themselves are missing/asymmetric; it does nothing for the deeper issue that the possession % shown is always a proxy metric, not a measurement of what it claims to represent. There is no event type anywhere in the logger (`FootballLogger.tsx`, `match-state-manager.ts`) that captures a possession change or duration — the platform has never had a mechanism to track real possession, only to approximate it after the fact from unrelated event counts.
 
@@ -6554,16 +6561,23 @@ No `clearTimeout` exists anywhere in the file. The effect that sets `stateManage
 
 ---
 
-### BACKLOG-157 — Public Lineup Builder (`/lineups`) Silently Swallows Save Failures
+### ~~BACKLOG-157~~ — Public Lineup Builder (`/lineups`) Silently Swallows Save Failures
 
-**Status:** OPEN — found session 47D, not fixed
+**Status:** RESOLVED — 2026-08-11 (session 51)
 **Priority:** MEDIUM — a direct instance of CLAUDE.md's "no silent failures" rule, inverted (silent no-op instead of silent success)
 
 **Problem:** `src/app/lineups/page.tsx` lets any visitor build a formation visually and download it as a PNG (works fine, no auth needed) or "Save Draft" (`handleSaveDraft`, lines 201-225), which POSTs to `/api/matches/[id]/lineup` — a route gated to `admin`/`logger` roles only. The save handler only checks `if (data.success)` and never checks `response.ok`, so a 401/403 JSON error response falls through both the success branch and the catch block silently. A viewer (or any non-admin/logger) clicking "Save Draft" sees **no error at all** — not even a failed-save message — and has no way to know their work wasn't saved.
 
-**Fix (not built):** check `response.ok` before `data.success`, surface a clear error toast/message on any non-2xx response, matching the pattern used correctly elsewhere in the app (e.g. `FootballLogger.tsx`'s server-first event handlers).
+**Second instance found in the same pass, not in the original filing:** `handleDelete` (same file) had the identical bug shape — only checked `data.success`, no `response.ok` check, same silent no-op on 401/403.
 
-**Found:** session 47D, by a background audit agent doing a full read-only trace of the admin platform.
+**Fix:** both `handleSaveDraft` and `handleDelete` now check `response.ok` first; a 401/403 shows a specific "you need to be signed in as an admin or logger" message, any other non-2xx shows the server's own `data.error` (falling back to a generic message if absent).
+
+**Evidence:**
+- `tsc --noEmit`: 49 baseline errors, none new, zero in `lineups/page.tsx`.
+- **Live-verified the exact failure condition against the real route**, unauthenticated, from the running dev server (staging DB): `POST /api/matches/busa-sf-kings-pirates/lineup` with no auth cookie returned `{ok: false, status: 401, data: {error: "Unauthorized"}}` — confirms the fix's `response.status === 401` branch is reachable with real data, not just theorized. Full UI click-through not done this pass — staging currently has zero `UPCOMING` matches (all backfilled data is `FINISHED`), so the "select a match" step in the real `/lineups` flow has nothing to select; would need a real upcoming match created first.
+- Pending items: a full UI click-through (select match → build lineup → Save Draft while logged out) once an `UPCOMING` match exists to test against.
+
+**Found:** session 47D, by a background audit agent doing a full read-only trace of the admin platform. **Fixed:** session 51 (2026-08-11).
 
 ---
 
@@ -7662,21 +7676,22 @@ Everything below is explicitly **not** being built now — captured from `NOTIFI
 
 ---
 
-### BUG-214 — Team-Follow Stars (`BACKLOG-207`) Not Visible at Mobile/Narrow Viewport Widths
+### ~~BUG-214~~ — Team-Follow Stars (`BACKLOG-207`) Not Visible at Mobile/Narrow Viewport Widths
 
-**Status:** OPEN — filed 2026-08-07 (session 50, branch `feature/notification-system`)
+**Status:** RESOLVED — 2026-08-11 (session 51)
 **Priority:** Medium — the buttons are fully functional (confirmed via `BACKLOG-207`'s live verification, DOM presence + working click handlers at every width tested), but invisible to the majority of real users given loggers/viewers are primarily mobile per this project's own PWA rules
 
-**Problem:** found live while verifying `BACKLOG-207` against the current preview. At the default mobile viewport (~314-375px CSS width), the two team-follow stars next to each team name in the match-detail header render with no visible team-name text or star icon at all — only the team logos and score are visible. The accessibility tree confirms both buttons exist in the DOM (`"Follow Kings FC — get alerts for this team's matches"`, ref present, clickable, click handler fires correctly) — this is a **display-only** bug, not a functional regression. At desktop width (641px+ CSS) the buttons are still not visually rendering as expected either (team name text present in the a11y tree but not appearing in the rendered screenshot), suggesting the issue isn't purely a mobile breakpoint problem — likely a CSS class or flex/overflow issue in the match-header component affecting the team-name-plus-star row across viewport sizes, not isolated to one breakpoint.
+**Problem:** found live while verifying `BACKLOG-207` against the current preview. At the default mobile viewport (~314-375px CSS width), the two team-follow stars next to each team name in the match-detail header render with no visible team-name text or star icon at all — only the team logos and score are visible. At desktop width (641px+ CSS) the buttons were also not visually rendering as expected.
 
-**Not yet root-caused:** which component/class is responsible (`matches/[id]/page.tsx`'s header row is the prime suspect, added as part of `BACKLOG-207`) — needs a dedicated pass with browser devtools open against the live layout, not just the accessibility tree.
+**Root cause (found this session, was never actually undiagnosed in the code — just undocumented):** the star `<button>` was nested inside the same `hidden sm:block` wrapper as the team name, so it inherited the name's mobile-hiding rule instead of staying independently visible. **Already fixed as of commit `4bd8dee`** (squash-merge of PR #20, 2026-08-07, session 50) — the button was moved to sit as a sibling of the `hidden sm:block` name wrapper in `src/app/matches/[id]/page.tsx` (home team: lines 566-577; away team: matching block lines 652-661), with an inline comment citing this exact bug number. The fix landed correctly but this `BACKLOG.md` entry was never updated to match — the same "fix landed without its own backlog entry being updated" pattern already logged 3 prior times in this project's own `known-issues.md`.
 
 **Evidence:**
-- Confirmed via `read_page` (accessibility tree) at both mobile (314x598) and desktop (641x598) viewports: buttons present, correctly labeled, clickable.
-- Confirmed via screenshot at both widths: no team-name text or star icon visible in the rendered output at either width.
-- Confirmed the buttons are NOT dead — clicking via ref at either width correctly fired the `POST`/`DELETE /api/users/favorites` calls verified in `BACKLOG-207`'s own evidence block.
+- Commit: `4bd8dee` (already on `dev`)
+- Verified by: live browser test against the local dev server (staging DB, `busa-sf-kings-pirates` match), not just code read
+- Observed result: **Mobile (375×812)** — screenshot confirms both stars render at full opacity next to each team logo (team name correctly still hidden by design at this width — that's the space-saving `hidden sm:block`, not part of this bug). **Wide desktop (1280×800)** — `getComputedStyle` read directly against both `button[aria-label*="Follow"]` elements: `display: block`, `visibility: visible`, `opacity: 1`, real non-zero bounding rects (`16×16` at `x:76,y:92` and `x:1188,y:92`), team names also visible alongside. **700×700 (crosses the `sm` breakpoint)** — screenshot confirms both stars, both team names, and both short names all rendering correctly together.
+- Pending items: none.
 
-**Found:** session 50 (2026-08-07), live UI verification of `BACKLOG-207`, flagged by Richard directly from the screenshot. **Fixed:** not yet — filed for a dedicated follow-up pass.
+**Found:** session 50 (2026-08-07), live UI verification of `BACKLOG-207`. **Fixed:** session 50 (2026-08-07), same session, just never marked in this file. **Discrepancy caught and closed:** session 51 (2026-08-11).
 
 ---
 
@@ -7694,8 +7709,8 @@ Everything below is explicitly **not** being built now — captured from `NOTIFI
 **Evidence:**
 - `tsc --noEmit` clean (49 baseline, none new; error is not in the edited file).
 - Root cause confirmed by reading `events/route.ts:355-409` directly — the toast/push asymmetry is visible in the same `after()` block, not inferred.
-- Not yet re-verified via a fresh real device push post-fix (would need a new event fired against the next preview deploy) — code-level fix directly mirrors the already-working, already-live toast fallback one code path away.
+- **Re-confirmed session 51 (2026-08-11):** code re-read directly at `match-notification-service.ts:308,318,328` — `event.playerName || 'A player'` present on all three of `GOAL`/`RED_CARD`/`YELLOW_CARD`, matching the intended fix exactly. `notification_send_log` checked for a post-fix real send to inspect the actual rendered body text — only 4 rows exist total, all on the now-deleted `notif-test-throwaway-1` match, and the table doesn't persist body text (only counts), so this couldn't independently confirm the rendered string. Still not re-verified via an actual real device push — no live match currently in a state to fire a real no-`playerId` card/goal event, and no device access in this session. Code-level confidence unchanged from session 50: the fix mirrors the already-device-confirmed toast fallback exactly.
 
-**Found:** session 50 (2026-08-07), live — a real push notification screenshot shared by Richard mid-verification of `BACKLOG-211`. **Fixed:** session 50, same session.
+**Found:** session 50 (2026-08-07), live — a real push notification screenshot shared by Richard mid-verification of `BACKLOG-211`. **Fixed:** session 50, same session. **Code re-confirmed, still no fresh device push:** session 51 (2026-08-11).
 
 ---
