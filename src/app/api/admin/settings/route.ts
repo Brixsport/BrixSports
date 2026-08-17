@@ -24,19 +24,18 @@ const DEFAULT_SETTINGS = {
     'system.notifications.enabled': { value: 'true', type: 'boolean', category: 'system', description: 'Enable push notifications' },
 
     // Feature Flags
-    'features.fpl.enabled': { value: 'true', type: 'boolean', category: 'features', description: 'Enable Fantasy Premier League' },
-    'features.predictions.enabled': { value: 'true', type: 'boolean', category: 'features', description: 'Enable match predictions' },
-    'features.polls.enabled': { value: 'true', type: 'boolean', category: 'features', description: 'Enable polls' },
-    'features.transfers.enabled': { value: 'true', type: 'boolean', category: 'features', description: 'Enable transfer news' },
+    'features.fpl.enabled': { value: 'true', type: 'boolean', category: 'features', description: 'Fantasy Premier League' },
+    'features.predictions.enabled': { value: 'true', type: 'boolean', category: 'features', description: 'Match predictions' },
+    'features.polls.enabled': { value: 'true', type: 'boolean', category: 'features', description: 'Polls' },
+    'features.transfers.enabled': { value: 'true', type: 'boolean', category: 'features', description: 'Transfer news' },
 
     // High-Volatility Feature Gates (BACKLOG-155) -- defaulted OFF deliberately.
-    // CLAUDE.md's own Live Event Readiness Checklist calls for these gated/hidden
-    // before any public match day; defaulting to false means they gate closed
+    // defaulting to false means they gate closed
     // automatically rather than depending on someone remembering to flip them.
-    'features.ads.enabled': { value: 'false', type: 'boolean', category: 'features', description: 'Enable Ads' },
-    'features.lineupbuilder.enabled': { value: 'false', type: 'boolean', category: 'features', description: 'Enable Lineup Builder' },
-    'features.usermanagement.enabled': { value: 'false', type: 'boolean', category: 'features', description: 'Enable User Management / Access Control admin panel' },
-    'features.news.enabled': { value: 'false', type: 'boolean', category: 'features', description: 'Enable News' },
+    'features.ads.enabled': { value: 'false', type: 'boolean', category: 'features', description: 'Advertisements' },
+    'features.lineupbuilder.enabled': { value: 'false', type: 'boolean', category: 'features', description: 'Lineup Builder' },
+    'features.usermanagement.enabled': { value: 'false', type: 'boolean', category: 'features', description: 'User Management / Access Control admin panel' },
+    'features.news.enabled': { value: 'false', type: 'boolean', category: 'features', description: 'News Management' },
 };
 
 // Initialize default settings in database if they don't exist
