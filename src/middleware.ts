@@ -60,7 +60,16 @@ export async function middleware(request: NextRequest) {
 
     // ── Admin route protection (all environments) ──────────────────────────
     if (pathname.startsWith('/admin') || pathname.startsWith('/api/admin')) {
-        const token = request.cookies.get('authToken')?.value;
+        // BACKLOG-223: this only checked the cookie, while every /api/admin/*
+        // route handler's own getAuthUser() (src/lib/auth.ts) accepts a Bearer
+        // token first and falls back to the cookie -- a valid Bearer-only request
+        // got a false 401 here before the route handler (which would have
+        // accepted it) ever ran. Same precedence as getAuthUser() now. Confirmed
+        // live, session 53: an existing, unmodified admin route rejected a real
+        // admin JWT sent as Bearer, accepted the identical token as a cookie.
+        const authHeader = request.headers.get('authorization');
+        const bearerToken = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
+        const token = bearerToken || request.cookies.get('authToken')?.value;
 
         if (!token) {
             if (pathname.startsWith('/api/')) {
