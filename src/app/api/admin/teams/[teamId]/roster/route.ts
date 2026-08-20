@@ -2,8 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { and, eq, isNull, sql } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { db } from '@/db';
-import { organizations, playerTeamAffiliations, players, teams } from '@/db/schema';
+import { playerTeamAffiliations, players, teams } from '@/db/schema';
 import { getAuthUser } from '@/lib/auth';
+import { resolveAffiliationType, CURRENT_SEASON } from '@/lib/rosterService';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -37,27 +38,6 @@ interface EntryResult {
     reason?: string;
     playerId?: string;
     matchedPlayerId?: string;
-}
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-async function resolveAffiliationType(teamId: string): Promise<string> {
-    const team = await db.query.teams.findFirst({
-        where: eq(teams.id, teamId),
-        columns: { ownerOrganizationId: true },
-    });
-
-    if (!team?.ownerOrganizationId) return 'club';
-
-    const org = await db.query.organizations.findFirst({
-        where: eq(organizations.id, team.ownerOrganizationId),
-        columns: { type: true },
-    });
-
-    if (!org) return 'club';
-    if (org.type === 'college') return 'college';
-    if (org.type === 'university') return 'university';
-    return 'club';
 }
 
 // ─── POST /api/admin/teams/[teamId]/roster ────────────────────────────────────
@@ -138,6 +118,7 @@ export async function POST(
                 position: entry.position ?? null,
                 nicknames: JSON.stringify(entry.nicknames ?? []),
                 startDate: new Date(),
+                season: CURRENT_SEASON,
                 createdAt: new Date(),
             });
 
@@ -204,6 +185,7 @@ export async function POST(
                 position: entry.position.trim(),
                 nicknames: JSON.stringify(entry.nicknames ?? []),
                 startDate: new Date(),
+                season: CURRENT_SEASON,
                 createdAt: new Date(),
             });
 
