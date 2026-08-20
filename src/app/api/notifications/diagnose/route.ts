@@ -3,8 +3,14 @@ import webpush from 'web-push';
 import { db } from '@/db';
 import { pushSubscriptions, users } from '@/db/schema';
 import { eq } from 'drizzle-orm';
+import { getAuthUser } from '@/lib/auth';
 
 export async function GET(request: NextRequest) {
+    const authUser = await getAuthUser(request).catch(() => null);
+    if (!authUser || authUser.role !== 'admin') {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const results: any = {
         timestamp: new Date().toISOString(),
         steps: [],

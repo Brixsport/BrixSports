@@ -6437,7 +6437,7 @@ No `clearTimeout` exists anywhere in the file. The effect that sets `stateManage
 
 ### BACKLOG-151 — Multi-Logger Sync Is Poll-Only: Real-Time Broadcast and Conflict Resolution Are Both No-Ops
 
-**Status:** OPEN — found session 47D, not fixed
+**Status:** OPEN — found session 47D, not fixed. **Explicitly deferred to its own dedicated session, 2026-08-20** — confirmed via code read that `FootballLogger.tsx` already holds a live socket connection to the same `match:{matchId}` room the server broadcasts `event:new`/`match:score:updated` into (`useWebSocket({ matchId, autoConnect: true })`), but the component only emits, never listens — so the real fix is wiring a receive-side listener + merge logic into both `FootballLogger.tsx` and `BasketballLogger.tsx`, plus making `resolveConflict` write server-side instead of clearing a local flag. Genuine feature work on the platform's highest-blast-radius live file, in CLAUDE.md's own 🟡 Caution zone, requires a real two-device dual-logger test before shipping per CLAUDE.md's Flow B testing mandate — deliberately not folded into a same-session cleanup pass under launch deadline pressure. Richard's explicit call.
 **Priority:** HIGH — Tier 0, directly relevant to CLAUDE.md's own still-open Live Event Readiness Checklist item ("Two simultaneous loggers do not conflict or overwrite — no dual-logger test ever run")
 
 **Problem, three parts, same root cause (`useMultiLogger.ts`/`multiLogger.ts`):**
@@ -6451,15 +6451,15 @@ No `clearTimeout` exists anywhere in the file. The effect that sets `stateManage
 
 ---
 
-### BUG-151 — No Server-Side Event Dedup/Idempotency Check Exists At All
+### ~~BUG-151~~ — No Server-Side Event Dedup/Idempotency Check Exists At All
 
-**Status:** OPEN — found session 47D, not fixed
+**Status:** RESOLVED — landed 2026-08-07 in `4bd8dee` (the notification-system PR), as `BUG-196`'s own duplicate-submission guard (`events/route.ts:159-181`) — never cross-referenced back to this entry, discovered and corrected 2026-08-20 while working the still-open `BACKLOG-151`/tier-0 sweep. No code change needed; tracker correction only.
 **Priority:** MEDIUM — client-side guards (temp-ID swap, `isRecordingRef`) cover the common case; this is a defense-in-depth gap, not a confirmed-active data-corruption incident
 **Filed:** 2026-07-27
 
-**Problem:** `POST /api/matches/[id]/events` (`events/route.ts:170-240`) has no idempotency-key check and no "does an identical event already exist for this match/player/type/minute" query — it unconditionally inserts whatever event body arrives, wrapped only in a transaction (`BUG-121`) that guarantees the insert and score-update commit atomically together, not that a *repeated* POST is rejected. If a client-side guard fails or is bypassed (a replayed offline-queue POST, or two loggers' independent optimistic writes racing for the same real-world event — see `BACKLOG-151` above), nothing server-side catches or merges the duplicate; both rows persist and both count in stats/score.
+**Problem (as filed):** `POST /api/matches/[id]/events` had no idempotency-key check and no "does an identical event already exist for this match/player/type/minute" query — it unconditionally inserted whatever event body arrived.
 
-**Fix (not built):** add a server-side idempotency check — e.g. a unique constraint or pre-insert query on `(matchId, playerId, type, minute, second)` within a short window, or require clients to send a client-generated idempotency key that the server dedupes on.
+**Fix, confirmed present in code:** player-attributed events (`playerId` required) within a 10s window of an identical `(matchId, type, minute, playerId)` are treated as the same real-world event — the existing row is returned instead of inserting a duplicate. Player-less event types (corner, offside, etc.) intentionally excluded, since those can legitimately repeat.
 
 **Found:** session 47D, by a background audit agent doing a full read-only trace of the live-logging system's sub-features.
 
@@ -6480,7 +6480,7 @@ No `clearTimeout` exists anywhere in the file. The effect that sets `stateManage
 
 ### BACKLOG-153 — Admin Match-Edit Modal Has No Score-Correction Fields; Three Dead Offline-Queue Implementations; Other Logging-System Cleanup Items
 
-**Status:** OPEN — found session 47D, not fixed
+**Status:** OPEN — found session 47D. **Item 3 (FINISHED write-lock) RESOLVED 2026-08-20** — confirmed via direct code read that no `FINISHED`-status check existed anywhere in `events/route.ts`; added a hard block (`match.status === 'FINISHED'` → 409) immediately after the match-exists check, before the dedup guard. No legitimate write path bypassed — score corrections go through admin `PATCH /api/matches/[id]`, not this route (item 1 below, still open, is the actual score-correction gap). Items 1, 2, 4 remain OPEN, not fixed.
 **Priority:** MEDIUM — none of these block a live match today, but compound the already-tracked "no mutation audit trail" gap and represent real maintenance debt
 
 **Findings, bundled (same investigation, none individually urgent enough for its own entry):**
@@ -7892,5 +7892,55 @@ Everything below is explicitly **not** being built now — captured from `NOTIFI
 **What it would take:** un-hiding Predictions as-is would just re-expose an unauthenticated, permanently-unscored feature (fix `BUG-222` first, regardless) — a real scoring job is a prerequisite even for the simplest possible reactivation. An actual pot/stakes "Prediction Pool" concept, if that's what's wanted, is new scope entirely — nothing in the current schema or routes provides a starting point for it beyond the basic match-linking pattern (`matchId` foreign keys, which any prediction-shaped feature would need regardless).
 
 **Found:** session 51, background audit agent tasked with assessing Prediction-Pool reactivation feasibility, per Richard's explicit request.
+
+---
+
+### ~~BUG-223~~ — `/admin` and `/admin/loggers` Crash On Auth/Server Failure (`X.filter is not a function`)
+
+**Status:** RESOLVED — 2026-08-20
+**Priority:** HIGH — live production error (minified as `h.filter`/`s.filter` on Vercel), transient but blocked both pages' intended function on the failure path
+
+**Problem:** `src/app/admin/page.tsx` and `src/app/admin/loggers/page.tsx` both called `setMatches`/`setLoggers`/etc. directly on `await res.json()` with no `res.ok` check and no `Array.isArray` guard. `GET /api/loggers` returns `{error:'Unauthorized'}` on a 401 and `GET /api/matches` returns `{error:'...'}` on a 500 — either response shape made the corresponding state an object instead of an array, and the next `.filter()` call (15+ call sites in `loggers/page.tsx` alone) threw.
+
+**Fix:** both pages now check `res.ok` and validate array shape before calling state setters; failures show a toast (`useToast`/`ToastContainer`, matching the existing codebase pattern) instead of crashing. `admin/page.tsx` previously had no `ErrorBoundary` at all (unlike `admin/loggers/page.tsx`) — added, scoping any future render exception to this page instead of the root boundary. New shared helper `src/lib/client-error.ts` (`getClientErrorMessage`) extracted from the correct pattern already used in `AuthContext.tsx`, distinguishing a real server-authored `Error` from a raw `TypeError`/`SyntaxError`.
+
+**Found & fixed:** session 2026-08-20, live debugging from a Vercel error report.
+
+---
+
+### ~~BUG-224~~ — Root `error.tsx` Randomly Guessed 404 vs 500 (`Math.random() > 0.5`)
+
+**Status:** RESOLVED — 2026-08-20
+**Priority:** MEDIUM — actively misleading (a real API failure had a 50% chance of showing a "page doesn't exist" 404 message), no functional impact
+
+**Problem:** `src/app/error.tsx` line 27-28 picked the displayed error code with `Math.random() > 0.5 ? '500' : '404'` — completely decoupled from the actual thrown error. Real 404s are handled correctly elsewhere via Next.js's `notFound()`/`not-found.tsx`; this boundary only ever catches unhandled render exceptions, for which there is no reliable client-side HTTP status to read.
+
+**Fix:** removed the random guess; boundary now always shows the honest generic state using the real `error.message` (already correctly captured lower in the file).
+
+**Found & fixed:** session 2026-08-20, surfaced while diagnosing `BUG-223`.
+
+---
+
+### ~~BUG-225~~ — `/api/notifications/diagnose` Had No Auth Check At All
+
+**Status:** RESOLVED — 2026-08-20
+**Priority:** HIGH — unauthenticated route leaked VAPID key presence/length, DB errors, and webpush send errors to anyone who curled it directly; same bug class as `BUG-034`/`BUG-107`/`BACKLOG-142`/`BUG-147`
+
+**Problem:** Every sibling route under `/api/notifications/*` calls `getAuthUser()`; this one didn't, confirmed via direct grep. Found by `USER_FACING_ERROR_MESSAGES_AUDIT.md` (session 49) but filed there as an error-hygiene note, not actioned.
+
+**Fix:** added the same `getAuthUser()` + `role === 'admin'` gate its siblings already use.
+
+**Found:** session 49 (`USER_FACING_ERROR_MESSAGES_AUDIT.md`). **Fixed:** session 2026-08-20.
+
+---
+
+### ~~BUG-226~~ — `ratings/adjust` Leaked Raw `error.message` to the Client
+
+**Status:** RESOLVED — 2026-08-20
+**Priority:** HIGH — the one server-side raw-error leak in `USER_FACING_ERROR_MESSAGES_AUDIT.md` confirmed actually rendered client-side (`admin/match-ratings/[id]/page.tsx` reads `errorData.message` by name)
+
+**Fix:** `src/app/api/matches/[id]/ratings/adjust/route.ts`'s catch block now returns a static `'Failed to fetch ratings'` instead of `error.message`. Full detail still logged server-side via `console.error`.
+
+**Found:** session 49 (`USER_FACING_ERROR_MESSAGES_AUDIT.md`). **Fixed:** session 2026-08-20. Remaining ~11 lower-severity instances from that audit (signup/forgot-password/reset-password pages, admin/organizations, admin/match-lineups, profile/settings, and ~10 more server-side leaks never actually rendered client-side) still open — scheduled as their own pass, now mechanical given `getClientErrorMessage` exists.
 
 ---

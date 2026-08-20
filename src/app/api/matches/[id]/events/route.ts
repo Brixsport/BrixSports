@@ -145,6 +145,18 @@ export async function POST(
             );
         }
 
+        // BACKLOG-153 item 3: no server-side write-lock existed on FINISHED matches --
+        // an event POST against an already-finished match had nothing rejecting it,
+        // silently corrupting post-match stats/score. Score corrections go through the
+        // admin PATCH /api/matches/[id] route, not this one, so this is a hard block
+        // with no legitimate write path bypassed.
+        if (match.status === 'FINISHED') {
+            return NextResponse.json(
+                { error: 'Cannot log events against a finished match' },
+                { status: 409 }
+            );
+        }
+
         // BUG-196: duplicate-submission guard. Found live during session 48's football
         // Tier 0 sweep -- two concurrent identical POSTs (a double-tap, or a client retry
         // after a slow/lost ack) each created a genuine, separate match_events row and,

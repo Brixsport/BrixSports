@@ -5,13 +5,26 @@ import Link from 'next/link';
 import { motion } from 'framer-motion';
 import { Activity, Shield, Users, Server, Globe, Settings, Eye, AlertCircle, CheckCircle2, MoreVertical, Search, Filter, Newspaper, TrendingUp, Trophy, Calendar, Video, Timer, Bell } from 'lucide-react';
 import { TeamLogo } from '@/lib/utils/team-logo';
+import { useToast } from '@/hooks/useToast';
+import { ToastContainer } from '@/components/admin/Toast';
+import ErrorBoundary from '@/components/admin/ErrorBoundary';
+import { getClientErrorMessage } from '@/lib/client-error';
 
+async function readListResponse(res: Response, label: string): Promise<any[]> {
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error || `Failed to load ${label}`);
+  }
+  const data = await res.json();
+  return Array.isArray(data) ? data : [];
+}
 
-export default function AdminPage() {
+function AdminPageContent() {
   const [matches, setMatches] = useState<any[]>([]);
   const [teams, setTeams] = useState<any[]>([]);
   const [loggers, setLoggers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const { toasts, removeToast, error: showError } = useToast();
 
   useEffect(() => {
     async function fetchData() {
@@ -22,15 +35,18 @@ export default function AdminPage() {
           fetch('/api/loggers')
         ]);
 
-        const matchesData = await matchesRes.json();
-        const teamsData = await teamsRes.json();
-        const loggersData = await loggersRes.json();
+        const [matchesData, teamsData, loggersData] = await Promise.all([
+          readListResponse(matchesRes, 'matches'),
+          readListResponse(teamsRes, 'teams'),
+          readListResponse(loggersRes, 'loggers')
+        ]);
 
         setMatches(matchesData);
         setTeams(teamsData);
         setLoggers(loggersData);
       } catch (error) {
         console.error('Error fetching data:', error);
+        showError(getClientErrorMessage(error, 'Failed to load operations data'));
       } finally {
         setLoading(false);
       }
@@ -256,11 +272,18 @@ export default function AdminPage() {
           </div>
         </section>
       </div>
+      <ToastContainer toasts={toasts} onClose={removeToast} />
     </div>
   );
 }
 
-
+export default function AdminPage() {
+  return (
+    <ErrorBoundary>
+      <AdminPageContent />
+    </ErrorBoundary>
+  );
+}
 
 function StatCard({ label, value, subValue }: { label: string, value: string, subValue: string }) {
   return (
