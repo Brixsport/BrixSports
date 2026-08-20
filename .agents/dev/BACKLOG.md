@@ -1744,7 +1744,7 @@ player stats can be stale or inconsistent after a match ends.
 
 ### BACKLOG-126 — No Working Transfer/Season Tracking (Roster History Silently Lost)
 
-**Status:** OPEN
+**Status:** IN PROGRESS — steps 1-3 of the session-53 build plan SHIPPED to staging (schema migration + `updatePlayerStats()` rewrite), steps 4-5 (standings recalculation, admin transfer UI) not yet built. Not yet mirrored to prod (pending live verification). See progress note below.
 **Priority:** Medium — Tier 2 (roster/season management, not live-match-critical), but explicitly named by Richard as a "ready for next season" concern
 **Filed:** 2026-07-21 (session 45), found while backfilling BUSA League Basketball — two real, confirmed mid-season transfers left zero trace in the DB
 
@@ -1780,6 +1780,14 @@ player stats can be stale or inconsistent after a match ends.
 **Explicit decision, Richard's call, session 53:** existing stats data stays frozen as a lifetime/legacy baseline (Option A) rather than being retroactively split by season (Option B — replaying every player's entire `match_events` history grouped by real season). Option B is real, valuable work Richard wants done later, but is a genuinely risky, compute-heavy migration against production data that deserves its own dedicated session — not folded into this pass. Going forward from whenever step 3 ships, new writes are correctly season-scoped; historical "stats for season X" queries before that point stay unavailable until Option B happens.
 
 **Sequencing (risk-ordered):** schema migrations first (staging, then prod, per `CLAUDE.md`) → `updatePlayerStats()` fix → standings recalculation (biggest logic surface) → admin transfer UI (smallest, sits on top of step 1's schema).
+
+**Progress note (2026-08-20, session 53) — steps 1-3 SHIPPED to staging, not yet live-verified or mirrored to prod:**
+- **Step 1 (`playerTeamAffiliations`):** live pre-flight confirmed 0 duplicate `(playerId, teamId)` rows across all 533 existing rows — safe to add the season-scoped constraint with no collision risk. Added `season` column, backfilled all 533 rows to `'2026/2027'` (the correct current/upcoming season — all `2025/2026` competitions are `completed`, only one competition is `upcoming`, at `2026/2027`), replaced `pta_player_team_unique` with `pta_player_team_season_unique (playerId, teamId, season)`.
+- **Step 2 (stats tables):** confirmed none of `basketballPlayerStats`/`footballPlayerStats`/`individualSportStats` had any unique index beyond the PK autoindex, and 0 rows would violate the new constraint. Added `fps_player_season_competition_unique`, `bps_player_season_competition_unique` (both `(playerId, season, competitionId)`), and `iss_player_sport_season_competition_unique (playerId, sport, season, competitionId)`.
+- **Step 3 (`updatePlayerStats()`):** rewritten in `src/app/api/matches/[id]/events/route.ts` — season is now derived from `match.competitionId → competitions.season` at call time (falls back to `'2026/2027'`, never the frozen `'2024'` legacy value, if a match genuinely has no `competitionId`); every select/update/insert for both Basketball and Football now scopes by `(playerId, season, competitionId)` instead of `playerId` alone.
+- `src/db/schema.ts` updated to match (new `season` field on `playerTeamAffiliations` + all four `uniqueIndex` exports). `tsc --noEmit` clean against baseline both before and after (47 pre-existing errors, none touching any file this change touched). Full migration detail and evidence in `RUNLOG.md` 2026-08-20 (session 53).
+- **Option A confirmed applied, not Option B:** legacy rows (`football_player_stats` at `season='2024'`, `basketball_player_stats` at `season='2025/2026'`) are left exactly as-is — frozen lifetime baseline, never replayed or reconciled. New writes going forward are correctly season/competition-scoped.
+- **Not yet done:** live verification against staging (fire a real event through the deployed route, confirm the new row lands with the right season/competitionId and doesn't collide with the legacy row), prod mirror, step 4 (standings recalculation), step 5 (admin transfer UI).
 
 ---
 

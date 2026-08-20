@@ -95,11 +95,12 @@ export const playerTeamAffiliations = sqliteTable('player_team_affiliations', {
     nicknames: text('nicknames').default('[]'),
     // JSON array of field aliases e.g. ["Blacko", "No.7"]
     // No expiry — university affiliation is permanent
+    season: text('season'),
     createdAt: integer('created_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
 });
 
-export const playerTeamAffiliationsUnique = uniqueIndex('pta_player_team_unique')
-    .on(playerTeamAffiliations.playerId, playerTeamAffiliations.teamId);
+export const playerTeamAffiliationsUnique = uniqueIndex('pta_player_team_season_unique')
+    .on(playerTeamAffiliations.playerId, playerTeamAffiliations.teamId, playerTeamAffiliations.season);
 
 // Player Organization Affiliations table
 // Stores institutional relationships such as university, college, department, and governing-body affiliations.
@@ -152,6 +153,9 @@ export const basketballPlayerStats = sqliteTable('basketball_player_stats', {
     updatedAt: integer('updated_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
 });
 
+export const basketballPlayerStatsUnique = uniqueIndex('bps_player_season_competition_unique')
+    .on(basketballPlayerStats.playerId, basketballPlayerStats.season, basketballPlayerStats.competitionId);
+
 // Football Player Stats table
 export const footballPlayerStats = sqliteTable('football_player_stats', {
     id: text('id').primaryKey(),
@@ -187,6 +191,9 @@ export const footballPlayerStats = sqliteTable('football_player_stats', {
     updatedAt: integer('updated_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
 });
 
+export const footballPlayerStatsUnique = uniqueIndex('fps_player_season_competition_unique')
+    .on(footballPlayerStats.playerId, footballPlayerStats.season, footballPlayerStats.competitionId);
+
 // Individual Sport Stats table (Chess, Scrabble, Table Tennis)
 export const individualSportStats = sqliteTable('individual_sport_stats', {
     id: text('id').primaryKey(),
@@ -212,6 +219,9 @@ export const individualSportStats = sqliteTable('individual_sport_stats', {
     customStats: text('custom_stats'), // JSON for sport-specific extras
     updatedAt: integer('updated_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
 });
+
+export const individualSportStatsUnique = uniqueIndex('iss_player_sport_season_competition_unique')
+    .on(individualSportStats.playerId, individualSportStats.sport, individualSportStats.season, individualSportStats.competitionId);
 
 // Competitions table
 export const competitions = sqliteTable('competitions', {

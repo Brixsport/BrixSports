@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse, after } from 'next/server';
 import { db } from '@/db';
 import { matchEvents, matches, matchLoggerAssignments, players, teams } from '@/db/schema';
-import { eq, asc, and, sql, gt } from 'drizzle-orm';
+import { eq, asc, and, sql, gt, isNull } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { getAuthUser } from '@/lib/auth';
 import { broadcastMatchEvent, broadcastScoreUpdate, broadcastGlobalNotification } from '@/lib/socket';
@@ -427,12 +427,12 @@ export async function POST(
 
         // Update player stats for competitive matches only — friendlies and shootout events do not count
         if (playerId && match.matchType !== 'friendly' && !isPenaltyShootout) {
-            await updatePlayerStats(match.sport, playerId, type, value, made);
+            await updatePlayerStats(match.sport, playerId, type, match.competitionId, value, made);
         }
 
         // Penalty Saved: credit the keeper's saves stat via relatedPlayerId (null-check — keeper is optional)
         if (upperType === 'PENALTY_SAVED' && relatedPlayerId && match.matchType !== 'friendly' && !isPenaltyShootout) {
-            await updatePlayerStats(match.sport, relatedPlayerId, 'Save', value);
+            await updatePlayerStats(match.sport, relatedPlayerId, 'Save', match.competitionId, value);
         }
 
         // Auto-calculate ratings after event (for live matches). Wrapped in after(),
@@ -477,22 +477,52 @@ export async function POST(
     }
 }
 
+// BACKLOG-126: season-readiness. Pre-migration, every player had exactly one lifetime
+// stats row (looked up by playerId alone), silently blending every season/competition
+// together forever. Stats are now scoped by (playerId, season, competitionId) — season
+// is derived from the match's real competition. Rows written before this migration
+// (season='2024' for football, season='2025/2026' for basketball) are an intentionally
+// frozen legacy/lifetime baseline (Option A, Richard's call) — never written to again by
+// this function once a real season is derivable, and never replayed/reconciled here.
+// Matches with no competitionId (schema allows it, though non-friendly matches should
+// always have one) fall back to CURRENT_SEASON rather than the legacy '2024' bucket, so
+// new data never silently merges into the frozen baseline.
+const CURRENT_SEASON_FALLBACK = '2026/2027';
+
 // Helper function to update player stats
 async function updatePlayerStats(
     sport: string,
     playerId: string,
     eventType: string,
+    competitionId: string | null,
     value?: any,
     made?: boolean
 ) {
     try {
-        const { basketballPlayerStats, footballPlayerStats, players } = await import('@/db/schema');
+        const { basketballPlayerStats, footballPlayerStats, competitions } = await import('@/db/schema');
+
+        let season = CURRENT_SEASON_FALLBACK;
+        if (competitionId) {
+            const competition = await db
+                .select({ season: competitions.season })
+                .from(competitions)
+                .where(eq(competitions.id, competitionId))
+                .get();
+            if (competition?.season) season = competition.season;
+        }
+        const basketballCompetitionMatch = competitionId
+            ? eq(basketballPlayerStats.competitionId, competitionId)
+            : isNull(basketballPlayerStats.competitionId);
 
         if (sport === 'Basketball') {
             const stats = await db
                 .select()
                 .from(basketballPlayerStats)
-                .where(eq(basketballPlayerStats.playerId, playerId))
+                .where(and(
+                    eq(basketballPlayerStats.playerId, playerId),
+                    eq(basketballPlayerStats.season, season),
+                    basketballCompetitionMatch
+                ))
                 .get();
 
             const updates: any = {};
@@ -565,21 +595,33 @@ async function updatePlayerStats(
                     await db
                         .update(basketballPlayerStats)
                         .set(updates)
-                        .where(eq(basketballPlayerStats.playerId, playerId));
+                        .where(and(
+                            eq(basketballPlayerStats.playerId, playerId),
+                            eq(basketballPlayerStats.season, season),
+                            basketballCompetitionMatch
+                        ));
                 } else {
                     await db.insert(basketballPlayerStats).values({
                         id: `bstats_${nanoid()}`,
                         playerId,
-                        season: '2024',
+                        season,
+                        competitionId,
                         ...updates,
                     });
                 }
             }
         } else if (sport === 'Football') {
+            const footballCompetitionMatch = competitionId
+                ? eq(footballPlayerStats.competitionId, competitionId)
+                : isNull(footballPlayerStats.competitionId);
             const stats = await db
                 .select()
                 .from(footballPlayerStats)
-                .where(eq(footballPlayerStats.playerId, playerId))
+                .where(and(
+                    eq(footballPlayerStats.playerId, playerId),
+                    eq(footballPlayerStats.season, season),
+                    footballCompetitionMatch
+                ))
                 .get();
 
             const updates: any = {};
@@ -624,12 +666,17 @@ async function updatePlayerStats(
                     await db
                         .update(footballPlayerStats)
                         .set(updates)
-                        .where(eq(footballPlayerStats.playerId, playerId));
+                        .where(and(
+                            eq(footballPlayerStats.playerId, playerId),
+                            eq(footballPlayerStats.season, season),
+                            footballCompetitionMatch
+                        ));
                 } else {
                     await db.insert(footballPlayerStats).values({
                         id: `fstats_${nanoid()}`,
                         playerId,
-                        season: '2024',
+                        season,
+                        competitionId,
                         ...updates,
                     });
                 }
