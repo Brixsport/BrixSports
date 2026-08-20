@@ -68,14 +68,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 const data = await response.json();
                 console.log('[AuthContext] Auth SUCCESS, user:', data.user?.email);
                 setUser(data.user);
-            } else {
-                console.log('[AuthContext] Auth FAILED, setting user to null');
+            } else if (response.status === 401 || response.status === 403) {
+                // BUG-217: the server explicitly rejected the credentials --
+                // genuinely unauthenticated, safe to treat as logged out.
+                console.log('[AuthContext] Auth explicitly rejected (401/403), setting user to null');
                 setUser(null);
                 localStorage.removeItem('authToken');
+            } else {
+                // BUG-217: any other non-2xx (5xx, gateway timeout, etc.) is NOT
+                // confirmation the session is invalid -- it just means we couldn't
+                // verify it right now. Leave existing auth state untouched so a
+                // transient server hiccup doesn't force a real logout; the next
+                // periodic check (or an explicit user action) will resolve it.
+                console.warn('[AuthContext] Auth check got a non-auth-failure status, leaving auth state unchanged:', response.status);
             }
         } catch (error) {
-            console.error('[AuthContext] checkAuth ERROR:', error);
-            setUser(null);
+            // BUG-217: a genuine network/fetch failure (offline, DNS, dropped
+            // connection) is not the same as "confirmed logged out" -- don't clear
+            // user or the stored token. Leave state as-is; the next check resolves it.
+            console.error('[AuthContext] checkAuth network error, leaving auth state unchanged:', error);
         } finally {
             console.log('[AuthContext] checkAuth FINISHED, loading set to false');
             setLoading(false);
@@ -108,12 +119,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
             if (response.ok) {
                 await checkAuth();
-            } else {
-                // Session expired, log out
+            } else if (response.status === 401 || response.status === 403) {
+                // BUG-217: genuinely expired/invalid session -- safe to log out.
                 setUser(null);
+                localStorage.removeItem('authToken');
+            } else {
+                // BUG-217: a non-auth-failure status (5xx, etc.) doesn't mean the
+                // session is actually invalid -- leave auth state unchanged.
+                console.warn('[AuthContext] refreshSession got a non-auth-failure status, leaving auth state unchanged:', response.status);
             }
         } catch (error) {
-            console.error('Session refresh failed:', error);
+            // BUG-217: network failure, not a confirmed logout -- leave state as-is.
+            console.error('[AuthContext] refreshSession network error, leaving auth state unchanged:', error);
         }
     }, [checkAuth]);
 
