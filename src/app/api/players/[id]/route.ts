@@ -9,6 +9,7 @@ import { players, teams, matchEvents, matches, playerStats, basketballPlayerStat
 import { eq, desc, and, sql, ne, inArray } from 'drizzle-orm';
 import { getAuthUser } from '@/lib/auth';
 import { enrichPlayersWithAffiliations, syncPlayerOrganizationAffiliations } from '@/lib/player-data';
+import { CURRENT_SEASON } from '@/lib/rosterService';
 
 interface RouteParams {
     params: {
@@ -452,6 +453,7 @@ export async function PATCH(
                     startDate: updated[0].createdAt || new Date(),
                     jerseyNumber: updated[0].number,
                     position: updated[0].position,
+                    season: CURRENT_SEASON,
                     createdAt: updated[0].createdAt || new Date(),
                 });
             }

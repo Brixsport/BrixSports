@@ -10,10 +10,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import { and, eq, sql } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { db } from '@/db';
-import { playerTeamAffiliations, players, teams } from '@/db/schema';
+import { playerTeamAffiliations, players, teams, competitions } from '@/db/schema';
 import { getPlayerProfileId } from '@/db/utils/player-profile';
 import { ensureOrganizationEntity, syncPlayerOrganizationAffiliations } from '@/lib/player-data';
 import { getAuthUser } from '@/lib/auth';
+import { CURRENT_SEASON } from '@/lib/rosterService';
 
 interface PlayerInput {
     name: string;
@@ -89,6 +90,19 @@ export async function POST(request: NextRequest) {
 
         const npugaCompetitionIds = ['npuga-special-edition-2026', 'npuga-special-edition'];
         const isNpugaCompetition = !!competitionId && npugaCompetitionIds.includes(competitionId);
+
+        // Derive the real season from the competition being registered for, same
+        // pattern as updatePlayerStats() -- falls back to CURRENT_SEASON (the
+        // upcoming season) only when no competition is supplied.
+        let registrationSeason = CURRENT_SEASON;
+        if (competitionId) {
+            const competition = await db
+                .select({ season: competitions.season })
+                .from(competitions)
+                .where(eq(competitions.id, competitionId))
+                .get();
+            if (competition?.season) registrationSeason = competition.season;
+        }
         const normalizedSport = sport || 'Football';
         const normalizedGender =
             gender === 'M' || gender === 'male'
@@ -392,6 +406,7 @@ export async function POST(request: NextRequest) {
                     startDate: new Date(),
                     jerseyNumber: playerInput.number,
                     position: playerInput.position,
+                    season: registrationSeason,
                     createdAt: new Date(),
                 });
             }
