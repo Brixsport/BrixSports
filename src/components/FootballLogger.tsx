@@ -118,6 +118,15 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
     // never drift from the DB-authoritative shootoutHomeScore/shootoutAwayScore.
     const [showShootoutModal, setShowShootoutModal] = useState(false);
     const [shootoutScore, setShootoutScore] = useState<{ home: number; away: number } | null>(null);
+    // BACKLOG-190: IFAB Law 10.3 -- "each kick is taken by a different player,
+    // and all eligible players must take a kick before any player can take a
+    // second kick." Tracks who has already kicked *this round* per team; once a
+    // team's set covers its whole on-pitch roster, the round is complete and
+    // everyone on that team becomes eligible again (sudden-death repeats allowed).
+    // Lives here, not inside ShootoutModal, because that component unmounts
+    // between kicks (`showShootoutModal && <ShootoutModal .../>`) and would
+    // otherwise forget who'd already gone every time it closes.
+    const [takenThisRound, setTakenThisRound] = useState<{ home: Set<string>; away: Set<string> }>({ home: new Set(), away: new Set() });
     const [showReasonModal, setShowReasonModal] = useState(false);
     const [pendingReasonEvent, setPendingReasonEvent] = useState<{ type: FootballEventType; playerId: string } | null>(null);
     const [showFoulOutcomeModal, setShowFoulOutcomeModal] = useState(false);
@@ -2011,14 +2020,23 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
             }
 
             {
-                showShootoutModal && (
-                    <ShootoutModal
-                        homeTeamName={homeTeam?.name || 'Home'}
-                        awayTeamName={awayTeam?.name || 'Away'}
-                        homePlayers={getOnPitchPlayers('home')}
-                        awayPlayers={getOnPitchPlayers('away')}
-                        onClose={() => setShowShootoutModal(false)}
-                        onSubmit={async (team, takerId, outcome, keeperId) => {
+                showShootoutModal && (() => {
+                    // BACKLOG-190: exclude this-round takers from the picker. If filtering
+                    // would leave zero eligible players (shouldn't happen with a real 11-a-side
+                    // roster, but a defensive fallback beats an unusable empty picker), fall
+                    // back to the full roster rather than soft-locking the logger mid-shootout.
+                    const homeRoster = getOnPitchPlayers('home');
+                    const awayRoster = getOnPitchPlayers('away');
+                    const eligibleHome = homeRoster.filter(p => !takenThisRound.home.has(p.id));
+                    const eligibleAway = awayRoster.filter(p => !takenThisRound.away.has(p.id));
+                    return (
+                        <ShootoutModal
+                            homeTeamName={homeTeam?.name || 'Home'}
+                            awayTeamName={awayTeam?.name || 'Away'}
+                            homePlayers={eligibleHome.length > 0 ? eligibleHome : homeRoster}
+                            awayPlayers={eligibleAway.length > 0 ? eligibleAway : awayRoster}
+                            onClose={() => setShowShootoutModal(false)}
+                            onSubmit={async (team, takerId, outcome, keeperId) => {
                             setShowShootoutModal(false);
                             const teamId = team === 'home' ? match.homeTeamId : match.awayTeamId;
                             const type = outcome === 'Scored' ? 'PEN_SCORED' : outcome === 'Saved' ? 'PEN_SAVED' : 'PEN_MISSED';
@@ -2037,6 +2055,20 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                                     }),
                                 });
                                 if (res.ok) {
+                                    // BACKLOG-190: only advance eligibility once the kick is
+                                    // actually confirmed saved -- a failed POST means this kick
+                                    // was never recorded, so the taker must stay eligible.
+                                    if (takerId) {
+                                        setTakenThisRound(prev => {
+                                            const roster = team === 'home' ? homeRoster : awayRoster;
+                                            const teamSet = new Set(prev[team]);
+                                            teamSet.add(takerId);
+                                            // Round complete once everyone on the pitch has kicked
+                                            // once -- reset so repeats become allowed again (sudden death).
+                                            if (teamSet.size >= roster.length) teamSet.clear();
+                                            return { ...prev, [team]: teamSet };
+                                        });
+                                    }
                                     const saved = await res.json();
                                     if (saved.shootoutHomeScore !== undefined && saved.shootoutAwayScore !== undefined) {
                                         setShootoutScore({ home: saved.shootoutHomeScore, away: saved.shootoutAwayScore });
@@ -2060,8 +2092,9 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                                 alert('Network error: could not save this kick. Please retry.');
                             }
                         }}
-                    />
-                )
+                        />
+                    );
+                })()
             }
 
             {

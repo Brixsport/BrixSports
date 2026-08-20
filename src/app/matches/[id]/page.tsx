@@ -452,12 +452,22 @@ export default function MatchDetailPage() {
     const homeRedCardsCount = (events || []).filter(e => e.type === 'Red Card' && e.teamId === match.homeTeamId).length;
     const awayRedCardsCount = (events || []).filter(e => e.type === 'Red Card' && e.teamId === match.awayTeamId).length;
 
-    // BACKLOG-105/BACKLOG-120: a shootout only ever ends decisively (sudden death
-    // continues until it isn't tied), so a genuine equal shootoutHomeScore/
-    // shootoutAwayScore only happens mid-shootout, never as the final stored result —
-    // treating them as unequal is what actually marks "a real result exists."
+    // BUG-197 root cause: shootoutHomeScore/shootoutAwayScore default to 0 (not
+    // null) on every match, shootout or not (schema.ts), so the only thing that
+    // ever hid "PEN 0-0" on a regular finished match was the `!==` inequality
+    // check below -- which also hid the live score every time an in-progress
+    // shootout happened to be tied (the normal case for most of a real
+    // shootout: 1-1, 2-2, etc.). A tab already open when a tying kick landed
+    // looked "stuck," when the state was actually updating correctly the whole
+    // time -- this was misdiagnosed as a broadcast bug and filed as BUG-197.
+    // While the shootout is actually live, show the running score regardless
+    // of tie state (that's exactly what a live viewer is watching for). Once
+    // FINISHED, fall back to the inequality check -- a shootout can never
+    // legitimately end tied, so that's still the correct "did one happen at
+    // all" signal for a match that's done.
+    const isLiveShootout = match.currentPeriod === 'PENALTY_SHOOTOUT' || match.status === 'PENALTY_SHOOTOUT';
     const hasShootoutResult = match.shootoutHomeScore != null && match.shootoutAwayScore != null
-        && match.shootoutHomeScore !== match.shootoutAwayScore;
+        && (isLiveShootout || match.shootoutHomeScore !== match.shootoutAwayScore);
 
     // Period/clock — WS value takes priority, but only while it's actually fresh.
     // BUG-109: once useMatchTimer marks the WS value stale (socket disconnected), it

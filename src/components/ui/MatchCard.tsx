@@ -47,11 +47,15 @@ export default function MatchCard({ match, variant = 'compact', showCompetition 
     const isFinished = match.status === 'FINISHED';
     const isUpcoming = match.status === 'UPCOMING';
 
-    // BACKLOG-105: a shootout only ever ends decisively (sudden death continues
-    // until it isn't tied), so equal scores only ever happen mid-shootout, never
-    // as a final stored result — treating them as unequal is what marks "a real result exists."
+    // BUG-197: same tie-hiding bug fixed in matches/[id]/page.tsx -- shootout
+    // score columns default to 0 (not null) on every match, so the `!==` guard
+    // alone hid a live, in-progress, currently-tied shootout on list cards too
+    // (homepage/live list), not just the detail page. Live, show regardless of
+    // tie; once FINISHED, a shootout can never legitimately end tied, so the
+    // inequality check is still the right "did one happen at all" signal.
+    const isLiveShootout = match.currentPeriod === 'PENALTY_SHOOTOUT';
     const hasShootoutResult = match.shootoutHomeScore != null && match.shootoutAwayScore != null
-        && match.shootoutHomeScore !== match.shootoutAwayScore;
+        && (isLiveShootout || match.shootoutHomeScore !== match.shootoutAwayScore);
     const shootoutHomeWon = hasShootoutResult && (match.shootoutHomeScore ?? 0) > (match.shootoutAwayScore ?? 0);
     const shootoutAwayWon = hasShootoutResult && (match.shootoutAwayScore ?? 0) > (match.shootoutHomeScore ?? 0);
 
