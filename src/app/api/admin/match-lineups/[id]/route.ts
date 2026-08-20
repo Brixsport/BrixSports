@@ -118,6 +118,7 @@ export async function POST(
 
                 if (lineupPlayerIds.length > 0) {
                     // Check if all players are in the squad
+                    const teamId = team === 'home' ? matchData.homeTeamId : matchData.awayTeamId;
                     const squadMembers = await db
                         .select({ playerId: squadPlayers.playerId })
                         .from(squadPlayers)
@@ -144,6 +145,19 @@ export async function POST(
                     }
                 }
             }
+        }
+
+        // Lock check: a published, not-yet-unlocked lineup cannot be silently
+        // overwritten from this route (BUG-220) — mirrors the guard already
+        // enforced in /api/matches/[id]/lineup/publish.
+        if (existingLineups[team]?.status === 'published' && !existingLineups[team]?.unlocked) {
+            return NextResponse.json({
+                error: 'Lineup already published and locked',
+                code: 'LINEUP_LOCKED',
+                publishedBy: existingLineups[team].publishedBy,
+                publishedAt: existingLineups[team].publishedAt,
+                message: 'This lineup has already been published. Contact an admin to unlock it for editing.'
+            }, { status: 409 });
         }
 
         // Update the specific team's lineup

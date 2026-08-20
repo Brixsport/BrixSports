@@ -230,6 +230,46 @@ export default function LineupBuilderPage() {
         }
     };
 
+    const handlePublish = async () => {
+        if (!selectedMatch || !selectedTeam || !lineup) return;
+        if (selectedTeam === 'combined') {
+            alert('Combined XI lineups are for reference only and cannot be published — publish the home and away lineups individually.');
+            return;
+        }
+
+        if (!confirm('Publish this lineup? It will be locked and visible to the public until an admin unlocks it.')) return;
+
+        try {
+            setSaving(true);
+            const response = await fetch(`/api/matches/${selectedMatch.id}/lineup/publish`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ team: selectedTeam })
+            });
+
+            const data = await response.json();
+            if (!response.ok) {
+                if (response.status === 409) {
+                    alert(data.message || 'This lineup has already been published and locked.');
+                } else if (response.status === 401 || response.status === 403) {
+                    alert('You need to be signed in as an admin or logger to publish a lineup.');
+                } else {
+                    alert(data.error || 'Failed to publish lineup');
+                }
+                return;
+            }
+            if (data.success) {
+                setLineup(data.lineups[selectedTeam]);
+                alert('Lineup published!');
+            }
+        } catch (error) {
+            console.error('Error publishing lineup:', error);
+            alert('Failed to publish lineup');
+        } finally {
+            setSaving(false);
+        }
+    };
+
     const handleDownload = async () => {
         if (!pitchRef.current) return;
 
@@ -381,6 +421,17 @@ export default function LineupBuilderPage() {
                                     <Save size={14} className="inline mr-2" />
                                     Save Draft
                                 </button>
+                                {selectedTeam !== 'combined' && (
+                                    <button
+                                        onClick={handlePublish}
+                                        disabled={saving || !validation?.isValid}
+                                        title={!validation?.isValid ? 'Fix lineup issues above before publishing' : undefined}
+                                        className="px-4 py-2 bg-green-500/20 text-green-400 border border-green-500/30 rounded-xl text-xs font-black uppercase tracking-wider hover:bg-green-500/30 transition-colors disabled:opacity-50"
+                                    >
+                                        <CheckCircle size={14} className="inline mr-2" />
+                                        Publish
+                                    </button>
+                                )}
                                 <button
                                     onClick={handleDownload}
                                     disabled={saving}

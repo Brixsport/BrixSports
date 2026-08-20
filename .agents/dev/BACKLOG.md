@@ -7802,55 +7802,68 @@ Everything below is explicitly **not** being built now — captured from `NOTIFI
 
 ### BUG-219 — CRITICAL: Official Lineup Publish Crashes With a `ReferenceError` on Any Squad-Validated Competition
 
-**Status:** OPEN — found session 51 (2026-08-11), background audit, not fixed
+**Status:** FIX APPLIED — 2026-08-20, tsc-clean, **not yet live-verified** (local dev server unstable this session — verifying against staging next)
 **Priority:** CRITICAL — a real 500 on the actual publish path for any competition with `requireSquad: true`, not a contrived scenario
 
 **Problem:** `src/app/api/admin/match-lineups/[id]/route.ts:126` references `teamId` in its squad-validation query, but `teamId` is never declared anywhere in that function scope — this throws a `ReferenceError` any time a lineup is submitted with player IDs through this route for a competition that requires squad validation. This is the route that actually publishes official match lineups (`/admin/match-lineups`) — not the newer `/lineup-builder` page, which (per `BUG-220` below) can't publish at all.
 
-**Fix (not built):** declare/derive `teamId` correctly in that function before the query runs — needs a direct read of the handler's full scope to confirm the right source (likely already available from the request body or an earlier lookup in the same handler).
+**Fix:** derived `teamId` the same way the sibling route (`/api/matches/[id]/lineup`) already does correctly — `team === 'home' ? matchData.homeTeamId : matchData.awayTeamId` — declared immediately before the squad query that consumes it.
 
-**Found:** session 51, background audit agent tasked with assessing Lineup Builder's live-match-day readiness, per Richard's explicit request (Lineup Builder is 🔴 High Volatility in `CLAUDE.md` — audited, not touched, per that flag).
+**Evidence:** `tsc --noEmit` — the pre-existing `TS2552: Cannot find name 'teamId'` error at this exact line is gone from the diff against baseline, zero new errors introduced. **Not yet exercised against a running server or real squad-validated competition** — pending staging verification.
+
+**Found:** session 51, background audit agent tasked with assessing Lineup Builder's live-match-day readiness, per Richard's explicit request (Lineup Builder is 🔴 High Volatility in `CLAUDE.md` — audited, not touched, per that flag). **Fixed:** session 51 continuation, 2026-08-20, per Richard's explicit "CRITICAL bugs first" call.
 
 ---
 
 ### BUG-220 — Lineup Builder Is Not Safe for a Live Match Day: No Publish Path on the New Page, and Neither Write Path Enforces the Publish Lock
 
-**Status:** OPEN — found session 51 (2026-08-11), background audit, not fixed
+**Status:** FIX APPLIED — 2026-08-20, tsc-clean, **not yet live-verified** (local dev server unstable this session — verifying against staging next)
 **Priority:** HIGH — a published/locked lineup can be silently overwritten via either UI; the newer page can't complete the one workflow it exists for
 
 **Problem, two related findings:**
 1. `src/app/lineup-builder/page.tsx` (formerly `/lineups`, renamed `BACKLOG-`-adjacent this session) has no publish button or handler at all — only Save Draft, Delete, and Download-as-image. `handleSaveDraft` always sends `status: 'draft'` (line 211) — a lineup built through this page can never actually be published. The real publish workflow lives entirely in a separate, older page, `src/app/admin/match-lineups/page.tsx`.
 2. Neither write path enforces the publish lock. `POST /api/matches/[id]/lineup` (used by `/lineup-builder`) and `POST /api/admin/match-lineups/[id]` (used by `/admin/match-lineups`) both unconditionally overwrite `matches.lineups` with no lock check. Only `POST .../lineup/publish` checks `status === 'published' && !unlocked` — and nothing in either UI calls that route before writing. Net effect: a locked, published lineup can be silently overwritten from either page without ever going through unlock.
 
-**Fix (not built):** decide which of the two publish paths is canonical (recommend consolidating on one), make both draft-save routes check the lock before writing, and either add a real publish action to `/lineup-builder` or retire it in favor of `/admin/match-lineups` if that's meant to stay the only publish surface.
+**Fix:**
+1. Added a `Publish` button/handler (`handlePublish`) to `/lineup-builder`, calling the existing canonical `POST .../lineup/publish` route (not a new publish implementation) — kept `/admin/match-lineups`'s publish path as-is rather than retiring either, per Richard's "same feature area, one session" scoping (consolidating the two is `BACKLOG-220`'s architecture-cleanup item, deliberately not done here). Disabled for `combined` XI (publish is a per-team/home-away concept; combined is reference-only) and while the client-side validation already on the page reports the lineup invalid.
+2. Added the same lock guard `publish/route.ts` already used (`status === 'published' && !unlocked` → 409 `LINEUP_LOCKED`) to both previously-unguarded write paths: `POST /api/matches/[id]/lineup` and `POST /api/admin/match-lineups/[id]`.
 
-**Found:** session 51, same background audit as `BUG-219`.
+**Evidence:** `tsc --noEmit` clean, zero new errors. **Not yet exercised against a running server** — publish→attempt-overwrite→confirm-409 cycle needs a real staging test before this can be called RESOLVED, especially the two write paths' concurrent-edit lock behavior.
+
+**Found:** session 51, same background audit as `BUG-219`. **Fixed:** session 51 continuation, 2026-08-20.
 
 ---
 
 ### BUG-221 — `GET /api/matches/[id]/lineup` Has Zero Auth — Leaks Unpublished Draft Lineups and Team Selections Pre-Publish
 
-**Status:** OPEN — found session 51 (2026-08-11), background audit, not fixed
+**Status:** FIX APPLIED — 2026-08-20, tsc-clean, **not yet live-verified** (local dev server unstable this session — verifying against staging next)
 **Priority:** MEDIUM-HIGH — not PII, but a real competitive-integrity leak (opposing team could see a draft lineup before it's meant to be public)
 
 **Problem:** `src/app/api/matches/[id]/lineup/route.ts:8-41` (`GET`) has no `getAuthUser` call at all — any unauthenticated caller can fetch any match's lineup data, including drafts never published. Same bug class as this project's own repeated `BUG-009`/`BUG-034`/`BUG-147` family (unauthenticated mutation/read endpoints), just not caught by the sweeps that produced those, since this route was audited fresh this session.
 
-**Fix (not built):** add `getAuthUser` + an appropriate role/visibility check (likely: public for published lineups, admin/logger-only for drafts) matching the pattern already used correctly on the route's own `POST` handler in the same file.
+**Fix:** implemented exactly as scoped — public/unauthenticated callers now only ever see `status === 'published'` entries (each team's lineup filtered independently); `getAuthUser(...).catch(() => null)` used rather than a hard 401, since this route must stay reachable by anonymous public viewers for published lineups, matching the established `.catch(() => null)` pattern for "public GET, richer for admins" routes. `admin`/`logger` callers still see drafts, matching the route's own `POST` handler's existing role gate.
 
-**Found:** session 51, same background audit as `BUG-219`/`BUG-220`.
+**Evidence:** `tsc --noEmit` clean, zero new errors. **Not yet exercised against a running server** — needs a real draft-vs-published, authed-vs-anon test before RESOLVED.
+
+**Found:** session 51, same background audit as `BUG-219`/`BUG-220`. **Fixed:** session 51 continuation, 2026-08-20.
 
 ---
 
 ### BUG-222 — CRITICAL: `POST`/`PUT /api/predictions` Has Zero Auth Despite the Predictions Page Being Hidden — a Live, Reachable, Unauthenticated Write Endpoint
 
-**Status:** OPEN — found session 51 (2026-08-11), background audit, not fixed
+**Status:** FIX APPLIED — 2026-08-20, tsc-clean, **not yet live-verified** (local dev server unstable this session — verifying against staging next)
 **Priority:** CRITICAL — the `/predictions` page returns `notFound()` (backscoped session 10, `BACKLOG-028`), but the API routes underneath it were never gated and are still fully live — same unauthenticated-write bug class as `BUG-009`/`BUG-010`/`BUG-034`/`BUG-147`, just on a route nobody thought to check because the UI in front of it is hidden
 
 **Problem:** `src/app/api/predictions/route.ts`'s `POST`/`PUT` handlers have no `getAuthUser` call anywhere in the file — `userId` is read straight from the request body/query (lines 10, 63), meaning any unauthenticated caller can create or modify prediction rows for any user ID they choose to supply. Separately, `src/app/api/predictions/stats/route.ts:39-42` pulls the entire `predictionLeaderboard` table with no `.limit()` just to compute one user's rank via `findIndex` — a CLAUDE.md architecture-rule violation (every list query needs `.limit()`), compounding as the table grows.
 
-**Fix (not built):** add `getAuthUser` + ownership check (`userId` must match the authenticated caller, not an arbitrary body/query value) to `POST`/`PUT`; add `.limit()` to the leaderboard query in `stats/route.ts`, or paginate around the target user's rank instead of loading the whole table.
+**Fix:**
+- `POST`/`PUT` now require `getAuthUser`; `userId` is no longer read from the request body at all — it's always the authenticated caller's own id (audit-field pattern, CLAUDE.md: identity fields never come from the client).
+- **Widened beyond the original filing, same file, same session:** `GET` also had no auth — any caller could read any other user's predictions by supplying an arbitrary `userId` query param. Per this project's own known-issue ("second handler in same file missed during auth sweep," `known-issues.md`), audited every export in the file rather than just the two named in the bug title. `GET` now requires auth and only permits `authUser.id === userId` or `role === 'admin'`.
+- `stats/route.ts`'s rank lookup replaced `findIndex` over the full unbounded table with `count(*) WHERE totalPoints > user's totalPoints` — gives the exact same rank without ever loading rows beyond the requesting user's own leaderboard entry.
 
-**Found:** session 51, background audit agent tasked with assessing Predictions/Prediction-Pool reactivation feasibility, per Richard's explicit request.
+**Evidence:** `tsc --noEmit` clean, zero new errors (one intermediate type error — `gt()` against a nullable `totalPoints` column — caught and fixed with `?? 0` before this counted as done). **Not yet exercised against a running server** — needs a real unauthenticated-caller-gets-401, wrong-user-gets-403, owner-succeeds test cycle before RESOLVED. `GET /api/predictions/stats` itself still takes an unauthenticated `userId` param (exposes only points/rank/accuracy, not PII) — left out of this bundle's scope, not filed as its own item; flag if it should be.
+
+**Found:** session 51, background audit agent tasked with assessing Predictions/Prediction-Pool reactivation feasibility, per Richard's explicit request. **Fixed:** session 51 continuation, 2026-08-20.
 
 ---
 

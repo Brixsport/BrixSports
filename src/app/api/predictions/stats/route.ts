@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
 import { predictionLeaderboard } from '@/db/schema';
-import { eq, desc } from 'drizzle-orm';
+import { eq, gt, sql } from 'drizzle-orm';
 
 // GET /api/predictions/stats - Get user prediction stats
 export async function GET(request: NextRequest) {
@@ -35,13 +35,15 @@ export async function GET(request: NextRequest) {
             });
         }
 
-        // Get user's rank
-        const allUsers = await db
-            .select()
+        // Rank = 1 + count of users with strictly more points. Avoids loading the
+        // full leaderboard table just to find one user's position (CLAUDE.md:
+        // every list query must have a bound; this has none instead of just a limit).
+        const higherRanked = await db
+            .select({ count: sql<number>`count(*)` })
             .from(predictionLeaderboard)
-            .orderBy(desc(predictionLeaderboard.totalPoints));
+            .where(gt(predictionLeaderboard.totalPoints, userStats[0].totalPoints ?? 0));
 
-        const rank = allUsers.findIndex((u) => u.userId === userId) + 1;
+        const rank = Number(higherRanked[0]?.count ?? 0) + 1;
 
         return NextResponse.json({
             stats: {
