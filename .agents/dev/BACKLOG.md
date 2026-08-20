@@ -7799,3 +7799,98 @@ Everything below is explicitly **not** being built now — captured from `NOTIFI
 **Found:** session 51 (2026-08-11), background audit agent, per Richard's explicit request to audit the settings page's functional wiring. **Fixed:** session 51, same session, per Richard's explicit "fix the notification bug next."
 
 ---
+
+### BUG-219 — CRITICAL: Official Lineup Publish Crashes With a `ReferenceError` on Any Squad-Validated Competition
+
+**Status:** OPEN — found session 51 (2026-08-11), background audit, not fixed
+**Priority:** CRITICAL — a real 500 on the actual publish path for any competition with `requireSquad: true`, not a contrived scenario
+
+**Problem:** `src/app/api/admin/match-lineups/[id]/route.ts:126` references `teamId` in its squad-validation query, but `teamId` is never declared anywhere in that function scope — this throws a `ReferenceError` any time a lineup is submitted with player IDs through this route for a competition that requires squad validation. This is the route that actually publishes official match lineups (`/admin/match-lineups`) — not the newer `/lineup-builder` page, which (per `BUG-220` below) can't publish at all.
+
+**Fix (not built):** declare/derive `teamId` correctly in that function before the query runs — needs a direct read of the handler's full scope to confirm the right source (likely already available from the request body or an earlier lookup in the same handler).
+
+**Found:** session 51, background audit agent tasked with assessing Lineup Builder's live-match-day readiness, per Richard's explicit request (Lineup Builder is 🔴 High Volatility in `CLAUDE.md` — audited, not touched, per that flag).
+
+---
+
+### BUG-220 — Lineup Builder Is Not Safe for a Live Match Day: No Publish Path on the New Page, and Neither Write Path Enforces the Publish Lock
+
+**Status:** OPEN — found session 51 (2026-08-11), background audit, not fixed
+**Priority:** HIGH — a published/locked lineup can be silently overwritten via either UI; the newer page can't complete the one workflow it exists for
+
+**Problem, two related findings:**
+1. `src/app/lineup-builder/page.tsx` (formerly `/lineups`, renamed `BACKLOG-`-adjacent this session) has no publish button or handler at all — only Save Draft, Delete, and Download-as-image. `handleSaveDraft` always sends `status: 'draft'` (line 211) — a lineup built through this page can never actually be published. The real publish workflow lives entirely in a separate, older page, `src/app/admin/match-lineups/page.tsx`.
+2. Neither write path enforces the publish lock. `POST /api/matches/[id]/lineup` (used by `/lineup-builder`) and `POST /api/admin/match-lineups/[id]` (used by `/admin/match-lineups`) both unconditionally overwrite `matches.lineups` with no lock check. Only `POST .../lineup/publish` checks `status === 'published' && !unlocked` — and nothing in either UI calls that route before writing. Net effect: a locked, published lineup can be silently overwritten from either page without ever going through unlock.
+
+**Fix (not built):** decide which of the two publish paths is canonical (recommend consolidating on one), make both draft-save routes check the lock before writing, and either add a real publish action to `/lineup-builder` or retire it in favor of `/admin/match-lineups` if that's meant to stay the only publish surface.
+
+**Found:** session 51, same background audit as `BUG-219`.
+
+---
+
+### BUG-221 — `GET /api/matches/[id]/lineup` Has Zero Auth — Leaks Unpublished Draft Lineups and Team Selections Pre-Publish
+
+**Status:** OPEN — found session 51 (2026-08-11), background audit, not fixed
+**Priority:** MEDIUM-HIGH — not PII, but a real competitive-integrity leak (opposing team could see a draft lineup before it's meant to be public)
+
+**Problem:** `src/app/api/matches/[id]/lineup/route.ts:8-41` (`GET`) has no `getAuthUser` call at all — any unauthenticated caller can fetch any match's lineup data, including drafts never published. Same bug class as this project's own repeated `BUG-009`/`BUG-034`/`BUG-147` family (unauthenticated mutation/read endpoints), just not caught by the sweeps that produced those, since this route was audited fresh this session.
+
+**Fix (not built):** add `getAuthUser` + an appropriate role/visibility check (likely: public for published lineups, admin/logger-only for drafts) matching the pattern already used correctly on the route's own `POST` handler in the same file.
+
+**Found:** session 51, same background audit as `BUG-219`/`BUG-220`.
+
+---
+
+### BUG-222 — CRITICAL: `POST`/`PUT /api/predictions` Has Zero Auth Despite the Predictions Page Being Hidden — a Live, Reachable, Unauthenticated Write Endpoint
+
+**Status:** OPEN — found session 51 (2026-08-11), background audit, not fixed
+**Priority:** CRITICAL — the `/predictions` page returns `notFound()` (backscoped session 10, `BACKLOG-028`), but the API routes underneath it were never gated and are still fully live — same unauthenticated-write bug class as `BUG-009`/`BUG-010`/`BUG-034`/`BUG-147`, just on a route nobody thought to check because the UI in front of it is hidden
+
+**Problem:** `src/app/api/predictions/route.ts`'s `POST`/`PUT` handlers have no `getAuthUser` call anywhere in the file — `userId` is read straight from the request body/query (lines 10, 63), meaning any unauthenticated caller can create or modify prediction rows for any user ID they choose to supply. Separately, `src/app/api/predictions/stats/route.ts:39-42` pulls the entire `predictionLeaderboard` table with no `.limit()` just to compute one user's rank via `findIndex` — a CLAUDE.md architecture-rule violation (every list query needs `.limit()`), compounding as the table grows.
+
+**Fix (not built):** add `getAuthUser` + ownership check (`userId` must match the authenticated caller, not an arbitrary body/query value) to `POST`/`PUT`; add `.limit()` to the leaderboard query in `stats/route.ts`, or paginate around the target user's rank instead of loading the whole table.
+
+**Found:** session 51, background audit agent tasked with assessing Predictions/Prediction-Pool reactivation feasibility, per Richard's explicit request.
+
+---
+
+### BACKLOG-220 — Lineup Builder Architecture Cleanup (Bundled, Not Fixed)
+
+**Status:** OPEN — found session 51 (2026-08-11), background audit, not fixed
+**Priority:** MEDIUM — none of these are live-exploitable bugs on their own, but they compound the confusion `BUG-219`/`BUG-220` already found
+
+1. **Dead code:** `src/lib/lineup-processing.ts`'s `processLineup` and `src/components/lineup/MatchLineup.tsx` are never imported anywhere. The lineup actually rendered on the public match page (`src/components/MatchLineups.tsx` → `FullPitchLineups.tsx:256`) uses a separate, duplicate positioning function (`processLineupForPitch`) — two parallel implementations of the same concept, one of them fully unused.
+2. **Non-atomic race condition:** all three lineup-write routes do a read-modify-write on one shared JSON blob (`matches.lineups`) with no transaction — concurrent saves (e.g. a logger and an admin editing at once) can silently lose one side's write.
+3. **No confirmation on formation change:** `lineup-builder/page.tsx:131-140` wipes all assigned starters the instant the formation dropdown changes, no undo, no confirm dialog.
+
+**Fix (not built):** delete the dead `lineup-processing.ts`/`MatchLineup.tsx` pair (or promote it to the single source of truth instead of `FullPitchLineups`'s duplicate logic — Richard's call on direction); wrap the lineup write path in a transaction or an optimistic-lock check; add a confirm step before a formation change discards assigned starters.
+
+**Found:** session 51, same background audit as `BUG-219`/`BUG-220`/`BUG-221`.
+
+---
+
+### BACKLOG-221 — Player Comparison: No Same-Sport Guard, "Higher Rated" Reads a Dead Field
+
+**Status:** OPEN — found session 51 (2026-08-11), background audit, not fixed
+**Priority:** LOW-MEDIUM — the feature otherwise works and is reachable; these are correctness/data-quality gaps, not crashes or security issues
+
+**Problem:** `src/app/api/players/compare/route.ts` has no guard preventing a football player from being compared against a basketball player — `getStats()` (line 54) derives each player's sport independently from their own team, and the `summary` block (167-189) is built off only `player1`'s sport, so a cross-sport comparison would silently produce meaningless zero-filled fields for one side rather than erroring or blocking the comparison. Separately, the "Higher Rated" verdict (lines 180, 187) reads `players.rating` (`src/db/schema.ts:59`, defaults to `7.0`) — a field `.agents/dev/BACKSCOPE.md:287` already documents as dead and never live-updated, so that tile isn't showing real data.
+
+**Fix (not built):** add a same-sport check before running the comparison (reject or warn on mismatch); either wire `rating` to something real or drop the "Higher Rated" tile until it is.
+
+**Found:** session 51, background audit agent tasked with assessing Comparison's current state, per Richard's explicit request. Otherwise confirmed working: real loading/empty/error states, publicly reachable and linked from `basketball/page.tsx`/`football/page.tsx`/`players/[id]/page.tsx`/`PlayerProfileOverlay.tsx` (not orphaned), no unbounded queries.
+
+---
+
+### BACKLOG-222 — Predictions/Polls: What Exists Is a Simple Score-Guess Feature With No Pooling/Stakes Concept, and No Scoring Job Was Ever Built
+
+**Status:** OPEN — found session 51 (2026-08-11), background audit, not fixed (see `BUG-222` above for the auth gap in the same routes, filed separately as a security issue)
+**Priority:** Scoping only — this is not a bug filing, it's the feasibility answer Richard asked for
+
+**Problem/finding:** `.agents/dev/BACKSCOPE.md:42-73` confirms Predictions was hidden session 10. The actual data model (`src/db/schema-predictions.ts`) is a plain "guess the final scoreline" system — `matchPredictions` (score guess, confidence, points, isCorrect), `predictionLeaderboard` (totals/accuracy/streak), `predictionComments`. Grepped for any `stake`/`pot`/`wager` concept anywhere in the codebase — zero hits. Nothing in the codebase ever sets `isCorrect` or computes real `points` from an actual match result — the match-finish → score-the-prediction job was never built, so even reactivated exactly as-is, every prediction's `points` would stay `0` forever. `predictionComments` has no API route touching it anywhere — a fully dead table. The separate Polls system (`MatchPoll`/`MatchPollEnhanced`/`CreatePoll`, `BACKSCOPE.md:144-177`) is a different concept (fan-votes-on-outcome, not a scored prediction), has the identical unauthenticated-write gap, and zero polls have ever been created.
+
+**What it would take:** un-hiding Predictions as-is would just re-expose an unauthenticated, permanently-unscored feature (fix `BUG-222` first, regardless) — a real scoring job is a prerequisite even for the simplest possible reactivation. An actual pot/stakes "Prediction Pool" concept, if that's what's wanted, is new scope entirely — nothing in the current schema or routes provides a starting point for it beyond the basic match-linking pattern (`matchId` foreign keys, which any prediction-shaped feature would need regardless).
+
+**Found:** session 51, background audit agent tasked with assessing Prediction-Pool reactivation feasibility, per Richard's explicit request.
+
+---
