@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { ArrowRight, Search, CheckCircle, AlertCircle } from 'lucide-react';
+import { ArrowRight, Search, CheckCircle, AlertCircle, History } from 'lucide-react';
 
 interface PlayerResult {
     id: string;
@@ -25,10 +25,35 @@ interface Team {
     sport?: string;
 }
 
-// BACKLOG-126 step 5: minimal admin roster transfer -- pick player, pick new team,
-// confirm. No history browser, no bulk mode -- one transfer at a time, matching the
-// plan's explicit "minimal" scope. Full roster history display remains a separate,
-// still-open gap noted in this entry.
+interface HistoryEntry {
+    affiliation: {
+        id: string;
+        affiliationType: string;
+        isActive: boolean;
+        startDate: string | null;
+        endDate: string | null;
+        season: string | null;
+        jerseyNumber: number | null;
+        position: string | null;
+    };
+    team: {
+        id: string;
+        name: string;
+        sport?: string;
+    };
+}
+
+function formatDate(value: string | null) {
+    if (!value) return null;
+    const d = new Date(value);
+    return isNaN(d.getTime()) ? null : d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+}
+
+// BACKLOG-126 step 5 + follow-up: pick player, pick new team, confirm -- plus a
+// full employment-history timeline (every past + current club/team affiliation,
+// across sports, not just the currently-active one) sourced from GET
+// /api/players/[id]'s affiliationHistory field. No bulk-transfer mode; one
+// transfer at a time, matching the original plan's "minimal" scope.
 export default function RosterTransfersPage() {
     const [query, setQuery] = useState('');
     const [results, setResults] = useState<PlayerResult[]>([]);
@@ -39,6 +64,9 @@ export default function RosterTransfersPage() {
     const [newTeamId, setNewTeamId] = useState('');
     const [jerseyNumber, setJerseyNumber] = useState('');
     const [position, setPosition] = useState('');
+
+    const [history, setHistory] = useState<HistoryEntry[]>([]);
+    const [historyLoading, setHistoryLoading] = useState(false);
 
     const [submitting, setSubmitting] = useState(false);
     const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -70,11 +98,25 @@ export default function RosterTransfersPage() {
         return () => clearTimeout(timeout);
     }, [query]);
 
+    const fetchHistory = async (playerId: string) => {
+        setHistoryLoading(true);
+        try {
+            const res = await fetch(`/api/players/${playerId}`);
+            const data = await res.json();
+            setHistory(res.ok ? data.player?.affiliationHistory ?? [] : []);
+        } catch {
+            setHistory([]);
+        } finally {
+            setHistoryLoading(false);
+        }
+    };
+
     const selectPlayer = (player: PlayerResult) => {
         setSelectedPlayer(player);
         setResults([]);
         setQuery(player.name);
         setMessage(null);
+        fetchHistory(player.id);
     };
 
     const resetForm = () => {
@@ -83,6 +125,7 @@ export default function RosterTransfersPage() {
         setNewTeamId('');
         setJerseyNumber('');
         setPosition('');
+        setHistory([]);
     };
 
     const submitTransfer = async () => {
@@ -102,7 +145,10 @@ export default function RosterTransfersPage() {
             const data = await res.json();
             if (res.ok) {
                 setMessage({ type: 'success', text: `${data.playerName} transferred to ${data.toTeamName}.` });
-                resetForm();
+                setNewTeamId('');
+                setJerseyNumber('');
+                setPosition('');
+                await fetchHistory(selectedPlayer.id);
             } else {
                 setMessage({ type: 'error', text: data.error || 'Transfer failed' });
             }
@@ -175,6 +221,54 @@ export default function RosterTransfersPage() {
                         <div className="text-xs text-white/40 mt-1">
                             Current: {selectedPlayer.currentTeams.map((t) => `${t.teamName} (${t.affiliationType})`).join(', ') || 'None'}
                         </div>
+                    </div>
+                )}
+
+                {selectedPlayer && (
+                    <div>
+                        <div className="flex items-center gap-2 text-sm text-white/60 mb-2">
+                            <History className="w-4 h-4" />
+                            Transfer history
+                        </div>
+                        {historyLoading ? (
+                            <p className="text-xs text-white/40">Loading history...</p>
+                        ) : history.length === 0 ? (
+                            <p className="text-xs text-white/40">No affiliation history found.</p>
+                        ) : (
+                            <div className="space-y-2">
+                                {history.map((h) => {
+                                    const start = formatDate(h.affiliation.startDate);
+                                    const end = formatDate(h.affiliation.endDate);
+                                    return (
+                                        <div
+                                            key={h.affiliation.id}
+                                            className="bg-neutral-900 border border-white/10 rounded-xl p-3 flex items-start justify-between gap-3"
+                                        >
+                                            <div>
+                                                <div className="font-medium text-sm">
+                                                    {h.team.name}
+                                                    {h.team.sport ? <span className="text-white/40"> · {h.team.sport}</span> : null}
+                                                </div>
+                                                <div className="text-xs text-white/40 mt-0.5">
+                                                    {h.affiliation.affiliationType}
+                                                    {h.affiliation.season ? ` · ${h.affiliation.season}` : ''}
+                                                    {start ? ` · ${start} – ${end ?? 'present'}` : ''}
+                                                </div>
+                                            </div>
+                                            <span
+                                                className={`shrink-0 text-[10px] font-semibold uppercase tracking-wide px-2 py-1 rounded-full ${
+                                                    h.affiliation.isActive
+                                                        ? 'bg-green-500/10 text-green-400'
+                                                        : 'bg-white/5 text-white/40'
+                                                }`}
+                                            >
+                                                {h.affiliation.isActive ? 'Active' : 'Past'}
+                                            </span>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
                     </div>
                 )}
 

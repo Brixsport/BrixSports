@@ -32,7 +32,7 @@ const defaultFormData = {
     scope: 'internal',
     level: 'busa-league',
     format: 'league',
-    season: '2024/2025',
+    season: '2026/2027',
     status: 'upcoming',
     numberOfTeams: 0,
     numberOfGroups: 0,

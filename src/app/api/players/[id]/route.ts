@@ -67,6 +67,20 @@ export async function GET(
             .where(eq(playerOrganizationAffiliations.playerId, id))
             .orderBy(desc(playerOrganizationAffiliations.isPrimary), desc(playerOrganizationAffiliations.createdAt));
 
+        // BACKLOG-126: full transfer/employment history -- every past affiliation is
+        // preserved (a transfer closes the old row via endDate/isActive rather than
+        // deleting it), but `memberships` above only ever surfaced the active one.
+        // Admin-only, same as memberships.
+        const affiliationHistory = await db
+            .select({
+                affiliation: playerTeamAffiliations,
+                team: teams,
+            })
+            .from(playerTeamAffiliations)
+            .innerJoin(teams, eq(playerTeamAffiliations.teamId, teams.id))
+            .where(eq(playerTeamAffiliations.playerId, id))
+            .orderBy(desc(playerTeamAffiliations.startDate), desc(playerTeamAffiliations.createdAt));
+
         if (memberships.length > 0) {
             team = memberships[0].team;
         } else if (player.teamId) {
@@ -333,8 +347,9 @@ export async function GET(
                     ...team,
                     sport: playerSport,
                 },
-                // memberships and organizationAffiliations are admin-only (CLAUDE.md banned public fields)
-                ...(isAdmin ? { memberships, organizationAffiliations } : {}),
+                // memberships, organizationAffiliations, and affiliationHistory are
+                // admin-only (CLAUDE.md banned public fields)
+                ...(isAdmin ? { memberships, organizationAffiliations, affiliationHistory } : {}),
                 relatedProfiles,
             },
             stats: seasonStats,
