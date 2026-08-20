@@ -3,10 +3,12 @@ import { nanoid } from 'nanoid';
 import { db } from '@/db';
 import { organizations, teams, players, playerTeamAffiliations } from '@/db/schema';
 
-// BACKLOG-126: single source of truth for "the season currently being rostered."
-// '2026/2027' because every season='2025/2026' competition is already `completed`
-// and the one `upcoming` competition is season='2026/2027' (confirmed live,
-// session 53 migration). Update this at the start of each new season.
+// BACKLOG-126: single source of truth for "the upcoming season new roster writes
+// belong to." '2026/2027' confirmed directly (Richard, session 53) — the season
+// about to start, distinct from '2025/2026' (the last real completed season,
+// which is what every pre-existing playerTeamAffiliations row was backfilled to on
+// both staging and prod — see the two migrate-season-readiness-*-53.mjs scripts).
+// Update this at the start of each new season.
 export const CURRENT_SEASON = '2026/2027';
 
 // Shared with src/app/api/admin/teams/[teamId]/roster/route.ts, which had its own
