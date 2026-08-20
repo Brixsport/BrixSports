@@ -1,0 +1,20 @@
+# Dependencies & build output — never needed in context, always regenerable
+node_modules/
+.next/
+dist/
+build/
+
+# Lockfiles — huge, machine-generated, never hand-read
+package-lock.json
+pnpm-lock.yaml
+yarn.lock
+
+# Static assets — binary/large, not source
+public/
+
+# Generated/raw evidence dumps — only relevant when pasted in manually
+*.har
+dev/**/*.json
+
+# VCS internals
+.git/

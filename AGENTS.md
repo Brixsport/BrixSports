@@ -15,7 +15,7 @@ Next.js App Router · TailwindCSS · Turso/LibSQL · Drizzle ORM · Custom JWT (
 3. No raw SQL — Drizzle query builder only
 4. All DB operations in try/catch/finally
 5. createdBy/updatedBy must come from verified session — never hardcoded
-6. Public API must never expose: assignedLoggers, approvedBy, approvalStatus, managerNotes, loggerId, profileId
+6. Public API must never expose: assignedLoggers, assignedLoggers.email, approvedBy, approvalStatus, managerNotes, loggerId, profileId, organizationAffiliations, memberships
 7. All test/seed artifacts go in /dev/ at project root
 8. Never return raw DB errors to the client
 9. Never touch 🔴 High Volatility features without an explicit brief

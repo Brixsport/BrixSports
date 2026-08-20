@@ -150,24 +150,9 @@ activation: always_on
 
 2026-06-16 — users.favorite_team_id silently blocks team deletion — FK constraint failed when deleting stub teams because two user accounts had them set as favourite_team_id. This column was not in the initial FK scan because the table was named `users` not `user_profiles`. Prevention: before any team delete, always query users.favorite_team_id in the pre-flight check alongside affiliations and matches. The PRAGMA foreign_key_list scan is the reliable fallback when you don't know all child tables.
 
-## Anti-Patterns for This Codebase
-- Middleware matcher and internal logic check do not match.
-- try/catch without finally in any DB operation.
-- List query with no .limit() clause.
-- createdBy, updatedBy, or any audit field set to a hardcoded string.
-- Auth check that only runs client-side with no server-side counterpart.
-- Business logic that assumes valid token = valid role.
-- TODO or FIXME comment touching auth, permissions, or data access.
-- Commented-out security checks with `// temp` or `// disable for testing`.
-- UI shows success state before server response is confirmed.
+## Standing Rules
 
-## Constraints Learned From Failures
-- Viewers never have a session. Never assume otherwise.
-- A valid JWT does NOT equal valid permissions. Always verify role explicitly.
-- Admin API routes must call `getAuthUser(request)` AND check `user.role === 'admin'` — never trust middleware alone.
-- Live update mechanism must have a fallback if the channel drops.
-- Viewer must see stale data clearly on failure, not a crash.
-- Target update latency: under 5 seconds from event save to public display.
+Standing anti-patterns and constraints: see `CLAUDE.md`.
 
 2026-06-17 — Empty string teamId causes FOREIGN KEY constraint failure on player create — `body.teamId` arrives as `''` when no team selected; DB rejects it as a non-null FK reference. Fix: always coerce `body.teamId || null` before insert. Applies to any optional FK column.
 

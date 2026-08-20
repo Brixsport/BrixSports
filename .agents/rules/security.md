@@ -20,6 +20,8 @@ NEVER hardcode any of the following in scripts, source files, or CLI commands:
 Always read from `process.env`. Values live in `.env.local` (local dev)
 or Vercel/Railway env vars (deployed environments).
 
+Scope: this applies to one-off scripts under `/dev/` (outside the Next.js app boundary). Application code under `src/` must never read `process.env` directly — see `CLAUDE.md` → Environment Variables (`src/lib/env.ts` only). Two different scopes, not a contradiction.
+
 ## 2. No Secrets in Git
 
 - `.env.local` is gitignored — never remove it from `.gitignore`

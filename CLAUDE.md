@@ -235,56 +235,7 @@ A feature is complete when:
 
 ### Backlog Close — Mandatory Before Moving On
 
-Before committing or starting the next task, update `.agents/dev/BACKLOG.md`:
-
-1. **Bug fixed** → change `**Status:** OPEN` to `**Status:** RESOLVED — YYYY-MM-DD (commit <hash>)` and strike through the heading (`~~BUG-XXX~~`). Move to Bugs (Resolved) section if it is in Bugs (Open).
-2. **Feature complete** → change `**Status:** OPEN` to `**Status:** COMPLETE — YYYY-MM-DD`. Strike through the heading if the item is fully done.
-3. **Partially resolved** → update the status line with what changed and what remains open. Never leave the status line unchanged after a partial fix.
-4. **Stale blocker note** → if the fix removes a dependency that another item listed (e.g. "Blocked by BUG-XXX"), update that item's notes too.
-5. **Priority drift** → if resolving this item changes the priority of a related item, update that item's `**Priority:**` line.
-
-**Never commit a fix without closing or updating its corresponding backlog entry in the same commit.**
-
-#### Mandatory Lifecycle States
-
-Every BACKLOG/BUG entry must use one of these states — not freeform text:
-
-| State | Meaning |
-|-------|---------|
-| `OPEN` | Known, not yet started |
-| `IN PROGRESS` | Active this session |
-| `SHIPPED` | Code committed. Live test NOT yet run. Do not treat as done. |
-| `UNVERIFIED` | Test run attempted but result disputed or incomplete |
-| `RESOLVED` | Live-tested, evidence block attached (see below) |
-| `WONT FIX` | Consciously deferred — reason documented |
-
-`SHIPPED` is never a final state. It must advance to `RESOLVED` or `UNVERIFIED` after a test run.
-
-#### Mandatory Evidence Block for RESOLVED
-
-Every entry moving to `RESOLVED` must include an evidence block:
-
-```
-**Evidence:**
-- Commit: <hash>
-- Verified by: <live test | staging smoke test | DB query | manual check>
-- Observed result: <what was seen — not what was expected>
-- Pending items: <any remaining actions, or "none">
-```
-
-No evidence block = the entry is `SHIPPED`, not `RESOLVED`. This is not optional.
-
-#### What Does NOT Count as Evidence
-
-The following are explicitly invalid as evidence for RESOLVED — they demonstrate the fix ran, not that it worked correctly:
-
-- "The UI showed X" — client state is computed locally and may diverge from DB
-- "All requests returned 201/200" — a 201 confirms row insertion, not correctness of the data written
-- "The logger showed score Y" — logger score is derived from locally dispatched events, not from `matches.homeScore` / `matches.awayScore`
-- "No errors in console" — absence of error is not presence of correct state
-- "Smoke test passed" — only counts if the smoke test explicitly reads back the DB state and confirms it matches expected values
-
-**For any bug that writes data to the DB**: evidence must include a DB query result showing the actual stored values match expected values. Screenshots and HTTP response codes are supporting context, not proof.
+Never commit a fix without closing or updating its corresponding entry in `.agents/dev/BACKLOG.md` in the same commit — states, evidence-block format, and what counts as evidence: see `.agents/rules/backlog.md`.
 
 ---
 
@@ -295,7 +246,7 @@ Before any live match deployment:
 - [ ] Logger session persists 120+ minutes — SHIPPED (auth fixes BUG-057, BUG-058b — `1401ee2`, `1057f22`). **UNVERIFIED** — no sustained 120min logger session test run.
 - [ ] Two simultaneous loggers do not conflict or overwrite — **OPEN** — no dual-logger test ever run. Clock collision risk confirmed (Directive 6). Block before any multi-logger match day.
 - [ ] Double event submission is prevented or deduplicated — SHIPPED (event dedup by id OR type+minute+playerId+teamId in `page.tsx`). **UNVERIFIED** — no double-tap stress test run.
-- [ ] Public page updates within 5 seconds of event save — BUG-109 (clock DB fallback) RESOLVED session 43. BUG-108/116 (broadcast never firing — root cause was `NEXT_PUBLIC_WS_URL` missing its `https://` scheme on Vercel) RESOLVED session 44, live-tested end-to-end with a genuine WS push confirmed (`[WS] New event received...`, no reload). **Still not fully checked off — real progress, not there yet**: server-log-measured latency was 42s pre-BUG-119, now ~9.9s post-BUG-119 (unawaited broadcast calls fixed with `next/server`'s `after()`) — a real ~4x improvement, but still short of the <5s target. Remaining gap not yet root-caused (candidates: Vercel cold start on the route invocation, Vercel→Railway network round-trip, Socket.IO's own emit path). Measure with server-log timestamps, not browser-side tool-call timing — that method was proven unreliable this session.
+- [ ] Public page updates within 5 seconds of event save — **UNVERIFIED**, ~9.9s measured (was 42s). BUG-108/109/116/119 — see `BACKLOG.md` and `BUILD_JOURNAL.md` for full history.
 - [x] Match can be cleanly closed and marked FINISHED — RESOLVED session 34 test match (2026-06-27). BUG-076 + BUG-078 fixed.
 - [x] Logger interface tested on an actual mobile device — RESOLVED session 34 test match — Richard logged live from mobile.
 - [ ] All 🔴 High Volatility features are disabled or hidden from the UI — **OPEN** — Ads, Lineup Builder, Transfers, User Management, News, and `/api/auth/test` (BUG-003) all accessible. Must gate or hide before any public match day.
@@ -320,55 +271,7 @@ Summarize briefly:
 
 ## Git Governance
 
-### Branch Model
-```
-main        ← production (Vercel prod, prod Turso DB)
-dev         ← staging/integration (Vercel staging, staging Turso DB)
-feature/*   ← new features — branch off dev, PR back to dev
-fix/*       ← bug fixes — branch off dev, PR back to dev
-hotfix/*    ← urgent prod fixes — branch off main, PR to main,
-              auto-syncs back to dev after merge
-```
-
-### Rules
-- All new work branches off `dev`, not `main`
-- PRs to `main` require 2 reviews (1 currently — raise when team grows)
-- PRs to `dev` require 1 review
-- Squash merge for `feature/*` and `fix/*`
-- Merge commit for `hotfix/*` (preserve audit trail)
-- Schema migrations run against staging first, then prod — no exceptions
-- No direct commits to `main` or `dev`
-- `dev` must always be deployable — do not merge broken code
-
-### Environments
-- `main` deploys to brixsports.com (prod Vercel project)
-- `dev` deploys to staging.brixsports.com (staging Vercel project)
-- Each PR gets a Vercel preview deployment automatically
-- `JWT_SECRET` and `CRON_SECRET` are different per environment
-- `NEXT_PUBLIC_ENV` = `production` | `staging` | `development`
-
-### Workflow — Feature Work
-```bash
-git checkout dev && git pull
-git checkout -b feature/your-feature-name
-# work, commit incrementally
-git push origin feature/your-feature-name
-# open PR → target dev
-# PR guard checks target, Vercel builds preview
-# 1 review required, merge with squash
-```
-
-### Workflow — Hotfix
-```bash
-git checkout main && git pull
-git checkout -b hotfix/description
-# fix, commit
-git push origin hotfix/description
-# open PR → target main
-# PR guard checks target, 2 reviews required
-# merge commit (not squash)
-# auto-sync action merges main back into dev automatically
-```
+All work branches off `dev` (never `main`), no direct commits to `main` or `dev`, PRs to `main` require 2 reviews / PRs to `dev` require 1 — full branch model, environments, and feature/hotfix workflow commands: see `.agents/rules/git-workflow.md`.
 
 ---
 
@@ -389,6 +292,7 @@ git push origin hotfix/description
 - Always import from `src/lib/env.ts` instead
 - Add new vars to `env.ts` first, then document in `.env.example`
 - `validateEnv()` in `env.ts` fails fast at startup if required vars are absent
+- Scope: this rule covers application code under `src/` only. One-off scripts under `/dev/` read `process.env` directly per `.agents/rules/security.md` — that's a separate, narrower exception, not a contradiction.
 
 ### Before Every Commit
 - Run `tsc --noEmit` — zero new errors only (pre-existing errors in `src/db/` scripts are known and acceptable)
@@ -427,3 +331,5 @@ Before writing any script or code that touches:
 ## Cross-Project Knowledge
 Read at session start: ~/.claude/knowledge/global-patterns/patterns.md
 Apply all anti-patterns, settled decisions, and stack gotchas recorded there.
+
+Note: `.agents/rules/project.md` (Antigravity/Gemini tooling) points to a different patterns file at a different path — that's intentional, not drift. Different tool ecosystem, separate knowledge store.
