@@ -1767,7 +1767,7 @@ player stats can be stale or inconsistent after a match ends.
 - An admin-facing way to record a transfer (even a simple one, not necessarily full UI) instead of a one-off script every time
 - Fix `updatePlayerStats()`'s hardcoded `season: '2024'` to derive the real season from the match's competition
 - A real unique constraint (or upsert-safe application logic) on `(playerId, season, competitionId)` for both stats tables
-- **Display side has the same gap, confirmed live (session 45):** `GET /api/players/[id]` correctly wrote and returned LIGHT's historical Rim Reapers row after this session's fix, but the `memberships` array only surfaces the *active* affiliation (Vikings) plus the college row — the inactive, dated Rim Reapers history is silently absent from the response entirely, not just hidden by the frontend. Even with correct data now sitting in the DB, there's no way for a viewer (or admin) to see a player's actual transfer history anywhere in the product. Recording history at the DB level (this session's fix) and *displaying* it are two separate gaps — closing one doesn't close the other.
+- ~~**Display side has the same gap, confirmed live (session 45)**~~ — **CLOSED, session 53 (2026-08-20).** `GET /api/players/[id]` now returns a new admin-only `affiliationHistory` field (all `playerTeamAffiliations` rows for the player, active and inactive, sorted newest-first) alongside the existing active-only `memberships`. `/admin/roster-transfers` renders it as a timeline (team, sport, affiliation type, season, date range, active/past badge) when a player is selected, refreshing after a successful transfer instead of resetting the form. Live-verified against the real `LIGHT` player — Vikings (active), Rim Reapers (past, closed), and the separate COLNAS college affiliation all correctly surfaced, `memberships` unaffected. **Found in the same pass, not fixed:** the Rim Reapers row's `startDate`/`createdAt` are corrupted (`+057867-...`, a nonsensical far-future year — left over from session 45's original manual fix script). `Date` parses it as technically-valid rather than `NaN`, so it renders as an absurd date instead of crashing or silently hiding — cosmetic, pre-existing, not introduced by this fix, not blocking.
 
 **Concrete build plan, session 53 (2026-08-20) — investigated in full, not yet built:**
 
@@ -1799,19 +1799,17 @@ player stats can be stale or inconsistent after a match ends.
 
 ---
 
-### BACKLOG-224 — Staging Has Most of the Project's Historical Backfill Data; Prod Does Not
+### BACKLOG-224 — Staging Has Most of the Project's Historical Backfill Data; Prod Does Not (Intentional, Pending Manual Verification)
 
-**Status:** OPEN — flagged, not investigated or fixed
-**Priority:** Medium-High — real data-completeness gap on the live production database, distinct from any schema issue
+**Status:** OPEN — deliberate, not a gap. Richard confirmed directly (session 53) this is by design: historical backfill data is being manually verified on staging *before* any sync to prod, not accidentally left behind. Do not sync without an explicit go-ahead.
+**Priority:** Low right now — no action needed until manual verification is complete
 **Filed:** 2026-08-20 (session 53), surfaced while mirroring `BACKLOG-126`'s schema migration to prod
 
-**Problem, confirmed directly by Richard (not yet independently audited):** essentially all of this project's historical match/roster backfill work — `BACKLOG-018`'s entire BUSA League + BUSALYMPICS effort, spanning many sessions — was run against the **staging DB only**. Prod was never mirrored with that underlying data. This is the real reason prod's `playerTeamAffiliations` row count (296) is meaningfully smaller than staging's (533), and why prod is missing entire competitions staging has (no `season='2026/2027'` competition exists on prod at all; prod's `active`-status competitions are at a different season than staging's).
+**What this actually is:** essentially all of this project's historical match/roster backfill work — `BACKLOG-018`'s entire BUSA League + BUSALYMPICS effort — was run against the **staging DB only**, on purpose. This is the real reason prod's `playerTeamAffiliations` row count (296) is smaller than staging's (533) and prod is missing competitions staging has. It reflects a deliberate staged rollout (verify on staging first, sync to prod only once confirmed correct), not an oversight or a broken pipeline.
 
-**Not yet known:** the actual scope of what's missing on prod — which specific matches, players, teams, and stats rows exist on staging but not prod. No audit has been run.
+**Not yet done:** the manual verification pass itself (Richard reviewing the staging data directly). No audit or sync should be started until that's complete and Richard asks for it.
 
-**Why this wasn't addressed this session:** discovered incidentally while doing pre-flight checks for an unrelated schema migration; a real data-completeness reconciliation between two live databases is a substantial, separate piece of work (comparable in shape to `BACKLOG-126`'s own explicitly-deferred Option B) that deserves its own dedicated session, not a same-session addition to a schema-migration task.
-
-**Next step, not started:** an audit comparing staging vs. prod row counts/contents across `matches`, `players`, `teams`, `player_team_affiliations`, and the stats tables, competition-by-competition, to scope exactly what a prod data-sync would need to cover.
+**Correction from this entry's original framing:** initially filed as if this were an accidental data-completeness gap needing an urgent audit — wrong. Corrected same session after Richard's direct clarification.
 
 ---
 
