@@ -426,6 +426,9 @@ export const standings = sqliteTable('standings', {
     updatedAt: integer('updated_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
 });
 
+export const standingsUnique = uniqueIndex('standings_team_competition_unique')
+    .on(standings.teamId, standings.competitionId);
+
 // Bracket/Tournament nodes
 export const bracketNodes = sqliteTable('bracket_nodes', {
     id: text('id').primaryKey(),

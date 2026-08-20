@@ -13,6 +13,7 @@ import { isLoggerAssigned } from '@/lib/match-logger-helpers';
 import { broadcastToMatch, broadcastGlobalNotification } from '@/lib/socket';
 import { sendMatchEventNotification } from '@/lib/notifications/match-notification-service';
 import { getNotifiablePeriodType } from '@/lib/notifications/notification-rules';
+import { recalculateStandingsForMatch } from '@/lib/standingsService';
 
 export async function GET(
     request: NextRequest,
@@ -654,6 +655,19 @@ export async function PATCH(
         // after() rather than a bare fire-and-forget call — see events/route.ts's POST
         // handler for why (traced root cause of BUG-108/116's multi-second broadcast delay).
         after(() => broadcastToMatch(matchId, 'match:updated', { matchId, ...updateData }));
+
+        // BACKLOG-097: standings/team-record recalculation, wired into the FINISHED
+        // transition — see standingsService.ts for why this is safe to call more than
+        // once (fully recomputed from FINISHED matches each time, not incremental).
+        if (body.status === 'FINISHED') {
+            after(async () => {
+                try {
+                    await recalculateStandingsForMatch(matchId);
+                } catch (error) {
+                    console.error('Error recalculating standings:', error);
+                }
+            });
+        }
 
         // Notification-reliability fix (same as events/route.ts's POST handler,
         // see that file's comment for the full BUG-108/116-class rationale): period
