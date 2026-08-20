@@ -7802,22 +7802,24 @@ Everything below is explicitly **not** being built now — captured from `NOTIFI
 
 ### BUG-219 — CRITICAL: Official Lineup Publish Crashes With a `ReferenceError` on Any Squad-Validated Competition
 
-**Status:** FIX APPLIED — 2026-08-20, tsc-clean, **not yet live-verified** (local dev server unstable this session — verifying against staging next)
+**Status:** RESOLVED — 2026-08-20, live-verified against staging
 **Priority:** CRITICAL — a real 500 on the actual publish path for any competition with `requireSquad: true`, not a contrived scenario
 
 **Problem:** `src/app/api/admin/match-lineups/[id]/route.ts:126` references `teamId` in its squad-validation query, but `teamId` is never declared anywhere in that function scope — this throws a `ReferenceError` any time a lineup is submitted with player IDs through this route for a competition that requires squad validation. This is the route that actually publishes official match lineups (`/admin/match-lineups`) — not the newer `/lineup-builder` page, which (per `BUG-220` below) can't publish at all.
 
 **Fix:** derived `teamId` the same way the sibling route (`/api/matches/[id]/lineup`) already does correctly — `team === 'home' ? matchData.homeTeamId : matchData.awayTeamId` — declared immediately before the squad query that consumes it.
 
-**Evidence:** `tsc --noEmit` — the pre-existing `TS2552: Cannot find name 'teamId'` error at this exact line is gone from the diff against baseline, zero new errors introduced. **Not yet exercised against a running server or real squad-validated competition** — pending staging verification.
+**Evidence:**
+- `tsc --noEmit` — the pre-existing `TS2552: Cannot find name 'teamId'` error at this exact line is gone from the diff against baseline, zero new errors introduced.
+- **Real staging test** (`dev/verify-bug219-220-221-222-51.mjs`, commit `3a6a393` deployed to `https://brixsports-staging.vercel.app`): built a throwaway `requireSquad: true` competition + match + real 11-player squad, published a full squad-validated lineup through this exact route as a real admin — `200`, no `ReferenceError`, no `500`. All throwaway rows cleaned up in `finally`, confirmed post-run.
 
-**Found:** session 51, background audit agent tasked with assessing Lineup Builder's live-match-day readiness, per Richard's explicit request (Lineup Builder is 🔴 High Volatility in `CLAUDE.md` — audited, not touched, per that flag). **Fixed:** session 51 continuation, 2026-08-20, per Richard's explicit "CRITICAL bugs first" call.
+**Found:** session 51, background audit agent tasked with assessing Lineup Builder's live-match-day readiness, per Richard's explicit request (Lineup Builder is 🔴 High Volatility in `CLAUDE.md` — audited, not touched, per that flag). **Fixed & verified:** session 51 continuation, 2026-08-20, per Richard's explicit "CRITICAL bugs first" call.
 
 ---
 
 ### BUG-220 — Lineup Builder Is Not Safe for a Live Match Day: No Publish Path on the New Page, and Neither Write Path Enforces the Publish Lock
 
-**Status:** FIX APPLIED — 2026-08-20, tsc-clean, **not yet live-verified** (local dev server unstable this session — verifying against staging next)
+**Status:** RESOLVED — 2026-08-20, live-verified against staging
 **Priority:** HIGH — a published/locked lineup can be silently overwritten via either UI; the newer page can't complete the one workflow it exists for
 
 **Problem, two related findings:**
@@ -7828,30 +7830,34 @@ Everything below is explicitly **not** being built now — captured from `NOTIFI
 1. Added a `Publish` button/handler (`handlePublish`) to `/lineup-builder`, calling the existing canonical `POST .../lineup/publish` route (not a new publish implementation) — kept `/admin/match-lineups`'s publish path as-is rather than retiring either, per Richard's "same feature area, one session" scoping (consolidating the two is `BACKLOG-220`'s architecture-cleanup item, deliberately not done here). Disabled for `combined` XI (publish is a per-team/home-away concept; combined is reference-only) and while the client-side validation already on the page reports the lineup invalid.
 2. Added the same lock guard `publish/route.ts` already used (`status === 'published' && !unlocked` → 409 `LINEUP_LOCKED`) to both previously-unguarded write paths: `POST /api/matches/[id]/lineup` and `POST /api/admin/match-lineups/[id]`.
 
-**Evidence:** `tsc --noEmit` clean, zero new errors. **Not yet exercised against a running server** — publish→attempt-overwrite→confirm-409 cycle needs a real staging test before this can be called RESOLVED, especially the two write paths' concurrent-edit lock behavior.
+**Evidence:**
+- `tsc --noEmit` clean, zero new errors.
+- **Real staging test** (`dev/verify-bug219-220-221-222-51.mjs`): published a lineup, then attempted to overwrite it a second time through **both** write paths — `POST /api/admin/match-lineups/[id]` → `409 LINEUP_LOCKED`; `POST /api/matches/[id]/lineup` (the separate draft-save route) → also `409 LINEUP_LOCKED`. Both blocked correctly, neither silently overwrote. The `/lineup-builder` Publish button itself was verified at the API layer it calls (`.../lineup/publish`) — not yet click-tested through the actual UI (local dev server unstable this session); flagged as a smaller follow-up, not blocking, since the route it calls is the same one `verify-staging-authed.mjs` already proved works end-to-end in session 47F.
 
-**Found:** session 51, same background audit as `BUG-219`. **Fixed:** session 51 continuation, 2026-08-20.
+**Found:** session 51, same background audit as `BUG-219`. **Fixed & verified:** session 51 continuation, 2026-08-20.
 
 ---
 
 ### BUG-221 — `GET /api/matches/[id]/lineup` Has Zero Auth — Leaks Unpublished Draft Lineups and Team Selections Pre-Publish
 
-**Status:** FIX APPLIED — 2026-08-20, tsc-clean, **not yet live-verified** (local dev server unstable this session — verifying against staging next)
+**Status:** RESOLVED — 2026-08-20, live-verified against staging
 **Priority:** MEDIUM-HIGH — not PII, but a real competitive-integrity leak (opposing team could see a draft lineup before it's meant to be public)
 
 **Problem:** `src/app/api/matches/[id]/lineup/route.ts:8-41` (`GET`) has no `getAuthUser` call at all — any unauthenticated caller can fetch any match's lineup data, including drafts never published. Same bug class as this project's own repeated `BUG-009`/`BUG-034`/`BUG-147` family (unauthenticated mutation/read endpoints), just not caught by the sweeps that produced those, since this route was audited fresh this session.
 
 **Fix:** implemented exactly as scoped — public/unauthenticated callers now only ever see `status === 'published'` entries (each team's lineup filtered independently); `getAuthUser(...).catch(() => null)` used rather than a hard 401, since this route must stay reachable by anonymous public viewers for published lineups, matching the established `.catch(() => null)` pattern for "public GET, richer for admins" routes. `admin`/`logger` callers still see drafts, matching the route's own `POST` handler's existing role gate.
 
-**Evidence:** `tsc --noEmit` clean, zero new errors. **Not yet exercised against a running server** — needs a real draft-vs-published, authed-vs-anon test before RESOLVED.
+**Evidence:**
+- `tsc --noEmit` clean, zero new errors.
+- **Real staging test:** a match with one published home lineup and one unpublished away draft — unauthenticated `GET` correctly returned the published home lineup and omitted the away draft entirely (`lineups.away === undefined`, not just empty); the same request with a real admin session correctly saw both.
 
-**Found:** session 51, same background audit as `BUG-219`/`BUG-220`. **Fixed:** session 51 continuation, 2026-08-20.
+**Found:** session 51, same background audit as `BUG-219`/`BUG-220`. **Fixed & verified:** session 51 continuation, 2026-08-20.
 
 ---
 
 ### BUG-222 — CRITICAL: `POST`/`PUT /api/predictions` Has Zero Auth Despite the Predictions Page Being Hidden — a Live, Reachable, Unauthenticated Write Endpoint
 
-**Status:** FIX APPLIED — 2026-08-20, tsc-clean, **not yet live-verified** (local dev server unstable this session — verifying against staging next)
+**Status:** RESOLVED — 2026-08-20, live-verified against staging
 **Priority:** CRITICAL — the `/predictions` page returns `notFound()` (backscoped session 10, `BACKLOG-028`), but the API routes underneath it were never gated and are still fully live — same unauthenticated-write bug class as `BUG-009`/`BUG-010`/`BUG-034`/`BUG-147`, just on a route nobody thought to check because the UI in front of it is hidden
 
 **Problem:** `src/app/api/predictions/route.ts`'s `POST`/`PUT` handlers have no `getAuthUser` call anywhere in the file — `userId` is read straight from the request body/query (lines 10, 63), meaning any unauthenticated caller can create or modify prediction rows for any user ID they choose to supply. Separately, `src/app/api/predictions/stats/route.ts:39-42` pulls the entire `predictionLeaderboard` table with no `.limit()` just to compute one user's rank via `findIndex` — a CLAUDE.md architecture-rule violation (every list query needs `.limit()`), compounding as the table grows.
@@ -7861,9 +7867,12 @@ Everything below is explicitly **not** being built now — captured from `NOTIFI
 - **Widened beyond the original filing, same file, same session:** `GET` also had no auth — any caller could read any other user's predictions by supplying an arbitrary `userId` query param. Per this project's own known-issue ("second handler in same file missed during auth sweep," `known-issues.md`), audited every export in the file rather than just the two named in the bug title. `GET` now requires auth and only permits `authUser.id === userId` or `role === 'admin'`.
 - `stats/route.ts`'s rank lookup replaced `findIndex` over the full unbounded table with `count(*) WHERE totalPoints > user's totalPoints` — gives the exact same rank without ever loading rows beyond the requesting user's own leaderboard entry.
 
-**Evidence:** `tsc --noEmit` clean, zero new errors (one intermediate type error — `gt()` against a nullable `totalPoints` column — caught and fixed with `?? 0` before this counted as done). **Not yet exercised against a running server** — needs a real unauthenticated-caller-gets-401, wrong-user-gets-403, owner-succeeds test cycle before RESOLVED. `GET /api/predictions/stats` itself still takes an unauthenticated `userId` param (exposes only points/rank/accuracy, not PII) — left out of this bundle's scope, not filed as its own item; flag if it should be.
+**Evidence:**
+- `tsc --noEmit` clean, zero new errors (one intermediate type error — `gt()` against a nullable `totalPoints` column — caught and fixed with `?? 0` before this counted as done).
+- **Real staging test** (`dev/verify-bug219-220-221-222-51.mjs`, 14/14 assertions passed across the full BUG-219/220/221/222 bundle): unauthenticated `POST`/`PUT`/`GET` all correctly `401`; a real non-admin user's own token requesting a *different* `userId` correctly `403` (first attempt at this check used a forged `role` claim on the admin's own id and false-failed — `getAuthUser` re-derives role from the live DB row regardless of the JWT's role claim, so the test needed a genuinely different non-admin account; corrected same session, both the finding and the fix are in the script's own comments now); a real admin `POST` with a spoofed `userId: 'someone-else-entirely'` in the body correctly wrote the row under the *admin's own* id, not the spoofed one — confirmed by reading the row back; `stats` endpoint's new count-based rank query ran clean post-fix. Throwaway prediction + leaderboard rows fully cleaned up / restored in `finally`, confirmed via post-run reads.
+- `GET /api/predictions/stats` itself still takes an unauthenticated `userId` param (exposes only points/rank/accuracy, not PII) — left out of this bundle's scope, not filed as its own item; flag if it should be.
 
-**Found:** session 51, background audit agent tasked with assessing Predictions/Prediction-Pool reactivation feasibility, per Richard's explicit request. **Fixed:** session 51 continuation, 2026-08-20.
+**Found:** session 51, background audit agent tasked with assessing Predictions/Prediction-Pool reactivation feasibility, per Richard's explicit request. **Fixed & verified:** session 51 continuation, 2026-08-20.
 
 ---
 
