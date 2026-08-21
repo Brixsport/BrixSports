@@ -8525,3 +8525,30 @@ Live-reproduced exactly as described: navigated to a real match's URL that had j
 **Found & fixed:** session 53, 2026-08-21.
 
 ---
+### Item 21 — `BACKLOG-189`: GA4 + Search Console + Sitemap + Per-Page Metadata, Fully Resolved
+
+**Status:** RESOLVED — 2026-08-21 (session 53). Full live-verification against deployed staging, not just code review.
+
+**All 5 parts of BACKLOG-189's original scope shipped:**
+1. GA4 wired — `gtag.js` injection gated on `NEXT_PUBLIC_GA_MEASUREMENT_ID` (unset in staging/local so dev traffic never pollutes production analytics). Real Measurement ID (`G-TQ3R7MCY8N`) already added to `.env.production` by Richard directly.
+2. Also added, Richard's own follow-up ask: `@vercel/analytics` + `@vercel/speed-insights` (pinned exact versions, verified against the npm registry first) — auto-detected on Vercel, inert elsewhere, no env gating needed.
+3. Search Console meta tag cleanup — removed the misplaced filename from `google-site-verification` (file-based verification already independently established ownership) and the empty `msvalidate.01` placeholder.
+4. `sitemap.ts` now fetches real matches/teams/players/news/competitions from the DB (capped at 2000 each, well within the sitemap protocol's 50k limit) instead of only static listing pages.
+5. Real per-page `generateMetadata` + JSON-LD structured data for `matches/[id]`, `teams/[id]`, `players/[id]`, `news/[slug]` — each was a `'use client'` page with no way to export `generateMetadata`, so every page shared the generic site-wide title regardless of content. Converted each to a thin server-component wrapper (fetches just the SEO-relevant fields, exports `generateMetadata` + inline JSON-LD) rendering the original, unchanged UI as a relocated `*Client.tsx` component — zero logic changes to the actual pages themselves.
+
+**Two real bugs found and fixed during this pass, not just the planned scope:**
+- **`metadataBase` missing** on the root layout — relative OG/Twitter image URLs (including the new per-page ones) were resolving against `localhost:3000` instead of the real domain. Added `metadataBase: new URL("https://brixsports.com")`.
+- **Sitemap crash, two-stage fix:** first Vercel deploy failed outright — `sitemap.ts` now runs live DB queries with no directive telling Next.js to defer that to request time, so it tried to statically prerender at build time (`export const dynamic = 'force-dynamic'` fixed the build, and is correct behavior regardless — a live sports platform's sitemap shouldn't be a stale build-time snapshot). Second deploy then revealed the *real* bug: `/sitemap.xml` returned a live `500` — `RangeError: Invalid time value` inside Next's own date serializer. Root cause: **126 rows** across `matches.updated_at` (33) and `players.created_at` (93) have corrupted timestamps (raw ISO strings or millisecond-epoch values written by old scripts into columns Drizzle reads as integer epoch-seconds) — same root-cause class as `BACKLOG-126`'s earlier corrupted `startDate`/`endDate` finding. Added a `safeDate()` helper validating each date before use, falling back to `new Date()` — one bad row now degrades that entry's accuracy instead of crashing the whole route.
+
+**The 126-row data-integrity issue itself is NOT fixed** — only defended against in the sitemap. Other code paths reading these same columns may have the same latent exposure (most display code doesn't call `.toISOString()` directly so wouldn't crash the same way, but could still render "Invalid Date" strings silently). Needs its own scoped backfill — folded into "the rest."
+
+**Evidence, fully live-verified against staging (not just local):**
+- `/sitemap.xml` → `200`, 755 URLs, includes real `/matches/*`, `/teams/*`, `/players/*`, `/news/*`, `/competitions/*/standings` entries.
+- Real match page (`busa-match-1`) → `<title>Joga-Bonito vs Wolves FC | BRIXSPORTS</title>`, correct OG description with live score.
+- Real news article → `<title>` is the actual headline, `og:image` is the real Cloudinary URL.
+- Browser-pane visual check on the match page: renders correctly (team logo, score, tabs), no new console errors from the restructuring (the two console errors present — a CSP worker warning and one 401 — are pre-existing/unrelated: a 401 on an anonymous viewer hitting a user-specific endpoint is expected, not a regression).
+- Local `next build` also run in full as part of debugging — confirmed all 168 pages generate, all 5 modified routes correctly built as dynamic (server-rendered on demand).
+
+**Found & fixed:** session 53, 2026-08-21. Commits: `11e87d3` (initial batch, failed deploy), `88aae22` (dynamic-rendering + metadataBase fix, deploy succeeded but sitemap 500'd), `0a6c252` (safeDate fix, fully working).
+
+---
