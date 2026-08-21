@@ -44,7 +44,11 @@ export async function middleware(request: NextRequest) {
             pathname.startsWith('/api/loggers/auth') ||
             pathname === '/login' ||
             pathname === '/logger' ||
-            pathname === '/api/reminders/check';
+            pathname === '/api/reminders/check' ||
+            // Sentry tunnel (next.config.ts withSentryConfig tunnelRoute) — carries
+            // client error/replay events from anonymous public viewers too; a redirect
+            // here silently drops those events before they reach Sentry.
+            pathname === '/monitoring';
 
         if (!isStagingExempt) {
             const token = request.cookies.get('authToken')?.value;

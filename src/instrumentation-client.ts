@@ -17,3 +17,7 @@ Sentry.init({
     Sentry.replayIntegration(),
   ],
 });
+
+// Hook into App Router navigation transitions so client-side route changes
+// produce tracing spans (this project already enables tracesSampleRate above).
+export const onRouterTransitionStart = Sentry.captureRouterTransitionStart;

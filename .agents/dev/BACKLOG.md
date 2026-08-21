@@ -2484,7 +2484,7 @@ Trace all email-sending code paths. Identify the active provider. Remove unused 
 
 ### ~~BACKLOG-011 — Install and Configure Sentry~~
 
-**Status:** RESOLVED — 2026-06-07
+**Status:** RESOLVED — 2026-06-07. **Correction, 2026-08-20 (session 53, item 11):** this was never actually active — no DSN had been supplied ("to activate" below was never done), and independently, the install itself was broken (server/edge `Sentry.init()` never ran at all, regardless of DSN — see `BUG-230`). Both are now genuinely fixed; see `BUG-230` for the real fix and its evidence.
 
 `@sentry/nextjs@10.56.0` installed (exact pin). Configured via:
 
@@ -8084,6 +8084,27 @@ Everything below is explicitly **not** being built now — captured from `NOTIFI
 **Fix:** added `.limit(50)` to the query, matching the ceiling this codebase already uses elsewhere (`players/search/route.ts`'s `Math.min(Math.max(1, parsed), 50)`).
 
 **Evidence:** `tsc --noEmit` — 48 errors, unchanged from pre-fix baseline, zero new.
+
+---
+
+### BUG-230 — Sentry Server/Edge `Sentry.init()` Never Actually Ran, Regardless of DSN
+
+**Status:** RESOLVED — 2026-08-20 (session 53, item 11 pre-launch ship pass)
+**Priority:** HIGH — the entire server-side error-monitoring signal (API routes, server actions, server components — everything CLAUDE.md's "Sentry is configured — unhandled errors must propagate, not be swallowed" rule assumes exists) was silently doing nothing this whole time.
+
+**Problem — two compounding causes:**
+1. `BACKLOG-011` was marked RESOLVED but its own text said "to activate: add real DSN values to `.env.local`" — that step was never actually done. No DSN, anywhere, ever.
+2. Independently, and more seriously: even with a DSN, `sentry.server.config.ts`/`sentry.edge.config.ts` were **never loaded at all**. `@sentry/nextjs` v8+ removed automatic loading of these files by filename convention — they now only run if explicitly imported from a `register()` function in `instrumentation.ts` (confirmed via `https://skills.sentry.dev/sentry-instrument` and cross-checked against a live web search). This project had no `instrumentation.ts` anywhere. A root-level one wouldn't have been enough either — this project keeps its whole App Router under `src/` (confirmed by `src/middleware.ts`), and Next.js's convention-file resolution follows the same src-directory rule for `instrumentation.ts`/`instrumentation-client.ts` as it does for `middleware.ts`. Proved live: creating `instrumentation.ts` at the project **root** produced zero Sentry SDK activity on boot (checked with `debug: true` — total silence); moving the identical file to `src/instrumentation.ts` immediately produced a real SDK-emitted log line (`[Sentry] Cannot initialize SDK with debug option using a non-debug bundle`) proving `Sentry.init()` now actually executes.
+
+**Fix:**
+- `src/instrumentation.ts` (new) — `register()` imports `../sentry.server.config` for `NEXT_RUNTIME === 'nodejs'` and `../sentry.edge.config` for `'edge'`; exports `onRequestError = Sentry.captureRequestError` so unhandled Route Handler/Server Component/Server Action errors are captured automatically.
+- `sentry.client.config.ts` migrated to `src/instrumentation-client.ts` (current SDK-recommended filename/location; old one is a dead filename on v8+ and had zero references anywhere, confirmed by grep before deleting). Same `Sentry.init()` content preserved (DSN, replay sample rates, tracesSampleRate), plus added `onRouterTransitionStart = Sentry.captureRouterTransitionStart` so App Router client-side navigations actually produce tracing spans (tracing was already enabled via `tracesSampleRate` but this export was missing, so navigation spans silently never fired).
+- Real DSN added to `.env.local` (gitignored, never committed) for both `SENTRY_DSN` and `NEXT_PUBLIC_SENTRY_DSN`, plus `SENTRY_ENVIRONMENT`/`NEXT_PUBLIC_SENTRY_ENVIRONMENT=development`. `.env.example` already documented these var names correctly (session 2026-06-07) — no change needed there.
+- `src/middleware.ts`'s staging-wide auth gate exemption list didn't include `/monitoring` (the Sentry tunnel route `next.config.ts` already configures). On staging, that meant an anonymous public viewer's tunneled client error/replay events would get redirected to `/login` and silently never reach Sentry — a real, if lower-severity, gap in the *existing* tunnel setup, found and fixed while wiring this. Added `pathname === '/monitoring'` to `isStagingExempt`.
+
+**Evidence:** Live-verified, not just code review — created a temporary route (`src/app/api/sentry-test-53/route.ts`, deleted after) that threw a real unhandled error and hit it against the local dev server (`node server.js`, this project's custom Socket.IO-wrapped Next server) both **before** and **after** the `src/` relocation. Before: `debug: true` produced zero Sentry log output despite the route genuinely throwing and Next.js returning a real 500 — proving `Sentry.init()` never ran. After: the SDK's own init-time warning appeared immediately on server boot, and the same thrown error then passed through the real `onRequestError`-instrumented request path. **Not closed to 100%**: this environment has no Sentry MCP/API token, so seeing the actual issue land in the Sentry Issues dashboard (the skill's own "done" bar) couldn't be confirmed end-to-end here — Richard should check the dashboard directly after the next deploy, or connect a Sentry MCP for future automated close-the-loop verification. `tsc --noEmit`: 48 errors, unchanged from the pre-existing baseline (the one extra hit seen mid-session was a stale `.next/types` reference to the now-deleted temp test route, not a real regression — confirmed gitignored, cleaned).
+
+**Found & fixed:** session 53, item 11, 2026-08-20.
 
 **Found:** session 53 continuation, 2026-08-20, during item 9's livestream audit. **Fixed:** same session.
 
