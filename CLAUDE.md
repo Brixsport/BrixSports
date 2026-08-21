@@ -131,12 +131,12 @@ Public player response: name, jerseyName, number, position, team name, rating
 - JWT auth flow and session handling
 
 ### 🔴 High Volatility — Do Not Touch Without Explicit Brief
-- Ads feature (recently added, untested under load)
-- Lineup Builder (marked NEW, unknown stability)
-- Transfers page (intersects BUG-004)
-- User management admin panel (intersects BUG-002)
-- News / articles (intersects BUG-006 XSS)
-- src/app/api/auth/test/route.ts (intersects BUG-003 — this file should be deleted)
+- Ads feature (recently added, untested under load) — no currently-open BACKLOG/BUG item found against it; kept 🔴 on "untested under load" alone, not a known bug
+- Lineup Builder — **re-audited session 51/53**: `BUG-219` (publish crash), `BUG-220` (no publish path + unenforced lock), `BUG-221` (unauthenticated draft-lineup leak) all RESOLVED and live-verified. Still 🔴: `BACKLOG-220`'s architecture cleanup (dead duplicate rendering code, non-atomic write race, no formation-change confirm) remains OPEN — the critical/security bugs are gone, the structural fragility is not
+- Transfers page — *(the news/rumor-announcement page at `/admin/transfers`, distinct from the new season-readiness roster-transfer UI at `/admin/roster-transfers`, which is 🟢, freshly built and live-verified session 53)*. Original citation (`BUG-004`, hardcoded `createdBy`) RESOLVED since session 3 — kept 🔴 conservatively since this page hasn't been re-audited since, not because the original reason still holds
+- User management admin panel — original citation (`BUG-002`, missing auth) RESOLVED since session 3 — kept 🔴 conservatively, not re-audited since. `CLAUDE.md`'s own Admin/Match Management stakeholder note (Aug 7) flags real, current over-broad-access concerns here independent of `BUG-002`
+- News / articles — original citation (`BUG-006`, XSS) RESOLVED since session 3 — kept 🔴 conservatively, not re-audited since
+- ~~`src/app/api/auth/test/route.ts`~~ — file deleted (confirmed, `BUG-003`), no longer applicable; leaving struck through rather than removing the line so the history isn't lost
 
 ---
 
@@ -243,13 +243,13 @@ Never commit a fix without closing or updating its corresponding entry in `.agen
 
 Before any live match deployment:
 - [x] Match creation → logger assignment → public appearance works end to end — RESOLVED session 34 test match (2026-06-27)
-- [ ] Logger session persists 120+ minutes — SHIPPED (auth fixes BUG-057, BUG-058b — `1401ee2`, `1057f22`). **UNVERIFIED** — no sustained 120min logger session test run.
-- [ ] Two simultaneous loggers do not conflict or overwrite — **OPEN** — no dual-logger test ever run. Clock collision risk confirmed (Directive 6). Block before any multi-logger match day.
+- [ ] Logger session persists 120+ minutes — SHIPPED (auth fixes BUG-057, BUG-058b — `1401ee2`, `1057f22`). **UNVERIFIED** — no sustained 120min logger session test run. `BUG-217` (session 51, shipped session 53 continuation) hardens the adjacent case — a transient network blip no longer force-logs-out or deletes the stored token — but is itself also unverified live (see `BACKLOG.md` for why a black-box test is structurally impractical here); doesn't substitute for the 120min run.
+- [ ] Two simultaneous loggers do not conflict or overwrite — **OPEN** — no dual-logger test ever run. Clock collision risk confirmed (Directive 6). Block before any multi-logger match day. Tracked as `BACKLOG-151`, still deferred.
 - [ ] Double event submission is prevented or deduplicated — SHIPPED (event dedup by id OR type+minute+playerId+teamId in `page.tsx`). **UNVERIFIED** — no double-tap stress test run.
-- [ ] Public page updates within 5 seconds of event save — **UNVERIFIED**, ~9.9s measured (was 42s). BUG-108/109/116/119 — see `BACKLOG.md` and `BUILD_JOURNAL.md` for full history.
+- [ ] Public page updates within 5 seconds of event save — **UNVERIFIED**, ~9.9s measured (was 42s), reconfirmed at "roughly ten seconds" in the Aug 7 stakeholder report — no new measurement since. BUG-108/109/116/119 — see `BACKLOG.md` and `BUILD_JOURNAL.md` for full history.
 - [x] Match can be cleanly closed and marked FINISHED — RESOLVED session 34 test match (2026-06-27). BUG-076 + BUG-078 fixed.
 - [x] Logger interface tested on an actual mobile device — RESOLVED session 34 test match — Richard logged live from mobile.
-- [ ] All 🔴 High Volatility features are disabled or hidden from the UI — **OPEN** — Ads, Lineup Builder, Transfers, User Management, News, and `/api/auth/test` (BUG-003) all accessible. Must gate or hide before any public match day.
+- [ ] All 🔴 High Volatility features are disabled or hidden from the UI — **OPEN, visibility unchanged** — Ads, Lineup Builder, Transfers, User Management, News still all accessible; `/api/auth/test` no longer applies (file deleted, `BUG-003`). **Materially lower-risk than when this line was written**: Lineup Builder's actual crash/security bugs (`BUG-219`/`220`/`221`) and Predictions' unauthenticated-write bug (`BUG-222`, same session-51 audit, routes reachable even though the `/predictions` page itself is hidden) are now fixed — the remaining gap is *exposure* (these features are visible/reachable pre-launch), not the underlying bugs that originally justified blocking. Still must gate or hide before any public match day; the bar for what "gate or hide" is protecting against is now lower.
 
 ---
 

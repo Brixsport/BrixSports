@@ -4,6 +4,13 @@
 > Tier: MVP → PRODUCTION
 > Author: Claude Code (generated from full codebase read)
 
+> **Section 12 (Known Structural Gaps) staleness note, session 53 (2026-08-20):** that
+> table was generated from sessions 27-38C's read (see its own footer) and was never
+> fully re-swept since. Spot-checked and corrected the rows this session had direct
+> evidence for (`BACKLOG-105`, `TD-011`, `BUG-083`) — the rest of the table has NOT
+> been independently re-verified and may contain other stale `OPEN` rows; treat
+> `BACKLOG.md` as the authoritative live source, this table as a snapshot.
+
 ---
 
 ## Table of Contents
@@ -743,15 +750,15 @@ Ordered by operational risk to a live match day.
 | PATCH `[eventId]` body spread (BUG-093)    | Any field overwritable by authenticated user       | `events/[eventId]/route.ts:125` | OPEN   |
 | Score revert before event delete (BUG-094) | Delete fails → score permanently wrong             | `events/[eventId]/route.ts:216` | OPEN   |
 | `loggerId` in public events GET (BUG-095)  | Logger identity exposed to unauthenticated callers | `events/route.ts:38`            | OPEN   |
-| Event type string mismatch (BUG-083)       | OWN GOAL may not match → score not credited        | Multiple route files            | OPEN   |
+| Event type string mismatch (BUG-083)       | OWN GOAL may not match → score not credited        | Multiple route files            | Code fix SHIPPED (`efb0081`, session 38D) — this row was stale. **Visual re-confirmation still genuinely open** (session 53 continuation, 2026-08-20): every card event currently on staging is a goals-only backfill row with no minute data, and `LiveMatchTimeline.tsx`'s own unrelated unknown-minute gate hides the whole timeline for those, so the fix can't be visually observed on any match presently in the DB — would need a throwaway admin-test match. See `BACKLOG.md` BUG-083. |
 
 ### Data Integrity
 
 | Gap                                                     | Risk                                                                                                                                                                   | Location                               | Status     |
 | ------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- | ---------- |
 | BUG-011 playerStats corruption (718 goals/133 apps)     | Historical stats unreliable                                                                                                                                            | `footballPlayerStats`                  | OPEN       |
-| BACKLOG-105 — penalty shootout full implementation      | Shootout goals corrupt match score                                                                                                                                     | `events/route.ts` (interim guard only) | OPEN       |
-| TD-011 — `season: '2024'` hardcoded                     | Stats written to wrong season bucket                                                                                                                                   | `events/route.ts:271,328`              | OPEN       |
+| BACKLOG-105 — penalty shootout full implementation      | Shootout goals corrupt match score                                                                                                                                     | `events/route.ts` (interim guard only) | RESOLVED — this row was stale. Distinct `PEN_SCORED`/`PEN_MISSED`/`PEN_SAVED` event types (zero stat-write cases by construction), dedicated `shootout_home_score`/`shootout_away_score` columns, atomic score isolation — shipped session 48, remaining display/rules gaps closed session 53. See `BACKLOG.md` BACKLOG-105. |
+| TD-011 — `season: '2024'` hardcoded                     | Stats written to wrong season bucket                                                                                                                                   | `events/route.ts:271,328`              | RESOLVED, session 53 — this row was stale. `updatePlayerStats()` rewritten to derive `season` from the match's real competition, scoping every stat lookup/upsert accordingly instead of a lifetime-blended `WHERE playerId = ?`. See `BACKLOG.md` BACKLOG-126. |
 | BACKLOG-094 — eyePoints never returned from API         | Eye Point Awards panel always empty                                                                                                                                    | `matches/[id]/route.ts`                | OPEN       |
 | Basketball stats write path unverified                  | `basketballPlayerStats` has 0 rows in DB — stat-write branch in `updatePlayerStats()` may be broken or untested                                                        | `events/route.ts` basketball branch    | UNVERIFIED |
 | `fixtures` table relationship to `matches` undocumented | Both tables exist in schema; Three Critical Flows only reference `matches` — `fixtures` purpose unclear, ambiguity must be resolved before multi-competition expansion | `src/db/schema.ts`                     | OPEN       |
