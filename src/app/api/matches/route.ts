@@ -3,9 +3,18 @@ import { db } from '@/db';
 import { matches, matchEvents, teams } from '@/db/schema';
 import { eq, and, inArray, or, desc } from 'drizzle-orm'; // inArray kept for teams fetch
 import { getAuthUser } from '@/lib/auth';
+import { checkRateLimit } from '@/lib/rate-limit';
 
 export async function GET(request: NextRequest) {
     try {
+        const rl = checkRateLimit(request);
+        if (rl.limited) {
+            return NextResponse.json(
+                { error: 'Too many requests. Please try again shortly.' },
+                { status: 429, headers: { 'Retry-After': String(rl.retryAfterSeconds) } }
+            );
+        }
+
         const authUser = await getAuthUser(request).catch(() => null);
         const isAdmin = authUser?.role === 'admin';
 

@@ -6,6 +6,7 @@ import { getAuthUser } from '@/lib/auth';
 import { enrichPlayersWithAffiliations, toPublicPlayer, type EnrichedPlayer, syncPlayerOrganizationAffiliations } from '@/lib/player-data';
 import { getPrimaryTeam, getResolvedInstitutionalData, playerMatchesInstitutionFilters } from '@/lib/player-affiliation-utils';
 import { CURRENT_SEASON } from '@/lib/rosterService';
+import { checkRateLimit } from '@/lib/rate-limit';
 
 function playerMatchesSearch(player: EnrichedPlayer, query: string) {
     const normalizedQuery = query.trim().toLowerCase();
@@ -44,6 +45,14 @@ function playerMatchesSearch(player: EnrichedPlayer, query: string) {
 
 export async function GET(request: Request) {
     try {
+        const rl = checkRateLimit(request);
+        if (rl.limited) {
+            return NextResponse.json(
+                { error: 'Too many requests. Please try again shortly.' },
+                { status: 429, headers: { 'Retry-After': String(rl.retryAfterSeconds) } }
+            );
+        }
+
         const authUser = await getAuthUser(request as any).catch(() => null);
         const isAdmin = authUser?.role === 'admin';
 

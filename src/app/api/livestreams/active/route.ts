@@ -2,10 +2,19 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
 import { matches, teams } from '@/db/schema';
 import { eq, and, lte, gte, or } from 'drizzle-orm';
+import { checkRateLimit } from '@/lib/rate-limit';
 
 // GET /api/livestreams/active - Get all active livestreams
 export async function GET(request: NextRequest) {
     try {
+        const rl = checkRateLimit(request);
+        if (rl.limited) {
+            return NextResponse.json(
+                { error: 'Too many requests. Please try again shortly.' },
+                { status: 429, headers: { 'Retry-After': String(rl.retryAfterSeconds) } }
+            );
+        }
+
         const now = new Date();
 
         // Find all matches with active livestreams

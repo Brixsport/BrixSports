@@ -3,10 +3,19 @@ import { db } from '@/db';
 import { news, newsLikes, users } from '@/db/schema';
 import { eq, desc, and, like, or, sql } from 'drizzle-orm';
 import { getAuthUser } from '@/lib/auth';
+import { checkRateLimit } from '@/lib/rate-limit';
 
 // GET /api/news - Get all news articles with filters
 export async function GET(request: NextRequest) {
     try {
+        const rl = checkRateLimit(request);
+        if (rl.limited) {
+            return NextResponse.json(
+                { error: 'Too many requests. Please try again shortly.' },
+                { status: 429, headers: { 'Retry-After': String(rl.retryAfterSeconds) } }
+            );
+        }
+
         const searchParams = request.nextUrl.searchParams;
         const category = searchParams.get('category');
         const tag = searchParams.get('tag');

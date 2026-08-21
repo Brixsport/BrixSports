@@ -2,9 +2,18 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
 import { teams } from '@/db/schema';
 import { getAuthUser } from '@/lib/auth';
+import { checkRateLimit } from '@/lib/rate-limit';
 
-export async function GET() {
+export async function GET(request: NextRequest) {
     try {
+        const rl = checkRateLimit(request);
+        if (rl.limited) {
+            return NextResponse.json(
+                { error: 'Too many requests. Please try again shortly.' },
+                { status: 429, headers: { 'Retry-After': String(rl.retryAfterSeconds) } }
+            );
+        }
+
         const allTeams = await db.select().from(teams).limit(500);
         return NextResponse.json(allTeams);
     } catch (error) {

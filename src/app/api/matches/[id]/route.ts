@@ -14,12 +14,24 @@ import { broadcastToMatch, broadcastGlobalNotification } from '@/lib/socket';
 import { sendMatchEventNotification } from '@/lib/notifications/match-notification-service';
 import { getNotifiablePeriodType } from '@/lib/notifications/notification-rules';
 import { recalculateStandingsForMatch } from '@/lib/standingsService';
+import { checkRateLimit } from '@/lib/rate-limit';
 
 export async function GET(
     request: NextRequest,
     { params }: { params: Promise<{ id: string }> }
 ) {
     try {
+        // Generous ceiling (see rate-limit.ts) -- this route backs the live
+        // match page, so it must never throttle a real viewer's normal
+        // WS-driven session, only obvious scraping/abuse.
+        const rl = checkRateLimit(request);
+        if (rl.limited) {
+            return NextResponse.json(
+                { error: 'Too many requests. Please try again shortly.' },
+                { status: 429, headers: { 'Retry-After': String(rl.retryAfterSeconds) } }
+            );
+        }
+
         const { id: matchId } = await params;
 
         // Fetch match with team details
