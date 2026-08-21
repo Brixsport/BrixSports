@@ -2,12 +2,22 @@ import { NextRequest } from 'next/server';
 
 /**
  * In-memory, per-IP fixed-window rate limiter for public GET endpoints.
- * Same tradeoff as loggers/auth/route.ts's own rate limit (BUG-053): resets on
- * Vercel cold start, not shared across instances -- acceptable for MVP, would
- * need Redis/Upstash for real distributed enforcement. Deliberately generous
- * (see DEFAULT_MAX below): this app's real audience shares campus WiFi NAT,
- * so many real students can share one public IP concurrently. The goal is
- * stopping obvious scraping/DoS, not throttling normal browsing.
+ * Same tradeoff as loggers/auth/route.ts's own rate limit (BUG-053).
+ *
+ * WEAKER IN PRACTICE THAN IT LOOKS -- confirmed empirically, not just a
+ * theoretical caveat (session 53, 2026-08-20): a clean sequential test
+ * against a route Vercel had already scaled to multiple warm instances (from
+ * an earlier burst test) got load-balanced across that whole warm pool --
+ * each instance keeps its own separate `buckets` Map, so no single instance's
+ * counter ever approached the limit, and 70 sequential requests against a
+ * 60/min ceiling all returned 200. The identical BUG-053 pattern DID
+ * correctly 429 in the same session, but only on a route that hadn't been
+ * burst-tested yet and so had very few warm instances. In other words: this
+ * degrades exactly under the burst/scale traffic pattern it exists to catch,
+ * not just on a cold start. It still raises the bar against a naive
+ * single-connection scraper, but do not treat it as real protection against
+ * a parallel-capable attacker or a real traffic spike -- that needs a shared
+ * external store (Redis/Upstash), not module-level memory.
  */
 const buckets = new Map<string, { count: number; resetAt: number }>();
 

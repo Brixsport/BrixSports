@@ -8091,12 +8091,12 @@ Everything below is explicitly **not** being built now — captured from `NOTIFI
 
 ### Rate Limiting on Public GETs (Item 10)
 
-**Status:** RESOLVED — 2026-08-20 (session 53 continuation)
+**Status:** SHIPPED, real limitation empirically confirmed — 2026-08-20 (session 53 continuation). Read the live-test result below before treating this as solved.
 **Priority:** Medium — was optional pre-launch, stops being optional once real September traffic hits (Richard's own framing)
 
 **Problem:** before this session, the only rate-limited endpoint anywhere in the app was `POST /api/loggers/auth` (`BUG-053`). Every public, unauthenticated `GET` list endpoint — `matches`, `matches/[id]`, `players`, `teams`, `competitions`, `news`, `search`, `livestreams/active` — had zero request throttling. Not an active incident, but a real gap given the actual expected traffic pattern (many real students on shared university WiFi, hitting the same handful of public pages around kickoff).
 
-**Fix:** new `src/lib/rate-limit.ts` — an in-memory, per-IP fixed-window limiter (`checkRateLimit(request, opts?)`), same tradeoff as `BUG-053`'s already-proven pattern (resets on Vercel cold start, not shared across instances — acceptable for MVP, `BUG-053`'s own comment already flags Redis/Upstash as the real prod-hardening path). Deliberately generous default (120 req/min per IP) rather than tuned tight: this app's real audience shares campus NAT, so the goal is stopping obvious scraping/DoS, not throttling normal concurrent browsing from one building. `search/route.ts` gets a tighter ceiling (60/min) since it's the most expensive of these per-request (multiple `LIKE` scans across tables) and the most attractive scrape target.
+**Fix:** new `src/lib/rate-limit.ts` — an in-memory, per-IP fixed-window limiter (`checkRateLimit(request, opts?)`), same code shape as `BUG-053`'s pattern. Deliberately generous default (120 req/min per IP): this app's real audience shares campus NAT, so many real students can share one public IP concurrently — the goal is stopping obvious scraping/DoS, not throttling normal browsing. `search/route.ts` gets a tighter ceiling (60/min) since it's the most expensive of these per-request (multiple `LIKE` scans across tables) and the most attractive scrape target.
 
 **Applied to:** `src/app/api/matches/route.ts`, `matches/[id]/route.ts` (the live match page's own backing route — flagged with its own comment not to throttle a real WS-driven viewing session), `players/route.ts`, `teams/route.ts` (also gained a `request` param it didn't previously take), `competitions/route.ts`, `news/route.ts`, `search/route.ts`, `livestreams/active/route.ts` (this session's own `BUG-229` fix, same file).
 
@@ -8104,7 +8104,15 @@ Everything below is explicitly **not** being built now — captured from `NOTIFI
 
 **Not done — deliberately out of scope:** `POST /api/competitions/register` (public team self-registration, no auth, has an explicit `// Rate limiting needed (BACKLOG)` comment already in the file) is a write endpoint, not a GET — real gap, but item 10 was scoped to public GETs specifically; flagging here so it isn't lost. `BACKLOG-169`'s remaining 13 unclamped-limit routes are unchanged.
 
-**Evidence:** `tsc --noEmit` clean, no new errors (see commit). Not live-tested via 120-real-requests-in-a-minute (would require either a scripted burst against a real deployment or waiting out the whole reset window to observe the 429 — judged not worth the time for a mechanical, directly-copied pattern already proven correct in production on `loggers/auth`); code-level reviewed against that proven pattern instead.
+**Live-tested against real staging, and the result changes the picture — this is weaker in practice than the code comment first claimed, not just a theoretical caveat:**
+- A 70-parallel-request burst against `/api/search` (60/min limit) returned **zero `429`s** — all `200`.
+- Initial hypothesis (browser-tool network instability) was ruled out with a clean, single Node process test: `POST /api/loggers/auth`'s *already-shipped* `BUG-053` limiter (identical code pattern) correctly `429`'d starting on the 2nd sequential attempt — proving the pattern itself, and this test methodology, both work.
+- Same clean Node process then ran **70 sequential** (not parallel) requests against `/api/search` — still **zero `429`s**, all `200`.
+- Root cause: the earlier parallel burst against `/api/search` had already caused Vercel to scale that route to many warm instances; the sequential follow-up got load-balanced across that whole pool rather than reused on one, so no single instance's in-memory counter ever approached 60. `/api/loggers/auth` hadn't been burst-tested first, so it still had few warm instances and worked correctly.
+- **Conclusion:** this in-memory approach degrades exactly under the burst/scale traffic pattern it exists to catch, not merely on a cold start as originally documented. It still raises the bar against a naive single-connection scraper (and against `BUG-053`'s specific brute-force-login threat model, which doesn't involve high concurrency), but **it is not real protection against a real traffic spike or a parallel-capable attacker** — that needs a shared external store (Redis/Upstash), not module-level memory. `rate-limit.ts`'s own doc comment now states this plainly rather than the softer original framing.
+- **Shipped anyway, deliberately**, matching `BUG-053`'s own already-accepted precedent for this exact tradeoff: partial protection against the common case is still strictly better than the zero protection that existed before this session, and a full Redis-backed rewrite is real infra work outside this session's scope. Flagging clearly rather than quietly is the point of this entry — do not let "RESOLVED" read as "solved."
+
+**Evidence:** `tsc --noEmit` clean, no new errors. Live-tested against real deployed staging (`dev/verify-rate-limit-53.mjs`), not just code review — see the burst-test writeup above.
 
 **Found/Fixed:** session 53 continuation, 2026-08-20.
 
