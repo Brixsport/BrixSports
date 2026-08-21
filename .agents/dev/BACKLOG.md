@@ -8366,3 +8366,24 @@ Live-reproduced exactly as described: navigated to a real match's URL that had j
 **Found:** session 53 defer-list sequencing. **Fixed:** session 53, item 5, 2026-08-21.
 
 ---
+### Cloudinary Asset-Pipeline Standardization — Folder Convention + Legacy Team-Logo Migration
+
+**Status:** RESOLVED — 2026-08-21 (session 53, follow-on from item 5).
+
+**Trigger:** while wiring competition-logo uploads (item 5), Richard asked to check whether `teams.logo` was already storing the right (portable, CDN) path format. It wasn't — 26 real teams/colleges had local `public/assests/Logos/...` relative paths, some with spaces and typos (`"rim reapears.jpg"`, `"the storm.jpg"`), which is exactly the kind of thing that has caused matching bugs elsewhere in this project (`[[project_backfill_cumulative_recompute]]`-adjacent class of issue).
+
+**Convention decided (researched against Cloudinary's own docs first):** folders for structure (shallow, per entity type — `brixsports/teams/logos`, `brixsports/competitions/logos`, `brixsports/players/avatars`, `brixsports/news/images`, `brixsports/ads`), tags for cross-cutting search, explicitly **not** using Cloudinary "Collections" (that's a DAM UI feature for curated campaign-style groupings, the wrong tool for permanent app-managed structure).
+
+**Code changes:** `MobileImageUpload`/`ImageUpload` now accept an optional `folder` prop, threaded through all 4 existing admin upload sites (competitions, players, news, ads) — each writes into its own folder going forward.
+
+**Data migration:** all 26 real local team/college logos uploaded to Cloudinary with clean `public_id`s (the team's own `id`), `teams.logo` updated to the new `secure_url` on both staging and prod. The 208 placeholder teams with no logo were correctly left untouched (no logo to migrate). Original `public/` files left in place as a fallback, not deleted.
+
+**Also fixed:** `CLOUDINARY_CLOUD_NAME` (server-side signed-upload var) was empty in both env files — set to `brixsport` in both. Was silently masked by a `NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME` fallback, so nothing was actually broken, but it's now explicit rather than accidental.
+
+**Evidence:** `tsc --noEmit` — 47 errors, unchanged, zero new. Full before/after `teams` table scan on both DBs (26 local → 0 local, 26 cloudinary on each), plus a live `200` on one migrated URL.
+
+**Not done (explicitly out of scope for this pass):** no admin upload UI exists yet for team logos themselves (teams/[id] page is still display-only) — that's a separate, not-yet-built feature. News/highlight-photo folders are wired for *future* uploads only; there was no legacy static-asset backlog for those categories to migrate.
+
+**Found & fixed:** session 53, 2026-08-21, same session as item 5.
+
+---
