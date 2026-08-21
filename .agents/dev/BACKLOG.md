@@ -8346,7 +8346,7 @@ Live-reproduced exactly as described: navigated to a real match's URL that had j
 
 **Also added:** a `comparisonError` state + inline message, since the page previously had no error-surfacing path at all for a failed comparison fetch (including the new 400 case) — it would just silently stay on the empty-state prompt.
 
-**Evidence:** `tsc --noEmit` — 47 errors, unchanged, zero new in either touched file.
+**Evidence:** `tsc --noEmit` — 47 errors, unchanged, zero new in either touched file. Live-verified against deployed staging (`300f6e4`): real cross-sport pair (Victor Ememe/Football vs Jordan/Basketball) → `400` with the clear message, confirmed both via direct API `curl` and in the actual UI (renders the calm inline message, no crash, no "Higher Rated" tile visible). Real same-sport football pair → `200`, correct `betterGoalScorer`/`betterPlaymaker`/`moreExperienced` summary, no `higherRated` key present. Real same-sport basketball pair → `200`, correct `betterScorer`/`betterPlaymaker`/`betterRebounder` summary.
 
 **Found:** session 51 background audit (`BACKLOG-221`); the basketball tile-label bug found this session while fixing it. **Fixed:** session 53, item 4, 2026-08-21.
 
