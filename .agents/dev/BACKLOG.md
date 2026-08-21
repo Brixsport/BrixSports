@@ -8551,6 +8551,17 @@ Live-reproduced exactly as described: navigated to a real match's URL that had j
 
 **Found & fixed:** session 53, 2026-08-21. Commits: `11e87d3` (initial batch, failed deploy), `88aae22` (dynamic-rendering + metadataBase fix, deploy succeeded but sitemap 500'd), `0a6c252` (safeDate fix, fully working).
 
+**Now live on `main`:** the dev→main squash-merge (`08f6381`, 2026-08-21) brought this and everything else since 2026-07-06 onto production. See "Main-Branch Sync" entry below.
+
+---
+### Main-Branch Sync — 391-Commit Divergence Closed, Squash-Merged to `main`
+
+**Status:** RESOLVED — 2026-08-21 (session 53).
+
+`main` was 391 commits / ~6.5 weeks behind `dev` (last real update 2026-07-06), discovered while trying to PR item 21. Two-part resolution: (1) a scoped `git filter-branch --msg-filter` rewrite of main's 12-commit tip removed a pre-existing `Co-Authored-By: Claude` commit from mid-June (content verified byte-identical via empty `git diff`), `v0.1.0` tag deleted and recreated on the new tip since it pointed exactly at the rewritten range, force-pushed and verified clean; (2) `git merge --squash origin/dev` from `main`, resolving all 10 real conflicts individually (docs took dev's version as a confirmed stale-prefix, `.gitignore` union-merged, service workers were comment-only, `matches/[id]/page.tsx` took dev's thin-wrapper version paired with the already-staged `MatchDetailClient.tsx`), full 303-file diff reviewed for secrets/unintended deletions before committing. Committed clean (no `Co-Authored-By`), pushed direct to `main` per Richard's explicit choice over opening a PR (given CLAUDE.md's stated 2-review policy, asked directly rather than assumed). `main` now at `08f6381`.
+
+**Side finding, not part of this item's scope:** GitHub's push output reported 102 Dependabot vulnerabilities on `main` (2 critical, 49 high, 46 moderate, 5 low) — pre-existing in the dependency tree, not introduced by this merge. Flagged to Richard, not investigated further this session.
+
 ---
 ### 126 Corrupted Timestamp Rows (`matches.updated_at` x33, `players.created_at` x93) — Found, Defended Against in One Place, Not Backfilled
 
