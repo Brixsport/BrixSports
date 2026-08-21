@@ -40,6 +40,7 @@ function PlayerCompareContent() {
     const [player2, setPlayer2] = useState<any>(null);
     const [comparisonData, setComparisonData] = useState<any>(null);
     const [loading, setLoading] = useState(false);
+    const [comparisonError, setComparisonError] = useState<string | null>(null);
 
     const [searchQuery1, setSearchQuery1] = useState('');
     const [searchQuery2, setSearchQuery2] = useState('');
@@ -91,22 +92,30 @@ function PlayerCompareContent() {
 
             // Fetch Comparison if both present
             if (shouldFetchComparison) {
+                setComparisonError(null);
                 try {
                     const res = await fetch(`/api/players/compare?player1=${player1Id}&player2=${player2Id}`);
+                    const data = await res.json();
                     if (res.ok) {
-                        const data = await res.json();
                         setComparisonData(data);
                         // Update with enriched data from comparison endpoint
                         setPlayer1(data.player1);
                         setPlayer2(data.player2);
+                    } else {
+                        // BACKLOG-221: the API now rejects a cross-sport comparison (400) --
+                        // surface that plainly instead of silently staying on the empty state.
+                        setComparisonData(null);
+                        setComparisonError(data.error || 'Could not compare these players.');
                     }
                 } catch (error) {
                     console.error('Error fetching comparison:', error);
+                    setComparisonError('Something went wrong loading this comparison. Please try again.');
                 } finally {
                     setLoading(false);
                 }
             } else {
                 setComparisonData(null);
+                setComparisonError(null);
                 setLoading(false);
             }
         };
@@ -308,6 +317,16 @@ function PlayerCompareContent() {
                             <div className="w-16 h-16 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4" />
                             <p className="text-white/60">Loading comparison...</p>
                         </motion.div>
+                    ) : comparisonError ? (
+                        <motion.div
+                            key="comparison-error"
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            className="text-center py-20"
+                        >
+                            <p className="text-white/60">{comparisonError}</p>
+                        </motion.div>
                     ) : hasComparison ? (
                         <motion.div
                             key="comparison"
@@ -321,37 +340,61 @@ function PlayerCompareContent() {
                                 sport={comparisonData.player1.team?.sport || 'Football'}
                             />
 
-                            {/* Summary */}
+                            {/* Summary -- BACKLOG-221: this used to always render the football-shaped
+                                tiles (betterGoalScorer/moreExperienced) regardless of sport, so a
+                                basketball comparison showed blank tiles for fields the API never sets
+                                for that sport (it sets betterScorer/betterRebounder instead). Also
+                                dropped "Higher Rated" -- it read players.rating, a field that's never
+                                live-updated (defaults to 7.0), so the API no longer sends it. */}
                             {comparisonData.summary && (
                                 <div className="mt-8 bg-white/5 border border-white/10 rounded-[32px] p-6">
                                     <h3 className="text-sm font-black uppercase tracking-widest text-white/60 mb-4">
                                         Comparison Summary
                                     </h3>
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                                        <div className="flex items-center justify-between p-3 bg-white/5 rounded-xl">
-                                            <span className="text-white/60">Better Goal Scorer</span>
-                                            <span className="font-bold text-primary">
-                                                {comparisonData.summary.betterGoalScorer}
-                                            </span>
-                                        </div>
-                                        <div className="flex items-center justify-between p-3 bg-white/5 rounded-xl">
-                                            <span className="text-white/60">Better Playmaker</span>
-                                            <span className="font-bold text-primary">
-                                                {comparisonData.summary.betterPlaymaker}
-                                            </span>
-                                        </div>
-                                        <div className="flex items-center justify-between p-3 bg-white/5 rounded-xl">
-                                            <span className="text-white/60">More Experienced</span>
-                                            <span className="font-bold text-primary">
-                                                {comparisonData.summary.moreExperienced}
-                                            </span>
-                                        </div>
-                                        <div className="flex items-center justify-between p-3 bg-white/5 rounded-xl">
-                                            <span className="text-white/60">Higher Rated</span>
-                                            <span className="font-bold text-primary">
-                                                {comparisonData.summary.higherRated}
-                                            </span>
-                                        </div>
+                                        {(comparisonData.player1.team?.sport || 'Football') === 'Basketball' ? (
+                                            <>
+                                                <div className="flex items-center justify-between p-3 bg-white/5 rounded-xl">
+                                                    <span className="text-white/60">Better Scorer</span>
+                                                    <span className="font-bold text-primary">
+                                                        {comparisonData.summary.betterScorer}
+                                                    </span>
+                                                </div>
+                                                <div className="flex items-center justify-between p-3 bg-white/5 rounded-xl">
+                                                    <span className="text-white/60">Better Playmaker</span>
+                                                    <span className="font-bold text-primary">
+                                                        {comparisonData.summary.betterPlaymaker}
+                                                    </span>
+                                                </div>
+                                                <div className="flex items-center justify-between p-3 bg-white/5 rounded-xl">
+                                                    <span className="text-white/60">Better Rebounder</span>
+                                                    <span className="font-bold text-primary">
+                                                        {comparisonData.summary.betterRebounder}
+                                                    </span>
+                                                </div>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <div className="flex items-center justify-between p-3 bg-white/5 rounded-xl">
+                                                    <span className="text-white/60">Better Goal Scorer</span>
+                                                    <span className="font-bold text-primary">
+                                                        {comparisonData.summary.betterGoalScorer}
+                                                    </span>
+                                                </div>
+                                                <div className="flex items-center justify-between p-3 bg-white/5 rounded-xl">
+                                                    <span className="text-white/60">Better Playmaker</span>
+                                                    <span className="font-bold text-primary">
+                                                        {comparisonData.summary.betterPlaymaker}
+                                                    </span>
+                                                </div>
+                                                <div className="flex items-center justify-between p-3 bg-white/5 rounded-xl">
+                                                    <span className="text-white/60">More Experienced</span>
+                                                    <span className="font-bold text-primary">
+                                                        {comparisonData.summary.moreExperienced}
+                                                    </span>
+                                                </div>
+                                            </>
+                                        )}
                                     </div>
                                 </div>
                             )}

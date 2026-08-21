@@ -8333,3 +8333,21 @@ Live-reproduced exactly as described: navigated to a real match's URL that had j
 **Found:** Richard, session 53, item 2 of the resequenced defer list, 2026-08-21. **Fixed:** same session.
 
 ---
+
+### ~~BACKLOG-221~~ — Player Comparison: Same-Sport Guard + Dead Rating Field, Plus a Real Basketball Display Bug Found Alongside It
+
+**Status:** RESOLVED — 2026-08-21 (session 53, item 4 of the resequenced defer list).
+
+**Fix 1 — same-sport guard:** `src/app/api/players/compare/route.ts` now rejects (`400`) if the two players' resolved sports differ, before running any comparison — `{ error: "Cannot compare players from different sports (Football vs Basketball)" }`.
+
+**Fix 2 — dropped the dead `higherRated` field:** it read `players.rating`, which defaults to `7.0` and is never live-updated (`.agents/dev/BACKSCOPE.md:287`). Removed from both sport branches of the API's `summary` object rather than continuing to ship a tile that wasn't showing real data.
+
+**Real bug found and fixed alongside it, not previously filed:** `src/app/players/compare/page.tsx`'s summary tiles always rendered the football-shaped labels (`betterGoalScorer`/`moreExperienced`) regardless of which sport was being compared — a basketball comparison would show blank tiles for fields the API never actually sets for that sport (it sets `betterScorer`/`betterRebounder` instead). Fixed by branching the tile set on `comparisonData.player1.team?.sport`, matching what the API actually returns per sport.
+
+**Also added:** a `comparisonError` state + inline message, since the page previously had no error-surfacing path at all for a failed comparison fetch (including the new 400 case) — it would just silently stay on the empty-state prompt.
+
+**Evidence:** `tsc --noEmit` — 47 errors, unchanged, zero new in either touched file.
+
+**Found:** session 51 background audit (`BACKLOG-221`); the basketball tile-label bug found this session while fixing it. **Fixed:** session 53, item 4, 2026-08-21.
+
+---
