@@ -38,7 +38,8 @@ export async function GET(request: NextRequest) {
                         eq(matches.status, 'UPCOMING')
                     )
                 )
-            );
+            )
+            .limit(50);
 
         // Filter by time and fetch team details
         const activeStreamsWithTeams = await Promise.all(

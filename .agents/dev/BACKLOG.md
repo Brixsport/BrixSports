@@ -8062,6 +8062,33 @@ Everything below is explicitly **not** being built now — captured from `NOTIFI
 
 ---
 
+### Livestream Feature Audit (Item 9) — How It Currently Works, and the Admin URL-Field-Placement Question
+
+**Status:** Audit complete, one real bug found and fixed (`BUG-229`), session 53 continuation, 2026-08-20
+**Context:** Richard asked directly how livestream currently works and where the URL field lives in the admin match modal (never landed as its own filed question — asked mid-session, answered here).
+
+**How it actually works, end to end:**
+1. **Schema**: `matches` carries `livestreamUrl`/`Type`/`Enabled`/`StartTime`/`EndTime`/`Viewers`/`ChatEnabled`/`ChatUrl` directly — no separate livestream table.
+2. **Admin write path — two separate surfaces, not one**: `/admin/matches` (match create/edit modal) has **no livestream UI at all** — `livestreamEnabled: false` is only a hardcoded default in the form's initial state, never exposed as an input. The actual livestream form (URL, type, enabled, chat, start/end time) lives entirely on a **separate dedicated page**, `/admin/livestreams` (`src/app/admin/livestreams/page.tsx`), which lists `UPCOMING`/`LIVE` matches and lets the admin pick one to configure via `PATCH /api/matches/[id]/livestream`.
+3. **The URL-field-placement answer**: the field isn't missing, it's just on a different page than you'd naturally expect if you're already in the match-creation modal. `/admin/livestreams` **is** linked in the admin sidebar nav (`AdminSidebar.tsx:24`, admin-only), so it's not orphaned/undiscoverable — but the match modal itself has zero link or hint pointing there, so an admin creating a match has no in-context nudge that livestream setup is a separate step. This is a real, minor discoverability gap, not a bug — **left as a UX call for Richard**, not fixed unilaterally: either (a) leave as-is (arguably fine — a match usually gets created well before its livestream URL is known, so a separate later-step page is a reasonable real workflow), or (b) add a small "Manage Livestream →" link on each match row in `/admin/matches` pointing to `/admin/livestreams?matchId=X` once the match exists.
+4. **Public read path**: `LiveNowSection.tsx` (homepage widget) and `livestream/[id]/page.tsx` fetch `GET /api/livestreams/active` / `GET /api/matches/[id]/livestream` and render `LivestreamPlayer.tsx`, which embeds via iframe.
+5. **Security posture — already hardened, prior sessions**: `BACKLOG-168` (this route's `PATCH` used to hand-roll `jwt.verify()` against the raw token, not `getAuthUser()` — fixed session 47F) and `BACKLOG-212` item 7 (an admin could paste an arbitrary `custom`/`hls`/`dash` URL and have it embedded with `allow-scripts`/`allow-forms`/`allow-popups` iframe permissions — fixed with `src/lib/livestream-allowlist.ts`, an explicit embed-host allowlist checked server-side on write). Both confirmed still in place, still correct, this session.
+
+**`BUG-229` — `GET /api/livestreams/active` Had No `.limit()` Clause (New Finding)**
+
+**Status:** RESOLVED — 2026-08-20 (session 53 continuation)
+**Priority:** Medium — real, direct violation of `CLAUDE.md`'s "every list endpoint MUST have a `.limit()` clause" rule; not in the existing `BACKLOG-169` unbounded-query list (a genuinely new find, not a re-catalog), and this one is **public, unauthenticated** — no auth check anywhere in the file.
+
+**Problem:** `src/app/api/livestreams/active/route.ts`'s `matches` query (`WHERE livestreamEnabled = true AND status IN (LIVE, UPCOMING)`) had no `.limit()` at all — an unbounded public read, plus an N+1 pattern fetching `homeTeam`/`awayTeam` in a `Promise.all` loop per row (noted, not fixed — real row counts here are inherently small and bounded by "currently live or upcoming with streaming on," a fundamentally different growth shape than e.g. a full match/player list, so the N+1 isn't the urgent part of this finding).
+
+**Fix:** added `.limit(50)` to the query, matching the ceiling this codebase already uses elsewhere (`players/search/route.ts`'s `Math.min(Math.max(1, parsed), 50)`).
+
+**Evidence:** `tsc --noEmit` — 48 errors, unchanged from pre-fix baseline, zero new.
+
+**Found:** session 53 continuation, 2026-08-20, during item 9's livestream audit. **Fixed:** same session.
+
+---
+
 ### ~~BUG-227~~ — `BasketballLogger.tsx`'s Start Match Button Flipped Local State Before the Server Confirmed the Write, and Silently Swallowed a Failed Persisted-Lineup Fetch
 
 **Status:** RESOLVED — 2026-08-20 (session 53 continuation), live click-tested against a real throwaway match on the local dev server
