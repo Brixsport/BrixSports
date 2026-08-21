@@ -16,7 +16,7 @@ import type { NotificationKey } from './notification-rules';
 // verification passes). Best-effort: a logging failure must never break the
 // actual notification send, so this never throws into its caller.
 export async function logNotificationSend(entry: {
-    source: 'match_event' | 'match_reminder' | 'campaign';
+    source: 'match_event' | 'match_reminder' | 'campaign' | 'lineup_not_published';
     matchId?: string | null;
     eventType?: string | null;
     targetAudience?: string | null;
@@ -158,12 +158,33 @@ export async function sendMatchEventNotification(event: MatchEventNotification):
                 )
             : [];
 
+        // Item 10: users who follow either player involved in this event. `playerId`/
+        // `relatedPlayerId` were added to this interface in an earlier session
+        // specifically so this query wouldn't require touching every call site again --
+        // there is currently no UI/API to actually create a `followType: 'player'` row
+        // (deliberately deferred, per the roadmap doc), so this is dead-but-ready until
+        // that feature ships, same query-time-join architecture as the other follow types.
+        const playerIds = [event.playerId, event.relatedPlayerId].filter((id): id is string => !!id);
+        const playerFollowers = playerIds.length > 0
+            ? await db
+                .select({ userId: userFollows.userId })
+                .from(userFollows)
+                .where(
+                    and(
+                        eq(userFollows.followType, 'player'),
+                        inArray(userFollows.followId, playerIds),
+                        eq(userFollows.notificationsEnabled, true)
+                    )
+                )
+            : [];
+
         // Combine and deduplicate user IDs
         const potentialUserIds = Array.from(new Set([
             ...teamFollowers.map(f => f.userId),
             ...teamFavorites.map(f => f.userId),
             ...primaryTeamFans.map(f => f.userId),
-            ...competitionFollowers.map(f => f.userId)
+            ...competitionFollowers.map(f => f.userId),
+            ...playerFollowers.map(f => f.userId)
         ]));
 
         // Filter out users who have disabled matchAlerts in their preferences
