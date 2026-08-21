@@ -29,6 +29,7 @@ export const env = {
 
     // Monitoring
     sentryDsn: process.env.NEXT_PUBLIC_SENTRY_DSN ?? '',
+    gaMeasurementId: process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID ?? '',
 
     // Media
     cloudinaryCloud: process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME ?? '',

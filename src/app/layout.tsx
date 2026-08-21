@@ -12,6 +12,9 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import { AuthModal } from "@/components/auth/AuthModal";
 import { SocketProvider } from "@/hooks/useWebSocket";
 import AdBanner from "@/components/ads/AdBanner";
+import { env } from "@/lib/env";
+import { Analytics } from "@vercel/analytics/react";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 
 export const metadata: Metadata = {
   title: {
@@ -89,10 +92,13 @@ export const metadata: Metadata = {
     statusBarStyle: "black-translucent",
     title: "BRIXSPORTS",
   },
-  other: {
-    'google-site-verification': 'googlefd0ce86c5ed02ba9.html',
-    'msvalidate.01': '',
-  },
+  // Search Console ownership is already verified via the file-based method
+  // (public/googlefd0ce86c5ed02ba9.html) -- the meta-tag method is a separate,
+  // independent verification path and its `content` value must be a real HTML-tag
+  // verification *token*, not this filename (BACKLOG-189). Removed rather than left
+  // stuffed with the wrong value; add back a real token if the meta-tag method is
+  // ever specifically wanted. `msvalidate.01` (Bing) was a bare empty string --
+  // also removed rather than shipping a token-shaped field with no token.
 };
 
 export const viewport: Viewport = {
@@ -220,6 +226,26 @@ export default function RootLayout({
         />
       </head>
       <body className="antialiased">
+        {/* GA4 -- BACKLOG-189: analytics was never wired at all, zero pageview or
+            event tracking anywhere. Gated on the env var so local/staging builds
+            (which don't set NEXT_PUBLIC_GA_MEASUREMENT_ID) never pollute production
+            analytics with dev traffic. */}
+        {env.gaMeasurementId && (
+          <>
+            <Script
+              src={`https://www.googletagmanager.com/gtag/js?id=${env.gaMeasurementId}`}
+              strategy="afterInteractive"
+            />
+            <Script id="ga4-init" strategy="afterInteractive">
+              {`
+                window.dataLayer = window.dataLayer || [];
+                function gtag(){dataLayer.push(arguments);}
+                gtag('js', new Date());
+                gtag('config', '${env.gaMeasurementId}');
+              `}
+            </Script>
+          </>
+        )}
         <ErrorReporter />
         <ThemeProvider>
           <PWAProvider swPath="/sw-user.js">
@@ -239,6 +265,11 @@ export default function RootLayout({
             </SessionProvider>
           </PWAProvider>
         </ThemeProvider>
+        {/* Vercel Analytics (pageviews/engagement) + Speed Insights (real-user Core
+            Web Vitals) -- both are inert no-ops when not running on Vercel, no env
+            gating needed unlike GA4 above. */}
+        <Analytics />
+        <SpeedInsights />
       </body>
     </html>
   );
