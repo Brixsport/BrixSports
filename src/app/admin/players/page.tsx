@@ -539,6 +539,7 @@ function AdminPlayersPageContent() {
                                             <ImageUpload
                                                 value={formData.image || ''}
                                                 onChange={url => setFormData({ ...formData, image: url })}
+                                                folder="brixsports/players/avatars"
                                             />
                                             <div>
                                                 <label className="block text-[10px] font-black uppercase tracking-widest text-white/40 mb-2 italic">Image URL (Manual Override)</label>

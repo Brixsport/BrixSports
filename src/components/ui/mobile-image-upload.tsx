@@ -14,6 +14,7 @@ interface MobileImageUploadProps {
   allowedFormats?: string[];
   className?: string;
   showPreview?: boolean;
+  folder?: string;
   onUploadStart?: () => void;
   onUploadSuccess?: (url: string) => void;
   onUploadError?: (error: any) => void;
@@ -28,6 +29,7 @@ export default function MobileImageUpload({
   allowedFormats = ['jpg', 'jpeg', 'png', 'webp'],
   className = '',
   showPreview = true,
+  folder,
   onUploadStart,
   onUploadSuccess,
   onUploadError,
@@ -142,6 +144,7 @@ export default function MobileImageUpload({
     showSkipCropButton: false,
     showPoweredBy: false,
     theme: 'minimal',
+    ...(folder ? { folder } : {}),
     text: {
       'gui.v2.main.apply': 'Apply',
       'gui.v2.main.cancel': 'Cancel',

@@ -134,6 +134,7 @@ function CompetitionModal({ mode, initialData, initialMatchSettings, onSubmit, o
                                 aspectRatio="square"
                                 maxSize={2}
                                 className="w-32 h-32"
+                                folder="brixsports/competitions/logos"
                             />
                         </div>
 

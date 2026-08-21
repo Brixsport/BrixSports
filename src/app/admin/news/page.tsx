@@ -781,6 +781,7 @@ function EnhancedNewsEditor({ formData, setFormData, onSubmit, onClose, isEditin
                                 value={formData.imageUrl}
                                 onChange={(url) => setFormData({ ...formData, imageUrl: url })}
                                 onRemove={() => setFormData({ ...formData, imageUrl: '' })}
+                                folder="brixsports/news/images"
                             />
                         </div>
 

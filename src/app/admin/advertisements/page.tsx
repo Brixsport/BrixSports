@@ -380,6 +380,7 @@ function AdvertisementsAdminContent() {
                       onChange={(url) => setFormData({ ...formData, imageUrl: url })}
                       aspectRatio="video"
                       maxSize={5}
+                      folder="brixsports/ads"
                       className="w-full h-48"
                       showPreview={true}
                     />
