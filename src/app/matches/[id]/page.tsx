@@ -297,13 +297,23 @@ export default function MatchDetailPage() {
     }, [isConnected, matchData?.match?.status]);
 
     // Listen for score updates
+    // BUG-235 (cross-session sweep, MEDIUM): this effect used to depend on the full
+    // matchData object, which nearly every other effect in this component mutates --
+    // every score update / event append / poll merge tore down and re-registered all
+    // 4 socket listeners on the app's single highest-traffic page. Not a correctness
+    // bug (off/on are synchronous, no gap), but needless churn. Each handler's
+    // "is there data yet" check now lives inside its own setMatchData(prev => ...)
+    // updater (which always sees the latest state regardless of closure staleness),
+    // so the effect no longer needs matchData in its dependency array at all.
     useEffect(() => {
         const handleScoreUpdate = (data: any) => {
-            if (data.matchId === matchId && matchData) {
-                setMatchData(prev => ({
-                    ...prev!,
+            if (data.matchId !== matchId) return;
+            setMatchData(prev => {
+                if (!prev) return prev;
+                return {
+                    ...prev,
                     match: {
-                        ...prev!.match,
+                        ...prev.match,
                         homeScore: data.homeScore,
                         awayScore: data.awayScore,
                         // BACKLOG-105: optional -- only present on a shootout kick broadcast,
@@ -311,20 +321,16 @@ export default function MatchDetailPage() {
                         ...(data.shootoutHomeScore !== undefined ? { shootoutHomeScore: data.shootoutHomeScore } : {}),
                         ...(data.shootoutAwayScore !== undefined ? { shootoutAwayScore: data.shootoutAwayScore } : {}),
                     },
-                }));
-            }
+                };
+            });
         };
 
         const handleStatusChange = (data: any) => {
-            if (data.matchId === matchId && matchData) {
-                setMatchData(prev => ({
-                    ...prev!,
-                    match: {
-                        ...prev!.match,
-                        status: data.status,
-                    },
-                }));
-            }
+            if (data.matchId !== matchId) return;
+            setMatchData(prev => {
+                if (!prev) return prev;
+                return { ...prev, match: { ...prev.match, status: data.status } };
+            });
         };
 
         // BUG-153: match:score:updated/match:status:changed are dead client-emit
@@ -336,7 +342,7 @@ export default function MatchDetailPage() {
         // above rather than removing them -- harmless no-ops today, and free
         // insurance if that emit-name bug is ever fixed at the source instead.
         const handleMatchUpdate = (data: any) => {
-            if (data.matchId !== matchId || !matchData) return;
+            if (data.matchId !== matchId) return;
             setMatchData(prev => {
                 if (!prev) return prev;
                 const nextMatch: any = { ...prev.match };
@@ -377,7 +383,7 @@ export default function MatchDetailPage() {
             off('match:updated', handleMatchUpdate);
             off('event:deleted', handleEventDeleted);
         };
-    }, [matchId, matchData, on, off]);
+    }, [matchId, on, off]);
 
     const fetchMatchData = async (silent = false) => {
         try {

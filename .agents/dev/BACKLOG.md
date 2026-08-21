@@ -8283,3 +8283,17 @@ Live-reproduced exactly as described: navigated to a real match's URL that had j
 **Found:** Richard, live, session 53, 2026-08-21. **Fixed:** same session.
 
 ---
+
+### Cross-Session Sweep — 2 MEDIUM Findings Fixed (`transferPlayerToTeam` Transaction, Socket-Listener Churn)
+
+**Status:** RESOLVED — 2026-08-21 (session 53), the remaining two findings from the same cross-session `feature`+`code-reviewer` sweep that produced `BUG-235`'s two CRITICAL fixes.
+
+**Finding 1 — `transferPlayerToTeam()` not transactional:** `src/lib/rosterService.ts` closed the player's old affiliation and wrote/updated the new one as two independent statements with no enclosing transaction and no try/catch of its own — a failure between the two left a player with zero active affiliation of that type, silently, no rollback path. **Fix:** wrapped both writes in `db.transaction(async (tx) => {...})`, same shape as `BUG-121`'s existing transaction around the score-race path. The caller (`src/app/api/admin/players/[playerId]/transfer/route.ts`) already had its own try/catch for HTTP-response shaping — unaffected, still correctly returns the right status codes.
+
+**Finding 2 — socket-listener churn on the live match page:** `src/app/matches/[id]/page.tsx`'s WS-listener effect depended on the full `matchData` object, which nearly every other effect in this component mutates (every score update, event append, poll merge) — tearing down and re-registering 4 socket listeners on the app's single highest-traffic page on every one of those. Not a correctness bug (`off`/`on` are synchronous, no gap), but needless churn. **Fix:** moved each handler's "is there data yet" check inside its own `setMatchData(prev => ...)` updater (which always sees the latest state regardless of closure staleness, unlike the outer `matchData` variable), removing `matchData` from the effect's dependency array entirely — it now only depends on `[matchId, on, off]`.
+
+**Evidence:** `tsc --noEmit` — 47 errors, unchanged from baseline, zero new in either touched file (one stale `.next/types` artifact appeared transiently from a leftover generated-types file, unrelated to source, cleaned).
+
+**Found:** cross-session `feature`+`code-reviewer` sweep agent, session 53 (same pass as `BUG-235`). **Fixed:** session 53, 2026-08-21.
+
+---

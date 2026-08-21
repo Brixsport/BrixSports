@@ -94,44 +94,55 @@ export async function transferPlayerToTeam(
 
     const now = new Date();
 
-    if (currentAffiliation && currentAffiliation.teamId !== newTeamId) {
-        await db
-            .update(playerTeamAffiliations)
-            .set({ isActive: false, endDate: now })
-            .where(eq(playerTeamAffiliations.id, currentAffiliation.id));
-    }
-
+    // BUG-235 (cross-session sweep, MEDIUM): these two writes used to be independent,
+    // non-transactional statements with no try/catch of their own -- a failure between
+    // closing the old affiliation and writing the new one left a player with zero
+    // active affiliation of that type, silently, and no rollback path existed.
+    // Same fix shape as BUG-121's transaction around the score-race path.
     let newAffiliationId: string;
     if (existingSeasonRow) {
         newAffiliationId = existingSeasonRow.id;
-        await db
-            .update(playerTeamAffiliations)
-            .set({
-                isActive: true,
-                isPrimary: true,
-                endDate: null,
-                startDate: now,
-                jerseyNumber: options.jerseyNumber ?? null,
-                position: options.position ?? null,
-            })
-            .where(eq(playerTeamAffiliations.id, existingSeasonRow.id));
     } else {
         newAffiliationId = nanoid();
-        await db.insert(playerTeamAffiliations).values({
-            id: newAffiliationId,
-            playerId,
-            teamId: newTeamId,
-            affiliationType,
-            isPrimary: true,
-            isActive: true,
-            startDate: now,
-            season: CURRENT_SEASON,
-            jerseyNumber: options.jerseyNumber ?? null,
-            position: options.position ?? null,
-            nicknames: '[]',
-            createdAt: now,
-        });
     }
+
+    await db.transaction(async (tx) => {
+        if (currentAffiliation && currentAffiliation.teamId !== newTeamId) {
+            await tx
+                .update(playerTeamAffiliations)
+                .set({ isActive: false, endDate: now })
+                .where(eq(playerTeamAffiliations.id, currentAffiliation.id));
+        }
+
+        if (existingSeasonRow) {
+            await tx
+                .update(playerTeamAffiliations)
+                .set({
+                    isActive: true,
+                    isPrimary: true,
+                    endDate: null,
+                    startDate: now,
+                    jerseyNumber: options.jerseyNumber ?? null,
+                    position: options.position ?? null,
+                })
+                .where(eq(playerTeamAffiliations.id, existingSeasonRow.id));
+        } else {
+            await tx.insert(playerTeamAffiliations).values({
+                id: newAffiliationId,
+                playerId,
+                teamId: newTeamId,
+                affiliationType,
+                isPrimary: true,
+                isActive: true,
+                startDate: now,
+                season: CURRENT_SEASON,
+                jerseyNumber: options.jerseyNumber ?? null,
+                position: options.position ?? null,
+                nicknames: '[]',
+                createdAt: now,
+            });
+        }
+    });
 
     return {
         success: true,
