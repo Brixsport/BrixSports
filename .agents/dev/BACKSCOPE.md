@@ -291,3 +291,13 @@ Grep for `BACKSCOPED: 2026-06-08` to find all comment-out markers in source.
 **What's missing to actually stabilize (if kept live) or reinstate cleanly (if backscoped later):** the `BUG-037` auth fix, a sport filter on the player picker, and either wiring the rating to something real or dropping the rating display entirely.
 
 **Decision:** deferred — noted here per Richard's explicit request, no `notFound()` applied, no functionality removed.
+
+---
+
+## Account Deletion — No Mechanism Exists (NDPR Gap)
+
+**Flagged:** 2026-08-21 (session 53) — Richard's own call, surfaced while reviewing a user-facing form.
+**Current state:** no account-deletion path exists anywhere in the app — not self-service, not admin-mediated. Confirmed by context, not yet independently re-verified via a dedicated grep this session.
+**Why it matters:** NDPR (Nigeria Data Protection Regulation) — like most privacy regimes BrixSports' peers operate under — expects a way for a user to request deletion of their data, even if that path is manual/contact-based rather than a self-service button.
+**Not a blocker for anything in flight** — doesn't need to gate the form or feature it was noticed alongside. Filed here as a real gap to eventually close: at minimum, a documented contact-based deletion process (e.g. "email privacy@brixsports.com to request deletion, admin fulfills manually"); a self-service delete-account flow would be the fuller fix.
+**Decision:** deferred — noted here, no code changed, no functionality blocked.
