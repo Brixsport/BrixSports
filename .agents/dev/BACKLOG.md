@@ -8244,3 +8244,21 @@ Everything below is explicitly **not** being built now — captured from `NOTIFI
 **Found:** cross-session `feature`+`code-reviewer` sweep agent, session 53. **Fixed:** same session, 2026-08-21.
 
 ---
+
+### BUG-083 — Item 17: Live Visual Re-Confirmation (Event Type String Mismatch — OWN GOAL Score Crediting)
+
+**Status:** RESOLVED, both code fix and visual re-confirmation now complete — 2026-08-21 (session 53, item 17 of the resequenced defer list).
+**Priority:** Medium — the code fix itself shipped long ago (`efb0081`, session 38D); this closes the "can't be visually observed" gap noted in `ARCHITECTURE.md`'s Known Structural Gaps table (corrected session 53 continuation, 2026-08-20) since every card event on staging at that time was a goals-only backfill row with `minute: -1`, hidden by `LiveMatchTimeline.tsx`'s own unrelated unknown-minute gate.
+
+**Verification, real data, real API, real UI — not code trace alone:**
+- Built a throwaway LIVE match (`bug083-visual-verify-53`, real teams `busa-joga`/`busa-wolves`, real `BUSA LEAGUE FOOTBALL` competition) via `dev/setup-bug083-visual-verify-53.mjs`.
+- `POST /api/matches/[id]/events` against real staging with `{ type: 'Own Goal', minute: 34, teamId: 'busa-wolves', playerId: <real TOJU> }` — `type: 'Own Goal'` is the exact title-case, space-separated string `FootballLogger.tsx:1861` actually sends, the precise shape `BUG-083`'s case-normalization fix (`.toUpperCase().replace(/\s+/g, '_')`) has to handle correctly.
+- **DB-confirmed:** `matches.home_score` (busa-joga, the opposing team) went to `1`, `away_score` (busa-wolves, the scoring player's own team) stayed `0` — own goal correctly credited the opposing side, not the scorer's own team. `football_player_stats.own_goals` = `1` for the real player, correctly scoped to `season='2025/2026'`, `competitionId='xm1OcBFeugKxLDHH6Xi6p'` — this row also incidentally re-proves `BUG-235`'s new atomic-upsert `updatePlayerStats()` rewrite works correctly for a real `OWN_GOAL` event end-to-end (fresh insert path, confirmed via the row's `stats_`-prefixed id and every other field at `0`).
+- **Visually confirmed** via the actual public match page (`brixsports-staging.vercel.app/matches/bug083-visual-verify-53`), Timeline tab: rendered **"34' Own Goal by TOJU, Wolves FC"** — the minute-based unknown-minute gate does not hide it (minute is a real value, not `-1`/`null`), and the event-type label renders correctly (not blank/mislabeled), confirming the case-normalization fix genuinely works end-to-end, not just in isolated code trace.
+- **Minor, unrelated cosmetic note, not chased down**: the Timeline's period-group header showed "FIRST HALF" for a minute-34 event even though the match's live `currentPeriod` was `SECOND_HALF` — `LiveMatchTimeline.tsx` appears to bucket the header by minute range rather than the match's actual period state. Out of scope for `BUG-083` itself; noting for a future pass, not filing separately given its low severity (cosmetic grouping label only, does not affect the event itself rendering correctly).
+
+**Cleanup:** throwaway match, its one event, and the freshly-created stats row all deleted via `dev/cleanup-bug083-visual-verify-53.mjs`, confirmed via post-delete `COUNT(*) = 0`. Verified the deleted stats row had no pre-existing real history before deleting (every field was `0` except the one `own_goals: 1` this test itself wrote) — did not risk destroying real player data.
+
+**Found:** session 38D (original bug), re-flagged as "visual confirmation open" session 53 continuation 2026-08-20. **Fixed & fully verified:** session 53, item 17, 2026-08-21.
+
+---

@@ -750,7 +750,7 @@ Ordered by operational risk to a live match day.
 | PATCH `[eventId]` body spread (BUG-093)    | Any field overwritable by authenticated user       | `events/[eventId]/route.ts:125` | OPEN   |
 | Score revert before event delete (BUG-094) | Delete fails → score permanently wrong             | `events/[eventId]/route.ts:216` | OPEN   |
 | `loggerId` in public events GET (BUG-095)  | Logger identity exposed to unauthenticated callers | `events/route.ts:38`            | OPEN   |
-| Event type string mismatch (BUG-083)       | OWN GOAL may not match → score not credited        | Multiple route files            | Code fix SHIPPED (`efb0081`, session 38D) — this row was stale. **Visual re-confirmation still genuinely open** (session 53 continuation, 2026-08-20): every card event currently on staging is a goals-only backfill row with no minute data, and `LiveMatchTimeline.tsx`'s own unrelated unknown-minute gate hides the whole timeline for those, so the fix can't be visually observed on any match presently in the DB — would need a throwaway admin-test match. See `BACKLOG.md` BUG-083. |
+| Event type string mismatch (BUG-083)       | OWN GOAL may not match → score not credited        | Multiple route files            | **RESOLVED, code fix + live visual confirmation both done** (`efb0081` session 38D; visually confirmed session 53, 2026-08-21). Real throwaway match, real `POST /api/matches/[id]/events` with `type: 'Own Goal'` (the exact string `FootballLogger.tsx` sends) and `minute: 34` against staging: Timeline tab correctly rendered "34' Own Goal by TOJU, Wolves FC", score correctly credited to the opposing team (1-0), `football_player_stats.own_goals` correctly incremented. See `BACKLOG.md` BUG-083. |
 
 ### Data Integrity
 
