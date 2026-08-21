@@ -202,29 +202,55 @@ export async function GET(
             }
         }
 
-        // Basketball-specific stats from specialized table
+        // Basketball-specific stats from specialized table -- CURRENT_SEASON only.
+        // A player has one row per (season, competition), so an unfiltered .get()
+        // would return an arbitrary row the moment a second season's stats exist
+        // (dormant today -- staging has zero multi-season players yet -- but not
+        // once a new season starts, which is exactly when this would surface).
+        // Summed across rows since a player can have multiple competitions in the
+        // same season.
         let basketballSeasonStats: any = null;
         if (playerSport === 'Basketball') {
-            const result = await db
+            const rows = await db
                 .select()
                 .from(basketballPlayerStats)
-                .where(eq(basketballPlayerStats.playerId, id))
-                .get();
-            if (result) {
-                basketballSeasonStats = result;
+                .where(and(eq(basketballPlayerStats.playerId, id), eq(basketballPlayerStats.season, CURRENT_SEASON)));
+            if (rows.length > 0) {
+                basketballSeasonStats = rows.reduce((acc, r) => ({
+                    gamesPlayed: (acc.gamesPlayed || 0) + (r.gamesPlayed || 0),
+                    minutesPlayed: (acc.minutesPlayed || 0) + (r.minutesPlayed || 0),
+                    totalPoints: (acc.totalPoints || 0) + (r.totalPoints || 0),
+                    fieldGoalsMade: (acc.fieldGoalsMade || 0) + (r.fieldGoalsMade || 0),
+                    threePointersMade: (acc.threePointersMade || 0) + (r.threePointersMade || 0),
+                    freeThrowsMade: (acc.freeThrowsMade || 0) + (r.freeThrowsMade || 0),
+                    offensiveRebounds: (acc.offensiveRebounds || 0) + (r.offensiveRebounds || 0),
+                    defensiveRebounds: (acc.defensiveRebounds || 0) + (r.defensiveRebounds || 0),
+                    totalRebounds: (acc.totalRebounds || 0) + (r.totalRebounds || 0),
+                    assists: (acc.assists || 0) + (r.assists || 0),
+                    turnovers: (acc.turnovers || 0) + (r.turnovers || 0),
+                    steals: (acc.steals || 0) + (r.steals || 0),
+                    blocks: (acc.blocks || 0) + (r.blocks || 0),
+                    personalFouls: (acc.personalFouls || 0) + (r.personalFouls || 0),
+                }), {} as any);
             }
         }
 
-        // Football-specific stats from specialized table
+        // Football-specific stats from specialized table -- same CURRENT_SEASON fix.
         let footballSeasonStats: any = null;
         if (playerSport === 'Football') {
-            const result = await db
+            const rows = await db
                 .select()
                 .from(footballPlayerStats)
-                .where(eq(footballPlayerStats.playerId, id))
-                .get();
-            if (result) {
-                footballSeasonStats = result;
+                .where(and(eq(footballPlayerStats.playerId, id), eq(footballPlayerStats.season, CURRENT_SEASON)));
+            if (rows.length > 0) {
+                footballSeasonStats = rows.reduce((acc, r) => ({
+                    appearances: (acc.appearances || 0) + (r.appearances || 0),
+                    minutesPlayed: (acc.minutesPlayed || 0) + (r.minutesPlayed || 0),
+                    goals: (acc.goals || 0) + (r.goals || 0),
+                    assists: (acc.assists || 0) + (r.assists || 0),
+                    yellowCards: (acc.yellowCards || 0) + (r.yellowCards || 0),
+                    redCards: (acc.redCards || 0) + (r.redCards || 0),
+                }), {} as any);
             }
         }
 

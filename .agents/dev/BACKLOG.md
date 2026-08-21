@@ -8455,3 +8455,41 @@ Live-reproduced exactly as described: navigated to a real match's URL that had j
 **Found & fixed:** session 53, 2026-08-21.
 
 ---
+### Player Season-Stats Query Was Season-Blind (Dormant Until a Second Season Exists)
+
+**Status:** RESOLVED — 2026-08-21 (session 53).
+
+**Trigger:** Richard asked directly whether the system already filters displayed stats to the current season once a new season starts. It didn't.
+
+**Root cause:** `football_player_stats`/`basketball_player_stats` are keyed `(playerId, season, competitionId)` — a player can have multiple rows, one per season (and per competition within a season). But `src/app/api/players/[id]/route.ts`'s query for these tables filtered *only* by `playerId`, with no season/competition awareness, using `.get()` (first row SQLite hands back, no `ORDER BY`) as if only one row could ever exist. The public player page's "Season Stats" heading wasn't backed by an actual season filter or selector.
+
+**Why this hadn't surfaced yet:** checked the real staging DB directly — zero players currently have more than one season row, so the query has been working by accident so far. It would have broken the moment any player's second-season stats started accumulating, which is exactly the scenario about to become real.
+
+**Fix:** both queries now filter `eq(season, CURRENT_SEASON)` (the same constant `rosterService.ts` already uses for season-scoped roster logic) and sum across however many competition rows exist within that season, rather than trusting a single arbitrary row.
+
+**Evidence:** `tsc --noEmit` — 47 errors, unchanged, zero new. Live-verified against staging with a real player's real current-season row plus a fabricated fake prior-season row (`goals: 999`) inserted for the same player — `GET /api/players/[id]` returned the real current-season `goals` value, not `999` and not the sum of both, confirming the fix isolates by season rather than blending or picking arbitrarily. Fake row cleaned up after.
+
+**Found & fixed:** session 53, 2026-08-21.
+
+---
+### Standings/Comp-Stats/Matches Share the Same Season-Blindness Risk, Worse in Places — Folded Into "The Rest"
+
+**Status:** OPEN, added to "the rest" — 2026-08-21 (session 53). Explicitly NOT fixed this pass (Richard's own call: "add it to tackle in the rest").
+
+**What was found while investigating the player-stats bug above:** the same root architectural pattern — a `competitionId` FK alongside a leftover `competition` name-string column, both usable as alternate join keys from an old name→id migration that was never fully cleaned up — is pervasive across the codebase, not just player stats:
+
+- **Standings** (worse than the player-stats bug): several routes (`src/app/api/football/standings/route.ts`, `basketball/standings/route.ts`) `OR` an exact `competitionId` match with a **name-*prefix*-LIKE match** on the `competition` text column. This means even a caller that supplies the *correct* `competitionId` can still pull in standings rows from a *different* competition instance that merely shares a name prefix — e.g. two different seasons both literally named "BUSA LEAGUE FOOTBALL". Also present in `src/app/api/standings/route.ts`, `competitions/[id]/standings/route.ts`, `competitions/[id]/teams/route.ts`, `competitions/[id]/route.ts`, `competitions/route.ts`.
+- **Competition stats** (`competitions/[id]/stats/route.ts`): same `or(competitionId, competition-name)` fallback shape, marginally safer (exact-string match, not a prefix `LIKE`) but the same fragile dual-key pattern.
+- **Matches**: the identical `competition`/`competitionId` pair exists on the `matches` table itself and is used as an OR-fallback join key in at least 14 route files (`fixtures`, `matches`, `matches/live`, `football/matches`, `basketball/matches`, `competitions/[id]/fixtures`, `loggers`, `players/stats/leaders`, `livestreams/active`, `other/matches`, and others — confirmed via grep, not individually read).
+
+**Not yet confirmed either way:** individual match-detail/history reads (`GET /api/matches/[id]`) look up by the match's own primary key directly, so they're less exposed to this pattern than the listing/aggregate endpoints above — worth confirming as part of the actual audit rather than assuming.
+
+**Why this matters now, not hypothetically:** the moment a competition rolls over to a new season — whichever mechanism that turns out to be (new competition row vs. same row with `season` mutated in place, itself an open question this audit needs to answer) — any of the above routes could silently blend two seasons' worth of standings/matches together via the name-prefix or exact-name OR-fallback, not just silently pick the wrong one the way the player-stats bug did.
+
+**Scope for the actual fix (not started):** (1) confirm how season rollover actually happens today — does creating "next season" produce a new `competitions.id` or mutate the existing row's `season` field; (2) audit each of the ~20 call sites above to decide, per site, whether the name-string fallback can be dropped entirely now that `competitionId` is populated on essentially all real rows, or whether it still needs to exist for some legacy data path; (3) fix the standings prefix-`LIKE` specifically first, since it's the most dangerous (can cross-contaminate even with a correct id supplied).
+
+**Meta-point, Richard's own:** this is exactly the class of bug a proactive `/feature` sweep or the upcoming beta-tester tooling should be designed to catch going forward — a season/instance-boundary bug that's dormant in current data and only manifests once a second instance of the same logically-recurring entity (a season, in this case) exists. Worth building an explicit check for "does this entity have a stable id-based key, or does something fall back to a mutable/reusable string field" into whatever the `/visual-qa` + beta-tester tooling's checklist ends up being, not just visual/UX regressions.
+
+**Found:** session 53, 2026-08-21, while investigating the player-stats season bug above.
+
+---
