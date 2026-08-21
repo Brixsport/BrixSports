@@ -475,8 +475,8 @@ function BulkRegisterContent() {
                                         type="text"
                                         value={newShortName}
                                         onChange={(e) => setNewShortName(e.target.value.toUpperCase())}
-                                        placeholder="e.g. BELLS"
-                                        maxLength={5}
+                                        placeholder="e.g. COLENG-B"
+                                        maxLength={12}
                                         className="w-full bg-white/[0.05] border border-white/[0.08] rounded-xl px-4 py-3 text-sm text-white placeholder-white/20 uppercase focus:outline-none focus:ring-2 focus:ring-purple-500/40 focus:border-purple-500/40 transition-all"
                                     />
                                 </div>

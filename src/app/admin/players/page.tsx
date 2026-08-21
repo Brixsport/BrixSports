@@ -6,7 +6,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
     ArrowLeft, Plus, Users, Search, Filter,
     Edit, Trash2, User, Shield, Info, X,
-    ChevronLeft, ChevronRight, Save, Loader2
+    ChevronLeft, ChevronRight, Save, Loader2, ExternalLink
 } from 'lucide-react';
 import { useToast } from '@/hooks/useToast';
 import { ToastContainer } from '@/components/admin/Toast';
@@ -454,6 +454,13 @@ function AdminPlayersPageContent() {
                                                 </td>
                                                 <td className="px-4 md:px-8 py-4 md:py-6 text-right">
                                                     <div className="flex items-center justify-end gap-1 md:gap-2">
+                                                        <Link
+                                                            href={`/admin/players/${player.id}`}
+                                                            className="p-1.5 md:p-2 hover:bg-white/5 rounded-lg md:rounded-xl transition-all border border-transparent hover:border-white/10 group/btn"
+                                                            title="View profile"
+                                                        >
+                                                            <ExternalLink size={18} className="text-white/40 group-hover/btn:text-primary" />
+                                                        </Link>
                                                         <button
                                                             onClick={() => handleOpenEdit(player)}
                                                             className="p-1.5 md:p-2 hover:bg-white/5 rounded-lg md:rounded-xl transition-all border border-transparent hover:border-white/10 group/btn"
@@ -532,6 +539,10 @@ function AdminPlayersPageContent() {
                                             <ImageUpload
                                                 value={formData.image || ''}
                                                 onChange={url => setFormData({ ...formData, image: url })}
+                                                folder="brixsports/players/avatars"
+                                                publicId={modalMode === 'edit' ? selectedPlayer?.id : undefined}
+                                                tags={['player-avatar']}
+                                                context={formData.name ? { alt: `${formData.name} avatar` } : undefined}
                                             />
                                             <div>
                                                 <label className="block text-[10px] font-black uppercase tracking-widest text-white/40 mb-2 italic">Image URL (Manual Override)</label>
@@ -572,7 +583,6 @@ function AdminPlayersPageContent() {
                                                 <label className="block text-[10px] font-black uppercase tracking-widest text-white/40 mb-2 italic">Jersey #</label>
                                                 <input
                                                     type="number"
-                                                    required
                                                     value={formData.number || ''}
                                                     onChange={e => setFormData({ ...formData, number: parseInt(e.target.value) })}
                                                     className="w-full bg-white/5 border border-white/10 rounded-[1.25rem] px-5 py-4 focus:outline-none focus:border-primary/50 font-bold transition-all"
@@ -598,12 +608,11 @@ function AdminPlayersPageContent() {
                                         <div>
                                             <label className="block text-[10px] font-black uppercase tracking-widest text-white/40 mb-2 italic">Assigned Team</label>
                                             <select
-                                                required
                                                 value={formData.teamId}
                                                 onChange={e => setFormData({ ...formData, teamId: e.target.value })}
                                                 className="w-full bg-white/5 border border-white/10 rounded-[1.25rem] px-5 py-4 focus:outline-none focus:border-primary/50 font-bold transition-all appearance-none"
                                             >
-                                                <option value="" disabled>Select Team...</option>
+                                                <option value="">No team assigned</option>
                                                 {teams.map(t => (
                                                     <option key={t.id} value={t.id}>{t.name} ({t.sport})</option>
                                                 ))}
@@ -611,14 +620,45 @@ function AdminPlayersPageContent() {
                                         </div>
                                         <div>
                                             <label className="block text-[10px] font-black uppercase tracking-widest text-white/40 mb-2 italic">Tactical Position</label>
-                                            <input
-                                                type="text"
-                                                required
-                                                value={formData.position}
-                                                onChange={e => setFormData({ ...formData, position: e.target.value })}
+                                            <select
+                                                value={formData.position || ''}
+                                                onChange={(e) => setFormData({ ...formData, position: e.target.value })}
                                                 className="w-full bg-white/5 border border-white/10 rounded-[1.25rem] px-5 py-4 focus:outline-none focus:border-primary/50 font-bold transition-all"
-                                                placeholder="e.g. GK, CB, CM, ST"
-                                            />
+                                            >
+                                                <option value="">Select position</option>
+                                                <optgroup label="Goalkeeper">
+                                                    <option value="GK">GK — Goalkeeper</option>
+                                                </optgroup>
+                                                <optgroup label="Defenders">
+                                                    <option value="CB">CB — Centre Back</option>
+                                                    <option value="LB">LB — Left Back</option>
+                                                    <option value="RB">RB — Right Back</option>
+                                                    <option value="LWB">LWB — Left Wing Back</option>
+                                                    <option value="RWB">RWB — Right Wing Back</option>
+                                                </optgroup>
+                                                <optgroup label="Midfielders">
+                                                    <option value="CDM">CDM — Defensive Mid</option>
+                                                    <option value="CM">CM — Central Mid</option>
+                                                    <option value="CAM">CAM — Attacking Mid</option>
+                                                    <option value="LM">LM — Left Mid</option>
+                                                    <option value="RM">RM — Right Mid</option>
+                                                </optgroup>
+                                                <optgroup label="Forwards">
+                                                    <option value="LW">LW — Left Wing</option>
+                                                    <option value="RW">RW — Right Wing</option>
+                                                    <option value="CF">CF — Centre Forward</option>
+                                                    <option value="ST">ST — Striker</option>
+                                                    <option value="SS">SS — Second Striker</option>
+                                                </optgroup>
+                                                <optgroup label="Basketball">
+                                                    <option value="PG">PG — Point Guard</option>
+                                                    <option value="SG">SG — Shooting Guard</option>
+                                                    <option value="SF">SF — Small Forward</option>
+                                                    <option value="PF">PF — Power Forward</option>
+                                                    <option value="C">C — Center</option>
+                                                    <option value="G/F">G/F — Guard/Forward</option>
+                                                </optgroup>
+                                            </select>
                                         </div>
                                         <div className="grid grid-cols-2 gap-4">
                                             <div>
@@ -651,23 +691,29 @@ function AdminPlayersPageContent() {
                                         <div className="space-y-6">
                                             <div>
                                                 <label className="block text-[10px] font-black uppercase tracking-widest text-white/40 mb-2 italic">University</label>
-                                                <input
-                                                    type="text"
+                                                <select
                                                     value={formData.university || ''}
-                                                    onChange={e => setFormData({ ...formData, university: e.target.value })}
+                                                    onChange={(e) => setFormData({ ...formData, university: e.target.value })}
                                                     className="w-full bg-white/5 border border-white/10 rounded-[1.25rem] px-5 py-4 focus:outline-none focus:border-primary/50 font-bold transition-all"
-                                                    placeholder="e.g. Bells University"
-                                                />
+                                                >
+                                                    <option value="">Not specified</option>
+                                                    <option value="Bells University of Technology">Bells University of Technology</option>
+                                                    <option value="Other">Other</option>
+                                                </select>
                                             </div>
                                             <div>
                                                 <label className="block text-[10px] font-black uppercase tracking-widest text-white/40 mb-2 italic">College</label>
-                                                <input
-                                                    type="text"
+                                                <select
                                                     value={formData.college || ''}
-                                                    onChange={e => setFormData({ ...formData, college: e.target.value })}
+                                                    onChange={(e) => setFormData({ ...formData, college: e.target.value })}
                                                     className="w-full bg-white/5 border border-white/10 rounded-[1.25rem] px-5 py-4 focus:outline-none focus:border-primary/50 font-bold transition-all"
-                                                    placeholder="e.g. COLENG"
-                                                />
+                                                >
+                                                    <option value="">None / External</option>
+                                                    <option value="COLNAS">COLNAS — Natural &amp; Applied Sciences</option>
+                                                    <option value="COLENG">COLENG — Engineering</option>
+                                                    <option value="COLMANS">COLMANS — Management Sciences</option>
+                                                    <option value="COLENVS">COLENVS — Environmental Sciences</option>
+                                                </select>
                                             </div>
                                             <div>
                                                 <label className="block text-[10px] font-black uppercase tracking-widest text-white/40 mb-2 italic">Department</label>

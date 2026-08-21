@@ -3,8 +3,14 @@ import webpush from 'web-push';
 import { db } from '@/db';
 import { pushSubscriptions, users } from '@/db/schema';
 import { eq } from 'drizzle-orm';
+import { getAuthUser } from '@/lib/auth';
 
 export async function GET(request: NextRequest) {
+    const authUser = await getAuthUser(request).catch(() => null);
+    if (!authUser || authUser.role !== 'admin') {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const results: any = {
         timestamp: new Date().toISOString(),
         steps: [],
@@ -46,12 +52,13 @@ export async function GET(request: NextRequest) {
                 });
                 return NextResponse.json(results);
             }
-        } catch (error: any) {
+        } catch (error) {
+            console.error('[Diagnose] VAPID configuration error:', error);
             results.steps.push({
                 step: 2,
                 name: 'VAPID Configuration',
                 success: false,
-                error: error.message,
+                error: 'Failed to configure VAPID',
             });
             return NextResponse.json(results);
         }
@@ -84,12 +91,13 @@ export async function GET(request: NextRequest) {
                     message: 'No subscriptions found in database',
                 });
             }
-        } catch (error: any) {
+        } catch (error) {
+            console.error('[Diagnose] Database subscriptions error:', error);
             results.steps.push({
                 step: 3,
                 name: 'Database Subscriptions',
                 success: false,
-                error: error.message,
+                error: 'Failed to query subscriptions',
             });
         }
 
@@ -138,29 +146,32 @@ export async function GET(request: NextRequest) {
                 success: true,
                 payloadSize: payload.length,
             });
-        } catch (error: any) {
+        } catch (error) {
+            console.error('[Diagnose] Payload validation error:', error);
             results.steps.push({
                 step: 5,
                 name: 'Payload Validation',
                 success: false,
-                error: error.message,
+                error: 'Failed to validate payload',
             });
         }
 
         results.overallSuccess = results.steps.every((s: any) => s.success !== false);
         
         return NextResponse.json(results);
-    } catch (error: any) {
-        return NextResponse.json({
-            error: 'Diagnostic failed',
-            message: error.message,
-            stack: error.stack,
-        }, { status: 500 });
+    } catch (error) {
+        console.error('[Diagnose] Diagnostic failed:', error);
+        return NextResponse.json({ error: 'Diagnostic failed' }, { status: 500 });
     }
 }
 
 // POST to actually test send to a specific subscription
 export async function POST(request: NextRequest) {
+    const authUser = await getAuthUser(request).catch(() => null);
+    if (!authUser || authUser.role !== 'admin') {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     try {
         const { subscriptionId } = await request.json();
         
@@ -223,17 +234,16 @@ export async function POST(request: NextRequest) {
                 subscriptionId: subscription.id,
                 endpoint: subscription.endpoint.substring(0, 50) + '...',
             });
-        } catch (error: any) {
+        } catch (error) {
             console.error('[Diagnose] Send failed:', error);
             return NextResponse.json({
                 success: false,
-                error: error.message,
-                statusCode: error.statusCode,
-                body: error.body,
+                error: 'Failed to send notification',
                 subscriptionId: subscription.id,
             }, { status: 500 });
         }
-    } catch (error: any) {
-        return NextResponse.json({ error: error.message }, { status: 500 });
+    } catch (error) {
+        console.error('[Diagnose] POST failed:', error);
+        return NextResponse.json({ error: 'Diagnostic send failed' }, { status: 500 });
     }
 }

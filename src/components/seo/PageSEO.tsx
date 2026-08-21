@@ -38,7 +38,7 @@ export function PageSEO({
     title,
     description,
     keywords = [],
-    ogImage = '/assets/Logos/BRIX-SPORT-LOGO.png',
+    ogImage = '/assests/Logos/BRIX-SPORT-LOGO.png',
     ogType = 'website',
     twitterCard = 'summary_large_image',
     canonicalUrl,

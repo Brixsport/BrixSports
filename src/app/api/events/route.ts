@@ -6,7 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
 import { matchEvents, matches, players } from '@/db/schema';
-import { eq, and, desc } from 'drizzle-orm';
+import { eq, and } from 'drizzle-orm';
 import { getAuthUser } from '@/lib/auth';
 import { RatingCalculator } from '@/lib/services/rating-calculator';
 import { TeamStatsCalculator } from '@/lib/services/team-stats-calculator';
@@ -165,6 +165,17 @@ export async function POST(request: NextRequest) {
                     { status: 400 }
                 );
             }
+        }
+
+        // Reject null playerId for stat-affecting event types
+        const PLAYER_REQUIRED_TYPES = ['Goal', 'GOAL', 'Penalty', 'PENALTY', 'Own Goal', 'OWN_GOAL', 'Yellow Card', 'YELLOW_CARD', 'Red Card', 'RED_CARD', 'Assist', 'ASSIST', 'Save', 'SAVE'];
+        const normalizedEventType = type.toLowerCase().replace(/[\s_-]+/g, '');
+        const requiresPlayer = PLAYER_REQUIRED_TYPES.some(t => t.toLowerCase().replace(/[\s_-]+/g, '') === normalizedEventType);
+        if (requiresPlayer && !playerId) {
+            return NextResponse.json(
+                { error: `Event type '${type}' requires a playerId` },
+                { status: 400 }
+            );
         }
 
         // Create event

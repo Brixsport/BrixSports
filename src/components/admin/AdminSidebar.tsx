@@ -7,7 +7,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
     Activity, Shield, Users, Server, Settings, Globe,
     Trophy, Calendar, Video, Newspaper, TrendingUp,
-    Timer, Menu, X, ChevronRight, LogOut, UserPlus, Briefcase, User, Megaphone
+    Timer, Menu, X, ChevronRight, LogOut, UserPlus, Briefcase, User, Megaphone, Layers
 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 
@@ -16,6 +16,7 @@ const navItems = [
     { icon: <Briefcase size={18} />, label: "Manager Center", href: "/admin/manager" },
     { icon: <Trophy size={18} />, label: "Competitions", href: "/admin/competitions" },
     { icon: <Globe size={18} />, label: "Organizations", href: "/admin/organizations", adminOnly: true },
+    { icon: <Layers size={18} />, label: "Teams", href: "/admin/teams" },
     { icon: <User size={18} />, label: "Player Profiles", href: "/admin/players" },
     { icon: <Calendar size={18} />, label: "Matches", href: "/admin/matches" },
     { icon: <Calendar size={18} />, label: "Import Matches", href: "/admin/past-matches/import", adminOnly: true },

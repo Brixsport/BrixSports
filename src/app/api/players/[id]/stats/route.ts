@@ -3,6 +3,7 @@ import { db } from '@/db';
 import { players, playerStats } from '@/db/schema';
 import { eq, and } from 'drizzle-orm';
 import { enrichPlayersWithAffiliations } from '@/lib/player-data';
+import { getAuthUser } from '@/lib/auth';
 
 // GET /api/players/[id]/stats - Get player statistics
 export async function GET(
@@ -119,6 +120,14 @@ export async function POST(
     { params }: { params: Promise<{ id: string }> }
 ) {
     try {
+        const authUser = await getAuthUser(request);
+        if (!authUser) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+        if (authUser.role !== 'admin') {
+            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+        }
+
         const { id: playerId } = await params;
         const body = await request.json();
         const {
@@ -243,6 +252,14 @@ export async function PATCH(
     { params }: { params: Promise<{ id: string }> }
 ) {
     try {
+        const authUser = await getAuthUser(request);
+        if (!authUser) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+        if (authUser.role !== 'admin') {
+            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+        }
+
         const { id: playerId } = await params;
         const body = await request.json();
         const {

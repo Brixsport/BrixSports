@@ -10,6 +10,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Loader2, ArrowLeft, CheckCircle, Lock, Eye, EyeOff } from "lucide-react";
 import { toast } from "sonner";
 import Image from "next/image";
+import { getClientErrorMessage } from "@/lib/client-error";
 
 const STRENGTH_LABELS = {
     0: "Enter Password",
@@ -99,8 +100,7 @@ function ResetPasswordForm() {
             }, 3000);
 
         } catch (error) {
-            const errorMessage = error instanceof Error ? error.message : "Please try again later";
-            setServerError(errorMessage);
+            setServerError(getClientErrorMessage(error, "Please try again later"));
             console.error("Reset password error:", error);
         } finally {
             setIsLoading(false);

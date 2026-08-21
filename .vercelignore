@@ -19,6 +19,11 @@ node_modules
 *.md
 !README.md
 
+# Internal session docs/tooling -- BACKLOG, RUNLOG, audits, etc. *.md already
+# catches most of it, but this covers the whole directory (any non-.md content
+# too) explicitly rather than relying on that alone.
+.agents/*
+
 # Scripts (not needed for production)
 scripts/
 

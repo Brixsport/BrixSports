@@ -6,9 +6,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
 import { players, teams, matchEvents, matches, playerStats, basketballPlayerStats, footballPlayerStats, playerTeamAffiliations, playerOrganizationAffiliations, organizations } from '@/db/schema';
-import { eq, desc, and, sql, ne } from 'drizzle-orm';
+import { eq, desc, and, sql, ne, inArray } from 'drizzle-orm';
 import { getAuthUser } from '@/lib/auth';
 import { enrichPlayersWithAffiliations, syncPlayerOrganizationAffiliations } from '@/lib/player-data';
+import { CURRENT_SEASON } from '@/lib/rosterService';
 
 interface RouteParams {
     params: {
@@ -21,6 +22,9 @@ export async function GET(
     { params }: RouteParams
 ) {
     try {
+        const authUser = await getAuthUser(request).catch(() => null);
+        const isAdmin = authUser?.role === 'admin';
+
         const { id } = await params;
 
         // Get player details
@@ -63,6 +67,20 @@ export async function GET(
             .where(eq(playerOrganizationAffiliations.playerId, id))
             .orderBy(desc(playerOrganizationAffiliations.isPrimary), desc(playerOrganizationAffiliations.createdAt));
 
+        // BACKLOG-126: full transfer/employment history -- every past affiliation is
+        // preserved (a transfer closes the old row via endDate/isActive rather than
+        // deleting it), but `memberships` above only ever surfaced the active one.
+        // Admin-only, same as memberships.
+        const affiliationHistory = await db
+            .select({
+                affiliation: playerTeamAffiliations,
+                team: teams,
+            })
+            .from(playerTeamAffiliations)
+            .innerJoin(teams, eq(playerTeamAffiliations.teamId, teams.id))
+            .where(eq(playerTeamAffiliations.playerId, id))
+            .orderBy(desc(playerTeamAffiliations.startDate), desc(playerTeamAffiliations.createdAt));
+
         if (memberships.length > 0) {
             team = memberships[0].team;
         } else if (player.teamId) {
@@ -73,10 +91,43 @@ export async function GET(
         }
 
         // Get player's match events (goals, assists, cards, etc.)
+        // Projection is deliberately narrow: excludes heavy unused match blobs
+        // (lineups, stats) and fields banned from public responses in CLAUDE.md
+        // (loggerId, approvalStatus, managerNotes, approvedBy) - nothing on
+        // /players/[id] or the admin player page reads any of these.
         const playerEvents = await db
             .select({
-                event: matchEvents,
-                match: matches,
+                event: {
+                    id: matchEvents.id,
+                    matchId: matchEvents.matchId,
+                    type: matchEvents.type,
+                    minute: matchEvents.minute,
+                    second: matchEvents.second,
+                    period: matchEvents.period,
+                    teamId: matchEvents.teamId,
+                    playerId: matchEvents.playerId,
+                    relatedPlayerId: matchEvents.relatedPlayerId,
+                    detail: matchEvents.detail,
+                    isEyePoint: matchEvents.isEyePoint,
+                    value: matchEvents.value,
+                    createdAt: matchEvents.createdAt,
+                },
+                match: {
+                    id: matches.id,
+                    sport: matches.sport,
+                    homeTeamId: matches.homeTeamId,
+                    awayTeamId: matches.awayTeamId,
+                    homeScore: matches.homeScore,
+                    awayScore: matches.awayScore,
+                    status: matches.status,
+                    startTime: matches.startTime,
+                    venue: matches.venue,
+                    competition: matches.competition,
+                    competitionId: matches.competitionId,
+                    round: matches.round,
+                    matchday: matches.matchday,
+                    groupName: matches.groupName,
+                },
             })
             .from(matchEvents)
             .leftJoin(matches, eq(matchEvents.matchId, matches.id))
@@ -84,11 +135,14 @@ export async function GET(
             .orderBy(desc(matches.startTime))
             .limit(50);
 
+        // Event type strings are stored Title Case ("Goal", "Yellow Card") — normalize before comparing
+        const normalizeType = (t: string) => t.toUpperCase().replace(/\s+/g, '_');
+
         // Calculate player statistics
-        const goals = playerEvents.filter(e => e.event.type === 'GOAL').length;
-        const assists = playerEvents.filter(e => e.event.type === 'ASSIST').length;
-        const yellowCards = playerEvents.filter(e => e.event.type === 'YELLOW_CARD').length;
-        const redCards = playerEvents.filter(e => e.event.type === 'RED_CARD').length;
+        const goals = playerEvents.filter(e => normalizeType(e.event.type) === 'GOAL').length;
+        const assists = playerEvents.filter(e => normalizeType(e.event.type) === 'ASSIST').length;
+        const yellowCards = playerEvents.filter(e => normalizeType(e.event.type) === 'YELLOW_CARD').length;
+        const redCards = playerEvents.filter(e => normalizeType(e.event.type) === 'RED_CARD').length;
 
         // Get matches the player participated in
         const primaryTeamId = team?.id || player.teamId;
@@ -106,15 +160,36 @@ export async function GET(
                 .limit(10)
             : [];
 
-        // Get recent form (last 5 matches with events)
-        const recentMatchesWithEvents = playerEvents
-            .slice(0, 5)
-            .map(pe => ({
-                match: pe.match,
-                events: playerEvents
-                    .filter(e => e.match?.id === pe.match?.id)
-                    .map(e => e.event),
-            }));
+        // Get recent form (last 5 distinct matches, each with its own events sorted chronologically)
+        const seenMatchIds = new Set<string>();
+        const recentMatchesWithEvents: { match: typeof playerEvents[number]['match']; events: typeof playerEvents[number]['event'][] }[] = [];
+        for (const pe of playerEvents) {
+            const matchId = pe.match?.id;
+            if (!matchId || seenMatchIds.has(matchId)) continue;
+            seenMatchIds.add(matchId);
+            const eventsForMatch = playerEvents
+                .filter(e => e.match?.id === matchId)
+                .map(e => e.event)
+                .sort((a, b) => (a.minute ?? 0) - (b.minute ?? 0) || (a.second ?? 0) - (b.second ?? 0));
+            recentMatchesWithEvents.push({ match: pe.match, events: eventsForMatch });
+            if (recentMatchesWithEvents.length >= 5) break;
+        }
+
+        // Resolve home/away team names for the recent-matches cards (admin and
+        // public "recent performances" both need real team names, not just IDs)
+        const recentTeamIds = [...new Set(recentMatchesWithEvents.flatMap(m => [m.match?.homeTeamId, m.match?.awayTeamId]).filter((id): id is string => !!id))];
+        const recentTeams = recentTeamIds.length > 0
+            ? await db.select({ id: teams.id, name: teams.name, shortName: teams.shortName }).from(teams).where(inArray(teams.id, recentTeamIds))
+            : [];
+        const teamById = new Map(recentTeams.map(t => [t.id, t]));
+        const recentMatchesWithTeams = recentMatchesWithEvents.map(m => ({
+            ...m,
+            match: m.match ? {
+                ...m.match,
+                homeTeam: m.match.homeTeamId ? teamById.get(m.match.homeTeamId) ?? null : null,
+                awayTeam: m.match.awayTeamId ? teamById.get(m.match.awayTeamId) ?? null : null,
+            } : m.match,
+        }));
 
         // Get player stats from specialized tables or generic table
         // Determine sport from team or matches
@@ -127,29 +202,71 @@ export async function GET(
             }
         }
 
-        // Basketball-specific stats from specialized table
+        // A player has one row per (season, competition), so an unfiltered .get()
+        // would return an arbitrary row the moment a second season's stats exist.
+        // Prefer CURRENT_SEASON rows -- but real data doesn't reliably have that
+        // value yet (football_player_stats.season is still the literal schema
+        // default '2024' on every real row; basketball's real rows are all
+        // '2025/2026', a season CURRENT_SEASON has already moved past for roster
+        // purposes) -- so an unconditional eq(season, CURRENT_SEASON) filter
+        // would silently return empty stats for every real player today, a
+        // regression caught by checking real data before trusting the first
+        // version of this fix. Falls back to whichever season the most recently
+        // updated row belongs to, rather than going empty or blending seasons.
+        function pickEffectiveSeasonRows<T extends { season: string; updatedAt: Date | null }>(rows: T[]): T[] {
+            if (rows.length === 0) return [];
+            const currentSeasonRows = rows.filter((r) => r.season === CURRENT_SEASON);
+            if (currentSeasonRows.length > 0) return currentSeasonRows;
+            const latestSeason = [...rows].sort(
+                (a, b) => (b.updatedAt?.getTime() ?? 0) - (a.updatedAt?.getTime() ?? 0)
+            )[0].season;
+            return rows.filter((r) => r.season === latestSeason);
+        }
+
         let basketballSeasonStats: any = null;
         if (playerSport === 'Basketball') {
-            const result = await db
+            const allRows = await db
                 .select()
                 .from(basketballPlayerStats)
-                .where(eq(basketballPlayerStats.playerId, id))
-                .get();
-            if (result) {
-                basketballSeasonStats = result;
+                .where(eq(basketballPlayerStats.playerId, id));
+            const rows = pickEffectiveSeasonRows(allRows);
+            if (rows.length > 0) {
+                basketballSeasonStats = rows.reduce((acc, r) => ({
+                    gamesPlayed: (acc.gamesPlayed || 0) + (r.gamesPlayed || 0),
+                    minutesPlayed: (acc.minutesPlayed || 0) + (r.minutesPlayed || 0),
+                    totalPoints: (acc.totalPoints || 0) + (r.totalPoints || 0),
+                    fieldGoalsMade: (acc.fieldGoalsMade || 0) + (r.fieldGoalsMade || 0),
+                    threePointersMade: (acc.threePointersMade || 0) + (r.threePointersMade || 0),
+                    freeThrowsMade: (acc.freeThrowsMade || 0) + (r.freeThrowsMade || 0),
+                    offensiveRebounds: (acc.offensiveRebounds || 0) + (r.offensiveRebounds || 0),
+                    defensiveRebounds: (acc.defensiveRebounds || 0) + (r.defensiveRebounds || 0),
+                    totalRebounds: (acc.totalRebounds || 0) + (r.totalRebounds || 0),
+                    assists: (acc.assists || 0) + (r.assists || 0),
+                    turnovers: (acc.turnovers || 0) + (r.turnovers || 0),
+                    steals: (acc.steals || 0) + (r.steals || 0),
+                    blocks: (acc.blocks || 0) + (r.blocks || 0),
+                    personalFouls: (acc.personalFouls || 0) + (r.personalFouls || 0),
+                }), {} as any);
             }
         }
 
-        // Football-specific stats from specialized table
+        // Football-specific stats from specialized table -- same season-selection fix.
         let footballSeasonStats: any = null;
         if (playerSport === 'Football') {
-            const result = await db
+            const allRows = await db
                 .select()
                 .from(footballPlayerStats)
-                .where(eq(footballPlayerStats.playerId, id))
-                .get();
-            if (result) {
-                footballSeasonStats = result;
+                .where(eq(footballPlayerStats.playerId, id));
+            const rows = pickEffectiveSeasonRows(allRows);
+            if (rows.length > 0) {
+                footballSeasonStats = rows.reduce((acc, r) => ({
+                    appearances: (acc.appearances || 0) + (r.appearances || 0),
+                    minutesPlayed: (acc.minutesPlayed || 0) + (r.minutesPlayed || 0),
+                    goals: (acc.goals || 0) + (r.goals || 0),
+                    assists: (acc.assists || 0) + (r.assists || 0),
+                    yellowCards: (acc.yellowCards || 0) + (r.yellowCards || 0),
+                    redCards: (acc.redCards || 0) + (r.redCards || 0),
+                }), {} as any);
             }
         }
 
@@ -229,12 +346,12 @@ export async function GET(
 
         // Group events by type for timeline
         const eventsByType = {
-            goals: playerEvents.filter(e => e.event.type === 'GOAL'),
-            assists: playerEvents.filter(e => e.event.type === 'ASSIST'),
-            cards: playerEvents.filter(e =>
-                e.event.type === 'YELLOW_CARD' ||
-                e.event.type === 'RED_CARD'
-            ),
+            goals: playerEvents.filter(e => normalizeType(e.event.type) === 'GOAL'),
+            assists: playerEvents.filter(e => normalizeType(e.event.type) === 'ASSIST'),
+            cards: playerEvents.filter(e => {
+                const t = normalizeType(e.event.type);
+                return t === 'YELLOW_CARD' || t === 'RED_CARD';
+            }),
         };
 
         // Check for related profiles (Multi-sport)
@@ -262,20 +379,24 @@ export async function GET(
             relatedProfiles.push(...relatedPlayers);
         }
 
+        const { email: _email, profileId: _profileId, ...playerPublic } = player;
+        const playerPayload = isAdmin ? player : playerPublic;
+
         return NextResponse.json({
             player: {
-                ...player,
+                ...playerPayload,
                 team: {
                     ...team,
-                    sport: playerSport, // Add sport to team object
+                    sport: playerSport,
                 },
-                memberships,
-                organizationAffiliations,
-                relatedProfiles, // Add related profiles
+                // memberships, organizationAffiliations, and affiliationHistory are
+                // admin-only (CLAUDE.md banned public fields)
+                ...(isAdmin ? { memberships, organizationAffiliations, affiliationHistory } : {}),
+                relatedProfiles,
             },
             stats: seasonStats,
             competitionStats,
-            recentMatches: recentMatchesWithEvents,
+            recentMatches: recentMatchesWithTeams,
             events: eventsByType,
             allEvents: playerEvents.slice(0, 20).map(pe => ({
                 ...pe.event,
@@ -389,6 +510,7 @@ export async function PATCH(
                     startDate: updated[0].createdAt || new Date(),
                     jerseyNumber: updated[0].number,
                     position: updated[0].position,
+                    season: CURRENT_SEASON,
                     createdAt: updated[0].createdAt || new Date(),
                 });
             }

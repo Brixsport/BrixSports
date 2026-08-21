@@ -1,12 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
-import { users } from '@/db/schema';
+import { users, loggers } from '@/db/schema';
 import { eq } from 'drizzle-orm';
 import { SignJWT, jwtVerify } from 'jose';
+import { env } from '@/lib/env';
 
-const JWT_SECRET = new TextEncoder().encode(
-    process.env.JWT_SECRET || 'your-secret-key-change-in-production'
-);
+if (!env.jwtSecret) {
+    throw new Error('JWT_SECRET is not configured');
+}
+const JWT_SECRET = new TextEncoder().encode(env.jwtSecret);
 
 // POST /api/auth/refresh - Refresh user session
 export async function POST(request: NextRequest) {
@@ -33,39 +35,51 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        // Get user from database
-        const user = await db.query.users.findFirst({
-            where: eq(users.id, payload.userId as string),
-        });
+        // Logger JWTs use { id } not { userId } — normalise before DB lookup
+        const actorId = (payload.userId ?? payload.id) as string | undefined;
+        const actorRole = payload.role as string | undefined;
 
-        if (!user) {
-            return NextResponse.json(
-                { error: 'User not found' },
-                { status: 404 }
-            );
+        if (!actorId) {
+            return NextResponse.json({ error: 'Invalid token payload' }, { status: 401 });
         }
 
-        // Generate new token with extended expiry
-        const newToken = await new SignJWT({
-            userId: user.id,
-            email: user.email,
-            role: user.role
-        })
-            .setProtectedHeader({ alg: 'HS256' })
-            .setIssuedAt()
-            .setExpirationTime('7d') // 7 days
-            .sign(JWT_SECRET);
+        let newToken: string;
+        let responseUser: Record<string, unknown>;
 
-        // Create response
+        if (actorRole === 'logger') {
+            const logger = await db.query.loggers.findFirst({
+                where: eq(loggers.id, actorId),
+            });
+            if (!logger) {
+                return NextResponse.json({ error: 'Logger not found' }, { status: 404 });
+            }
+            // Logger tokens use { id } to match what /api/loggers/auth signs
+            newToken = await new SignJWT({ id: logger.id, email: logger.email, role: logger.role })
+                .setProtectedHeader({ alg: 'HS256' })
+                .setIssuedAt()
+                .setExpirationTime('7d')
+                .sign(JWT_SECRET);
+            responseUser = { id: logger.id, name: logger.name, email: logger.email, role: logger.role };
+        } else {
+            const user = await db.query.users.findFirst({
+                where: eq(users.id, actorId),
+            });
+            if (!user) {
+                return NextResponse.json({ error: 'User not found' }, { status: 404 });
+            }
+            newToken = await new SignJWT({ userId: user.id, email: user.email, role: user.role })
+                .setProtectedHeader({ alg: 'HS256' })
+                .setIssuedAt()
+                .setExpirationTime('7d')
+                .sign(JWT_SECRET);
+            responseUser = { id: user.id, name: user.name, email: user.email, avatar: user.avatar, role: user.role };
+        }
+
+        // Create response — include token in body so logger pages can store in localStorage
         const response = NextResponse.json({
             success: true,
-            user: {
-                id: user.id,
-                name: user.name,
-                email: user.email,
-                avatar: user.avatar,
-                role: user.role,
-            },
+            token: newToken,
+            user: responseUser,
         });
 
         // Set new token in cookie

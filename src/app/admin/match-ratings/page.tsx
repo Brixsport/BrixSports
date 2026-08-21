@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { Star, Edit, Calendar, Trophy, AlertCircle } from 'lucide-react';
 import Image from 'next/image';
+import { getClientErrorMessage } from '@/lib/client-error';
 
 interface Match {
     id: string;
@@ -51,7 +52,7 @@ export default function MatchRatingsListPage() {
             const data = await response.json();
             setMatches(data.matches || []);
         } catch (err) {
-            setError(err instanceof Error ? err.message : 'Failed to load matches');
+            setError(getClientErrorMessage(err, 'Failed to load matches'));
         } finally {
             setLoading(false);
         }

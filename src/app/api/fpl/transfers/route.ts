@@ -9,7 +9,7 @@ export async function GET(request: NextRequest) {
         const { searchParams } = new URL(request.url);
         const teamId = searchParams.get('teamId');
         const gameweekId = searchParams.get('gameweekId');
-        const limit = parseInt(searchParams.get('limit') || '50');
+        const limit = Math.min(Math.max(1, parseInt(searchParams.get('limit') || '50', 10) || 50), 100);
 
         if (!teamId) {
             return NextResponse.json({ error: 'Team ID is required' }, { status: 400 });

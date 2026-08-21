@@ -18,13 +18,15 @@ MVP → moving toward PRODUCTION
 - Competition and fixture management
 - Logger assignment to matches
 - Match status lifecycle (PENDING → LIVE → FINISHED)
+- Match/team push notifications — event-triggered (goals, cards, match start/end), reminders,
+  and the admin campaign composer (session 50 decision: brought in scope, hardened — see
+  `BACKLOG.md` entries `BUG-204`/`BACKLOG-211`/`BACKLOG-212`)
 
 ## Explicit Out of Scope
 - Payment, sponsorship, or financial processing
 - Social features (comments, reactions, follows, DMs)
 - External league API integrations
 - Automated video or AI-based score detection
-- Push notification campaigns
 - Advanced analytics dashboards
 - Role-based access beyond: Super Admin → Competition Admin → Team Manager → Logger → Viewer
 
@@ -129,12 +131,12 @@ Public player response: name, jerseyName, number, position, team name, rating
 - JWT auth flow and session handling
 
 ### 🔴 High Volatility — Do Not Touch Without Explicit Brief
-- Ads feature (recently added, untested under load)
-- Lineup Builder (marked NEW, unknown stability)
-- Transfers page (intersects BUG-004)
-- User management admin panel (intersects BUG-002)
-- News / articles (intersects BUG-006 XSS)
-- src/app/api/auth/test/route.ts (intersects BUG-003 — this file should be deleted)
+- Ads feature (recently added, untested under load) — no currently-open BACKLOG/BUG item found against it; kept 🔴 on "untested under load" alone, not a known bug
+- Lineup Builder — **re-audited session 51/53**: `BUG-219` (publish crash), `BUG-220` (no publish path + unenforced lock), `BUG-221` (unauthenticated draft-lineup leak) all RESOLVED and live-verified. Still 🔴: `BACKLOG-220`'s architecture cleanup (dead duplicate rendering code, non-atomic write race, no formation-change confirm) remains OPEN — the critical/security bugs are gone, the structural fragility is not
+- Transfers page — *(the news/rumor-announcement page at `/admin/transfers`, distinct from the new season-readiness roster-transfer UI at `/admin/roster-transfers`, which is 🟢, freshly built and live-verified session 53)*. Original citation (`BUG-004`, hardcoded `createdBy`) RESOLVED since session 3 — kept 🔴 conservatively since this page hasn't been re-audited since, not because the original reason still holds
+- User management admin panel — original citation (`BUG-002`, missing auth) RESOLVED since session 3 — kept 🔴 conservatively, not re-audited since. `CLAUDE.md`'s own Admin/Match Management stakeholder note (Aug 7) flags real, current over-broad-access concerns here independent of `BUG-002`
+- News / articles — original citation (`BUG-006`, XSS) RESOLVED since session 3 — kept 🔴 conservatively, not re-audited since
+- ~~`src/app/api/auth/test/route.ts`~~ — file deleted (confirmed, `BUG-003`), no longer applicable; leaving struck through rather than removing the line so the history isn't lost
 
 ---
 
@@ -231,19 +233,23 @@ A feature is complete when:
 - Error states are visible and actionable
 - Manual test scenarios pass on both desktop and mobile
 
+### Backlog Close — Mandatory Before Moving On
+
+Never commit a fix without closing or updating its corresponding entry in `.agents/dev/BACKLOG.md` in the same commit — states, evidence-block format, and what counts as evidence: see `.agents/rules/backlog.md`.
+
 ---
 
 ## Live Event Readiness Checklist
 
 Before any live match deployment:
-- [ ] Match creation → logger assignment → public appearance works end to end
-- [ ] Logger session persists 120+ minutes
-- [ ] Two simultaneous loggers do not conflict or overwrite
-- [ ] Double event submission is prevented or deduplicated
-- [ ] Public page updates within 5 seconds of event save
-- [ ] Match can be cleanly closed and marked FINISHED
-- [ ] Logger interface tested on an actual mobile device
-- [ ] All 🔴 High Volatility features are disabled or hidden from the UI
+- [x] Match creation → logger assignment → public appearance works end to end — RESOLVED session 34 test match (2026-06-27)
+- [ ] Logger session persists 120+ minutes — SHIPPED (auth fixes BUG-057, BUG-058b — `1401ee2`, `1057f22`). **UNVERIFIED** — no sustained 120min logger session test run. `BUG-217` (session 51, shipped session 53 continuation) hardens the adjacent case — a transient network blip no longer force-logs-out or deletes the stored token — but is itself also unverified live (see `BACKLOG.md` for why a black-box test is structurally impractical here); doesn't substitute for the 120min run.
+- [ ] Two simultaneous loggers do not conflict or overwrite — **OPEN** — no dual-logger test ever run. Clock collision risk confirmed (Directive 6). Block before any multi-logger match day. Tracked as `BACKLOG-151`, still deferred.
+- [ ] Double event submission is prevented or deduplicated — SHIPPED (event dedup by id OR type+minute+playerId+teamId in `page.tsx`). **UNVERIFIED** — no double-tap stress test run.
+- [ ] Public page updates within 5 seconds of event save — **UNVERIFIED**, ~9.9s measured (was 42s), reconfirmed at "roughly ten seconds" in the Aug 7 stakeholder report — no new measurement since. BUG-108/109/116/119 — see `BACKLOG.md` and `BUILD_JOURNAL.md` for full history.
+- [x] Match can be cleanly closed and marked FINISHED — RESOLVED session 34 test match (2026-06-27). BUG-076 + BUG-078 fixed.
+- [x] Logger interface tested on an actual mobile device — RESOLVED session 34 test match — Richard logged live from mobile.
+- [ ] All 🔴 High Volatility features are disabled or hidden from the UI — **OPEN, visibility unchanged** — Ads, Lineup Builder, Transfers, User Management, News still all accessible; `/api/auth/test` no longer applies (file deleted, `BUG-003`). **Materially lower-risk than when this line was written**: Lineup Builder's actual crash/security bugs (`BUG-219`/`220`/`221`) and Predictions' unauthenticated-write bug (`BUG-222`, same session-51 audit, routes reachable even though the `/predictions` page itself is hidden) are now fixed — the remaining gap is *exposure* (these features are visible/reachable pre-launch), not the underlying bugs that originally justified blocking. Still must gate or hide before any public match day; the bar for what "gate or hide" is protecting against is now lower.
 
 ---
 
@@ -265,59 +271,16 @@ Summarize briefly:
 
 ## Git Governance
 
-### Branch Model
-```
-main        ← production (Vercel prod, prod Turso DB)
-dev         ← staging/integration (Vercel staging, staging Turso DB)
-feature/*   ← new features — branch off dev, PR back to dev
-fix/*       ← bug fixes — branch off dev, PR back to dev
-hotfix/*    ← urgent prod fixes — branch off main, PR to main,
-              auto-syncs back to dev after merge
-```
-
-### Rules
-- All new work branches off `dev`, not `main`
-- PRs to `main` require 2 reviews (1 currently — raise when team grows)
-- PRs to `dev` require 1 review
-- Squash merge for `feature/*` and `fix/*`
-- Merge commit for `hotfix/*` (preserve audit trail)
-- Schema migrations run against staging first, then prod — no exceptions
-- No direct commits to `main` or `dev`
-- `dev` must always be deployable — do not merge broken code
-
-### Environments
-- `main` deploys to brixsports.com (prod Vercel project)
-- `dev` deploys to staging.brixsports.com (staging Vercel project)
-- Each PR gets a Vercel preview deployment automatically
-- `JWT_SECRET` and `CRON_SECRET` are different per environment
-- `NEXT_PUBLIC_ENV` = `production` | `staging` | `development`
-
-### Workflow — Feature Work
-```bash
-git checkout dev && git pull
-git checkout -b feature/your-feature-name
-# work, commit incrementally
-git push origin feature/your-feature-name
-# open PR → target dev
-# PR guard checks target, Vercel builds preview
-# 1 review required, merge with squash
-```
-
-### Workflow — Hotfix
-```bash
-git checkout main && git pull
-git checkout -b hotfix/description
-# fix, commit
-git push origin hotfix/description
-# open PR → target main
-# PR guard checks target, 2 reviews required
-# merge commit (not squash)
-# auto-sync action merges main back into dev automatically
-```
+All work branches off `dev` (never `main`), no direct commits to `main` or `dev`, PRs to `main` require 2 reviews / PRs to `dev` require 1 — full branch model, environments, and feature/hotfix workflow commands: see `.agents/rules/git-workflow.md`.
 
 ---
 
 ## Session Conventions
+
+### Background/Sub-Agent Git Safety
+- Any Agent-tool call that shares this working directory (no `isolation: "worktree"`) can run `git stash`/`reset`/`checkout` and silently wipe every other in-progress edit in the session — this has actually happened (session 47D: a background agent ran `git stash` mid-task, reverting five files of concurrent work; recovered only because `git status` was checked immediately after and the stash hadn't been dropped yet).
+- Prefer `isolation: "worktree"` for any agent that will edit files, OR explicitly forbid destructive git commands (`stash`, `reset`, `checkout --`, `clean`) in the agent's prompt when it must share this directory.
+- After any parallel agent that touched files completes, run `git status`/`git stash list` before trusting the working tree — don't assume it's untouched.
 
 ### Before Every Session
 - Read `.agents/rules/backlog.md` (if it exists) and `.agents/dev/PROJECT_HISTORY.md`
@@ -329,10 +292,12 @@ git push origin hotfix/description
 - Always import from `src/lib/env.ts` instead
 - Add new vars to `env.ts` first, then document in `.env.example`
 - `validateEnv()` in `env.ts` fails fast at startup if required vars are absent
+- Scope: this rule covers application code under `src/` only. One-off scripts under `/dev/` read `process.env` directly per `.agents/rules/security.md` — that's a separate, narrower exception, not a contradiction.
 
 ### Before Every Commit
 - Run `tsc --noEmit` — zero new errors only (pre-existing errors in `src/db/` scripts are known and acceptable)
 - Confirm you are on the correct branch
+- **Update `.agents/dev/BACKLOG.md`** — close or update every BUG/BACKLOG entry touched by this commit (see Definition of Done → Backlog Close). This is not optional. Do not commit without it.
 - Write descriptive commit messages using these types:
   - `feat:` — new feature
   - `fix:` — bug fix
@@ -351,8 +316,20 @@ git push origin hotfix/description
 - Every run logged in `.agents/dev/RUNLOG.md`
 - Include: date, script name, what it did, row counts affected
 
+### Security Rules — Mandatory Read
+Before writing any script or code that touches:
+- The database (Turso/Drizzle, any direct libsql client)
+- Auth tokens, JWT, or session handling
+- Environment variables containing secrets
+- API keys (Cloudinary, Sentry, VAPID, AWS)
+- Any dev/ script that connects to staging or prod
+
+**Read `.agents/rules/security.md` first. Violations are blocking.**
+
 ---
 
 ## Cross-Project Knowledge
 Read at session start: ~/.claude/knowledge/global-patterns/patterns.md
 Apply all anti-patterns, settled decisions, and stack gotchas recorded there.
+
+Note: `.agents/rules/project.md` (Antigravity/Gemini tooling) points to a different patterns file at a different path — that's intentional, not drift. Different tool ecosystem, separate knowledge store.

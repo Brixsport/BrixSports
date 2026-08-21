@@ -1,18 +1,21 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { LogIn, Activity, Lock, User, CheckCircle2, AlertCircle, ChevronRight, Globe, WifiOff } from 'lucide-react';
 import { MatchLoggerUI } from '@/components/MatchLoggerUI';
 import { BasketballLogger } from '@/components/BasketballLogger';
+import { TeamLogo } from '@/lib/utils/team-logo';
 import { FootballLogger } from '@/components/FootballLogger';
 import { TrackLogger } from '@/components/TrackLogger';
+import { SessionExpiryBanner } from '@/components/logger/SessionExpiryBanner';
 
 import { Match, Logger } from '@/db/schema';
 
 export default function LoggerPage() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [selectedMatchId, setSelectedMatchId] = useState<string | null>(null);
+  const rehydratedRef = useRef(false);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -22,6 +25,7 @@ export default function LoggerPage() {
   const [assignedMatches, setAssignedMatches] = useState<Match[]>([]);
   const [teams, setTeams] = useState<any[]>([]);
   const [players, setPlayers] = useState<any[]>([]);
+  const [loggerStats, setLoggerStats] = useState<{ totalEvents: number; loggedMatches: number } | null>(null);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -47,6 +51,8 @@ export default function LoggerPage() {
       setAssignedMatches(data.assignedMatches || []);
       setIsLoggedIn(true);
       localStorage.setItem('logger', JSON.stringify(data.logger));
+      // Store token for offline queue (sw-admin.js reads this from IndexedDB rows at sync time)
+      if (data.token) localStorage.setItem('authToken', data.token);
     } catch (err) {
       setError('Network error. Please try again.');
     } finally {
@@ -65,6 +71,34 @@ export default function LoggerPage() {
       fetchAssignedMatches(loggerData.id);
     }
   }, []);
+
+  // Persist selectedMatchId across hard refresh — cleared on exit or match end
+  useEffect(() => {
+    if (selectedMatchId) {
+      localStorage.setItem('brix_logger_matchId', selectedMatchId);
+    } else {
+      localStorage.removeItem('brix_logger_matchId');
+    }
+  }, [selectedMatchId]);
+
+  // Rehydrate selectedMatchId once assignedMatches first loads after refresh
+  useEffect(() => {
+    if (rehydratedRef.current || assignedMatches.length === 0) return;
+    rehydratedRef.current = true;
+    const savedId = localStorage.getItem('brix_logger_matchId');
+    if (savedId && assignedMatches.some(m => m.id === savedId)) {
+      setSelectedMatchId(savedId);
+    }
+  }, [assignedMatches]);
+
+  // Fetch logger stats from /api/loggers/me when logged in
+  useEffect(() => {
+    if (!isLoggedIn) return;
+    fetch('/api/loggers/me', { credentials: 'include' })
+      .then(r => r.ok ? r.json() : null)
+      .then(data => { if (data?.stats) setLoggerStats(data.stats); })
+      .catch(() => {});
+  }, [isLoggedIn]);
 
   // Fetch teams when logged in
   useEffect(() => {
@@ -185,16 +219,23 @@ export default function LoggerPage() {
     if (!match) return null;
 
     // Render sport-specific logger
+    let sportLogger: React.ReactNode;
     if (match.sport === 'Basketball' || (match.sport as string) === '3x3 Basketball' || (match.sport as string) === 'Basketball 3x3') {
-      return <BasketballLogger match={match} onExit={() => setSelectedMatchId(null)} currentLogger={logger} />;
+      sportLogger = <BasketballLogger match={match} onExit={() => setSelectedMatchId(null)} currentLogger={logger} />;
     } else if (match.sport === 'Football' || (match.sport as string) === 'Five-a-side' || (match.sport as string) === '5-a-side' || (match.sport as string) === '5-aside' || (match.sport as string) === 'Futsal') {
-      return <FootballLogger match={match} onExit={() => setSelectedMatchId(null)} currentLogger={logger} />;
+      sportLogger = <FootballLogger match={match} onExit={() => setSelectedMatchId(null)} currentLogger={logger} />;
     } else if (match.sport === 'Track' || (match.sport as string) === 'Track & Field') {
-      return <TrackLogger match={match} onExit={() => setSelectedMatchId(null)} teams={teams} players={players} />;
+      sportLogger = <TrackLogger match={match} onExit={() => setSelectedMatchId(null)} teams={teams} players={players} />;
     } else {
       // Default to generic logger for other sports
-      return <MatchLoggerUI match={match} onExit={() => setSelectedMatchId(null)} currentLogger={logger} teams={teams} players={players} />;
+      sportLogger = <MatchLoggerUI match={match} onExit={() => setSelectedMatchId(null)} currentLogger={logger} teams={teams} players={players} />;
     }
+    return (
+      <>
+        <SessionExpiryBanner />
+        {sportLogger}
+      </>
+    );
   }
 
   const handleLogout = () => {
@@ -202,10 +243,12 @@ export default function LoggerPage() {
     setLogger(null);
     setAssignedMatches([]);
     localStorage.removeItem('logger');
+    localStorage.removeItem('authToken');
   };
 
   return (
     <div className="min-h-screen bg-[#050505] text-white p-4 md:p-12">
+      <SessionExpiryBanner />
       <div className="max-w-4xl mx-auto space-y-8 md:space-y-12">
         <header className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
           <div>
@@ -277,11 +320,11 @@ export default function LoggerPage() {
           <div className="grid grid-cols-3 gap-3 md:gap-4">
             <div className="bg-white/5 border border-white/10 rounded-xl p-3 text-center">
               <p className="text-[9px] font-black uppercase tracking-widest text-white/40 mb-1">Total Events</p>
-              <p className="text-lg md:text-xl font-display italic text-white">-</p>
+              <p className="text-lg md:text-xl font-display italic text-white">{loggerStats ? loggerStats.totalEvents : '-'}</p>
             </div>
             <div className="bg-white/5 border border-white/10 rounded-xl p-3 text-center">
               <p className="text-[9px] font-black uppercase tracking-widest text-white/40 mb-1">Logged Matches</p>
-              <p className="text-lg md:text-xl font-display italic text-white">-</p>
+              <p className="text-lg md:text-xl font-display italic text-white">{loggerStats ? loggerStats.loggedMatches : '-'}</p>
             </div>
             <div className="bg-white/5 border border-white/10 rounded-xl p-3 text-center">
               <p className="text-[9px] font-black uppercase tracking-widest text-white/40 mb-1">Active Since</p>
@@ -328,11 +371,7 @@ export default function LoggerPage() {
 
                 <div className="flex items-center justify-between gap-2 mb-6 md:mb-8">
                   <div className="text-center flex-1 min-w-0">
-                    {homeTeam?.logo ? (
-                      <img src={homeTeam.logo} alt={homeTeam.name} className="w-12 h-12 md:w-16 md:h-16 mx-auto mb-2 object-contain" />
-                    ) : (
-                      <span className="text-3xl md:text-4xl mb-2 block">⚽</span>
-                    )}
+                    <TeamLogo logo={homeTeam?.logo} name={homeTeam?.name ?? ''} size="md" className="mx-auto mb-2" />
                     <p className="text-[10px] md:text-xs font-black uppercase tracking-widest truncate">{homeTeam?.shortName || 'HOME'}</p>
                   </div>
                   <div className="flex flex-col items-center gap-1 shrink-0">
@@ -343,11 +382,7 @@ export default function LoggerPage() {
                     </span>
                   </div>
                   <div className="text-center flex-1 min-w-0">
-                    {awayTeam?.logo ? (
-                      <img src={awayTeam.logo} alt={awayTeam.name} className="w-12 h-12 md:w-16 md:h-16 mx-auto mb-2 object-contain" />
-                    ) : (
-                      <span className="text-3xl md:text-4xl mb-2 block">⚽</span>
-                    )}
+                    <TeamLogo logo={awayTeam?.logo} name={awayTeam?.name ?? ''} size="md" className="mx-auto mb-2" />
                     <p className="text-[10px] md:text-xs font-black uppercase tracking-widest truncate">{awayTeam?.shortName || 'AWAY'}</p>
                   </div>
                 </div>
@@ -355,7 +390,9 @@ export default function LoggerPage() {
                 <div className="flex items-center justify-between text-[10px] font-black uppercase tracking-widest text-white/40">
                   <span className="flex items-center gap-2">
                     <ClockIcon size={12} />
-                    {new Date(match.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    {match.startTime && !isNaN(new Date(match.startTime).getTime())
+                      ? new Date(match.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                      : 'Time TBC'}
                   </span>
                   {isLoggable ? (
                     <div className="flex items-center gap-1 group-hover:text-primary transition-colors">

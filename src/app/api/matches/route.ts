@@ -3,9 +3,21 @@ import { db } from '@/db';
 import { matches, matchEvents, teams } from '@/db/schema';
 import { eq, and, inArray, or, desc } from 'drizzle-orm'; // inArray kept for teams fetch
 import { getAuthUser } from '@/lib/auth';
+import { checkRateLimit } from '@/lib/rate-limit';
 
 export async function GET(request: NextRequest) {
     try {
+        const rl = checkRateLimit(request);
+        if (rl.limited) {
+            return NextResponse.json(
+                { error: 'Too many requests. Please try again shortly.' },
+                { status: 429, headers: { 'Retry-After': String(rl.retryAfterSeconds) } }
+            );
+        }
+
+        const authUser = await getAuthUser(request).catch(() => null);
+        const isAdmin = authUser?.role === 'admin';
+
         const { searchParams } = new URL(request.url);
         const sport = searchParams.get('sport');
         const loggerId = searchParams.get('loggerId');
@@ -56,11 +68,8 @@ export async function GET(request: NextRequest) {
                 const homeTeam = teamsMap.get(match.homeTeamId);
                 const awayTeam = teamsMap.get(match.awayTeamId);
 
-                // BUG-025: strip all banned internal fields before returning public response.
-                // loggerId, assignedLoggers, approvalStatus, managerNotes, approvedBy, approvedAt
-                // are internal assignment/audit fields — never exposed to public viewers.
                 const {
-                    loggerId: _lid,
+                    loggerId,
                     approvalStatus: _as,
                     managerNotes: _mn,
                     approvedBy: _ab,
@@ -70,6 +79,7 @@ export async function GET(request: NextRequest) {
 
                 return {
                     ...publicMatch,
+                    ...(isAdmin && { loggerId }),
                     events,
                     stats: match.stats ? JSON.parse(match.stats) : {},
                     lineups: match.lineups ? JSON.parse(match.lineups) : null,

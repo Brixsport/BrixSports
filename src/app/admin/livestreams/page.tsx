@@ -1,8 +1,10 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { Video, Plus, Edit, Trash2, Eye, EyeOff, Save, X, Radio, Info, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { TeamLogo } from '@/lib/utils/team-logo';
 
 interface Match {
     id: string;
@@ -30,6 +32,16 @@ interface LivestreamForm {
 }
 
 export default function LivestreamsAdminPage() {
+    return (
+        <Suspense fallback={<div className="p-8 text-center text-white/40">Loading...</div>}>
+            <LivestreamsAdminPageContent />
+        </Suspense>
+    );
+}
+
+function LivestreamsAdminPageContent() {
+    const searchParams = useSearchParams();
+    const deepLinkMatchId = searchParams.get('matchId');
     const [matches, setMatches] = useState<Match[]>([]);
     const [loading, setLoading] = useState(true);
     const [editingMatch, setEditingMatch] = useState<string | null>(null);
@@ -47,6 +59,23 @@ export default function LivestreamsAdminPage() {
     useEffect(() => {
         fetchMatches();
     }, []);
+
+    // Deep-link from a match row's "Manage Livestream" button in /admin/matches --
+    // auto-opens that match's edit form instead of making the admin find it again
+    // in this page's own list. Tracked via a ref (not editingMatch === null) because
+    // handleSave() itself calls fetchMatches() -- which changes the `matches` reference
+    // this effect depends on -- before the save flow clears editingMatch; relying on
+    // editingMatch alone reopened the form right after every save (and after any other
+    // fetchMatches() call, e.g. toggleLivestream, while the URL still carries ?matchId=).
+    const autoOpenedMatchIdRef = useRef<string | null>(null);
+    useEffect(() => {
+        if (!deepLinkMatchId || autoOpenedMatchIdRef.current === deepLinkMatchId || matches.length === 0) return;
+        const match = matches.find(m => m.id === deepLinkMatchId);
+        if (match) {
+            autoOpenedMatchIdRef.current = deepLinkMatchId;
+            handleEdit(match);
+        }
+    }, [deepLinkMatchId, matches]);
 
     const fetchMatches = async () => {
         try {
@@ -347,8 +376,8 @@ export default function LivestreamsAdminPage() {
                                                 <td className="px-6 py-4">
                                                     <div className="flex items-center gap-3">
                                                         <div className="flex -space-x-2">
-                                                            <img src={match.homeTeam.logo} alt="" className="w-8 h-8 rounded-full border-2 border-gray-900" />
-                                                            <img src={match.awayTeam.logo} alt="" className="w-8 h-8 rounded-full border-2 border-gray-900" />
+                                                            <TeamLogo logo={match.homeTeam.logo} name={match.homeTeam.name} size="sm" className="rounded-full border-2 border-gray-900" />
+                                                            <TeamLogo logo={match.awayTeam.logo} name={match.awayTeam.name} size="sm" className="rounded-full border-2 border-gray-900" />
                                                         </div>
                                                         <div>
                                                             <p className="font-semibold text-sm">

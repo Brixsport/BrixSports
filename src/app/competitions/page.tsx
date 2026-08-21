@@ -7,8 +7,9 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import Image from 'next/image';
 import MatchCalendar from '@/components/MatchCalendar';
 import { isSameDay } from 'date-fns';
+import { TeamLogo } from '@/lib/utils/team-logo';
 
-type SportType = 'Football' | 'Basketball' | 'Track';
+type SportType = 'All' | 'Football' | 'Basketball' | 'Track';
 
 interface Competition {
   id: string;
@@ -18,6 +19,7 @@ interface Competition {
   season?: string;
   status?: string;
   description?: string;
+  logo?: string | null;
 }
 
 interface Standing {
@@ -72,7 +74,7 @@ function CompetitionsContent() {
   const initialComp = searchParams.get('competition');
 
   const [view, setView] = useState<'standings' | 'matches' | 'brackets'>('standings');
-  const [selectedSport, setSelectedSport] = useState<SportType>('Football');
+  const [selectedSport, setSelectedSport] = useState<SportType>('All');
   const [competitions, setCompetitions] = useState<Competition[]>([]);
   const [selectedComp, setSelectedComp] = useState<Competition | null>(null);
   const [standings, setStandings] = useState<Standing[]>([]);
@@ -164,8 +166,9 @@ function CompetitionsContent() {
   }, [selectedComp, selectedSport]);
 
   // Filter competitions for the current sport tab
-  const filteredCompetitions = competitions
-    .filter(c => c.isMultiSport || c.sport === selectedSport);
+  const filteredCompetitions = selectedSport === 'All'
+    ? competitions
+    : competitions.filter(c => c.isMultiSport || c.sport === selectedSport);
 
   if (loading && competitions.length === 0) {
     return (
@@ -179,19 +182,26 @@ function CompetitionsContent() {
     <div className="min-h-screen bg-[#050505] text-white p-4 md:p-12">
       <div className="max-w-5xl mx-auto space-y-6 md:space-y-12">
         <header className="flex flex-col md:flex-row md:items-end justify-between gap-4 md:gap-6 border-b border-white/5 pb-8">
-          <div>
-            <div className="flex items-center gap-2 mb-2">
-              <Trophy size={14} className="text-primary" />
-              <span className="text-[10px] font-black uppercase tracking-widest text-white/40">
-                {selectedComp?.season || 'Current Season'} • {selectedComp?.status || 'Active'}
-              </span>
+          <div className="flex items-center gap-4">
+            {selectedComp?.logo && (
+              <div className="w-14 h-14 md:w-20 md:h-20 shrink-0 bg-white/5 rounded-2xl border border-white/10 p-2 flex items-center justify-center">
+                <TeamLogo logo={selectedComp.logo} name={selectedComp.name} size="lg" />
+              </div>
+            )}
+            <div>
+              <div className="flex items-center gap-2 mb-2">
+                <Trophy size={14} className="text-primary" />
+                <span className="text-[10px] font-black uppercase tracking-widest text-white/40">
+                  {selectedComp?.season || 'Current Season'} • {selectedComp?.status || 'Active'}
+                </span>
+              </div>
+              <h1 className="font-display text-2xl md:text-5xl tracking-tighter italic uppercase leading-none mb-2">
+                {selectedComp?.name || 'Competition Viewer'}
+              </h1>
+              <p className="text-white/60 text-sm max-w-xl">
+                {selectedComp?.description || `Managing standings, fixtures, and results for ${selectedComp?.name || 'this competition'}.`}
+              </p>
             </div>
-            <h1 className="font-display text-2xl md:text-5xl tracking-tighter italic uppercase leading-none mb-2">
-              {selectedComp?.name || 'Competition Viewer'}
-            </h1>
-            <p className="text-white/60 text-sm max-w-xl">
-              {selectedComp?.description || `Managing standings, fixtures, and results for ${selectedComp?.name || 'this competition'}.`}
-            </p>
           </div>
 
           {/* View Toggle */}
@@ -224,12 +234,14 @@ function CompetitionsContent() {
         <div className="space-y-4 md:space-y-6">
           <div className="flex justify-center overflow-x-auto">
             <div className="inline-flex bg-white/5 p-1 rounded-2xl border border-white/10 gap-1">
-              {(['Football', 'Basketball', 'Track'] as SportType[]).map((sport) => (
+              {(['All', 'Football', 'Basketball', 'Track'] as SportType[]).map((sport) => (
                 <button
                   key={sport}
                   onClick={() => {
                     setSelectedSport(sport);
-                    const firstForSport = competitions.find(c => c.sport === sport);
+                    const firstForSport = sport === 'All'
+                      ? competitions[0]
+                      : competitions.find(c => c.sport === sport);
                     if (firstForSport) setSelectedComp(firstForSport);
                   }}
                   className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${selectedSport === sport ? 'bg-primary text-black' : 'text-white/40 hover:text-white'}`}
@@ -299,8 +311,8 @@ function CompetitionsContent() {
                           </td>
                           <td className="px-6 py-4">
                             <div className="flex items-center gap-4">
-                              <div className="w-10 h-10 relative flex-shrink-0 bg-white/5 rounded-lg p-1">
-                                {row.team.logo ? <img src={row.team.logo} alt={row.team.name} className="w-full h-full object-contain" /> : <div className="w-full h-full flex items-center justify-center text-xs font-bold text-white/20">{row.team.shortName}</div>}
+                              <div className="w-10 h-10 relative flex-shrink-0 bg-white/5 rounded-lg p-1 flex items-center justify-center">
+                                <TeamLogo logo={row.team.logo} name={row.team.name} size="sm" />
                               </div>
                               <div className="min-w-0">
                                 <p className="text-sm font-black uppercase tracking-tight truncate">{row.team.name}</p>
@@ -393,7 +405,7 @@ function CompetitionsContent() {
                             <p className="font-bold text-sm uppercase truncate">{match.homeTeam?.name || 'Home'}</p>
                           </div>
                           <div className="w-10 h-10 bg-white/5 rounded-lg p-1 flex items-center justify-center">
-                            {match.homeTeam?.logo ? <img src={match.homeTeam.logo} className="w-full h-full object-contain" /> : <span className="text-xs font-bold">{match.homeTeam?.shortName}</span>}
+                            <TeamLogo logo={match.homeTeam?.logo} name={match.homeTeam?.name ?? ''} size="sm" />
                           </div>
                         </div>
 
@@ -407,7 +419,7 @@ function CompetitionsContent() {
 
                         <div className="flex items-center gap-3 flex-1">
                           <div className="w-10 h-10 bg-white/5 rounded-lg p-1 flex items-center justify-center">
-                            {match.awayTeam?.logo ? <img src={match.awayTeam.logo} className="w-full h-full object-contain" /> : <span className="text-xs font-bold">{match.awayTeam?.shortName}</span>}
+                            <TeamLogo logo={match.awayTeam?.logo} name={match.awayTeam?.name ?? ''} size="sm" />
                           </div>
                           <div className="text-left flex-1">
                             <p className="font-bold text-sm uppercase truncate">{match.awayTeam?.name || 'Away'}</p>
@@ -459,7 +471,7 @@ function CompetitionsContent() {
                                 <div className="space-y-3">
                                   <div className="flex justify-between items-center">
                                     <div className="flex items-center gap-2">
-                                      <img src={match.homeTeam?.logo} className="w-6 h-6 object-contain" />
+                                      <TeamLogo logo={match.homeTeam?.logo} name={match.homeTeam?.name ?? 'TBD'} size="sm" />
                                       <span className="text-[10px] font-black uppercase text-white/60">{match.homeTeam?.name || 'TBD'}</span>
                                     </div>
                                     <span className="font-display italic text-lg">{match.homeScore ?? '-'}</span>
@@ -467,7 +479,7 @@ function CompetitionsContent() {
                                   <div className="h-px bg-white/5" />
                                   <div className="flex justify-between items-center">
                                     <div className="flex items-center gap-2">
-                                      <img src={match.awayTeam?.logo} className="w-6 h-6 object-contain" />
+                                      <TeamLogo logo={match.awayTeam?.logo} name={match.awayTeam?.name ?? 'TBD'} size="sm" />
                                       <span className="text-[10px] font-black uppercase text-white/60">{match.awayTeam?.name || 'TBD'}</span>
                                     </div>
                                     <span className="font-display italic text-lg">{match.awayScore ?? '-'}</span>

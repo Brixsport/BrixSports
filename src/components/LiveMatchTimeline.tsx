@@ -19,6 +19,13 @@ interface Event {
         name: string;
         number: number;
     };
+    // WS events from match-state-manager carry playerSnapshot instead of player
+    playerSnapshot?: {
+        id?: string;
+        name?: string;
+        jerseyName?: string;
+        teamId?: string;
+    };
     relatedPlayer?: {
         id: string;
         name: string;
@@ -32,6 +39,8 @@ interface Event {
     detail?: string;
     isEyePoint?: boolean;
     value?: any;
+    playerId?: string;
+    teamId?: string;
 }
 
 interface LiveMatchTimelineProps {
@@ -44,7 +53,7 @@ interface LiveMatchTimelineProps {
 
 export default function LiveMatchTimeline({ events, homeTeam, awayTeam, eyePoints, sport = 'football' }: LiveMatchTimelineProps) {
     const getEventIcon = (type: string) => {
-        switch (type.toUpperCase()) {
+        switch (type.toUpperCase().replace(/\s+/g, '_')) {
             case 'GOAL':
                 return <Target className="w-5 h-5" />;
             case 'ASSIST':
@@ -57,6 +66,10 @@ export default function LiveMatchTimeline({ events, homeTeam, awayTeam, eyePoint
                 return <ArrowRightLeft className="w-5 h-5" />;
             case 'SAVE':
                 return <Shield className="w-5 h-5" />;
+            case 'PENALTY_SAVED':
+                return <Shield className="w-5 h-5 text-amber-400" />;
+            case 'PENALTY_MISSED':
+                return <Activity className="w-5 h-5 text-red-400" />;
             case 'EYE_POINT':
                 return <Eye className="w-5 h-5 text-purple-500" />;
             case 'FIELD_GOAL':
@@ -75,7 +88,7 @@ export default function LiveMatchTimeline({ events, homeTeam, awayTeam, eyePoint
 
     const getEventColor = (type: string) => {
         const baseStyle = "bg-white/5 border border-white/10 backdrop-blur-sm transition-all hover:bg-white/10";
-        switch (type.toUpperCase()) {
+        switch (type.toUpperCase().replace(/\s+/g, '_')) {
             case 'GOAL':
             case 'FIELD_GOAL':
             case 'THREE_POINTER':
@@ -88,6 +101,10 @@ export default function LiveMatchTimeline({ events, homeTeam, awayTeam, eyePoint
                 return `${baseStyle} border-green-500/20 hover:border-green-500/40`;
             case 'EYE_POINT':
                 return `${baseStyle} border-purple-500/20 hover:border-purple-500/40`;
+            case 'PENALTY_SAVED':
+                return `${baseStyle} border-amber-500/20 hover:border-amber-500/40`;
+            case 'PENALTY_MISSED':
+                return `${baseStyle} border-red-500/20 hover:border-red-500/40`;
             default:
                 return baseStyle;
         }
@@ -100,7 +117,7 @@ export default function LiveMatchTimeline({ events, homeTeam, awayTeam, eyePoint
 
     // Advanced Commentary Generators
     const generateGoalCommentary = (event: Event, seed: number) => {
-        const playerName = event.player?.name;
+        const playerName = event.player?.name ?? event.playerSnapshot?.name ?? event.playerSnapshot?.jerseyName;
         const isLateGame = event.minute > 85;
         const isEarlyGame = event.minute < 10;
         const detail = event.detail?.toLowerCase() || '';
@@ -149,7 +166,7 @@ export default function LiveMatchTimeline({ events, homeTeam, awayTeam, eyePoint
     };
 
     const generateBasketballScoreCommentary = (event: Event, seed: number, type: '2pt' | '3pt' | 'ft') => {
-        const playerName = event.player?.name || 'Player';
+        const playerName = event.player?.name ?? event.playerSnapshot?.name ?? event.playerSnapshot?.jerseyName ?? 'Player';
         const isClutch = event.minute > 36; // Late 4th quarter
 
         let templates: string[] = [];
@@ -188,12 +205,11 @@ export default function LiveMatchTimeline({ events, homeTeam, awayTeam, eyePoint
     };
 
     const getEventDescription = (event: Event) => {
-        const playerName = event.player?.name || 'Unknown';
+        const playerName = event.player?.name ?? event.playerSnapshot?.name ?? event.playerSnapshot?.jerseyName ?? 'Unknown';
         const playerNumber = event.player?.number;
-        // Use minute + event.type length as a simple seed for variety
-        const seed = event.minute + (event.type?.length || 0) + (event.player?.name?.length || 0) + (event.detail?.length || 0);
+        const seed = event.minute + (event.type?.length || 0) + (playerName?.length || 0) + (event.detail?.length || 0);
 
-        switch (event.type.toUpperCase()) {
+        switch (event.type.toUpperCase().replace(/\s+/g, '_')) {
             case 'GOAL':
                 const goalText = generateGoalCommentary(event, seed);
                 return (
@@ -249,7 +265,7 @@ export default function LiveMatchTimeline({ events, homeTeam, awayTeam, eyePoint
                         <span className="font-bold block mb-1">🔄 Substitution</span>
                         <div className="text-sm grid gap-1">
                             <div className="text-green-400 flex items-center gap-2">
-                                <span className="text-[10px] font-bold bg-green-500/20 px-1 rounded">IN</span> {event.player?.name}
+                                <span className="text-[10px] font-bold bg-green-500/20 px-1 rounded">IN</span> {event.player?.name ?? event.playerSnapshot?.name ?? event.playerSnapshot?.jerseyName}
                             </div>
                             {event.relatedPlayer && (
                                 <div className="text-red-400 flex items-center gap-2">
@@ -319,6 +335,16 @@ export default function LiveMatchTimeline({ events, homeTeam, awayTeam, eyePoint
                 case 'EXTRA_TIME_1': period = 'Extra Time 1'; break;
                 case 'EXTRA_TIME_2': period = 'Extra Time 2'; break;
                 case 'PENALTY_SHOOTOUT': period = 'Penalties'; break;
+                // Basketball -- BasketballLogger now sends period on every event (it never
+                // did before), so real basketball events reach this branch instead of the
+                // minute-based football-only fallback below, which always mislabeled every
+                // basketball event as "First Half"/"Second Half" since quarter numbers (1-5)
+                // never exceed the football thresholds.
+                case 'Q1': period = '1st Quarter'; break;
+                case 'Q2': period = '2nd Quarter'; break;
+                case 'Q3': period = '3rd Quarter'; break;
+                case 'Q4': period = '4th Quarter'; break;
+                case 'OT': period = 'Overtime'; break;
                 default: period = event.period.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, l => l.toUpperCase());
             }
         } else {
@@ -337,6 +363,22 @@ export default function LiveMatchTimeline({ events, homeTeam, awayTeam, eyePoint
                 <Activity className="w-16 h-16 text-white/20 mx-auto mb-4" />
                 <h3 className="text-xl font-semibold text-white/60 mb-2">No events yet</h3>
                 <p className="text-white/40">Match events will appear here as they happen</p>
+            </div>
+        );
+    }
+
+    // -1 is the established "minute unknown" sentinel written by goals-only
+    // backfill scripts (no full logsheet available for the match). If any
+    // event carries it, the match's timing data isn't trustworthy enough to
+    // present as a real minute-by-minute timeline — hide it entirely rather
+    // than show a partial/misleading order.
+    const hasUnknownMinuteEvents = events.some(e => e.minute == null || e.minute < 0);
+    if (hasUnknownMinuteEvents) {
+        return (
+            <div className="text-center py-20">
+                <Clock className="w-16 h-16 text-white/20 mx-auto mb-4" />
+                <h3 className="text-xl font-semibold text-white/60 mb-2">Timeline not available</h3>
+                <p className="text-white/40">Match timeline will be displayed here once available</p>
             </div>
         );
     }
@@ -373,18 +415,47 @@ export default function LiveMatchTimeline({ events, homeTeam, awayTeam, eyePoint
                                         <div className="text-sm font-bold text-primary">
                                             {(() => {
                                                 const min = event.minute;
+                                                // -1 is the established "minute unknown" sentinel written by
+                                                // goals-only backfill scripts (no full logsheet available).
+                                                if (min == null || min < 0) return '—';
+
                                                 const p = event.period;
+
+                                                // Basketball -- `min` is now a real elapsed-match-minute
+                                                // (BasketballLogger used to send the quarter number here,
+                                                // which every branch below assumed was elapsed time).
+                                                // Showing a bare elapsed-minute with a football-style `'`
+                                                // isn't what a basketball viewer expects; show the quarter
+                                                // label plus the in-quarter clock (event.second holds
+                                                // seconds-remaining-in-quarter from the logger's countdown).
+                                                if (sport?.toLowerCase() === 'basketball') {
+                                                    const secs = event.second ?? 0;
+                                                    const mm = Math.floor(secs / 60);
+                                                    const ss = String(secs % 60).padStart(2, '0');
+                                                    return (
+                                                        <>
+                                                            <span>{p ?? 'Q?'}</span>
+                                                            <span className="text-xs block opacity-70">{mm}:{ss}</span>
+                                                        </>
+                                                    );
+                                                }
+
                                                 const isFootball = sport?.toLowerCase() === 'football' || sport?.toLowerCase() === '5-a-side' || sport?.toLowerCase() === 'five-a-side';
 
+                                                let label = String(min);
                                                 if (isFootball && p) {
-                                                    if (p === 'FIRST_HALF' && min > 45) return `45+${min - 45}`;
-                                                    if (p === 'SECOND_HALF' && min > 90) return `90+${min - 90}`;
-                                                    if (p === 'EXTRA_TIME_1' && min > 105) return `105+${min - 105}`;
-                                                    if (p === 'EXTRA_TIME_2' && min > 120) return `120+${min - 120}`;
+                                                    if (p === 'FIRST_HALF' && min > 45) label = `45+${min - 45}`;
+                                                    else if (p === 'SECOND_HALF' && min > 90) label = `90+${min - 90}`;
+                                                    else if (p === 'EXTRA_TIME_1' && min > 105) label = `105+${min - 105}`;
+                                                    else if (p === 'EXTRA_TIME_2' && min > 120) label = `120+${min - 120}`;
                                                 }
-                                                return min;
-                                            })()}'
-                                            {event.second ? <span className="text-xs">:{event.second}</span> : ''}
+                                                return (
+                                                    <>
+                                                        {label}'
+                                                        {event.second ? <span className="text-xs">:{event.second}</span> : ''}
+                                                    </>
+                                                );
+                                            })()}
                                         </div>
                                     </div>
 
@@ -434,14 +505,14 @@ export default function LiveMatchTimeline({ events, homeTeam, awayTeam, eyePoint
             ))}
 
             {/* Eye Points Summary */}
-            {eyePoints.length > 0 && (
+            {(eyePoints ?? []).length > 0 && (
                 <div className="mt-8 p-6 bg-purple-500/10 border border-purple-500/30 rounded-2xl">
                     <div className="flex items-center gap-2 mb-4">
                         <Eye className="w-5 h-5 text-purple-500" />
                         <h3 className="font-bold text-lg">Eye Point Awards</h3>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                        {eyePoints.map((award) => (
+                        {(eyePoints ?? []).map((award) => (
                             <div key={award.id} className="flex items-center gap-3 p-3 bg-white/5 rounded-lg">
                                 <Award className="w-5 h-5 text-purple-500" />
                                 <div>

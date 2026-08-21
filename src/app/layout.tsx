@@ -1,8 +1,8 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
-import VisualEditsMessenger from "../visual-edits/VisualEditsMessenger";
 import ErrorReporter from "@/components/ErrorReporter";
 import Script from "next/script";
+import { ThemeProvider } from "@/components/providers/ThemeProvider";
 import { BottomNav } from "@/components/BottomNav";
 import { PWAProvider } from "@/components/pwa/PWAProvider";
 import SessionProvider from "@/components/providers/SessionProvider";
@@ -12,8 +12,17 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import { AuthModal } from "@/components/auth/AuthModal";
 import { SocketProvider } from "@/hooks/useWebSocket";
 import AdBanner from "@/components/ads/AdBanner";
+import { env } from "@/lib/env";
+import { Analytics } from "@vercel/analytics/react";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 
 export const metadata: Metadata = {
+  // Without this, Next.js resolves relative OG/Twitter image URLs (the root
+  // layout's own "/assets/Logos/BRIX-SPORT-LOGO.png" included) against
+  // "http://localhost:3000" instead of the real domain -- harmless in dev,
+  // but wrong for any shared link once deployed (BACKLOG-189, surfaced by a
+  // build warning while wiring the new per-page matches/teams/players/news metadata).
+  metadataBase: new URL("https://brixsports.com"),
   title: {
     default: "BRIXSPORTS | Nigerian University Sports Live",
     template: "%s | BRIXSPORTS"
@@ -77,22 +86,25 @@ export const metadata: Metadata = {
     canonical: "https://brixsports.com",
   },
   manifest: "/manifest-user.json",
+  // Favicon itself is served via the app/icon.png file convention (navy,
+  // transparent background -- viewer-facing, what most users see). Only the
+  // iOS home-screen icon needs an explicit entry here since Apple fills a
+  // transparent PNG's background with black, so this one is solid navy.
   icons: {
-    icon: [
-      { url: '/assests/Logos/BRIX-SPORT-LOGO.png', type: 'image/png' },
-      { url: '/favicon.ico', sizes: 'any' },
-    ],
-    apple: '/assests/Logos/BRIX-SPORT-LOGO.png',
+    apple: '/icons/role-colorways/viewer-192.png',
   },
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
     title: "BRIXSPORTS",
   },
-  other: {
-    'google-site-verification': 'googlefd0ce86c5ed02ba9.html',
-    'msvalidate.01': '',
-  },
+  // Search Console ownership is already verified via the file-based method
+  // (public/googlefd0ce86c5ed02ba9.html) -- the meta-tag method is a separate,
+  // independent verification path and its `content` value must be a real HTML-tag
+  // verification *token*, not this filename (BACKLOG-189). Removed rather than left
+  // stuffed with the wrong value; add back a real token if the meta-tag method is
+  // ever specifically wanted. `msvalidate.01` (Bing) was a bare empty string --
+  // also removed rather than shipping a token-shaped field with no token.
 };
 
 export const viewport: Viewport = {
@@ -109,11 +121,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <head>
-        <link rel="icon" href="/assests/Logos/BRIX-SPORT-LOGO.png" type="image/png" sizes="any" />
-        <link rel="icon" href="/favicon.ico" sizes="any" />
-        <link rel="apple-touch-icon" href="/assests/Logos/BRIX-SPORT-LOGO.png" />
+        {/* Favicon (app/icon.png) and apple-touch-icon (metadata.icons.apple
+            above) are both handled by Next.js's metadata API -- no manual
+            <link> tags needed here, avoids redundant/conflicting declarations. */}
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
         <meta name="apple-mobile-web-app-title" content="BRIXSPORTS" />
@@ -220,40 +232,50 @@ export default function RootLayout({
         />
       </head>
       <body className="antialiased">
-        <Script
-          id="orchids-browser-logs"
-          src="https://slelguoygbfzlpylpxfs.supabase.co/storage/v1/object/public/scripts/orchids-browser-logs.js"
-          strategy="lazyOnload"
-          data-orchids-project-id="014126df-de10-4764-9819-95edd7099944"
-        />
+        {/* GA4 -- BACKLOG-189: analytics was never wired at all, zero pageview or
+            event tracking anywhere. Gated on the env var so local/staging builds
+            (which don't set NEXT_PUBLIC_GA_MEASUREMENT_ID) never pollute production
+            analytics with dev traffic. */}
+        {env.gaMeasurementId && (
+          <>
+            <Script
+              src={`https://www.googletagmanager.com/gtag/js?id=${env.gaMeasurementId}`}
+              strategy="afterInteractive"
+            />
+            <Script id="ga4-init" strategy="afterInteractive">
+              {`
+                window.dataLayer = window.dataLayer || [];
+                function gtag(){dataLayer.push(arguments);}
+                gtag('js', new Date());
+                gtag('config', '${env.gaMeasurementId}');
+              `}
+            </Script>
+          </>
+        )}
         <ErrorReporter />
-        <Script
-          src="https://slelguoygbfzlpylpxfs.supabase.co/storage/v1/object/public/scripts//route-messenger.js"
-          strategy="lazyOnload"
-          data-target-origin="*"
-          data-message-type="ROUTE_CHANGE"
-          data-include-search-params="true"
-          data-only-in-iframe="true"
-          data-debug="true"
-          data-custom-data='{"appName": "YourApp", "version": "1.0.0", "greeting": "hi"}'
-        />
-        <PWAProvider swPath="/sw-user.js">
-          <SessionProvider>
-            <AuthProvider>
-              <NotificationProvider>
-                <SocketProvider>
-                  <GlobalNotificationListener />
-                  <AdBanner position="top" />
-                  {children}
-                  <AdBanner position="bottom" />
-                  <BottomNav />
-                  <AuthModal />
-                </SocketProvider>
-              </NotificationProvider>
-            </AuthProvider>
-          </SessionProvider>
-        </PWAProvider>
-        <VisualEditsMessenger />
+        <ThemeProvider>
+          <PWAProvider swPath="/sw-user.js">
+            <SessionProvider>
+              <AuthProvider>
+                <NotificationProvider>
+                  <SocketProvider>
+                    <GlobalNotificationListener />
+                    <AdBanner position="top" />
+                    {children}
+                    <AdBanner position="bottom" />
+                    <BottomNav />
+                    <AuthModal />
+                  </SocketProvider>
+                </NotificationProvider>
+              </AuthProvider>
+            </SessionProvider>
+          </PWAProvider>
+        </ThemeProvider>
+        {/* Vercel Analytics (pageviews/engagement) + Speed Insights (real-user Core
+            Web Vitals) -- both are inert no-ops when not running on Vercel, no env
+            gating needed unlike GA4 above. */}
+        <Analytics />
+        <SpeedInsights />
       </body>
     </html>
   );

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
 import { matchPredictions, predictionLeaderboard } from '@/db/schema';
 import { eq, and, desc } from 'drizzle-orm';
+import { getAuthUser } from '@/lib/auth';
 
 // GET /api/predictions - Get user predictions
 export async function GET(request: NextRequest) {
@@ -15,6 +16,14 @@ export async function GET(request: NextRequest) {
                 { error: 'User ID is required' },
                 { status: 400 }
             );
+        }
+
+        const authUser = await getAuthUser(request).catch(() => null);
+        if (!authUser) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+        if (authUser.id !== userId && authUser.role !== 'admin') {
+            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
         }
 
         // If matchId is provided, get specific prediction
@@ -58,15 +67,21 @@ export async function GET(request: NextRequest) {
 // POST /api/predictions - Create a prediction
 export async function POST(request: NextRequest) {
     try {
+        const authUser = await getAuthUser(request).catch(() => null);
+        if (!authUser) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+
         const body = await request.json();
         const {
-            userId,
             matchId,
             predictedHomeScore,
             predictedAwayScore,
             predictedWinner,
             confidence,
         } = body;
+        // Ownership is never client-supplied — always the verified session (CLAUDE.md audit-field rule).
+        const userId = authUser.id;
 
         if (!userId || !matchId || predictedHomeScore === undefined || predictedAwayScore === undefined) {
             return NextResponse.json(
@@ -145,15 +160,21 @@ export async function POST(request: NextRequest) {
 // PUT /api/predictions - Update an existing prediction
 export async function PUT(request: NextRequest) {
     try {
+        const authUser = await getAuthUser(request).catch(() => null);
+        if (!authUser) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+
         const body = await request.json();
         const {
-            userId,
             matchId,
             predictedHomeScore,
             predictedAwayScore,
             predictedWinner,
             confidence,
         } = body;
+        // Ownership is never client-supplied — always the verified session (CLAUDE.md audit-field rule).
+        const userId = authUser.id;
 
         if (!userId || !matchId || predictedHomeScore === undefined || predictedAwayScore === undefined) {
             return NextResponse.json(

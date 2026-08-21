@@ -1,9 +1,11 @@
 'use client';
 
-import { useState } from 'react';
-import { Calendar, MapPin, Trophy, Users, TrendingUp, MessageSquare } from 'lucide-react';
-import { MatchPredictionCard } from '@/components/predictions/MatchPredictionCard';
-import { MatchVotePoll } from '@/components/predictions/MatchVotePoll';
+// BACKSCOPED: 2026-06-08 — BACKLOG-028. Reinstate when: Predictions + Polls built (Phase 7)
+// import { useState } from 'react';
+// import { Calendar, MapPin, Trophy, Users, TrendingUp, MessageSquare } from 'lucide-react';
+// import { MatchPredictionCard } from '@/components/predictions/MatchPredictionCard';
+// import { MatchVotePoll } from '@/components/predictions/MatchVotePoll';
+import { Calendar, MapPin, Trophy, MessageSquare } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface Team {
@@ -33,7 +35,8 @@ interface UpcomingMatchViewProps {
 }
 
 export function UpcomingMatchView({ match }: UpcomingMatchViewProps) {
-    const [activeTab, setActiveTab] = useState<'prediction' | 'poll'>('prediction');
+    // BACKSCOPED: 2026-06-08 — BACKLOG-028. Reinstate when: Predictions + Polls built (Phase 7)
+    // const [activeTab, setActiveTab] = useState<'prediction' | 'poll'>('prediction');
 
     const formatDate = (dateString: string) => {
         const date = new Date(dateString);
@@ -144,45 +147,20 @@ export function UpcomingMatchView({ match }: UpcomingMatchViewProps) {
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                     {/* Main Content */}
                     <div className="lg:col-span-2 space-y-6">
-                        {/* Prediction/Poll Tabs */}
-                        <div className="bg-gray-900 rounded-xl border border-gray-800 overflow-hidden">
-                            {/* Tab Headers */}
+                        {/* BACKSCOPED: 2026-06-08 — BACKLOG-028. Reinstate when: Predictions + Polls built (Phase 7) */}
+                        {/* <div className="bg-gray-900 rounded-xl border border-gray-800 overflow-hidden">
                             <div className="flex border-b border-gray-800">
-                                <button
-                                    onClick={() => setActiveTab('prediction')}
-                                    className={cn(
-                                        "flex-1 px-6 py-4 font-semibold transition-colors flex items-center justify-center gap-2",
-                                        activeTab === 'prediction'
-                                            ? "bg-purple-600 text-white"
-                                            : "text-gray-400 hover:text-white hover:bg-gray-800"
-                                    )}
-                                >
-                                    <TrendingUp className="w-4 h-4" />
-                                    <span>Predict Score</span>
+                                <button onClick={() => setActiveTab('prediction')} className={cn("flex-1 px-6 py-4 font-semibold transition-colors flex items-center justify-center gap-2", activeTab === 'prediction' ? "bg-purple-600 text-white" : "text-gray-400 hover:text-white hover:bg-gray-800")}>
+                                    <TrendingUp className="w-4 h-4" /><span>Predict Score</span>
                                 </button>
-                                <button
-                                    onClick={() => setActiveTab('poll')}
-                                    className={cn(
-                                        "flex-1 px-6 py-4 font-semibold transition-colors flex items-center justify-center gap-2",
-                                        activeTab === 'poll'
-                                            ? "bg-purple-600 text-white"
-                                            : "text-gray-400 hover:text-white hover:bg-gray-800"
-                                    )}
-                                >
-                                    <Users className="w-4 h-4" />
-                                    <span>Vote Winner</span>
+                                <button onClick={() => setActiveTab('poll')} className={cn("flex-1 px-6 py-4 font-semibold transition-colors flex items-center justify-center gap-2", activeTab === 'poll' ? "bg-purple-600 text-white" : "text-gray-400 hover:text-white hover:bg-gray-800")}>
+                                    <Users className="w-4 h-4" /><span>Vote Winner</span>
                                 </button>
                             </div>
-
-                            {/* Tab Content */}
                             <div className="p-6">
-                                {activeTab === 'prediction' ? (
-                                    <MatchPredictionCard match={match} />
-                                ) : (
-                                    <MatchVotePoll match={match} />
-                                )}
+                                {activeTab === 'prediction' ? <MatchPredictionCard match={match} /> : <MatchVotePoll match={match} />}
                             </div>
-                        </div>
+                        </div> */}
 
                         {/* Match Info */}
                         <div className="bg-gradient-to-br from-gray-900 to-gray-800 rounded-xl border border-gray-700 p-6">
@@ -224,11 +202,11 @@ export function UpcomingMatchView({ match }: UpcomingMatchViewProps) {
 
                     {/* Sidebar */}
                     <div className="space-y-6">
-                        {/* Quick Poll */}
-                        <div className="bg-gradient-to-br from-gray-900 to-gray-800 rounded-xl border border-gray-700 p-6">
+                        {/* BACKSCOPED: 2026-06-08 — BACKLOG-028. Reinstate when: Polls built (Phase 7) */}
+                        {/* <div className="bg-gradient-to-br from-gray-900 to-gray-800 rounded-xl border border-gray-700 p-6">
                             <h3 className="text-lg font-bold text-white mb-4">Quick Vote</h3>
                             <MatchVotePoll match={match} compact />
-                        </div>
+                        </div> */}
 
                         {/* Countdown */}
                         <div className="bg-gradient-to-br from-purple-900/30 to-pink-900/30 border border-purple-500/30 rounded-xl p-6">

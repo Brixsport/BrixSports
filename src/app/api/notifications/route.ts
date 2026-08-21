@@ -7,7 +7,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
 import { matches, teams, players, news, matchEvents, userFavorites } from '@/db/schema';
 import { eq, desc, and, gte, or, inArray } from 'drizzle-orm';
-import { getAuthUser } from '@/lib/auth';
+import { getAuthUser, resolveEffectiveUserId } from '@/lib/auth';
 
 export async function GET(request: NextRequest) {
     try {
@@ -20,14 +20,15 @@ export async function GET(request: NextRequest) {
             );
         }
 
+        const effectiveId = await resolveEffectiveUserId(user);
         const { searchParams } = new URL(request.url);
-        const limit = parseInt(searchParams.get('limit') || '20');
+        const limit = Math.min(Math.max(1, parseInt(searchParams.get('limit') || '20', 10) || 20), 100);
 
         // Fetch user favorites to personalize notifications
         const favorites = await db
             .select()
             .from(userFavorites)
-            .where(eq(userFavorites.userId, user.id));
+            .where(eq(userFavorites.userId, effectiveId));
 
         const favoriteTeamIds = favorites
             .filter(f => f.favoriteType === 'team')

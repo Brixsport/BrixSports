@@ -38,6 +38,17 @@ let stableFallback: SocketContextValue | null = null;
 
 let sharedSocket: Socket | null = null;
 let connectionCount = 0;
+let manualRetryLoopActive = false; // guards against a second parallel post-exhaustion retry loop
+// BUG-137: the pending setTimeout handle inside scheduleRetry() had no reference
+// reachable outside its own closure, so SocketProvider's unmount cleanup could
+// null sharedSocket but never actually cancel a queued retry or reset the flag
+// above. Once a retry loop started and the socket later tore down (unmount, not
+// just disconnect), manualRetryLoopActive could get stuck true forever -- its own
+// self-clearing check reads sharedSocket?.connected on a now-null socket, always
+// false, so it never fires -- permanently blocking any future retry loop for a
+// new socket. Tracked at module scope specifically so the unmount cleanup can
+// reach in and cancel it.
+let manualRetryTimeoutHandle: ReturnType<typeof setTimeout> | null = null;
 
 function getOrCreateSocket(): Socket | null {
     if (sharedSocket?.connected || sharedSocket?.active) {
@@ -79,6 +90,16 @@ function getOrCreateSocket(): Socket | null {
         reconnectionDelay: 2000,
         reconnectionDelayMax: 10000,
         timeout: 10000,
+        // Logger WS socket auth: a function (not a static object) so it re-reads
+        // localStorage on every (re)connection attempt, not just the first one --
+        // covers a logger reconnecting after a network blip. Viewers have no
+        // token, connect anonymously, exactly as before. Known gap, not solved
+        // here: if this shared connection was already established anonymously
+        // (e.g. browsing the public site) and the user THEN logs in as a logger
+        // without a page reload, the existing connection won't pick up the new
+        // token until its next reconnect -- narrow edge case, not the common
+        // path (loggers navigate straight to /logger).
+        auth: (cb) => cb({ token: localStorage.getItem('authToken') || undefined }),
     });
 
     let reconnectAttempts = 0;
@@ -97,9 +118,73 @@ function getOrCreateSocket(): Socket | null {
         if (reconnectAttempts <= 3) {
             console.warn(`[WS] Connection error (attempt ${reconnectAttempts}/5):`, error.message);
         } else if (reconnectAttempts === 5) {
-            console.warn('[WS] Max reconnection attempts reached. Real-time features disabled.');
-            sharedSocket?.disconnect();
+            // Do NOT call disconnect() — it permanently kills Socket.IO's reconnection loop.
+            console.warn('[WS] Max reconnection attempts reached. Waiting for server...');
+        } else {
+            // BUG-114: attempt 4, and every attempt after 5 (including retries triggered by
+            // the manual 30s loop below calling connect() again), previously fell through
+            // both branches above and were silently unlogged forever — made it impossible
+            // to tell from the console whether Socket.IO's reconnection engine was still
+            // trying or had genuinely given up. Log unconditionally so that ambiguity
+            // can't recur in the next investigation.
+            console.warn(`[WS] Connection error (attempt ${reconnectAttempts}):`, error.message);
         }
+    });
+
+    // BUG-114 real root cause: reconnection lifecycle events (reconnect, reconnect_attempt,
+    // reconnect_error, reconnect_failed) are emitted by the Manager (socket.io), never
+    // re-relayed to the Socket instance itself in socket.io-client v4 — unlike connect_error,
+    // which IS re-relayed to the socket for convenience (why that one always logged
+    // correctly while this one never fired, confirmed live across multiple session-43
+    // Railway-kill tests: connect_error reached attempt 6+, reconnect_failed never once
+    // logged). `sharedSocket.on('reconnect_failed', ...)` was listening on the wrong
+    // object and could never fire — this is why the manual retry loop below never engaged,
+    // not a server-side session-handling mystery as originally suspected.
+    sharedSocket.io.on('reconnect_failed', () => {
+        // Socket.IO exhausted its own 5 built-in attempts (which already use
+        // exponential backoff + jitter internally via the library's own defaults --
+        // confirmed in node_modules/socket.io-client: randomizationFactor defaults
+        // to 0.5, backoff base 2000ms capped at reconnectionDelayMax=10000ms). Past
+        // that cap, Socket.IO gives up entirely -- this manual loop is what actually
+        // recovers the page once the server returns, without needing a hard refresh.
+        //
+        // It used to retry every flat 30s with zero growth and zero jitter: every
+        // client that disconnected around the same moment (a single Railway restart
+        // affects everyone connected at once, by construction) would retry in exact
+        // lockstep, forever -- a thundering herd against one Railway instance with no
+        // load balancer. Now exponential (base 10s, factor 1.5, capped at 60s) with
+        // ±50% jitter (matching Socket.IO's own default), same shape as the library's
+        // own backoff, just extended past its hard attempt limit.
+        if (manualRetryLoopActive) return; // guard: don't stack a second parallel loop
+        manualRetryLoopActive = true;
+        console.warn('[WS] reconnect_failed — starting manual retry loop (exponential backoff + jitter)');
+
+        let manualAttempt = 0;
+        const BASE_MS = 10000;
+        const MAX_MS = 60000;
+        const FACTOR = 1.5;
+        const JITTER_RATIO = 0.5;
+
+        const scheduleRetry = () => {
+            const raw = Math.min(BASE_MS * Math.pow(FACTOR, manualAttempt), MAX_MS);
+            const jitter = raw * JITTER_RATIO * (Math.random() * 2 - 1); // ± JITTER_RATIO
+            const delay = Math.max(1000, Math.round(raw + jitter));
+
+            manualRetryTimeoutHandle = setTimeout(() => {
+                manualRetryTimeoutHandle = null;
+                if (sharedSocket?.connected) {
+                    manualRetryLoopActive = false;
+                    return;
+                }
+                manualAttempt++;
+                console.log(`[WS] Manual retry attempt ${manualAttempt} (this delay was ~${Math.round(delay / 1000)}s)`);
+                reconnectAttempts = 0;
+                sharedSocket?.connect();
+                scheduleRetry();
+            }, delay);
+        };
+
+        scheduleRetry();
     });
 
     return sharedSocket;
@@ -147,6 +232,17 @@ export function SocketProvider({ children }: { children: ReactNode }) {
                 socket.disconnect();
                 sharedSocket = null;
                 connectionCount = 0;
+                // BUG-137: cancel any pending manual-retry timeout and reset its guard
+                // flag here -- previously only the socket reference was nulled, leaving
+                // a queued scheduleRetry() timeout to fire against a dead socket later,
+                // and manualRetryLoopActive stuck true forever (its own self-clearing
+                // check reads sharedSocket?.connected on a now-null socket, always
+                // false), permanently blocking any future retry loop for a new socket.
+                if (manualRetryTimeoutHandle) {
+                    clearTimeout(manualRetryTimeoutHandle);
+                    manualRetryTimeoutHandle = null;
+                }
+                manualRetryLoopActive = false;
             }
         };
     }, []);
@@ -307,36 +403,58 @@ export function useTeamStats(matchId: string) {
  * Hook for subscribing to match timer updates
  */
 export function useMatchTimer(matchId: string) {
-    const [time, setTime] = useState<{ minute: number; extraTime: number; half: number; period?: string } | null>(null);
+    const [time, setTime] = useState<{ minute: number; second?: number; extraTime: number; half: number; period?: string } | null>(null);
+    const [isStale, setIsStale] = useState(false);
     const { socket } = useMatchSubscription(matchId);
 
     useEffect(() => {
         if (!socket) return;
 
-        const handleTimeUpdate = (data: { matchId: string; minute: number; extraTime: number; half: number; period?: string }) => {
+        // `second` was always sent (both sports) but silently dropped here --
+        // harmless for football (never rendered), but basketball's countdown
+        // display needs it. Now threaded through for both.
+        const handleTimeUpdate = (data: { matchId: string; minute: number; second?: number; extraTime: number; half: number; period?: string }) => {
             if (data.matchId === matchId) {
-                setTime({ minute: data.minute, extraTime: data.extraTime, half: data.half, period: data.period });
+                setTime({ minute: data.minute, second: data.second, extraTime: data.extraTime, half: data.half, period: data.period });
+                setIsStale(false);
             }
         };
 
+        // Mark stale on disconnect but preserve last-known minute — do not null it.
+        // LiveMatchStatus renders the frozen minute with a dimmed indicator instead
+        // of dropping to the bare DB period label on every transient hiccup.
+        const handleDisconnect = () => setIsStale(true);
+
         socket.on('match:time:updated', handleTimeUpdate);
         socket.on('match:time:update', handleTimeUpdate);
+        socket.on('disconnect', handleDisconnect);
 
         return () => {
             socket.off('match:time:updated', handleTimeUpdate);
             socket.off('match:time:update', handleTimeUpdate);
+            socket.off('disconnect', handleDisconnect);
         };
     }, [socket, matchId]);
 
-    return time;
+    return { time, isStale };
 }
 
 /**
  * Hook for subscribing to match status updates
  */
-export function useMatchStatus(matchId: string, initialStatus: string = 'UPCOMING', initialScore = { home: 0, away: 0 }) {
+export function useMatchStatus(
+    matchId: string,
+    initialStatus: string = 'UPCOMING',
+    initialScore = { home: 0, away: 0 },
+    // BACKLOG-105: penalty shootout score, kept undefined until a real shootout
+    // kick fires — undefined (not {home:0,away:0}) is what tells the consumer
+    // "no shootout happened" vs. "shootout is 0-0 so far", so the (X-Y pens) line
+    // only ever renders once a real kick has landed.
+    initialShootoutScore?: { home: number; away: number }
+) {
     const [status, setStatus] = useState<string>(initialStatus);
     const [score, setScore] = useState<{ home: number; away: number }>(initialScore);
+    const [shootoutScore, setShootoutScore] = useState<{ home: number; away: number } | undefined>(initialShootoutScore);
     const { socket } = useMatchSubscription(matchId);
 
     useEffect(() => {
@@ -346,8 +464,12 @@ export function useMatchStatus(matchId: string, initialStatus: string = 'UPCOMIN
             if (data.matchId === matchId) setStatus(data.status);
         };
 
-        const handleScoreUpdate = (data: { matchId: string; homeScore: number; awayScore: number }) => {
-            if (data.matchId === matchId) setScore({ home: data.homeScore, away: data.awayScore });
+        const handleScoreUpdate = (data: { matchId: string; homeScore: number; awayScore: number; shootoutHomeScore?: number; shootoutAwayScore?: number }) => {
+            if (data.matchId !== matchId) return;
+            setScore({ home: data.homeScore, away: data.awayScore });
+            if (data.shootoutHomeScore !== undefined && data.shootoutAwayScore !== undefined) {
+                setShootoutScore({ home: data.shootoutHomeScore, away: data.shootoutAwayScore });
+            }
         };
 
         const handleMatchUpdate = (data: { matchId: string; status?: string; homeScore?: number; awayScore?: number }) => {
@@ -370,7 +492,7 @@ export function useMatchStatus(matchId: string, initialStatus: string = 'UPCOMIN
         };
     }, [socket, matchId]);
 
-    return { status, score };
+    return { status, score, shootoutScore };
 }
 
 /**

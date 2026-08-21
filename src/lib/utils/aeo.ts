@@ -586,7 +586,7 @@ export function generateBrixsportOrganizationSchema() {
         url: baseUrl,
         logo: {
             '@type': 'ImageObject',
-            url: `${baseUrl}/assets/Logos/BRIX-SPORT-LOGO.png`,
+            url: `${baseUrl}/assests/Logos/BRIX-SPORT-LOGO.png`,
             width: 512,
             height: 512,
         },

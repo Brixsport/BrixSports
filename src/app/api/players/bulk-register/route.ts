@@ -7,13 +7,14 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { db } from '@/db';
-import { playerTeamAffiliations, players, teams } from '@/db/schema';
+import { playerTeamAffiliations, players, teams, competitions } from '@/db/schema';
 import { getPlayerProfileId } from '@/db/utils/player-profile';
 import { ensureOrganizationEntity, syncPlayerOrganizationAffiliations } from '@/lib/player-data';
 import { getAuthUser } from '@/lib/auth';
+import { CURRENT_SEASON } from '@/lib/rosterService';
 
 interface PlayerInput {
     name: string;
@@ -89,6 +90,19 @@ export async function POST(request: NextRequest) {
 
         const npugaCompetitionIds = ['npuga-special-edition-2026', 'npuga-special-edition'];
         const isNpugaCompetition = !!competitionId && npugaCompetitionIds.includes(competitionId);
+
+        // Derive the real season from the competition being registered for, same
+        // pattern as updatePlayerStats() -- falls back to CURRENT_SEASON (the
+        // upcoming season) only when no competition is supplied.
+        let registrationSeason = CURRENT_SEASON;
+        if (competitionId) {
+            const competition = await db
+                .select({ season: competitions.season })
+                .from(competitions)
+                .where(eq(competitions.id, competitionId))
+                .get();
+            if (competition?.season) registrationSeason = competition.season;
+        }
         const normalizedSport = sport || 'Football';
         const normalizedGender =
             gender === 'M' || gender === 'male'
@@ -198,7 +212,13 @@ export async function POST(request: NextRequest) {
 
         const isExternalTeam = isNpugaCompetition && !isHomeInstitution;
         const createdPlayers: Array<{ id: string; name: string; number: number }> = [];
-        const skippedPlayers: Array<{ name: string; number: number; reason: string }> = [];
+        const skippedPlayers: Array<{
+            name: string;
+            number: number;
+            reason: string;
+            matchedPlayerId?: string;
+            matchedPlayerName?: string;
+        }> = [];
 
         for (const playerInput of playerList) {
             const existingOnLegacyTeam = await db.query.players.findFirst({
@@ -213,6 +233,52 @@ export async function POST(request: NextRequest) {
                     name: playerInput.name,
                     number: playerInput.number,
                     reason: 'Jersey number already taken',
+                });
+                continue;
+            }
+
+            // Pre-flight dedup: skip if a player with the same name+college already exists
+            // ON THIS TEAM. Exempt: NPUGA email-reuse path (shouldReuseByEmail) — that path
+            // intentionally finds and reuses an existing player, so dedup would be a false
+            // positive there.
+            //
+            // Previously matched against the ENTIRE players table (hundreds of legacy rows),
+            // not scoped to this team -- a brand-new team's players typically have no college
+            // set (the field doesn't apply to an external team), so the match condition
+            // became "same name, college IS NULL/empty" against every player in the whole
+            // database. Any name collision with an unrelated existing player who also has no
+            // college on file silently skipped the new player -- no error, no crash, just
+            // never created, invisible to the logger, with no in-UI way to force-create them.
+            // Scoping to this team's actual roster (via playerTeamAffiliations) means a name
+            // collision against a totally unrelated team is no longer treated as a duplicate.
+            const inputCollege = isExternalTeam ? null : playerInput.college || null;
+            const dupCheck = await db
+                .select({ id: players.id, name: players.name })
+                .from(players)
+                .innerJoin(playerTeamAffiliations, eq(playerTeamAffiliations.playerId, players.id))
+                .where(
+                    and(
+                        sql`LOWER(${players.name}) = LOWER(${playerInput.name})`,
+                        eq(playerTeamAffiliations.teamId, resolvedTeamId!),
+                        eq(playerTeamAffiliations.isActive, true),
+                        inputCollege
+                            ? eq(players.college, inputCollege)
+                            : sql`(${players.college} IS NULL OR ${players.college} = '')`
+                    )
+                )
+                .limit(1)
+                .get();
+
+            const willReuseByEmail =
+                isNpugaCompetition && isHomeInstitution && !!playerInput.email;
+
+            if (dupCheck && !willReuseByEmail) {
+                skippedPlayers.push({
+                    name: playerInput.name,
+                    number: playerInput.number,
+                    reason: 'possible_duplicate',
+                    matchedPlayerId: dupCheck.id,
+                    matchedPlayerName: dupCheck.name,
                 });
                 continue;
             }
@@ -340,6 +406,7 @@ export async function POST(request: NextRequest) {
                     startDate: new Date(),
                     jerseyNumber: playerInput.number,
                     position: playerInput.position,
+                    season: registrationSeason,
                     createdAt: new Date(),
                 });
             }

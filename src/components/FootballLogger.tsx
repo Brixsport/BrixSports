@@ -3,15 +3,24 @@
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Activity, Save, Undo2, Clock, Play, Pause, Settings, Lock as LockIcon, MessageSquare, AlertTriangle, Send } from 'lucide-react';
+
+// BUG-194: this file used to carry its own inline copy of the offline-queue
+// helpers below (openAdminDB/queueOfflineEvent/jwtSecondsRemaining) -- a third
+// near-duplicate of the same contract BasketballLogger.tsx's BUG-142 fix was
+// explicitly written to avoid becoming. The inline copy also predated BUG-193
+// (basketball's fix for a real missing-IndexedDB-store race that could
+// silently and permanently break the queue) and never got it, since it lived
+// in a separate file. Importing from the shared module closes that gap here
+// too, for free, and removes the duplication.
+import { queueOfflineEvent, queueAdminChange, jwtSecondsRemaining } from '@/lib/admin-offline-queue';
 import { useAuth } from '@/hooks/useAuth';
 import { useMultiLogger } from '@/hooks/useMultiLogger';
 import { useWebSocket } from '@/hooks/useWebSocket';
 import { MultiLoggerStatus } from '@/components/MultiLoggerStatus';
-import { getMatchStateManager, MatchStateManager, MatchState, FootballEventType } from '@/lib/match-state-manager';
+import { getMatchStateManager, destroyMatchStateManager, MatchStateManager, MatchState, FootballEventType, MatchPeriod } from '@/lib/match-state-manager';
 import type { SyncEvent } from '@/lib/multiLogger';
 import { getPrimaryTeam } from '@/lib/player-affiliation-utils';
-// Import to initialize match event notification listener
-import '@/lib/notifications/event-driven-notifier';
+import { TeamLogo } from '@/lib/utils/team-logo';
 
 import { Match, Logger, Player, Team } from '@/db/schema';
 
@@ -24,7 +33,16 @@ interface FootballLoggerProps {
 export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerProps) {
     // ========== STATE MANAGEMENT ==========
     const stateManager = useRef<MatchStateManager | null>(null);
+    // BUG-143: the Goal/Penalty->Assist chain schedules a delayed confirmEvent() call
+    // (see "1b" below) that nothing ever cancelled -- if the logger navigated away
+    // within that window, the timeout still fired and silently wrote/broadcast an
+    // event for a match no longer on screen. Tracked here so the unmount cleanup can
+    // clear any still-pending ones.
+    const pendingAssistTimeouts = useRef<ReturnType<typeof setTimeout>[]>([]);
     const [matchState, setMatchState] = useState<MatchState | null>(null);
+    // BUG-109: last wall-clock time a clock checkpoint was persisted to the DB —
+    // throttles the PATCH separately from the per-tick WS emit.
+    const lastClockCheckpointAt = useRef<number>(0);
 
     // UI Local State
     const [selectedTeam, setSelectedTeam] = useState<'home' | 'away'>('home');
@@ -34,6 +52,8 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
     const [awayPlayers, setAwayPlayers] = useState<Player[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
+    const [isUndoing, setIsUndoing] = useState(false);
+    const [isStartingMatch, setIsStartingMatch] = useState(false);
     const [showSettingsModal, setShowSettingsModal] = useState(false);
     const getPlayerTeam = (player?: Player | null) =>
         player ? (getPrimaryTeam(player as Player & Record<string, unknown>) as Team | null) : null;
@@ -62,6 +82,7 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
     // Variant Detection — fetched from competition data or string fallback
     const [competitionPlayersPerSide, setCompetitionPlayersPerSide] = useState<number | null>(null);
     const [halfDuration, setHalfDuration] = useState<number>(45); // Will be updated in init
+    const [maxSubstitutions, setMaxSubstitutions] = useState<number | null>(null); // null = no cap
 
     const is5Aside = competitionPlayersPerSide === 5 ||
         matchState?.halfDuration === 20 ||
@@ -92,6 +113,20 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
     const [showPeriodEndModal, setShowPeriodEndModal] = useState(false);
     const [pendingPeriodTransition, setPendingPeriodTransition] = useState<{ current: string; next: string } | null>(null);
     const [showPenaltyModal, setShowPenaltyModal] = useState(false);
+    // BACKLOG-105: local running tally for the logger's own UI, hydrated from
+    // the real server response after each kick (never client-derived) so it can
+    // never drift from the DB-authoritative shootoutHomeScore/shootoutAwayScore.
+    const [showShootoutModal, setShowShootoutModal] = useState(false);
+    const [shootoutScore, setShootoutScore] = useState<{ home: number; away: number } | null>(null);
+    // BACKLOG-190: IFAB Law 10.3 -- "each kick is taken by a different player,
+    // and all eligible players must take a kick before any player can take a
+    // second kick." Tracks who has already kicked *this round* per team; once a
+    // team's set covers its whole on-pitch roster, the round is complete and
+    // everyone on that team becomes eligible again (sudden-death repeats allowed).
+    // Lives here, not inside ShootoutModal, because that component unmounts
+    // between kicks (`showShootoutModal && <ShootoutModal .../>`) and would
+    // otherwise forget who'd already gone every time it closes.
+    const [takenThisRound, setTakenThisRound] = useState<{ home: Set<string>; away: Set<string> }>({ home: new Set(), away: new Set() });
     const [showReasonModal, setShowReasonModal] = useState(false);
     const [pendingReasonEvent, setPendingReasonEvent] = useState<{ type: FootballEventType; playerId: string } | null>(null);
     const [showFoulOutcomeModal, setShowFoulOutcomeModal] = useState(false);
@@ -105,69 +140,181 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
     const [noteContent, setNoteContent] = useState('');
     const { user } = useAuth();
     const [showLineupEditModal, setShowLineupEditModal] = useState(false);
+    const [queuedOfflineCount, setQueuedOfflineCount] = useState(0);
+    // BUG-194 part 2: period-transition PATCH / undo DELETE retries, via the
+    // separate pendingAdminChanges queue (mirrors BasketballLogger.tsx's own
+    // BUG-142 fix exactly, same admin-offline-queue.ts module).
+    const [queuedAdminChangeCount, setQueuedAdminChangeCount] = useState(0);
+    const [eventSaveError, setEventSaveError] = useState<string | null>(null);
+
+    // Listen for background-sync completion from sw-admin.js
+    useEffect(() => {
+        if (!('serviceWorker' in navigator)) return;
+        const handleMessage = (e: MessageEvent) => {
+            if (e.data?.type === 'SYNC_COMPLETE' && e.data?.tag === 'sync-match-events') {
+                setQueuedOfflineCount(0);
+            } else if (e.data?.type === 'SYNC_COMPLETE' && e.data?.tag === 'sync-admin-changes') {
+                setQueuedAdminChangeCount(0);
+            }
+        };
+        navigator.serviceWorker.addEventListener('message', handleMessage);
+        return () => navigator.serviceWorker.removeEventListener('message', handleMessage);
+    }, []);
+
+    // iOS drain fallback — Background Sync API is a no-op on iOS (BACKLOG-107).
+    // When the page comes online or becomes visible, trigger a drain directly:
+    // Android/desktop: re-register the sync tag (idempotent).
+    // iOS: postMessage DRAIN_MATCH_EVENTS to the SW, which calls syncMatchEvents().
+    useEffect(() => {
+        const triggerDrain = () => {
+            if (!('serviceWorker' in navigator)) return;
+            navigator.serviceWorker.ready.then((reg) => {
+                if ('sync' in reg) {
+                    const syncReg = reg as ServiceWorkerRegistration & { sync: { register: (tag: string) => Promise<void> } };
+                    syncReg.sync.register('sync-match-events').catch(() => {});
+                    syncReg.sync.register('sync-admin-changes').catch(() => {});
+                } else if (navigator.serviceWorker.controller) {
+                    navigator.serviceWorker.controller.postMessage({ type: 'DRAIN_MATCH_EVENTS' });
+                    navigator.serviceWorker.controller.postMessage({ type: 'DRAIN_ADMIN_CHANGES' });
+                }
+            }).catch(() => {});
+        };
+        const handleVisibility = () => {
+            if (document.visibilityState === 'visible') triggerDrain();
+        };
+        window.addEventListener('online', triggerDrain);
+        document.addEventListener('visibilitychange', handleVisibility);
+        return () => {
+            window.removeEventListener('online', triggerDrain);
+            document.removeEventListener('visibilitychange', handleVisibility);
+        };
+    }, []);
+
+    // Ensure localStorage.authToken is populated for the offline queue path.
+    // AuthContext wipes localStorage when /api/auth/me returns 401 for logger roles.
+    // On mount, refresh via cookie to re-store the token.
+    useEffect(() => {
+        const ensureLocalToken = async () => {
+            try {
+                const res = await fetch('/api/auth/refresh', { method: 'POST', credentials: 'include' });
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data.token) localStorage.setItem('authToken', data.token);
+                }
+            } catch {
+                // offline at mount — silently ignore, token may already be in localStorage
+            }
+        };
+        ensureLocalToken();
+    }, []);
     const [editingTeam, setEditingTeam] = useState<'home' | 'away'>('home');
     const [draftLineup, setDraftLineup] = useState<{ starters: Player[], subs: Player[] }>({ starters: [], subs: [] });
 
-    // Fetch staff comms
-    useEffect(() => {
-        const fetchComms = async () => {
-            try {
-                const res = await fetch(`/api/staff-comms?matchId=${match.id}`);
-                if (res.ok) {
-                    const data = await res.json();
-                    setComms(data);
-                }
-            } catch (err) {
-                console.error(err);
-            }
-        };
+    // BACKSCOPED: 2026-07-27 (session 47C) — BACKLOG-142. Reinstate when: /api/staff-comms
+    // has a real auth gate (currently none in production -- unauthenticated read + a
+    // spoofable userId on write) and admin/manager/page.tsx's half-built match-selection
+    // flow for this panel is cleaned up. See BACKLOG-142 for the full audit.
+    // // Fetch staff comms
+    // useEffect(() => {
+    //     const fetchComms = async () => {
+    //         try {
+    //             const res = await fetch(`/api/staff-comms?matchId=${match.id}`);
+    //             if (res.ok) {
+    //                 const data = await res.json();
+    //                 setComms(data);
+    //             }
+    //         } catch (err) {
+    //             console.error(err);
+    //         }
+    //     };
+    //
+    //     fetchComms();
+    //     const interval = setInterval(fetchComms, 15000);
+    //     return () => clearInterval(interval);
+    // }, [match.id]);
+    //
+    // const handleSendNote = async (e: React.FormEvent) => {
+    //     e.preventDefault();
+    //     if (!noteContent || !user) return;
+    //
+    //     try {
+    //         await fetch('/api/staff-comms', {
+    //             method: 'POST',
+    //             headers: { 'Content-Type': 'application/json' },
+    //             body: JSON.stringify({
+    //                 matchId: match.id,
+    //                 userId: user.id,
+    //                 content: noteContent,
+    //                 type: 'note'
+    //             })
+    //         });
+    //         setNoteContent('');
+    //         const res = await fetch(`/api/staff-comms?matchId=${match.id}`);
+    //         if (res.ok) setComms(await res.json());
+    //     } catch (err) {
+    //         console.error(err);
+    //     }
+    // };
 
-        fetchComms();
-        const interval = setInterval(fetchComms, 15000);
-        return () => clearInterval(interval);
-    }, [match.id]);
-
-    const handleSendNote = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!noteContent || !user) return;
-
-        try {
-            await fetch('/api/staff-comms', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    matchId: match.id,
-                    userId: user.id,
-                    content: noteContent,
-                    type: 'note'
-                })
-            });
-            setNoteContent('');
-            const res = await fetch(`/api/staff-comms?matchId=${match.id}`);
-            if (res.ok) setComms(await res.json());
-        } catch (err) {
-            console.error(err);
-        }
+    // Derive sub event sets for a team — shared by both pool functions
+    const getSubSets = (teamId: string) => {
+        const subEvents = (matchState?.events ?? []).filter(
+            (e: any) => e.type === 'Substitution' && e.teamId === teamId
+        );
+        const subbedOffIds = new Set(subEvents.filter((e: any) => e.playerId).map((e: any) => e.playerId));
+        const subbedOnIds = new Set(subEvents.filter((e: any) => e.relatedPlayerId).map((e: any) => e.relatedPlayerId));
+        return { subbedOffIds, subbedOnIds };
     };
 
-    // Helper to get only players from the published lineup
-    const getActiveRoster = (team: 'home' | 'away') => {
+    // Players currently on the pitch: starters - subbed off + subbed on
+    // Used by: normal event picker, sub-OUT picker, assist picker, penalty modal
+    const getOnPitchPlayers = (team: 'home' | 'away') => {
         const roster = team === 'home' ? homePlayers : awayPlayers;
+        const teamId = team === 'home' ? match.homeTeamId : match.awayTeamId;
         const teamLineup = lineups[team];
-        if (!teamLineup) return roster;
+        const { subbedOffIds, subbedOnIds } = getSubSets(teamId);
 
-        const starterList = teamLineup.starters || teamLineup.players || [];
-        const subList = teamLineup.substitutes || [];
+        const subbedOnPlayers = roster.filter(p => subbedOnIds.has(p.id) && !subbedOffIds.has(p.id));
+        const addSubbedOn = (base: typeof roster) => [
+            ...base,
+            ...subbedOnPlayers.filter(p => !base.find(b => b.id === p.id)),
+        ];
 
-        const lineupIds = new Set([
-            ...starterList.map((p: any) => p.playerId || p.id || p),
-            ...subList.map((p: any) => p.playerId || p.id || p)
-        ].filter(Boolean));
+        if (!teamLineup) return addSubbedOn(roster.filter(p => !subbedOffIds.has(p.id)));
 
-        if (lineupIds.size > 0) {
-            return roster.filter(p => lineupIds.has(p.id));
+        const starterIds = new Set(
+            (teamLineup.starters || teamLineup.players || [])
+                .map((p: any) => p.playerId || p.id || p)
+                .filter(Boolean)
+        );
+
+        if (starterIds.size > 0) {
+            return addSubbedOn(roster.filter(p => starterIds.has(p.id) && !subbedOffIds.has(p.id)));
         }
-        return roster;
+        return addSubbedOn(roster.filter(p => !subbedOffIds.has(p.id)));
+    };
+
+    // Players available to come on: bench - already subbed on - playerComingOut
+    // Used by: sub-IN picker only
+    const getAvailableBench = (team: 'home' | 'away') => {
+        const roster = team === 'home' ? homePlayers : awayPlayers;
+        const teamId = team === 'home' ? match.homeTeamId : match.awayTeamId;
+        const teamLineup = lineups[team];
+        const { subbedOnIds } = getSubSets(teamId);
+
+        if (!teamLineup) return [];
+
+        const benchIds = new Set(
+            (teamLineup.substitutes || [])
+                .map((p: any) => p.playerId || p.id || p)
+                .filter(Boolean)
+        );
+
+        return roster.filter(p =>
+            benchIds.has(p.id) &&
+            !subbedOnIds.has(p.id) &&
+            p.id !== playerComingOut
+        );
     };
 
     // Initial Load & Manager Setup
@@ -201,9 +348,16 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                 setHomeTeam(home || null);
                 setAwayTeam(away || null);
 
-                // Filter eligible players by team
-                const hPlayers = eligiblePlayers.filter((player: Player) => getPlayerTeam(player)?.id === match.homeTeamId);
-                const aPlayers = eligiblePlayers.filter((player: Player) => getPlayerTeam(player)?.id === match.awayTeamId);
+                // Filter eligible players by team — memberships-aware so multi-affiliated players
+                // (e.g. college + BUSA team) resolve against the match team, not just their primary affiliation
+                const hPlayers = eligiblePlayers.filter((player: Player) =>
+                    (player as any).memberships?.some((m: any) => m.team?.id === match.homeTeamId)
+                    || getPlayerTeam(player)?.id === match.homeTeamId
+                );
+                const aPlayers = eligiblePlayers.filter((player: Player) =>
+                    (player as any).memberships?.some((m: any) => m.team?.id === match.awayTeamId)
+                    || getPlayerTeam(player)?.id === match.awayTeamId
+                );
 
                 setHomePlayers(hPlayers);
                 setAwayPlayers(aPlayers);
@@ -232,7 +386,24 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                     match.competition?.toLowerCase().includes('npuga');
                 matchHalfDuration = isFiveAside ? 20 : 35;
 
-                // Initialize Manager
+                // Initialize Manager — seed currentPeriod from DB so period survives phone refresh
+                // (DB value wins over localStorage via initial?.clock spread in initializeState)
+                const VALID_PERIODS = ['NOT_STARTED','FIRST_HALF','HALF_TIME','SECOND_HALF','EXTRA_TIME_1','EXTRA_TIME_2','PENALTY_SHOOTOUT','FINISHED'] as const;
+                type SeedPeriod = typeof VALID_PERIODS[number];
+                // Same set matches/[id]/page.tsx uses for "should the clock be ticking" —
+                // kept local here rather than shared, both files' copies are tiny and static.
+                const ACTIVE_PLAY_PERIODS: readonly SeedPeriod[] = ['FIRST_HALF', 'SECOND_HALF', 'EXTRA_TIME_1', 'EXTRA_TIME_2'];
+                const seedPeriod: SeedPeriod = VALID_PERIODS.includes(match.currentPeriod as SeedPeriod)
+                    ? (match.currentPeriod as SeedPeriod)
+                    : 'NOT_STARTED';
+                // BUG-115: getMatchStateManager is a module-level singleton keyed by matchId —
+                // if a manager instance already exists in memory (e.g. survived a re-auth that
+                // didn't fully unmount this component), it's returned as-is and the DB seed
+                // above is silently ignored, regardless of how stale the in-memory state is.
+                // Destroying first guarantees every mount of this component gets a manager
+                // freshly seeded from the DB, never a stale cached one. No other call site
+                // in the codebase reads this registry, so nothing relies on it persisting.
+                destroyMatchStateManager(match.id);
                 const manager = getMatchStateManager(match.id, {
                     homeTeamId: match.homeTeamId,
                     awayTeamId: match.awayTeamId,
@@ -241,12 +412,43 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                         home: match.homeScore || 0,
                         away: match.awayScore || 0
                     },
+                    // BUG-118 follow-up: this only ever seeded `period` — `absoluteMinute`
+                    // was never read from the DB at all, so initializeState's baseClock fell
+                    // through to its own default (0) or a stale localStorage value regardless
+                    // of BUG-118's fix adding match.minute to the assigned-matches projection.
+                    // match.minute is the BUG-109 checkpoint value — the closest real elapsed
+                    // time available for a match resumed via this path.
+                    // isRunning was also never seeded — every refresh mid-match came back
+                    // paused (constructor only auto-starts the clock when isRunning is
+                    // already true), needing a manual "Start" press even mid-second-half.
+                    // Auto-resume only for periods where the clock should actually be
+                    // ticking; HALF_TIME/PENALTY_SHOOTOUT/FINISHED/SUSPENDED stay paused.
+                    clock: {
+                        period: seedPeriod,
+                        ...(match.minute != null ? { absoluteMinute: match.minute } : {}),
+                        isRunning: ACTIVE_PLAY_PERIODS.includes(seedPeriod),
+                    } as import('@/lib/match-state-manager').MatchClock,
                 });
 
                 manager.registerPlayers(hPlayers, 'home');
                 manager.registerPlayers(aPlayers, 'away');
 
                 stateManager.current = manager;
+
+                // Fetch match config and apply halfDuration + maxSubstitutions
+                try {
+                    const configRes = await fetch(`/api/matches/${match.id}/config`);
+                    if (configRes.ok) {
+                        const { config } = await configRes.json();
+                        stateManager.current.updateConfig({ halfDuration: config.halfDuration });
+                        setHalfDuration(config.halfDuration);
+                        setMaxSubstitutions(config.maxSubstitutions ?? null);
+                    } else {
+                        alert('Match config failed to load — using default duration. Check settings before starting.');
+                    }
+                } catch (e) {
+                    alert('Match config failed to load — using default duration. Check settings before starting.');
+                }
 
                 unsubscribe = manager.subscribe((newState) => {
                     setMatchState({ ...newState });
@@ -256,9 +458,49 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
 
                 setMatchState(manager.getState());
 
+                // BACKLOG-106: If match is in-progress but no events in local state (fresh session
+                // after tab close, device switch, or AuthContext wipe), seed from DB so that
+                // subbedOnIds/subbedOffIds derive correctly and all 11 on-pitch players are visible.
+                const stateAfterInit = manager.getState();
+                if (stateAfterInit.clock.period !== 'NOT_STARTED' && stateAfterInit.events.length === 0) {
+                    try {
+                        const eventsRes = await fetch(`/api/matches/${match.id}/events`);
+                        if (eventsRes.ok) {
+                            const { events: dbEvents } = await eventsRes.json();
+                            if (Array.isArray(dbEvents) && dbEvents.length > 0) {
+                                const seeded = dbEvents.map((e: any) => ({
+                                    id: e.id,
+                                    matchId: e.matchId,
+                                    type: e.type as FootballEventType,
+                                    absoluteMinute: e.minute ?? 0,
+                                    displayMinute: e.minute ?? 0,
+                                    second: e.second ?? 0,
+                                    period: (e.period ?? 'FIRST_HALF') as MatchPeriod,
+                                    playerId: e.playerId ?? null,
+                                    playerSnapshot: null,
+                                    relatedPlayerId: e.relatedPlayerId ?? null,
+                                    relatedPlayerSnapshot: null,
+                                    teamId: e.teamId ?? '',
+                                    detail: e.detail ?? '',
+                                    value: e.value != null ? Number(e.value) : undefined,
+                                    createdAt: e.createdAt ? new Date(e.createdAt) : new Date(),
+                                    loggerId: e.loggerId ?? '',
+                                }));
+                                stateManager.current?.mergeExternalEvents(seeded);
+                                setMatchState(manager.getState());
+                            }
+                        }
+                    } catch (e) {
+                        console.error('[BACKLOG-106] Failed to seed events from DB:', e);
+                    }
+                }
+
                 // Lineup Check
                 const currentState = manager.getState();
                 if (currentState.clock.period !== 'NOT_STARTED') {
+                    if (lineupsData.success && lineupsData.lineups) {
+                        setLineups(lineupsData.lineups);
+                    }
                     setViewState('active');
                 } else if (lineupsData.success && lineupsData.lineups && (lineupsData.lineups.home || lineupsData.lineups.away)) {
                     setLineups(lineupsData.lineups || { home: null, away: null });
@@ -277,6 +519,11 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
         init();
         return () => {
             if (unsubscribe) unsubscribe();
+            // BUG-143: cancel any still-pending assist-chain timeouts so they can't
+            // fire (and silently write/broadcast an event) after this component --
+            // and this specific match's stateManager -- is gone.
+            pendingAssistTimeouts.current.forEach(clearTimeout);
+            pendingAssistTimeouts.current = [];
         };
     }, [match.id, match.homeTeamId, match.awayTeamId]);
 
@@ -336,6 +583,22 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
         // Remote Sync
         if (isSocketConnected) {
             emit('match:time:update', payload);
+        }
+
+        // BUG-109: periodic DB checkpoint, throttled separately from the per-tick WS emit
+        // above — this is the durable fallback a fresh page load / dead socket reads from.
+        // Not gated on isSocketConnected: the DB write is the point precisely when the
+        // live channel isn't reaching viewers.
+        if (period !== 'NOT_STARTED') {
+            const now = Date.now();
+            if (now - lastClockCheckpointAt.current >= 15000) {
+                lastClockCheckpointAt.current = now;
+                fetch(`/api/matches/${match.id}`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ minute: payload.minute, extraTime: payload.extraTime }),
+                }).catch((e) => console.error('[BUG-109] Failed to persist clock checkpoint:', e));
+            }
         }
     }, [matchState, isSocketConnected, emit, match.id]);
 
@@ -500,19 +763,20 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
             }
 
             // 2. Persist to API
+            // Hoisted so catch block can queue the same payload on network failure.
+            const payload = {
+                type: event.type,
+                minute: event.absoluteMinute,
+                second: event.second,
+                teamId: event.teamId,
+                playerId: event.playerId,
+                relatedPlayerId: event.relatedPlayerId,
+                detail: event.detail,
+                loggerId: event.loggerId,
+                loggerName: currentLogger?.name,
+                period: event.period,
+            };
             try {
-                const payload = {
-                    type: event.type,
-                    minute: event.absoluteMinute,
-                    second: event.second,
-                    teamId: event.teamId,
-                    playerId: event.playerId,
-                    relatedPlayerId: event.relatedPlayerId,
-                    detail: event.detail,
-                    loggerId: event.loggerId,
-                    loggerName: currentLogger?.name,
-                    period: event.period,
-                };
 
                 const res = await fetch(`/api/matches/${match.id}/events`, {
                     method: 'POST',
@@ -525,9 +789,49 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                     if (saved.event && saved.event.id) {
                         manager.confirmEvent(event.id, saved.event.id);
                     }
+                } else {
+                    // Server rejection (4xx/5xx) — real error, not a connectivity issue.
+                    // Do NOT queue: the server received and rejected the event.
+                    const errBody = await res.json().catch(() => ({}));
+                    if (res.status === 401) {
+                        alert('Session expired — please log in again to continue logging.');
+                    } else if (res.status === 403) {
+                        alert('Not authorised to log events for this match. Contact admin.');
+                    } else {
+                        alert(`Event failed to save (${res.status}) — check connection and retry.`);
+                    }
+                    console.error('[FootballLogger] Event POST rejected:', res.status, errBody);
                 }
             } catch (e) {
-                console.error("Propagation API Error:", e);
+                // Network failure — server never received the event. Queue for background sync.
+                const token = localStorage.getItem('authToken');
+                if (!token) {
+                    // No token = no recovery path. Surface visibly rather than silently losing the event.
+                    console.error('[FootballLogger] Network error and no token available — event cannot be queued:', e);
+                    alert('Network error: could not save this event and no session found. Please re-login and re-log this event manually.');
+                    return;
+                }
+                // JWT TTL is 7 days. Refuse to queue if < 30 min remaining —
+                // a drained sync with an expired token will 401 with no recovery path.
+                const QUEUE_MIN_TTL_SECONDS = 30 * 60;
+                if (jwtSecondsRemaining(token) < QUEUE_MIN_TTL_SECONDS) {
+                    console.warn('[FootballLogger] Token expiring soon — refusing to queue offline event');
+                    alert('Your session is expiring soon. This event was NOT queued for offline sync — please re-login before continuing offline, then re-log this event.');
+                    return;
+                }
+                try {
+                    await queueOfflineEvent(match.id, payload, token);
+                    setQueuedOfflineCount(prev => prev + 1);
+                    if ('serviceWorker' in navigator) {
+                        const reg = await navigator.serviceWorker.ready;
+                        if ('sync' in reg) {
+                            await (reg as ServiceWorkerRegistration & { sync: { register: (tag: string) => Promise<void> } }).sync.register('sync-match-events');
+                        }
+                    }
+                    console.log('[FootballLogger] Event queued for background sync');
+                } catch (queueErr) {
+                    console.error('[FootballLogger] Failed to queue event:', queueErr);
+                }
             }
         });
 
@@ -595,6 +899,16 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
 
     const handleSubIn = (playerInId: string) => {
         if (!playerComingOut) return;
+        if (maxSubstitutions !== null) {
+            const teamIndex = selectedTeam === 'home' ? 0 : 1;
+            const subsMade = matchState?.stats?.substitutions[teamIndex] ?? 0;
+            if (subsMade >= maxSubstitutions) {
+                alert(`Maximum substitutions reached for this team (${maxSubstitutions})`);
+                setShowSubInModal(false);
+                setPlayerComingOut(null);
+                return;
+            }
+        }
         confirmEvent('Substitution', playerComingOut, playerInId);
         setShowSubInModal(false);
         setPlayerComingOut(null);
@@ -642,37 +956,18 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
         // If this is a Goal/Penalty and has an assistant, record the assistant as a separate event
         if ((type === 'Goal' || type === 'Penalty') && relatedPlayerId) {
             // We give it a short delay so IDs and order are consistent
-            setTimeout(() => {
+            const timeoutId = setTimeout(() => {
                 confirmEvent('Assist', relatedPlayerId, playerId);
             }, 500);
+            pendingAssistTimeouts.current.push(timeoutId);
         }
 
-        // 2. Send Push Notifications for key discipline and scoring events
-        const isGoalEvent = type === 'Goal' || type === 'Penalty' || type === 'Own Goal';
-        const isCardEvent = type === 'Yellow Card' || type === 'Red Card';
-        if (isGoalEvent || isCardEvent) {
-            const currentState = manager.getState();
-            const notifEventType = (type === 'Goal' || type === 'Penalty' || type === 'Own Goal') ? 'GOAL' :
-                type === 'Red Card' ? 'RED_CARD' : 'YELLOW_CARD';
-            const playerName = playerSnapshot?.name || 'Unknown Player';
-            const teamName = selectedTeam === 'home' ? (homeTeam?.name || 'Home') : (awayTeam?.name || 'Away');
-
-            fetch('/api/notifications/match-event', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    matchId: match.id,
-                    homeTeamId: match.homeTeamId,
-                    awayTeamId: match.awayTeamId,
-                    eventType: notifEventType,
-                    playerName,
-                    teamName,
-                    minute: currentState.clock.displayMinute,
-                    homeScore: currentState.score.home,
-                    awayScore: currentState.score.away,
-                })
-            }).catch(e => console.warn('[FootballLogger] Push notification failed:', e));
-        }
+        // Push notifications for goal/card/penalty-outcome events are sent server-side
+        // now (BUG-200/BUG-204 sweep) from events/route.ts's after() hook, right after
+        // the event save above actually commits. This client-side fetch used to run in
+        // parallel with that and was double-sending every one of these notifications —
+        // removed, not merged, since the server-side path already has the authoritative
+        // saved data (minute, score) and doesn't depend on this tab staying open.
     };
 
     const handleSetStoppage = (minutes: number) => {
@@ -680,11 +975,72 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
         setShowStoppageModal(false);
     };
 
+    // BUG-194 part 2: shared by every period-transition PATCH (half/OT/penalty
+    // starts, end-of-period transitions, including the final-whistle combined
+    // patch). Was fire-and-forget (`.catch(e => console.error(...))`) at every
+    // call site, same gap BasketballLogger.tsx's BUG-142 fix closed there --
+    // on a network failure this now queues the PATCH via the same
+    // pendingAdminChanges mechanism undo below uses, instead of silently
+    // dropping the write with no recovery path. Deliberately NOT applied to
+    // the 15s clock-checkpoint PATCH (BUG-109) -- that one is a frequent,
+    // best-effort update where only the latest value matters, and queueing
+    // every 15s tick while offline would flood the queue with superseded data.
+    const persistMatchPatch = async (body: Record<string, unknown>, label: string) => {
+        try {
+            const res = await fetch(`/api/matches/${match.id}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body),
+            });
+            if (!res.ok) {
+                setEventSaveError(`Failed to save ${label} (${res.status}) — may not persist on refresh.`);
+                return;
+            }
+            setEventSaveError(null);
+        } catch (e) {
+            console.error(`Failed to persist ${label}:`, e);
+            const token = localStorage.getItem('authToken');
+            if (!token || jwtSecondsRemaining(token) < 30 * 60) {
+                setEventSaveError(`Failed to save ${label} — offline or unreachable, and could not queue a retry (${!token ? 'no session' : 'session expiring soon'}).`);
+                return;
+            }
+            try {
+                await queueAdminChange(`/api/matches/${match.id}`, 'PATCH', body, token);
+                setQueuedAdminChangeCount(prev => prev + 1);
+                setEventSaveError(`${label} queued — will save automatically once back online.`);
+                if ('serviceWorker' in navigator) {
+                    const reg = await navigator.serviceWorker.ready;
+                    if ('sync' in reg) {
+                        await (reg as ServiceWorkerRegistration & { sync: { register: (tag: string) => Promise<void> } }).sync.register('sync-admin-changes');
+                    }
+                }
+            } catch (queueErr) {
+                console.error(`Failed to queue ${label}:`, queueErr);
+                setEventSaveError(`Failed to save ${label} — offline or unreachable, and queueing also failed.`);
+            }
+        }
+    };
+
     const handlePeriodEndConfirm = () => {
         if (!stateManager.current || !pendingPeriodTransition) return;
 
+        const nextPeriod = pendingPeriodTransition.next;
+
         // Complete the transition to next period
-        stateManager.current.completePeriodTransition(pendingPeriodTransition.next as any);
+        stateManager.current.completePeriodTransition(nextPeriod as any);
+
+        // When the period reaches FINISHED and scores differ, finalize the match in the same
+        // PATCH — the "End Match" button is hidden once currentPeriod === 'FINISHED' so
+        // handleFinalize would be unreachable after this transition (BUG-076).
+        // When scores are equal we leave status as LIVE so the ET/Penalties flow can continue.
+        const isFinalWhistle = nextPeriod === 'FINISHED' && homeScore !== awayScore;
+
+        persistMatchPatch(
+            isFinalWhistle
+                ? { currentPeriod: nextPeriod, status: 'FINISHED', homeScore, awayScore, stats: matchState?.stats }
+                : { currentPeriod: nextPeriod },
+            isFinalWhistle ? 'match finalization' : `${nextPeriod} transition`
+        );
 
         // Close modal and reset state
         setShowPeriodEndModal(false);
@@ -700,46 +1056,166 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
         }
     };
 
-    const handleUndo = () => {
-        if (!stateManager.current) return;
+    // BUG-194 part 2: shared by both delete calls in handleUndo below (the
+    // main event, plus the preceding Yellow Card on a second-yellow undo).
+    // Was previously a single try/catch around both fetches ending in a
+    // blocking alert() with no recovery path -- on a genuine network failure
+    // this now queues the DELETE via the same pendingAdminChanges mechanism
+    // BasketballLogger.tsx's BUG-142 fix uses. Never touches local state
+    // itself (BUG-130's principle: never flip local state before the server,
+    // or a confirmed queue write, actually reflects it) -- the caller decides
+    // what to do with each outcome.
+    const deleteEventWithQueue = async (eventId: string): Promise<
+        { status: 'ok' } | { status: 'rejected'; detail: string } | { status: 'queued'; detail: string } | { status: 'failed'; detail: string }
+    > => {
+        try {
+            const res = await fetch(`/api/matches/${match.id}/events/${eventId}`, {
+                method: 'DELETE',
+                credentials: 'include',
+            });
+            if (!res.ok) {
+                const data = await res.json().catch(() => ({}));
+                return { status: 'rejected', detail: String(data.error || res.status) };
+            }
+            return { status: 'ok' };
+        } catch (e) {
+            console.error('Failed to undo event:', e);
+            const token = localStorage.getItem('authToken');
+            if (!token || jwtSecondsRemaining(token) < 30 * 60) {
+                return { status: 'failed', detail: `offline or unreachable, and could not queue a retry (${!token ? 'no session' : 'session expiring soon'})` };
+            }
+            try {
+                await queueAdminChange(`/api/matches/${match.id}/events/${eventId}`, 'DELETE', {}, token);
+                setQueuedAdminChangeCount(prev => prev + 1);
+                if ('serviceWorker' in navigator) {
+                    const reg = await navigator.serviceWorker.ready;
+                    if ('sync' in reg) {
+                        await (reg as ServiceWorkerRegistration & { sync: { register: (tag: string) => Promise<void> } }).sync.register('sync-admin-changes');
+                    }
+                }
+                return { status: 'queued', detail: 'queued — will retry automatically once back online' };
+            } catch (queueErr) {
+                console.error('Failed to queue undo:', queueErr);
+                return { status: 'failed', detail: 'offline or unreachable, and queueing also failed' };
+            }
+        }
+    };
+
+    const handleUndo = async () => {
+        if (!stateManager.current || isUndoing) return;
         const manager = stateManager.current;
         const currentEvents = manager.getState().events;
         if (currentEvents.length === 0) return;
 
         const eventToUndo = currentEvents[currentEvents.length - 1];
-        manager.undoLastEvent();
+        const isSecondYellow = eventToUndo.detail === 'Red Card (Second Yellow)';
 
-        // Sync Undo with overlay clients
-        if (isSocketConnected) {
-            const fullState = manager.getState();
-            console.log(`[FootballLogger] Emitting event:undo for match ${match.id}, eventId: ${eventToUndo.id}`);
-            emit('event:undo', {
-                matchId: match.id,
-                eventId: eventToUndo.id,
-                score: fullState.score,
-                stats: fullState.stats,
-                lineups: fullState.lineups,
-                teamRatings: fullState.teamRatings
-            });
+        // For second yellow: find the Yellow Card for the same player that triggered it
+        let precedingYellow: typeof currentEvents[0] | null = null;
+        if (isSecondYellow && eventToUndo.playerId) {
+            for (let i = currentEvents.length - 2; i >= 0; i--) {
+                if (currentEvents[i].playerId === eventToUndo.playerId && currentEvents[i].type === 'Yellow Card') {
+                    precedingYellow = currentEvents[i];
+                    break;
+                }
+            }
+        }
+
+        setIsUndoing(true);
+        try {
+            const redResult = await deleteEventWithQueue(eventToUndo.id);
+            if (redResult.status === 'rejected') {
+                alert(`Failed to undo event: ${redResult.detail}`);
+                return;
+            }
+            if (redResult.status === 'failed') {
+                setEventSaveError(`Failed to undo "${eventToUndo.type}" — ${redResult.detail}. Event was not removed; try again once back online.`);
+                return;
+            }
+            if (redResult.status === 'queued') {
+                setEventSaveError(`Undo of "${eventToUndo.type}" ${redResult.detail}. Event still shown until then.`);
+                return;
+            }
+
+            // Second yellow: also delete the Yellow Card that triggered it
+            if (isSecondYellow && precedingYellow) {
+                const yellowResult = await deleteEventWithQueue(precedingYellow.id);
+                if (yellowResult.status === 'rejected') {
+                    // Red is already gone from DB — remove it from local state before surfacing error
+                    manager.undoLastEvent();
+                    alert(`Red card removed but yellow card could not be undone: ${yellowResult.detail}`);
+                    return;
+                }
+                if (yellowResult.status === 'failed') {
+                    manager.undoLastEvent();
+                    setEventSaveError(`Red card removed, but Yellow Card undo failed — ${yellowResult.detail}. Yellow Card was not removed; try again once back online.`);
+                    return;
+                }
+                if (yellowResult.status === 'queued') {
+                    // Red confirmed gone — remove it locally. The Yellow Card's own
+                    // removal stays unconfirmed, so it stays visible until the queued
+                    // DELETE actually lands.
+                    manager.undoLastEvent();
+                    setEventSaveError(`Red card removed. Yellow Card undo ${yellowResult.detail}. Yellow Card still shown until then.`);
+                    return;
+                }
+            }
+
+            // DB deletes confirmed — update local state
+            manager.undoLastEvent(); // removes Red Card
+            if (isSecondYellow && precedingYellow) {
+                manager.undoLastEvent(); // Yellow Card is now last — remove it too
+            }
+            setEventSaveError(null);
+
+            if (isSocketConnected) {
+                const fullState = manager.getState();
+                emit('event:undo', {
+                    matchId: match.id,
+                    eventId: eventToUndo.id,
+                    score: fullState.score,
+                    stats: fullState.stats,
+                    lineups: fullState.lineups,
+                    teamRatings: fullState.teamRatings,
+                });
+                // Second yellow: broadcast Yellow Card removal separately so public
+                // viewers see both cards removed from their timeline.
+                if (isSecondYellow && precedingYellow) {
+                    const stateAfterBoth = manager.getState();
+                    emit('event:undo', {
+                        matchId: match.id,
+                        eventId: precedingYellow.id,
+                        score: stateAfterBoth.score,
+                        stats: stateAfterBoth.stats,
+                        lineups: stateAfterBoth.lineups,
+                        teamRatings: stateAfterBoth.teamRatings,
+                    });
+                }
+            }
+        } finally {
+            setIsUndoing(false);
         }
     };
 
     const handleFinalize = async () => {
         if (!confirm('Are you sure you want to end the match?')) return;
         setIsSaving(true);
-        stateManager.current?.transitionStatus('FINISHED');
 
         try {
-            await fetch(`/api/matches/${match.id}`, {
+            const res = await fetch(`/api/matches/${match.id}`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     status: 'FINISHED',
+                    currentPeriod: 'FINISHED',
                     homeScore,
                     awayScore,
                     stats: matchState?.stats
                 }),
             });
+            if (!res.ok) throw new Error(`Server returned ${res.status}`);
+            // PATCH confirmed — transition local state to FINISHED
+            stateManager.current?.transitionStatus('FINISHED');
 
             // Sync status via socket immediately
             if (isSocketConnected) {
@@ -751,22 +1227,9 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                 });
             }
 
-            // Send MATCH_END push notification
-            try {
-                await fetch('/api/notifications/match-event', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        matchId: match.id,
-                        homeTeamId: match.homeTeamId,
-                        awayTeamId: match.awayTeamId,
-                        eventType: 'MATCH_END',
-                        teamName: `${homeTeam?.name || 'Home'} vs ${awayTeam?.name || 'Away'}`,
-                        homeScore,
-                        awayScore,
-                    }),
-                });
-            } catch (e) { console.error('Failed to send match end notification:', e); }
+            // MATCH_END notification now sent server-side from matches/[id]/route.ts's
+            // PATCH handler when currentPeriod transitions to FINISHED — this client
+            // fetch was double-sending it (BUG-204 sweep), removed.
             alert('Match finalized.');
         } catch (e) {
             console.error(e);
@@ -781,11 +1244,12 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
         try {
             const lineupsRes = await fetch(`/api/matches/${match.id}/lineup`);
             const lineupsData = await lineupsRes.json();
+            const isActive = viewState === 'active';
             if (lineupsData.success && lineupsData.lineups && (lineupsData.lineups.home || lineupsData.lineups.away)) {
                 setLineups(lineupsData.lineups || { home: null, away: null });
-                setViewState('confirm_lineup');
+                if (!isActive) setViewState('confirm_lineup');
             } else {
-                setViewState('check_lineup');
+                if (!isActive) setViewState('check_lineup');
             }
         } catch (e) { console.error(e); }
         setIsLoading(false);
@@ -807,7 +1271,7 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
         const starterList = currentLineup ? (currentLineup.starters || currentLineup.players) : null;
 
         if (starterList) {
-            const starterIds = new Set(starterList.map((p: any) => p.id || p));
+            const starterIds = new Set(starterList.map((p: any) => p.playerId || p.id || p));
             starters = allPlayers.filter(p => starterIds.has(p.id));
             subs = allPlayers.filter(p => !starterIds.has(p.id));
         } else {
@@ -952,13 +1416,16 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                                 <div>
                                     <h4 className="text-[10px] font-black uppercase tracking-widest text-white/40 mb-2">Starters</h4>
                                     <div className="space-y-1">
-                                        {(lineups.home?.starters || lineups.home?.players || []).map((p: any) => (
-                                            <div key={p.id || p} className="flex items-center gap-2 text-sm p-2 bg-black/20 rounded-lg">
-                                                <span className="font-mono text-white/40 w-6 text-right">{p.number}</span>
-                                                <span className="font-bold">{p.name}</span>
-                                                <span className="text-xs text-white/30 ml-auto">{p.position}</span>
-                                            </div>
-                                        ))}
+                                        {(lineups.home?.starters || lineups.home?.players || []).map((p: any) => {
+                                            const full = homePlayers.find(pl => pl.id === (p.playerId || p.id)) || p;
+                                            return (
+                                                <div key={p.playerId || p.id || p} className="flex items-center gap-2 text-sm p-2 bg-black/20 rounded-lg">
+                                                    <span className="font-mono text-white/40 w-6 text-right">{full.number ?? p.jerseyNumber}</span>
+                                                    <span className="font-bold">{full.name ?? p.jerseyName}</span>
+                                                    <span className="text-xs text-white/30 ml-auto">{full.position ?? p.position}</span>
+                                                </div>
+                                            );
+                                        })}
                                         {(!(lineups.home?.starters || lineups.home?.players) || (lineups.home?.starters || lineups.home?.players).length === 0) && (
                                             <div className="text-white/20 text-sm italic p-2">No players set</div>
                                         )}
@@ -979,13 +1446,16 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                                 <div>
                                     <h4 className="text-[10px] font-black uppercase tracking-widest text-white/40 mb-2">Starters</h4>
                                     <div className="space-y-1">
-                                        {(lineups.away?.starters || lineups.away?.players || []).map((p: any) => (
-                                            <div key={p.id || p} className="flex items-center gap-2 text-sm p-2 bg-black/20 rounded-lg">
-                                                <span className="font-mono text-white/40 w-6 text-right">{p.number}</span>
-                                                <span className="font-bold">{p.name}</span>
-                                                <span className="text-xs text-white/30 ml-auto">{p.position}</span>
-                                            </div>
-                                        ))}
+                                        {(lineups.away?.starters || lineups.away?.players || []).map((p: any) => {
+                                            const full = awayPlayers.find(pl => pl.id === (p.playerId || p.id)) || p;
+                                            return (
+                                                <div key={p.playerId || p.id || p} className="flex items-center gap-2 text-sm p-2 bg-black/20 rounded-lg">
+                                                    <span className="font-mono text-white/40 w-6 text-right">{full.number ?? p.jerseyNumber}</span>
+                                                    <span className="font-bold">{full.name ?? p.jerseyName}</span>
+                                                    <span className="text-xs text-white/30 ml-auto">{full.position ?? p.position}</span>
+                                                </div>
+                                            );
+                                        })}
                                         {(!(lineups.away?.starters || lineups.away?.players) || (lineups.away?.starters || lineups.away?.players).length === 0) && (
                                             <div className="text-white/20 text-sm italic p-2">No players set</div>
                                         )}
@@ -1068,31 +1538,76 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                         </div>
                     </div>
                     <div className="flex items-center gap-1.5 shrink-0">
+                        <div className="px-2 py-1 bg-white/5 rounded-lg border border-white/10 shrink-0 text-center min-w-[36px]">
+                            <span className="text-[10px] font-black tabular-nums text-white/70">{recordedEvents.length}</span>
+                            <span className="text-[8px] font-black uppercase tracking-tighter text-white/30 block leading-none">Evts</span>
+                        </div>
                         <button
                             onClick={handleUndo}
-                            disabled={!canLogEvents || recordedEvents.length === 0}
-                            className={`p-1.5 rounded-lg transition-colors ${canLogEvents && recordedEvents.length > 0 ? 'bg-white/5 hover:bg-white/10' : 'opacity-20 cursor-not-allowed'}`}
+                            disabled={!canLogEvents || recordedEvents.length === 0 || isUndoing}
+                            className={`p-1.5 rounded-lg transition-colors ${canLogEvents && recordedEvents.length > 0 && !isUndoing ? 'bg-white/5 hover:bg-white/10' : 'opacity-20 cursor-not-allowed'}`}
                         >
-                            <Undo2 size={16} />
+                            {isUndoing ? <span className="text-[10px]">...</span> : <Undo2 size={16} />}
                         </button>
+                        {/* BUG-112: this badge used to be driven entirely by isSocketConnected,
+                            showing "Offline" (implying data loss) whenever just the WS dropped —
+                            even though events still save fine via REST (confirmed, BUG-108).
+                            isConnected (useMultiLogger, real REST reachability) now drives the
+                            actual "offline" framing; a WS-only drop shows a separate, honest
+                            "Sync Paused" state instead of implying anything isn't being saved. */}
                         <div className="flex items-center gap-1.5 px-2 py-1 bg-white/5 rounded-lg border border-white/10 shrink-0">
-                            <span className={`w-1.5 h-1.5 rounded-full ${isSocketConnected ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.5)]' : 'bg-red-500 animate-pulse'}`} />
+                            <span className={`w-1.5 h-1.5 rounded-full ${!isConnected ? 'bg-red-500 animate-pulse' : isSocketConnected ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.5)]' : 'bg-yellow-500 animate-pulse'}`} />
                             <span className="text-[8px] font-black uppercase tracking-tighter opacity-60">
-                                {isSocketConnected ? 'Live Sync' : 'Offline'}
+                                {!isConnected ? 'Offline' : isSocketConnected ? 'Live Sync' : 'Sync Paused'}
                             </span>
                         </div>
-                        <button onClick={() => setShowCommsModal(true)} className="p-1.5 bg-white/5 rounded-lg hover:bg-white/10 shrink-0 relative">
+                        {queuedOfflineCount > 0 && (
+                            <div className="flex items-center gap-1.5 px-2 py-1 bg-orange-500/10 rounded-lg border border-orange-500/30 shrink-0">
+                                <span className="w-1.5 h-1.5 rounded-full bg-orange-500 animate-pulse" />
+                                <span className="text-[8px] font-black uppercase tracking-tighter text-orange-400">
+                                    {queuedOfflineCount} Queued
+                                </span>
+                            </div>
+                        )}
+                        {queuedAdminChangeCount > 0 && (
+                            <div className="flex items-center gap-1.5 px-2 py-1 bg-orange-500/10 rounded-lg border border-orange-500/30 shrink-0">
+                                <span className="w-1.5 h-1.5 rounded-full bg-orange-500 animate-pulse" />
+                                <span className="text-[8px] font-black uppercase tracking-tighter text-orange-400">
+                                    {queuedAdminChangeCount} Pending
+                                </span>
+                            </div>
+                        )}
+                        {/* BACKSCOPED: 2026-07-27 (session 47C) — BACKLOG-142. Reinstate when: /api/staff-comms is auth-gated. */}
+                        {/* <button onClick={() => setShowCommsModal(true)} className="p-1.5 bg-white/5 rounded-lg hover:bg-white/10 shrink-0 relative">
                             <MessageSquare size={16} />
                             {comms.some(c => !c.isRead) && (
                                 <span className="absolute -top-1 -right-1 w-2 h-2 bg-primary rounded-full animate-pulse shadow-[0_0_5px_rgba(var(--primary-rgb),0.5)]" />
                             )}
-                        </button>
+                        </button> */}
                         <button onClick={() => setShowSettingsModal(true)} className="p-1.5 bg-white/5 rounded-lg hover:bg-white/10 shrink-0">
                             <Settings size={16} />
                         </button>
                     </div>
                 </div>
             </div>
+
+            {/* BUG-194 part 2: mirrors BasketballLogger.tsx's own eventSaveError banner
+                exactly -- visible, dismissible feedback for period-transition/undo
+                failures and queue confirmations, instead of a blocking alert() or
+                nothing at all. */}
+            {eventSaveError && (
+                <div className="px-3 pt-3">
+                    <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-3 flex items-center justify-between gap-3">
+                        <p className="text-xs font-bold text-red-400">{eventSaveError}</p>
+                        <button
+                            onClick={() => setEventSaveError(null)}
+                            className="text-red-400 hover:text-red-300 text-xs font-black uppercase tracking-widest shrink-0"
+                        >
+                            Dismiss
+                        </button>
+                    </div>
+                </div>
+            )}
 
             <div className="px-3 pt-3">
                 {/* ===== SCOREBOARD ===== */}
@@ -1109,13 +1624,7 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                     <div className="flex items-center justify-between">
                         {/* Home */}
                         <div className="text-center flex-1 min-w-0">
-                            {homeTeam?.logo ? (
-                                <img src={homeTeam.logo} alt="" className="w-10 h-10 mx-auto mb-1.5 object-contain" />
-                            ) : (
-                                <div className="w-10 h-10 mx-auto mb-1.5 bg-white/10 rounded-full flex items-center justify-center text-xs font-black">
-                                    {homeTeam?.shortName?.charAt(0) || 'H'}
-                                </div>
-                            )}
+                            <TeamLogo logo={homeTeam?.logo} name={homeTeam?.name ?? ''} size="md" className="mx-auto mb-1.5" />
                             <div className="text-[10px] font-bold uppercase tracking-wider truncate px-1 flex items-center justify-center gap-1">
                                 {homeTeam?.shortName || 'Home'}
                                 {homeRedCards > 0 && (
@@ -1159,13 +1668,7 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
 
                         {/* Away */}
                         <div className="text-center flex-1 min-w-0">
-                            {awayTeam?.logo ? (
-                                <img src={awayTeam.logo} alt="" className="w-10 h-10 mx-auto mb-1.5 object-contain" />
-                            ) : (
-                                <div className="w-10 h-10 mx-auto mb-1.5 bg-white/10 rounded-full flex items-center justify-center text-xs font-black">
-                                    {awayTeam?.shortName?.charAt(0) || 'A'}
-                                </div>
-                            )}
+                            <TeamLogo logo={awayTeam?.logo} name={awayTeam?.name ?? ''} size="md" className="mx-auto mb-1.5" />
                             <div className="text-[10px] font-bold uppercase tracking-wider truncate px-1 flex items-center justify-center gap-1">
                                 {awayTeam?.shortName || 'Away'}
                                 {awayRedCards > 0 && (
@@ -1202,16 +1705,33 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                 <div className="flex flex-wrap gap-2 mb-4">
                     {currentPeriod === 'NOT_STARTED' && (
                         <button
+                            disabled={isStartingMatch}
                             onClick={async () => {
-                                if (stateManager.current) {
+                                if (!stateManager.current || isStartingMatch) return;
+                                setIsStartingMatch(true);
+                                try {
+                                    const res = await fetch(`/api/matches/${match.id}`, {
+                                        method: 'PATCH',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({ status: 'LIVE' }),
+                                    });
+                                    if (!res.ok) throw new Error(`Server returned ${res.status}`);
+                                    // PATCH confirmed — now transition local state and start the clock
                                     stateManager.current.transitionStatus('FIRST_HALF');
-                                    try { await fetch(`/api/matches/${match.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'LIVE' }) }); } catch (e) { console.error(e); }
-                                    try { await fetch('/api/notifications/match-event', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ matchId: match.id, homeTeamId: match.homeTeamId, awayTeamId: match.awayTeamId, eventType: 'MATCH_START', teamName: `${homeTeam?.name || 'Home'} vs ${awayTeam?.name || 'Away'}` }) }); } catch (e) { console.error(e); }
+                                    // Persist period to DB — non-blocking
+                                    persistMatchPatch({ currentPeriod: 'FIRST_HALF' }, 'First Half start');
+                                    // MATCH_START notification now sent server-side from matches/[id]/route.ts's
+                                    // PATCH handler when currentPeriod transitions to FIRST_HALF — this client
+                                    // fetch was double-sending it (BUG-204 sweep), removed.
+                                } catch (e) {
+                                    console.error('Failed to start match:', e);
+                                    alert('Couldn\'t start match — check connection and try again.');
+                                    setIsStartingMatch(false);
                                 }
                             }}
-                            className="flex-1 py-3 bg-green-500 text-black font-black uppercase tracking-widest rounded-xl hover:scale-[1.02] transition-transform shadow-lg shadow-green-500/20 animate-pulse text-sm"
+                            className={`flex-1 py-3 font-black uppercase tracking-widest rounded-xl text-sm transition-all shadow-lg ${isStartingMatch ? 'bg-green-500/50 text-black/50 cursor-not-allowed' : 'bg-green-500 text-black hover:scale-[1.02] shadow-green-500/20 animate-pulse'}`}
                         >
-                            ▶ Start Match
+                            {isStartingMatch ? 'Starting...' : '▶ Start Match'}
                         </button>
                     )}
 
@@ -1244,7 +1764,7 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                     )}
 
                     {currentPeriod === 'HALF_TIME' && (
-                        <button onClick={() => { stateManager.current?.transitionStatus('SECOND_HALF'); }}
+                        <button onClick={() => { stateManager.current?.transitionStatus('SECOND_HALF'); persistMatchPatch({ currentPeriod: 'SECOND_HALF' }, 'Second Half start'); }}
                             className="flex-1 py-3 bg-green-500 text-black font-black uppercase tracking-widest rounded-xl text-sm animate-pulse shadow-lg shadow-green-500/20 active:scale-95 transition-transform">
                             ▶ Start 2nd Half
                         </button>
@@ -1252,18 +1772,18 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
 
                     {currentPeriod === 'FINISHED' && homeScore === awayScore && (
                         <>
-                            <button onClick={() => { if (confirm('Start Extra Time?')) stateManager.current?.transitionStatus('EXTRA_TIME_1'); }}
+                            <button onClick={() => { if (confirm('Start Extra Time?')) { stateManager.current?.transitionStatus('EXTRA_TIME_1'); persistMatchPatch({ currentPeriod: 'EXTRA_TIME_1' }, 'Extra Time start'); } }}
                                 className="flex-1 py-2.5 bg-amber-500 text-black font-bold uppercase tracking-widest rounded-xl text-xs active:scale-95 transition-transform">
                                 ⏱ Extra Time
                             </button>
-                            <button onClick={() => { if (confirm('Start Penalties?')) stateManager.current?.transitionStatus('PENALTY_SHOOTOUT'); }}
+                            <button onClick={() => { if (confirm('Start Penalties?')) { stateManager.current?.transitionStatus('PENALTY_SHOOTOUT'); persistMatchPatch({ currentPeriod: 'PENALTY_SHOOTOUT' }, 'Penalties start'); } }}
                                 className="flex-1 py-2.5 bg-purple-500 text-black font-bold uppercase tracking-widest rounded-xl text-xs active:scale-95 transition-transform">
                                 🎯 Penalties
                             </button>
                         </>
                     )}
 
-                    {currentPeriod !== 'FINISHED' && currentPeriod !== 'NOT_STARTED' && (
+                    {currentPeriod !== 'NOT_STARTED' && (
                         <button onClick={handleFinalize} disabled={isSaving}
                             className="py-2.5 px-4 bg-white/5 border border-white/10 text-white/60 font-bold uppercase tracking-widest rounded-xl text-xs active:scale-95 transition-transform">
                             {isSaving ? '...' : '🏁 End'}
@@ -1307,17 +1827,23 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                         </div>
                     </div>
                 ) : currentPeriod === 'PENALTY_SHOOTOUT' ? (
-                    // Penalty Shootout Buttons
+                    // BACKLOG-105: dedicated shootout flow — PEN_SCORED/PEN_MISSED/PEN_SAVED,
+                    // never the regular Penalty/Penalty Missed/Penalty Saved types (those write
+                    // career stats and the main score; shootout kicks must not).
                     <div className="space-y-4 mb-8">
-                        <div className="bg-purple-500/10 border border-purple-500/30 rounded-xl p-4 mb-4">
+                        <div className="bg-purple-500/10 border border-purple-500/30 rounded-xl p-4 mb-4 text-center">
                             <h3 className="text-sm font-black uppercase tracking-widest text-purple-400 mb-2">Penalty Shootout</h3>
-                            <p className="text-xs text-white/60">Select team, then log each penalty</p>
+                            {shootoutScore && (
+                                <p className="text-2xl font-black text-white mb-1">{shootoutScore.home} – {shootoutScore.away}</p>
+                            )}
+                            <p className="text-xs text-white/60">Tap to log each kick</p>
                         </div>
-                        <div className="grid grid-cols-3 gap-4">
-                            <EventButton type="Penalty" icon="⚽" label="Scored" onClick={() => handleEventClick('Penalty', true)} />
-                            <EventButton type="Penalty Missed" icon="❌" label="Missed" onClick={() => handleEventClick('Shot off Target')} />
-                            <EventButton type="Save" icon="🧤" label="Saved" onClick={() => handleEventClick('Save')} />
-                        </div>
+                        <button
+                            onClick={() => setShowShootoutModal(true)}
+                            className="w-full py-6 bg-purple-500/10 border-2 border-purple-500/30 text-purple-300 font-black uppercase tracking-widest rounded-2xl hover:bg-purple-500/20 transition-colors"
+                        >
+                            Log Kick
+                        </button>
                     </div>
                 ) : (
                     // Regular Match Buttons — mobile-first 4-col grid
@@ -1411,7 +1937,7 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
 
             {showPlayerModal && (
                 <PlayerSelectionModal
-                    players={getActiveRoster(selectedTeam)}
+                    players={getOnPitchPlayers(selectedTeam)}
                     onSelect={handlePlayerSelect}
                     onClose={() => setShowPlayerModal(false)}
                     title={`Select Player for ${pendingEvent?.type}`}
@@ -1419,19 +1945,21 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                     redCardedPlayerIds={redCardedPlayerIds}
                     teamLineup={lineups[selectedTeam]}
                     filterStartersOnly={pendingEvent?.type !== 'Substitution'}
+                    subbedOnPlayerIds={getSubSets(selectedTeam === 'home' ? match.homeTeamId : match.awayTeamId).subbedOnIds}
                 />
             )}
 
             {
                 showAssistModal && (
                     <PlayerSelectionModal
-                        players={getActiveRoster(selectedTeam).filter(p => p.id !== selectedEventPlayer)}
+                        players={getOnPitchPlayers(selectedTeam).filter(p => p.id !== selectedEventPlayer)}
                         onSelect={handleAssistSelect}
                         onClose={() => { setShowAssistModal(false); handleAssistSelect(null); }}
                         title="Select Assist (Optional)"
                         redCardedPlayerIds={redCardedPlayerIds}
                         teamLineup={lineups[selectedTeam]}
                         filterStartersOnly={true}
+                        subbedOnPlayerIds={getSubSets(selectedTeam === 'home' ? match.homeTeamId : match.awayTeamId).subbedOnIds}
                     />
                 )
             }
@@ -1439,13 +1967,14 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
             {
                 showSubInModal && (
                     <PlayerSelectionModal
-                        players={getActiveRoster(selectedTeam)}
+                        players={getAvailableBench(selectedTeam)}
                         onSelect={handleSubIn}
                         onClose={() => setShowSubInModal(false)}
                         title="Select Player Coming IN"
                         redCardedPlayerIds={redCardedPlayerIds}
                         teamLineup={lineups[selectedTeam]}
                         filterSubsOnly={true}
+                        emptyMessage={!lineups[selectedTeam] ? 'No lineup published for this team' : 'No available substitutes'}
                     />
                 )
             }
@@ -1454,23 +1983,17 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                 showPenaltyModal && (
                     <PenaltySequenceModal
                         attackingTeam={selectedTeam}
-                        homePlayers={getActiveRoster('home').filter((p: Player) => !redCardedPlayerIds.has(p.id))}
-                        awayPlayers={getActiveRoster('away').filter((p: Player) => !redCardedPlayerIds.has(p.id))}
+                        homePlayers={getOnPitchPlayers('home').filter((p: Player) => !redCardedPlayerIds.has(p.id))}
+                        awayPlayers={getOnPitchPlayers('away').filter((p: Player) => !redCardedPlayerIds.has(p.id))}
                         homeLineup={lineups.home}
                         awayLineup={lineups.away}
+                        homeSubbedOnIds={getSubSets(match.homeTeamId).subbedOnIds}
+                        awaySubbedOnIds={getSubSets(match.awayTeamId).subbedOnIds}
                         onClose={() => setShowPenaltyModal(false)}
-                        onSubmit={(takerId, foulerId, outcome) => {
-                            const attackingTeamId = selectedTeam === 'home' ? match.homeTeamId : match.awayTeamId;
-                            const defendingTeamId = selectedTeam === 'home' ? match.awayTeamId : match.homeTeamId;
-
+                        onSubmit={(takerId, foulerId, outcome, keeperId) => {
                             // 1. Log the Foul/Concession for the defender
                             if (foulerId) {
-                                // We record this from the perspective of the defending team
-                                // Note: confirmEvent uses selectedTeam, so we need to be careful or update confirmEvent
-                                // For simplicity here, we'll just log it
                                 const defendingTeamType = selectedTeam === 'home' ? 'away' : 'home';
-
-                                // Temporarily switch team to defending team to log its foul
                                 const originalTeam = selectedTeam;
                                 setSelectedTeam(defendingTeamType);
                                 confirmEvent('Foul', foulerId, null);
@@ -1478,12 +2001,13 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                             }
 
                             // 2. Log the Penalty outcome for the taker
+                            // Penalty Saved: relatedPlayerId = keeperId (null if keeper was skipped)
                             setTimeout(() => {
                                 const validTakerId = takerId || 'TEAM';
                                 if (outcome === 'Scored') {
                                     confirmEvent('Penalty', validTakerId, null);
                                 } else if (outcome === 'Saved') {
-                                    confirmEvent('Penalty Saved', validTakerId, null);
+                                    confirmEvent('Penalty Saved', validTakerId, keeperId);
                                 } else {
                                     confirmEvent('Penalty Missed', validTakerId, null);
                                 }
@@ -1493,6 +2017,84 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                         }}
                     />
                 )
+            }
+
+            {
+                showShootoutModal && (() => {
+                    // BACKLOG-190: exclude this-round takers from the picker. If filtering
+                    // would leave zero eligible players (shouldn't happen with a real 11-a-side
+                    // roster, but a defensive fallback beats an unusable empty picker), fall
+                    // back to the full roster rather than soft-locking the logger mid-shootout.
+                    const homeRoster = getOnPitchPlayers('home');
+                    const awayRoster = getOnPitchPlayers('away');
+                    const eligibleHome = homeRoster.filter(p => !takenThisRound.home.has(p.id));
+                    const eligibleAway = awayRoster.filter(p => !takenThisRound.away.has(p.id));
+                    return (
+                        <ShootoutModal
+                            homeTeamName={homeTeam?.name || 'Home'}
+                            awayTeamName={awayTeam?.name || 'Away'}
+                            homePlayers={eligibleHome.length > 0 ? eligibleHome : homeRoster}
+                            awayPlayers={eligibleAway.length > 0 ? eligibleAway : awayRoster}
+                            onClose={() => setShowShootoutModal(false)}
+                            onSubmit={async (team, takerId, outcome, keeperId) => {
+                            setShowShootoutModal(false);
+                            const teamId = team === 'home' ? match.homeTeamId : match.awayTeamId;
+                            const type = outcome === 'Scored' ? 'PEN_SCORED' : outcome === 'Saved' ? 'PEN_SAVED' : 'PEN_MISSED';
+                            try {
+                                const res = await fetch(`/api/matches/${match.id}/events`, {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({
+                                        type,
+                                        minute: matchState?.clock.absoluteMinute ?? 0,
+                                        teamId,
+                                        playerId: takerId,
+                                        relatedPlayerId: outcome === 'Saved' ? keeperId : null,
+                                        period: currentPeriod,
+                                        loggerName: currentLogger?.name,
+                                    }),
+                                });
+                                if (res.ok) {
+                                    // BACKLOG-190: only advance eligibility once the kick is
+                                    // actually confirmed saved -- a failed POST means this kick
+                                    // was never recorded, so the taker must stay eligible.
+                                    if (takerId) {
+                                        setTakenThisRound(prev => {
+                                            const roster = team === 'home' ? homeRoster : awayRoster;
+                                            const teamSet = new Set(prev[team]);
+                                            teamSet.add(takerId);
+                                            // Round complete once everyone on the pitch has kicked
+                                            // once -- reset so repeats become allowed again (sudden death).
+                                            if (teamSet.size >= roster.length) teamSet.clear();
+                                            return { ...prev, [team]: teamSet };
+                                        });
+                                    }
+                                    const saved = await res.json();
+                                    if (saved.shootoutHomeScore !== undefined && saved.shootoutAwayScore !== undefined) {
+                                        setShootoutScore({ home: saved.shootoutHomeScore, away: saved.shootoutAwayScore });
+                                    } else {
+                                        // Response didn't carry the score (e.g. a miss/save, which
+                                        // doesn't change it) — re-fetch match state to stay in sync.
+                                        const matchRes = await fetch(`/api/matches/${match.id}`);
+                                        if (matchRes.ok) {
+                                            const matchData = await matchRes.json();
+                                            const m = matchData.match || matchData;
+                                            if (m.shootoutHomeScore !== undefined) {
+                                                setShootoutScore({ home: m.shootoutHomeScore ?? 0, away: m.shootoutAwayScore ?? 0 });
+                                            }
+                                        }
+                                    }
+                                } else {
+                                    alert(`Shootout kick failed to save (${res.status}) — check connection and retry.`);
+                                }
+                            } catch (e) {
+                                console.error('[FootballLogger] Shootout kick POST failed:', e);
+                                alert('Network error: could not save this kick. Please retry.');
+                            }
+                        }}
+                        />
+                    );
+                })()
             }
 
             {
@@ -1785,7 +2387,10 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
             />
 
             {/* Staff Communication Modal */}
-            <AnimatePresence>
+            {/* BACKSCOPED: 2026-07-27 (session 47C) — BACKLOG-142. Reinstate when: /api/staff-comms
+                is auth-gated (done, see route.ts) AND admin/manager/page.tsx's half-built
+                match-selection flow for this panel is rebuilt properly. */}
+            {/* <AnimatePresence>
                 {showCommsModal && (
                     <motion.div
                         initial={{ opacity: 0 }}
@@ -1855,7 +2460,7 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                         </motion.div>
                     </motion.div>
                 )}
-            </AnimatePresence>
+            </AnimatePresence> */}
         </div>
     );
 }
@@ -1866,6 +2471,8 @@ function PenaltySequenceModal({
     awayPlayers,
     homeLineup,
     awayLineup,
+    homeSubbedOnIds,
+    awaySubbedOnIds,
     onClose,
     onSubmit
 }: {
@@ -1874,21 +2481,38 @@ function PenaltySequenceModal({
     awayPlayers: Player[],
     homeLineup: any,
     awayLineup: any,
+    homeSubbedOnIds: Set<string>,
+    awaySubbedOnIds: Set<string>,
     onClose: () => void,
-    onSubmit: (takerId: string | null, foulerId: string | null, outcome: 'Scored' | 'Saved' | 'Missed') => void
+    onSubmit: (takerId: string | null, foulerId: string | null, outcome: 'Scored' | 'Saved' | 'Missed', keeperId: string | null) => void
 }) {
     const [step, setStep] = useState(1);
     const [takerId, setTakerId] = useState<string | null>(null);
     const [foulerId, setFoulerId] = useState<string | null>(null);
     const [outcome, setOutcome] = useState<'Scored' | 'Saved' | 'Missed' | null>(null);
+    const [keeperId, setKeeperId] = useState<string | null>(null);
 
     const attackers = attackingTeam === 'home' ? homePlayers : awayPlayers;
     const defenders = attackingTeam === 'home' ? awayPlayers : homePlayers;
     const attackerLineup = attackingTeam === 'home' ? homeLineup : awayLineup;
     const defenderLineup = attackingTeam === 'home' ? awayLineup : homeLineup;
+    const attackerSubbedOnIds = attackingTeam === 'home' ? homeSubbedOnIds : awaySubbedOnIds;
+    const defenderSubbedOnIds = attackingTeam === 'home' ? awaySubbedOnIds : homeSubbedOnIds;
 
+    // BUG-202 Finding 1: same bug class as BUG-201 -- no fallback for a missing
+    // lineup meant the entire attacking roster got excluded ("Who is taking the
+    // penalty?" showed zero clickable players). Mirrors getOnPitchPlayers()'s own
+    // contract: no published lineup -> everyone is a valid on-pitch candidate.
+    const attackerHasLineup = !!(attackerLineup?.starters?.length || attackerLineup?.players?.length);
+    const defenderHasLineup = !!(defenderLineup?.starters?.length || defenderLineup?.players?.length);
     const attackerStarterIds = new Set((attackerLineup?.starters || attackerLineup?.players || []).map((p: any) => p.playerId || p.id));
     const defenderStarterIds = new Set((defenderLineup?.starters || defenderLineup?.players || []).map((p: any) => p.playerId || p.id));
+    const attackerOnPitchIds = attackerHasLineup
+        ? new Set([...attackerStarterIds, ...attackerSubbedOnIds])
+        : new Set(attackers.map((p: Player) => p.id));
+    const defenderOnPitchIds = defenderHasLineup
+        ? new Set([...defenderStarterIds, ...defenderSubbedOnIds])
+        : new Set(defenders.map((p: Player) => p.id));
 
     return (
         <div className="fixed inset-0 bg-black/95 backdrop-blur-md z-50 flex items-center justify-center p-4 overflow-y-auto">
@@ -1916,14 +2540,14 @@ function PenaltySequenceModal({
                                     <button
                                         key={p.id}
                                         onClick={() => { setFoulerId(p.id); setStep(2); }}
-                                        className={`p-3 text-left hover:bg-white/5 bg-black/20 border rounded-xl flex items-center gap-3 ${defenderStarterIds.has(p.id) ? 'border-primary/20' : 'border-white/5 opacity-60'}`}
+                                        className={`p-3 text-left hover:bg-white/5 bg-black/20 border rounded-xl flex items-center gap-3 ${defenderOnPitchIds.has(p.id) ? 'border-primary/20' : 'border-white/5 opacity-60'}`}
                                     >
-                                        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-black ${defenderStarterIds.has(p.id) ? 'bg-primary/20 text-primary' : 'bg-white/10 text-white/40'}`}>
+                                        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-black ${defenderOnPitchIds.has(p.id) ? 'bg-primary/20 text-primary' : 'bg-white/10 text-white/40'}`}>
                                             {p.number}
                                         </div>
                                         <div>
                                             <div className="font-bold text-sm">{p.name}</div>
-                                            <div className="text-[10px] text-white/40">{p.position} {!defenderStarterIds.has(p.id) && '(Bench)'}</div>
+                                            <div className="text-[10px] text-white/40">{p.position} {!defenderOnPitchIds.has(p.id) && '(Bench)'}</div>
                                         </div>
                                     </button>
                                 ))}
@@ -1935,7 +2559,7 @@ function PenaltySequenceModal({
                         <div className="space-y-4">
                             <h4 className="text-sm font-bold text-center mb-4">Who is taking the penalty?</h4>
                             <div className="grid grid-cols-1 gap-2">
-                                {attackers.filter(p => attackerStarterIds.has(p.id)).map((p: Player) => (
+                                {attackers.filter(p => attackerOnPitchIds.has(p.id)).map((p: Player) => (
                                     <button
                                         key={p.id}
                                         onClick={() => { setTakerId(p.id); setStep(3); }}
@@ -1948,11 +2572,11 @@ function PenaltySequenceModal({
                                         </div>
                                     </button>
                                 ))}
-                                {attackers.filter(p => !attackerStarterIds.has(p.id)).length > 0 && (
+                                {attackers.filter(p => !attackerOnPitchIds.has(p.id)).length > 0 && (
                                     <div className="py-2">
                                         <p className="text-[9px] font-black uppercase tracking-widest text-white/20 mb-2">Players on Bench</p>
                                         <div className="grid grid-cols-1 gap-2 opacity-40">
-                                            {attackers.filter(p => !attackerStarterIds.has(p.id)).map(p => (
+                                            {attackers.filter(p => !attackerOnPitchIds.has(p.id)).map(p => (
                                                 <div key={p.id} className="p-2 bg-black/20 border border-white/5 rounded-lg flex items-center gap-3 grayscale">
                                                     <div className="w-6 h-6 bg-white/5 rounded-full flex items-center justify-center text-[10px] font-bold">{p.number}</div>
                                                     <div className="text-xs font-bold">{p.name}</div>
@@ -1992,9 +2616,41 @@ function PenaltySequenceModal({
                                 </button>
                             </div>
 
+                            {outcome === 'Saved' && (
+                                <div className="w-full mt-2 space-y-2">
+                                    <p className="text-[10px] font-black uppercase tracking-widest text-white/40 text-center">Goalkeeper? (optional)</p>
+                                    <div className="grid grid-cols-1 gap-2 max-h-40 overflow-y-auto">
+                                        <button
+                                            onClick={() => setKeeperId(null)}
+                                            className={`p-2.5 rounded-xl text-xs font-bold text-center transition-all ${keeperId === null ? 'bg-white/10 border border-white/20 text-white' : 'bg-white/5 border border-white/5 text-white/30'}`}
+                                        >
+                                            Skip / Unknown
+                                        </button>
+                                        {defenders.filter(p => {
+                                            const pos = (p.position || '').toLowerCase();
+                                            const lineupPos = ((defenderLineup?.starters || defenderLineup?.players || []).find((lp: any) => (lp.playerId || lp.id) === p.id)?.position || '').toLowerCase();
+                                            return pos.includes('gk') || pos.includes('goalkeeper') || pos.includes('keeper') || pos === 'g' || lineupPos.includes('gk') || lineupPos.includes('goalkeeper');
+                                        }).concat(defenders.filter(p => {
+                                            const pos = (p.position || '').toLowerCase();
+                                            const lineupPos = ((defenderLineup?.starters || defenderLineup?.players || []).find((lp: any) => (lp.playerId || lp.id) === p.id)?.position || '').toLowerCase();
+                                            return !(pos.includes('gk') || pos.includes('goalkeeper') || pos.includes('keeper') || pos === 'g' || lineupPos.includes('gk') || lineupPos.includes('goalkeeper'));
+                                        })).slice(0, 5).map((p: Player) => (
+                                            <button
+                                                key={p.id}
+                                                onClick={() => setKeeperId(p.id)}
+                                                className={`p-2.5 text-left rounded-xl flex items-center gap-2 text-xs transition-all ${keeperId === p.id ? 'bg-amber-500/20 border border-amber-500/40 text-amber-300' : 'bg-white/5 border border-white/5 text-white/60 hover:bg-white/10'}`}
+                                            >
+                                                <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black ${keeperId === p.id ? 'bg-amber-500/30 text-amber-300' : 'bg-white/10 text-white/40'}`}>{p.number}</div>
+                                                <span className="font-bold">{p.name}</span>
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
                             {outcome && (
                                 <button
-                                    onClick={() => onSubmit(takerId, foulerId, outcome)}
+                                    onClick={() => onSubmit(takerId, foulerId, outcome, outcome === 'Saved' ? keeperId : null)}
                                     className="w-full mt-4 py-4 bg-primary text-black font-black uppercase tracking-widest rounded-xl hover:scale-105 transition-transform shadow-lg shadow-primary/20"
                                 >
                                     Confirm & Log
@@ -2010,6 +2666,132 @@ function PenaltySequenceModal({
                         onClick={() => setStep(step - 1)}
                         className="p-4 text-xs font-bold text-white/30 uppercase tracking-widest hover:text-white transition-colors"
                     >
+                        ← Back
+                    </button>
+                )}
+            </div>
+        </div>
+    );
+}
+
+// BACKLOG-105: simplified 3-step shootout logger. Deliberately NOT a reuse of
+// PenaltySequenceModal — that flow's fouler-picker step is wrong UX under real
+// shootout time pressure (10+ kicks, no fouls to attribute). Team -> taker -> outcome only.
+function ShootoutModal({
+    homeTeamName,
+    awayTeamName,
+    homePlayers,
+    awayPlayers,
+    onClose,
+    onSubmit,
+}: {
+    homeTeamName: string,
+    awayTeamName: string,
+    homePlayers: Player[],
+    awayPlayers: Player[],
+    onClose: () => void,
+    onSubmit: (team: 'home' | 'away', takerId: string | null, outcome: 'Scored' | 'Missed' | 'Saved', keeperId: string | null) => void,
+}) {
+    const [step, setStep] = useState(1);
+    const [team, setTeam] = useState<'home' | 'away' | null>(null);
+    const [takerId, setTakerId] = useState<string | null>(null);
+    const [outcome, setOutcome] = useState<'Scored' | 'Missed' | 'Saved' | null>(null);
+    const [keeperId, setKeeperId] = useState<string | null>(null);
+
+    const takers = team === 'home' ? homePlayers : team === 'away' ? awayPlayers : [];
+    const keeperCandidates = team === 'home' ? awayPlayers : homePlayers;
+
+    const reset = () => { setStep(1); setTeam(null); setTakerId(null); setOutcome(null); setKeeperId(null); };
+
+    return (
+        <div className="fixed inset-0 bg-black/95 backdrop-blur-md z-50 flex items-center justify-center p-4 overflow-y-auto">
+            <div className="bg-zinc-900 border border-white/10 w-full max-w-md rounded-3xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
+                <div className="p-4 border-b border-white/10 flex justify-between items-center bg-black/40">
+                    <div>
+                        <h3 className="font-black uppercase tracking-widest text-purple-400 italic">Penalty Shootout</h3>
+                        <p className="text-[10px] text-white/40 uppercase">Step {step} of 3</p>
+                    </div>
+                    <button onClick={onClose} className="p-2 hover:bg-white/10 rounded-full"><X size={20} /></button>
+                </div>
+
+                <div className="flex-1 overflow-y-auto p-4">
+                    {step === 1 && (
+                        <div className="space-y-4">
+                            <h4 className="text-sm font-bold text-center mb-4">Which team is shooting?</h4>
+                            <div className="grid grid-cols-2 gap-3">
+                                <button onClick={() => { setTeam('home'); setStep(2); }} className="p-6 rounded-2xl border-2 border-primary/20 bg-primary/10 text-primary font-black uppercase tracking-widest hover:scale-105 transition-transform">{homeTeamName}</button>
+                                <button onClick={() => { setTeam('away'); setStep(2); }} className="p-6 rounded-2xl border-2 border-white/10 bg-white/5 text-white font-black uppercase tracking-widest hover:scale-105 transition-transform">{awayTeamName}</button>
+                            </div>
+                        </div>
+                    )}
+
+                    {step === 2 && (
+                        <div className="space-y-4">
+                            <h4 className="text-sm font-bold text-center mb-4">Who is taking the kick?</h4>
+                            <div className="grid grid-cols-1 gap-2">
+                                {takers.map((p: Player) => (
+                                    <button
+                                        key={p.id}
+                                        onClick={() => { setTakerId(p.id); setStep(3); }}
+                                        className="p-3 text-left hover:bg-white/5 bg-black/20 border border-primary/20 rounded-xl flex items-center gap-3"
+                                    >
+                                        <div className="w-8 h-8 bg-primary/20 text-primary rounded-full flex items-center justify-center text-xs font-black border border-primary/20">{p.number}</div>
+                                        <div className="font-bold text-sm">{p.name}</div>
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {step === 3 && (
+                        <div className="space-y-6 flex flex-col items-center justify-center py-8">
+                            <h4 className="text-sm font-bold text-center">Outcome?</h4>
+                            <div className="grid grid-cols-3 gap-4 w-full">
+                                <button onClick={() => setOutcome('Scored')} className={`aspect-square rounded-2xl border-2 flex flex-col items-center justify-center gap-2 transition-all ${outcome === 'Scored' ? 'bg-green-500 text-black border-green-400' : 'bg-green-500/10 border-green-500/20 text-green-400'}`}>
+                                    <span className="text-3xl">⚽</span>
+                                    <span className="font-black text-[10px] uppercase">Scored</span>
+                                </button>
+                                <button onClick={() => setOutcome('Saved')} className={`aspect-square rounded-2xl border-2 flex flex-col items-center justify-center gap-2 transition-all ${outcome === 'Saved' ? 'bg-amber-500 text-black border-amber-400' : 'bg-amber-500/10 border-amber-500/20 text-amber-400'}`}>
+                                    <span className="text-3xl">🧤</span>
+                                    <span className="font-black text-[10px] uppercase">Saved</span>
+                                </button>
+                                <button onClick={() => setOutcome('Missed')} className={`aspect-square rounded-2xl border-2 flex flex-col items-center justify-center gap-2 transition-all ${outcome === 'Missed' ? 'bg-red-500 text-black border-red-400' : 'bg-red-500/10 border-red-500/20 text-red-400'}`}>
+                                    <span className="text-3xl">❌</span>
+                                    <span className="font-black text-[10px] uppercase">Missed</span>
+                                </button>
+                            </div>
+
+                            {outcome === 'Saved' && (
+                                <div className="w-full mt-2 space-y-2">
+                                    <p className="text-[10px] font-black uppercase tracking-widest text-white/40 text-center">Goalkeeper? (optional)</p>
+                                    <div className="grid grid-cols-1 gap-2 max-h-40 overflow-y-auto">
+                                        <button onClick={() => setKeeperId(null)} className={`p-2.5 rounded-xl text-xs font-bold text-center transition-all ${keeperId === null ? 'bg-white/10 border border-white/20 text-white' : 'bg-white/5 border border-white/5 text-white/30'}`}>
+                                            Skip / Unknown
+                                        </button>
+                                        {keeperCandidates.slice(0, 5).map((p: Player) => (
+                                            <button key={p.id} onClick={() => setKeeperId(p.id)} className={`p-2.5 text-left rounded-xl flex items-center gap-2 text-xs transition-all ${keeperId === p.id ? 'bg-amber-500/20 border border-amber-500/40 text-amber-300' : 'bg-white/5 border border-white/5 text-white/60 hover:bg-white/10'}`}>
+                                                <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black ${keeperId === p.id ? 'bg-amber-500/30 text-amber-300' : 'bg-white/10 text-white/40'}`}>{p.number}</div>
+                                                <span className="font-bold">{p.name}</span>
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            {outcome && (
+                                <button
+                                    onClick={() => { onSubmit(team!, takerId, outcome, outcome === 'Saved' ? keeperId : null); reset(); }}
+                                    className="w-full mt-4 py-4 bg-purple-500 text-black font-black uppercase tracking-widest rounded-xl hover:scale-105 transition-transform shadow-lg shadow-purple-500/20"
+                                >
+                                    Confirm & Log Kick
+                                </button>
+                            )}
+                        </div>
+                    )}
+                </div>
+
+                {step > 1 && (
+                    <button onClick={() => setStep(step - 1)} className="p-4 text-xs font-bold text-white/30 uppercase tracking-widest hover:text-white transition-colors">
                         ← Back
                     </button>
                 )}
@@ -2049,8 +2831,19 @@ function PlayerSelectionModal({
     redCardedPlayerIds,
     teamLineup,
     filterStartersOnly = false,
-    filterSubsOnly = false
+    filterSubsOnly = false,
+    subbedOnPlayerIds,
+    emptyMessage = 'No player found',
 }: any) {
+    // BUG-201: no guard here meant an absent lineup (starters/players both empty)
+    // made starterIds an empty Set, and filterStartersOnly's `!starterIds.has(p.id)`
+    // was then true for every player -- the whole roster got filtered out, showing
+    // "No player found" even though the roster itself (homePlayers/awayPlayers,
+    // built in getActiveRoster) was correct. getActiveRoster already treats a
+    // missing lineup as "no restriction" (`if (!teamLineup) return roster`) --
+    // this filter needs the same fallback, since it re-derives the same distinction
+    // independently rather than reusing that already-correct roster.
+    const hasLineup = !!(teamLineup?.starters?.length || teamLineup?.players?.length);
     const starterIds = new Set((teamLineup?.starters || teamLineup?.players || []).map((p: any) => p.playerId || p.id));
 
     // Filter players: remove red-carded players and optionally only show goalkeepers
@@ -2058,8 +2851,10 @@ function PlayerSelectionModal({
         // Always exclude red-carded players
         if (redCardedPlayerIds && redCardedPlayerIds.has(p.id)) return false;
 
-        if (filterStartersOnly && !starterIds.has(p.id)) return false;
-        if (filterSubsOnly && starterIds.has(p.id)) return false;
+        if (hasLineup) {
+            if (filterStartersOnly && !starterIds.has(p.id) && !subbedOnPlayerIds?.has(p.id)) return false;
+            if (filterSubsOnly && starterIds.has(p.id)) return false;
+        }
 
         if (filterGoalkeepersOnly) {
             const pos = p.position?.toLowerCase() || '';
@@ -2095,9 +2890,9 @@ function PlayerSelectionModal({
                     {filteredPlayers.length > 0 ? (
                         <div className="grid grid-cols-1 gap-1">
                             {filteredPlayers.map((p: Player) => {
-                                // Logic to determine if they are on the bench
+                                // A player is bench-styled unless they're a starter OR they came on mid-match
                                 const isBench = teamLineup
-                                    ? !starterIds.has(p.id)
+                                    ? !starterIds.has(p.id) && !(subbedOnPlayerIds?.has(p.id))
                                     : (p.position?.toLowerCase().includes('sub') || p.position?.toLowerCase().includes('reserve'));
 
                                 return (
@@ -2125,8 +2920,7 @@ function PlayerSelectionModal({
                         </div>
                     ) : (
                         <div className="text-center py-8 text-white/40">
-                            <div className="text-4xl mb-2">🧤</div>
-                            <div className="font-medium">No player found</div>
+                            <div className="font-medium">{emptyMessage}</div>
                         </div>
                     )}
                 </div>

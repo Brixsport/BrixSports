@@ -3,12 +3,13 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Plus, Trophy, Calendar, Users, Settings, Edit, Trash2, Eye, X } from 'lucide-react';
+import { ArrowLeft, Plus, Trophy, Calendar, Users, Settings, Edit, Trash2, Eye, X, ChevronDown, ChevronUp } from 'lucide-react';
 import { useToast } from '@/hooks/useToast';
 import { ToastContainer } from '@/components/admin/Toast';
 import ConfirmDialog from '@/components/admin/ConfirmDialog';
 import SkeletonLoader from '@/components/admin/SkeletonLoader';
 import ErrorBoundary from '@/components/admin/ErrorBoundary';
+import ImageUpload from '@/components/ImageUpload';
 
 interface Competition {
     id: string;
@@ -24,6 +25,7 @@ interface Competition {
     teamsPerGroup?: number;
     isMultiSport?: boolean;
     description?: string;
+    logo?: string;
 }
 
 const defaultFormData = {
@@ -32,29 +34,80 @@ const defaultFormData = {
     scope: 'internal',
     level: 'busa-league',
     format: 'league',
-    season: '2024/2025',
+    season: '2026/2027',
     status: 'upcoming',
     numberOfTeams: 0,
     numberOfGroups: 0,
     teamsPerGroup: 0,
     isMultiSport: false,
-    description: ''
+    description: '',
+    logo: ''
 };
+
+const defaultMatchSettings = {
+    halfDuration: 45,
+    playersPerSide: 11,
+    maxSubstitutions: 5 as number | null,
+    unlimitedSubs: false,
+    allowSubbedOutReentry: false,
+    extraTimeEnabled: false,
+    penaltiesEnabled: false,
+    allowDraws: true,
+    pointsForWin: 3,
+    pointsForDraw: 1,
+};
+
+type MatchSettingsForm = typeof defaultMatchSettings;
 
 interface CompetitionModalProps {
     mode: 'create' | 'edit';
+    entityId?: string;
     initialData: typeof defaultFormData;
-    onSubmit: (data: typeof defaultFormData) => Promise<void>;
+    initialMatchSettings?: MatchSettingsForm;
+    onSubmit: (data: typeof defaultFormData, matchSettings: MatchSettingsForm) => Promise<void>;
     onClose: () => void;
     isSubmitting: boolean;
 }
 
-function CompetitionModal({ mode, initialData, onSubmit, onClose, isSubmitting }: CompetitionModalProps) {
+function derivePlayersOption(n: number): '11' | '5' | 'custom' {
+    if (n === 11) return '11';
+    if (n === 5) return '5';
+    return 'custom';
+}
+
+function CompetitionModal({ mode, entityId, initialData, initialMatchSettings, onSubmit, onClose, isSubmitting }: CompetitionModalProps) {
     const [form, setForm] = useState(initialData);
+    const [matchSettings, setMatchSettings] = useState<MatchSettingsForm>(initialMatchSettings ?? defaultMatchSettings);
+    const [showMatchSettings, setShowMatchSettings] = useState(false);
+    const [playersOption, setPlayersOption] = useState<'11' | '5' | 'custom'>(
+        derivePlayersOption(initialMatchSettings?.playersPerSide ?? 11)
+    );
+    const [playersCustom, setPlayersCustom] = useState(
+        (initialMatchSettings?.playersPerSide && initialMatchSettings.playersPerSide !== 11 && initialMatchSettings.playersPerSide !== 5)
+            ? initialMatchSettings.playersPerSide
+            : 7
+    );
+
+    useEffect(() => {
+        if (!initialMatchSettings) return;
+        setMatchSettings(initialMatchSettings);
+        setPlayersOption(derivePlayersOption(initialMatchSettings.playersPerSide ?? 11));
+        if (initialMatchSettings.playersPerSide && initialMatchSettings.playersPerSide !== 11 && initialMatchSettings.playersPerSide !== 5) {
+            setPlayersCustom(initialMatchSettings.playersPerSide);
+        }
+    }, [initialMatchSettings]);
+
+    const setMs = (patch: Partial<MatchSettingsForm>) => setMatchSettings(prev => ({ ...prev, ...patch }));
+
+    const handlePlayersOption = (opt: '11' | '5' | 'custom') => {
+        setPlayersOption(opt);
+        if (opt !== 'custom') setMs({ playersPerSide: parseInt(opt) });
+        else setMs({ playersPerSide: playersCustom });
+    };
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        await onSubmit(form);
+        await onSubmit(form, matchSettings);
     };
 
     return (
@@ -74,6 +127,21 @@ function CompetitionModal({ mode, initialData, onSubmit, onClose, isSubmitting }
                 </div>
                 <form onSubmit={handleSubmit} className="p-8 pt-4 space-y-6">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div className="md:col-span-2">
+                            <label className="block text-[10px] font-black uppercase tracking-widest text-white/40 mb-2">Competition Logo</label>
+                            <ImageUpload
+                                value={form.logo}
+                                onChange={(url) => setForm({ ...form, logo: url })}
+                                aspectRatio="square"
+                                maxSize={2}
+                                className="w-32 h-32"
+                                folder="brixsports/competitions/logos"
+                                publicId={entityId}
+                                tags={['competition-logo']}
+                                context={form.name ? { alt: `${form.name} logo` } : undefined}
+                            />
+                        </div>
+
                         <div className="md:col-span-2">
                             <label className="block text-[10px] font-black uppercase tracking-widest text-white/40 mb-2">Competition Name</label>
                             <input
@@ -219,6 +287,144 @@ function CompetitionModal({ mode, initialData, onSubmit, onClose, isSubmitting }
                         </div>
                     </div>
 
+                    {/* Match Settings — collapsible */}
+                    <div className="border border-white/10 rounded-xl overflow-hidden">
+                        <button
+                            type="button"
+                            onClick={() => setShowMatchSettings(v => !v)}
+                            className="w-full flex items-center justify-between px-5 py-4 text-left hover:bg-white/5 transition-colors"
+                        >
+                            <span className="text-[10px] font-black uppercase tracking-widest text-white/60">Match Settings</span>
+                            {showMatchSettings ? <ChevronUp size={16} className="text-white/40" /> : <ChevronDown size={16} className="text-white/40" />}
+                        </button>
+
+                        {showMatchSettings && (
+                            <div className="px-5 pb-6 space-y-5 border-t border-white/10 pt-5">
+                                {/* Duration */}
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block text-[10px] font-black uppercase tracking-widest text-white/40 mb-2">Half Duration (mins)</label>
+                                        <input type="number" min="1"
+                                            value={matchSettings.halfDuration}
+                                            onChange={e => setMs({ halfDuration: parseInt(e.target.value) || 45 })}
+                                            className="w-full bg-[#121212] border border-white/10 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-primary text-white"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-[10px] font-black uppercase tracking-widest text-white/40 mb-2">Players Per Side</label>
+                                        <div className="flex gap-2">
+                                            {(['11', '5', 'custom'] as const).map(opt => (
+                                                <button key={opt} type="button"
+                                                    onClick={() => handlePlayersOption(opt)}
+                                                    className={`px-3 py-2 rounded-lg text-xs font-black uppercase tracking-widest border transition-colors ${playersOption === opt ? 'border-primary text-primary bg-primary/10' : 'border-white/10 text-white/40 hover:border-white/30'}`}
+                                                >
+                                                    {opt === '11' ? 'Standard' : opt === '5' ? '5-aside' : 'Custom'}
+                                                </button>
+                                            ))}
+                                        </div>
+                                        {playersOption === 'custom' && (
+                                            <input type="number" min="1" className="mt-2 w-full bg-[#121212] border border-white/10 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-primary text-white"
+                                                value={playersCustom}
+                                                onChange={e => {
+                                                    const v = parseInt(e.target.value) || 7;
+                                                    setPlayersCustom(v);
+                                                    setMs({ playersPerSide: v });
+                                                }}
+                                            />
+                                        )}
+                                    </div>
+                                </div>
+
+                                {/* Substitutions */}
+                                <div>
+                                    <label className="block text-[10px] font-black uppercase tracking-widest text-white/40 mb-2">Substitutions</label>
+                                    <div className="flex items-center gap-4 flex-wrap">
+                                        <label className="flex items-center gap-2 text-sm font-bold text-white/60 cursor-pointer">
+                                            <input type="checkbox"
+                                                checked={matchSettings.allowSubbedOutReentry}
+                                                onChange={e => setMs({ allowSubbedOutReentry: e.target.checked, unlimitedSubs: e.target.checked ? true : matchSettings.unlimitedSubs, maxSubstitutions: e.target.checked ? null : (matchSettings.maxSubstitutions ?? 5) })}
+                                                className="w-4 h-4 rounded border-white/10 bg-[#121212] text-primary focus:ring-primary"
+                                            />
+                                            Rolling subs
+                                        </label>
+                                        {!matchSettings.allowSubbedOutReentry && (
+                                            <>
+                                                <input type="number" min="0"
+                                                    value={matchSettings.unlimitedSubs ? '' : (matchSettings.maxSubstitutions ?? '')}
+                                                    disabled={matchSettings.unlimitedSubs}
+                                                    onChange={e => setMs({ maxSubstitutions: parseInt(e.target.value) || 0 })}
+                                                    className="w-24 bg-[#121212] border border-white/10 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-primary text-white disabled:opacity-30"
+                                                    placeholder="Max"
+                                                />
+                                                <label className="flex items-center gap-2 text-sm font-bold text-white/60 cursor-pointer">
+                                                    <input type="checkbox"
+                                                        checked={matchSettings.unlimitedSubs}
+                                                        onChange={e => setMs({ unlimitedSubs: e.target.checked, maxSubstitutions: e.target.checked ? null : 5 })}
+                                                        className="w-4 h-4 rounded border-white/10 bg-[#121212] text-primary focus:ring-primary"
+                                                    />
+                                                    Unlimited
+                                                </label>
+                                            </>
+                                        )}
+                                    </div>
+                                </div>
+
+                                {/* Extra time + Penalties */}
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div className="space-y-3">
+                                        <label className="flex items-center gap-2 text-sm font-bold text-white/60 cursor-pointer">
+                                            <input type="checkbox"
+                                                checked={matchSettings.extraTimeEnabled}
+                                                onChange={e => setMs({ extraTimeEnabled: e.target.checked })}
+                                                className="w-4 h-4 rounded border-white/10 bg-[#121212] text-primary focus:ring-primary"
+                                            />
+                                            Extra Time
+                                        </label>
+                                    </div>
+                                    <label className="flex items-center gap-2 text-sm font-bold text-white/60 cursor-pointer self-start pt-1">
+                                        <input type="checkbox"
+                                            checked={matchSettings.penaltiesEnabled}
+                                            onChange={e => setMs({ penaltiesEnabled: e.target.checked })}
+                                            className="w-4 h-4 rounded border-white/10 bg-[#121212] text-primary focus:ring-primary"
+                                        />
+                                        Penalties
+                                    </label>
+                                </div>
+
+                                {/* Points */}
+                                <div className="grid grid-cols-3 gap-4">
+                                    <div>
+                                        <label className="flex items-center gap-2 text-sm font-bold text-white/60 cursor-pointer mb-3">
+                                            <input type="checkbox"
+                                                checked={matchSettings.allowDraws}
+                                                onChange={e => setMs({ allowDraws: e.target.checked })}
+                                                className="w-4 h-4 rounded border-white/10 bg-[#121212] text-primary focus:ring-primary"
+                                            />
+                                            {matchSettings.allowDraws ? 'Draws allowed' : 'Must produce winner'}
+                                        </label>
+                                    </div>
+                                    <div>
+                                        <label className="block text-[10px] font-black uppercase tracking-widest text-white/40 mb-2">Points for Win</label>
+                                        <input type="number" min="0"
+                                            value={matchSettings.pointsForWin}
+                                            onChange={e => setMs({ pointsForWin: parseInt(e.target.value) || 3 })}
+                                            className="w-full bg-[#121212] border border-white/10 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-primary text-white"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-[10px] font-black uppercase tracking-widest text-white/40 mb-2">Points for Draw</label>
+                                        <input type="number" min="0"
+                                            value={matchSettings.pointsForDraw}
+                                            disabled={!matchSettings.allowDraws}
+                                            onChange={e => setMs({ pointsForDraw: parseInt(e.target.value) || 1 })}
+                                            className="w-full bg-[#121212] border border-white/10 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-primary text-white disabled:opacity-30"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
                     <div className="flex justify-end gap-3 mt-8">
                         <button
                             type="button"
@@ -256,6 +462,7 @@ function AdminCompetitionsPageContent() {
     });
 
     const [editingCompetition, setEditingCompetition] = useState<Competition | null>(null);
+    const [editingMatchSettings, setEditingMatchSettings] = useState<MatchSettingsForm | undefined>(undefined);
     const [isEditSubmitting, setIsEditSubmitting] = useState(false);
 
     useEffect(() => {
@@ -285,7 +492,26 @@ function AdminCompetitionsPageContent() {
         }
     };
 
-    const handleSubmit = async (data: typeof defaultFormData) => {
+    const saveMatchSettings = async (competitionId: string, sport: string, ms: MatchSettingsForm) => {
+        await fetch(`/api/competitions/${competitionId}/match-settings`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                sport,
+                playersPerSide: ms.playersPerSide,
+                halfDuration: ms.halfDuration,
+                maxSubstitutions: ms.unlimitedSubs ? null : ms.maxSubstitutions,
+                allowSubbedOutReentry: ms.allowSubbedOutReentry,
+                extraTimeEnabled: ms.extraTimeEnabled,
+                penaltiesEnabled: ms.penaltiesEnabled,
+                allowDraws: ms.allowDraws,
+                pointsForWin: ms.pointsForWin,
+                pointsForDraw: ms.pointsForDraw,
+            }),
+        });
+    };
+
+    const handleSubmit = async (data: typeof defaultFormData, ms: MatchSettingsForm) => {
         setIsCreating(true);
 
         try {
@@ -297,6 +523,7 @@ function AdminCompetitionsPageContent() {
 
             if (response.ok) {
                 const newComp = await response.json();
+                await saveMatchSettings(newComp.id, data.sport, ms);
                 setCompetitions([...competitions, {
                     ...newComp,
                     scope: newComp.level === 'inter-university' ? 'external' : 'internal'
@@ -350,11 +577,35 @@ function AdminCompetitionsPageContent() {
         }
     };
 
-    const handleEditClick = (comp: Competition) => {
+    const handleEditClick = async (comp: Competition) => {
         setEditingCompetition(comp);
+        setEditingMatchSettings(undefined);
+        try {
+            const res = await fetch(`/api/competitions/${comp.id}/match-settings`);
+            if (res.ok) {
+                const data = await res.json();
+                const s = Array.isArray(data.settings) ? data.settings[0] : data.settings;
+                if (s) {
+                    setEditingMatchSettings({
+                        halfDuration: s.halfDuration ?? 45,
+                        playersPerSide: s.playersPerSide ?? 11,
+                        maxSubstitutions: s.maxSubstitutions ?? 5,
+                        unlimitedSubs: s.maxSubstitutions === null,
+                        allowSubbedOutReentry: !!s.allowSubbedOutReentry,
+                        extraTimeEnabled: !!s.extraTimeEnabled,
+                        penaltiesEnabled: !!s.penaltiesEnabled,
+                        allowDraws: s.allowDraws ?? true,
+                        pointsForWin: s.pointsForWin ?? 3,
+                        pointsForDraw: s.pointsForDraw ?? 1,
+                    });
+                }
+            }
+        } catch {
+            // falls back to defaultMatchSettings inside modal
+        }
     };
 
-    const handleEditSubmit = async (data: typeof defaultFormData) => {
+    const handleEditSubmit = async (data: typeof defaultFormData, ms: MatchSettingsForm) => {
         if (!editingCompetition) return;
         setIsEditSubmitting(true);
         try {
@@ -367,6 +618,7 @@ function AdminCompetitionsPageContent() {
                 }
             );
             if (res.ok) {
+                await saveMatchSettings(editingCompetition.id, data.sport, ms);
                 success('Competition updated successfully.');
                 setEditingCompetition(null);
                 fetchCompetitions();
@@ -544,8 +796,8 @@ function AdminCompetitionsPageContent() {
                 <CompetitionModal
                     mode="create"
                     initialData={defaultFormData}
-                    onSubmit={async (data) => {
-                        await handleSubmit(data);
+                    onSubmit={async (data, ms) => {
+                        await handleSubmit(data, ms);
                     }}
                     onClose={() => setShowCreateModal(false)}
                     isSubmitting={isCreating}
@@ -555,6 +807,8 @@ function AdminCompetitionsPageContent() {
             {editingCompetition && (
                 <CompetitionModal
                     mode="edit"
+                    entityId={editingCompetition.id}
+                    initialMatchSettings={editingMatchSettings}
                     initialData={{
                         name: editingCompetition.name,
                         sport: editingCompetition.sport || 'Football',
@@ -567,10 +821,11 @@ function AdminCompetitionsPageContent() {
                         numberOfGroups: editingCompetition.numberOfGroups || 0,
                         teamsPerGroup: editingCompetition.teamsPerGroup || 0,
                         isMultiSport: editingCompetition.isMultiSport || false,
-                        description: editingCompetition.description || ''
+                        description: editingCompetition.description || '',
+                        logo: editingCompetition.logo || ''
                     }}
-                    onSubmit={async (data) => {
-                        await handleEditSubmit(data);
+                    onSubmit={async (data, ms) => {
+                        await handleEditSubmit(data, ms);
                     }}
                     onClose={() => setEditingCompetition(null)}
                     isSubmitting={isEditSubmitting}

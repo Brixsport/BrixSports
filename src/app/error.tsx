@@ -24,9 +24,10 @@ interface ErrorPageProps {
 
 export default function ErrorPage({ error, reset }: ErrorPageProps) {
   const [isClient, setIsClient] = useState(false);
-  const [errorCode] = useState(() => 
-    Math.random() > 0.5 ? '500' : '404'
-  );
+  // This boundary only ever catches unhandled render exceptions — real 404s
+  // are handled separately by Next.js's notFound()/not-found.tsx. There is
+  // no reliable way to know a real HTTP status here, so we no longer guess one.
+  const errorCode = '500';
 
   useEffect(() => {
     setIsClient(true);
@@ -34,19 +35,9 @@ export default function ErrorPage({ error, reset }: ErrorPageProps) {
     console.error('Application error:', error);
   }, [error]);
 
-  const getErrorMessage = () => {
-    if (errorCode === '404') {
-      return "Oops! Looks like this page took a wrong turn at the penalty box.";
-    }
-    return "Houston, we have a problem! The server fumbled the ball.";
-  };
+  const getErrorMessage = () => "Houston, we have a problem! The server fumbled the ball.";
 
-  const getSubMessage = () => {
-    if (errorCode === '404') {
-      return "The goal you're looking for doesn't exist. Maybe it was offside?";
-    }
-    return "Our servers are having a tough game. Let's take a water break and try again.";
-  };
+  const getSubMessage = () => "Our servers are having a tough game. Let's take a water break and try again.";
 
   if (!isClient) {
     return null;

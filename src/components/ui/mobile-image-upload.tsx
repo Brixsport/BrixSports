@@ -14,6 +14,16 @@ interface MobileImageUploadProps {
   allowedFormats?: string[];
   className?: string;
   showPreview?: boolean;
+  folder?: string;
+  /** Stable per-entity id (e.g. the record's own id). When given, re-uploads
+   *  overwrite the same Cloudinary asset instead of leaving orphaned copies
+   *  behind each time an image is replaced. Omit for create flows where the
+   *  entity id doesn't exist yet — Cloudinary still generates a unique name. */
+  publicId?: string;
+  /** Cloudinary tags for cross-cutting search (e.g. ['team-logo']). */
+  tags?: string[];
+  /** Cloudinary context metadata (e.g. { alt: 'Kings FC logo' }). */
+  context?: Record<string, string>;
   onUploadStart?: () => void;
   onUploadSuccess?: (url: string) => void;
   onUploadError?: (error: any) => void;
@@ -28,6 +38,10 @@ export default function MobileImageUpload({
   allowedFormats = ['jpg', 'jpeg', 'png', 'webp'],
   className = '',
   showPreview = true,
+  folder,
+  publicId,
+  tags,
+  context,
   onUploadStart,
   onUploadSuccess,
   onUploadError,
@@ -142,6 +156,10 @@ export default function MobileImageUpload({
     showSkipCropButton: false,
     showPoweredBy: false,
     theme: 'minimal',
+    ...(folder ? { folder } : {}),
+    ...(publicId ? { publicId, overwrite: true, uniqueFilename: false, useFilename: false } : {}),
+    tags: ['brixsports', ...(tags ?? [])],
+    ...(context ? { context } : {}),
     text: {
       'gui.v2.main.apply': 'Apply',
       'gui.v2.main.cancel': 'Cancel',

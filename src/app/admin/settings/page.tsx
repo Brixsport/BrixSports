@@ -291,6 +291,14 @@ function SettingItem({
         onSave(setting.key, value);
     };
 
+    // Boolean toggles auto-save on click instead of the pending-change + separate
+    // Save button flow below -- that flow's failure feedback was a single banner at
+    // the top of a long page, easy to miss while scrolled down on a toggle. This
+    // keeps success/error feedback right next to the control that was clicked.
+    if (setting.type === 'boolean') {
+        return <BooleanSettingItem setting={setting} initialValue={value} />;
+    }
+
     return (
         <div className={`p-4 rounded-2xl transition-all ${isModified ? 'bg-primary/10 border border-primary/20' : 'bg-white/5'
             }`}>
@@ -306,24 +314,7 @@ function SettingItem({
                     </div>
                     <p className="text-xs text-white/40 mb-3">{setting.description}</p>
 
-                    {setting.type === 'boolean' ? (
-                        <button
-                            onClick={() => handleChange(value === 'true' ? 'false' : 'true')}
-                            className="flex items-center gap-2 group"
-                        >
-                            {value === 'true' ? (
-                                <>
-                                    <ToggleRight className="text-primary" size={32} />
-                                    <span className="text-xs font-bold text-primary">Enabled</span>
-                                </>
-                            ) : (
-                                <>
-                                    <ToggleLeft className="text-white/20" size={32} />
-                                    <span className="text-xs font-bold text-white/40">Disabled</span>
-                                </>
-                            )}
-                        </button>
-                    ) : setting.type === 'number' ? (
+                    {setting.type === 'number' ? (
                         <input
                             type="number"
                             value={value}
@@ -350,6 +341,79 @@ function SettingItem({
                         Save
                     </button>
                 )}
+            </div>
+        </div>
+    );
+}
+
+function BooleanSettingItem({ setting, initialValue }: { setting: Setting; initialValue: string }) {
+    const [value, setValue] = useState(initialValue);
+    const [status, setStatus] = useState<'idle' | 'saving' | 'success' | 'error'>('idle');
+
+    const handleToggle = async () => {
+        const newValue = value === 'true' ? 'false' : 'true';
+        const previousValue = value;
+        setValue(newValue); // optimistic
+        setStatus('saving');
+        try {
+            const response = await fetch('/api/admin/settings', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ key: setting.key, value: newValue }),
+            });
+            if (response.ok) {
+                setStatus('success');
+                setTimeout(() => setStatus('idle'), 2000);
+            } else {
+                setValue(previousValue); // revert -- the write didn't actually happen
+                setStatus('error');
+            }
+        } catch (error) {
+            console.error('Failed to save setting:', error);
+            setValue(previousValue);
+            setStatus('error');
+        }
+    };
+
+    return (
+        <div className={`p-4 rounded-2xl transition-all ${status === 'error' ? 'bg-red-500/10 border border-red-500/20' : 'bg-white/5'
+            }`}>
+            <div className="flex items-start justify-between gap-4">
+                <div className="flex-1">
+                    <p className="text-xs text-white/40 mb-3">{setting.description}</p>
+                    <div className="flex items-center gap-3">
+                        <button
+                            onClick={handleToggle}
+                            disabled={status === 'saving'}
+                            className="flex items-center gap-2 group disabled:opacity-60"
+                        >
+                            {value === 'true' ? (
+                                <>
+                                    <ToggleRight className="text-primary" size={32} />
+                                    <span className="text-xs font-bold text-primary">Enabled</span>
+                                </>
+                            ) : (
+                                <>
+                                    <ToggleLeft className="text-white/20" size={32} />
+                                    <span className="text-xs font-bold text-white/40">Disabled</span>
+                                </>
+                            )}
+                        </button>
+                        {status === 'saving' && (
+                            <RefreshCw className="animate-spin text-white/40" size={14} />
+                        )}
+                        {status === 'success' && (
+                            <span className="flex items-center gap-1 text-[10px] font-black uppercase text-green-500">
+                                <CheckCircle2 size={12} /> Saved
+                            </span>
+                        )}
+                        {status === 'error' && (
+                            <span className="flex items-center gap-1 text-[10px] font-black uppercase text-red-500">
+                                <AlertCircle size={12} /> Failed to save, try again
+                            </span>
+                        )}
+                    </div>
+                </div>
             </div>
         </div>
     );

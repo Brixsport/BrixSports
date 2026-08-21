@@ -3,9 +3,17 @@ import { db } from '@/db';
 import { staffComms, users } from '@/db/schema';
 import { eq, desc, and } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
+import { getAuthUser, resolveEffectiveUserId } from '@/lib/auth';
 
 export async function GET(request: NextRequest) {
     try {
+        // BUG-143 / BACKLOG-142: this route had zero auth check -- anyone with a
+        // matchId could read any match's staff notes in production.
+        const authUser = await getAuthUser(request);
+        if (!authUser) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+
         const { searchParams } = new URL(request.url);
         const matchId = searchParams.get('matchId');
 
@@ -43,10 +51,22 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
     try {
-        const body = await request.json();
-        const { matchId, userId, content, type, priority } = body;
+        // BUG-143 / BACKLOG-142: this route had zero auth check and trusted a
+        // client-supplied userId verbatim (identity spoof). userId now always comes
+        // from the verified session -- staffComms.userId FKs to users.id, and a
+        // logger session's own id lives in a separate loggers table (same FK-mismatch
+        // class as BUG-124), so resolveEffectiveUserId's fan-account lookup is used
+        // rather than authUser.id directly.
+        const authUser = await getAuthUser(request);
+        if (!authUser) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+        const userId = await resolveEffectiveUserId(authUser);
 
-        if (!matchId || !userId || !content) {
+        const body = await request.json();
+        const { matchId, content, type, priority } = body;
+
+        if (!matchId || !content) {
             return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
         }
 

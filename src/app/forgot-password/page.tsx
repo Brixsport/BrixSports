@@ -9,6 +9,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Loader2, ArrowLeft, Mail, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
 import Image from "next/image";
+import { getClientErrorMessage } from "@/lib/client-error";
 
 const formSchema = z.object({
     email: z.string().email({
@@ -57,8 +58,7 @@ export default function ForgotPasswordPage() {
             }
 
         } catch (error) {
-            const errorMessage = error instanceof Error ? error.message : "Please try again later";
-            setServerError(errorMessage);
+            setServerError(getClientErrorMessage(error, "Please try again later"));
             console.error("Forgot password error:", error);
         } finally {
             setIsLoading(false);

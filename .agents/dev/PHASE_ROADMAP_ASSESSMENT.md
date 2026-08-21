@@ -1,6 +1,18 @@
 # BrixSports — Phase Roadmap Assessment
 > Audit Date: 2026-06-05 | Auditor: Antigravity
 
+> **⚠️ STALE — historical snapshot, not current state.** Flagged during session 53's
+> stale-docs refresh (2026-08-20). This document is a point-in-time audit from the
+> project's very first sessions (Phase 2's `BUG-001` through `BUG-012` — all RESOLVED
+> since session 3). Phase 1's "what is missing" list below (no staging branch, no
+> separate staging DB, no branching strategy) is also resolved — a real staging
+> environment (`brixsports-staging.vercel.app`) and the full feature/fix branch
+> workflow (`.agents/rules/git-workflow.md`) have existed and been in active use for
+> many sessions since. Kept for historical reference only, not rewritten line-by-line
+> (would be pure churn against dead content) — for current state, use
+> `.agents/dev/BACKLOG.md` (live bug/feature tracking) and `CLAUDE.md`'s own
+> Feature Volatility / Live Event Readiness Checklist sections instead.
+
 ---
 
 ## Phase Assessment Summary

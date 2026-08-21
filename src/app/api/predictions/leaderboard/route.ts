@@ -7,7 +7,7 @@ import { desc } from 'drizzle-orm';
 export async function GET(request: NextRequest) {
     try {
         const { searchParams } = new URL(request.url);
-        const limit = parseInt(searchParams.get('limit') || '100');
+        const limit = Math.min(Math.max(1, parseInt(searchParams.get('limit') || '100', 10) || 100), 100);
 
         const leaderboard = await db
             .select()

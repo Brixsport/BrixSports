@@ -60,7 +60,7 @@ export function BottomNav() {
             <div className="h-20 md:hidden" />
 
             {/* Bottom Navigation - Mobile Only */}
-            <nav className="fixed bottom-0 left-0 right-0 z-50 md:hidden bg-[#0a0a0a] border-t border-white/10 backdrop-blur-xl">
+            <nav className="fixed bottom-0 left-0 right-0 z-50 md:hidden bg-background border-t border-border backdrop-blur-xl">
                 <div className="max-w-lg mx-auto px-2 py-2">
                     <div className="flex items-center justify-around">
                         {navItems.map((item) => {
@@ -103,7 +103,7 @@ export function BottomNav() {
                                                 size={24}
                                                 className={`transition-colors ${active
                                                     ? 'text-primary'
-                                                    : 'text-white/40'
+                                                    : 'text-foreground/40'
                                                     }`}
                                                 strokeWidth={active ? 2.5 : 2}
                                             />
@@ -126,7 +126,7 @@ export function BottomNav() {
                                             <motion.div
                                                 initial={{ scale: 0 }}
                                                 animate={{ scale: 1 }}
-                                                className="absolute -top-2 -right-2 bg-primary text-black text-[8px] font-black px-1.5 py-0.5 rounded-full"
+                                                className="absolute -top-2 -right-2 bg-primary text-primary-foreground text-[8px] font-black px-1.5 py-0.5 rounded-full"
                                             >
                                                 NEW
                                             </motion.div>
@@ -137,7 +137,7 @@ export function BottomNav() {
                                     <span
                                         className={`text-[10px] font-bold uppercase tracking-wider transition-colors ${active
                                             ? 'text-primary'
-                                            : 'text-white/40'
+                                            : 'text-foreground/40'
                                             }`}
                                     >
                                         {item.label}
@@ -149,7 +149,7 @@ export function BottomNav() {
                 </div>
 
                 {/* Safe Area for iOS devices */}
-                <div className="h-[env(safe-area-inset-bottom)] bg-[#0a0a0a]" />
+                <div className="h-[env(safe-area-inset-bottom)] bg-background" />
             </nav>
         </>
     );

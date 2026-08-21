@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
+import { TeamLogo } from '@/lib/utils/team-logo';
 import { motion } from 'framer-motion';
 import { toast } from 'sonner';
 import {
@@ -436,7 +437,7 @@ export default function ProfilePage() {
                                 >
                                     <div className="flex items-center gap-6 relative z-10">
                                         <div className="w-16 h-16 md:w-20 md:h-20 bg-white/5 rounded-2xl flex items-center justify-center p-2">
-                                            <img src={user.favoriteTeam.logo} alt={user.favoriteTeam.name} className="w-full h-full object-contain" />
+                                            <TeamLogo logo={user.favoriteTeam.logo} name={user.favoriteTeam.name} size="md" />
                                         </div>
                                         <div className="flex-1">
                                             <p className="text-xl md:text-2xl font-black uppercase tracking-tight leading-none mb-1 group-hover:text-primary transition-colors">{user.favoriteTeam.name}</p>
@@ -476,7 +477,8 @@ export default function ProfilePage() {
                             <div className="space-y-2">
                                 <QuickActionButton icon={<Settings size={16} />} label="System Settings" href="/profile/settings" />
                                 <QuickActionButton icon={<Heart size={16} />} label="Manage Favorites" href="/profile/favorites" />
-                                <QuickActionButton icon={<Trophy size={16} />} label="My Predictions" href="/predictions" />
+                                {/* BACKSCOPED: 2026-06-08 — BACKLOG-028. Reinstate when: Predictions feature built (Phase 7) */}
+                                {/* <QuickActionButton icon={<Trophy size={16} />} label="My Predictions" href="/predictions" /> */}
                                 <QuickActionButton icon={<Shield size={16} />} label="Privacy & Security" href="/profile/settings#privacy" />
                             </div>
                         </div>
@@ -652,7 +654,7 @@ function TeamSelectorModal({ isOpen, onClose, teams, onSelect }: { isOpen: boole
                                 className="w-full group bg-white/5 border border-white/5 rounded-3xl p-4 md:p-6 flex items-center gap-6 hover:bg-white/10 hover:border-primary/30 transition-all text-left"
                             >
                                 <div className="w-12 h-12 md:w-16 md:h-16 bg-black/40 rounded-2xl flex items-center justify-center p-2 group-hover:scale-110 transition-transform">
-                                    <img src={team.logo} alt={team.name} className="w-full h-full object-contain" />
+                                    <TeamLogo logo={team.logo} name={team.name} size="md" />
                                 </div>
                                 <div className="flex-1">
                                     <p className="text-lg md:text-xl font-black uppercase tracking-tight group-hover:text-primary transition-colors">{team.name}</p>

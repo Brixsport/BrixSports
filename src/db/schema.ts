@@ -92,9 +92,15 @@ export const playerTeamAffiliations = sqliteTable('player_team_affiliations', {
     endDate: integer('end_date', { mode: 'timestamp' }),
     jerseyNumber: integer('jersey_number'),
     position: text('position'),
+    nicknames: text('nicknames').default('[]'),
+    // JSON array of field aliases e.g. ["Blacko", "No.7"]
     // No expiry — university affiliation is permanent
+    season: text('season'),
     createdAt: integer('created_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
 });
+
+export const playerTeamAffiliationsUnique = uniqueIndex('pta_player_team_season_unique')
+    .on(playerTeamAffiliations.playerId, playerTeamAffiliations.teamId, playerTeamAffiliations.season);
 
 // Player Organization Affiliations table
 // Stores institutional relationships such as university, college, department, and governing-body affiliations.
@@ -147,6 +153,9 @@ export const basketballPlayerStats = sqliteTable('basketball_player_stats', {
     updatedAt: integer('updated_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
 });
 
+export const basketballPlayerStatsUnique = uniqueIndex('bps_player_season_competition_unique')
+    .on(basketballPlayerStats.playerId, basketballPlayerStats.season, basketballPlayerStats.competitionId);
+
 // Football Player Stats table
 export const footballPlayerStats = sqliteTable('football_player_stats', {
     id: text('id').primaryKey(),
@@ -169,6 +178,8 @@ export const footballPlayerStats = sqliteTable('football_player_stats', {
     clearances: integer('clearances').default(0),
     yellowCards: integer('yellow_cards').default(0),
     redCards: integer('red_cards').default(0),
+    ownGoals: integer('own_goals').default(0),
+    penaltiesScored: integer('penalties_scored').default(0),
     foulsCommitted: integer('fouls_committed').default(0),
     foulsDrawn: integer('fouls_drawn').default(0),
     saves: integer('saves').default(0),
@@ -179,6 +190,9 @@ export const footballPlayerStats = sqliteTable('football_player_stats', {
     passAccuracy: real('pass_accuracy').default(0),
     updatedAt: integer('updated_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
 });
+
+export const footballPlayerStatsUnique = uniqueIndex('fps_player_season_competition_unique')
+    .on(footballPlayerStats.playerId, footballPlayerStats.season, footballPlayerStats.competitionId);
 
 // Individual Sport Stats table (Chess, Scrabble, Table Tennis)
 export const individualSportStats = sqliteTable('individual_sport_stats', {
@@ -206,6 +220,9 @@ export const individualSportStats = sqliteTable('individual_sport_stats', {
     updatedAt: integer('updated_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
 });
 
+export const individualSportStatsUnique = uniqueIndex('iss_player_sport_season_competition_unique')
+    .on(individualSportStats.playerId, individualSportStats.sport, individualSportStats.season, individualSportStats.competitionId);
+
 // Competitions table
 export const competitions = sqliteTable('competitions', {
     id: text('id').primaryKey(),
@@ -214,6 +231,7 @@ export const competitions = sqliteTable('competitions', {
     isMultiSport: integer('is_multi_sport', { mode: 'boolean' }).default(false),
     format: text('format').notNull(), // 'league' | 'knockout' | 'group_knockout'
     season: text('season').notNull(),
+    logo: text('logo'),
     startDate: integer('start_date', { mode: 'timestamp' }),
     endDate: integer('end_date', { mode: 'timestamp' }),
     description: text('description'),
@@ -262,13 +280,25 @@ export const competitionSportSettings = sqliteTable('competition_sport_settings'
     sport: text('sport').notNull(), // 'Football' | 'Basketball' | 'Scrabble' | 'Chess' | 'Table Tennis'
     format: text('format'), // '5-aside' | '3x3' | '1v1' | 'singles' | 'doubles' | 'standard'
     playersPerSide: integer('players_per_side').notNull(),
-    halfDuration: integer('half_duration'), // in minutes — null for non-timed sports
-    matchDuration: integer('match_duration'), // total in minutes — null for non-timed sports
+    // in minutes — null for non-timed sports. Named for football's 2-half model but
+    // reused as "one period's length" for any sport (e.g. basketball's quarter length,
+    // 10 min) — a live prod column, so renaming costs a SQL-direct migration
+    // (BACKLOG-040 blocks db:push) for a naming-clarity-only change. Deliberately left
+    // overloaded rather than renamed; revisit if/when Track's period model needs a
+    // genuinely different shape, not preemptively — see TD entry in BACKLOG.md.
+    halfDuration: integer('half_duration'),
     // For round/set based sports (Chess, Scrabble, Table Tennis)
     // e.g. {"format":"round-based","tracking":"score-per-game","rounds":3}
     // e.g. {"format":"set-based","bestOf":5,"allowDoubles":true}
     customRules: text('custom_rules'), // JSON
     isTimed: integer('is_timed', { mode: 'boolean' }).default(true), // false for Chess, Scrabble, Table Tennis
+    maxSubstitutions: integer('maxSubstitutions'), // null = unlimited
+    allowSubbedOutReentry: integer('allowSubbedOutReentry', { mode: 'boolean' }).notNull().default(false),
+    extraTimeEnabled: integer('extraTimeEnabled', { mode: 'boolean' }).notNull().default(false),
+penaltiesEnabled: integer('penaltiesEnabled', { mode: 'boolean' }).notNull().default(false),
+    allowDraws: integer('allowDraws', { mode: 'boolean' }).notNull().default(true),
+    pointsForWin: integer('pointsForWin').notNull().default(3),
+    pointsForDraw: integer('pointsForDraw').notNull().default(1),
     createdAt: integer('created_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
 });
 
@@ -321,6 +351,17 @@ export const matches = sqliteTable('matches', {
     managerNotes: text('manager_notes'),
     approvedBy: text('approved_by').references(() => users.id),
     approvedAt: integer('approved_at', { mode: 'timestamp' }),
+    penaltiesEnabledOverride: integer('penaltiesEnabledOverride', { mode: 'boolean' }),
+    allowDrawsOverride: integer('allowDrawsOverride', { mode: 'boolean' }),
+    extraTimeEnabledOverride: integer('extraTimeEnabledOverride', { mode: 'boolean' }),
+    currentPeriod: text('current_period').default('NOT_STARTED'),
+    minute: integer('minute'),
+    extraTime: integer('extra_time'),
+    // BACKLOG-105: penalty shootout score, isolated from homeScore/awayScore --
+    // the official result stays the ET score per FIFA convention. Only PEN_SCORED
+    // events increment these, via SQL atomic COALESCE(col, 0) + 1.
+    shootoutHomeScore: integer('shootout_home_score').default(0),
+    shootoutAwayScore: integer('shootout_away_score').default(0),
     createdAt: integer('created_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
     updatedAt: integer('updated_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
 });
@@ -385,6 +426,9 @@ export const standings = sqliteTable('standings', {
     groupName: text('group_name'), // Nullable until draw is complete
     updatedAt: integer('updated_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
 });
+
+export const standingsUnique = uniqueIndex('standings_team_competition_unique')
+    .on(standings.teamId, standings.competitionId);
 
 // Bracket/Tournament nodes
 export const bracketNodes = sqliteTable('bracket_nodes', {
@@ -766,15 +810,39 @@ export const staffComms = sqliteTable('staff_comms', {
 });
 
 // Push Subscriptions table
+// BACKLOG-150: anonymous (unauthenticated) viewers can subscribe too -- their
+// row's userId points at ANONYMOUS_PUSH_USER_ID (a single well-known sentinel
+// user row, see src/lib/notifications/anonymous-subscriber.ts), not a real
+// person. deviceId (client-generated, localStorage-persisted) is the real
+// per-device identity for anonymous rows; endpoint's own uniqueness prevents
+// duplicate rows on re-subscribe either way. Chosen over making userId
+// nullable to avoid a SQLite table-rebuild migration (ALTER COLUMN DROP NOT
+// NULL isn't supported) -- functionally equivalent, lower migration risk.
 export const pushSubscriptions = sqliteTable('push_subscriptions', {
     id: text('id').primaryKey(),
     userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    deviceId: text('device_id'),
     endpoint: text('endpoint').notNull().unique(),
     p256dh: text('p256dh').notNull(),
     auth: text('auth').notNull(),
     userAgent: text('user_agent'),
     createdAt: integer('created_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
     updatedAt: integer('updated_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
+});
+
+// Push Subscription <-> Match links table
+// Anonymous subscribers have no userFollows/favoriteTeamId row to target by
+// team, so they instead opt into specific matches directly ("notify me about
+// this match") from the match detail page. Authenticated subscribers keep
+// using the existing team-follow targeting in match-notification-service.ts
+// unchanged -- this table is anonymous-path-only, but not restricted to it at
+// the schema level in case an authenticated user ever wants ad-hoc
+// single-match alerts too.
+export const pushSubscriptionMatches = sqliteTable('push_subscription_matches', {
+    id: text('id').primaryKey(),
+    subscriptionId: text('subscription_id').notNull().references(() => pushSubscriptions.id, { onDelete: 'cascade' }),
+    matchId: text('match_id').notNull().references(() => matches.id, { onDelete: 'cascade' }),
+    createdAt: integer('created_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
 });
 
 // Match Reminders table
@@ -786,6 +854,28 @@ export const matchReminders = sqliteTable('match_reminders', {
     minutesBefore: integer('minutes_before').notNull().default(15),
     notificationSent: integer('notification_sent', { mode: 'boolean' }).default(false),
     notificationSentAt: integer('notification_sent_at', { mode: 'timestamp' }),
+    createdAt: integer('created_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
+});
+
+// BACKLOG-211: persistent record of every notification send attempt.
+// sendMatchEventNotification()/sendMatchReminderNotification()/the campaign
+// composer previously only console.log'd -- Vercel function logs aren't
+// reachable from a dev session, which cost real debugging time twice in one
+// session (BUG-200's and BACKLOG-203's own verification passes both had to
+// fall back to direct tsx-run diagnostics instead of just reading a log).
+// One row per send *call* (not per-subscription) -- enough to answer "did
+// this fire, for how many people, did it succeed" without the row count
+// exploding on a large audience.
+export const notificationSendLog = sqliteTable('notification_send_log', {
+    id: text('id').primaryKey(),
+    source: text('source').notNull(), // 'match_event' | 'match_reminder' | 'campaign'
+    matchId: text('match_id'), // nullable -- campaigns aren't always match-scoped
+    eventType: text('event_type'), // e.g. 'GOAL', 'MATCH_START', or the campaign's own `type` field
+    targetAudience: text('target_audience'), // campaign-only: 'all' | 'team_followers' | 'match_specific'
+    totalSubscriptions: integer('total_subscriptions').notNull().default(0),
+    sentCount: integer('sent_count').notNull().default(0),
+    failedCount: integer('failed_count').notNull().default(0),
+    errors: text('errors'), // JSON array of error strings, nullable
     createdAt: integer('created_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
 });
 

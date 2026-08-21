@@ -7,8 +7,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
 import { teams, players, matches, basketballPlayerStats, playerTeamAffiliations, squadPlayers } from '@/db/schema';
 import { eq, or, desc, and, sql, inArray } from 'drizzle-orm';
-import { enrichPlayersWithAffiliations } from '@/lib/player-data';
+import { enrichPlayersWithAffiliations, toPublicPlayer } from '@/lib/player-data';
 import { getResolvedInstitutionalData } from '@/lib/player-affiliation-utils';
+import { getAuthUser } from '@/lib/auth';
 
 interface RouteParams {
     params: Promise<{
@@ -21,6 +22,9 @@ export async function GET(
     props: { params: Promise<{ id: string }> }
 ) {
     try {
+        const authUser = await getAuthUser(request).catch(() => null);
+        const isAdmin = authUser?.role === 'admin';
+
         const params = await props.params;
         const { id } = params;
         const { searchParams } = new URL(request.url);
@@ -95,7 +99,7 @@ export async function GET(
                 )
                 .orderBy(desc(players.rating));
 
-            teamPlayers = teamPlayerRows.map(row => row.player);
+            teamPlayers = teamPlayerRows.map(row => toPublicPlayer(row.player, isAdmin));
         }
 
         // UNIVERSITY POOL — all students eligible to represent this university
@@ -110,7 +114,7 @@ export async function GET(
             const enrichedPlayers = await enrichPlayersWithAffiliations(allPlayers);
             universityPlayers = enrichedPlayers
                 .filter((player) => getResolvedInstitutionalData(player, player.team).university === team.university)
-                .map(({ team: _team, memberships: _memberships, organizationAffiliations: _organizationAffiliations, ...player }) => player);
+                .map(({ team: _team, ...player }) => toPublicPlayer(player, isAdmin));
         }
 
         // Get player stats (Basketball)

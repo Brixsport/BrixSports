@@ -24,7 +24,7 @@ export async function GET(
 
         const competitionFilter = or(eq(playerStats.competitionId, compIdOrName), eq(playerStats.competition, compIdOrName));
         const type = searchParams.get('type') || 'scorers'; // 'scorers' | 'assists' | 'discipline'
-        const limit = parseInt(searchParams.get('limit') || '10');
+        const limit = Math.min(Math.max(1, parseInt(searchParams.get('limit') || '10', 10) || 10), 100);
 
         let query;
 

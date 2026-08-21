@@ -35,9 +35,9 @@ interface HeadToHeadProps {
 export function HeadToHeadComparison({ data, showRecentMatches = true }: HeadToHeadProps) {
     const { team1, team2, headToHead, recentMatches } = data;
 
-    const team1WinPercentage = (headToHead.team1Wins / headToHead.totalMatches) * 100;
-    const team2WinPercentage = (headToHead.team2Wins / headToHead.totalMatches) * 100;
-    const drawPercentage = (headToHead.draws / headToHead.totalMatches) * 100;
+    const team1WinPercentage = headToHead.totalMatches > 0 ? (headToHead.team1Wins / headToHead.totalMatches) * 100 : 0;
+    const team2WinPercentage = headToHead.totalMatches > 0 ? (headToHead.team2Wins / headToHead.totalMatches) * 100 : 0;
+    const drawPercentage = headToHead.totalMatches > 0 ? (headToHead.draws / headToHead.totalMatches) * 100 : 0;
 
     return (
         <div className="bg-white/5 border border-white/10 rounded-[32px] p-6 space-y-6">

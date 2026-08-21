@@ -7,8 +7,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { and, desc, eq, like, or, sql } from 'drizzle-orm';
 import { db } from '@/db';
 import { competitions, matches, players, teams } from '@/db/schema';
-import { enrichPlayersWithAffiliations } from '@/lib/player-data';
+import { enrichPlayersWithAffiliations, toPublicPlayer } from '@/lib/player-data';
 import { getPrimaryTeam, getResolvedInstitutionalData } from '@/lib/player-affiliation-utils';
+import { getAuthUser } from '@/lib/auth';
+import { checkRateLimit } from '@/lib/rate-limit';
 
 function playerMatchesQuery(
     player: Awaited<ReturnType<typeof enrichPlayersWithAffiliations>>[number],
@@ -43,12 +45,28 @@ function playerMatchesQuery(
 
 export async function GET(request: NextRequest) {
     try {
+        // Search is the most expensive of the public GET endpoints (multiple
+        // LIKE scans per request), so a tighter ceiling than the shared
+        // default -- still generous enough for real campus-shared-IP traffic.
+        const rl = checkRateLimit(request, { max: 60, windowMs: 60 * 1000 });
+        if (rl.limited) {
+            return NextResponse.json(
+                { error: 'Too many requests. Please try again shortly.' },
+                { status: 429, headers: { 'Retry-After': String(rl.retryAfterSeconds) } }
+            );
+        }
+
+        const authUser = await getAuthUser(request).catch(() => null);
+        const isAdmin = authUser?.role === 'admin';
+
         const { searchParams } = new URL(request.url);
 
         const query = searchParams.get('q') || '';
         const category = searchParams.get('category');
         const sport = searchParams.get('sport');
-        const limit = parseInt(searchParams.get('limit') || '20', 10);
+        // BACKLOG-169: was unclamped -- ?limit=999999999 bypassed the intent
+        // entirely across all 4 .limit(limit) call sites below.
+        const limit = Math.min(Math.max(1, parseInt(searchParams.get('limit') || '20', 10) || 20), 50);
 
         if (!query || query.length < 2) {
             return NextResponse.json({
@@ -114,13 +132,16 @@ export async function GET(request: NextRequest) {
                         return false;
                     }
 
+                    // Matched against email/memberships/etc. before the public strip
+                    // below — search must still work over fields a non-admin caller
+                    // never sees in the response (BACKLOG-167).
                     return playerMatchesQuery(player, query);
                 })
                 .slice(0, limit)
-                .map((player) => ({
+                .map((player) => toPublicPlayer({
                     ...player,
                     team: getPrimaryTeam(player),
-                }));
+                }, isAdmin));
         }
 
         if (!category || category === 'all' || category === 'matches') {

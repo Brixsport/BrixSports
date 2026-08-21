@@ -12,7 +12,7 @@ export async function GET(request: NextRequest) {
         const teamId = searchParams.get('teamId');
         const sortBy = searchParams.get('sortBy') || 'totalPoints'; // totalPoints, price, form, selectedBy
         const order = searchParams.get('order') || 'desc';
-        const limit = parseInt(searchParams.get('limit') || '100');
+        const limit = Math.min(Math.max(1, parseInt(searchParams.get('limit') || '100', 10) || 100), 100);
         const search = searchParams.get('search');
 
         // Build where conditions

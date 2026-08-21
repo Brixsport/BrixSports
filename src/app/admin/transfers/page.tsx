@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { motion, AnimatePresence } from 'framer-motion';
+import { FeatureGate } from '@/components/admin/FeatureGate';
 import {
     TrendingUp,
     Plus,
@@ -23,6 +24,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { useToast } from '@/hooks/useToast';
+import { TeamLogo } from '@/lib/utils/team-logo';
 import { ToastContainer } from '@/components/admin/Toast';
 import ConfirmDialog from '@/components/admin/ConfirmDialog';
 import SkeletonLoader from '@/components/admin/SkeletonLoader';
@@ -373,9 +375,11 @@ function AdminTransfersPageContent() {
 
 export default function AdminTransfersPage() {
     return (
-        <ErrorBoundary>
-            <AdminTransfersPageContent />
-        </ErrorBoundary>
+        <FeatureGate flagKey="features.transfers.enabled" featureName="Transfers">
+            <ErrorBoundary>
+                <AdminTransfersPageContent />
+            </ErrorBoundary>
+        </FeatureGate>
     );
 }
 
@@ -424,14 +428,14 @@ function TransferCard({ transfer, onEdit, onDelete }: {
                 <div className="flex items-center gap-4">
                     {transfer.fromTeam && (
                         <div className="flex items-center gap-2">
-                            <img src={transfer.fromTeam.logo} alt={transfer.fromTeam.name} className="w-8 h-8" />
+                            <TeamLogo logo={transfer.fromTeam.logo} name={transfer.fromTeam.name} size="sm" />
                             <span className="text-sm text-slate-300 hidden md:block">{transfer.fromTeam.name}</span>
                         </div>
                     )}
                     <ArrowRight className="w-6 h-6 text-blue-400" />
                     {transfer.toTeam && (
                         <div className="flex items-center gap-2">
-                            <img src={transfer.toTeam.logo} alt={transfer.toTeam.name} className="w-8 h-8" />
+                            <TeamLogo logo={transfer.toTeam.logo} name={transfer.toTeam.name} size="sm" />
                             <span className="text-sm text-slate-300 hidden md:block">{transfer.toTeam.name}</span>
                         </div>
                     )}

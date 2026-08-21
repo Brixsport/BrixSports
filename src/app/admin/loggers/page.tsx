@@ -15,6 +15,7 @@ import ConfirmDialog from '@/components/admin/ConfirmDialog';
 import SkeletonLoader from '@/components/admin/SkeletonLoader';
 import ErrorBoundary from '@/components/admin/ErrorBoundary';
 import { useWebSocket } from '@/hooks/useWebSocket';
+import { getClientErrorMessage } from '@/lib/client-error';
 
 interface Logger {
     id: string;
@@ -115,15 +116,24 @@ function AdminLoggersPageContent() {
                 fetch('/api/analytics/loggers')
             ]);
 
+            if (!loggersRes.ok) {
+                const body = await loggersRes.json().catch(() => ({}));
+                throw new Error(body.error || 'Failed to load loggers');
+            }
+            if (!matchesRes.ok) {
+                const body = await matchesRes.json().catch(() => ({}));
+                throw new Error(body.error || 'Failed to load matches');
+            }
+
             const loggersData = await loggersRes.json();
             const matchesData = await matchesRes.json();
-            const analyticsData = await analyticsRes.json();
+            const analyticsData = analyticsRes.ok ? await analyticsRes.json() : null;
 
-            setLoggers(loggersData);
-            setMatches(matchesData);
+            setLoggers(Array.isArray(loggersData) ? loggersData : []);
+            setMatches(Array.isArray(matchesData) ? matchesData : []);
             setAnalytics(analyticsData);
         } catch (err) {
-            error('Failed to load logger data. Please try again.');
+            error(getClientErrorMessage(err, 'Failed to load logger data. Please try again.'));
             console.error('Error fetching data:', err);
         } finally {
             setLoading(false);

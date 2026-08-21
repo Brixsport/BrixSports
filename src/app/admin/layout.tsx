@@ -2,6 +2,7 @@ import { Metadata } from 'next';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { jwtVerify } from 'jose';
+import { env } from '@/lib/env';
 import { PWAProvider } from '@/components/pwa/PWAProvider';
 import { AdminDashboardLayout } from '@/components/admin/AdminDashboardLayout';
 
@@ -9,12 +10,14 @@ export const metadata: Metadata = {
     title: 'Brix Admin | Statistics & Management',
     description: 'Admin dashboard for Brixsport',
     manifest: '/manifest-admin.json',
+    // Purple identity, distinct from viewer's brand purple (#8b5cf6) and from
+    // the live-match-status red used elsewhere in the app -- see BACKLOG.md
+    // favicon directive for the collision reasoning behind this pick.
     icons: {
         icon: [
-            { url: '/assests/Logos/BRIX-SPORT-LOGO.png', type: 'image/png' },
-            { url: '/favicon.ico', sizes: 'any' },
+            { url: '/icons/role-colorways/admin-32.png', sizes: '32x32', type: 'image/png' },
         ],
-        apple: '/assests/Logos/BRIX-SPORT-LOGO.png',
+        apple: '/icons/role-colorways/admin-192.png',
     },
 };
 
@@ -31,9 +34,11 @@ export default async function AdminLayout({
     }
 
     try {
-        const secret = new TextEncoder().encode(
-            process.env.JWT_SECRET || 'your-secret-key-change-in-production'
-        );
+        if (!env.jwtSecret) {
+            console.error('[AdminLayout] JWT_SECRET is not configured');
+            redirect('/login?callbackUrl=/admin');
+        }
+        const secret = new TextEncoder().encode(env.jwtSecret);
 
         const { payload } = await jwtVerify(token, secret);
 

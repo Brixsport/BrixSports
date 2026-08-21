@@ -48,11 +48,17 @@
 
 :root {
   --radius: 0.75rem;
-  --background: oklch(0.98 0 0);
+  /* Session 51: was pure achromatic (0 chroma) -- oklch(1 0 0) card on
+     oklch(0.98 0 0) page read as clinical/sharp, flagged directly by Richard
+     against a real screenshot. Slight warm tint (hue ~85, matching the
+     "paper white" convention most polished light themes use) plus a touch
+     less lightness softens it without meaningfully changing contrast ratios
+     against --foreground/--muted-foreground (unchanged, still 0 chroma). */
+  --background: oklch(0.97 0.004 85);
   --foreground: oklch(0.15 0 0);
-  --card: oklch(1 0 0);
+  --card: oklch(0.99 0.003 85);
   --card-foreground: oklch(0.15 0 0);
-  --popover: oklch(1 0 0);
+  --popover: oklch(0.99 0.003 85);
   --popover-foreground: oklch(0.15 0 0);
   --primary: oklch(0.6 0.2 250);
   /* Premium Blue */
@@ -72,7 +78,7 @@
   --chart-3: oklch(0.8 0.15 85);
   --chart-4: oklch(0.7 0.2 30);
   --chart-5: oklch(0.4 0.15 200);
-  --sidebar: oklch(0.98 0 0);
+  --sidebar: oklch(0.97 0.004 85);
   --sidebar-foreground: oklch(0.15 0 0);
   --sidebar-primary: oklch(0.6 0.2 250);
   --sidebar-primary-foreground: oklch(0.98 0 0);

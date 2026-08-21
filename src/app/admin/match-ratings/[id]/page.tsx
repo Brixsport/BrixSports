@@ -6,6 +6,7 @@ import { RatingCalculator } from '@/lib/ratingCalculator';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronLeft, Save, AlertCircle, RefreshCw, Star, Info, Filter, X } from 'lucide-react';
 import Image from 'next/image';
+import { getClientErrorMessage } from '@/lib/client-error';
 
 interface Team {
     id: string;
@@ -123,8 +124,7 @@ export default function MatchRatingsAdjustPage() {
             setAdjustedRatings(initial);
 
         } catch (err) {
-            const errorMessage = err instanceof Error ? err.message : 'Failed to load ratings';
-            setError(errorMessage);
+            setError(getClientErrorMessage(err, 'Failed to load ratings'));
             console.error('Error in fetchRatings:', err);
         } finally {
             setLoading(false);
@@ -146,7 +146,7 @@ export default function MatchRatingsAdjustPage() {
 
             fetchRatings();
         } catch (err) {
-            setError(err instanceof Error ? err.message : 'Failed to calculate ratings');
+            setError(getClientErrorMessage(err, 'Failed to calculate ratings'));
             setLoading(false);
         }
     };

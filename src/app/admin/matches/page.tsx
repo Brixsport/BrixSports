@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, Plus, Calendar, Users, MapPin, Trophy, Edit, Trash2, Eye, Filter, ClipboardList, Star } from 'lucide-react';
+import { ArrowLeft, Plus, Calendar, Users, MapPin, Trophy, Edit, Trash2, Eye, Filter, ClipboardList, Star, ChevronDown, ChevronUp, Video } from 'lucide-react';
 import { nanoid } from 'nanoid';
 import { useToast } from '@/hooks/useToast';
 import { ToastContainer } from '@/components/admin/Toast';
@@ -55,6 +55,8 @@ interface Competition {
     sport: string;
     isMultiSport: boolean;
     level?: string;
+    season?: string;
+    status?: 'upcoming' | 'ongoing' | 'completed';
 }
 
 function AdminMatchesPageContent() {
@@ -79,6 +81,13 @@ function AdminMatchesPageContent() {
 
     const [competitionTeams, setCompetitionTeams] = useState<Team[]>([]);
     const [isFetchingTeams, setIsFetchingTeams] = useState(false);
+    const [competitionMatchSettings, setCompetitionMatchSettings] = useState<{
+        halfDuration?: number | null;
+        maxSubstitutions?: number | null;
+        extraTimeEnabled?: boolean;
+        penaltiesEnabled?: boolean;
+        allowDraws?: boolean;
+    } | null>(null);
 
     const [formData, setFormData] = useState({
         sport: 'Football',
@@ -96,8 +105,13 @@ function AdminMatchesPageContent() {
         livestreamEnabled: false,
         round: '',
         groupName: '',
-        matchday: null as number | null
+        matchday: null as number | null,
+        // Per-match overrides — null means "use competition match settings"
+        extraTimeEnabledOverride: null as boolean | null,
+        penaltiesEnabledOverride: null as boolean | null,
+        allowDrawsOverride: null as boolean | null,
     });
+    const [showMatchOverrides, setShowMatchOverrides] = useState(false);
 
     useEffect(() => {
         fetchMatches();
@@ -124,8 +138,16 @@ function AdminMatchesPageContent() {
     useEffect(() => {
         if (formData.competitionId) {
             fetchCompetitionTeams(formData.competitionId);
+            fetch(`/api/competitions/${formData.competitionId}/match-settings`)
+                .then(r => r.ok ? r.json() : null)
+                .then(data => {
+                    const s = Array.isArray(data?.settings) ? data.settings[0] : data?.settings;
+                    setCompetitionMatchSettings(s ?? null);
+                })
+                .catch(() => setCompetitionMatchSettings(null));
         } else {
             setCompetitionTeams([]);
+            setCompetitionMatchSettings(null);
         }
     }, [formData.competitionId]);
 
@@ -190,8 +212,12 @@ function AdminMatchesPageContent() {
                     livestreamEnabled: false,
                     round: '',
                     groupName: '',
-                    matchday: null
+                    matchday: null,
+                    extraTimeEnabledOverride: null,
+                    penaltiesEnabledOverride: null,
+                    allowDrawsOverride: null,
                 });
+                setShowMatchOverrides(false);
                 success('Match created successfully!');
             } else {
                 const data = await response.json();
@@ -258,7 +284,10 @@ function AdminMatchesPageContent() {
             livestreamEnabled: false,
             round: match.round || '',
             groupName: match.groupName || '',
-            matchday: match.matchday || null
+            matchday: match.matchday || null,
+            extraTimeEnabledOverride: null,
+            penaltiesEnabledOverride: null,
+            allowDrawsOverride: null,
         });
         setShowEditModal(true);
     };
@@ -461,6 +490,15 @@ function AdminMatchesPageContent() {
                                                         <Star size={20} />
                                                     </Link>
                                                 )}
+                                                {(match.status === 'UPCOMING' || match.status === 'LIVE') && (
+                                                    <Link
+                                                        href={`/admin/livestreams?matchId=${match.id}`}
+                                                        className="p-3 bg-white/5 border border-white/10 rounded-xl hover:bg-red-500/20 text-red-400 transition-colors"
+                                                        title="Manage Livestream"
+                                                    >
+                                                        <Video size={20} />
+                                                    </Link>
+                                                )}
                                                 <Link href={`/logger?matchId=${match.id}`} className="p-3 bg-white/5 border border-white/10 rounded-xl hover:bg-white/10 transition-colors">
                                                     <Eye size={20} />
                                                 </Link>
@@ -548,7 +586,21 @@ function AdminMatchesPageContent() {
                                     <label className="block text-[10px] font-black uppercase tracking-widest text-white/40 mb-2">Match Type</label>
                                     <select
                                         value={formData.matchType}
-                                        onChange={(e) => setFormData({ ...formData, matchType: e.target.value as any })}
+                                        onChange={(e) => {
+                                            const matchType = e.target.value as 'competition' | 'friendly';
+                                            setFormData(prev => ({
+                                                ...prev,
+                                                matchType,
+                                                // BACKLOG-180: friendlies default to a non-filtering
+                                                // eligibility level instead of 'busa-league' — that
+                                                // level requires player.university to be set for
+                                                // eligible-players lookups, which only bulk-register
+                                                // and admin/players currently guarantee. A friendly
+                                                // created outside those paths would otherwise silently
+                                                // return an empty roster with no error surfaced.
+                                                competitionLevel: matchType === 'friendly' ? 'external' : prev.competitionLevel,
+                                            }));
+                                        }}
                                         className="w-full bg-[#121212] border border-white/10 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-primary transition-colors text-white hover:border-white/20"
                                     >
                                         <option value="competition" className="bg-[#0a0a0a]">Competition</option>
@@ -586,9 +638,17 @@ function AdminMatchesPageContent() {
                                             required
                                         >
                                             <option value="" className="bg-[#0a0a0a]">Select Competition</option>
-                                            {competitions.filter(c => c.isMultiSport || !c.sport || c.sport === formData.sport).map(comp => (
-                                                <option key={comp.id} value={comp.id} className="bg-[#0a0a0a]">{comp.name}</option>
-                                            ))}
+                                            {competitions
+                                                .filter(c => c.isMultiSport || !c.sport || c.sport === formData.sport)
+                                                // Ongoing/upcoming first -- completed competitions are still selectable
+                                                // (e.g. backfilling a missed match) but shouldn't be the first thing an
+                                                // admin sees once multiple seasons of the same league coexist.
+                                                .sort((a, b) => (a.status === 'completed' ? 1 : 0) - (b.status === 'completed' ? 1 : 0))
+                                                .map(comp => (
+                                                    <option key={comp.id} value={comp.id} className="bg-[#0a0a0a]">
+                                                        {comp.name}{comp.season ? ` (${comp.season})` : ''}{comp.status === 'completed' ? ' — Completed' : ''}
+                                                    </option>
+                                                ))}
                                         </select>
                                     </div>
                                 ) : (
@@ -686,6 +746,67 @@ function AdminMatchesPageContent() {
                                     </select>
                                 </div>
                             </div>
+                            {/* Match Overrides — collapsed by default */}
+                            <div className="border border-white/10 rounded-xl overflow-hidden">
+                                <button
+                                    type="button"
+                                    onClick={() => setShowMatchOverrides(v => !v)}
+                                    className="w-full flex items-center justify-between px-5 py-4 text-left hover:bg-white/5 transition-colors"
+                                >
+                                    <span className="text-[10px] font-black uppercase tracking-widest text-white/40">Override Match Settings for This Fixture</span>
+                                    {showMatchOverrides ? <ChevronUp size={16} className="text-white/40" /> : <ChevronDown size={16} className="text-white/40" />}
+                                </button>
+                                {showMatchOverrides && (
+                                    <div className="px-5 pb-5 border-t border-white/10 pt-4 space-y-3">
+                                        <p className="text-[10px] text-white/30 uppercase tracking-widest">Untouched toggles inherit from competition match settings. Toggle only what differs for this specific fixture.</p>
+                                        {competitionMatchSettings && (
+                                            <div className="bg-white/5 rounded-lg px-4 py-3 text-[10px] font-bold text-white/40 uppercase tracking-widest space-y-1">
+                                                <p className="text-white/20">Inheriting from competition:</p>
+                                                <p>Half Duration: <span className="text-white/60">{competitionMatchSettings.halfDuration ?? 45} min</span></p>
+                                                <p>Subs: <span className="text-white/60">{competitionMatchSettings.maxSubstitutions == null ? 'Unlimited' : competitionMatchSettings.maxSubstitutions}</span></p>
+                                                <p>Extra Time: <span className="text-white/60">{competitionMatchSettings.extraTimeEnabled ? 'ON' : 'OFF'}</span></p>
+                                                <p>Penalties: <span className="text-white/60">{competitionMatchSettings.penaltiesEnabled ? 'ON' : 'OFF'}</span></p>
+                                                <p>Allow Draws: <span className="text-white/60">{competitionMatchSettings.allowDraws ? 'ON' : 'OFF'}</span></p>
+                                            </div>
+                                        )}
+                                        {(
+                                            [
+                                                { key: 'extraTimeEnabledOverride', label: 'Extra Time', inherited: competitionMatchSettings?.extraTimeEnabled },
+                                                { key: 'penaltiesEnabledOverride', label: 'Penalties', inherited: competitionMatchSettings?.penaltiesEnabled },
+                                                { key: 'allowDrawsOverride', label: 'Allow Draws', inherited: competitionMatchSettings?.allowDraws },
+                                            ] as const
+                                        ).map(({ key, label, inherited }) => {
+                                            const val = formData[key];
+                                            return (
+                                                <div key={key} className="flex items-center gap-4">
+                                                    <span className="text-sm font-bold text-white/60 w-32">{label}</span>
+                                                    <div className="flex gap-2">
+                                                        {(['inherit', 'on', 'off'] as const).map(opt => (
+                                                            <button
+                                                                key={opt}
+                                                                type="button"
+                                                                onClick={() => setFormData({ ...formData, [key]: opt === 'inherit' ? null : opt === 'on' })}
+                                                                className={`px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest border transition-colors ${
+                                                                    (opt === 'inherit' && val === null) ||
+                                                                    (opt === 'on' && val === true) ||
+                                                                    (opt === 'off' && val === false)
+                                                                        ? 'border-primary text-primary bg-primary/10'
+                                                                        : 'border-white/10 text-white/30 hover:border-white/30'
+                                                                }`}
+                                                            >
+                                                                {opt === 'inherit' && inherited !== undefined
+                                                                    ? `inherit (${inherited ? 'on' : 'off'})`
+                                                                    : opt}
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                )}
+                            </div>
+
                             <div className="flex gap-4 pt-4">
                                 <button type="button" onClick={() => setShowCreateModal(false)} className="flex-1 py-4 text-[10px] font-black uppercase tracking-widest text-white/40 hover:text-white transition-colors">Cancel</button>
                                 <button type="submit" disabled={isCreating} className="flex-1 bg-primary text-black py-4 rounded-xl text-[10px] font-black uppercase italic tracking-widest hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-50">

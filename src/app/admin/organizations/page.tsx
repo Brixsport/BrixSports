@@ -15,6 +15,7 @@ import {
     Shield,
     Users,
 } from 'lucide-react';
+import { getClientErrorMessage } from '@/lib/client-error';
 
 type OrganizationType =
     | 'organization'
@@ -132,7 +133,7 @@ export default function AdminOrganizationsPage() {
 
             setOrganizations(data.organizations || []);
         } catch (error) {
-            setErrorMessage(error instanceof Error ? error.message : 'Failed to load organizations');
+            setErrorMessage(getClientErrorMessage(error, 'Failed to load organizations'));
         } finally {
             setIsLoading(false);
         }
@@ -225,7 +226,7 @@ export default function AdminOrganizationsPage() {
             setSuccessMessage(`${data.organization?.name || 'Organization'} created successfully`);
             await loadOrganizations();
         } catch (error) {
-            setErrorMessage(error instanceof Error ? error.message : 'Failed to create organization');
+            setErrorMessage(getClientErrorMessage(error, 'Failed to create organization'));
         } finally {
             setIsSaving(false);
         }

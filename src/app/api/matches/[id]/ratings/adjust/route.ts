@@ -270,7 +270,7 @@ export async function GET(
         return NextResponse.json(
             {
                 error: 'Internal server error',
-                message: error instanceof Error ? error.message : 'Failed to fetch ratings',
+                message: 'Failed to fetch ratings',
                 code: 'INTERNAL_ERROR'
             },
             { status: 500 }

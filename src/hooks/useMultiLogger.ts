@@ -137,7 +137,14 @@ export function useMultiLogger({
                 playerId: e.playerId,
                 relatedPlayerId: e.relatedPlayerId,
                 detail: e.detail,
-                value: e.value,
+                // match_events.value is a TEXT column storing JSON.stringify(value) --
+                // the raw string ("1", "2") was passed straight through here, unlike
+                // BasketballLogger's own initial-mount fetch which already parses it.
+                // Every event picked up via this 15s sync silently turned numeric into
+                // string, breaking any downstream arithmetic (BasketballLogger's
+                // calculatePlayerRating: `rating += event.value` string-concatenates
+                // instead of adding, then `.toFixed()` throws on the resulting string).
+                value: e.value != null ? (typeof e.value === 'string' ? JSON.parse(e.value) : e.value) : undefined,
                 loggerId: e.loggerId || 'unknown',
                 loggerName: e.loggerName || 'Unknown Logger',
                 timestamp: new Date(e.createdAt),

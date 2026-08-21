@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
+import { useParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     Trophy, TrendingUp, Award, Shield, Target, AlertCircle,
@@ -8,6 +9,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { useLiveStandings } from '@/hooks/useLiveStandings';
+import { TeamLogo } from '@/lib/utils/team-logo';
 import { StandingsFilters, FilterOptions, SortOption } from '@/components/StandingsFilters';
 
 // Mock data - will be replaced with real API calls
@@ -143,9 +145,6 @@ const mockCompetitionData = {
         },
     ],
 };
-
-import { useParams } from 'next/navigation';
-import { useEffect } from 'react';
 
 type TabType = 'standings' | 'scorers' | 'assists' | 'discipline' | 'rules';
 
@@ -383,10 +382,7 @@ function StandingsRow({
 
     return (
         <>
-            <motion.tr
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay }}
+            <tr
                 className="border-b border-white/5 hover:bg-white/5 transition-colors cursor-pointer"
                 onClick={onExpand}
             >
@@ -397,7 +393,7 @@ function StandingsRow({
                 </td>
                 <td className="px-6 py-4">
                     <div className="flex items-center gap-3">
-                        <span className="text-2xl">{team.teamLogo}</span>
+                        <TeamLogo logo={team.teamLogo} name={team.teamName} size="md" />
                         <div>
                             <p className="text-sm font-black uppercase tracking-tight">{team.teamName}</p>
                             <p className="text-[10px] text-white/40 font-bold uppercase">{team.university}</p>
@@ -424,7 +420,7 @@ function StandingsRow({
                 <td className="px-4 py-4 text-center">
                     {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                 </td>
-            </motion.tr>
+            </tr>
             {isExpanded && (
                 <tr>
                     <td colSpan={12} className="px-6 py-4 bg-white/5">
@@ -439,7 +435,6 @@ function StandingsRow({
 function StandingsMobileCard({ team, delay }: { team: any; delay: number }) {
     return (
         <motion.div
-            initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay }}
             className="bg-white/5 border border-white/10 rounded-2xl p-4"
@@ -447,7 +442,7 @@ function StandingsMobileCard({ team, delay }: { team: any; delay: number }) {
             <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-3">
                     <span className="text-2xl font-display italic text-primary">{team.position}</span>
-                    <span className="text-2xl">{team.teamLogo}</span>
+                    <TeamLogo logo={team.teamLogo} name={team.teamName} size="md" />
                     <div>
                         <p className="text-sm font-black uppercase">{team.teamName}</p>
                         <p className="text-xs text-white/40">{team.university}</p>
@@ -556,7 +551,6 @@ function TopScorersTable({ players }: { players: any[] }) {
                 {players.map((player, idx) => (
                     <motion.div
                         key={player.id}
-                        initial={{ opacity: 0, x: -20 }}
                         animate={{ opacity: 1, x: 0 }}
                         transition={{ delay: idx * 0.1 }}
                         className="flex items-center justify-between p-4 bg-white/5 border border-white/10 rounded-2xl hover:bg-white/10 transition-all"
@@ -565,7 +559,7 @@ function TopScorersTable({ players }: { players: any[] }) {
                             <span className={`text-2xl font-display italic ${idx < 3 ? 'text-primary' : 'text-white/40'}`}>
                                 {idx + 1}
                             </span>
-                            <span className="text-2xl">{player.teamLogo}</span>
+                            <TeamLogo logo={player.teamLogo} name={player.name} size="md" />
                             <div>
                                 <p className="text-sm font-black uppercase">{player.name}</p>
                                 <p className="text-xs text-white/60">{player.team}</p>
@@ -599,7 +593,6 @@ function TopAssistsTable({ players }: { players: any[] }) {
                 {players.map((player, idx) => (
                     <motion.div
                         key={player.id}
-                        initial={{ opacity: 0, x: -20 }}
                         animate={{ opacity: 1, x: 0 }}
                         transition={{ delay: idx * 0.1 }}
                         className="flex items-center justify-between p-4 bg-white/5 border border-white/10 rounded-2xl hover:bg-white/10 transition-all"
@@ -608,7 +601,7 @@ function TopAssistsTable({ players }: { players: any[] }) {
                             <span className={`text-2xl font-display italic ${idx < 3 ? 'text-primary' : 'text-white/40'}`}>
                                 {idx + 1}
                             </span>
-                            <span className="text-2xl">{player.teamLogo}</span>
+                            <TeamLogo logo={player.teamLogo} name={player.name} size="md" />
                             <div>
                                 <p className="text-sm font-black uppercase">{player.name}</p>
                                 <p className="text-xs text-white/60">{player.team}</p>
@@ -642,13 +635,12 @@ function DisciplinaryTable({ players }: { players: any[] }) {
                 {players.map((player, idx) => (
                     <motion.div
                         key={player.id}
-                        initial={{ opacity: 0, x: -20 }}
                         animate={{ opacity: 1, x: 0 }}
                         transition={{ delay: idx * 0.1 }}
                         className="flex items-center justify-between p-4 bg-white/5 border border-white/10 rounded-2xl"
                     >
                         <div className="flex items-center gap-4">
-                            <span className="text-2xl">{player.teamLogo}</span>
+                            <TeamLogo logo={player.teamLogo} name={player.name} size="md" />
                             <div>
                                 <p className="text-sm font-black uppercase">{player.name}</p>
                                 <p className="text-xs text-white/60">{player.team}</p>

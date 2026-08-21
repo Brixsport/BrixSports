@@ -50,6 +50,21 @@ export async function GET(request: NextRequest) {
         const team1 = enrichedPlayersById.get(player1.id)?.team ?? null;
         const team2 = enrichedPlayersById.get(player2.id)?.team ?? null;
 
+        // BACKLOG-221: no guard previously stopped a football player being compared
+        // against a basketball player -- getStats() derives each sport independently,
+        // so a cross-sport comparison silently produced meaningless zero-filled fields
+        // for one side instead of erroring. Default to 'Football' matches getStats()'s
+        // own fallback below, so a player with no team/sport data doesn't spuriously
+        // block a same-sport comparison.
+        const sport1 = team1?.sport || 'Football';
+        const sport2 = team2?.sport || 'Football';
+        if (sport1 !== sport2) {
+            return NextResponse.json(
+                { error: `Cannot compare players from different sports (${sport1} vs ${sport2})` },
+                { status: 400 }
+            );
+        }
+
         // Helper to fetch stats based on sport
         const getStats = async (playerId: string, team: any) => {
             const sport = team?.sport || 'Football';
@@ -172,19 +187,20 @@ export async function GET(request: NextRequest) {
         const s1 = stats1 as any;
         const s2 = stats2 as any;
 
+        // BACKLOG-221: "Higher Rated" used to read players.rating, a field that
+        // defaults to 7.0 and is never live-updated (.agents/dev/BACKSCOPE.md:287) --
+        // dropped rather than shipping a tile that isn't showing real data.
         if (primarySport === 'Basketball') {
             summary = {
                 betterScorer: (s1.totalPoints || 0) > (s2.totalPoints || 0) ? player1.name : player2.name,
                 betterPlaymaker: (s1.totalAssists || 0) > (s2.totalAssists || 0) ? player1.name : player2.name,
                 betterRebounder: (s1.rebounds || 0) > (s2.rebounds || 0) ? player1.name : player2.name,
-                higherRated: (player1.rating || 0) > (player2.rating || 0) ? player1.name : player2.name,
             };
         } else {
             summary = {
                 betterGoalScorer: (s1.goals || 0) > (s2.goals || 0) ? player1.name : player2.name,
                 betterPlaymaker: (s1.assists || 0) > (s2.assists || 0) ? player1.name : player2.name,
                 moreExperienced: (s1.appearances || 0) > (s2.appearances || 0) ? player1.name : player2.name,
-                higherRated: (player1.rating || 0) > (player2.rating || 0) ? player1.name : player2.name,
             };
         }
 

@@ -2,6 +2,7 @@
 
 import { motion } from 'framer-motion';
 import { X, Bell, Eye, Zap, Loader2 } from 'lucide-react';
+import Link from 'next/link';
 import { useState, useEffect } from 'react';
 import { getPushService } from '@/lib/notifications/push-service';
 import { useAuth } from '@/contexts/AuthContext';
@@ -264,6 +265,12 @@ export function SettingsOverlay({ onClose }: { onClose: () => void }) {
         >
           Save Configuration
         </button>
+
+        <div className="flex items-center justify-center gap-4 mt-8 text-[10px] font-bold uppercase tracking-widest text-white/30">
+          <Link href="/privacy" className="hover:text-white/60 transition-colors">Privacy Policy</Link>
+          <span>&middot;</span>
+          <Link href="/terms" className="hover:text-white/60 transition-colors">Terms of Service</Link>
+        </div>
       </div>
     </motion.div>
   );

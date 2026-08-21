@@ -40,7 +40,12 @@ export type FootballEventType =
     // General
     | 'Shot' | 'Shot on Target' | 'Shot off Target' | 'Offside' | 'Substitution'
     // Penalty outcomes
-    | 'Penalty Saved' | 'Penalty Missed';
+    | 'Penalty Saved' | 'Penalty Missed'
+    // BACKLOG-105: penalty shootout kicks — distinct from 'Penalty'/'Penalty Saved'/
+    // 'Penalty Missed' on purpose. Those write career stats and the main score;
+    // these must not (updatePlayerStats has no case for them, so it's a no-op by
+    // construction — see events/route.ts). Shootout score is tracked separately.
+    | 'PEN_SCORED' | 'PEN_MISSED' | 'PEN_SAVED';
 
 export interface PlayerSnapshot {
     name: string;
@@ -890,9 +895,6 @@ export class MatchStateManager {
                 status: this.state.clock.period,
             }
         }));
-
-        // Trigger notification
-        this.triggerNotification(event);
     }
 
     private broadcastUndo(event: MatchEvent): void {
@@ -951,21 +953,6 @@ export class MatchStateManager {
                 nextPeriod,
                 clock: this.state.clock,
                 requiresExtraTime: currentPeriod === 'FIRST_HALF' || currentPeriod === 'SECOND_HALF',
-            }
-        }));
-    }
-
-    private triggerNotification(event: MatchEvent): void {
-        const notifiableEvents: FootballEventType[] = ['Goal', 'Penalty', 'Red Card'];
-        console.log('[MatchStateManager] triggerNotification called for:', event.type, 'Notifiable:', notifiableEvents.includes(event.type));
-        if (!notifiableEvents.includes(event.type)) return;
-
-        console.log('[MatchStateManager] Dispatching MATCH_NOTIFICATION_TRIGGER:', { matchId: this.state.matchId, eventType: event.type });
-        window.dispatchEvent(new CustomEvent('MATCH_NOTIFICATION_TRIGGER', {
-            detail: {
-                matchId: this.state.matchId,
-                event,
-                score: this.state.score,
             }
         }));
     }

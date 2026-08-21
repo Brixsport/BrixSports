@@ -43,6 +43,7 @@ export interface Player {
     jerseyName?: string;
     college?: string;
     department?: string;
+    memberships?: Array<{ affiliation?: { isPrimary?: boolean }; team?: { id: string; name: string } | null }>;
 }
 
 export type MatchStatus = 'UPCOMING' | 'LIVE' | 'FINISHED';
@@ -53,6 +54,9 @@ export interface Match {
     awayTeamId: string;
     homeScore: number;
     awayScore: number;
+    // BACKLOG-105: undefined means "no shootout," never "0-0 so far."
+    shootoutHomeScore?: number;
+    shootoutAwayScore?: number;
     status: MatchStatus;
     startTime: string;
     venue: string;
@@ -68,6 +72,7 @@ export interface Match {
         home: LineupEntry[];
         away: LineupEntry[];
     };
+    currentPeriod?: string | null;
     isStreaming?: boolean;
     streamUrl?: string;
     streamType?: 'youtube' | 'twitch' | 'facebook' | 'hls' | 'dash' | 'custom';

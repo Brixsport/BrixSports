@@ -16,7 +16,7 @@ export async function GET(request: NextRequest) {
     try {
         const { searchParams } = new URL(request.url);
         const userId = searchParams.get('userId');
-        const limit = parseInt(searchParams.get('limit') || '20');
+        const limit = Math.min(Math.max(1, parseInt(searchParams.get('limit') || '20', 10) || 20), 100);
         const activityType = searchParams.get('type');
 
         if (!userId) {

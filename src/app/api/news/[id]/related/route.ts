@@ -11,7 +11,7 @@ export async function GET(
     try {
         const { id } = await params;
         const { searchParams } = new URL(request.url);
-        const limit = parseInt(searchParams.get('limit') || '5');
+        const limit = Math.min(Math.max(1, parseInt(searchParams.get('limit') || '5', 10) || 5), 100);
 
         // Get the current article
         const currentArticle = await db

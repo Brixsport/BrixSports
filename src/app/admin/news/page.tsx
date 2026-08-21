@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { FeatureGate } from '@/components/admin/FeatureGate';
 import {
     Newspaper,
     Plus,
@@ -217,8 +218,8 @@ function AdminNewsPageContent() {
             const payload = {
                 ...formData,
                 tags: formData.tags ? formData.tags.split(',').map(t => t.trim()) : [],
-                authorId: 'admin-1',
-                authorName: 'Admin',
+                // authorId/authorName are derived server-side from the verified session
+                // (BUG-147) -- anything sent here is ignored, no longer sent.
             };
 
             const url = editingNews ? `/api/news/${editingNews.id}` : '/api/news';
@@ -505,6 +506,7 @@ function AdminNewsPageContent() {
                             setAutoSaveEnabled(false);
                         }}
                         isEditing={!!editingNews}
+                        entityId={editingNews?.id}
                         isSaving={isSaving}
                         lastSaved={lastSaved}
                         autoSaveEnabled={autoSaveEnabled}
@@ -529,6 +531,14 @@ function AdminNewsPageContent() {
 }
 
 export default function AdminNewsPageEnhanced() {
+    return (
+        <FeatureGate flagKey="features.news.enabled" featureName="News">
+            <AdminNewsPageEnhancedContent />
+        </FeatureGate>
+    );
+}
+
+function AdminNewsPageEnhancedContent() {
     return (
         <ErrorBoundary>
             <AdminNewsPageContent />
@@ -652,12 +662,13 @@ function NewsCard({ article, isSelected, onToggleSelect, onEdit, onDelete }: {
     );
 }
 
-function EnhancedNewsEditor({ formData, setFormData, onSubmit, onClose, isEditing, isSaving, lastSaved, autoSaveEnabled, onToggleAutoSave }: {
+function EnhancedNewsEditor({ formData, setFormData, onSubmit, onClose, isEditing, entityId, isSaving, lastSaved, autoSaveEnabled, onToggleAutoSave }: {
     formData: any;
     setFormData: (data: any) => void;
     onSubmit: (e: React.FormEvent) => void;
     onClose: () => void;
     isEditing: boolean;
+    entityId?: string;
     isSaving: boolean;
     lastSaved: Date | null;
     autoSaveEnabled: boolean;
@@ -772,6 +783,10 @@ function EnhancedNewsEditor({ formData, setFormData, onSubmit, onClose, isEditin
                                 value={formData.imageUrl}
                                 onChange={(url) => setFormData({ ...formData, imageUrl: url })}
                                 onRemove={() => setFormData({ ...formData, imageUrl: '' })}
+                                folder="brixsports/news/images"
+                                publicId={entityId}
+                                tags={['news-image']}
+                                context={formData.title ? { alt: formData.title } : undefined}
                             />
                         </div>
 

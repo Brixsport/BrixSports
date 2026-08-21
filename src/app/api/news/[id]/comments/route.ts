@@ -11,7 +11,7 @@ export async function GET(
     try {
         const { id: slug } = await params;
         const { searchParams } = new URL(request.url);
-        const limit = parseInt(searchParams.get('limit') || '50');
+        const limit = Math.min(Math.max(1, parseInt(searchParams.get('limit') || '50', 10) || 50), 100);
         const offset = parseInt(searchParams.get('offset') || '0');
 
         // Look up the news article by slug to get the actual ID

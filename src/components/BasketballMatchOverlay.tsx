@@ -3,10 +3,11 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Image from 'next/image';
-import { X, Trophy, BarChart3, Table, Star, MapPin, Calendar, Target, MessageSquare, Play } from 'lucide-react';
+import { X, Trophy, BarChart3, Table, Star, MapPin, Calendar, MessageSquare, Play } from 'lucide-react';
 import { Match } from '@/types';
-import { MatchPredictionCard } from '@/components/predictions/MatchPredictionCard';
-import { MatchVotePoll } from '@/components/predictions/MatchVotePoll';
+// BACKSCOPED: 2026-06-08 — BACKLOG-028. Reinstate when: Predictions + Polls built (Phase 7)
+// import { MatchPredictionCard } from '@/components/predictions/MatchPredictionCard';
+// import { MatchVotePoll } from '@/components/predictions/MatchVotePoll';
 import { LivestreamChat } from '@/components/livestream/LivestreamChat';
 import { LivestreamPlayer } from '@/components/livestream/LivestreamPlayer';
 import { StatBar } from '@/components/StatBar';
@@ -108,10 +109,11 @@ export function BasketballMatchOverlay({ match, onClose, onSelectTeam, onSelectP
         { id: 'standings', label: 'Standings', icon: Table },
         { id: 'scout', label: 'Scout Report', icon: Star },
         // Conditional tabs based on match status
-        ...(match.status === 'UPCOMING' ? [
-            { id: 'predict', label: 'Predict', icon: Target },
-            { id: 'poll', label: 'Fan Poll', icon: BarChart3 },
-        ] : []),
+        // BACKSCOPED: 2026-06-08 — BACKLOG-028. Reinstate when: Predictions + Polls built (Phase 7)
+        // ...(match.status === 'UPCOMING' ? [
+        //     { id: 'predict', label: 'Predict', icon: Target },
+        //     { id: 'poll', label: 'Fan Poll', icon: BarChart3 },
+        // ] : []),
         ...(match.status === 'LIVE' ? [
             { id: 'chat', label: 'Chat', icon: MessageSquare },
         ] : []),
@@ -765,64 +767,21 @@ export function BasketballMatchOverlay({ match, onClose, onSelectTeam, onSelectP
                             </motion.div>
                         )}
 
-                        {/* Predict Tab - For Upcoming Matches */}
-                        {activeTab === 'predict' && match.status === 'UPCOMING' && (
-                            <motion.div
-                                key="predict"
-                                initial={{ opacity: 0, y: 20 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                exit={{ opacity: 0, y: -20 }}
-                            >
+                        {/* BACKSCOPED: 2026-06-08 — BACKLOG-028. Reinstate when: Predictions + Polls built (Phase 7) */}
+                        {/* {activeTab === 'predict' && match.status === 'UPCOMING' && (
+                            <motion.div key="predict" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}>
                                 <div className="bg-white/5 rounded-2xl border border-white/10 p-6">
-                                    <div className="flex items-center gap-3 mb-6">
-                                        <Target className="text-primary" size={24} />
-                                        <div>
-                                            <h3 className="font-bold text-lg">Predict the Score</h3>
-                                            <p className="text-sm text-white/60">Make your prediction and earn points!</p>
-                                        </div>
-                                    </div>
-                                    <MatchPredictionCard
-                                        match={{
-                                            id: match.id,
-                                            homeTeam: match.homeTeam || { id: '', name: 'Home', shortName: 'HOM', logo: '', color: '#000' },
-                                            awayTeam: match.awayTeam || { id: '', name: 'Away', shortName: 'AWY', logo: '', color: '#000' },
-                                            startTime: match.startTime,
-                                            competition: match.competition,
-                                            sport: 'Basketball',
-                                        }}
-                                    />
+                                    <MatchPredictionCard match={{ id: match.id, homeTeam: match.homeTeam || { id: '', name: 'Home', shortName: 'HOM', logo: '', color: '#000' }, awayTeam: match.awayTeam || { id: '', name: 'Away', shortName: 'AWY', logo: '', color: '#000' }, startTime: match.startTime, competition: match.competition, sport: 'Basketball' }} />
                                 </div>
                             </motion.div>
                         )}
-
-                        {/* Fan Poll Tab - For Upcoming Matches */}
                         {activeTab === 'poll' && match.status === 'UPCOMING' && (
-                            <motion.div
-                                key="poll"
-                                initial={{ opacity: 0, y: 20 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                exit={{ opacity: 0, y: -20 }}
-                            >
+                            <motion.div key="poll" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}>
                                 <div className="bg-white/5 rounded-2xl border border-white/10 p-6">
-                                    <div className="flex items-center gap-3 mb-6">
-                                        <BarChart3 className="text-primary" size={24} />
-                                        <div>
-                                            <h3 className="font-bold text-lg">Fan Poll</h3>
-                                            <p className="text-sm text-white/60">Vote for your prediction!</p>
-                                        </div>
-                                    </div>
-                                    <MatchVotePoll
-                                        match={{
-                                            id: match.id,
-                                            homeTeam: match.homeTeam || { id: '', name: 'Home', shortName: 'HOM', logo: '', color: '#000' },
-                                            awayTeam: match.awayTeam || { id: '', name: 'Away', shortName: 'AWY', logo: '', color: '#000' },
-                                            startTime: match.startTime,
-                                            sport: 'Basketball',
-                                        }}
-                                    />
+                                    <MatchVotePoll match={{ id: match.id, homeTeam: match.homeTeam || { id: '', name: 'Home', shortName: 'HOM', logo: '', color: '#000' }, awayTeam: match.awayTeam || { id: '', name: 'Away', shortName: 'AWY', logo: '', color: '#000' }, startTime: match.startTime, sport: 'Basketball' }} />
                                 </div>
                             </motion.div>
-                        )}
+                        )} */}
 
                         {/* Chat Tab - For Live Matches */}
                         {activeTab === 'chat' && match.status === 'LIVE' && (

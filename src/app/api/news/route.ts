@@ -2,17 +2,27 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
 import { news, newsLikes, users } from '@/db/schema';
 import { eq, desc, and, like, or, sql } from 'drizzle-orm';
+import { getAuthUser } from '@/lib/auth';
+import { checkRateLimit } from '@/lib/rate-limit';
 
 // GET /api/news - Get all news articles with filters
 export async function GET(request: NextRequest) {
     try {
+        const rl = checkRateLimit(request);
+        if (rl.limited) {
+            return NextResponse.json(
+                { error: 'Too many requests. Please try again shortly.' },
+                { status: 429, headers: { 'Retry-After': String(rl.retryAfterSeconds) } }
+            );
+        }
+
         const searchParams = request.nextUrl.searchParams;
         const category = searchParams.get('category');
         const tag = searchParams.get('tag');
         const search = searchParams.get('search');
         const featured = searchParams.get('featured');
         const breaking = searchParams.get('breaking');
-        const limit = parseInt(searchParams.get('limit') || '20');
+        const limit = Math.min(Math.max(1, parseInt(searchParams.get('limit') || '20', 10) || 20), 100);
         const offset = parseInt(searchParams.get('offset') || '0');
         const status = searchParams.get('status') || 'published'; // Only show published by default
 
@@ -71,7 +81,7 @@ export async function GET(request: NextRequest) {
     } catch (error) {
         console.error('[News API] Error fetching news:', error);
         return NextResponse.json(
-            { error: 'Failed to fetch news articles', details: error instanceof Error ? error.message : String(error) },
+            { error: 'Failed to fetch news articles' },
             { status: 500 }
         );
     }
@@ -80,6 +90,14 @@ export async function GET(request: NextRequest) {
 // POST /api/news - Create new news article (Admin only)
 export async function POST(request: NextRequest) {
     try {
+        const authUser = await getAuthUser(request);
+        if (!authUser) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+        if (authUser.role !== 'admin') {
+            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+        }
+
         const body = await request.json();
         const {
             title,
@@ -90,16 +108,14 @@ export async function POST(request: NextRequest) {
             tags,
             isBreaking,
             isFeatured,
-            authorId,
-            authorName,
             sendPushNotification,
             status,
         } = body;
 
         // Validate required fields
-        if (!title || !content || !category || !authorId) {
+        if (!title || !content || !category) {
             return NextResponse.json(
-                { error: 'Missing required fields: title, content, category, authorId' },
+                { error: 'Missing required fields: title, content, category' },
                 { status: 400 }
             );
         }
@@ -113,16 +129,7 @@ export async function POST(request: NextRequest) {
         // Create news article
         const newsId = `news-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
-        // Check if author exists in users table (foreign key constraint)
-        let validAuthorId = authorId;
-        if (authorId) {
-            const existingUser = await db.select({ id: users.id }).from(users).where(eq(users.id, authorId)).limit(1);
-            if (existingUser.length === 0) {
-                // User doesn't exist, set to null to avoid FK constraint violation
-                validAuthorId = null;
-            }
-        }
-
+        // authorId/authorName always come from the verified session, never the request body
         const newNews = await db.insert(news).values({
             id: newsId,
             title,
@@ -134,8 +141,8 @@ export async function POST(request: NextRequest) {
             tags: tags ? JSON.stringify(tags) : null,
             isBreaking: isBreaking || false,
             isFeatured: isFeatured || false,
-            authorId: validAuthorId,
-            authorName: authorName || 'Admin',
+            authorId: authUser.id,
+            authorName: authUser.name || 'Admin',
             sendPushNotification: sendPushNotification || false,
             status: status || 'draft',
             publishedAt: status === 'published' ? new Date() : null,
@@ -148,7 +155,13 @@ export async function POST(request: NextRequest) {
                 console.log('[News API] Sending push notification...');
                 const notificationResponse = await fetch(`${request.nextUrl.origin}/api/notifications/send`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: {
+                        'Content-Type': 'application/json',
+                        // Forward the caller's auth cookie -- /api/notifications/send is
+                        // admin-gated (BUG-147), and this is a server-to-server call made
+                        // on behalf of the already-verified admin who hit this route.
+                        cookie: request.headers.get('cookie') || '',
+                    },
                     body: JSON.stringify({
                         type: 'news',
                         newsId,
@@ -197,7 +210,7 @@ export async function POST(request: NextRequest) {
             console.error('[News API] Full error:', JSON.stringify(error, Object.getOwnPropertyNames(error)));
         }
         return NextResponse.json(
-            { error: 'Failed to create news article', details: error instanceof Error ? error.message : String(error) },
+            { error: 'Failed to create news article' },
             { status: 500 }
         );
     }

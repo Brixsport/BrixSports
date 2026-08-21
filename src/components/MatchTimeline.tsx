@@ -28,7 +28,7 @@ export function MatchTimeline({ events, homeTeam, awayTeam, sport, showFilters =
     const [expandedEvent, setExpandedEvent] = useState<string | null>(null);
 
     const getEventIcon = (type: string) => {
-        switch (type.toUpperCase()) {
+        switch (type.toUpperCase().replace(/\s+/g, '_')) {
             case 'GOAL':
                 return <Target className="w-5 h-5" />;
             case 'ASSIST':
@@ -36,11 +36,16 @@ export function MatchTimeline({ events, homeTeam, awayTeam, sport, showFilters =
             case 'YELLOW_CARD':
                 return <AlertCircle className="w-5 h-5 text-yellow-500" />;
             case 'RED_CARD':
+            case 'RED_CARD_(SECOND_YELLOW)':
                 return <AlertCircle className="w-5 h-5 text-red-500" />;
             case 'SUBSTITUTION':
                 return <ArrowRightLeft className="w-5 h-5" />;
             case 'SAVE':
                 return <Shield className="w-5 h-5" />;
+            case 'PENALTY_SAVED':
+                return <Shield className="w-5 h-5 text-amber-400" />;
+            case 'PENALTY_MISSED':
+                return <Activity className="w-5 h-5 text-red-400" />;
             case 'EYE_POINT':
                 return <Eye className="w-5 h-5 text-purple-500" />;
             case 'FIELD_GOAL':
@@ -58,7 +63,7 @@ export function MatchTimeline({ events, homeTeam, awayTeam, sport, showFilters =
     };
 
     const getEventColor = (type: string) => {
-        switch (type.toUpperCase()) {
+        switch (type.toUpperCase().replace(/\s+/g, '_')) {
             case 'GOAL':
             case 'FIELD_GOAL':
             case 'THREE_POINTER':
@@ -66,6 +71,7 @@ export function MatchTimeline({ events, homeTeam, awayTeam, sport, showFilters =
             case 'YELLOW_CARD':
                 return 'bg-yellow-500/20 border-yellow-500/50 text-yellow-500';
             case 'RED_CARD':
+            case 'RED_CARD_(SECOND_YELLOW)':
                 return 'bg-red-500/20 border-red-500/50 text-red-500';
             case 'SUBSTITUTION':
                 return 'bg-blue-500/20 border-blue-500/50 text-blue-500';
@@ -73,6 +79,10 @@ export function MatchTimeline({ events, homeTeam, awayTeam, sport, showFilters =
                 return 'bg-purple-500/20 border-purple-500/50 text-purple-500';
             case 'SAVE':
                 return 'bg-cyan-500/20 border-cyan-500/50 text-cyan-500';
+            case 'PENALTY_SAVED':
+                return 'bg-amber-500/20 border-amber-500/50 text-amber-400';
+            case 'PENALTY_MISSED':
+                return 'bg-red-500/20 border-red-500/50 text-red-400';
             case 'ASSIST':
                 return 'bg-orange-500/20 border-orange-500/50 text-orange-500';
             default:
@@ -84,7 +94,7 @@ export function MatchTimeline({ events, homeTeam, awayTeam, sport, showFilters =
         const playerName = event.player?.name || 'Unknown';
         const playerNumber = event.player?.number;
 
-        switch (event.type.toUpperCase()) {
+        switch (event.type.toUpperCase().replace(/\s+/g, '_')) {
             case 'GOAL':
                 return (
                     <div>
@@ -201,9 +211,9 @@ export function MatchTimeline({ events, homeTeam, awayTeam, sport, showFilters =
     // Filter events
     const filteredEvents = events.filter(event => {
         if (filter === 'all') return true;
-        if (filter === 'goals') return ['GOAL', 'FIELD_GOAL', 'THREE_POINTER'].includes(event.type.toUpperCase());
-        if (filter === 'cards') return ['YELLOW_CARD', 'RED_CARD'].includes(event.type.toUpperCase());
-        if (filter === 'substitutions') return event.type.toUpperCase() === 'SUBSTITUTION';
+        if (filter === 'goals') return ['GOAL', 'FIELD_GOAL', 'THREE_POINTER'].includes(event.type.toUpperCase().replace(/\s+/g, '_'));
+        if (filter === 'cards') return ['YELLOW_CARD', 'RED_CARD', 'RED_CARD_(SECOND_YELLOW)'].includes(event.type.toUpperCase().replace(/\s+/g, '_'));
+        if (filter === 'substitutions') return event.type.toUpperCase().replace(/\s+/g, '_') === 'SUBSTITUTION';
         if (filter === 'eyePoints') return event.isEyePoint;
         return true;
     });

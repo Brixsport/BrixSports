@@ -12,7 +12,7 @@ export interface StandingRow {
     position: number;
     teamId: string;
     teamName: string;
-    teamLogo: string;
+    teamLogo: string | null;
     university: string;
     played: number;
     won: number;
@@ -72,7 +72,7 @@ export function useLiveStandings({
                     position: index + 1,
                     teamId: standing.teamId,
                     teamName: standing.team?.name || 'Unknown',
-                    teamLogo: standing.team?.logo || '❓',
+                    teamLogo: standing.team?.logo || null,
                     university: standing.team?.university || '',
                     played: standing.played,
                     won: standing.won,

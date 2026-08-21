@@ -1,11 +1,12 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
 import { matches, competitions, squadPlayers } from '@/db/schema';
 import { eq, and, inArray } from 'drizzle-orm';
+import { getAuthUser } from '@/lib/auth';
 
 // GET /api/matches/[id]/lineup - Get lineup for a match
 export async function GET(
-    request: Request,
+    request: NextRequest,
     props: { params: Promise<{ id: string }> }
 ) {
     try {
@@ -27,6 +28,16 @@ export async function GET(
             }
         }
 
+        // BUG-221: unpublished drafts are only visible to admin/logger. Public
+        // viewers (and any unauthenticated caller) only ever see published lineups.
+        const authUser = await getAuthUser(request).catch(() => null);
+        const canViewDrafts = authUser?.role === 'admin' || authUser?.role === 'logger';
+        if (lineups && !canViewDrafts) {
+            lineups = Object.fromEntries(
+                Object.entries(lineups).filter(([, teamLineup]) => (teamLineup as any)?.status === 'published')
+            );
+        }
+
         return NextResponse.json({
             success: true,
             lineups,
@@ -41,10 +52,18 @@ export async function GET(
 
 // POST /api/matches/[id]/lineup - Create/update lineup (draft)
 export async function POST(
-    request: Request,
+    request: NextRequest,
     props: { params: Promise<{ id: string }> }
 ) {
     try {
+        const authUser = await getAuthUser(request);
+        if (!authUser) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+        if (authUser.role !== 'admin' && authUser.role !== 'logger') {
+            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+        }
+
         const params = await props.params;
         const matchId = params.id;
         const body = await request.json();
@@ -105,6 +124,7 @@ export async function POST(
 
                 if (lineupPlayerIds.length > 0) {
                     // Check if all players are in the squad
+                    const teamId = team === 'home' ? matchData.homeTeamId : matchData.awayTeamId;
                     const squadMembers = await db
                         .select({ playerId: squadPlayers.playerId })
                         .from(squadPlayers)
@@ -131,6 +151,19 @@ export async function POST(
                     }
                 }
             }
+        }
+
+        // Lock check: a published, not-yet-unlocked lineup cannot be silently
+        // overwritten from this route (BUG-220) — mirrors the guard already
+        // enforced in /api/matches/[id]/lineup/publish.
+        if (existingLineups[team]?.status === 'published' && !existingLineups[team]?.unlocked) {
+            return NextResponse.json({
+                error: 'Lineup already published and locked',
+                code: 'LINEUP_LOCKED',
+                publishedBy: existingLineups[team].publishedBy,
+                publishedAt: existingLineups[team].publishedAt,
+                message: 'This lineup has already been published. Contact an admin to unlock it for editing.'
+            }, { status: 409 });
         }
 
         // Update the specific team's lineup
@@ -161,10 +194,18 @@ export async function POST(
 
 // DELETE /api/matches/[id]/lineup - Delete lineup
 export async function DELETE(
-    request: Request,
+    request: NextRequest,
     props: { params: Promise<{ id: string }> }
 ) {
     try {
+        const authUser = await getAuthUser(request);
+        if (!authUser) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+        if (authUser.role !== 'admin' && authUser.role !== 'logger') {
+            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+        }
+
         const params = await props.params;
         const matchId = params.id;
         const { searchParams } = new URL(request.url);

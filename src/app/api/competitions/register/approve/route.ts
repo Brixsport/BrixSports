@@ -17,11 +17,13 @@ import {
     teams,
     players,
     playerTeamAffiliations,
+    competitions,
 } from '@/db/schema';
 import { eq } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { ensureOrganizationEntity, syncPlayerOrganizationAffiliations } from '@/lib/player-data';
 import { getAuthUser } from '@/lib/auth';
+import { CURRENT_SEASON } from '@/lib/rosterService';
 
 export async function POST(request: NextRequest) {
     try {
@@ -57,6 +59,17 @@ export async function POST(request: NextRequest) {
         }
 
         const reg = registration[0];
+
+        // Derive the real season from the competition being registered for, same
+        // pattern as updatePlayerStats()/bulk-register -- competitionId is NOT NULL
+        // on teamRegistrations, so this is always available.
+        let registrationSeason = CURRENT_SEASON;
+        const competition = await db
+            .select({ season: competitions.season })
+            .from(competitions)
+            .where(eq(competitions.id, reg.competitionId))
+            .get();
+        if (competition?.season) registrationSeason = competition.season;
 
         // Get registered players
         const regPlayers = await db
@@ -155,6 +168,7 @@ export async function POST(request: NextRequest) {
                 startDate: new Date(),
                 jerseyNumber: regPlayer.number,
                 position: regPlayer.position,
+                season: registrationSeason,
                 createdAt: new Date(),
             });
 
@@ -183,7 +197,7 @@ export async function POST(request: NextRequest) {
     } catch (error) {
         console.error('Approval error:', error);
         return NextResponse.json(
-            { error: 'Failed to approve registration', details: String(error) },
+            { error: 'Failed to approve registration' },
             { status: 500 }
         );
     }

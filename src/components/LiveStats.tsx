@@ -2,6 +2,7 @@
 
 import { motion } from 'framer-motion';
 import { TrendingUp, Target, Shield, Activity, Zap } from 'lucide-react';
+import { TeamLogo } from '@/lib/utils/team-logo';
 
 interface LiveStatsProps {
     stats: any;
@@ -57,91 +58,128 @@ export default function LiveStats({ stats, sport, homeTeam, awayTeam }: LiveStat
         );
     };
 
-    const renderFootballStats = () => (
+    const renderFootballStats = () => {
+        // API returns array format: stats.shots = [homeVal, awayVal]
+        const homePossession = Array.isArray(stats.possession) ? stats.possession[0] : (stats.possession ?? 50);
+        const awayPossession = Array.isArray(stats.possession) ? stats.possession[1] : (100 - homePossession);
+        const shots        = Array.isArray(stats.shots)        ? stats.shots        : [stats.homeShots ?? 0,        stats.awayShots ?? 0];
+        const shotsOnTarget= Array.isArray(stats.shotsOnTarget)? stats.shotsOnTarget: [stats.homeShotsOnTarget ?? 0, stats.awayShotsOnTarget ?? 0];
+        const corners      = Array.isArray(stats.corners)      ? stats.corners      : [stats.homeCorners ?? 0,      stats.awayCorners ?? 0];
+        const fouls        = Array.isArray(stats.fouls)        ? stats.fouls        : [stats.homeFouls ?? 0,        stats.awayFouls ?? 0];
+        const yellowCards  = Array.isArray(stats.yellowCards)  ? stats.yellowCards  : [stats.homeYellowCards ?? 0,  stats.awayYellowCards ?? 0];
+        const redCards     = Array.isArray(stats.redCards)     ? stats.redCards     : [stats.homeRedCards ?? 0,     stats.awayRedCards ?? 0];
+        const saves        = Array.isArray(stats.saves)        ? stats.saves        : [stats.homeSaves ?? 0,        stats.awaySaves ?? 0];
+
+        // BACKLOG-122: goals-only backfilled matches (no team logsheet) never captured
+        // possession/shots/corners/fouls/saves -- those categories are not real 0-0s, they
+        // were simply never tracked. Suppress them instead of rendering a false stat line.
+        // Yellow/Red Cards are always real captured data in both modes, so they stay.
+        const isGoalsOnly = stats.statsCaptureMode === 'goals-only';
+
+        return (
         <div className="space-y-6">
-            <StatBar
-                label="Possession"
-                homeValue={stats.possession || 50}
-                awayValue={100 - (stats.possession || 50)}
-                max={100}
-                unit="%"
-                icon={<Activity className="w-4 h-4" />}
-            />
-            <StatBar
-                label="Shots"
-                homeValue={stats.homeShots || 0}
-                awayValue={stats.awayShots || 0}
-                max={Math.max(stats.homeShots || 0, stats.awayShots || 0, 20)}
-                icon={<Target className="w-4 h-4" />}
-            />
-            <StatBar
-                label="Shots on Target"
-                homeValue={stats.homeShotsOnTarget || 0}
-                awayValue={stats.awayShotsOnTarget || 0}
-                max={Math.max(stats.homeShotsOnTarget || 0, stats.awayShotsOnTarget || 0, 10)}
-                icon={<Target className="w-4 h-4" />}
-            />
-            <StatBar
-                label="Corners"
-                homeValue={stats.homeCorners || 0}
-                awayValue={stats.awayCorners || 0}
-                max={Math.max(stats.homeCorners || 0, stats.awayCorners || 0, 10)}
-                icon={<Zap className="w-4 h-4" />}
-            />
-            <StatBar
-                label="Fouls"
-                homeValue={stats.homeFouls || 0}
-                awayValue={stats.awayFouls || 0}
-                max={Math.max(stats.homeFouls || 0, stats.awayFouls || 0, 20)}
-                icon={<Shield className="w-4 h-4" />}
-            />
-            <StatBar
-                label="Yellow Cards"
-                homeValue={stats.homeYellowCards || 0}
-                awayValue={stats.awayYellowCards || 0}
-                max={Math.max(stats.homeYellowCards || 0, stats.awayYellowCards || 0, 5)}
-                icon={<div className="w-3 h-4 bg-yellow-500 rounded-sm" />}
-            />
-            {(stats.homeRedCards > 0 || stats.awayRedCards > 0) && (
+            {/* BACKLOG-192: possession is computed as an attacking-event-count proxy
+                (shots + corners + free kicks), not real time-based possession -- even on
+                fully-tracked matches this reads as authoritative but isn't. Richard's call:
+                hide it rather than ship a misleading number; real tracking or honest
+                relabeling is a later, separate decision. Commented out, not deleted --
+                homePossession/awayPossession above still compute correctly if reinstated. */}
+            {false && !isGoalsOnly && (
                 <StatBar
-                    label="Red Cards"
-                    homeValue={stats.homeRedCards || 0}
-                    awayValue={stats.awayRedCards || 0}
-                    max={Math.max(stats.homeRedCards || 0, stats.awayRedCards || 0, 2)}
-                    icon={<div className="w-3 h-4 bg-red-500 rounded-sm" />}
+                    label="Possession"
+                    homeValue={homePossession}
+                    awayValue={awayPossession}
+                    max={100}
+                    unit="%"
+                    icon={<Activity className="w-4 h-4" />}
+                />
+            )}
+            {!isGoalsOnly && (
+                <StatBar
+                    label="Shots"
+                    homeValue={shots[0]}
+                    awayValue={shots[1]}
+                    max={Math.max(shots[0], shots[1], 20)}
+                    icon={<Target className="w-4 h-4" />}
+                />
+            )}
+            {!isGoalsOnly && (
+                <StatBar
+                    label="Shots on Target"
+                    homeValue={shotsOnTarget[0]}
+                    awayValue={shotsOnTarget[1]}
+                    max={Math.max(shotsOnTarget[0], shotsOnTarget[1], 10)}
+                    icon={<Target className="w-4 h-4" />}
+                />
+            )}
+            {!isGoalsOnly && (
+                <StatBar
+                    label="Corners"
+                    homeValue={corners[0]}
+                    awayValue={corners[1]}
+                    max={Math.max(corners[0], corners[1], 10)}
+                    icon={<Zap className="w-4 h-4" />}
+                />
+            )}
+            {!isGoalsOnly && (
+                <StatBar
+                    label="Fouls"
+                    homeValue={fouls[0]}
+                    awayValue={fouls[1]}
+                    max={Math.max(fouls[0], fouls[1], 20)}
+                    icon={<Shield className="w-4 h-4" />}
                 />
             )}
             <StatBar
-                label="Saves"
-                homeValue={stats.homeSaves || 0}
-                awayValue={stats.awaySaves || 0}
-                max={Math.max(stats.homeSaves || 0, stats.awaySaves || 0, 10)}
-                icon={<Shield className="w-4 h-4" />}
+                label="Yellow Cards"
+                homeValue={yellowCards[0]}
+                awayValue={yellowCards[1]}
+                max={Math.max(yellowCards[0], yellowCards[1], 5)}
+                icon={<div className="w-3 h-4 bg-yellow-500 rounded-sm" />}
             />
+            {(redCards[0] > 0 || redCards[1] > 0) && (
+                <StatBar
+                    label="Red Cards"
+                    homeValue={redCards[0]}
+                    awayValue={redCards[1]}
+                    max={Math.max(redCards[0], redCards[1], 2)}
+                    icon={<div className="w-3 h-4 bg-red-500 rounded-sm" />}
+                />
+            )}
+            {!isGoalsOnly && (
+                <StatBar
+                    label="Saves"
+                    homeValue={saves[0]}
+                    awayValue={saves[1]}
+                    max={Math.max(saves[0], saves[1], 10)}
+                    icon={<Shield className="w-4 h-4" />}
+                />
+            )}
         </div>
-    );
+        );
+    };
 
     const renderBasketballStats = () => (
         <div className="space-y-6">
             <StatBar
                 label="Field Goals Made"
-                homeValue={stats.homeFieldGoals || 0}
-                awayValue={stats.awayFieldGoals || 0}
-                max={Math.max(stats.homeFieldGoals || 0, stats.awayFieldGoals || 0, 40)}
+                homeValue={stats.homeFieldGoalsMade || 0}
+                awayValue={stats.awayFieldGoalsMade || 0}
+                max={Math.max(stats.homeFieldGoalsMade || 0, stats.awayFieldGoalsMade || 0, 40)}
                 icon={<Target className="w-4 h-4" />}
             />
             <StatBar
                 label="3-Pointers Made"
-                homeValue={stats.homeThreePointers || 0}
-                awayValue={stats.awayThreePointers || 0}
-                max={Math.max(stats.homeThreePointers || 0, stats.awayThreePointers || 0, 15)}
+                homeValue={stats.homeThreePointersMade || 0}
+                awayValue={stats.awayThreePointersMade || 0}
+                max={Math.max(stats.homeThreePointersMade || 0, stats.awayThreePointersMade || 0, 15)}
                 icon={<Target className="w-4 h-4" />}
             />
             <StatBar
                 label="Free Throws Made"
-                homeValue={stats.homeFreeThrows || 0}
-                awayValue={stats.awayFreeThrows || 0}
-                max={Math.max(stats.homeFreeThrows || 0, stats.awayFreeThrows || 0, 20)}
+                homeValue={stats.homeFreeThrowsMade || 0}
+                awayValue={stats.awayFreeThrowsMade || 0}
+                max={Math.max(stats.homeFreeThrowsMade || 0, stats.awayFreeThrowsMade || 0, 20)}
                 icon={<Target className="w-4 h-4" />}
             />
             <StatBar
@@ -191,11 +229,7 @@ export default function LiveStats({ stats, sport, homeTeam, awayTeam }: LiveStat
                         className="w-12 h-12 rounded-xl flex items-center justify-center"
                         style={{ backgroundColor: homeTeam.color + '20' }}
                     >
-                        {homeTeam.logo ? (
-                            <img src={homeTeam.logo} alt={homeTeam.name} className="w-10 h-10 object-contain" />
-                        ) : (
-                            <span className="text-xl font-bold">{homeTeam.shortName.substring(0, 2)}</span>
-                        )}
+                        <TeamLogo logo={homeTeam.logo} name={homeTeam.name} size="sm" />
                     </div>
                     <div>
                         <div className="font-bold">{homeTeam.name}</div>
@@ -210,11 +244,7 @@ export default function LiveStats({ stats, sport, homeTeam, awayTeam }: LiveStat
                         className="w-12 h-12 rounded-xl flex items-center justify-center"
                         style={{ backgroundColor: awayTeam.color + '20' }}
                     >
-                        {awayTeam.logo ? (
-                            <img src={awayTeam.logo} alt={awayTeam.name} className="w-10 h-10 object-contain" />
-                        ) : (
-                            <span className="text-xl font-bold">{awayTeam.shortName.substring(0, 2)}</span>
-                        )}
+                        <TeamLogo logo={awayTeam.logo} name={awayTeam.name} size="sm" />
                     </div>
                     <div className="text-right">
                         <div className="font-bold">{awayTeam.name}</div>

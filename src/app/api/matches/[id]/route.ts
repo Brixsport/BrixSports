@@ -3,19 +3,40 @@
  * Fetch detailed match information with events, lineups, stats, and more
  */
 
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse, after } from 'next/server';
 import { db } from '@/db';
 import { matches, teams, matchEvents, players, bracketNodes, teamForm, headToHead } from '@/db/schema';
 import { eq, desc, sql } from 'drizzle-orm';
 import { playerRatings } from '@/db/schema-ratings';
 import { getAuthUser } from '@/lib/auth';
 import { isLoggerAssigned } from '@/lib/match-logger-helpers';
+import { broadcastToMatch, broadcastGlobalNotification } from '@/lib/socket';
+import { sendMatchEventNotification } from '@/lib/notifications/match-notification-service';
+import { getNotifiablePeriodType } from '@/lib/notifications/notification-rules';
+import { recalculateStandingsForMatch } from '@/lib/standingsService';
+import { checkRateLimit } from '@/lib/rate-limit';
 
 export async function GET(
     request: NextRequest,
     { params }: { params: Promise<{ id: string }> }
 ) {
     try {
+        // Raised well above the default 120/min (see rate-limit.ts) -- this route backs
+        // the live match page's WS-fallback poll (every 10s while the socket is down,
+        // src/app/matches/[id]/page.tsx). Per-IP bucketing means every viewer on a shared
+        // NAT (campus WiFi -- this is a college sports app) counts against the same
+        // bucket: at the default ceiling, ~20 concurrent same-IP viewers polling during a
+        // real WS outage would already be at the limit. 600/min covers roughly 100
+        // concurrent same-IP fallback-polling viewers while still catching anything
+        // polling faster than the fallback's own 10s interval, which no real viewer does.
+        const rl = checkRateLimit(request, { max: 600 });
+        if (rl.limited) {
+            return NextResponse.json(
+                { error: 'Too many requests. Please try again shortly.' },
+                { status: 429, headers: { 'Retry-After': String(rl.retryAfterSeconds) } }
+            );
+        }
+
         const { id: matchId } = await params;
 
         // Fetch match with team details
@@ -75,7 +96,8 @@ export async function GET(
             .leftJoin(players, eq(matchEvents.playerId, players.id))
             .leftJoin(teams, eq(matchEvents.teamId, teams.id))
             .where(eq(matchEvents.matchId, matchId))
-            .orderBy(desc(matchEvents.minute), desc(matchEvents.second));
+            .orderBy(desc(matchEvents.minute), desc(matchEvents.second))
+            .limit(500);
 
         // Process events to include related player data
         const events = await Promise.all(
@@ -248,7 +270,24 @@ export async function GET(
         // If stats are not available and this is a football match, calculate from events
         const isFootball = !match.match.sport || match.match.sport === 'Football' ||
             (match.match.sport as string) === '5-a-side' || (match.match.sport as string) === 'Five-a-side';
-        if (!stats && isFootball && events.length > 0) {
+        const statsEmpty = !stats || Object.keys(stats).length === 0;
+        // BACKLOG-122: goals-only backfilled matches (no team logsheet) only ever write
+        // Goal/Penalty/Own Goal/Assist/Yellow Card/Red Card events -- every other category
+        // below always computes to a literal 0-0. Worse, and easy to miss: some matches have
+        // ASYMMETRIC coverage (e.g. busa-match-16 -- Hammers has a real full-stat logsheet,
+        // Santos has almost nothing), which produces a fabricated-looking lopsided stat line
+        // (100%-0% possession, 26-0 shots) rather than a neutral 0-0. A per-match "does any
+        // event anywhere have a full-stat type" check misses this entirely, since Hammers'
+        // real events pass it. The real test is per-team: both sides must have logged at
+        // least one full-stat-only event for the comparison to mean anything.
+        const FULL_STAT_ONLY_EVENT_TYPES = new Set([
+            'Shot on Target', 'Shot off Target', 'Corner', 'Foul', 'Push', 'Handball',
+            'Offside', 'Free Kick', 'Save', 'Catch', 'Block', 'Interception', 'Clearance',
+        ]);
+        const homeHasFullStatCoverage = events.some((e: any) => e.teamId === match.match.homeTeamId && FULL_STAT_ONLY_EVENT_TYPES.has(e.type));
+        const awayHasFullStatCoverage = events.some((e: any) => e.teamId !== match.match.homeTeamId && FULL_STAT_ONLY_EVENT_TYPES.has(e.type));
+        const isGoalsOnlyCapture = events.length > 0 && !(homeHasFullStatCoverage && awayHasFullStatCoverage);
+        if (statsEmpty && isFootball && events.length > 0) {
             const homeIdx = 0; // home = index 0
             const awayIdx = 1; // away = index 1
             const s: number[][] = Array.from({ length: 18 }, () => [0, 0]);
@@ -309,18 +348,34 @@ export async function GET(
                 throwIns: [0, 0],
                 goalKicks: [0, 0],
                 substitutions: [0, 0],
+                statsCaptureMode: isGoalsOnlyCapture ? 'goals-only' : 'full',
             };
         }
 
-        // If stats are not available and this is a basketball match, calculate from events
+        // If stats are not available and this is a basketball match, calculate from events.
+        // BACKLOG-139: this switch previously matched on '2PT_MADE'/'3PT_MADE'/'FREE_THROW'/
+        // 'REBOUND'/'ASSIST'/'STEAL'/'BLOCK' -- BasketballLogger.tsx has only ever dispatched
+        // 'Field Goal'/'Three Pointer'/'Free Throw'/'Rebound'/'Assist'/'Steal'/'Block' (see its
+        // own BasketballEventType union). Every case here was dead on arrival, so every
+        // basketball team stat (not just the percentage fields originally filed) was always
+        // zero for every real match. Attempt/made distinction now uses the same convention
+        // already correct in BasketballLogger.tsx's own calculateAdvancedStats: `value` holds
+        // the point value on a make (2/3/1) and 0 on a miss; every shot-type event counts as
+        // an attempt regardless of outcome.
         if (!stats && match.match.sport === 'Basketball' && events.length > 0) {
             stats = {
-                homeFieldGoals: 0,
-                awayFieldGoals: 0,
-                homeThreePointers: 0,
-                awayThreePointers: 0,
-                homeFreeThrows: 0,
-                awayFreeThrows: 0,
+                homeFieldGoalsMade: 0,
+                awayFieldGoalsMade: 0,
+                homeFieldGoalsAttempted: 0,
+                awayFieldGoalsAttempted: 0,
+                homeThreePointersMade: 0,
+                awayThreePointersMade: 0,
+                homeThreePointersAttempted: 0,
+                awayThreePointersAttempted: 0,
+                homeFreeThrowsMade: 0,
+                awayFreeThrowsMade: 0,
+                homeFreeThrowsAttempted: 0,
+                awayFreeThrowsAttempted: 0,
                 homeRebounds: 0,
                 awayRebounds: 0,
                 homeAssists: 0,
@@ -337,32 +392,51 @@ export async function GET(
             events.forEach((event: any) => {
                 const isHomeTeam = event.teamId === match.match.homeTeamId;
                 const prefix = isHomeTeam ? 'home' : 'away';
+                const made = Number(event.value) > 0;
 
                 switch (event.type) {
-                    case '2PT_MADE':
-                        stats[`${prefix}FieldGoals`]++;
+                    case 'Field Goal':
+                        stats[`${prefix}FieldGoalsAttempted`]++;
+                        if (made) stats[`${prefix}FieldGoalsMade`]++;
                         break;
-                    case '3PT_MADE':
-                        stats[`${prefix}FieldGoals`]++;
-                        stats[`${prefix}ThreePointers`]++;
+                    case 'Three Pointer':
+                        stats[`${prefix}FieldGoalsAttempted`]++;
+                        stats[`${prefix}ThreePointersAttempted`]++;
+                        if (made) {
+                            stats[`${prefix}FieldGoalsMade`]++;
+                            stats[`${prefix}ThreePointersMade`]++;
+                        }
                         break;
-                    case 'FREE_THROW':
-                        stats[`${prefix}FreeThrows`]++;
+                    case 'Free Throw':
+                        stats[`${prefix}FreeThrowsAttempted`]++;
+                        if (made) stats[`${prefix}FreeThrowsMade`]++;
                         break;
-                    case 'REBOUND':
+                    case 'Rebound':
                         stats[`${prefix}Rebounds`]++;
                         break;
-                    case 'ASSIST':
+                    case 'Assist':
                         stats[`${prefix}Assists`]++;
                         break;
-                    case 'STEAL':
+                    case 'Steal':
                         stats[`${prefix}Steals`]++;
                         break;
-                    case 'BLOCK':
+                    case 'Block':
                         stats[`${prefix}Blocks`]++;
+                        break;
+                    case 'Turnover':
+                        stats[`${prefix}Turnovers`]++;
                         break;
                 }
             });
+
+            // BACKLOG-139: the actual originally-filed gap -- percentage fields were never
+            // computed at all, so BasketballMatchOverlay.tsx's Field Goal %/3-Point %/Free
+            // Throw % bars always rendered a flat 0% regardless of the (now-fixed) counters
+            // above.
+            const pct = (made: number, attempted: number) => attempted > 0 ? Math.round((made / attempted) * 100) : 0;
+            stats.fieldGoalPercentage = [pct(stats.homeFieldGoalsMade, stats.homeFieldGoalsAttempted), pct(stats.awayFieldGoalsMade, stats.awayFieldGoalsAttempted)];
+            stats.threePointPercentage = [pct(stats.homeThreePointersMade, stats.homeThreePointersAttempted), pct(stats.awayThreePointersMade, stats.awayThreePointersAttempted)];
+            stats.freeThrowPercentage = [pct(stats.homeFreeThrowsMade, stats.homeFreeThrowsAttempted), pct(stats.awayFreeThrowsMade, stats.awayFreeThrowsAttempted)];
         }
 
         // Note: Viewer count feature not yet implemented in schema
@@ -373,7 +447,8 @@ export async function GET(
                 const updatedRatings = await db
                     .select()
                     .from(playerRatings)
-                    .where(eq(playerRatings.matchId, matchId));
+                    .where(eq(playerRatings.matchId, matchId))
+                    .limit(100);
 
                 if (updatedRatings.length > 0) {
                     const ratingMap = new Map();
@@ -451,6 +526,18 @@ export async function PATCH(
 
         const body = await request.json();
 
+        // BUG-051: validate status against allowed enum; restrict loggers to safe transitions only
+        const VALID_STATUSES = ['PENDING', 'UPCOMING', 'LIVE', 'FINISHED', 'CANCELLED'] as const;
+        const LOGGER_ALLOWED_STATUSES: string[] = ['LIVE', 'FINISHED'];
+        if (body.status !== undefined) {
+            if (!VALID_STATUSES.includes(body.status)) {
+                return NextResponse.json({ error: 'Invalid status value' }, { status: 422 });
+            }
+            if (authUser.role === 'logger' && !LOGGER_ALLOWED_STATUSES.includes(body.status)) {
+                return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+            }
+        }
+
         // If assigning a logger, validate that the match isn't already assigned to another logger
         if (body.loggerId !== undefined && body.loggerId !== null) {
             const [existingMatch] = await db
@@ -482,9 +569,73 @@ export async function PATCH(
         };
 
         // Update allowed fields
-        if (body.homeScore !== undefined) updateData.homeScore = body.homeScore;
-        if (body.awayScore !== undefined) updateData.awayScore = body.awayScore;
-        if (body.status) updateData.status = body.status;
+        // BUG-052: score writes restricted to admin only; integer guard prevents corruption
+        if (authUser.role === 'admin') {
+            if (body.homeScore !== undefined) {
+                const s = Number(body.homeScore);
+                if (!Number.isInteger(s) || s < 0) {
+                    return NextResponse.json({ error: 'Invalid homeScore' }, { status: 422 });
+                }
+                updateData.homeScore = s;
+            }
+            if (body.awayScore !== undefined) {
+                const s = Number(body.awayScore);
+                if (!Number.isInteger(s) || s < 0) {
+                    return NextResponse.json({ error: 'Invalid awayScore' }, { status: 422 });
+                }
+                updateData.awayScore = s;
+            }
+        }
+        if (body.status !== undefined) updateData.status = body.status;
+        // currentPeriod had no enum validation at all, unlike status just above --
+        // reachable only by an authenticated, assigned logger/admin so low exploitability,
+        // but cheap to close. No DB-level constraint either (schema.ts:340, plain text
+        // column), so this is the only gate.
+        // BUG-191: the flat 'OT' entry was stale the moment this list was written --
+        // BUG-135 (session 47E) already changed basketball's OT label to numbered
+        // OT1/OT2/etc, but this allowlist was added later without picking that up.
+        // Confirmed live, session 47F: every real OT transition since BUG-135 shipped
+        // has 422'd here, visibly failing to persist (BasketballLogger.tsx only ever
+        // sends `OT${n}`, never the flat string). Matched via regex instead of a fixed
+        // list since the OT number is unbounded (a match can theoretically reach OT3+).
+        const VALID_PERIODS = [
+            'NOT_STARTED', 'FIRST_HALF', 'HALF_TIME', 'SECOND_HALF',
+            'EXTRA_TIME_1', 'EXTRA_TIME_BREAK', 'EXTRA_TIME_2', 'PENALTY_SHOOTOUT',
+            'FINISHED', 'SUSPENDED',
+            'Q1', 'Q2', 'Q3', 'Q4',
+        ] as const;
+        if (body.currentPeriod !== undefined) {
+            const isNumberedOT = /^OT\d+$/.test(body.currentPeriod);
+            if (!VALID_PERIODS.includes(body.currentPeriod) && !isNumberedOT) {
+                return NextResponse.json({ error: 'Invalid currentPeriod value' }, { status: 422 });
+            }
+            updateData.currentPeriod = body.currentPeriod;
+        }
+        // BUG-109: periodic DB checkpoint of the live clock — assigned logger or admin only
+        // (already gated above), same integer-guard pattern as score. null clears the value
+        // (e.g. on FINISHED) without requiring a separate code path.
+        if (body.minute !== undefined) {
+            if (body.minute !== null) {
+                const m = Number(body.minute);
+                if (!Number.isInteger(m) || m < 0 || m > 200) {
+                    return NextResponse.json({ error: 'Invalid minute' }, { status: 422 });
+                }
+                updateData.minute = m;
+            } else {
+                updateData.minute = null;
+            }
+        }
+        if (body.extraTime !== undefined) {
+            if (body.extraTime !== null) {
+                const e = Number(body.extraTime);
+                if (!Number.isInteger(e) || e < 0 || e > 60) {
+                    return NextResponse.json({ error: 'Invalid extraTime' }, { status: 422 });
+                }
+                updateData.extraTime = e;
+            } else {
+                updateData.extraTime = null;
+            }
+        }
         if (body.loggerId !== undefined) updateData.loggerId = body.loggerId;
         if (body.stats) updateData.stats = JSON.stringify(body.stats);
         if (body.lineups) updateData.lineups = JSON.stringify(body.lineups);
@@ -514,11 +665,102 @@ export async function PATCH(
             .set(updateData)
             .where(eq(matches.id, matchId));
 
-        // Broadcast update via Socket.IO
-        if (typeof global !== 'undefined' && (global as any).io) {
-            (global as any).io.to(`match:${matchId}`).emit('match:updated', {
-                matchId,
-                ...updateData,
+        // Broadcast update via Socket.IO — was a raw `global.io` check, only ever true
+        // when running the local custom server.js; dead code on Vercel's serverless
+        // deployment, same class of gap as BUG-108. broadcastToMatch (src/lib/socket.ts)
+        // handles both cases correctly (local global.io, or HTTP /broadcast on Railway).
+        // after() rather than a bare fire-and-forget call — see events/route.ts's POST
+        // handler for why (traced root cause of BUG-108/116's multi-second broadcast delay).
+        after(() => broadcastToMatch(matchId, 'match:updated', { matchId, ...updateData }));
+
+        // BACKLOG-097: standings/team-record recalculation, wired into the FINISHED
+        // transition — see standingsService.ts for why this is safe to call more than
+        // once (fully recomputed from FINISHED matches each time, not incremental).
+        if (body.status === 'FINISHED') {
+            after(async () => {
+                try {
+                    await recalculateStandingsForMatch(matchId);
+                } catch (error) {
+                    console.error('Error recalculating standings:', error);
+                }
+            });
+        }
+
+        // Notification-reliability fix (same as events/route.ts's POST handler,
+        // see that file's comment for the full BUG-108/116-class rationale): period
+        // transitions used to notify only via MatchStateManager.triggerPeriodNotification()
+        // dispatching a window CustomEvent from the logger's own tab. Moved server-side.
+        //
+        // Which currentPeriod values are notifiable, per sport, now lives in
+        // notification-rules.ts's NOTIFICATION_RULES table (roadmap thread 5/7) --
+        // basketball's 'FINISHED' -> MATCH_END entry there is now an explicit,
+        // consciously-kept table row rather than an accidental match on a
+        // football-shaped if-chain (it was firing unintentionally before Phase 2
+        // formalized it — NOTIFICATION_SYSTEM_ROADMAP_PROPOSAL.md thread 3).
+        if (body.currentPeriod !== undefined) {
+            after(async () => {
+                try {
+                    const [current] = await db
+                        .select({
+                            sport: matches.sport,
+                            homeTeamId: matches.homeTeamId,
+                            awayTeamId: matches.awayTeamId,
+                            homeScore: matches.homeScore,
+                            awayScore: matches.awayScore,
+                            competitionId: matches.competitionId,
+                        })
+                        .from(matches)
+                        .where(eq(matches.id, matchId));
+                    if (!current) return;
+
+                    // Sport-keyed lookup (notification-rules.ts) -- resolved here, not
+                    // synchronously before scheduling after(), since it needs the match's
+                    // sport and this avoids an extra query on the hot PATCH request path.
+                    const periodEventType = getNotifiablePeriodType(current.sport, body.currentPeriod);
+                    if (!periodEventType) return;
+
+                    const [homeTeam, awayTeam] = await Promise.all([
+                        db.select({ name: teams.name }).from(teams).where(eq(teams.id, current.homeTeamId)).get(),
+                        db.select({ name: teams.name }).from(teams).where(eq(teams.id, current.awayTeamId)).get(),
+                    ]);
+                    await sendMatchEventNotification({
+                        matchId,
+                        homeTeamId: current.homeTeamId,
+                        awayTeamId: current.awayTeamId,
+                        eventType: periodEventType,
+                        teamName: homeTeam && awayTeam ? `${homeTeam.name} vs ${awayTeam.name}` : undefined,
+                        homeScore: current.homeScore ?? undefined,
+                        awayScore: current.awayScore ?? undefined,
+                        competitionId: current.competitionId,
+                    });
+
+                    // BUG-210: same in-app toast fix as events/route.ts's POST handler --
+                    // server-side, no logger-tab dependency, works for basketball too.
+                    // HALF_TIME maps to GlobalNotificationListener.tsx's 'PERIOD_CHANGE'
+                    // type (its accepted-type list predates this sport-keyed HALF_TIME
+                    // notion and was never updated -- mapped here rather than touching
+                    // the listener's own vocabulary).
+                    // periodEventType is narrowed to MATCH_START/HALF_TIME/MATCH_END at
+                    // runtime (the only three values NOTIFICATION_RULES' periods maps
+                    // produce for either sport) but typed as the full NotificationKey
+                    // union, so TS can't see that -- explicit cast, not a real widening risk.
+                    const toastType: 'MATCH_START' | 'MATCH_END' | 'PERIOD_CHANGE' =
+                        periodEventType === 'HALF_TIME' ? 'PERIOD_CHANGE' : periodEventType as 'MATCH_START' | 'MATCH_END';
+                    const toastMessage = periodEventType === 'MATCH_START'
+                        ? `Match started: ${homeTeam?.name || 'Home'} vs ${awayTeam?.name || 'Away'}`
+                        : periodEventType === 'HALF_TIME'
+                            ? `Half time: ${current.homeScore ?? 0}-${current.awayScore ?? 0}`
+                            : `Full time: ${current.homeScore ?? 0}-${current.awayScore ?? 0}`;
+                    await broadcastGlobalNotification({
+                        type: toastType,
+                        message: toastMessage,
+                        matchId,
+                        homeTeamId: current.homeTeamId,
+                        awayTeamId: current.awayTeamId,
+                    });
+                } catch (error) {
+                    console.error('Error sending period notification:', error);
+                }
             });
         }
 

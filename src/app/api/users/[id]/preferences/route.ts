@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
 import { userPreferences } from '@/db/schema';
 import { eq } from 'drizzle-orm';
+import { getAuthUser } from '@/lib/auth';
 
 /**
  * GET user preferences
@@ -18,6 +19,14 @@ export async function GET(
 ) {
     try {
         const { id: userId } = await params;
+
+        const authUser = await getAuthUser(request);
+        if (!authUser) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+        if (authUser.id !== userId && authUser.role !== 'admin') {
+            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+        }
 
         const [preferences] = await db
             .select()
@@ -91,6 +100,15 @@ export async function PATCH(
 ) {
     try {
         const { id: userId } = await params;
+
+        const authUser = await getAuthUser(request);
+        if (!authUser) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+        if (authUser.id !== userId && authUser.role !== 'admin') {
+            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+        }
+
         const body = await request.json();
 
         // Build update object
@@ -160,6 +178,14 @@ export async function DELETE(
 ) {
     try {
         const { id: userId } = await params;
+
+        const authUser = await getAuthUser(request);
+        if (!authUser) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+        if (authUser.id !== userId && authUser.role !== 'admin') {
+            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+        }
 
         // Reset to default preferences
         await db

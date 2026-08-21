@@ -46,8 +46,36 @@ export function UpdatePrompt() {
             }
         });
 
-        // Also listen for controller change to reload
+        // BUG-041 root cause: sw-user.js calls self.clients.claim() in its
+        // `activate` handler (public/sw-user.js line 61), which claims THIS
+        // page the moment the service worker first activates -- including on
+        // a brand new visit where no worker controlled the page yet, and
+        // including while this very page is still hydrating. That claim
+        // fires `controllerchange` unconditionally, and this handler used to
+        // call window.location.reload() for ANY controllerchange, with no
+        // check for whether the page was already controlled.
+        //
+        // Net effect in production: every fresh visit (new tab, cleared
+        // cache, or a page open when a deploy activates a new worker) forced
+        // a full hard reload while React was mid-hydration -- interrupting
+        // hydration is exactly what produces React error #418, and the
+        // reload re-parses/re-executes the entire bundle (including the
+        // ~420KB shared framework chunk, "168" in the original filing),
+        // which is the long-task/TBT spike, recurring on every such claim,
+        // not just the first page load.
+        //
+        // Fix: only reload on a genuine controller SWAP (this page was
+        // already controlled by an older worker, and a newer one just took
+        // over) -- never on the first-ever claim of a previously-uncontrolled
+        // page. Captured before the listener is attached so it reflects the
+        // state at mount, not after any claim has already happened.
+        const hadControllerAlready = !!navigator.serviceWorker.controller;
+
         const handleControllerChange = () => {
+            if (!hadControllerAlready) {
+                console.log('[UpdatePrompt] Controller changed (first claim on an uncontrolled page, no reload needed)');
+                return;
+            }
             console.log('[UpdatePrompt] Controller changed, reloading...');
             window.location.reload();
         };

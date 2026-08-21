@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -59,229 +59,161 @@ export default function Home() {
   const { notifications, addNotification } = useNotifications();
   const { favoriteTeams, favoritePlayers } = useFavorites();
 
-  // Fetch matches from API (both basketball and football)
+  // Fetch matches from API (both basketball and football).
+  // BUG-149: this used to run once on mount only, plus a same-tab-only
+  // MATCH_STATUS_CHANGE window event a logger's own browser tab could fire --
+  // a remote viewer's tab never receives that event, so the homepage showed a
+  // permanently frozen score/status during a live match. Extracted into one
+  // shared fetcher (was duplicated 2x) and polled on an interval, matching the
+  // same stopgap pattern /live/page.tsx already uses (BUG-020).
+  const fetchAllMatches = useCallback(async (showLoadingState: boolean) => {
+    try {
+      if (showLoadingState) setLoading(true);
+
+      const [basketballResponse, footballResponse, otherResponse] = await Promise.all([
+        fetch('/api/basketball/matches'),
+        fetch('/api/football/matches'),
+        fetch('/api/other/matches')
+      ]);
+
+      const basketballData = await basketballResponse.json();
+      const footballData = await footballResponse.json();
+      const otherData = await otherResponse.json();
+
+      const allMatches = [];
+
+      // Transform basketball matches
+      if (basketballData.success && basketballData.matches) {
+        const basketballMatches = basketballData.matches.map((match: any) => {
+          let dbStats = {};
+          try {
+            dbStats = typeof match.stats === 'string' ? JSON.parse(match.stats) : (match.stats || {});
+          } catch (e) {
+            console.error('Error parsing match stats:', e);
+          }
+
+          return {
+            id: match.id,
+            homeTeamId: match.homeTeamId,
+            awayTeamId: match.awayTeamId,
+            homeScore: match.homeScore || 0,
+            awayScore: match.awayScore || 0,
+            // BACKLOG-105: explicit transform map, same class as the already-documented
+            // "round silently dropped" bug — any field MatchCard reads must be listed here.
+            shootoutHomeScore: match.shootoutHomeScore ?? undefined,
+            shootoutAwayScore: match.shootoutAwayScore ?? undefined,
+            status: match.status,
+            startTime: match.startTime,
+            venue: match.venue,
+            competition: match.competition,
+            round: match.round ?? null,
+            sport: 'Basketball',
+            matchType: 'competition',
+            homeTeam: match.homeTeam,
+            awayTeam: match.awayTeam,
+            events: [],
+            stats: {
+              possession: [0, 0],
+              shots: [0, 0],
+              shotsOnTarget: [0, 0],
+              corners: [0, 0],
+              fouls: [0, 0],
+              yellowCards: [0, 0],
+              redCards: [0, 0],
+              ...dbStats
+            }
+          };
+        });
+        allMatches.push(...basketballMatches);
+      }
+
+      // Transform football matches
+      if (footballData.success && footballData.matches) {
+        const footballMatches = footballData.matches.map((match: any) => {
+          let dbStats = {};
+          try {
+            dbStats = typeof match.stats === 'string' ? JSON.parse(match.stats) : (match.stats || {});
+          } catch (e) {
+            console.error('Error parsing match stats:', e);
+          }
+
+          return {
+            id: match.id,
+            homeTeamId: match.homeTeamId,
+            awayTeamId: match.awayTeamId,
+            homeScore: match.homeScore || 0,
+            awayScore: match.awayScore || 0,
+            // BACKLOG-105: explicit transform map, same class as the already-documented
+            // "round silently dropped" bug — any field MatchCard reads must be listed here.
+            shootoutHomeScore: match.shootoutHomeScore ?? undefined,
+            shootoutAwayScore: match.shootoutAwayScore ?? undefined,
+            status: match.status,
+            currentPeriod: match.currentPeriod ?? null,
+            startTime: match.startTime,
+            venue: match.venue,
+            competition: match.competition,
+            round: match.round ?? null,
+            sport: 'Football',
+            matchType: 'competition',
+            homeTeam: match.homeTeam,
+            awayTeam: match.awayTeam,
+            events: [],
+            stats: dbStats
+          };
+        });
+        allMatches.push(...footballMatches);
+      }
+
+      // Add OTHER matches
+      if (otherData.success && otherData.matches) {
+        const otherMatches = otherData.matches.map((match: any) => ({
+          ...match,
+          stats: typeof match.stats === 'string' ? JSON.parse(match.stats || '{}') : (match.stats || {})
+        }));
+        allMatches.push(...otherMatches);
+      }
+
+      setMatches(allMatches);
+      return allMatches;
+    } catch (error) {
+      console.error('Error fetching matches:', error);
+      return null;
+    } finally {
+      if (showLoadingState) setLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
-    const fetchMatches = async () => {
-      try {
-        setLoading(true);
+    fetchAllMatches(true);
 
-        // Fetch football, basketball, AND other matches in parallel
-        const [basketballResponse, footballResponse, otherResponse] = await Promise.all([
-          fetch('/api/basketball/matches'),
-          fetch('/api/football/matches'),
-          fetch('/api/other/matches')
-        ]);
+    // Poll every 15s -- stopgap until a real WS subscription is wired to the
+    // homepage, matching /live/page.tsx's existing pattern (BUG-020/BUG-149).
+    const interval = setInterval(() => fetchAllMatches(false), 15000);
+    return () => clearInterval(interval);
+  }, [fetchAllMatches]);
 
-        const basketballData = await basketballResponse.json();
-        const footballData = await footballResponse.json();
-        const otherData = await otherResponse.json();
-
-        const allMatches = [];
-
-        // Transform basketball matches
-        if (basketballData.success && basketballData.matches) {
-          const basketballMatches = basketballData.matches.map((match: any) => {
-            let dbStats = {};
-            try {
-              dbStats = typeof match.stats === 'string' ? JSON.parse(match.stats) : (match.stats || {});
-            } catch (e) {
-              console.error('Error parsing match stats:', e);
-            }
-
-            return {
-              id: match.id,
-              homeTeamId: match.homeTeamId,
-              awayTeamId: match.awayTeamId,
-              homeScore: match.homeScore || 0,
-              awayScore: match.awayScore || 0,
-              status: match.status,
-              startTime: match.startTime,
-              venue: match.venue,
-              competition: match.competition,
-              round: match.round ?? null,
-              sport: 'Basketball',
-              matchType: 'competition',
-              homeTeam: match.homeTeam,
-              awayTeam: match.awayTeam,
-              events: [],
-              stats: {
-                possession: [0, 0],
-                shots: [0, 0],
-                shotsOnTarget: [0, 0],
-                corners: [0, 0],
-                fouls: [0, 0],
-                yellowCards: [0, 0],
-                redCards: [0, 0],
-                ...dbStats
-              }
-            };
-          });
-          allMatches.push(...basketballMatches);
-        }
-
-        // Transform football matches
-        if (footballData.success && footballData.matches) {
-          const footballMatches = footballData.matches.map((match: any) => {
-            let dbStats = {};
-            try {
-              dbStats = typeof match.stats === 'string' ? JSON.parse(match.stats) : (match.stats || {});
-            } catch (e) {
-              console.error('Error parsing match stats:', e);
-            }
-
-            return {
-              id: match.id,
-              homeTeamId: match.homeTeamId,
-              awayTeamId: match.awayTeamId,
-              homeScore: match.homeScore || 0,
-              awayScore: match.awayScore || 0,
-              status: match.status,
-              startTime: match.startTime,
-              venue: match.venue,
-              competition: match.competition,
-              round: match.round ?? null,
-              sport: 'Football',
-              matchType: 'competition',
-              homeTeam: match.homeTeam,
-              awayTeam: match.awayTeam,
-              events: [],
-              stats: dbStats
-            };
-          });
-          allMatches.push(...footballMatches);
-        }
-
-        // Add OTHER matches
-        if (otherData.success && otherData.matches) {
-          const otherMatches = otherData.matches.map((match: any) => ({
-            ...match,
-            stats: typeof match.stats === 'string' ? JSON.parse(match.stats || '{}') : (match.stats || {})
-          }));
-          allMatches.push(...otherMatches);
-        }
-
-        setMatches(allMatches);
-      } catch (error) {
-        console.error('Error fetching matches:', error);
-      } finally {
-        setLoading(false);
+  // Same-tab fast-path: a logger on this same device gets an instant refresh
+  // (plus a notification) without waiting for the next poll tick. Remote
+  // viewers rely on the 15s poll above -- this event never reaches them.
+  useEffect(() => {
+    const handleMatchStatusChange = async (event: any) => {
+      console.log('🔄 Match status changed, refreshing matches...', event.detail);
+      const result = await fetchAllMatches(false);
+      if (result) {
+        addNotification({
+          title: 'Match Started!',
+          message: `A match is now LIVE`,
+          type: 'info'
+        });
       }
     };
 
-    fetchMatches();
-  }, []);
-
-  // Listen for match status changes from logger
-  useEffect(() => {
-    const handleMatchStatusChange = (event: any) => {
-      console.log('🔄 Match status changed, refreshing matches...', event.detail);
-      // Refetch matches to get updated status
-      const fetchMatches = async () => {
-        try {
-          const [basketballResponse, footballResponse] = await Promise.all([
-            fetch('/api/basketball/matches'),
-            fetch('/api/football/matches')
-          ]);
-
-          const basketballData = await basketballResponse.json();
-          const footballData = await footballResponse.json();
-
-          const allMatches = [];
-
-          if (basketballData.success && basketballData.matches) {
-            const basketballMatches = basketballData.matches.map((match: any) => {
-              let dbStats = {};
-              try {
-                dbStats = typeof match.stats === 'string' ? JSON.parse(match.stats) : (match.stats || {});
-              } catch (e) {
-                console.error('Error parsing match stats:', e);
-              }
-
-              return {
-                id: match.id,
-                homeTeamId: match.homeTeamId,
-                awayTeamId: match.awayTeamId,
-                homeScore: match.homeScore || 0,
-                awayScore: match.awayScore || 0,
-                status: match.status,
-                startTime: match.startTime,
-                venue: match.venue,
-                competition: match.competition,
-                round: match.round ?? null,
-                sport: 'Basketball',
-                matchType: 'competition',
-                homeTeam: match.homeTeam,
-                awayTeam: match.awayTeam,
-                events: [],
-                stats: {
-                  possession: [0, 0],
-                  shots: [0, 0],
-                  shotsOnTarget: [0, 0],
-                  corners: [0, 0],
-                  fouls: [0, 0],
-                  yellowCards: [0, 0],
-                  redCards: [0, 0],
-                  ...dbStats
-                }
-              };
-            });
-            allMatches.push(...basketballMatches);
-          }
-
-          if (footballData.success && footballData.matches) {
-            const footballMatches = footballData.matches.map((match: any) => {
-              let dbStats = {};
-              try {
-                dbStats = typeof match.stats === 'string' ? JSON.parse(match.stats) : (match.stats || {});
-              } catch (e) {
-                console.error('Error parsing match stats:', e);
-              }
-
-              return {
-                id: match.id,
-                homeTeamId: match.homeTeamId,
-                awayTeamId: match.awayTeamId,
-                homeScore: match.homeScore || 0,
-                awayScore: match.awayScore || 0,
-                status: match.status,
-                startTime: match.startTime,
-                venue: match.venue,
-                competition: match.competition,
-                round: match.round ?? null,
-                sport: 'Football',
-                matchType: 'competition',
-                homeTeam: match.homeTeam,
-                awayTeam: match.awayTeam,
-                events: [],
-                stats: dbStats
-              };
-            });
-            allMatches.push(...footballMatches);
-          }
-
-          setMatches(allMatches);
-
-          // Show notification
-          addNotification({
-            title: 'Match Started!',
-            message: `A match is now LIVE`,
-            type: 'info'
-          });
-        } catch (error) {
-          console.error('Error refreshing matches:', error);
-        }
-      };
-
-      fetchMatches();
-    };
-
-    // Listen for custom event from logger
     window.addEventListener('MATCH_STATUS_CHANGE', handleMatchStatusChange);
 
     return () => {
       window.removeEventListener('MATCH_STATUS_CHANGE', handleMatchStatusChange);
     };
-  }, [addNotification]);
+  }, [addNotification, fetchAllMatches]);
 
   // Fetch competitions
   useEffect(() => {
@@ -330,24 +262,55 @@ export default function Home() {
     return true;
   });
 
-  // Sort matches by start time in reverse chronological order (most recent first)
-  const sortedMatches = [...filteredMatches].sort((a, b) =>
-    new Date(b.startTime).getTime() - new Date(a.startTime).getTime()
-  );
+  // Sort matches by start time in reverse chronological order (most recent first).
+  // BUG-213: a malformed start_time (raw epoch-as-text instead of an ISO string --
+  // known to come from a couple of dev/test-setup scripts, root cause not yet
+  // fully traced platform-wide) parses to NaN, and NaN feeding this comparator
+  // is implementation-defined in Array.prototype.sort() -- confirmed live to
+  // measurably displace other, validly-dated matches near it, not just mislabel
+  // its own group. Guard: unparseable dates sort to the end (oldest), never let
+  // NaN reach the comparator at all.
+  const sortedMatches = [...filteredMatches].sort((a, b) => {
+    const aTime = new Date(a.startTime).getTime();
+    const bTime = new Date(b.startTime).getTime();
+    return (isNaN(bTime) ? -Infinity : bTime) - (isNaN(aTime) ? -Infinity : aTime);
+  });
+
+  // BUG-213: `toLocaleDateString()` on an unparseable date returns the literal
+  // string "Invalid Date" -- which then rendered as a real, user-facing section
+  // header. A clearly-labeled fallback communicates "we don't know" honestly
+  // instead of looking like the app itself is broken.
+  const formatGroupDate = (startTime: string) => {
+    const d = new Date(startTime);
+    if (isNaN(d.getTime())) return 'Date Unknown';
+    return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+  };
 
   // Group matches by round (for basketball) or date (for other sports)
   const groupedMatches = sortedMatches.reduce((groups: any, match: any) => {
     let groupKey: string = '';
 
     if (match.sport === 'Basketball') {
+      // BACKLOG: prefer the real matches.round column (freeform text, e.g.
+      // "Semi-Finals", "Round 6") over the numeric stats-blob parse and the
+      // hardcoded-date-table fallback below -- that fallback assumed one
+      // specific 2026 playoff calendar and silently mislabeled every other
+      // basketball match (any other season, any friendly, any competition)
+      // with a fabricated "Round N" or wrong semifinal-game label.
+      if (match.round) {
+        groupKey = match.round;
+      }
+
       let roundNum: number | undefined;
-      try {
+      if (!groupKey) try {
         // Try to get round from stats
         const stats = typeof match.stats === 'string' ? JSON.parse(match.stats) : match.stats;
         roundNum = stats?.round;
       } catch (e) { }
 
-      if (!roundNum || isNaN(roundNum) || roundNum > 100 || roundNum < 1) {
+      if (groupKey) {
+        // already set from match.round above
+      } else if (!roundNum || isNaN(roundNum) || roundNum > 100 || roundNum < 1) {
         // Fallback to date-based calculation
         const matchDate = new Date(match.startTime);
 
@@ -377,19 +340,11 @@ export default function Home() {
         groupKey = `Round ${roundNum}`;
       } else {
         // Ultimate fallback: Use date
-        groupKey = new Date(match.startTime).toLocaleDateString('en-US', {
-          weekday: 'short',
-          month: 'short',
-          day: 'numeric'
-        });
+        groupKey = formatGroupDate(match.startTime);
       }
     } else {
       // For other sports, group by date
-      groupKey = new Date(match.startTime).toLocaleDateString('en-US', {
-        weekday: 'short',
-        month: 'short',
-        day: 'numeric'
-      });
+      groupKey = formatGroupDate(match.startTime);
     }
 
     if (!groups[groupKey]) {
@@ -409,7 +364,7 @@ export default function Home() {
           'BRIXSPORTS', 'Nigerian university sports', 'NUGA', 'NPUGA', 'BUSA LEAGUE', 'live scores',
           'university football', 'university basketball', 'campus sports Nigeria'
         ]}
-        ogImage="/assets/Logos/BRIX-SPORT-LOGO.png"
+        ogImage="/assests/Logos/BRIX-SPORT-LOGO.png"
         ogType="website"
       />
       
@@ -692,6 +647,9 @@ export default function Home() {
                                       {match.status !== 'UPCOMING' && (
                                         <span className={`ml-auto text-sm font-bold ${match.homeScore > match.awayScore ? 'text-primary' : 'text-white/60'}`}>
                                           {match.homeScore}
+                                          {match.shootoutHomeScore != null && match.shootoutAwayScore != null && match.shootoutHomeScore !== match.shootoutAwayScore && (
+                                            <span className={`ml-1 text-xs font-normal ${match.shootoutHomeScore > match.shootoutAwayScore ? 'text-primary' : ''}`}>({match.shootoutHomeScore})</span>
+                                          )}
                                         </span>
                                       )}
                                     </div>
@@ -718,6 +676,9 @@ export default function Home() {
                                       {match.status !== 'UPCOMING' && (
                                         <span className={`ml-auto text-sm font-bold ${match.awayScore > match.homeScore ? 'text-primary' : 'text-white/60'}`}>
                                           {match.awayScore}
+                                          {match.shootoutHomeScore != null && match.shootoutAwayScore != null && match.shootoutHomeScore !== match.shootoutAwayScore && (
+                                            <span className={`ml-1 text-xs font-normal ${match.shootoutAwayScore > match.shootoutHomeScore ? 'text-primary' : ''}`}>({match.shootoutAwayScore})</span>
+                                          )}
                                         </span>
                                       )}
                                     </div>
@@ -732,7 +693,7 @@ export default function Home() {
                                     )}
 
                                     {match.status === 'LIVE' ? (
-                                      <LiveMatchStatus matchId={match.id} sport={match.sport} />
+                                      <LiveMatchStatus matchId={match.id} sport={match.sport} fallbackPeriod={(match as any).currentPeriod ?? undefined} />
                                     ) : match.status === 'FINISHED' ? (
                                       <span className="text-xs text-white/40 font-bold">FT</span>
                                     ) : (

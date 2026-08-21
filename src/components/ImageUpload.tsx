@@ -9,6 +9,10 @@ interface ImageUploadProps {
     aspectRatio?: 'square' | 'video' | 'portrait' | 'free';
     maxSize?: number;
     className?: string;
+    folder?: string;
+    publicId?: string;
+    tags?: string[];
+    context?: Record<string, string>;
 }
 
 export default function ImageUpload({
@@ -18,6 +22,10 @@ export default function ImageUpload({
     aspectRatio = 'free',
     maxSize = 5,
     className = '',
+    folder,
+    publicId,
+    tags,
+    context,
 }: ImageUploadProps) {
     return (
         <MobileImageUpload
@@ -28,6 +36,10 @@ export default function ImageUpload({
             maxSize={maxSize}
             className={className}
             showPreview={true}
+            folder={folder}
+            publicId={publicId}
+            tags={tags}
+            context={context}
         />
     );
 }

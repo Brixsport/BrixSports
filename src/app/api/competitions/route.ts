@@ -10,9 +10,57 @@ import { competitions, matches, standings } from '@/db/schema';
 import { sql, eq, or } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { getAuthUser } from '@/lib/auth';
+import { checkRateLimit } from '@/lib/rate-limit';
+
+// Groups season-instances of the same recurring league together (e.g. "BUSA LEAGUE
+// FOOTBALL" 2025/2026 and 2026/2027 as one entity with a season history), rather
+// than every season being a fully disconnected competition row. Case-insensitive
+// name match, scoped by sport + hostOrganizationId so two different universities'
+// leagues that happen to share a display name (or differ only in casing) never
+// merge -- see BACKLOG.md's standings/comp-stats audit for the full context this
+// came out of.
+function getCompetitionGroupKey(comp: { sport: string | null; name: string; hostOrganizationId: string | null }): string {
+    return `${comp.sport ?? 'multi'}::${comp.name.trim().toLowerCase()}::${comp.hostOrganizationId ?? 'none'}`;
+}
+
+// "Most recent season" is ordered by startDate/createdAt (real timestamps) rather
+// than the free-text `season` string ("2024" vs "2025/2026" vs "2026/2027" don't
+// all sort correctly the same way) -- same reasoning as the player-stats season
+// fallback fix elsewhere this session.
+function buildCompetitionGroups(comps: any[]) {
+    const groups = new Map<string, any[]>();
+    for (const c of comps) {
+        const key = getCompetitionGroupKey(c);
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key)!.push(c);
+    }
+
+    return Array.from(groups.entries()).map(([groupKey, seasons]) => {
+        const sorted = [...seasons].sort((a, b) => {
+            const aTime = a.startDate ? new Date(a.startDate).getTime() : (a.createdAt ? new Date(a.createdAt).getTime() : 0);
+            const bTime = b.startDate ? new Date(b.startDate).getTime() : (b.createdAt ? new Date(b.createdAt).getTime() : 0);
+            return bTime - aTime;
+        });
+        return {
+            groupKey,
+            name: sorted[0].name,
+            sport: sorted[0].sport,
+            latest: sorted[0],
+            seasons: sorted,
+        };
+    });
+}
 
 export async function GET(request: NextRequest) {
     try {
+        const rl = checkRateLimit(request);
+        if (rl.limited) {
+            return NextResponse.json(
+                { error: 'Too many requests. Please try again shortly.' },
+                { status: 429, headers: { 'Retry-After': String(rl.retryAfterSeconds) } }
+            );
+        }
+
         const { searchParams } = new URL(request.url);
 
         // Query parameters
@@ -86,12 +134,14 @@ export async function GET(request: NextRequest) {
             return NextResponse.json({
                 competitions: competitionsWithStats,
                 total: competitionsWithStats.length,
+                groups: buildCompetitionGroups(competitionsWithStats),
             });
         }
 
         return NextResponse.json({
             competitions: filteredCompetitions,
             total: filteredCompetitions.length,
+            groups: buildCompetitionGroups(filteredCompetitions),
         });
     } catch (error) {
         console.error('Error fetching competitions:', error);
@@ -119,7 +169,7 @@ export async function POST(request: NextRequest) {
         const {
             name, sport, format, season, status,
             numberOfTeams, numberOfGroups, teamsPerGroup,
-            level, scope, rules, description, isMultiSport
+            level, scope, rules, description, isMultiSport, logo
         } = body;
 
         if (!name || (!sport && !isMultiSport) || !format || !season) {
@@ -144,6 +194,7 @@ export async function POST(request: NextRequest) {
             scope: scope || 'internal',
             rules: rules ? JSON.stringify(rules) : null,
             description: description || null,
+            logo: logo || null,
             createdAt: new Date(),
             updatedAt: new Date(),
         };

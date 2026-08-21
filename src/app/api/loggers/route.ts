@@ -3,25 +3,47 @@ import { db } from '@/db';
 import { loggers, matches } from '@/db/schema';
 import { eq } from 'drizzle-orm';
 import bcrypt from 'bcryptjs';
+import { getAuthUser } from '@/lib/auth';
 
-// GET /api/loggers - Get all loggers
+// Loggers are their own identity table, separate from `users` — real admin accounts
+// live in `users`, never in `loggers`. 'admin' is deliberately excluded here so this
+// endpoint can never mint a logger row whose role claim reads as a platform admin.
+const ALLOWED_LOGGER_ROLES = ['logger', 'logger_manager'];
+
+// GET /api/loggers - Get all loggers (admin/logger_manager only)
 export async function GET(request: NextRequest) {
     try {
+        const authUser = await getAuthUser(request);
+        if (!authUser || (authUser.role !== 'admin' && authUser.role !== 'logger_manager')) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+
         const allLoggers = await db.select().from(loggers).limit(200);
 
         // Fetch all active assignments
-        // Dynamically import to avoid circular dependency issues if any, though schema is already imported
         const { matchLoggerAssignments } = await import('@/db/schema');
         const assignments = await db.select().from(matchLoggerAssignments).where(eq(matchLoggerAssignments.status, 'active'));
 
         // Get unique match IDs from assignments
         const matchIds = [...new Set(assignments.map(a => a.matchId))];
 
-        // Fetch match details
+        // Fetch match details — narrow projection, no stats/lineups blobs needed here
+        const matchColumns = {
+            id: matches.id,
+            sport: matches.sport,
+            homeTeamId: matches.homeTeamId,
+            awayTeamId: matches.awayTeamId,
+            status: matches.status,
+            startTime: matches.startTime,
+            competition: matches.competition,
+        };
         let matchDetails: any[] = [];
         if (matchIds.length > 0) {
             const { inArray } = await import('drizzle-orm');
-            matchDetails = await db.select().from(matches).where(inArray(matches.id, matchIds));
+            matchDetails = await db
+                .select(matchColumns)
+                .from(matches)
+                .where(inArray(matches.id, matchIds));
         }
 
         // Create match map
@@ -36,33 +58,21 @@ export async function GET(request: NextRequest) {
             const match = matchMap.get(a.matchId);
             if (match) {
                 assignmentsByLogger.get(a.loggerId)?.push({
-                    id: match.id,
-                    sport: match.sport,
-                    homeTeamId: match.homeTeamId,
-                    awayTeamId: match.awayTeamId,
-                    status: match.status,
-                    startTime: match.startTime,
-                    competition: match.competition,
-                    role: a.role // Include role info
+                    ...match,
+                    role: a.role, // Include role info
                 });
             }
         });
 
-        // Combine data
+        // Combine data — explicit exclude of password (spreading `{...logger, password: undefined}`
+        // does not reliably strip the key from every serializer, per this project's own known-issues.md)
         const loggersWithMatches = allLoggers.map(logger => {
-            // Also check legacy loggerId if no assignments found in new table (backward compatibility)
-            // But for now, we prioritize the new table.
-            // If you want to merge both, you'd need to fetch matches where loggerId matches too.
-            // Assuming migration is done, we rely on assignment table. 
-
+            const { password: _password, ...loggerPublic } = logger;
             const assignedMatches = assignmentsByLogger.get(logger.id) || [];
 
             return {
-                ...logger,
-                password: undefined, // Don't send password to client
-                status: logger.status,
-                isAvailable: logger.isAvailable,
-                assignedMatches
+                ...loggerPublic,
+                assignedMatches,
             };
         });
 
@@ -76,9 +86,14 @@ export async function GET(request: NextRequest) {
     }
 }
 
-// POST /api/loggers - Create a new logger
+// POST /api/loggers - Create a new logger (admin/logger_manager only)
 export async function POST(request: NextRequest) {
     try {
+        const authUser = await getAuthUser(request);
+        if (!authUser || (authUser.role !== 'admin' && authUser.role !== 'logger_manager')) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+
         const body = await request.json();
         const { name, email, password, role = 'logger' } = body;
 
@@ -86,6 +101,13 @@ export async function POST(request: NextRequest) {
             return NextResponse.json(
                 { error: 'Name, email, and password are required' },
                 { status: 400 }
+            );
+        }
+
+        if (!ALLOWED_LOGGER_ROLES.includes(role)) {
+            return NextResponse.json(
+                { error: `Invalid role. Must be one of: ${ALLOWED_LOGGER_ROLES.join(', ')}` },
+                { status: 422 }
             );
         }
 
@@ -117,13 +139,9 @@ export async function POST(request: NextRequest) {
             })
             .returning();
 
-        return NextResponse.json(
-            {
-                ...newLogger[0],
-                password: undefined, // Don't send password back
-            },
-            { status: 201 }
-        );
+        const { password: _password, ...createdLoggerPublic } = newLogger[0];
+
+        return NextResponse.json(createdLoggerPublic, { status: 201 });
     } catch (error) {
         console.error('Error creating logger:', error);
         return NextResponse.json(

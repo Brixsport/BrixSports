@@ -6,6 +6,7 @@
  */
 
 import { Server as SocketIOServer } from 'socket.io';
+import { env as appEnv } from './env';
 
 // Extend global namespace to include io
 declare global {
@@ -50,13 +51,26 @@ async function broadcast(room: string | null, event: string, data: any): Promise
 
     try {
         const broadcastUrl = wsServerUrl.replace(/\/+$/, '') + '/broadcast';
+        // BUG-074: ws-server/index.js shares one Railway instance across staging and
+        // prod, with no browser Origin header on this server-to-server call to read
+        // env from — tell it explicitly so it can room-scope the broadcast the same
+        // way it scopes browser socket connections. Deliberately NOT appEnv.isStaging:
+        // NEXT_PUBLIC_ENV is currently kept off 'staging' on the staging deployment
+        // on purpose, to bypass middleware.ts's staging-wide JWT gate — so it can't be
+        // trusted here. Match on the deployment's own URL instead, using the exact same
+        // hostname patterns the socket connection handlers already check on the
+        // incoming browser Origin, so both sides always agree on the room name. Same
+        // default-to-'prod' direction as the rest of BUG-074's fix either way.
+        const wsEnv = (appEnv.appUrl.includes('staging.brixsports.com') || appEnv.appUrl.includes('brixsports-staging.vercel.app'))
+            ? 'staging'
+            : 'prod';
         await fetch(broadcastUrl, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 'x-api-key': apiKey,
             },
-            body: JSON.stringify({ room, event, data }),
+            body: JSON.stringify({ room, event, data, env: wsEnv }),
         });
     } catch (error) {
         // Don't crash API routes if WS broadcast fails
@@ -65,17 +79,22 @@ async function broadcast(room: string | null, event: string, data: any): Promise
 }
 
 /**
- * Broadcast an event to a specific match room
+ * Broadcast an event to a specific match room.
+ * Returns the underlying promise (rather than firing-and-forgetting it) so
+ * callers on Vercel can hand it to next/server's after() -- an unresolved,
+ * un-awaited promise has no guaranteed completion once a serverless function
+ * returns its response, which is the root cause traced for BUG-108/116's
+ * multi-second (up to 42s observed) broadcast delivery latency.
  */
-export function broadcastToMatch(matchId: string, event: string, data: any): void {
-    broadcast(`match:${matchId}`, event, data);
+export function broadcastToMatch(matchId: string, event: string, data: any): Promise<void> {
+    return broadcast(`match:${matchId}`, event, data);
 }
 
 /**
  * Broadcast a match event (goal, card, etc.)
  */
-export function broadcastMatchEvent(matchId: string, event: any): void {
-    broadcastToMatch(matchId, 'event:new', {
+export function broadcastMatchEvent(matchId: string, event: any): Promise<void> {
+    return broadcastToMatch(matchId, 'event:new', {
         matchId,
         event,
     });
@@ -84,19 +103,29 @@ export function broadcastMatchEvent(matchId: string, event: any): void {
 /**
  * Broadcast a score update
  */
-export function broadcastScoreUpdate(matchId: string, homeScore: number, awayScore: number): void {
-    broadcastToMatch(matchId, 'match:score:updated', {
+export function broadcastScoreUpdate(
+    matchId: string,
+    homeScore: number,
+    awayScore: number,
+    // BACKLOG-105: optional shootout score, backward compatible -- existing
+    // listeners that don't know about these fields simply ignore them.
+    shootoutHomeScore?: number,
+    shootoutAwayScore?: number
+): Promise<void> {
+    return broadcastToMatch(matchId, 'match:score:updated', {
         matchId,
         homeScore,
         awayScore,
+        ...(shootoutHomeScore !== undefined ? { shootoutHomeScore } : {}),
+        ...(shootoutAwayScore !== undefined ? { shootoutAwayScore } : {}),
     });
 }
 
 /**
  * Broadcast a rating update
  */
-export function broadcastRatingUpdate(matchId: string, playerId: string, rating: number): void {
-    broadcastToMatch(matchId, 'rating:updated', {
+export function broadcastRatingUpdate(matchId: string, playerId: string, rating: number): Promise<void> {
+    return broadcastToMatch(matchId, 'rating:updated', {
         matchId,
         playerId,
         rating,
@@ -106,8 +135,8 @@ export function broadcastRatingUpdate(matchId: string, playerId: string, rating:
 /**
  * Broadcast stats update
  */
-export function broadcastStatsUpdate(matchId: string, teamId: string, stats: any): void {
-    broadcastToMatch(matchId, 'stats:updated', {
+export function broadcastStatsUpdate(matchId: string, teamId: string, stats: any): Promise<void> {
+    return broadcastToMatch(matchId, 'stats:updated', {
         matchId,
         teamId,
         stats,
@@ -117,8 +146,8 @@ export function broadcastStatsUpdate(matchId: string, teamId: string, stats: any
 /**
  * Broadcast match status change
  */
-export function broadcastMatchStatus(matchId: string, status: string): void {
-    broadcastToMatch(matchId, 'match:status:changed', {
+export function broadcastMatchStatus(matchId: string, status: string): Promise<void> {
+    return broadcastToMatch(matchId, 'match:status:changed', {
         matchId,
         status,
     });
@@ -127,9 +156,31 @@ export function broadcastMatchStatus(matchId: string, status: string): void {
 /**
  * Broadcast event deletion
  */
-export function broadcastEventDeleted(matchId: string, eventId: string): void {
-    broadcastToMatch(matchId, 'event:deleted', {
+export function broadcastEventDeleted(matchId: string, eventId: string): Promise<void> {
+    return broadcastToMatch(matchId, 'event:deleted', {
         matchId,
         eventId,
     });
+}
+
+/**
+ * BUG-210: the in-app WS toast (`GlobalNotificationListener.tsx`) previously
+ * only fired from `ws-server/index.js`'s `event:log` handler -- emitted from
+ * the logger's own browser tab (`FootballLogger.tsx`), so a closed/crashed
+ * tab silently stopped toasts exactly the way it stopped push before
+ * `BUG-200`. Basketball never emitted `event:log` at all, so it produced
+ * zero in-app toasts under any circumstances. Server-side broadcast instead,
+ * same `after()` call sites already doing the equivalent push send -- no
+ * room (global), same env-scoping `broadcast()` already handles.
+ */
+export function broadcastGlobalNotification(payload: {
+    type: 'GOAL' | 'RED_CARD' | 'YELLOW_CARD' | 'MATCH_START' | 'MATCH_END' | 'PERIOD_CHANGE';
+    message: string;
+    matchId?: string;
+    teamId?: string;
+    homeTeamId?: string;
+    awayTeamId?: string;
+    playerId?: string;
+}): Promise<void> {
+    return broadcast(null, 'notification:global', payload);
 }
