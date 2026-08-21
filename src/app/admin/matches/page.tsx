@@ -55,6 +55,8 @@ interface Competition {
     sport: string;
     isMultiSport: boolean;
     level?: string;
+    season?: string;
+    status?: 'upcoming' | 'ongoing' | 'completed';
 }
 
 function AdminMatchesPageContent() {
@@ -636,9 +638,17 @@ function AdminMatchesPageContent() {
                                             required
                                         >
                                             <option value="" className="bg-[#0a0a0a]">Select Competition</option>
-                                            {competitions.filter(c => c.isMultiSport || !c.sport || c.sport === formData.sport).map(comp => (
-                                                <option key={comp.id} value={comp.id} className="bg-[#0a0a0a]">{comp.name}</option>
-                                            ))}
+                                            {competitions
+                                                .filter(c => c.isMultiSport || !c.sport || c.sport === formData.sport)
+                                                // Ongoing/upcoming first -- completed competitions are still selectable
+                                                // (e.g. backfilling a missed match) but shouldn't be the first thing an
+                                                // admin sees once multiple seasons of the same league coexist.
+                                                .sort((a, b) => (a.status === 'completed' ? 1 : 0) - (b.status === 'completed' ? 1 : 0))
+                                                .map(comp => (
+                                                    <option key={comp.id} value={comp.id} className="bg-[#0a0a0a]">
+                                                        {comp.name}{comp.season ? ` (${comp.season})` : ''}{comp.status === 'completed' ? ' — Completed' : ''}
+                                                    </option>
+                                                ))}
                                         </select>
                                     </div>
                                 ) : (
