@@ -8552,3 +8552,18 @@ Live-reproduced exactly as described: navigated to a real match's URL that had j
 **Found & fixed:** session 53, 2026-08-21. Commits: `11e87d3` (initial batch, failed deploy), `88aae22` (dynamic-rendering + metadataBase fix, deploy succeeded but sitemap 500'd), `0a6c252` (safeDate fix, fully working).
 
 ---
+### 126 Corrupted Timestamp Rows (`matches.updated_at` x33, `players.created_at` x93) — Found, Defended Against in One Place, Not Backfilled
+
+**Status:** OPEN, folded into "the rest" — 2026-08-21 (session 53). Found while debugging item 21's sitemap crash.
+
+**What:** 33 `matches.updated_at` rows and 93 `players.created_at` rows hold either a raw ISO-format string (e.g. `"2026-07-21 13:57:23"`) or a millisecond-epoch integer (e.g. `1766757087279`) instead of a proper epoch-*seconds* value — the format Drizzle's `integer({mode:'timestamp'})` expects. Reading these back produces either a nonsensical date or a JS `RangeError: Invalid time value` the moment anything calls `.toISOString()` on the resulting `Date` (confirmed: this is exactly what crashed `/sitemap.xml` in production before the `safeDate()` fix).
+
+**Same root-cause class as `BACKLOG-126`'s earlier finding** (a corrupted `startDate`/`endDate` on a historical `LIGHT`/Rim Reapers row, traced to an old manual-fix script writing an ISO string into an integer-timestamp column via raw SQL, which doesn't error at insert time). This confirms it's a repeating pattern, not a one-off — old scripts writing timestamps the wrong way has happened at least twice now across different tables.
+
+**Only defended against in `sitemap.ts`** (the one place it was confirmed to actively crash something). Not fixed at the data level, and not audited elsewhere — any other code path reading `matches.updated_at` or `players.created_at` and calling `.toISOString()`/date arithmetic on it directly has the same latent exposure, just not yet confirmed to crash (most display code tolerates an `Invalid Date` by rendering it as a literal "Invalid Date" string rather than throwing).
+
+**Scope for the actual fix (not started):** (1) identify which of the 126 rows have a recoverable real timestamp (the ISO-string ones can be parsed and rewritten correctly; the millisecond-epoch ones can be divided by 1000 and rewritten) vs. which are unrecoverable/have no evident correct original value; (2) backfill with the corrected value, staging first then prod, per the project's own migration convention; (3) audit other read sites for the same `.toISOString()`-on-unvalidated-date crash risk, not just assume sitemap.ts was the only exposed one.
+
+**Found:** session 53, 2026-08-21, while diagnosing the item-21 sitemap 500.
+
+---
