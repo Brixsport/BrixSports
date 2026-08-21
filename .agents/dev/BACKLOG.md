@@ -8512,3 +8512,16 @@ Live-reproduced exactly as described: navigated to a real match's URL that had j
 **Found & fixed:** session 53, 2026-08-21 (`e8dfcac` grouping, `7a194b6` dropdown).
 
 ---
+### Standings competitionId Backfill — Completed, Plus Two Related Findings (Group/Knockout Blending, No Live Standings)
+
+**Status:** RESOLVED (backfill) — 2026-08-21 (session 53). Two adjacent findings logged, not fixed this pass.
+
+**Backfill:** all 22 orphaned (`competitionId IS NULL`) standings rows on both staging and prod now have a real `competitionId` (6 basketball rows → `BUSA LEAGUE BASKETBALL`, 16 football group-stage rows → `BUSA LEAGUE FOOTBALL` + a real `groupName`, resolved from `competitionTeamEntries` on staging and parsed from the row's own `"...- Group X"` suffix as a fallback on prod, where `competitionTeamEntries` has no data yet per `BACKLOG-224`). Deliberately did **not** touch `played`/`won`/`drawn`/`lost`/`points`/`goalsFor`/`goalsAgainst` — see the finding below for why. Live-verified: `GET /api/football/standings?competitionId=...` and `GET /api/basketball/standings?competitionId=...` both return the correct row counts (16, 6) with `competitionId`/`groupName` now populated, on staging. 0 orphaned rows remaining on both DBs after.
+
+**Finding 1 (why the backfill didn't just re-run the real auto-recompute):** `recalculateStandingsForMatch()` (already fully automatic, fires on every match's FINISHED transition) aggregates **all** of a competition's FINISHED matches with zero group/knockout distinction — `matches.round` clearly separates `"Group A"`..`"Group D"` from `"Quarter Finals"`/`"Semifinals"`/`"Final"`/`"3rd Place"` (confirmed real data has all of these for `BUSA LEAGUE FOOTBALL`), but `aggregateTeamRecord()` in `standingsService.ts` ignores `round` entirely. Running the real recompute across all 31 FINISHED matches (instead of the targeted ID-only backfill actually done) would have blended knockout results into what should stay pure group-stage standings, corrupting otherwise-correct numbers. **Not fixed this pass** — `standingsService.ts` needs round/stage-awareness for any `group_knockout`-format competition, folded into "the rest" alongside the rest of this investigation thread.
+
+**Finding 2 (Richard's own, confirmed): standings never update mid-match.** `recalculateStandingsForMatch()` returns immediately unless `match.status === 'FINISHED'` — a goal, card, or any live event during a match has zero effect on the standings table until the match actually ends. This is the current, deliberate behavior (not a bug to rush a fix for) — logged per Richard's explicit "log it for now."
+
+**Found & fixed:** session 53, 2026-08-21.
+
+---
