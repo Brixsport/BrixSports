@@ -9,16 +9,24 @@ import { eq } from 'drizzle-orm';
 const MAX_PER_ENTITY = 2000;
 
 // This project has a known, recurring class of bug where a timestamp column
-// gets an ISO-string value written into it via raw SQL by an old backfill/seed
-// script (integer-timestamp columns don't error at insert time, but corrupt the
-// later Drizzle read into an Invalid Date) -- see BACKLOG.md's `BACKLOG-126`
-// history. Confirmed to be exactly what crashed this route in production:
-// `RangeError: Invalid time value` inside Next's own sitemap serializer, which
-// calls `.toISOString()` on whatever lastModified value it's given with no
-// validation of its own. One bad row must not 500 the entire sitemap.
+// gets an ISO-string or millisecond-epoch value written into it via raw SQL by
+// an old backfill/seed script (integer-timestamp columns don't error at insert
+// time, but corrupt the later Drizzle read) -- see BACKLOG.md's `BACKLOG-126`
+// history. Two distinct failure shapes, both confirmed in production:
+// (1) `RangeError: Invalid time value` inside Next's own sitemap serializer,
+// from an unparseable value -- `!isNaN(value.getTime())` alone catches this.
+// (2) A millisecond-epoch value stored in a column Drizzle reads as
+// epoch-*seconds* gets multiplied by 1000 again, producing a technically-valid
+// but nonsensical Date (e.g. year 57956) -- passes the NaN check but Google
+// Search Console still rejects it as an "Invalid date" on submission (18 such
+// `players.createdAt` rows found live, 2026-08-21). A sane-range check catches
+// this second shape too. One bad row must not 500 the entire sitemap or get
+// this route's whole submission rejected by a crawler.
 function safeDate(value: Date | null | undefined): Date {
-    if (value instanceof Date && !isNaN(value.getTime())) return value;
-    return new Date();
+    if (!(value instanceof Date) || isNaN(value.getTime())) return new Date();
+    const year = value.getFullYear();
+    if (year < 2000 || year > new Date().getFullYear() + 2) return new Date();
+    return value;
 }
 
 // This file now does live DB queries (previously pure static data) -- without
