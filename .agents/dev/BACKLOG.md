@@ -8387,3 +8387,22 @@ Live-reproduced exactly as described: navigated to a real match's URL that had j
 **Found & fixed:** session 53, 2026-08-21, same session as item 5.
 
 ---
+### Cloudinary Metadata + Stable Public IDs (Follow-on to the Folder Convention)
+
+**Status:** RESOLVED — 2026-08-21 (session 53, same follow-on chain as item 5).
+
+**Gap:** live in-app uploads (via `CldUploadWidget`) carried zero tags and zero context metadata, and had no stable `public_id` — every re-upload for the same entity (a competition's logo, a player's avatar, a news article's image, an ad's image) created a brand-new random-named Cloudinary asset rather than overwriting the old one, leaving orphaned copies behind indefinitely.
+
+**Fix:** `MobileImageUpload`/`ImageUpload` gained `publicId`, `tags`, `context` props. Every edit-mode form (the only case where the entity's real id exists at upload time) now passes its own id as `publicId` — combined with `overwrite: true, uniqueFilename: false, useFilename: false` — so replacing an image overwrites the same Cloudinary asset instead of orphaning the old one. Create flows (no id yet) keep Cloudinary's default unique naming, same as before. Every upload site now also tags its asset by domain (`competition-logo`, `player-avatar`, `news-image`, `ad-image`, plus a base `brixsports` tag) and sets `context.alt` from whatever name/title field the form already has.
+
+**One wiring snag caught by `tsc`, not by eye:** `EnhancedNewsEditor` (the actual component rendering the news image upload) is a separate function component from the one holding `editingNews` state — needed a new `entityId` prop threaded through, since the upload JSX doesn't have direct closure access to the parent's state. `tsc --noEmit` caught this as `Cannot find name 'editingNews'` before it ever reached a browser.
+
+**Retroactive metadata:** the 26 team logos already migrated (see the folder-convention entry above) only had `tags`, no `context` — ran a one-off follow-up (`dev/add-team-logo-context-53.mjs`, deleted after use) adding `alt`/`entity_type`/`entity_id` context to all 26 via `cloudinary.uploader.explicit()`.
+
+**Evidence:** `tsc --noEmit` — 47 errors, back to baseline after the `entityId` fix (48 mid-fix, confirming the scope bug was real and this check actually caught it).
+
+**Not done:** no admin upload UI exists yet for team logos themselves (still the one remaining gap noted in the folder-convention entry) — this metadata/publicId work only reaches upload sites that already exist.
+
+**Found & fixed:** session 53, 2026-08-21.
+
+---
