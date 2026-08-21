@@ -10,6 +10,9 @@ interface ImageUploadProps {
     maxSize?: number;
     className?: string;
     folder?: string;
+    publicId?: string;
+    tags?: string[];
+    context?: Record<string, string>;
 }
 
 export default function ImageUpload({
@@ -20,6 +23,9 @@ export default function ImageUpload({
     maxSize = 5,
     className = '',
     folder,
+    publicId,
+    tags,
+    context,
 }: ImageUploadProps) {
     return (
         <MobileImageUpload
@@ -31,6 +37,9 @@ export default function ImageUpload({
             className={className}
             showPreview={true}
             folder={folder}
+            publicId={publicId}
+            tags={tags}
+            context={context}
         />
     );
 }

@@ -540,6 +540,9 @@ function AdminPlayersPageContent() {
                                                 value={formData.image || ''}
                                                 onChange={url => setFormData({ ...formData, image: url })}
                                                 folder="brixsports/players/avatars"
+                                                publicId={modalMode === 'edit' ? selectedPlayer?.id : undefined}
+                                                tags={['player-avatar']}
+                                                context={formData.name ? { alt: `${formData.name} avatar` } : undefined}
                                             />
                                             <div>
                                                 <label className="block text-[10px] font-black uppercase tracking-widest text-white/40 mb-2 italic">Image URL (Manual Override)</label>

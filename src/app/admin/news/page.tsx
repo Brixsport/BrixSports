@@ -506,6 +506,7 @@ function AdminNewsPageContent() {
                             setAutoSaveEnabled(false);
                         }}
                         isEditing={!!editingNews}
+                        entityId={editingNews?.id}
                         isSaving={isSaving}
                         lastSaved={lastSaved}
                         autoSaveEnabled={autoSaveEnabled}
@@ -661,12 +662,13 @@ function NewsCard({ article, isSelected, onToggleSelect, onEdit, onDelete }: {
     );
 }
 
-function EnhancedNewsEditor({ formData, setFormData, onSubmit, onClose, isEditing, isSaving, lastSaved, autoSaveEnabled, onToggleAutoSave }: {
+function EnhancedNewsEditor({ formData, setFormData, onSubmit, onClose, isEditing, entityId, isSaving, lastSaved, autoSaveEnabled, onToggleAutoSave }: {
     formData: any;
     setFormData: (data: any) => void;
     onSubmit: (e: React.FormEvent) => void;
     onClose: () => void;
     isEditing: boolean;
+    entityId?: string;
     isSaving: boolean;
     lastSaved: Date | null;
     autoSaveEnabled: boolean;
@@ -782,6 +784,9 @@ function EnhancedNewsEditor({ formData, setFormData, onSubmit, onClose, isEditin
                                 onChange={(url) => setFormData({ ...formData, imageUrl: url })}
                                 onRemove={() => setFormData({ ...formData, imageUrl: '' })}
                                 folder="brixsports/news/images"
+                                publicId={entityId}
+                                tags={['news-image']}
+                                context={formData.title ? { alt: formData.title } : undefined}
                             />
                         </div>
 

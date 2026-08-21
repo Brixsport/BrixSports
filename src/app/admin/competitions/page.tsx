@@ -61,6 +61,7 @@ type MatchSettingsForm = typeof defaultMatchSettings;
 
 interface CompetitionModalProps {
     mode: 'create' | 'edit';
+    entityId?: string;
     initialData: typeof defaultFormData;
     initialMatchSettings?: MatchSettingsForm;
     onSubmit: (data: typeof defaultFormData, matchSettings: MatchSettingsForm) => Promise<void>;
@@ -74,7 +75,7 @@ function derivePlayersOption(n: number): '11' | '5' | 'custom' {
     return 'custom';
 }
 
-function CompetitionModal({ mode, initialData, initialMatchSettings, onSubmit, onClose, isSubmitting }: CompetitionModalProps) {
+function CompetitionModal({ mode, entityId, initialData, initialMatchSettings, onSubmit, onClose, isSubmitting }: CompetitionModalProps) {
     const [form, setForm] = useState(initialData);
     const [matchSettings, setMatchSettings] = useState<MatchSettingsForm>(initialMatchSettings ?? defaultMatchSettings);
     const [showMatchSettings, setShowMatchSettings] = useState(false);
@@ -135,6 +136,9 @@ function CompetitionModal({ mode, initialData, initialMatchSettings, onSubmit, o
                                 maxSize={2}
                                 className="w-32 h-32"
                                 folder="brixsports/competitions/logos"
+                                publicId={entityId}
+                                tags={['competition-logo']}
+                                context={form.name ? { alt: `${form.name} logo` } : undefined}
                             />
                         </div>
 
@@ -803,6 +807,7 @@ function AdminCompetitionsPageContent() {
             {editingCompetition && (
                 <CompetitionModal
                     mode="edit"
+                    entityId={editingCompetition.id}
                     initialMatchSettings={editingMatchSettings}
                     initialData={{
                         name: editingCompetition.name,

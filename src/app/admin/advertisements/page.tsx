@@ -381,6 +381,9 @@ function AdvertisementsAdminContent() {
                       aspectRatio="video"
                       maxSize={5}
                       folder="brixsports/ads"
+                      publicId={editingAd?.id}
+                      tags={['ad-image']}
+                      context={formData.title ? { alt: formData.title } : undefined}
                       className="w-full h-48"
                       showPreview={true}
                     />
