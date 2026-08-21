@@ -3735,3 +3735,18 @@ Also found and fixed a genuinely new bug via this same rigor: **BACKLOG-122** fi
 **Branches used, all merged to `dev`:** `docs/criticality-map-refresh-53`, `fix/error-audit-sweep-53`, `fix/livestream-audit-53`, `feature/livestream-manage-link-53`, `feature/rate-limit-public-gets-53`, `docs/rate-limit-honesty-correction-53`. `dev`/`origin/dev` at `fce1638` as of this checkpoint.
 
 **Next session — exact first task:** item 11, the pre-launch ship pass (Sentry health check, `/code-review ultra`, flow-checker, security agent) — the last item on the session's SHOULD list.
+
+**Checkpoint continued, same session (2026-08-21) — item 11, the pre-launch ship pass:**
+
+Ran flow-checker and a security agent in parallel; also ran a combined `feature`+`code-review` gate-check agent (Richard's explicit ask) covering everything shipped in items 4/7-10. Results: flow-checker found Flow A and B intact, Flow C at-risk (rate limit on `GET /api/matches/[id]` too tight for the shared-NAT WS-fallback-poll case — fixed as `BUG-233`). Security agent verdict: **CLEAR**, two non-blocking MEDIUM findings (unbounded query in `admin/assigned-matches`, missing try/catch in several `admin/teams/*` routes — logged, not yet fixed, tracked below). The combined agent found two real regressions in this session's own new code: `BUG-231` (livestreams admin deep-link reopen-loop after save) and `BUG-232` (one residual raw-error leak in `notifications/diagnose` GET that `BUG-228`'s sweep missed).
+
+Richard also separately directed a full Sentry instrumentation fix mid-pass (`BUG-230`) — root cause was two-fold: no real DSN had ever been supplied (`BACKLOG-011` was marked resolved but never actually activated), and independently, `@sentry/nextjs` v8+ requires `instrumentation.ts` to explicitly import `sentry.server.config.ts`/`sentry.edge.config.ts` (no more filename-convention auto-loading), and this project's whole App Router lives under `src/` (per `src/middleware.ts`) so the convention file had to live at `src/instrumentation.ts`, not root — proved live with a real thrown test error: zero Sentry activity at root, real SDK init log immediately after moving it into `src/`. Also migrated `sentry.client.config.ts` → `src/instrumentation-client.ts` (current SDK convention), added `onRequestError`/`onRouterTransitionStart` hooks, exempted `/monitoring` from the staging auth gate, added the real DSN to `.env.local` (gitignored).
+
+Fixed all gate-check findings per Richard's "handle everything, even LOW" instruction: `BUG-231`, `BUG-232`, `BUG-233`, plus two LOW items (`rate-limit.ts`'s `getClientIp()` trust-boundary comment, `BasketballLogger.tsx`'s `lineupFetchFailed` not covering a non-throwing `!ok` response). `tsc --noEmit`: 47 errors throughout, zero new in any touched file.
+
+**Not fixed, logged instead:** the security agent's two MEDIUM findings (`admin/assigned-matches` unbounded query, missing try/catch in several `admin/teams/*` routes) — real but non-blocking, need their own pass.
+**Still open, unchanged:** `BUG-083`/`BUG-217` live verification (structurally blocked, see earlier entries); Sentry dashboard confirmation itself (no MCP/API access in this environment — code-level fix verified live, but Richard should confirm the next real error actually lands in the Sentry Issues dashboard).
+
+**Branches this pass, both merged to `dev`:** `fix/sentry-instrumentation-53`, `fix/item11-gate-check-followups-53`. `dev`/`origin/dev` at `02fba15`.
+
+**Next session — exact first task:** either the two MEDIUM security findings from this pass (quick, isolated fixes), or `/code-review ultra` if Richard wants the full multi-agent cloud review before calling item 11 fully closed.
