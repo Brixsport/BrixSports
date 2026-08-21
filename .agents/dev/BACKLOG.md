@@ -8351,3 +8351,18 @@ Live-reproduced exactly as described: navigated to a real match's URL that had j
 **Found:** session 51 background audit (`BACKLOG-221`); the basketball tile-label bug found this session while fixing it. **Fixed:** session 53, item 4, 2026-08-21.
 
 ---
+### Item 5 — Competition Logos + Cloudinary Upload
+
+**Status:** RESOLVED — 2026-08-21 (session 53, item 5 of the resequenced defer list).
+
+**What was missing:** `competitions` had no `logo` column at all — no schema field, no admin upload UI, no public rendering. Team logos already had this (schema column + `TeamLogo` component), competitions never got the same treatment.
+
+**Fix:** Added `logo: text('logo')` to the `competitions` schema. Reused the existing `CldUploadWidget`-based upload chain as-is (`ImageUpload` → `MobileImageUpload`) in the admin create/edit modal (`src/app/admin/competitions/page.tsx`) rather than building a parallel upload component. Wired `logo` through both `POST /api/competitions` and `PATCH /api/competitions/[id]`. Rendered publicly via the already-generic `TeamLogo` component in the competitions page header (`src/app/competitions/page.tsx`) — confirmed reusable as-is, no competition-specific variant needed.
+
+**Migration note:** `drizzle-kit push` refused to run clean — it also wanted to drop 2 unrelated legacy tables (`football_player_stats_snapshot_pre_md1_20260709`, `team_ratings`) as drift cleanup. Used a direct idempotent `ALTER TABLE competitions ADD COLUMN logo TEXT` instead (staging first, then prod after live verification) — see `RUNLOG.md` for the full entry.
+
+**Evidence:** `tsc --noEmit` — 47 errors, unchanged, zero new in any touched file. Live-verified against deployed staging: real `POST /api/competitions` with a `logo` URL → `201` with logo persisted, `GET`/`PATCH`/public-list round-trip all confirmed, throwaway competition deleted after. Migration mirrored to prod immediately after staging passed.
+
+**Found:** session 53 defer-list sequencing. **Fixed:** session 53, item 5, 2026-08-21.
+
+---
