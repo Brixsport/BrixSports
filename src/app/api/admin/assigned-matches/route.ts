@@ -29,7 +29,8 @@ export async function GET(request: NextRequest) {
                         eq(matches.status, 'LIVE')
                     )
                 )
-                .orderBy(matches.startTime);
+                .orderBy(matches.startTime)
+                .limit(50);
         } else {
             // Loggers can only see their assigned matches
             matchesQuery = db
@@ -44,7 +45,8 @@ export async function GET(request: NextRequest) {
                         )
                     )
                 )
-                .orderBy(matches.startTime);
+                .orderBy(matches.startTime)
+                .limit(50);
         }
 
         const matchesList = await matchesQuery;

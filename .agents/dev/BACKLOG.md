@@ -8210,3 +8210,18 @@ Everything below is explicitly **not** being built now — captured from `NOTIFI
 **Found:** session 53 continuation, 2026-08-20, item 4 of the session's planned work sequence (surfaced earlier in the session, not yet filed as its own entry). **Fixed:** same session.
 
 ---
+
+### BUG-234 — Item 16: Security Agent's Two MEDIUM Findings From the Item-11 Gate Check
+
+**Status:** RESOLVED — 2026-08-21 (session 53, item 16 of the resequenced defer list)
+**Priority:** Medium — real, non-blocking findings from the pre-launch security agent (item 11), fixed as their own scheduled item rather than left open.
+
+**Finding 1 — unbounded query:** `src/app/api/admin/assigned-matches/route.ts`'s `GET` (both the admin branch, lines 23-32, and the logger branch, lines 35-47 in the pre-fix version) had no `.limit()` on either query builder. **Fix:** added `.limit(50)` to both.
+
+**Finding 2 — missing try/catch/finally:** five `admin/teams/*` routes had zero try/catch around their DB calls (only the inner JSON-parse guard was ever wrapped) — `roster/route.ts` (POST + GET), `squad/route.ts` (GET + POST), `competitions/route.ts` (GET), `roster/[affiliationId]/route.ts` (PATCH), `squad/[squadPlayerId]/route.ts` (PATCH + DELETE). Not an information-leak risk in practice (Next.js returns a generic 500 on an unhandled throw in production), but it violated CLAUDE.md's "all DB operations must be wrapped in try/catch/finally" rule and meant these routes had zero server-side logging on DB failure. **Fix:** wrapped every handler body in try/catch (console.error + generic client-facing message) plus an empty `finally` for consistency with the rest of the codebase, per every one of these 8 handlers.
+
+**Evidence:** `tsc --noEmit` — 47 errors, unchanged from baseline, zero new in any of the 6 touched files.
+
+**Found:** security agent, session 53, item 11 gate check. **Fixed:** session 53, item 16, 2026-08-21.
+
+---
