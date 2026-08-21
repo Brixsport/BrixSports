@@ -66,7 +66,7 @@ main        ← production (prod Turso DB, prod Vercel)
 dev         ← staging (staging Turso DB, staging Vercel)
 feature/*   ← new work → PR to dev
 fix/*       ← bug fixes → PR to dev
-hotfix/*    ← urgent prod fix → PR to main (auto-syncs back to dev)
+hotfix/*    ← urgent prod fix → PR to main (then merge main back into dev — no auto-sync action exists yet, do it manually, see below)
 ```
 
 Rules:
@@ -74,6 +74,20 @@ Rules:
 - All data scripts go in `dev/` (gitignored except `pre-prod-check.ts`)
 - Schema migrations run against staging first, then prod
 - No `.env.*` files committed — ever
+
+---
+
+## dev ↔ main Sync — Always a Real Merge, Never `--squash`
+
+**Rule: any sync between `dev` and `main`, in either direction, must be a real `git merge` (or fast-forward) — never `git merge --squash`.**
+
+**Why:** `git merge --squash` never records the source branch as a parent of the resulting commit — it produces a same-content commit with no linkage. This means git's merge-base calculation between `dev` and `main` afterward still points at whatever commit they last *really* shared, so every future sync in *either* direction re-flags already-identical content as a fresh conflict, forever. This bit us directly: after session 53's `dev`→`main` squash-merge (391 commits, justified one-time exception to land it as one clean commit alongside a history rewrite), the very next `main`→`dev` sync (a same-day sitemap hotfix) hit conflicts on 5 files that had zero real content differences — `next.config.ts`'s conflict was two branches independently adding the *identical* block, and 3 of the 5 were pure duplication noise from the broken merge-base, not real divergence.
+
+**The fix:** the `main`→`dev` merge that day used a real `git merge main` (not squash) into `dev`, which already repairs the link on `dev`'s side — confirmed via `git merge-base --is-ancestor main dev`. Going forward, **the next `dev`→`main` sync must also be a real merge**, not another squash, to repair the other direction and permanently stop this recurring.
+
+**The tradeoff, accepted deliberately:** `main`'s history becomes as verbose as `dev`'s (every individual commit, not one clean squash) — this is not a new cost, it's just applying this file's own Hotfix Flow rule ("merge commit, NOT squash — preserve audit trail") consistently to routine syncs too, not only hotfixes.
+
+**No auto-sync action exists.** The Git Workflow diagram above used to claim hotfixes "auto-sync back to dev" — false; there is no GitHub Action for this (checked `.github/workflows/`, nothing matches). After any hotfix PR merges to `main`, manually `git checkout dev && git merge main` (real merge) and push. Building the actual auto-sync action is still open, not yet done.
 
 ---
 
@@ -177,6 +191,31 @@ Scripts that are gitignored (one-time or contain env-specific data):
 - All `dev/fix-*.ts` — one-time data fixes, logged in RUNLOG
 - All `dev/query-*.ts` — ad-hoc diagnostic queries
 - All `dev/script/` and `dev/test/` subdirectories
+
+---
+
+## Beta-Testing with the `beta-tester` Tool (Live, Authenticated Flows)
+
+The global `beta-tester` skill (`~/.claude/skills/beta-tester`, standalone project at `C:\Users\Wise\Desktop\beta-tester-skill`) can drive a real, recorded browser session against staging. This section is BrixSports-specific glue for using it against *this* app — the tool itself stays generic, this workflow doesn't belong in that repo.
+
+**Target environment:** always `https://brixsports-staging.vercel.app`, never prod, unless explicitly verifying a live production issue.
+
+**Authenticated personas need a REAL `users.id`, not a fabricated one.** `getAuthUser()` (`src/lib/auth.ts`) re-verifies the JWT's subject against a live DB row on every request (`BACKLOG-168`'s fix — confirmed working correctly, not a bug: a synthetic `userId` in an otherwise-validly-signed token gets a clean 401, not a silent trust of the JWT's own role claim). A throwaway *email* is fine; the `userId` itself must resolve to a real row, or auth-gated actions (anything past a page load) will 401.
+
+To get one, read-only:
+```js
+// from brixsports-v2/, with dotenv loaded from .env.local
+const { createClient } = require('@libsql/client');
+const client = createClient({ url: process.env.TURSO_CONNECTION_URL, authToken: process.env.TURSO_AUTH_TOKEN });
+client.execute("SELECT id, email, role FROM users WHERE role = 'admin' LIMIT 3").then(r => console.log(r.rows));
+```
+Known real staging admin: `admin-001`  (as of 2026-08-21 — re-verify it still exists before reusing, don't assume it's permanent).
+
+**Minting the token:** sign `{ userId, email, role }` with the real `JWT_SECRET` from `.env.local`, matching `src/lib/auth.ts`'s `generateToken` shape. A hand-rolled HS256 signer (no `jsonwebtoken` dependency needed) works fine — verified byte-compatible with the real `jsonwebtoken` library's own `.verify()` this session.
+
+**If a run writes real (even if throwaway) data to a real row** (e.g. a livestream URL, a match field), check the field's value *before* running so you know what to revert to, and revert it after — the same discipline as every other dev/ script touching staging. Don't assume a "throwaway" value is harmless just because the identity minting it is fake; the row it writes to is real.
+
+**Known BrixSports-specific gotcha:** a page load can occasionally hit stale CDN-cached HTML shortly after a deploy, referencing a JS chunk hash that's since been deleted — the page hangs on its loading spinner indefinitely, with a 404+wrong-MIME-type error in the console for the missing chunk. Self-resolving (a fresh reload moments later gets the current, correct chunk) — don't mistake this for an app bug on the flow actually being tested; a quick `fetch()` on the same route to check whether the chunk reference has changed is enough to tell the two apart.
 
 ---
 
