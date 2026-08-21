@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, Suspense } from 'react';
+import { useState, useEffect, useRef, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Video, Plus, Edit, Trash2, Eye, EyeOff, Save, X, Radio, Info, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -62,12 +62,19 @@ function LivestreamsAdminPageContent() {
 
     // Deep-link from a match row's "Manage Livestream" button in /admin/matches --
     // auto-opens that match's edit form instead of making the admin find it again
-    // in this page's own list. Only fires once (guarded by editingMatch already
-    // being null) so it doesn't re-open after the admin closes the form.
+    // in this page's own list. Tracked via a ref (not editingMatch === null) because
+    // handleSave() itself calls fetchMatches() -- which changes the `matches` reference
+    // this effect depends on -- before the save flow clears editingMatch; relying on
+    // editingMatch alone reopened the form right after every save (and after any other
+    // fetchMatches() call, e.g. toggleLivestream, while the URL still carries ?matchId=).
+    const autoOpenedMatchIdRef = useRef<string | null>(null);
     useEffect(() => {
-        if (!deepLinkMatchId || editingMatch !== null || matches.length === 0) return;
+        if (!deepLinkMatchId || autoOpenedMatchIdRef.current === deepLinkMatchId || matches.length === 0) return;
         const match = matches.find(m => m.id === deepLinkMatchId);
-        if (match) handleEdit(match);
+        if (match) {
+            autoOpenedMatchIdRef.current = deepLinkMatchId;
+            handleEdit(match);
+        }
     }, [deepLinkMatchId, matches]);
 
     const fetchMatches = async () => {

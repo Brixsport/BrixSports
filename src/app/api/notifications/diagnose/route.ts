@@ -146,12 +146,13 @@ export async function GET(request: NextRequest) {
                 success: true,
                 payloadSize: payload.length,
             });
-        } catch (error: any) {
+        } catch (error) {
+            console.error('[Diagnose] Payload validation error:', error);
             results.steps.push({
                 step: 5,
                 name: 'Payload Validation',
                 success: false,
-                error: error.message,
+                error: 'Failed to validate payload',
             });
         }
 

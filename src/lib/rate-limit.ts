@@ -24,6 +24,10 @@ const buckets = new Map<string, { count: number; resetAt: number }>();
 const DEFAULT_MAX = 120;
 const DEFAULT_WINDOW_MS = 60 * 1000; // 1 minute
 
+// Vercel's edge network always overwrites client-supplied x-forwarded-for before this
+// runs, so this is not client-spoofable on this deployment target. If ever deployed
+// behind a different proxy/CDN or directly on bare Node, this assumption breaks and
+// the limiter becomes trivially bypassable per-request (attacker sets their own XFF).
 export function getClientIp(request: NextRequest | Request): string {
     return request.headers.get('x-forwarded-for')?.split(',')[0].trim() ?? 'unknown';
 }

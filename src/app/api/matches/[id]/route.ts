@@ -21,10 +21,15 @@ export async function GET(
     { params }: { params: Promise<{ id: string }> }
 ) {
     try {
-        // Generous ceiling (see rate-limit.ts) -- this route backs the live
-        // match page, so it must never throttle a real viewer's normal
-        // WS-driven session, only obvious scraping/abuse.
-        const rl = checkRateLimit(request);
+        // Raised well above the default 120/min (see rate-limit.ts) -- this route backs
+        // the live match page's WS-fallback poll (every 10s while the socket is down,
+        // src/app/matches/[id]/page.tsx). Per-IP bucketing means every viewer on a shared
+        // NAT (campus WiFi -- this is a college sports app) counts against the same
+        // bucket: at the default ceiling, ~20 concurrent same-IP viewers polling during a
+        // real WS outage would already be at the limit. 600/min covers roughly 100
+        // concurrent same-IP fallback-polling viewers while still catching anything
+        // polling faster than the fallback's own 10s interval, which no real viewer does.
+        const rl = checkRateLimit(request, { max: 600 });
         if (rl.limited) {
             return NextResponse.json(
                 { error: 'Too many requests. Please try again shortly.' },

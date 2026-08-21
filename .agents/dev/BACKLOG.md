@@ -8106,6 +8106,56 @@ Everything below is explicitly **not** being built now — captured from `NOTIFI
 
 **Found & fixed:** session 53, item 11, 2026-08-20.
 
+---
+
+### BUG-231 — Livestream Admin Deep-Link Reopened the Edit Form Right After Every Save
+
+**Status:** RESOLVED — 2026-08-20 (session 53, item 11)
+**Priority:** Medium — real, reproducible UX regression in this session's own new code (the `BUG-229`/item-9 "Manage Livestream" deep-link), not a pre-existing issue.
+
+**Problem:** Found by a combined `feature`/`code-review` gate-check agent while auditing this session's own changes. `src/app/admin/livestreams/page.tsx`'s deep-link effect auto-opened a match's edit form based on `editingMatch === null` in its dependency array `[deepLinkMatchId, matches]`. `handleSave()` calls `fetchMatches()` (a new `matches` array reference) *before* `setEditingMatch(null)` — so the effect re-evaluates on the `matches` reference change while `editingMatch` was still (or had just become) `null`, and reopened the just-saved form immediately. The URL's `?matchId=` param is never cleared, so this could refire on any subsequent `fetchMatches()` call (including `toggleLivestream`) while the deep link was still present and the form currently closed.
+
+**Fix:** replaced the `editingMatch === null` guard with a `useRef<string | null>` tracking which `matchId` has already been auto-opened, independent of the form's current open/closed state — the effect now opens a given deep-linked match at most once per page load, full stop, regardless of render/batching order or how many times `matches` gets refetched afterward.
+
+**Found & fixed:** session 53, item 11, 2026-08-20.
+
+---
+
+### BUG-232 — `notifications/diagnose` GET Handler Had One Raw-Error Leak `BUG-228`'s Sweep Missed
+
+**Status:** RESOLVED — 2026-08-20 (session 53, item 11)
+**Priority:** Low — the try block only `JSON.parse`s a hardcoded string literal (effectively unreachable in practice), and the route is admin-gated — but it directly contradicted `BUG-228`'s own claim of having sanitized every raw-error response in this file, and CLAUDE.md's "never return raw database errors to the client" rule doesn't carve out an admin exception (the same reasoning `BUG-228` used to justify fixing this file's `POST` auth gap).
+
+**Problem:** Found by the same combined `feature`/`code-review` gate-check agent. `GET`'s Step 5 ("Payload Validation") catch block still did `catch (error: any) { ... error: error.message }`.
+
+**Fix:** `catch (error) { console.error(...); error: 'Failed to validate payload' }`, matching every other catch block `BUG-228` already fixed in this same file.
+
+**Found & fixed:** session 53, item 11, 2026-08-20.
+
+---
+
+### BUG-233 — Flow C Fragility: Rate Limit on `GET /api/matches/[id]` Could Throttle the Live Match Page's Own WS-Fallback Poll
+
+**Status:** RESOLVED — 2026-08-20 (session 53, item 11)
+**Priority:** Medium — not a live incident, but a real pre-launch fragility flagged by a `flow-checker` gate-check agent auditing item 10's rate-limit rollout against the Three Critical Flows.
+
+**Problem:** `src/app/api/matches/[id]/route.ts` GET is the route `src/app/matches/[id]/page.tsx`'s WS-fallback polls every 10s while the socket is down (`BUG-080`). It got the same default 120/min ceiling as every other rate-limited public GET. Per-IP bucketing means every viewer sharing one IP counts against the same bucket — on a campus WiFi NAT (this is a college sports app) with ~20+ concurrent viewers polling during a real WS outage, the shared bucket would already be at the ceiling, right in the exact scenario the fallback exists to protect. A 429 there degrades to the existing stale-data UI (no crash), but it's a new fragility this session's rate-limiting introduced into a Critical Flow.
+
+**Fix:** raised this route's limit specifically to `{ max: 600 }` (comment explains the math: ~100 concurrent same-IP fallback-polling viewers, well above any realistic campus-WiFi crowd, while still catching anything polling faster than the fallback's own 10s interval).
+
+**Found & fixed:** session 53, item 11, 2026-08-20.
+
+---
+
+### Item 11 — Two LOW Findings Fixed Alongside the Above
+
+**Status:** RESOLVED — 2026-08-20 (session 53, item 11)
+
+- `src/lib/rate-limit.ts`'s `getClientIp()` trusted `x-forwarded-for` with no comment stating the trust boundary. Added a comment noting this is safe only because Vercel's edge always overwrites client-supplied XFF — if this app is ever deployed behind a different proxy/CDN or bare Node, that assumption breaks and the limiter becomes trivially bypassable per-request.
+- `src/components/BasketballLogger.tsx`'s `lineupFetchFailed` warning (`BUG-227`) only fired from the fetch's `catch` block — a non-`ok` HTTP response (e.g. a 500) that doesn't throw silently skipped the warning and fell through to the full-roster fallback with no indication anything was wrong. Added an `else` branch on `!lineupRes.ok` to set the same flag.
+
+**Found & fixed:** session 53, item 11, 2026-08-20 (both found by the same combined `feature`/`code-review` gate-check agent).
+
 **Found:** session 53 continuation, 2026-08-20, during item 9's livestream audit. **Fixed:** same session.
 
 ---

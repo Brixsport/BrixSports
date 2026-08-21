@@ -476,6 +476,12 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                             setLineupSet(true);
                             hydratedFromServer = true;
                         }
+                    } else {
+                        // A non-ok response (e.g. a 500) doesn't throw here -- without this,
+                        // only a network-level failure (the catch below) set the warning,
+                        // and a server error silently fell through to the full-roster fallback.
+                        console.error('Failed to fetch persisted lineup: HTTP', lineupRes.status);
+                        lineupFetchFailed = true;
                     }
                 } catch (e) {
                     console.error('Failed to fetch persisted lineup:', e);
