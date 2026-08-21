@@ -30,7 +30,7 @@ export async function GET(
         // Query parameters
         const status = searchParams.get('status'); // UPCOMING, LIVE, FINISHED
         const teamId = searchParams.get('teamId'); // Filter by team
-        const limit = parseInt(searchParams.get('limit') || '100');
+        const limit = Math.min(Math.max(1, parseInt(searchParams.get('limit') || '100', 10) || 100), 100);
         const offset = parseInt(searchParams.get('offset') || '0');
         const sortBy = searchParams.get('sortBy') || 'date'; // 'date' | 'date_desc'
 

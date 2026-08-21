@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
         const teamId = searchParams.get('teamId');
         const playerId = searchParams.get('playerId');
         const season = searchParams.get('season');
-        const limit = parseInt(searchParams.get('limit') || '20');
+        const limit = Math.min(Math.max(1, parseInt(searchParams.get('limit') || '20', 10) || 20), 100);
         const offset = parseInt(searchParams.get('offset') || '0');
 
         // Build query conditions

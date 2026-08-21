@@ -6886,9 +6886,9 @@ No `clearTimeout` exists anywhere in the file. The effect that sets `stateManage
 
 ---
 
-### BACKLOG-169 — User-Supplied `limit` Query Param Unclamped in 14+ List Routes (Shallow ".limit() Present" Without an Upper Bound)
+### ~~BACKLOG-169~~ — User-Supplied `limit` Query Param Unclamped in 14+ List Routes (Shallow ".limit() Present" Without an Upper Bound)
 
-**Status:** OPEN — found session 47E, not fixed
+**Status:** RESOLVED — 2026-08-21 (session 53, item 13 of the resequenced defer list). All 14 listed routes now use `Math.min(Math.max(1, parseInt(searchParams.get('limit') || '<default>', 10) || <default>), 100)`, each file keeping its own original default value. `tsc --noEmit`: 47 errors, zero new across all 14 files.
 **Priority:** HIGH — CLAUDE.md mandates `.limit()` on every list endpoint; these technically have one but it's caller-controlled with no ceiling, `?limit=999999999` bypasses the intent entirely
 
 **Problem:** `parseInt(searchParams.get('limit') || 'N')` passed straight into `.limit()` with no `Math.min()` ceiling in: `src/app/api/news/route.ts`, `news/[id]/comments/route.ts`, `news/[id]/related/route.ts`, `transfers/route.ts`, `fixtures/route.ts`, `competitions/[id]/fixtures/route.ts`, `competitions/[id]/stats/route.ts`, `notifications/route.ts`, `users/activity/route.ts`, `predictions/leaderboard/route.ts`, `ratings/analytics/route.ts`, `teams/[id]/form/route.ts`, `search/route.ts`, `fpl/players/route.ts`, `fpl/transfers/route.ts`. `src/app/api/players/search/route.ts` already has the correct pattern in this same codebase: `Math.min(Math.max(1, parsed), 50)`.
@@ -6970,9 +6970,9 @@ const allEvents = matchIds.length ? await db.select().from(matchEvents).where(in
 
 ---
 
-### BACKLOG-175 — `GET /api/universities` Has No `.limit()` Clause At All
+### ~~BACKLOG-175~~ — `GET /api/universities` Has No `.limit()` Clause At All
 
-**Status:** OPEN — found session 47E, not fixed
+**Status:** RESOLVED — 2026-08-21 (session 53, alongside item 13). Added `.limit(1000)` — generous since this is inherently a small, slow-changing table, but a real ceiling per CLAUDE.md's rule regardless.
 **Priority:** LOW — low exploitability (teams table is naturally small), but a literal violation of CLAUDE.md's own unbounded-query rule
 
 **Problem:** `src/app/api/universities/route.ts` — `db.select({ university: teams.university }).from(teams)` with no `.limit()` at all, unlike `BACKLOG-169`'s "present but unclamped" pattern — this one is fully absent.
@@ -8295,5 +8295,23 @@ Live-reproduced exactly as described: navigated to a real match's URL that had j
 **Evidence:** `tsc --noEmit` — 47 errors, unchanged from baseline, zero new in either touched file (one stale `.next/types` artifact appeared transiently from a leftover generated-types file, unrelated to source, cleaned).
 
 **Found:** cross-session `feature`+`code-reviewer` sweep agent, session 53 (same pass as `BUG-235`). **Fixed:** session 53, 2026-08-21.
+
+---
+
+### Items 14-15 — `POST /api/competitions/register` Rate Limit + Redis/Upstash Limiter Plan
+
+**Status:** Item 14 RESOLVED, item 15 planned-not-built — 2026-08-21 (session 53, resequenced defer list).
+
+**Item 14:** `src/app/api/competitions/register/route.ts`'s `POST` had a comment reading literally "Rate limiting needed (BACKLOG)" — a public, unauthenticated, self-registration write endpoint with real registration-spam risk, out of scope for item 10 (which targeted public GETs only). **Fix:** `checkRateLimit(request, { max: 10, windowMs: 60_000 })` — tighter than the GET default, since this is a write with no account requirement. Same known in-memory-per-instance limitation as every other route this session touched — not re-documented per-route, see `rate-limit.ts`'s own doc comment.
+
+**Item 15 — real Redis/Upstash-backed limiter:** genuine infrastructure work requiring an actual Upstash account and its credentials, neither of which exist in this codebase today (confirmed via grep — zero references to `upstash`/`redis` anywhere in `.env.local`, `.env.example`, or `package.json`). Not attempted — building a fake/non-functional stand-in would be worse than leaving the honest gap documented. **Concrete plan, ready to execute once Richard provisions an Upstash account:**
+1. `npm install @upstash/ratelimit @upstash/redis` (exact-pinned versions, verified on npmjs.com first per standing rule).
+2. Add `UPSTASH_REDIS_REST_URL`/`UPSTASH_REDIS_REST_TOKEN` to `env.ts` + `.env.example` (never read `process.env` directly in `src/`, per this project's own rule).
+3. Replace `rate-limit.ts`'s in-memory `Map` with `@upstash/ratelimit`'s `Ratelimit.slidingWindow(...)` backed by the Redis client — same `checkRateLimit(request, opts)` call signature at every existing call site, so no changes needed to any of the 8 routes already wired to it.
+4. This is the one change that actually closes the warm-instance-pool weakness documented in item 10/`rate-limit.ts` — a shared external store means every Vercel instance sees the same counter, unlike the current per-instance `Map`.
+
+**Evidence:** `tsc --noEmit` — 47 errors, zero new.
+
+**Found:** defer list, items 14-15. **Item 14 fixed:** session 53, 2026-08-21. **Item 15:** planned, not built, pending real Upstash credentials.
 
 ---

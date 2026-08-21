@@ -22,7 +22,7 @@ export async function GET(request: NextRequest) {
 
         const effectiveId = await resolveEffectiveUserId(user);
         const { searchParams } = new URL(request.url);
-        const limit = parseInt(searchParams.get('limit') || '20');
+        const limit = Math.min(Math.max(1, parseInt(searchParams.get('limit') || '20', 10) || 20), 100);
 
         // Fetch user favorites to personalize notifications
         const favorites = await db

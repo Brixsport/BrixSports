@@ -2,10 +2,21 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
 import { teamRegistrations, registeredPlayers } from '@/db/schema';
 import { nanoid } from 'nanoid';
+import { checkRateLimit } from '@/lib/rate-limit';
 
-// PUBLIC: intentional — teams self-register for competitions without an account. Rate limiting needed (BACKLOG).
+// PUBLIC: intentional — teams self-register for competitions without an account.
 export async function POST(request: NextRequest) {
     try {
+        // Tighter than the public-GET default (item 10) -- a write endpoint with no
+        // account requirement, real registration-spam risk, not just a scrape target.
+        const rl = checkRateLimit(request, { max: 10, windowMs: 60 * 1000 });
+        if (rl.limited) {
+            return NextResponse.json(
+                { error: 'Too many requests. Please try again shortly.' },
+                { status: 429, headers: { 'Retry-After': String(rl.retryAfterSeconds) } }
+            );
+        }
+
         const body = await request.json();
         const { competitionId, teamInfo, players } = body;
 

@@ -11,7 +11,8 @@ export async function GET() {
         // Get all teams and extract unique university names
         const allTeams = await db
             .select({ university: teams.university })
-            .from(teams);
+            .from(teams)
+            .limit(1000);
 
         // Extract unique university names and filter out null/empty values
         const uniqueUniversities = new Set<string>();

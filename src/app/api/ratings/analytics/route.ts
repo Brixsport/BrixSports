@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
         const playerId = searchParams.get('playerId');
         const teamId = searchParams.get('teamId');
         const position = searchParams.get('position');
-        const limit = parseInt(searchParams.get('limit') || '10');
+        const limit = Math.min(Math.max(1, parseInt(searchParams.get('limit') || '10', 10) || 10), 100);
 
         switch (type) {
             case 'player-average':

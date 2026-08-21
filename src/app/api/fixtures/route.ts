@@ -21,7 +21,7 @@ export async function GET(request: NextRequest) {
         const dateFrom = searchParams.get('dateFrom'); // YYYY-MM-DD
         const dateTo = searchParams.get('dateTo'); // YYYY-MM-DD
         const status = searchParams.get('status'); // UPCOMING, LIVE, FINISHED
-        const limit = parseInt(searchParams.get('limit') || '50');
+        const limit = Math.min(Math.max(1, parseInt(searchParams.get('limit') || '50', 10) || 50), 100);
         const offset = parseInt(searchParams.get('offset') || '0');
         const view = searchParams.get('view') || 'upcoming'; // 'upcoming', 'today', 'week', 'month', 'all'
 

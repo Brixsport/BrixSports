@@ -21,7 +21,7 @@ export async function GET(
         const teamId = params.id;
         const { searchParams } = new URL(request.url);
         const competition = searchParams.get('competition');
-        const limit = parseInt(searchParams.get('limit') || '5');
+        const limit = Math.min(Math.max(1, parseInt(searchParams.get('limit') || '5', 10) || 5), 100);
 
         // Build query
         let query = db

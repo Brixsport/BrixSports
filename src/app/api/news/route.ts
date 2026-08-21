@@ -22,7 +22,7 @@ export async function GET(request: NextRequest) {
         const search = searchParams.get('search');
         const featured = searchParams.get('featured');
         const breaking = searchParams.get('breaking');
-        const limit = parseInt(searchParams.get('limit') || '20');
+        const limit = Math.min(Math.max(1, parseInt(searchParams.get('limit') || '20', 10) || 20), 100);
         const offset = parseInt(searchParams.get('offset') || '0');
         const status = searchParams.get('status') || 'published'; // Only show published by default
 
