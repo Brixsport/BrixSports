@@ -19,6 +19,30 @@ import { useWebSocket } from '@/hooks/useWebSocket';
 import { MultiLoggerStatus } from '@/components/MultiLoggerStatus';
 import { getMatchStateManager, destroyMatchStateManager, MatchStateManager, MatchState, FootballEventType, MatchPeriod } from '@/lib/match-state-manager';
 import type { SyncEvent } from '@/lib/multiLogger';
+
+// BACKLOG-151: shared by both the 10s poll sync and the new real-time WS push
+// (see useMultiLogger's onIncomingEvent) -- one reconstruction path for
+// "SyncEvent from another logger" -> "local MatchEvent", not two copies that
+// could drift. manager.mergeExternalEvents() already dedupes by id.
+function reconstructMatchEventFromSync(s: SyncEvent, matchId: string, manager: MatchStateManager): any {
+    return {
+        id: s.id,
+        matchId,
+        type: s.type as any,
+        absoluteMinute: s.minute,
+        displayMinute: s.minute, // Approximation
+        second: s.second,
+        period: s.minute <= 45 ? 'FIRST_HALF' : 'SECOND_HALF', // Rough heuristic
+        playerId: s.playerId || null,
+        playerSnapshot: s.playerId ? manager.createPlayerSnapshot(s.playerId) : null,
+        relatedPlayerId: s.relatedPlayerId || null,
+        relatedPlayerSnapshot: s.relatedPlayerId ? manager.createPlayerSnapshot(s.relatedPlayerId) : null,
+        teamId: s.teamId,
+        detail: s.detail,
+        createdAt: s.timestamp instanceof Date ? s.timestamp : new Date(s.timestamp),
+        loggerId: s.loggerId,
+    };
+}
 import { getPrimaryTeam } from '@/lib/player-affiliation-utils';
 import { TeamLogo } from '@/lib/utils/team-logo';
 
@@ -640,6 +664,12 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
         loggerId: currentLogger?.id || 'unknown',
         loggerName: currentLogger?.name || 'Unknown Logger',
         enabled: !!currentLogger,
+        // BACKLOG-151: real-time arrival instead of waiting for the next 10s poll.
+        onIncomingEvent: (event) => {
+            const manager = stateManager.current;
+            if (!manager || event.loggerId === currentLogger?.id) return;
+            manager.mergeExternalEvents([reconstructMatchEventFromSync(event, match.id, manager)]);
+        },
     });
 
     // Periodic Sync
@@ -671,30 +701,12 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
             try {
                 const merged = await syncEvents(syncableEvents);
 
-                // Convert back to MatchEvent
+                // Convert back to MatchEvent (dedup against already-held events is
+                // handled inside mergeExternalEvents itself, no need to duplicate it here)
                 const externalEvents: any[] = merged.map(s => {
-                    // Check if we already have it
                     const existing = currentEvents.find(ce => ce.id === s.id);
                     if (existing) return existing;
-
-                    // Reconstruct
-                    return {
-                        id: s.id,
-                        matchId: match.id,
-                        type: s.type as any,
-                        absoluteMinute: s.minute,
-                        displayMinute: s.minute, // Approximation
-                        second: s.second,
-                        period: s.minute <= 45 ? 'FIRST_HALF' : 'SECOND_HALF', // Rough heuristic
-                        playerId: s.playerId || null,
-                        playerSnapshot: s.playerId ? manager.createPlayerSnapshot(s.playerId) : null,
-                        relatedPlayerId: s.relatedPlayerId || null,
-                        relatedPlayerSnapshot: s.relatedPlayerId ? manager.createPlayerSnapshot(s.relatedPlayerId) : null,
-                        teamId: s.teamId,
-                        detail: s.detail,
-                        createdAt: s.timestamp instanceof Date ? s.timestamp : new Date(s.timestamp),
-                        loggerId: s.loggerId
-                    };
+                    return reconstructMatchEventFromSync(s, match.id, manager);
                 });
 
                 manager.mergeExternalEvents(externalEvents);
