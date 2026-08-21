@@ -8,6 +8,14 @@ import { eq } from 'drizzle-orm';
 // rows per entity today), not an attempt to paginate a truly large dataset.
 const MAX_PER_ENTITY = 2000;
 
+// This file now does live DB queries (previously pure static data) -- without
+// this, Next.js may try to execute it at BUILD time to statically generate
+// sitemap.xml, which needs a reachable DB in the build environment. Forcing
+// request-time rendering also means the sitemap always reflects live data
+// rather than a stale build-time snapshot, which is the correct behavior for
+// a sports platform where matches/teams/news change constantly.
+export const dynamic = 'force-dynamic';
+
 /**
  * Dynamic sitemap.xml generator for Brixsport
  * Includes all public pages and dynamic routes

@@ -17,6 +17,12 @@ import { Analytics } from "@vercel/analytics/react";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 
 export const metadata: Metadata = {
+  // Without this, Next.js resolves relative OG/Twitter image URLs (the root
+  // layout's own "/assets/Logos/BRIX-SPORT-LOGO.png" included) against
+  // "http://localhost:3000" instead of the real domain -- harmless in dev,
+  // but wrong for any shared link once deployed (BACKLOG-189, surfaced by a
+  // build warning while wiring the new per-page matches/teams/players/news metadata).
+  metadataBase: new URL("https://brixsports.com"),
   title: {
     default: "BRIXSPORTS | Nigerian University Sports Live",
     template: "%s | BRIXSPORTS"
