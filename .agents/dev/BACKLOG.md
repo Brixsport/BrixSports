@@ -8465,11 +8465,15 @@ Live-reproduced exactly as described: navigated to a real match's URL that had j
 
 **Why this hadn't surfaced yet:** checked the real staging DB directly — zero players currently have more than one season row, so the query has been working by accident so far. It would have broken the moment any player's second-season stats started accumulating, which is exactly the scenario about to become real.
 
-**Fix:** both queries now filter `eq(season, CURRENT_SEASON)` (the same constant `rosterService.ts` already uses for season-scoped roster logic) and sum across however many competition rows exist within that season, rather than trusting a single arbitrary row.
+**Fix, attempt 1 (WRONG, caught before being trusted):** filtered both queries strictly on `eq(season, CURRENT_SEASON)`. This was pushed (`2757a7b`) before checking real data against the assumption. Attempting to live-verify it immediately after deploy failed to find *any* current-season row to test with — which led to checking why, and the real distribution turned out to be: every `football_player_stats` row is still the literal schema default `season='2024'` (never correctly populated by whatever wrote them), and every `basketball_player_stats` row is `'2025/2026'`. `CURRENT_SEASON` (`'2026/2027'`) is forward-looking for roster-transfer purposes, not "the season with actual match stats" — so the strict filter would have silently returned **empty stats for every real player today**, a real regression, not a fix.
 
-**Evidence:** `tsc --noEmit` — 47 errors, unchanged, zero new. Live-verified against staging with a real player's real current-season row plus a fabricated fake prior-season row (`goals: 999`) inserted for the same player — `GET /api/players/[id]` returned the real current-season `goals` value, not `999` and not the sum of both, confirming the fix isolates by season rather than blending or picking arbitrarily. Fake row cleaned up after.
+**Fix, attempt 2 (correct, live-verified):** prefer rows matching `CURRENT_SEASON` when they exist; otherwise fall back to whichever season the most recently updated row (`updatedAt`) belongs to, rather than going empty or blending multiple seasons together. Still fixes the original bug (an arbitrary/non-deterministic row once 2+ season rows exist) without breaking today's real dataset.
 
-**Found & fixed:** session 53, 2026-08-21.
+**Evidence:** `tsc --noEmit` — 47 errors, unchanged, zero new, on both attempts. Live-verified against staging in two cases: (A) a real player's real existing row (`season='2024'`, no `CURRENT_SEASON` data anywhere) — API correctly returned the real fallback stats, not empty; (B) a fabricated real `CURRENT_SEASON` row inserted for that same player (`goals: 42`) — API correctly switched to it, not blended with the old row and not stuck on the old one. Fake row cleaned up after.
+
+**Process note, said directly rather than glossed over:** this is the second time this session a fix needed a live-data check to catch what code review/type-checking alone missed (`tsc` was clean on *both* the wrong and the correct version — it can't catch "the assumption behind this filter is false"). Reinforces the standing rule: verify against real data before calling a fix done, not just against a clean type-check.
+
+**Found & fixed:** session 53, 2026-08-21 (`2757a7b` wrong, `f9f302b` corrected).
 
 ---
 ### Standings/Comp-Stats/Matches Share the Same Season-Blindness Risk, Worse in Places — Folded Into "The Rest"
