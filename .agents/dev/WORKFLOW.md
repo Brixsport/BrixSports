@@ -196,7 +196,7 @@ Scripts that are gitignored (one-time or contain env-specific data):
 
 ## Beta-Testing with the `beta-tester` Tool (Live, Authenticated Flows)
 
-The global `beta-tester` skill (`~/.claude/skills/beta-tester`, standalone project at `C:\Users\Wise\Desktop\beta-tester-skill`) can drive a real, recorded browser session against staging. This section is BrixSports-specific glue for using it against *this* app — the tool itself stays generic, this workflow doesn't belong in that repo.
+The global `beta-tester` skill (`~/.claude/skills/beta-tester`, standalone project at `C:\Users\Wise\Desktop\beta-tester-skill`) can drive a real, recorded browser session against staging. 
 
 **Target environment:** always `https://brixsports-staging.vercel.app`, never prod, unless explicitly verifying a live production issue.
 
