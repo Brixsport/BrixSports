@@ -191,6 +191,7 @@ io.use((socket, next) => {
     try {
         const payload = jwt.verify(token, secret);
         socket.data.isLogger = payload.role === 'logger' || payload.role === 'admin';
+        socket.data.isAdmin = payload.role === 'admin';
         socket.data.loggerId = payload.id;
     } catch (err) {
         console.warn(`[WS Auth] Rejected token at handshake (${socket.id}, env=${env}): ${err.message}`);
@@ -266,6 +267,21 @@ io.on('connection', (socket) => {
     const requireLogger = (handler) => (data) => {
         if (!socket.data.isLogger) {
             socket.emit('error', { message: 'Unauthorized: logger authentication required', type: 'auth:required' });
+            return;
+        }
+        return handler(data);
+    };
+
+    // BUG-235: admin:subscribe/admin:livestream:subscribe/admin:infrastructure:subscribe
+    // had NO role check at all -- any anonymous viewer socket (viewers connect with no
+    // token, by design) could join these rooms and receive logger:updated broadcasts
+    // (which include loggerId, a field CLAUDE.md explicitly bans from any public
+    // response) and real server uptime/connection-count telemetry. requireLogger()
+    // above isn't strict enough here since these are admin-only channels, not
+    // logger-only ones.
+    const requireAdmin = (handler) => (data) => {
+        if (!socket.data.isAdmin) {
+            socket.emit('error', { message: 'Unauthorized: admin authentication required', type: 'auth:required' });
             return;
         }
         return handler(data);
@@ -429,13 +445,13 @@ io.on('connection', (socket) => {
     });
 
     // ── Admin Channels ──────────────────────────────────────────
-    socket.on('admin:subscribe', () => {
+    socket.on('admin:subscribe', requireAdmin(() => {
         socket.join(room('admin:loggers'));
-    });
+    }));
 
-    socket.on('admin:livestream:subscribe', () => {
+    socket.on('admin:livestream:subscribe', requireAdmin(() => {
         socket.join(room('admin:livestreams'));
-    });
+    }));
 
     // ── Infrastructure Monitoring ───────────────────────────────
     // Deliberately NOT env-scoped (BUG-074's room() helper is not applied here):
@@ -443,10 +459,10 @@ io.on('connection', (socket) => {
     // (uptime, memory, io.engine.clientsCount), which is already shared across
     // staging and prod by construction — scoping the room wouldn't scope the
     // underlying data, since clientsCount counts every connected socket regardless.
-    socket.on('admin:infrastructure:subscribe', () => {
+    socket.on('admin:infrastructure:subscribe', requireAdmin(() => {
         socket.join('admin:infrastructure');
         console.log(`[WS] ${socket.id} subscribed to infrastructure updates`);
-        
+
         // Send current system status immediately
         socket.emit('infrastructure:update', {
             status: 'operational',
@@ -454,7 +470,7 @@ io.on('connection', (socket) => {
             uptime: process.uptime(),
             connections: io.engine?.clientsCount || 0,
         });
-    });
+    }));
 
     socket.on('admin:infrastructure:unsubscribe', () => {
         socket.leave('admin:infrastructure');

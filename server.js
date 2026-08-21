@@ -2,6 +2,7 @@ const { createServer } = require('http');
 const { parse } = require('url');
 const next = require('next');
 const { Server } = require('socket.io');
+const jwt = require('jsonwebtoken');
 
 const dev = process.env.NODE_ENV !== 'production';
 const hostname = 'localhost';
@@ -63,9 +64,37 @@ app.prepare().then(() => {
     // In-memory cache for match times
     const matchTimes = new Map();
 
+    // BUG-235: this local/self-hosted dev server had zero JWT auth of any kind --
+    // ws-server/index.js (the real deployed Railway server) got the identical
+    // admin-channel gap fixed the same session; mirroring the minimal parity fix
+    // here (single JWT_SECRET, not the staging/prod split, since this file never
+    // serves both environments from one process the way Railway's does).
+    io.use((socket, next) => {
+        const token = socket.handshake.auth?.token;
+        if (!token || !process.env.JWT_SECRET) {
+            socket.data.isAdmin = false;
+            return next();
+        }
+        try {
+            const payload = jwt.verify(token, process.env.JWT_SECRET);
+            socket.data.isAdmin = payload.role === 'admin';
+        } catch (err) {
+            socket.data.isAdmin = false;
+        }
+        next();
+    });
+
     // Socket.IO event handlers
     io.on('connection', (socket) => {
         console.log(`[Socket.IO] Client connected: ${socket.id}`);
+
+        const requireAdmin = (handler) => (data) => {
+            if (!socket.data.isAdmin) {
+                socket.emit('error', { message: 'Unauthorized: admin authentication required', type: 'auth:required' });
+                return;
+            }
+            return handler(data);
+        };
 
         // BUG-074: staging and prod share this single Railway instance — a staging test
         // match with a colliding ID would otherwise broadcast straight to prod viewers.
@@ -327,16 +356,16 @@ app.prepare().then(() => {
         });
 
         // Admin: Subscribe to Logger Updates
-        socket.on('admin:subscribe', () => {
+        socket.on('admin:subscribe', requireAdmin(() => {
             socket.join(room('admin:loggers'));
             console.log(`[Socket.IO] Client ${socket.id} subscribed to ${room('admin:loggers')}`);
-        });
+        }));
 
         // Admin: Subscribe to Livestream Updates
-        socket.on('admin:livestream:subscribe', () => {
+        socket.on('admin:livestream:subscribe', requireAdmin(() => {
             socket.join(room('admin:livestreams'));
             console.log(`[Socket.IO] Client ${socket.id} subscribed to ${room('admin:livestreams')}`);
-        });
+        }));
 
         // Logger: Status Update (broadcast to admin)
         socket.on('logger:status:update', (data) => {

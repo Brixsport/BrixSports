@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse, after } from 'next/server';
+import * as Sentry from '@sentry/nextjs';
 import { db } from '@/db';
 import { matchEvents, matches, matchLoggerAssignments, players, teams } from '@/db/schema';
 import { eq, asc, and, sql, gt, isNull } from 'drizzle-orm';
@@ -510,23 +511,8 @@ async function updatePlayerStats(
                 .get();
             if (competition?.season) season = competition.season;
         }
-        const basketballCompetitionMatch = competitionId
-            ? eq(basketballPlayerStats.competitionId, competitionId)
-            : isNull(basketballPlayerStats.competitionId);
 
         if (sport === 'Basketball') {
-            const stats = await db
-                .select()
-                .from(basketballPlayerStats)
-                .where(and(
-                    eq(basketballPlayerStats.playerId, playerId),
-                    eq(basketballPlayerStats.season, season),
-                    basketballCompetitionMatch
-                ))
-                .get();
-
-            const updates: any = {};
-
             // BUG (missed-shot-counted-as-made): these three cases used to increment
             // made-counts and totalPoints unconditionally on event type alone, with no
             // make/miss distinction — a "2PT Missed"/"3PT Missed"/"FT Missed" log entry
@@ -542,148 +528,177 @@ async function updatePlayerStats(
             // miss) increments its Attempted counter; only a make also increments the
             // Made counter and totalPoints -- made/miss discipline from the fix above
             // is unchanged, this is additive.
+            const deltas: Partial<Record<keyof typeof basketballPlayerStats.$inferInsert, number>> = {};
             switch (eventType) {
                 case 'Field Goal':
-                    updates.fieldGoalsAttempted = (stats?.fieldGoalsAttempted || 0) + 1;
+                    deltas.fieldGoalsAttempted = 1;
                     if (made) {
-                        updates.fieldGoalsMade = (stats?.fieldGoalsMade || 0) + 1;
-                        updates.totalPoints = (stats?.totalPoints || 0) + 2;
+                        deltas.fieldGoalsMade = 1;
+                        deltas.totalPoints = 2;
                     }
                     break;
                 case 'Three Pointer':
-                    updates.threePointersAttempted = (stats?.threePointersAttempted || 0) + 1;
+                    deltas.threePointersAttempted = 1;
                     if (made) {
-                        updates.threePointersMade = (stats?.threePointersMade || 0) + 1;
-                        updates.totalPoints = (stats?.totalPoints || 0) + 3;
+                        deltas.threePointersMade = 1;
+                        deltas.totalPoints = 3;
                     }
                     break;
                 case 'Free Throw':
-                    updates.freeThrowsAttempted = (stats?.freeThrowsAttempted || 0) + 1;
+                    deltas.freeThrowsAttempted = 1;
                     if (made) {
-                        updates.freeThrowsMade = (stats?.freeThrowsMade || 0) + 1;
-                        updates.totalPoints = (stats?.totalPoints || 0) + 1;
+                        deltas.freeThrowsMade = 1;
+                        deltas.totalPoints = 1;
                     }
                     break;
                 case 'Rebound':
-                    updates.totalRebounds = (stats?.totalRebounds || 0) + 1;
+                    deltas.totalRebounds = 1;
                     break;
                 case 'Assist':
-                    updates.assists = (stats?.assists || 0) + 1;
+                    deltas.assists = 1;
                     break;
                 case 'Steal':
-                    updates.steals = (stats?.steals || 0) + 1;
+                    deltas.steals = 1;
                     break;
                 case 'Block':
-                    updates.blocks = (stats?.blocks || 0) + 1;
+                    deltas.blocks = 1;
                     break;
                 case 'Turnover':
-                    updates.turnovers = (stats?.turnovers || 0) + 1;
+                    deltas.turnovers = 1;
                     break;
                 case 'Foul':
-                    updates.personalFouls = (stats?.personalFouls || 0) + 1;
+                    deltas.personalFouls = 1;
                     break;
                 case 'Technical Foul':
                     // BACKLOG-166: this used to be indistinguishable from a regular
                     // Foul client-side (both dispatched type: 'Foul'), so it silently
                     // inflated personalFouls -- now its own type, own column.
-                    updates.technicalFouls = (stats?.technicalFouls || 0) + 1;
+                    deltas.technicalFouls = 1;
                     break;
             }
 
-            if (Object.keys(updates).length > 0) {
-                if (stats) {
-                    await db
-                        .update(basketballPlayerStats)
-                        .set(updates)
-                        .where(and(
-                            eq(basketballPlayerStats.playerId, playerId),
-                            eq(basketballPlayerStats.season, season),
-                            basketballCompetitionMatch
-                        ));
-                } else {
-                    await db.insert(basketballPlayerStats).values({
-                        id: `bstats_${nanoid()}`,
-                        playerId,
-                        season,
-                        competitionId,
-                        ...updates,
-                    });
-                }
-            }
+            await upsertPlayerStats(basketballPlayerStats, playerId, season, competitionId, deltas);
         } else if (sport === 'Football') {
-            const footballCompetitionMatch = competitionId
-                ? eq(footballPlayerStats.competitionId, competitionId)
-                : isNull(footballPlayerStats.competitionId);
-            const stats = await db
-                .select()
-                .from(footballPlayerStats)
-                .where(and(
-                    eq(footballPlayerStats.playerId, playerId),
-                    eq(footballPlayerStats.season, season),
-                    footballCompetitionMatch
-                ))
-                .get();
-
-            const updates: any = {};
-
+            const deltas: Partial<Record<keyof typeof footballPlayerStats.$inferInsert, number>> = {};
             switch (eventType.toUpperCase().replace(/\s+/g, '_')) {
                 case 'GOAL':
-                    updates.goals = (stats?.goals || 0) + 1;
-                    updates.shotsOnTarget = (stats?.shotsOnTarget || 0) + 1;
+                    deltas.goals = 1;
+                    deltas.shotsOnTarget = 1;
                     break;
                 case 'ASSIST':
-                    updates.assists = (stats?.assists || 0) + 1;
+                    deltas.assists = 1;
                     break;
                 case 'OWN_GOAL':
-                    updates.ownGoals = (stats?.ownGoals || 0) + 1;
+                    deltas.ownGoals = 1;
                     break;
                 case 'PENALTY':
-                    updates.penaltiesScored = (stats?.penaltiesScored || 0) + 1;
-                    updates.shotsOnTarget = (stats?.shotsOnTarget || 0) + 1;
+                    deltas.penaltiesScored = 1;
+                    deltas.shotsOnTarget = 1;
                     break;
                 case 'PENALTY_MISSED':
-                    updates.shotsOffTarget = (stats?.shotsOffTarget || 0) + 1;
+                    deltas.shotsOffTarget = 1;
                     break;
                 case 'PENALTY_SAVED':
-                    updates.shotsOnTarget = (stats?.shotsOnTarget || 0) + 1;
+                    deltas.shotsOnTarget = 1;
                     break;
                 case 'FOUL':
-                    updates.foulsCommitted = (stats?.foulsCommitted || 0) + 1;
+                    deltas.foulsCommitted = 1;
                     break;
                 case 'YELLOW_CARD':
-                    updates.yellowCards = (stats?.yellowCards || 0) + 1;
+                    deltas.yellowCards = 1;
                     break;
                 case 'RED_CARD':
-                    updates.redCards = (stats?.redCards || 0) + 1;
+                    deltas.redCards = 1;
                     break;
                 case 'SAVE':
-                    updates.saves = (stats?.saves || 0) + 1;
+                    deltas.saves = 1;
                     break;
             }
 
-            if (Object.keys(updates).length > 0) {
-                if (stats) {
-                    await db
-                        .update(footballPlayerStats)
-                        .set(updates)
-                        .where(and(
-                            eq(footballPlayerStats.playerId, playerId),
-                            eq(footballPlayerStats.season, season),
-                            footballCompetitionMatch
-                        ));
-                } else {
-                    await db.insert(footballPlayerStats).values({
-                        id: `fstats_${nanoid()}`,
-                        playerId,
-                        season,
-                        competitionId,
-                        ...updates,
-                    });
-                }
-            }
+            await upsertPlayerStats(footballPlayerStats, playerId, season, competitionId, deltas);
         }
     } catch (error) {
         console.error('Error updating player stats:', error);
+        Sentry.captureException(error, { tags: { area: 'player-stats' }, extra: { playerId, eventType, sport, competitionId } });
         // Don't throw - event should still be logged
+    }
+}
+
+// BUG-235: the old select-then-insert-or-update pattern was not atomic. Two
+// near-simultaneous events for the same player/season/competition (the exact
+// dual-logger scenario BACKLOG-151 flags as never tested) could both SELECT a
+// null row, both attempt INSERT, and the second throw a unique-constraint
+// violation on the (playerId, season, competitionId) index BACKLOG-126 added --
+// caught above and silently swallowed, permanently dropping that player's stat
+// increment for the event with zero visible error anywhere. Real DB-level
+// upsert (single atomic statement) instead of separate read-then-write calls
+// closes the race for every match tied to a real competition -- SQLite/libsql
+// does not treat two NULL competitionId rows as conflicting under a UNIQUE
+// index (each NULL is distinct from every other NULL), so a friendly/
+// untracked-competition match (competitionId === null) can't rely on the
+// conflict target the same way; the insert-then-recover-via-update fallback
+// below at least turns that narrower remaining case into "recovered on retry"
+// rather than "silently gone," matching this project's "no silent failures" rule.
+async function upsertPlayerStats(
+    table: typeof import('@/db/schema').footballPlayerStats | typeof import('@/db/schema').basketballPlayerStats,
+    playerId: string,
+    season: string,
+    competitionId: string | null,
+    deltas: Record<string, number>
+) {
+    if (Object.keys(deltas).length === 0) return;
+
+    const insertValues: Record<string, unknown> = {
+        id: `stats_${nanoid()}`,
+        playerId,
+        season,
+        competitionId,
+        ...deltas,
+    };
+
+    if (competitionId) {
+        // Real competition -- the unique index actually catches a concurrent conflict.
+        const incrementSet: Record<string, unknown> = {};
+        for (const [column, delta] of Object.entries(deltas)) {
+            incrementSet[column] = sql`${(table as any)[column]} + ${delta}`;
+        }
+        await db
+            .insert(table as any)
+            .values(insertValues)
+            .onConflictDoUpdate({
+                target: [(table as any).playerId, (table as any).season, (table as any).competitionId],
+                set: incrementSet,
+            });
+        return;
+    }
+
+    // No competition (friendly match) -- NULL bypasses the unique index, so fall
+    // back to insert-first, recover-via-update-on-conflict rather than a blind
+    // select-then-branch (narrows, doesn't fully close, the race for this case).
+    try {
+        await db.insert(table as any).values(insertValues);
+    } catch {
+        const existing = await db
+            .select()
+            .from(table as any)
+            .where(and(
+                eq((table as any).playerId, playerId),
+                eq((table as any).season, season),
+                isNull((table as any).competitionId)
+            ))
+            .get();
+        if (!existing) throw new Error('upsertPlayerStats: insert failed and no existing row found to update');
+        const incrementSet: Record<string, unknown> = {};
+        for (const [column, delta] of Object.entries(deltas)) {
+            incrementSet[column] = sql`${(table as any)[column]} + ${delta}`;
+        }
+        await db
+            .update(table as any)
+            .set(incrementSet)
+            .where(and(
+                eq((table as any).playerId, playerId),
+                eq((table as any).season, season),
+                isNull((table as any).competitionId)
+            ));
     }
 }
