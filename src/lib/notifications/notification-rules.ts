@@ -20,6 +20,7 @@
 
 export type NotificationKey =
     | 'MATCH_START'
+    | 'MATCH_STARTING_SOON'
     | 'GOAL'
     | 'RED_CARD'
     | 'YELLOW_CARD'

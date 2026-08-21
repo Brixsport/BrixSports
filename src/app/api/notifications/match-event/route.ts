@@ -29,6 +29,7 @@ export async function POST(request: NextRequest) {
             minute,
             homeScore,
             awayScore,
+            competitionId,
         } = body;
 
         // Validate required fields
@@ -65,6 +66,7 @@ export async function POST(request: NextRequest) {
             minute,
             homeScore,
             awayScore,
+            competitionId,
         });
 
         return NextResponse.json({

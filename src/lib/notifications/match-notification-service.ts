@@ -342,6 +342,16 @@ function createNotificationPayload(event: MatchEventNotification): NotificationP
                 actions: baseActions,
             };
 
+        case 'MATCH_STARTING_SOON':
+            return {
+                title: '⏰ Kickoff in 30 Minutes',
+                body: `${event.teamName} starts soon — don't miss it`,
+                icon: '/icons/icon-192x192.png',
+                badge: '/icons/icon-192x192.png',
+                data: baseData,
+                actions: baseActions,
+            };
+
         case 'LINEUP_AVAILABLE':
             return {
                 title: '📋 Lineup Available!',

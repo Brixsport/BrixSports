@@ -121,6 +121,7 @@ export async function POST(
                     awayTeamId: match[0].awayTeamId,
                     eventType: 'LINEUP_AVAILABLE',
                     teamName: team === 'home' ? 'Home team' : 'Away team',
+                    competitionId: match[0].competitionId,
                 }),
             });
             console.log('✅ Lineup available notification sent');

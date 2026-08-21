@@ -18,7 +18,7 @@ import { matchReminders, matches, teams, pushSubscriptions, users, notificationS
 import { eq, and, lte, inArray } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/sqlite-core';
 import webpush from 'web-push';
-import { logNotificationSend } from '@/lib/notifications/match-notification-service';
+import { logNotificationSend, sendMatchEventNotification } from '@/lib/notifications/match-notification-service';
 
 // Item 9: lineup-not-published reminder -- matches kicking off within this
 // window with either team's lineup still not marked `status: 'published'`
@@ -26,6 +26,14 @@ import { logNotificationSend } from '@/lib/notifications/match-notification-serv
 // (same architecture as the item-2 competition-follow cascade) -- dedup is
 // done against notificationSendLog rather than a new tracking column.
 const LINEUP_WARNING_WINDOW_MS = 60 * 60 * 1000; // 60 minutes before kickoff
+
+// Public "kickoff in 30 minutes" broadcast -- distinct from the user-opt-in
+// matchReminders below (which require the viewer to have created a personal
+// reminder). This fires automatically to every team/competition follower,
+// same query-time-join audience sendMatchEventNotification() already builds
+// for GOAL/MATCH_START/etc. Dedup via notificationSendLog rather than a new
+// tracking column (sendMatchEventNotification always logs source:'match_event').
+const STARTING_SOON_WINDOW_MS = 30 * 60 * 1000; // 30 minutes before kickoff
 
 // BACKLOG-208: cron-driven, so not attacker-facing, but still a genuine list
 // query -- CLAUDE.md requires a .limit() on every one, no exceptions.
@@ -231,6 +239,56 @@ async function checkLineupNotPublished() {
     return { checked: dueSoon.length, notified };
 }
 
+async function checkMatchStartingSoon() {
+    const now = new Date();
+    const windowEnd = new Date(now.getTime() + STARTING_SOON_WINDOW_MS);
+
+    const upcomingMatches = await db
+        .select()
+        .from(matches)
+        .where(eq(matches.status, 'UPCOMING'))
+        .limit(MAX_REMINDERS_PER_RUN);
+
+    const dueSoon = upcomingMatches.filter((m) => {
+        const start = new Date(m.startTime);
+        return !isNaN(start.getTime()) && start >= now && start <= windowEnd;
+    });
+
+    let notified = 0;
+    for (const match of dueSoon) {
+        const alreadySent = await db
+            .select({ id: notificationSendLog.id })
+            .from(notificationSendLog)
+            .where(
+                and(
+                    eq(notificationSendLog.source, 'match_event'),
+                    eq(notificationSendLog.matchId, match.id),
+                    eq(notificationSendLog.eventType, 'MATCH_STARTING_SOON')
+                )
+            )
+            .limit(1);
+        if (alreadySent.length > 0) continue;
+
+        const [homeTeam, awayTeam] = await Promise.all([
+            db.select({ name: teams.name }).from(teams).where(eq(teams.id, match.homeTeamId)).get(),
+            db.select({ name: teams.name }).from(teams).where(eq(teams.id, match.awayTeamId)).get(),
+        ]);
+
+        const result = await sendMatchEventNotification({
+            matchId: match.id,
+            homeTeamId: match.homeTeamId,
+            awayTeamId: match.awayTeamId,
+            eventType: 'MATCH_STARTING_SOON',
+            teamName: homeTeam && awayTeam ? `${homeTeam.name} vs ${awayTeam.name}` : undefined,
+            competitionId: match.competitionId,
+        });
+
+        if (result.sentCount > 0) notified++;
+    }
+
+    return { checked: dueSoon.length, notified };
+}
+
 async function runStatusCheck() {
     const now = new Date();
 
@@ -255,6 +313,32 @@ async function runStatusCheck() {
     };
 }
 
+type CheckResult = { checked: number; notified: number } | { error: string };
+
+// Independent try/catches -- a failure in one reminder type must never block
+// the others from running in the same cron tick.
+async function runAllChecks() {
+    const result = await runReminderCheck();
+
+    let lineupNotPublished: CheckResult;
+    try {
+        lineupNotPublished = await checkLineupNotPublished();
+    } catch (error: any) {
+        console.error('[Reminder Checker] Lineup check error:', error);
+        lineupNotPublished = { error: error.message };
+    }
+
+    let matchStartingSoon: CheckResult;
+    try {
+        matchStartingSoon = await checkMatchStartingSoon();
+    } catch (error: any) {
+        console.error('[Reminder Checker] Match-starting-soon check error:', error);
+        matchStartingSoon = { error: error.message };
+    }
+
+    return { ...result, lineupNotPublished, matchStartingSoon };
+}
+
 /**
  * GET /api/reminders/check
  * The real cron target (Vercel Cron Jobs send GET). Runs the actual reminder
@@ -272,19 +356,7 @@ export async function GET(request: NextRequest) {
         if (mode === 'status') {
             return NextResponse.json(await runStatusCheck());
         }
-
-        // Independent try/catches -- a failure in one reminder type must never
-        // block the other from running in the same cron tick.
-        const result = await runReminderCheck();
-        let lineupCheck: { checked: number; notified: number } | { error: string };
-        try {
-            lineupCheck = await checkLineupNotPublished();
-        } catch (error: any) {
-            console.error('[Reminder Checker] Lineup check error:', error);
-            lineupCheck = { error: error.message };
-        }
-
-        return NextResponse.json({ ...result, lineupNotPublished: lineupCheck });
+        return NextResponse.json(await runAllChecks());
     } catch (error) {
         console.error('[Reminder Checker] Error:', error);
         return NextResponse.json({ error: 'Failed to process reminders' }, { status: 500 });
@@ -302,15 +374,7 @@ export async function POST(request: NextRequest) {
     }
 
     try {
-        const result = await runReminderCheck();
-        let lineupCheck: { checked: number; notified: number } | { error: string };
-        try {
-            lineupCheck = await checkLineupNotPublished();
-        } catch (error: any) {
-            console.error('[Reminder Checker] Lineup check error:', error);
-            lineupCheck = { error: error.message };
-        }
-        return NextResponse.json({ ...result, lineupNotPublished: lineupCheck });
+        return NextResponse.json(await runAllChecks());
     } catch (error) {
         console.error('[Reminder Checker] Error:', error);
         return NextResponse.json({ error: 'Failed to process reminders' }, { status: 500 });
