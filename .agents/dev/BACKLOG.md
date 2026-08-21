@@ -313,7 +313,7 @@ BUG-001 through BUG-029, AUDIT-001/002 (partial), BACKLOG-065 — all resolved S
 - Observed result: write handlers protected by same guard
 - Pending items: none
 
-- ~~**BUG-083**~~ _(HIGH — Logger UX / Display)_: `LiveMatchTimeline` switch cases used underscore format (`YELLOW_CARD`) but event type arrives as `'Yellow Card'` (title case with space) — `toUpperCase()` alone never matched. Fix: `.replace(/\s+/g, '_')` added to all three switch normalization calls; `PENALTY_SAVED`/`PENALTY_MISSED` case labels updated to match. `1c7a6f3` (38C) patched `LiveMatchTimeline.tsx` only — `MatchTimeline.tsx` was missed. `efb0081` (38D) completed the fix in `MatchTimeline.tsx` (lines 31, 65, 95) and added `RED_CARD_(SECOND_YELLOW)` case to both switches and the cards filter. **Status:** SHIPPED — `efb0081`, 2026-06-30. Pending: visual verify on staging — Yellow Card yellow icon, Red Card red icon on both MatchTimeline and LiveMatchTimeline. Parity gap remaining: `LiveMatchTimeline.tsx` has no `RED_CARD_(SECOND_YELLOW)` case (lines 63, 98, 248) — needs own scoped directive.
+- ~~**BUG-083**~~ _(HIGH — Logger UX / Display)_: `LiveMatchTimeline` switch cases used underscore format (`YELLOW_CARD`) but event type arrives as `'Yellow Card'` (title case with space) — `toUpperCase()` alone never matched. Fix: `.replace(/\s+/g, '_')` added to all three switch normalization calls; `PENALTY_SAVED`/`PENALTY_MISSED` case labels updated to match. `1c7a6f3` (38C) patched `LiveMatchTimeline.tsx` only — `MatchTimeline.tsx` was missed. `efb0081` (38D) completed the fix in `MatchTimeline.tsx` (lines 31, 65, 95) and added `RED_CARD_(SECOND_YELLOW)` case to both switches and the cards filter. **Status:** SHIPPED — `efb0081`, 2026-06-30. **Still pending: visual verify on staging.** **Attempted, session 53 continuation, 2026-08-20:** the Aug 7 `STAKEHOLDER_STATUS_REPORT_2026-08-07.md` claims "directly re-confirmed today on the real public match page" — that claim was never reflected back into this entry, so the two docs disagreed. Checked directly on `brixsports-staging.vercel.app` this session: every match currently carrying a real Yellow/Red Card event on staging is a goals-only BUSA League backfill row with `minute: -1` on every event (confirmed via `busa-match-22`, `busa-sf-joga-hammers`, `busa-match-final-2026`) — `LiveMatchTimeline.tsx`'s own unrelated "unknown-minute" gate (line 375) correctly hides the whole timeline for these, by design, so the icon/color fix can't actually be observed on any match presently in the DB. Every other match is still `UPCOMING` with zero events. **Cannot be visually confirmed against real staging data right now — would require standing up a throwaway admin-authenticated test match with a real minute-stamped card event, not a 5-minute check.** The Aug 7 report's claim is unverifiable after the fact and should not be treated as confirmation. Parity gap remaining: `LiveMatchTimeline.tsx` has no `RED_CARD_(SECOND_YELLOW)` case (lines 63, 98, 248) — needs own scoped directive.
 
 - ~~**BUG-084**~~ _(HIGH — Notifications)_: Originally filed as "no push enrollment UI — pushSubscriptions always empty." **INCORRECT — retracted 2026-07-01.** Full code audit confirmed three active enrollment paths:
   - `src/components/SettingsOverlay.tsx` — subscribe/unsubscribe toggle, calls `pushService.subscribe(user.id)` / `pushService.unsubscribe(user.id)`
@@ -1622,6 +1622,8 @@ player stats can be stale or inconsistent after a match ends.
 **Why this matters:** unlike goals-only matches (where a viewer might reasonably suspect "0" means "not tracked"), a fully-logged match's possession percentage looks exactly as authoritative as a real one — there's no visual or data-shape difference between "true possession" and "attacking-event ratio dressed up as possession." A viewer has no way to know the number is an approximation.
 
 **Fix (not built — scoping only, this is a filing):** Two real options, not mutually exclusive: (a) relabel the stat honestly (e.g. "Attacking Play %" instead of "Possession") so the UI stops claiming to measure something it doesn't, or (b) add a real possession-tracking mechanism to the logger (a "possession change" event type, timestamped, that the backend can integrate over match duration) for matches where a logger is willing to track it live — a bigger lift, only worth it if match-level possession accuracy is a real product priority. Richard's call needed on which direction (or whether to leave the proxy as-is with better labeling only).
+
+**Reconfirmed, session 53 continuation, 2026-08-20:** asked directly — Richard's call is to leave the stat hidden (current interim mitigation) for now, no relabel, no real-tracking build. Direction decision remains open for a future session; not a regression, a deliberate re-defer.
 
 **Found:** session 49, raised by Richard directly while reviewing `BACKLOG-122`'s fix — noted the possession model "isn't rigid" and would be inaccurate even where data exists.
 
@@ -5428,7 +5430,9 @@ Affected files to audit:
 
 ---
 
-### BACKLOG-105 — is_test Flag on Matches (Test Match Isolation)
+### BACKLOG-225 — is_test Flag on Matches (Test Match Isolation)
+
+**Renumbered from BACKLOG-105, session 53 continuation, 2026-08-20** — `BACKLOG-105` was already in use for "Penalty shootout score isolation" (filed earlier, extensively cross-referenced elsewhere in this doc); this entry silently duplicated that id since 2026-06-25. This is the only content change — status/priority/problem below are unchanged.
 
 **Status:** OPEN
 **Priority:** Medium
@@ -5568,8 +5572,8 @@ On event delete: instead of decrementing a global counter (fragile, can go negat
 - Do NOT implement step 6 (drop old table) until leaderboards and player profile pages are confirmed reading from the new path.
 - Step 5 (backfill) must run after BUG-011 (718 goals anomaly / duplicate stat rows) is audited — do not backfill from dirty source data.
 - BACKLOG-019 remains open for the automation hook (match → FINISHED triggers the recompute). This item only covers the table structure and write/read path.
-- `match_player_stats` rows cascading on match delete also fixes the test match contamination problem (BACKLOG-105) — once `is_test` matches are deleted, their stat rows go with them automatically.
-- Related: BUG-060, BUG-011, BACKLOG-019, BACKLOG-105, TD-011 (`season` hardcoded)
+- `match_player_stats` rows cascading on match delete also fixes the test match contamination problem (BACKLOG-225) — once `is_test` matches are deleted, their stat rows go with them automatically.
+- Related: BUG-060, BUG-011, BACKLOG-019, BACKLOG-225, TD-011 (`season` hardcoded)
 
 ---
 
@@ -7393,7 +7397,7 @@ deprioritized in its favor. -->
 
 ### BUG-198 — Login Page Shows Raw Browser Error Strings ("Failed to fetch") Directly to Users
 
-**Status:** SHIPPED — session 49 (`9d23ecf`, PR #18, targeting `dev`). `tsc --noEmit` clean (49 baseline errors, none new). **Not live-tested yet** — no manual network-failure repro run against a real preview. Do not treat as RESOLVED until that happens.
+**Status:** RESOLVED — session 53 continuation, 2026-08-20, live-verified against `https://brixsports-staging.vercel.app`. **Evidence:** patched `window.fetch` to throw `TypeError('Failed to fetch')` on `/api/auth/login` (the exact real-world failure mode this bug describes), submitted the real login form through the actual UI — rendered `"Unable to reach the server. Please check your connection and try again."`, no raw browser error string leaked. `tsc --noEmit` clean, 49 baseline errors, none new (session 49).
 **Priority:** Medium — real UX/trust issue on the highest-stakes auth surface, not a security or data-integrity bug
 **Filed:** 2026-08-05
 
@@ -7785,7 +7789,7 @@ Everything below is explicitly **not** being built now — captured from `NOTIFI
 
 ### BACKLOG-216 — Light/Dark Theme Mechanism Wiring (Phase 1 of the Theme Initiative)
 
-**Status:** SHIPPED — 2026-08-11 (session 51), mechanism + Phase 2 pilot screen live-verified locally; not yet confirmed on a deployed environment; remaining Phase 2 screens are separate, ongoing work (folded into the UI-refinement sprint)
+**Status:** SHIPPED — 2026-08-11 (session 51), mechanism + Phase 2 pilot screen live-verified locally; **mechanism re-confirmed on real deployed staging, session 53 continuation, 2026-08-20** (`localStorage.theme='light'` + reload on `brixsports-staging.vercel.app` → `<html class="light" style="color-scheme: light">`, `getComputedStyle(body).backgroundColor` resolved to `oklch(0.97 0.004 85)`, a real light-mode value); remaining Phase 2 screens are separate, ongoing work (folded into the UI-refinement sprint)
 **Priority:** Medium — foundational for the theme initiative Richard requested; not a bug, a new capability
 
 **Problem:** the app had all the *pieces* of a light/dark theme system already in place but none of them were connected: `next-themes` was an installed dependency but never mounted as a provider; `globals.css` already had a full shadcn-style light/dark CSS variable pair set (`--background`, `--foreground`, `--card`, `--border`, etc., switched via a `.dark` class per `@custom-variant dark (&:is(.dark *))`); `userPreferences.theme` existed in the DB schema with a working API; `profile/settings/page.tsx` already had a Light/Dark toggle UI. But with no `ThemeProvider` in `layout.tsx`, the `.dark` class never actually toggled, and the settings page's toggle only wrote to local state / the DB on Save — it never called `next-themes`' `setTheme()`, so clicking it did nothing visually. Separately (not part of this item, scoped as Phase 2): almost none of the actual custom-built pages use the semantic tokens anyway — they're built with hardcoded dark-only classes (`bg-[#050505]`, `text-white/60`, `bg-white/5`), so even a working toggle wouldn't visibly re-theme most screens yet.
@@ -8032,5 +8036,27 @@ Everything below is explicitly **not** being built now — captured from `NOTIFI
 **Fix:** `src/app/api/matches/[id]/ratings/adjust/route.ts`'s catch block now returns a static `'Failed to fetch ratings'` instead of `error.message`. Full detail still logged server-side via `console.error`.
 
 **Found:** session 49 (`USER_FACING_ERROR_MESSAGES_AUDIT.md`). **Fixed:** session 2026-08-20. Remaining ~11 lower-severity instances from that audit (signup/forgot-password/reset-password pages, admin/organizations, admin/match-lineups, profile/settings, and ~10 more server-side leaks never actually rendered client-side) still open — scheduled as their own pass, now mechanical given `getClientErrorMessage` exists.
+
+---
+
+### ~~BUG-227~~ — `BasketballLogger.tsx`'s Start Match Button Flipped Local State Before the Server Confirmed the Write, and Silently Swallowed a Failed Persisted-Lineup Fetch
+
+**Status:** RESOLVED — 2026-08-20 (session 53 continuation), live click-tested against a real throwaway match on the local dev server
+**Priority:** HIGH — direct violation of `CLAUDE.md`'s own named anti-pattern ("UI shows success state before server response is confirmed") on Tier 0 live-match-day code; a failed Start Match write left the logger fully in the live logging UI with the match never actually `LIVE` server-side and zero on-screen indication anything was wrong
+
+**Problem, two findings in the same file:**
+1. The Start Match `onClick` handler (`!matchStarted` button) called `setMatchStarted(true)` and `setQuarterStartedAt(Date.now())` **before** the `PATCH /api/matches/[id]` call even fired. The `catch` block only `console.error`'d — no banner, no `alert`, nothing. `FootballLogger.tsx`'s own equivalent handler already does this correctly (PATCH first, check `res.ok`, only then transition local state, `alert()` on failure) — `BasketballLogger.tsx` never matched that pattern.
+2. The persisted-lineup fetch on mount (`GET .../lineup`) had a bare `catch { console.error(...) }`, then silently fell through to a full-roster fallback for any `LIVE` match. A live match whose real lineup fetch failed would show "everyone's a starter" instead of the actual confirmed lineup, with no indication to the logger that the real data didn't load.
+
+**Fix:**
+1. Restructured to mirror `FootballLogger.tsx` exactly: added `isStartingMatch` state, button `disabled` while in flight, label switches to "Starting...". PATCH fires first; `!response.ok` throws; only on confirmed success does `matchStarted`/`quarterStartedAt` get set and the `MATCH_STATUS_CHANGE` event dispatch fire. On failure, `setEventSaveError('Couldn\'t start the match — check your connection and try again. The match has NOT gone live yet.')` (reusing the file's existing banner state/UI, same pattern `BACKLOG-134` already established here) — button re-enables for retry, UI never leaves the pre-match view.
+2. Added a `lineupFetchFailed` flag set in the lineup-fetch `catch`; when the full-roster fallback fires for a `LIVE` match specifically because of that failure (not just because no lineup was ever published), `setEventSaveError('Could not load the saved lineup — showing full roster as starters. Check your connection; the actual starting lineup may differ.')`.
+
+**Evidence:**
+- `tsc --noEmit`: zero errors in `BasketballLogger.tsx` (51 total repo-wide, baseline drift unrelated to this file — confirmed via per-file breakdown, none touch this change).
+- **Real click-through against a throwaway match** (`dev/setup-basketball-start-verify-53.mjs`, local dev server against the staging DB, real logger session for `logger_1767968844029`): cloned team/competition ids from `busa-basketball-1`, `UPCOMING` status, real persisted lineup so the console loaded with `lineupSet=true`. **Failure path:** patched `fetch` to reject the PATCH with `TypeError('Failed to fetch')` — banner rendered exactly as coded, button re-enabled, UI stayed on the pre-match view (no optimistic flip). **Success path:** unpatched, clicked again — button showed "Starting..." then the UI transitioned to the live console (Finalize Match button, quarter clock counting down); confirmed via direct DB read, not just UI: `status: 'LIVE', current_period: 'Q1'`. Local dev server was slow under React Strict Mode's duplicate dev-effect firing (20-30s/request) — confirmed this was general local latency, not a hang, by timing the identical route against a real pre-existing match first. Throwaway match + assignment + events fully deleted after, confirmed via post-delete `COUNT(*) = 0` (`dev/cleanup-basketball-start-verify-53.mjs`).
+- Lineup-fetch-failure banner not independently click-tested this session (would require forcing that specific fetch to fail while leaving the status PATCH working — lower severity, narrower blast radius than the Start Match fix, code path traced directly instead).
+
+**Found:** session 53 continuation, 2026-08-20, item 4 of the session's planned work sequence (surfaced earlier in the session, not yet filed as its own entry). **Fixed:** same session.
 
 ---

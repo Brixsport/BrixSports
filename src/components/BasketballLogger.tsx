@@ -57,6 +57,7 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
     const [viewMode, setViewMode] = useState<'logger' | 'stats' | 'history'>('logger');
     const [isSaving, setIsSaving] = useState(false);
     const [isUndoing, setIsUndoing] = useState(false);
+    const [isStartingMatch, setIsStartingMatch] = useState(false);
     // BACKLOG-134: scoring buttons were only disabled by !matchStarted || matchEnded --
     // a rapid double-tap (most reachable via the player-select modal, which every
     // scoring action routes through) fired two independently-atomic recordEvent()
@@ -439,6 +440,7 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                 // back to BUG-139's full-roster seed (doesn't distinguish on-court from
                 // bench) if nothing was ever actually published for this match.
                 let hydratedFromServer = false;
+                let lineupFetchFailed = false;
                 try {
                     const lineupRes = await fetch(`/api/matches/${match.id}/lineup`);
                     if (lineupRes.ok) {
@@ -477,12 +479,20 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                     }
                 } catch (e) {
                     console.error('Failed to fetch persisted lineup:', e);
+                    lineupFetchFailed = true;
                 }
 
                 if (!hydratedFromServer && match.status === 'LIVE') {
                     setHomeStarters(prev => prev.length > 0 ? prev : homePlayersList.map((p: Player) => p.id));
                     setAwayStarters(prev => prev.length > 0 ? prev : awayPlayersList.map((p: Player) => p.id));
                     setLineupSet(true);
+                    // A live match falling back to "everyone's a starter" because the real
+                    // persisted lineup couldn't be fetched is silently wrong, not just
+                    // incomplete -- the logger has no way to know their actual confirmed
+                    // starters weren't loaded unless this is surfaced explicitly.
+                    if (lineupFetchFailed) {
+                        setEventSaveError('Could not load the saved lineup — showing full roster as starters. Check your connection; the actual starting lineup may differ.');
+                    }
                 }
 
                 // Fetch existing events for this match
@@ -1158,41 +1168,43 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                         <div className="flex items-center gap-4">
                             {!matchStarted && (
                                 <button
+                                    disabled={isStartingMatch}
                                     onClick={async () => {
-                                        console.log('🔘 Button clicked! lineupSet:', lineupSet);
-                                        console.log('📋 Home players:', homePlayers.length, 'Away players:', awayPlayers.length);
                                         if (!lineupSet) {
-                                            console.log('✅ Opening lineup modal...');
                                             setShowLineupModal(true);
-                                        } else {
-                                            console.log('▶️ Starting match...');
+                                            return;
+                                        }
+                                        if (isStartingMatch) return;
+                                        setIsStartingMatch(true);
+
+                                        // BACKLOG-item-4: this used to flip matchStarted/setQuarterStartedAt
+                                        // BEFORE the PATCH even fired, then only console.error'd on failure --
+                                        // a failed/offline write left the logger fully in the live-logging UI
+                                        // with the match never actually LIVE server-side, and zero on-screen
+                                        // indication anything was wrong (CLAUDE.md: never show success before
+                                        // the server confirms). Mirrors FootballLogger.tsx's own Start Match
+                                        // handler: PATCH first, confirm res.ok, only then transition local state.
+                                        try {
+                                            const response = await fetch(`/api/matches/${match.id}`, {
+                                                method: 'PATCH',
+                                                headers: { 'Content-Type': 'application/json' },
+                                                body: JSON.stringify({
+                                                    status: 'LIVE',
+                                                    // Without this, currentPeriod stays at the schema
+                                                    // default ('NOT_STARTED') for the entire first quarter
+                                                    // -- the End-of-Quarter modal is the only other place
+                                                    // that writes currentPeriod, and it doesn't fire until
+                                                    // Q1 ends.
+                                                    currentPeriod: 'Q1',
+                                                }),
+                                            });
+
+                                            if (!response.ok) {
+                                                throw new Error(`Server returned ${response.status}`);
+                                            }
+
                                             setMatchStarted(true);
                                             setQuarterStartedAt(Date.now());
-
-                                            // Update match status in database to LIVE
-                                            try {
-                                                const response = await fetch(`/api/matches/${match.id}`, {
-                                                    method: 'PATCH',
-                                                    headers: { 'Content-Type': 'application/json' },
-                                                    body: JSON.stringify({
-                                                        status: 'LIVE',
-                                                        // Without this, currentPeriod stays at the schema
-                                                        // default ('NOT_STARTED') for the entire first quarter
-                                                        // -- the End-of-Quarter modal is the only other place
-                                                        // that writes currentPeriod, and it doesn't fire until
-                                                        // Q1 ends.
-                                                        currentPeriod: 'Q1',
-                                                    }),
-                                                });
-
-                                                if (response.ok) {
-                                                    console.log('✅ Match status updated to LIVE in database');
-                                                } else {
-                                                    console.error('❌ Failed to update match status');
-                                                }
-                                            } catch (error) {
-                                                console.error('❌ Error updating match status:', error);
-                                            }
 
                                             // Dispatch WebSocket event for match start
                                             if (typeof window !== 'undefined') {
@@ -1205,12 +1217,17 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                                                     }
                                                 }));
                                             }
+                                        } catch (error) {
+                                            console.error('Failed to start match:', error);
+                                            setEventSaveError('Couldn\'t start the match — check your connection and try again. The match has NOT gone live yet.');
+                                        } finally {
+                                            setIsStartingMatch(false);
                                         }
                                     }}
-                                    className="px-6 py-3 bg-green-500 text-black rounded-2xl hover:scale-105 transition-all flex items-center gap-2 font-black uppercase tracking-widest"
+                                    className={`px-6 py-3 rounded-2xl transition-all flex items-center gap-2 font-black uppercase tracking-widest ${isStartingMatch ? 'bg-green-500/50 text-black/50 cursor-not-allowed' : 'bg-green-500 text-black hover:scale-105'}`}
                                 >
                                     <Play size={16} />
-                                    {lineupSet ? 'Start Match' : 'Set Lineup & Start'}
+                                    {isStartingMatch ? 'Starting...' : (lineupSet ? 'Start Match' : 'Set Lineup & Start')}
                                 </button>
                             )}
 
