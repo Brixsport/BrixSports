@@ -8611,3 +8611,25 @@ Live-reproduced exactly as described: navigated to a real match's URL that had j
 **Third re-test run, deep-link confirmed working when the match IS in-list:** targeting a real UPCOMING match (`F-Oqtj3HKpWjBc35R8k89`, in the visible 50) after the stale-chunk window passed, the deep-link auto-opened the edit form correctly — consistent with `BUG-237`'s root cause being purely the 50-row cutoff, not a broken deep-link mechanism. The save itself then 401'd — traced to the test's own fabricated `userId` (`getAuthUser()` re-verifies the JWT subject against a real `users` row per `BACKLOG-168`'s fix, and correctly rejected a synthetic id even with a validly-signed token) — **not an app bug, a test-harness gap, now fixed** (a real `admin-001` DB user id used instead). Re-run with the real id: all 5 steps passed clean, `livestreamUrl`/`livestreamType` confirmed actually persisted via a direct DB-backed API read, then reverted to empty/original state after. **Positive confirmation, not just a negative result:** `BACKLOG-168`'s DB re-verification is genuinely working as designed in production — a token can't authenticate as an admin without a real, currently-existing admin row backing it, even with a perfectly valid signature. The full pattern (real user id required, how to find one read-only, revert-after discipline) is now documented in `WORKFLOW.md`'s new "Beta-Testing with the `beta-tester` Tool" section for reuse.
 
 ---
+
+### BUG-238 — WS Server Reads JWT `payload.id` for Logger Identity, But Every Real Token Carries `payload.userId` — Single-Writer Clock Authority Silently Never Engages
+
+**Status:** OPEN — found session 53, 2026-08-21, while live-testing `BACKLOG-151`'s dual-logger fix (unrelated to that fix itself — surfaced by reading `ws-server/index.js` in full to understand the real-time channel).
+**Priority:** HIGH — Tier 0. Directly threatens Flow C's "score/clock updates without refresh" and the documented under-5-second latency target for the match clock specifically, though `event:new`/score broadcasts (a separate, correctly-wired path via `events/route.ts`'s `after(broadcastMatchEvent(...))`) are unaffected — this is scoped to the live match *clock/timer* only.
+
+**Problem:** `ws-server/index.js`'s socket auth middleware (`io.use(...)`, around line 178-200) does:
+```js
+const payload = jwt.verify(token, secret);
+socket.data.loggerId = payload.id;
+```
+But every real token this app ever issues is signed by `generateToken(userId, email, role)` (`src/lib/auth.ts`), which produces `{ userId, email, role }` — confirmed the only signer used app-wide (`src/app/api/auth/login/route.ts:76` calls `generateToken(user.id, user.email, normalizedRole)`, the canonical login path). There is no `id` field on any real payload, only `userId`. So `socket.data.loggerId` is `undefined` for every real logger connection, always.
+
+This directly breaks `match:time:update`'s single-writer clock-authority check (`isAssignedLogger(socket, matchId)`, `ws-server/index.js` ~line 231-250), which calls the internal assignment-check endpoint with `loggerId=encodeURIComponent(socket.data.loggerId)` — i.e. the literal string `"undefined"` for every real logger, which cannot match any real `match_logger_assignments` row. Every real logger's `match:time:update` emit (both `FootballLogger.tsx:609` and `BasketballLogger.tsx:848` emit this on every clock tick) gets rejected with `clock:not-assigned`, silently — no error surfaces to the logger UI, the clock socket event just never reaches viewers via this path.
+
+**Confirmed via static code read across all three points (signer, WS auth middleware, assignment-check consumer) — not yet confirmed via a live WS connection trace** (e.g. watching `ws-server`'s own console for a real `[Single-Writer]` rejection log during a real logger session, or checking whether some other fallback mechanism keeps the public clock display working despite this). The code evidence is unambiguous, but per this project's own evidence standard, a live trace is the stronger proof and hasn't been run yet — worth doing before or alongside the fix.
+
+**Fix (not built):** change `socket.data.loggerId = payload.id;` to `socket.data.loggerId = payload.userId;` in `ws-server/index.js`'s auth middleware — a one-line fix, but `ws-server` is a separately-deployed Railway process (not part of the Vercel/Next.js deploy), so shipping it requires its own deploy step, not just a `dev`→`main` merge. Needs a real live logger clock-tick test after deploying (watch `match:time:updated` actually reach a subscribed viewer session) before closing.
+
+**Found:** session 53, 2026-08-21, incidentally during `BACKLOG-151`'s dual-logger live-verification prep.
+
+---
