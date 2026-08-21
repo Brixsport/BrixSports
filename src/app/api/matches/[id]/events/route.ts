@@ -394,6 +394,7 @@ export async function POST(
                         // followed-player audience query doesn't need this call site again.
                         playerId: notifyPlayerId || undefined,
                         relatedPlayerId: relatedPlayerId || undefined,
+                        competitionId: match.competitionId,
                     });
 
                     // BUG-210: in-app toast, server-side, same trigger point as the push

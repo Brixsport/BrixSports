@@ -707,6 +707,7 @@ export async function PATCH(
                             awayTeamId: matches.awayTeamId,
                             homeScore: matches.homeScore,
                             awayScore: matches.awayScore,
+                            competitionId: matches.competitionId,
                         })
                         .from(matches)
                         .where(eq(matches.id, matchId));
@@ -730,6 +731,7 @@ export async function PATCH(
                         teamName: homeTeam && awayTeam ? `${homeTeam.name} vs ${awayTeam.name}` : undefined,
                         homeScore: current.homeScore ?? undefined,
                         awayScore: current.awayScore ?? undefined,
+                        competitionId: current.competitionId,
                     });
 
                     // BUG-210: same in-app toast fix as events/route.ts's POST handler --

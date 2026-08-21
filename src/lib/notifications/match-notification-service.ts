@@ -75,6 +75,12 @@ interface MatchEventNotification {
     // followed-player audience query doesn't need touching every call site again.
     playerId?: string;
     relatedPlayerId?: string;
+    // Item 2, session 53: competition-follow cascade -- following a competition should
+    // auto-notify for every match in it, not just matches involving a followed team.
+    // Query-time join by competitionId, same architecture as the existing team-follow
+    // query below (no materialized per-match rows), so it applies to future matches
+    // under a followed competition automatically, with no backfill ever needed.
+    competitionId?: string | null;
 }
 
 /**
@@ -137,11 +143,27 @@ export async function sendMatchEventNotification(event: MatchEventNotification):
                 )
             );
 
+        // Item 2: users who follow this match's competition -- following a competition
+        // means every match in it, not just ones involving a team you already follow.
+        const competitionFollowers = event.competitionId
+            ? await db
+                .select({ userId: userFollows.userId })
+                .from(userFollows)
+                .where(
+                    and(
+                        eq(userFollows.followType, 'competition'),
+                        eq(userFollows.followId, event.competitionId),
+                        eq(userFollows.notificationsEnabled, true)
+                    )
+                )
+            : [];
+
         // Combine and deduplicate user IDs
         const potentialUserIds = Array.from(new Set([
             ...teamFollowers.map(f => f.userId),
             ...teamFavorites.map(f => f.userId),
-            ...primaryTeamFans.map(f => f.userId)
+            ...primaryTeamFans.map(f => f.userId),
+            ...competitionFollowers.map(f => f.userId)
         ]));
 
         // Filter out users who have disabled matchAlerts in their preferences

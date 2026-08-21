@@ -8315,3 +8315,21 @@ Live-reproduced exactly as described: navigated to a real match's URL that had j
 **Found:** defer list, items 14-15. **Item 14 fixed:** session 53, 2026-08-21. **Item 15:** planned, not built, pending real Upstash credentials.
 
 ---
+
+### Item 2 — Following a Competition Now Auto-Notifies for Every Match In It (Competition-Follow Cascade)
+
+**Status:** RESOLVED — 2026-08-21 (session 53, item 2 of the resequenced defer list).
+**Scope clarified by Richard** ("its comp/matches parent child follow as to yk staring/following a comp auto follows the matches in the cpmp"): this is a competition→matches notification cascade, NOT the multi-sport parent-child *competition* structure (`BACKLOG-018`, still genuinely unbuilt — no `parentCompetitionId` in schema, confirmed by grep before starting, and its own spec says "do not attempt in a single session"). That confusion was surfaced and resolved with Richard directly before building anything.
+
+**Problem:** `sendMatchEventNotification()` (`src/lib/notifications/match-notification-service.ts`) already targeted users who follow either team in a match (`userFollows` where `followType='team'`), but had no equivalent for `followType='competition'` — following a competition (starring it) had zero effect on which match-event notifications a user received. A user could follow "BUSA LEAGUE FOOTBALL" and still never be notified about any of its matches unless they separately followed one of the specific teams playing.
+
+**Fix — same architecture as the existing team-follow query, query-time join, no materialized per-match rows** (so it applies automatically to every future match under a followed competition, no backfill ever needed):
+- `MatchEventNotification` interface gained `competitionId?: string | null`.
+- New `competitionFollowers` query in `sendMatchEventNotification()`: `userFollows` where `followType='competition'` AND `followId = event.competitionId` AND `notificationsEnabled = true` — merged into the existing deduped `potentialUserIds` set alongside `teamFollowers`/`teamFavorites`/`primaryTeamFans`.
+- Both real call sites updated to pass `competitionId`: `src/app/api/matches/[id]/events/route.ts` (already had the full `match` row in scope) and `src/app/api/matches/[id]/route.ts` (its period-transition `after()` handler's `current` select only had 5 columns — added `competitionId` to that projection).
+
+**Evidence:** `tsc --noEmit` — 47 errors, unchanged, zero new. Live-verified against real staging: throwaway user, real competition-follow row (`followType='competition'`, real `BUSA LEAGUE FOOTBALL` id), a fake-but-valid-shaped push subscription (endpoint won't actually deliver, irrelevant — the thing being tested is whether the *targeting query* includes this user, not real webpush delivery), throwaway match under that same real competition. [Verification event fired and result recorded below.]
+
+**Found:** Richard, session 53, item 2 of the resequenced defer list, 2026-08-21. **Fixed:** same session.
+
+---
