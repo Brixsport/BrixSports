@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, Plus, Calendar, Users, MapPin, Trophy, Edit, Trash2, Eye, Filter, ClipboardList, Star, ChevronDown, ChevronUp } from 'lucide-react';
+import { ArrowLeft, Plus, Calendar, Users, MapPin, Trophy, Edit, Trash2, Eye, Filter, ClipboardList, Star, ChevronDown, ChevronUp, Video } from 'lucide-react';
 import { nanoid } from 'nanoid';
 import { useToast } from '@/hooks/useToast';
 import { ToastContainer } from '@/components/admin/Toast';
@@ -486,6 +486,15 @@ function AdminMatchesPageContent() {
                                                         title="Adjust Ratings"
                                                     >
                                                         <Star size={20} />
+                                                    </Link>
+                                                )}
+                                                {(match.status === 'UPCOMING' || match.status === 'LIVE') && (
+                                                    <Link
+                                                        href={`/admin/livestreams?matchId=${match.id}`}
+                                                        className="p-3 bg-white/5 border border-white/10 rounded-xl hover:bg-red-500/20 text-red-400 transition-colors"
+                                                        title="Manage Livestream"
+                                                    >
+                                                        <Video size={20} />
                                                     </Link>
                                                 )}
                                                 <Link href={`/logger?matchId=${match.id}`} className="p-3 bg-white/5 border border-white/10 rounded-xl hover:bg-white/10 transition-colors">

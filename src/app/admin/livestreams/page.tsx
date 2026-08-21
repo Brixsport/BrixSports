@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { Video, Plus, Edit, Trash2, Eye, EyeOff, Save, X, Radio, Info, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { TeamLogo } from '@/lib/utils/team-logo';
@@ -31,6 +32,16 @@ interface LivestreamForm {
 }
 
 export default function LivestreamsAdminPage() {
+    return (
+        <Suspense fallback={<div className="p-8 text-center text-white/40">Loading...</div>}>
+            <LivestreamsAdminPageContent />
+        </Suspense>
+    );
+}
+
+function LivestreamsAdminPageContent() {
+    const searchParams = useSearchParams();
+    const deepLinkMatchId = searchParams.get('matchId');
     const [matches, setMatches] = useState<Match[]>([]);
     const [loading, setLoading] = useState(true);
     const [editingMatch, setEditingMatch] = useState<string | null>(null);
@@ -48,6 +59,16 @@ export default function LivestreamsAdminPage() {
     useEffect(() => {
         fetchMatches();
     }, []);
+
+    // Deep-link from a match row's "Manage Livestream" button in /admin/matches --
+    // auto-opens that match's edit form instead of making the admin find it again
+    // in this page's own list. Only fires once (guarded by editingMatch already
+    // being null) so it doesn't re-open after the admin closes the form.
+    useEffect(() => {
+        if (!deepLinkMatchId || editingMatch !== null || matches.length === 0) return;
+        const match = matches.find(m => m.id === deepLinkMatchId);
+        if (match) handleEdit(match);
+    }, [deepLinkMatchId, matches]);
 
     const fetchMatches = async () => {
         try {
