@@ -8278,7 +8278,7 @@ Live-reproduced exactly as described: navigated to a real match's URL that had j
 - On a **silent** poll: just `return` without touching state — the page keeps showing the last known-good data, per the real-time rule.
 - On the **initial** (non-silent) load: `setMatchData(null)`, which already falls through to the existing "Match not found" UI.
 
-**Evidence:** `tsc --noEmit` — 47 errors, unchanged from baseline, zero new. Root cause and fix logic confirmed by direct code read and the exact live reproduction described above; a second live re-test against the fix itself was attempted locally but the local dev server was unreliably slow this pass (per Richard's own call, shipped straight to `dev`/staging instead of continuing to fight it locally — matches this session's established "don't block on a flaky local dev server, verify against real staging" precedent).
+**Evidence:** `tsc --noEmit` — 47 errors, unchanged from baseline, zero new. Root cause and fix logic confirmed by direct code read and the exact live reproduction described above. Local dev-server re-verification was unreliably slow this pass, so per Richard's own call ("push and test"), shipped straight to `dev` and re-verified against real deployed staging instead: navigated to a genuinely nonexistent match id (`brixsports-staging.vercel.app/matches/genuinely-nonexistent-match-id-test-53`) post-deploy — rendered the calm "Match not found / Back to live matches" UI, zero console errors beyond a pre-existing, unrelated CSP `worker-src` warning. No crash.
 
 **Found:** Richard, live, session 53, 2026-08-21. **Fixed:** same session.
 
