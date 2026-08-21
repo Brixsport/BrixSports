@@ -384,6 +384,24 @@ export default function MatchDetailPage() {
             if (!silent) setLoading(true);
             const response = await fetch(`/api/matches/${matchId}`);
             const data = await response.json();
+
+            // BUG-236: neither path checked response.ok or that `data` actually has the
+            // shape a successful match fetch has before using it. A 404/error response
+            // (e.g. the match got deleted, or any transient API error) doesn't have
+            // `.events`/`.match` -- the silent-poll merge below then called `.map()` on
+            // undefined and hard-crashed the ENTIRE page ("Cannot read properties of
+            // undefined (reading 'map')"), and the non-silent path would have set
+            // matchData to a shape without `.match`, crashing later at `match.status`.
+            // Per CLAUDE.md's real-time rule ("viewer must see stale data clearly on
+            // failure, not a crash"): a bad response during a silent background poll
+            // should keep showing the last good state, not crash; a bad response on the
+            // real initial load should fall through to the existing "Match not found" UI.
+            if (!response.ok || !data?.match || !Array.isArray(data?.events)) {
+                console.error('fetchMatchData: unexpected response shape', { status: response.status, silent, data });
+                if (!silent) setMatchData(null);
+                return;
+            }
+
             if (silent) {
                 // BUG-113: diff/merge instead of a wholesale replace on every silent poll —
                 // reuses existing event objects' references when their id is unchanged, so

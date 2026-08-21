@@ -8262,3 +8262,24 @@ Everything below is explicitly **not** being built now — captured from `NOTIFI
 **Found:** session 38D (original bug), re-flagged as "visual confirmation open" session 53 continuation 2026-08-20. **Fixed & fully verified:** session 53, item 17, 2026-08-21.
 
 ---
+
+### BUG-236 — Match Detail Page Hard-Crashed on Any Malformed/Missing-Match API Response
+
+**Status:** RESOLVED — 2026-08-21 (session 53), found live by Richard while `BUG-083`'s throwaway match was being cleaned up out from under a still-open tab.
+**Priority:** High — same class as the project's own already-known `X.filter is not a function` pattern (BUG-223): a genuinely unexpected/error server response was allowed to hard-crash the entire client page (Next.js "Application error" overlay) instead of logging server-side and degrading gracefully, directly violating CLAUDE.md's real-time rule ("viewer must see stale data clearly on failure, not a crash").
+
+**Problem:** `src/app/matches/[id]/page.tsx`'s `fetchMatchData()` never checked `response.ok` or that the parsed body actually had the shape a successful fetch has. Two ways this crashed, live-observed:
+1. **Silent background poll** (the 25s reconciliation poll): if a poll's response lacks `.events` (match deleted, any transient API error), the diff/merge logic did `data.events.map(...)` on `undefined` — `TypeError: Cannot read properties of undefined (reading 'map')`, hard-crashing the whole page for anyone still viewing it, not just a failed refresh.
+2. **Initial page load**: an error-shaped response (e.g. `{ error: 'Match not found' }`) would have been passed straight to `setMatchData(data)` — not caught by the existing `if (!matchData)` "Match not found" UI (since `data` here is a truthy object, just missing `.match`) — and would have crashed later at `match.status` instead.
+
+Live-reproduced exactly as described: navigated to a real match's URL that had just been deleted (by an unrelated cleanup script, same session) while the page was still open — the background poll crashed with the exact reported error.
+
+**Fix:** added one guard at the top of `fetchMatchData()`, right after parsing the response: if `!response.ok`, or `data` is missing `.match`, or `data.events` isn't an array, log the full shape via `console.error` (visible in server/Sentry logs) and:
+- On a **silent** poll: just `return` without touching state — the page keeps showing the last known-good data, per the real-time rule.
+- On the **initial** (non-silent) load: `setMatchData(null)`, which already falls through to the existing "Match not found" UI.
+
+**Evidence:** `tsc --noEmit` — 47 errors, unchanged from baseline, zero new. Root cause and fix logic confirmed by direct code read and the exact live reproduction described above; a second live re-test against the fix itself was attempted locally but the local dev server was unreliably slow this pass (per Richard's own call, shipped straight to `dev`/staging instead of continuing to fight it locally — matches this session's established "don't block on a flaky local dev server, verify against real staging" precedent).
+
+**Found:** Richard, live, session 53, 2026-08-21. **Fixed:** same session.
+
+---
