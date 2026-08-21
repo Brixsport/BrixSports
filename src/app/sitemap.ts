@@ -8,6 +8,19 @@ import { eq } from 'drizzle-orm';
 // rows per entity today), not an attempt to paginate a truly large dataset.
 const MAX_PER_ENTITY = 2000;
 
+// This project has a known, recurring class of bug where a timestamp column
+// gets an ISO-string value written into it via raw SQL by an old backfill/seed
+// script (integer-timestamp columns don't error at insert time, but corrupt the
+// later Drizzle read into an Invalid Date) -- see BACKLOG.md's `BACKLOG-126`
+// history. Confirmed to be exactly what crashed this route in production:
+// `RangeError: Invalid time value` inside Next's own sitemap serializer, which
+// calls `.toISOString()` on whatever lastModified value it's given with no
+// validation of its own. One bad row must not 500 the entire sitemap.
+function safeDate(value: Date | null | undefined): Date {
+    if (value instanceof Date && !isNaN(value.getTime())) return value;
+    return new Date();
+}
+
 // This file now does live DB queries (previously pure static data) -- without
 // this, Next.js may try to execute it at BUILD time to statically generate
 // sitemap.xml, which needs a reachable DB in the build environment. Forcing
@@ -144,7 +157,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
         dynamicPages.push(
             ...allMatches.map((m) => ({
                 url: `${baseUrl}/matches/${m.id}`,
-                lastModified: m.updatedAt ?? new Date(),
+                lastModified: safeDate(m.updatedAt),
                 changeFrequency: 'hourly' as const,
                 priority: 0.7,
             }))
@@ -161,7 +174,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
         dynamicPages.push(
             ...allTeams.map((t) => ({
                 url: `${baseUrl}/teams/${t.id}`,
-                lastModified: t.createdAt ?? new Date(),
+                lastModified: safeDate(t.createdAt),
                 changeFrequency: 'weekly' as const,
                 priority: 0.6,
             }))
@@ -178,7 +191,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
         dynamicPages.push(
             ...allPlayers.map((p) => ({
                 url: `${baseUrl}/players/${p.id}`,
-                lastModified: p.createdAt ?? new Date(),
+                lastModified: safeDate(p.createdAt),
                 changeFrequency: 'weekly' as const,
                 priority: 0.6,
             }))
@@ -196,7 +209,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
         dynamicPages.push(
             ...publishedNews.map((n) => ({
                 url: `${baseUrl}/news/${n.slug}`,
-                lastModified: n.updatedAt ?? n.publishedAt ?? new Date(),
+                lastModified: safeDate(n.updatedAt ?? n.publishedAt),
                 changeFrequency: 'weekly' as const,
                 priority: 0.7,
             }))
@@ -216,7 +229,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
                 // pointing the sitemap straight at the canonical destination avoids
                 // an unnecessary redirect hop for crawlers.
                 url: `${baseUrl}/competitions/${c.id}/standings`,
-                lastModified: c.updatedAt ?? new Date(),
+                lastModified: safeDate(c.updatedAt),
                 changeFrequency: 'daily' as const,
                 priority: 0.8,
             }))
