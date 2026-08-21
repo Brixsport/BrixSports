@@ -8406,3 +8406,31 @@ Live-reproduced exactly as described: navigated to a real match's URL that had j
 **Found & fixed:** session 53, 2026-08-21.
 
 ---
+### Item 9 — Reminder Scheduler: Session-Expiry + Lineup-Not-Published (Logger-Assignment Blocked)
+
+**Status:** 2/3 RESOLVED, 1/3 BLOCKED — 2026-08-21 (session 53).
+
+**Session-expiry (RESOLVED):** built as a client-side warning, not a server-cron push. Root cause for the architecture choice: loggers have no server-side session table and no refresh endpoint (unlike the viewer/admin `AuthContext.refreshSession()`) — the JWT's own `exp` claim, already sitting in `localStorage`, is the only signal that exists at all, and only the browser holding that token can act on it. New `SessionExpiryBanner` component decodes the token client-side, warns at 10 minutes remaining, mounted across all 3 of `logger/page.tsx`'s render branches (login, assignment list, active match) so it stays visible mid-match — the exact moment losing a session matters most.
+
+**Lineup-not-published (RESOLVED):** added to `reminders/check/route.ts` as a query-time check (matches kicking off within 60 min with either team's lineup not `status: 'published'`), same no-materialized-row architecture as the item-2 competition-follow cascade. Dedup via `notificationSendLog` rather than a new tracking column. Targets admins, not Team Managers — that role isn't fully wired yet (item 8).
+
+**Logger-assignment (BLOCKED, not built):** loggers have zero push-subscription infrastructure. `pushSubscriptions.userId` has a hard FK to `users.id`, and `loggers` is a completely separate table with its own id space and its own auth (`/api/loggers/auth`) — a logger's id can't satisfy that FK. Building this would mean inventing a parallel subscribe flow for the logger PWA from scratch, not completing existing plumbing. Confirmed via grep: zero push-subscription code anywhere under `src/app/logger`.
+
+**Verification:** the deployed staging endpoint couldn't be hit directly — `CRON_SECRET` in `.env.local` doesn't match whatever's actually configured on Vercel (Railway's real caller, `ws-server/index.js`, uses separate `CRON_SECRET_STAGING`/`CRON_SECRET_PROD` vars). Verified the new logic directly instead: temporarily exported `checkLineupNotPublished`, ran it via `tsx` against the real staging DB with a real throwaway UPCOMING match with no lineup. First run: `{ checked: 1, notified: 1 }`, sent to 2 real admin push subscriptions, 0 failures (Richard's own device). Immediate re-run: `{ checked: 1, notified: 0 }` — correctly deduped via `notificationSendLog`. Export reverted after. `tsc --noEmit` — 47 errors, unchanged.
+
+**Found & fixed:** session 53, 2026-08-21.
+
+---
+### Item 10 — Player-Follow Audience Query Completion
+
+**Status:** RESOLVED (audience-query half only) — 2026-08-21 (session 53).
+
+**Fix:** `sendMatchEventNotification()` now queries `userFollows` for `followType='player'` matching `event.playerId`/`event.relatedPlayerId`, merged into the same deduplicated audience set as the team/competition-follow queries beside it — identical query-time-join architecture, no materialized rows.
+
+**Still genuinely incomplete, on purpose:** there is no UI or API anywhere to create a `followType='player'` row — no follow-a-player button, no `/api/players/[id]/follow` route (confirmed via grep; only `teams/[id]/follow` exists). This was explicitly called "deliberately later" in the original roadmap doc; this pass only finishes the audience-query side that was pre-scaffolded so building the actual follow feature later won't require touching every notification call site again.
+
+**Evidence:** `tsc --noEmit` — 47 errors, unchanged, zero new.
+
+**Found & fixed:** session 53, 2026-08-21.
+
+---
