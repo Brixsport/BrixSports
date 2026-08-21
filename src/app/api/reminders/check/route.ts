@@ -14,10 +14,18 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
-import { matchReminders, matches, teams, pushSubscriptions } from '@/db/schema';
-import { eq, and, lte } from 'drizzle-orm';
+import { matchReminders, matches, teams, pushSubscriptions, users, notificationSendLog } from '@/db/schema';
+import { eq, and, lte, inArray } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/sqlite-core';
 import webpush from 'web-push';
+import { logNotificationSend } from '@/lib/notifications/match-notification-service';
+
+// Item 9: lineup-not-published reminder -- matches kicking off within this
+// window with either team's lineup still not marked `status: 'published'`
+// get a one-time admin push. Query-time check, no materialized reminder rows
+// (same architecture as the item-2 competition-follow cascade) -- dedup is
+// done against notificationSendLog rather than a new tracking column.
+const LINEUP_WARNING_WINDOW_MS = 60 * 60 * 1000; // 60 minutes before kickoff
 
 // BACKLOG-208: cron-driven, so not attacker-facing, but still a genuine list
 // query -- CLAUDE.md requires a .limit() on every one, no exceptions.
@@ -136,6 +144,93 @@ async function runReminderCheck() {
     };
 }
 
+async function checkLineupNotPublished() {
+    const now = new Date();
+    const windowEnd = new Date(now.getTime() + LINEUP_WARNING_WINDOW_MS);
+
+    const upcomingMatches = await db
+        .select()
+        .from(matches)
+        .where(eq(matches.status, 'UPCOMING'))
+        .limit(MAX_REMINDERS_PER_RUN);
+
+    // startTime is a plain text column, not a comparable timestamp -- filter
+    // in JS after parsing rather than relying on lexical SQL comparison.
+    const dueSoon = upcomingMatches.filter((m) => {
+        const start = new Date(m.startTime);
+        return !isNaN(start.getTime()) && start >= now && start <= windowEnd;
+    });
+
+    let notified = 0;
+    for (const match of dueSoon) {
+        let lineups: any = {};
+        if (match.lineups) {
+            try {
+                lineups = JSON.parse(match.lineups as string);
+            } catch {
+                // Malformed lineups JSON -- treat as unpublished rather than crash the cron.
+            }
+        }
+        const homePublished = lineups?.home?.status === 'published';
+        const awayPublished = lineups?.away?.status === 'published';
+        if (homePublished && awayPublished) continue;
+
+        const alreadySent = await db
+            .select({ id: notificationSendLog.id })
+            .from(notificationSendLog)
+            .where(and(eq(notificationSendLog.source, 'lineup_not_published'), eq(notificationSendLog.matchId, match.id)))
+            .limit(1);
+        if (alreadySent.length > 0) continue;
+
+        const admins = await db.select({ id: users.id }).from(users).where(eq(users.role, 'admin')).limit(100);
+        const adminIds = admins.map((a) => a.id);
+        if (adminIds.length === 0) continue;
+
+        const subs = await db.select().from(pushSubscriptions).where(inArray(pushSubscriptions.userId, adminIds));
+
+        const missing = [!homePublished ? 'home' : null, !awayPublished ? 'away' : null].filter(Boolean).join(' & ');
+        const payload = JSON.stringify({
+            title: '⚠️ Lineup Not Published',
+            body: `${match.competition}: ${missing} lineup not published, kickoff in under 60 minutes`,
+            icon: '/icons/icon-192x192.png',
+            badge: '/icons/badge-96x96.png',
+            data: { url: '/admin/matches', type: 'lineup_not_published', matchId: match.id },
+        });
+
+        let sentCount = 0;
+        const errors: string[] = [];
+        for (const sub of subs) {
+            try {
+                await webpush.sendNotification(
+                    { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
+                    payload
+                );
+                sentCount++;
+            } catch (error: any) {
+                if (error.statusCode === 410 || error.statusCode === 404) {
+                    await db.delete(pushSubscriptions).where(eq(pushSubscriptions.id, sub.id));
+                }
+                errors.push(`sub ${sub.id}: ${error.message}`);
+            }
+        }
+
+        await logNotificationSend({
+            source: 'lineup_not_published',
+            matchId: match.id,
+            eventType: 'lineup_not_published',
+            targetAudience: 'admin',
+            totalSubscriptions: subs.length,
+            sentCount,
+            failedCount: subs.length - sentCount,
+            errors: errors.length > 0 ? errors : undefined,
+        });
+
+        if (sentCount > 0) notified++;
+    }
+
+    return { checked: dueSoon.length, notified };
+}
+
 async function runStatusCheck() {
     const now = new Date();
 
@@ -174,8 +269,22 @@ export async function GET(request: NextRequest) {
 
     try {
         const mode = request.nextUrl.searchParams.get('mode');
-        const result = mode === 'status' ? await runStatusCheck() : await runReminderCheck();
-        return NextResponse.json(result);
+        if (mode === 'status') {
+            return NextResponse.json(await runStatusCheck());
+        }
+
+        // Independent try/catches -- a failure in one reminder type must never
+        // block the other from running in the same cron tick.
+        const result = await runReminderCheck();
+        let lineupCheck: { checked: number; notified: number } | { error: string };
+        try {
+            lineupCheck = await checkLineupNotPublished();
+        } catch (error: any) {
+            console.error('[Reminder Checker] Lineup check error:', error);
+            lineupCheck = { error: error.message };
+        }
+
+        return NextResponse.json({ ...result, lineupNotPublished: lineupCheck });
     } catch (error) {
         console.error('[Reminder Checker] Error:', error);
         return NextResponse.json({ error: 'Failed to process reminders' }, { status: 500 });
@@ -194,7 +303,14 @@ export async function POST(request: NextRequest) {
 
     try {
         const result = await runReminderCheck();
-        return NextResponse.json(result);
+        let lineupCheck: { checked: number; notified: number } | { error: string };
+        try {
+            lineupCheck = await checkLineupNotPublished();
+        } catch (error: any) {
+            console.error('[Reminder Checker] Lineup check error:', error);
+            lineupCheck = { error: error.message };
+        }
+        return NextResponse.json({ ...result, lineupNotPublished: lineupCheck });
     } catch (error) {
         console.error('[Reminder Checker] Error:', error);
         return NextResponse.json({ error: 'Failed to process reminders' }, { status: 500 });

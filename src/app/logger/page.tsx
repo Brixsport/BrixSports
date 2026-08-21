@@ -8,6 +8,7 @@ import { BasketballLogger } from '@/components/BasketballLogger';
 import { TeamLogo } from '@/lib/utils/team-logo';
 import { FootballLogger } from '@/components/FootballLogger';
 import { TrackLogger } from '@/components/TrackLogger';
+import { SessionExpiryBanner } from '@/components/logger/SessionExpiryBanner';
 
 import { Match, Logger } from '@/db/schema';
 
@@ -218,16 +219,23 @@ export default function LoggerPage() {
     if (!match) return null;
 
     // Render sport-specific logger
+    let sportLogger: React.ReactNode;
     if (match.sport === 'Basketball' || (match.sport as string) === '3x3 Basketball' || (match.sport as string) === 'Basketball 3x3') {
-      return <BasketballLogger match={match} onExit={() => setSelectedMatchId(null)} currentLogger={logger} />;
+      sportLogger = <BasketballLogger match={match} onExit={() => setSelectedMatchId(null)} currentLogger={logger} />;
     } else if (match.sport === 'Football' || (match.sport as string) === 'Five-a-side' || (match.sport as string) === '5-a-side' || (match.sport as string) === '5-aside' || (match.sport as string) === 'Futsal') {
-      return <FootballLogger match={match} onExit={() => setSelectedMatchId(null)} currentLogger={logger} />;
+      sportLogger = <FootballLogger match={match} onExit={() => setSelectedMatchId(null)} currentLogger={logger} />;
     } else if (match.sport === 'Track' || (match.sport as string) === 'Track & Field') {
-      return <TrackLogger match={match} onExit={() => setSelectedMatchId(null)} teams={teams} players={players} />;
+      sportLogger = <TrackLogger match={match} onExit={() => setSelectedMatchId(null)} teams={teams} players={players} />;
     } else {
       // Default to generic logger for other sports
-      return <MatchLoggerUI match={match} onExit={() => setSelectedMatchId(null)} currentLogger={logger} teams={teams} players={players} />;
+      sportLogger = <MatchLoggerUI match={match} onExit={() => setSelectedMatchId(null)} currentLogger={logger} teams={teams} players={players} />;
     }
+    return (
+      <>
+        <SessionExpiryBanner />
+        {sportLogger}
+      </>
+    );
   }
 
   const handleLogout = () => {
@@ -240,6 +248,7 @@ export default function LoggerPage() {
 
   return (
     <div className="min-h-screen bg-[#050505] text-white p-4 md:p-12">
+      <SessionExpiryBanner />
       <div className="max-w-4xl mx-auto space-y-8 md:space-y-12">
         <header className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
           <div>
