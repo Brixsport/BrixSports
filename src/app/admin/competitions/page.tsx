@@ -9,6 +9,7 @@ import { ToastContainer } from '@/components/admin/Toast';
 import ConfirmDialog from '@/components/admin/ConfirmDialog';
 import SkeletonLoader from '@/components/admin/SkeletonLoader';
 import ErrorBoundary from '@/components/admin/ErrorBoundary';
+import ImageUpload from '@/components/ImageUpload';
 
 interface Competition {
     id: string;
@@ -24,6 +25,7 @@ interface Competition {
     teamsPerGroup?: number;
     isMultiSport?: boolean;
     description?: string;
+    logo?: string;
 }
 
 const defaultFormData = {
@@ -38,7 +40,8 @@ const defaultFormData = {
     numberOfGroups: 0,
     teamsPerGroup: 0,
     isMultiSport: false,
-    description: ''
+    description: '',
+    logo: ''
 };
 
 const defaultMatchSettings = {
@@ -123,6 +126,17 @@ function CompetitionModal({ mode, initialData, initialMatchSettings, onSubmit, o
                 </div>
                 <form onSubmit={handleSubmit} className="p-8 pt-4 space-y-6">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div className="md:col-span-2">
+                            <label className="block text-[10px] font-black uppercase tracking-widest text-white/40 mb-2">Competition Logo</label>
+                            <ImageUpload
+                                value={form.logo}
+                                onChange={(url) => setForm({ ...form, logo: url })}
+                                aspectRatio="square"
+                                maxSize={2}
+                                className="w-32 h-32"
+                            />
+                        </div>
+
                         <div className="md:col-span-2">
                             <label className="block text-[10px] font-black uppercase tracking-widest text-white/40 mb-2">Competition Name</label>
                             <input
@@ -801,7 +815,8 @@ function AdminCompetitionsPageContent() {
                         numberOfGroups: editingCompetition.numberOfGroups || 0,
                         teamsPerGroup: editingCompetition.teamsPerGroup || 0,
                         isMultiSport: editingCompetition.isMultiSport || false,
-                        description: editingCompetition.description || ''
+                        description: editingCompetition.description || '',
+                        logo: editingCompetition.logo || ''
                     }}
                     onSubmit={async (data, ms) => {
                         await handleEditSubmit(data, ms);

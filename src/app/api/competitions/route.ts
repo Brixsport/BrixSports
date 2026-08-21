@@ -128,7 +128,7 @@ export async function POST(request: NextRequest) {
         const {
             name, sport, format, season, status,
             numberOfTeams, numberOfGroups, teamsPerGroup,
-            level, scope, rules, description, isMultiSport
+            level, scope, rules, description, isMultiSport, logo
         } = body;
 
         if (!name || (!sport && !isMultiSport) || !format || !season) {
@@ -153,6 +153,7 @@ export async function POST(request: NextRequest) {
             scope: scope || 'internal',
             rules: rules ? JSON.stringify(rules) : null,
             description: description || null,
+            logo: logo || null,
             createdAt: new Date(),
             updatedAt: new Date(),
         };

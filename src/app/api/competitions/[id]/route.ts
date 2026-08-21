@@ -163,6 +163,7 @@ export async function PATCH(
             teamsPerGroup,
             status,
             isMultiSport,
+            logo,
         } = body;
 
         // Check if competition exists
@@ -198,6 +199,7 @@ export async function PATCH(
         if (teamsPerGroup !== undefined) updateData.teamsPerGroup = teamsPerGroup;
         if (status !== undefined) updateData.status = status;
         if (isMultiSport !== undefined) updateData.isMultiSport = isMultiSport;
+        if (logo !== undefined) updateData.logo = logo;
 
         // Update competition
         await db

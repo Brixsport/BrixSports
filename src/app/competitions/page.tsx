@@ -19,6 +19,7 @@ interface Competition {
   season?: string;
   status?: string;
   description?: string;
+  logo?: string | null;
 }
 
 interface Standing {
@@ -181,19 +182,26 @@ function CompetitionsContent() {
     <div className="min-h-screen bg-[#050505] text-white p-4 md:p-12">
       <div className="max-w-5xl mx-auto space-y-6 md:space-y-12">
         <header className="flex flex-col md:flex-row md:items-end justify-between gap-4 md:gap-6 border-b border-white/5 pb-8">
-          <div>
-            <div className="flex items-center gap-2 mb-2">
-              <Trophy size={14} className="text-primary" />
-              <span className="text-[10px] font-black uppercase tracking-widest text-white/40">
-                {selectedComp?.season || 'Current Season'} • {selectedComp?.status || 'Active'}
-              </span>
+          <div className="flex items-center gap-4">
+            {selectedComp?.logo && (
+              <div className="w-14 h-14 md:w-20 md:h-20 shrink-0 bg-white/5 rounded-2xl border border-white/10 p-2 flex items-center justify-center">
+                <TeamLogo logo={selectedComp.logo} name={selectedComp.name} size="lg" />
+              </div>
+            )}
+            <div>
+              <div className="flex items-center gap-2 mb-2">
+                <Trophy size={14} className="text-primary" />
+                <span className="text-[10px] font-black uppercase tracking-widest text-white/40">
+                  {selectedComp?.season || 'Current Season'} • {selectedComp?.status || 'Active'}
+                </span>
+              </div>
+              <h1 className="font-display text-2xl md:text-5xl tracking-tighter italic uppercase leading-none mb-2">
+                {selectedComp?.name || 'Competition Viewer'}
+              </h1>
+              <p className="text-white/60 text-sm max-w-xl">
+                {selectedComp?.description || `Managing standings, fixtures, and results for ${selectedComp?.name || 'this competition'}.`}
+              </p>
             </div>
-            <h1 className="font-display text-2xl md:text-5xl tracking-tighter italic uppercase leading-none mb-2">
-              {selectedComp?.name || 'Competition Viewer'}
-            </h1>
-            <p className="text-white/60 text-sm max-w-xl">
-              {selectedComp?.description || `Managing standings, fixtures, and results for ${selectedComp?.name || 'this competition'}.`}
-            </p>
           </div>
 
           {/* View Toggle */}

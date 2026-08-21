@@ -231,6 +231,7 @@ export const competitions = sqliteTable('competitions', {
     isMultiSport: integer('is_multi_sport', { mode: 'boolean' }).default(false),
     format: text('format').notNull(), // 'league' | 'knockout' | 'group_knockout'
     season: text('season').notNull(),
+    logo: text('logo'),
     startDate: integer('start_date', { mode: 'timestamp' }),
     endDate: integer('end_date', { mode: 'timestamp' }),
     description: text('description'),
