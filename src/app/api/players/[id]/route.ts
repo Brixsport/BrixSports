@@ -202,19 +202,34 @@ export async function GET(
             }
         }
 
-        // Basketball-specific stats from specialized table -- CURRENT_SEASON only.
         // A player has one row per (season, competition), so an unfiltered .get()
-        // would return an arbitrary row the moment a second season's stats exist
-        // (dormant today -- staging has zero multi-season players yet -- but not
-        // once a new season starts, which is exactly when this would surface).
-        // Summed across rows since a player can have multiple competitions in the
-        // same season.
+        // would return an arbitrary row the moment a second season's stats exist.
+        // Prefer CURRENT_SEASON rows -- but real data doesn't reliably have that
+        // value yet (football_player_stats.season is still the literal schema
+        // default '2024' on every real row; basketball's real rows are all
+        // '2025/2026', a season CURRENT_SEASON has already moved past for roster
+        // purposes) -- so an unconditional eq(season, CURRENT_SEASON) filter
+        // would silently return empty stats for every real player today, a
+        // regression caught by checking real data before trusting the first
+        // version of this fix. Falls back to whichever season the most recently
+        // updated row belongs to, rather than going empty or blending seasons.
+        function pickEffectiveSeasonRows<T extends { season: string; updatedAt: Date | null }>(rows: T[]): T[] {
+            if (rows.length === 0) return [];
+            const currentSeasonRows = rows.filter((r) => r.season === CURRENT_SEASON);
+            if (currentSeasonRows.length > 0) return currentSeasonRows;
+            const latestSeason = [...rows].sort(
+                (a, b) => (b.updatedAt?.getTime() ?? 0) - (a.updatedAt?.getTime() ?? 0)
+            )[0].season;
+            return rows.filter((r) => r.season === latestSeason);
+        }
+
         let basketballSeasonStats: any = null;
         if (playerSport === 'Basketball') {
-            const rows = await db
+            const allRows = await db
                 .select()
                 .from(basketballPlayerStats)
-                .where(and(eq(basketballPlayerStats.playerId, id), eq(basketballPlayerStats.season, CURRENT_SEASON)));
+                .where(eq(basketballPlayerStats.playerId, id));
+            const rows = pickEffectiveSeasonRows(allRows);
             if (rows.length > 0) {
                 basketballSeasonStats = rows.reduce((acc, r) => ({
                     gamesPlayed: (acc.gamesPlayed || 0) + (r.gamesPlayed || 0),
@@ -235,13 +250,14 @@ export async function GET(
             }
         }
 
-        // Football-specific stats from specialized table -- same CURRENT_SEASON fix.
+        // Football-specific stats from specialized table -- same season-selection fix.
         let footballSeasonStats: any = null;
         if (playerSport === 'Football') {
-            const rows = await db
+            const allRows = await db
                 .select()
                 .from(footballPlayerStats)
-                .where(and(eq(footballPlayerStats.playerId, id), eq(footballPlayerStats.season, CURRENT_SEASON)));
+                .where(eq(footballPlayerStats.playerId, id));
+            const rows = pickEffectiveSeasonRows(allRows);
             if (rows.length > 0) {
                 footballSeasonStats = rows.reduce((acc, r) => ({
                     appearances: (acc.appearances || 0) + (r.appearances || 0),
