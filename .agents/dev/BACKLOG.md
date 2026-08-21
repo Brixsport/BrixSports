@@ -8497,3 +8497,18 @@ Live-reproduced exactly as described: navigated to a real match's URL that had j
 **Found:** session 53, 2026-08-21, while investigating the player-stats season bug above.
 
 ---
+### Competition League-Grouping + Match-Creation Dropdown Season/Status Visibility
+
+**Status:** RESOLVED — 2026-08-21 (session 53), same investigation thread as the standings audit above.
+
+**Design question, Richard's:** competitions had no franchise/series concept — every season is a fully disconnected row, linked to prior/future seasons only by an exact-match `name` string. Considered a full `competition_series`/FK schema migration vs. a lighter naming-discipline + grouping approach; went with the latter (Richard's call) — cheaper, and directly unblocks the standings audit's `competitionId` backfill question once names are consistent.
+
+**Fix 1 — grouping API:** `GET /api/competitions` gained a non-breaking `groups` field. Groups by a composite key — `sport + name (trimmed, case-insensitive) + hostOrganizationId` — specifically *not* name alone, per Richard's own refinement: two different universities' leagues sharing a display name (or differing only in casing) must never merge. Each group carries a `seasons` list ordered by real timestamp (`startDate`/`createdAt`) rather than the free-text `season` string (which doesn't sort reliably — `"2024"` vs `"2025/2026"` vs `"2026/2027"` are different formats), plus a `latest` pointer.
+
+**Fix 2 — match-creation dropdown (found while implementing fix 1, not separately reported):** `admin/matches/page.tsx`'s competition dropdown showed only the bare `comp.name` — no season, no status — because its local `Competition` interface never declared either field, even though the API already returns both. This was about to become a real, immediate problem the moment fix 1's naming discipline is actually followed: an admin creating a match would see "BUSA LEAGUE FOOTBALL" listed twice with zero way to tell which season is current. Now shows `"{name} ({season})"` plus a `— Completed` suffix, and sorts completed competitions to the bottom (still selectable, not hidden — e.g. backfilling a missed match into a just-finished competition).
+
+**Evidence:** `tsc --noEmit` — 47 errors, unchanged, zero new, both commits. Grouping live-verified against staging with 3 real throwaway competitions (2 same org, 1 different org, same league name) — API returned exactly 2 groups, the same-org pair correctly grouped with `latest.season` = the newer one, the different-org one correctly kept separate. Dropdown fix verified by code/type-check confidence rather than a full authenticated browser click-through (low-risk presentational change — a sort + string interpolation, no data writes — and the underlying season/status data was already confirmed correct via the grouping test above) — flagged explicitly rather than claiming a browser-verify that didn't happen.
+
+**Found & fixed:** session 53, 2026-08-21 (`e8dfcac` grouping, `7a194b6` dropdown).
+
+---
