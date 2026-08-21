@@ -8492,7 +8492,7 @@ Live-reproduced exactly as described: navigated to a real match's URL that had j
 
 **Scope for the actual fix (not started):** (1) confirm how season rollover actually happens today — does creating "next season" produce a new `competitions.id` or mutate the existing row's `season` field; (2) audit each of the ~20 call sites above to decide, per site, whether the name-string fallback can be dropped entirely now that `competitionId` is populated on essentially all real rows, or whether it still needs to exist for some legacy data path; (3) fix the standings prefix-`LIKE` specifically first, since it's the most dangerous (can cross-contaminate even with a correct id supplied).
 
-**Meta-point, Richard's own:** this is exactly the class of bug a proactive `/feature` sweep or the upcoming beta-tester tooling should be designed to catch going forward — a season/instance-boundary bug that's dormant in current data and only manifests once a second instance of the same logically-recurring entity (a season, in this case) exists. Worth building an explicit check for "does this entity have a stable id-based key, or does something fall back to a mutable/reusable string field" into whatever the `/visual-qa` + beta-tester tooling's checklist ends up being, not just visual/UX regressions.
+**Meta-point, Richard's own:** this is exactly the class of bug a proactive `/feature` sweep or the upcoming beta-tester tooling should be designed to catch going forward — a season/instance-boundary bug that's dormant in current data and only manifests once a second instance of the same logically-recurring entity (a season, in this case) exists. Worth building an explicit check for "does this entity have a stable id-based key, or does something fall back to a mutable/reusable string field" into whatever the `/visual-qa` + beta-tester tooling's checklist ends up being, not just visual/UX regressions. **Tooling now built** (2026-08-21, same session): `beta-tester`'s `insider`/`boundary-probe` mode is exactly this class of check — see the standalone `beta-tester-skill` project for the full design. Not yet run against this specific standings/comp-stats finding.
 
 **Found:** session 53, 2026-08-21, while investigating the player-stats season bug above.
 
@@ -8562,6 +8562,8 @@ Live-reproduced exactly as described: navigated to a real match's URL that had j
 
 **Side finding, not part of this item's scope:** GitHub's push output reported 102 Dependabot vulnerabilities on `main` (2 critical, 49 high, 46 moderate, 5 low) — pre-existing in the dependency tree, not introduced by this merge. Flagged to Richard, not investigated further this session.
 
+**Follow-on hotfix, same day:** submitting the new sitemap to Search Console surfaced 18 "Invalid date" `lastmod` entries — a second corrupted-timestamp failure shape (`safeDate()`'s `NaN` check didn't catch a millisecond-epoch value read as epoch-seconds, producing a technically-valid year-57956 `Date`). Fixed via a real hotfix branch → PR #21 (`b792b5b` → `2d16014`) → merged to `main`, then merged back to `dev`. That `main`→`dev` merge hit 5 spurious conflicts on files with zero real content differences — root-caused to `--squash` never recording parentage, fixed going forward in `WORKFLOW.md` (real merges only for `dev`↔`main` syncs from here on; see its new "dev ↔ main Sync" section). Also corrected `WORKFLOW.md`'s stale claim that hotfixes auto-sync back to `dev` — no such GitHub Action exists.
+
 ---
 ### 126 Corrupted Timestamp Rows (`matches.updated_at` x33, `players.created_at` x93) — Found, Defended Against in One Place, Not Backfilled
 
@@ -8576,5 +8578,22 @@ Live-reproduced exactly as described: navigated to a real match's URL that had j
 **Scope for the actual fix (not started):** (1) identify which of the 126 rows have a recoverable real timestamp (the ISO-string ones can be parsed and rewritten correctly; the millisecond-epoch ones can be divided by 1000 and rewritten) vs. which are unrecoverable/have no evident correct original value; (2) backfill with the corrected value, staging first then prod, per the project's own migration convention; (3) audit other read sites for the same `.toISOString()`-on-unvalidated-date crash risk, not just assume sitemap.ts was the only exposed one.
 
 **Found:** session 53, 2026-08-21, while diagnosing the item-21 sitemap 500.
+
+---
+### BUG-237 — `/admin/matches`'s "Manage Livestream" Deep Link Silently Fails for Any Match Outside the 50 Most-Recently-Created
+
+**Status:** OPEN — found 2026-08-21 (session 53), via the new `beta-tester` tool's first live-project run (admin persona, iPad Air viewport, `insider` mode).
+
+**What:** `/admin/livestreams?matchId=<id>` is supposed to auto-open that match's edit form (the deep-link mechanism from `/admin/matches`'s "Manage Livestream" button — see the `autoOpenedMatchIdRef` effect in `src/app/admin/livestreams/page.tsx`). It silently does nothing if the target match isn't in the list `fetchMatches()` pulls from `/api/matches?limit=100`.
+
+**Root cause, fully confirmed:** `src/app/api/matches/route.ts` reads `sport`/`loggerId`/`status`/`competitionId`/`competition` from `searchParams` but never reads `limit` at all — every request is hardcoded to `.orderBy(desc(matches.createdAt)).limit(50)` regardless of what the caller asks for. The admin livestreams page's own `?limit=100` request is silently ignored server-side, so it only ever sees the 50 most-recently-*created* matches. A real match tested (`busa-basketball-1`, created 2025-12-31, FINISHED status) fell outside that window — confirmed directly: `GET /api/matches?limit=100` returned exactly 50 rows, `busa-basketball-1` not among them.
+
+**Impact:** any admin trying to manage a livestream for an older match via the deep-link button gets a page that just loads normally with no error, no "match not found," nothing — they'd have to know to scroll/search the livestreams page's own list manually (also capped at the same 50) instead. Silent failure, not a crash — the worse kind for a support/triage perspective, since there's no error to report.
+
+**Evidence:** `beta-tester` run `20260821-172913_admin_admin-updates-a-livestream-url_ipad-air` (screenshots + video) — two identical screenshots 5+ seconds apart, edit form never appeared, target match not visible anywhere in the rendered list.
+
+**Also noted, same run, not yet filed as its own bug:** the "Install Brixsport" PWA banner visually overlaps the "Livestream Management" page heading at the iPad Air viewport (820px) — worth a follow-up visual-qa pass specifically at that width; admin pages are documented as 1440px-only/desktop-first (`visual-qa` skill's breakpoint table) so this may be expected-but-still-worth-fixing rather than a regression.
+
+**Fix scope (not started):** either make `/api/matches` actually honor a `limit` query param (straightforward, but changes behavior for every other caller of this route — audit who else calls it and with what assumption about the default 50 first), or give the livestreams page its own dedicated single-match fetch for the deep-link case (`GET /api/matches/[id]`, already exists) instead of relying on the match being present in the bulk list at all.
 
 ---
