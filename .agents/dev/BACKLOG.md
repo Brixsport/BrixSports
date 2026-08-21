@@ -8434,3 +8434,24 @@ Live-reproduced exactly as described: navigated to a real match's URL that had j
 **Found & fixed:** session 53, 2026-08-21.
 
 ---
+### Public Match-Lifecycle Notifications — Lineup Available, Match Start/End, Starting-Soon Broadcast
+
+**Status:** RESOLVED — 2026-08-21 (session 53).
+
+**Richard's ask:** public notifications for lineups-available, kickoff-in-30-minutes, match-started, match-ended.
+
+**Audit result — 3 of 4 already existed:**
+- **Match started / match ended (full time):** `MATCH_START`/`MATCH_END` period-transition triggers, wired in an earlier session, already reach the general public (team + competition followers via `sendMatchEventNotification()`'s query-time audience join) — not admin-only. Nothing to build.
+- **Lineup available:** also already wired — `lineup/publish/route.ts` already called the notification pipeline on publish, and `createNotificationPayload()` already had a `LINEUP_AVAILABLE` template. Only gap: it didn't pass `competitionId`, so competition-followers (item 2's cascade) were missed. Fixed — threaded `competitionId` through `lineup/publish/route.ts` → `/api/notifications/match-event` → `sendMatchEventNotification()`.
+
+**New — match-starting-soon (built this pass):** a new `MATCH_STARTING_SOON` notification key + payload template, triggered from a new `checkMatchStartingSoon()` in `reminders/check/route.ts` — a public broadcast to every team/competition follower 30 minutes before kickoff. Deliberately distinct from the existing user-opt-in `matchReminders` (which require the viewer to have created a personal reminder first) — this fires automatically to the same audience `sendMatchEventNotification()` already builds for every other event type, reusing that pipeline rather than a parallel one. Dedup via `notificationSendLog` (checks `source='match_event' AND matchId AND eventType='MATCH_STARTING_SOON'` — `sendMatchEventNotification()` always logs with `source:'match_event'` regardless of the specific event type, confirmed by reading its own internal logging calls before relying on it).
+
+**Refactor:** `reminders/check/route.ts`'s GET/POST handlers were duplicating the same "run all checks with independent try/catch" pattern three times over (once per new reminder type) — consolidated into one `runAllChecks()` helper.
+
+**Evidence:** `tsc --noEmit` — 47 errors, unchanged, zero new. Live-verified via the real deployed `https://brixsports-staging.vercel.app/api/reminders/check` HTTP endpoint (not bypassed — see the `CRON_SECRET` note below) with a real throwaway UPCOMING match, both lineups pre-marked `published`: `lineupNotPublished: { checked: 1, notified: 0 }` (correctly skipped, both published), `matchStartingSoon: { checked: 1, notified: 1 }`, sent to 3 real subscriptions, 0 failures. Second call: both correctly deduped (`notified: 0` on both, log row count unchanged at 1). Full cleanup after.
+
+**Separately found & fixed:** `.env.local`'s `CRON_SECRET` was stale (rotated at some point, last few characters differed from the real deployed value) — every prior attempt to hit the deployed `/api/reminders/check` endpoint had been failing with `401 Unauthorized`, which is why item 9's lineup-not-published check had to be verified via a direct `tsx` import bypassing the route entirely. Richard supplied the correct current value (`CRON_SECRET_STAGING`, the same one Railway's `ws-server` actually calls this endpoint with); updated `.env.local` and confirmed it authenticates against the real deployed endpoint (`?mode=status` returned `200` where it previously returned `401`). This unblocks real HTTP-level verification for all future reminder-cron changes, not just this one.
+
+**Found & fixed:** session 53, 2026-08-21.
+
+---
