@@ -61,9 +61,9 @@ function configureVAPID(): { success: boolean; error?: string } {
         );
         console.log('[Notifications API] VAPID configured successfully');
         return { success: true };
-    } catch (error: any) {
+    } catch (error) {
         console.error('[Notifications API] VAPID configuration failed:', error);
-        return { success: false, error: `VAPID configuration error: ${error.message}` };
+        return { success: false, error: 'VAPID configuration error' };
     }
 }
 

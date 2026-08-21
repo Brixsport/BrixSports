@@ -144,10 +144,10 @@ export async function POST(request: NextRequest) {
             success: true,
             message: 'Subscription saved successfully',
         });
-    } catch (error: any) {
+    } catch (error) {
         console.error('[NotificationAPI] Error saving subscription:', error);
         return NextResponse.json(
-            { error: 'Failed to save subscription', details: error.message },
+            { error: 'Failed to save subscription' },
             { status: 500 }
         );
     }

@@ -10,6 +10,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Loader2, Mail, Lock, User, CheckCircle2, Eye, EyeOff } from "lucide-react";
 import { toast } from "sonner";
 import { OnboardingModal } from "@/components/OnboardingModal";
+import { getClientErrorMessage } from "@/lib/client-error";
 
 const STRENGTH_LABELS = {
     0: "Enter Password",
@@ -122,7 +123,7 @@ export default function SignupPage() {
             toast.error("Registration failed", {
                 description: (
                     <div className="flex flex-col gap-1">
-                        <p>{error instanceof Error ? error.message : "Please try again later."}</p>
+                        <p>{getClientErrorMessage(error, "Please try again later.")}</p>
                         {(error as any).code && (
                             <p className="text-[10px] font-mono uppercase opacity-50">Code: {(error as any).code}</p>
                         )}

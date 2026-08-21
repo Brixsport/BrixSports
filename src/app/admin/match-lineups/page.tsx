@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useAuth } from '@/hooks/useAuth';
 import { useRouter } from 'next/navigation';
 import { Shield, Calendar, Users, CheckCircle, AlertCircle, Save, Lock as LockIcon } from 'lucide-react';
+import { getClientErrorMessage } from '@/lib/client-error';
 
 interface Match {
     id: string;
@@ -352,9 +353,9 @@ export default function AdminMatchLineupsPage() {
             alert('Lineups published successfully!');
             // Reload to update status headers
             loadRosters(selectedMatch);
-        } catch (error: any) {
+        } catch (error) {
             console.error('Error publishing lineups:', error);
-            alert(error.message || 'Failed to publish lineups');
+            alert(getClientErrorMessage(error, 'Failed to publish lineups'));
         } finally {
             setSaving(false);
         }

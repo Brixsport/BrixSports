@@ -328,13 +328,10 @@ export async function POST(request: NextRequest) {
             },
             { status: 201 }
         );
-    } catch (error: any) {
+    } catch (error) {
         console.error('Transaction failed during backfill:', error);
         return NextResponse.json(
-            {
-                error: 'Transaction failed',
-                message: error.message || 'An internal database error occurred'
-            },
+            { error: 'Transaction failed' },
             { status: 500 }
         );
     }

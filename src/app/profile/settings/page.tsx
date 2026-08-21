@@ -9,6 +9,7 @@ import {
 import { useTheme } from 'next-themes';
 import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';
+import { getClientErrorMessage } from '@/lib/client-error';
 
 export default function SettingsPage() {
     const { user, loading: authLoading } = useAuth();
@@ -536,8 +537,8 @@ function ChangePasswordModal({ onClose }: { onClose: () => void }) {
 
             toast.success('Password updated successfully');
             onClose();
-        } catch (error: any) {
-            toast.error(error.message);
+        } catch (error) {
+            toast.error(getClientErrorMessage(error, 'Failed to update password'));
         } finally {
             setLoading(false);
         }

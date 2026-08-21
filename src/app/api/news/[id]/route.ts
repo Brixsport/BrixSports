@@ -219,7 +219,7 @@ export async function PATCH(
             console.error('[News API] Error stack:', error.stack);
         }
         return NextResponse.json(
-            { error: 'Failed to update news article', details: error instanceof Error ? error.message : String(error) },
+            { error: 'Failed to update news article' },
             { status: 500 }
         );
     }

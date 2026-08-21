@@ -95,7 +95,7 @@ export async function POST(request: NextRequest) {
     } catch (error) {
         console.error('Player creation error:', error);
         return NextResponse.json(
-            { error: 'Failed to create player', details: String(error) },
+            { error: 'Failed to create player' },
             { status: 500 }
         );
     }

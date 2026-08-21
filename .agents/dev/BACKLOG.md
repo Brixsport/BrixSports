@@ -8035,7 +8035,30 @@ Everything below is explicitly **not** being built now — captured from `NOTIFI
 
 **Fix:** `src/app/api/matches/[id]/ratings/adjust/route.ts`'s catch block now returns a static `'Failed to fetch ratings'` instead of `error.message`. Full detail still logged server-side via `console.error`.
 
-**Found:** session 49 (`USER_FACING_ERROR_MESSAGES_AUDIT.md`). **Fixed:** session 2026-08-20. Remaining ~11 lower-severity instances from that audit (signup/forgot-password/reset-password pages, admin/organizations, admin/match-lineups, profile/settings, and ~10 more server-side leaks never actually rendered client-side) still open — scheduled as their own pass, now mechanical given `getClientErrorMessage` exists.
+**Found:** session 49 (`USER_FACING_ERROR_MESSAGES_AUDIT.md`). **Fixed:** session 2026-08-20. Remaining instances from that audit closed in the same-day follow-up pass — see `BUG-228` below.
+
+---
+
+### ~~BUG-228~~ — `USER_FACING_ERROR_MESSAGES_AUDIT.md` Remaining-Instance Sweep (Item 8)
+
+**Status:** RESOLVED — 2026-08-20 (session 53 continuation)
+**Priority:** Medium (bundled severities — see audit for the original per-instance High/Medium/Low breakdown)
+
+**Fix — client-side, all converged onto the existing `getClientErrorMessage()` helper (`src/lib/client-error.ts`, already proven in `admin/loggers/page.tsx`/`admin/page.tsx`):**
+- `src/app/signup/page.tsx`, `src/app/forgot-password/page.tsx`, `src/app/reset-password/page.tsx` — the exact `BUG-198` pattern, unfixed everywhere else it was pasted.
+- `src/app/admin/organizations/page.tsx` (2 instances — list fetch + create), `src/app/admin/match-ratings/page.tsx`, `src/app/admin/match-ratings/[id]/page.tsx` (2 instances — fetch + calculate), `src/app/admin/match-lineups/page.tsx` (was a raw `alert(error.message)`).
+- `src/app/profile/settings/page.tsx` — the audit's worst instance, `toast.error(error.message)` with **no `instanceof` guard at all** (would show the literal string `"undefined"` for a non-`Error` throw).
+- **Not touched, deliberately**: `admin/past-matches/import/page.tsx`'s CSV/XLSX parse-failure catch — a different pattern (library parse error, not a fetch/network failure); `getClientErrorMessage()`'s network-vs-thrown-Error distinction doesn't apply and would actually be wrong here (a real `SyntaxError` from a malformed file is exactly the detail an admin uploading a bad file needs to see, not a generic "network error"). Audit rated this Low-Medium and "arguably acceptable" in this debugging context — left as-is.
+
+**Fix — server-side, raw `error.message`/`.stack`/`String(error)` replaced with a static message in the response body, full detail kept in `console.error`:** `src/app/api/notifications/subscribe/route.ts`, `src/app/api/cloudinary/sign/route.ts`, `src/app/api/news/route.ts` (2 instances), `src/app/api/news/[id]/route.ts`, `src/app/api/competitions/register/approve/route.ts`, `src/app/api/players/create-individual/route.ts`, `src/app/api/matches/backfill/route.ts`, `src/app/api/notifications/send/route.ts` (the `configureVAPID()` helper's caught-exception branch only — its other returns are hand-authored config-validation messages, not raw exception dumps, left as-is).
+
+**Real finding beyond the original audit, same file:** `src/app/api/notifications/diagnose/route.ts`'s `GET` already had a proper `getAuthUser()` + admin gate (fixed since the audit was written session 49 — that part of the original filing is stale) — but its **`POST` handler had zero auth check at all**, letting anyone trigger a real `webpush.sendNotification()` call to an arbitrary or first subscription with no authentication. This is a live unauthenticated-action bug, not just an info leak — same "second handler in the same file missed during an auth sweep" pattern this project has hit before (`BUG-222`). Added the identical `getAuthUser()` + admin gate to `POST`. Also sanitized every raw-error response in the file (VAPID config, DB query, send-failure, outer catches) — kept as a diagnostics tool for admins, but CLAUDE.md's "never return raw database errors" rule doesn't carve out an admin exception.
+
+**Deliberately left alone (matches the audit's own severity call, not re-litigated):** `admin/infrastructure/route.ts` (semi-intentional admin health-check surface, already gated); `notifications/match-reminders/route.ts` + `reminders/check/route.ts` (CRON_SECRET-gated internal jobs, no real client ever renders these).
+
+**Evidence:** `tsc --noEmit` — 48 total errors (down from 49 baseline; no new errors, confirmed none of the 17 touched files appear in the diff — the only hits near these areas are pre-existing baseline errors in `admin/news/page.tsx`, a file this pass didn't touch).
+
+**Found:** session 49 (`USER_FACING_ERROR_MESSAGES_AUDIT.md`), the `notifications/diagnose` POST auth gap found fresh this session while fixing the file's leaks. **Fixed:** session 53 continuation, 2026-08-20.
 
 ---
 

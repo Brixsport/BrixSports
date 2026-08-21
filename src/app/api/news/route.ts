@@ -72,7 +72,7 @@ export async function GET(request: NextRequest) {
     } catch (error) {
         console.error('[News API] Error fetching news:', error);
         return NextResponse.json(
-            { error: 'Failed to fetch news articles', details: error instanceof Error ? error.message : String(error) },
+            { error: 'Failed to fetch news articles' },
             { status: 500 }
         );
     }
@@ -201,7 +201,7 @@ export async function POST(request: NextRequest) {
             console.error('[News API] Full error:', JSON.stringify(error, Object.getOwnPropertyNames(error)));
         }
         return NextResponse.json(
-            { error: 'Failed to create news article', details: error instanceof Error ? error.message : String(error) },
+            { error: 'Failed to create news article' },
             { status: 500 }
         );
     }

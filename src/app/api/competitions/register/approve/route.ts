@@ -197,7 +197,7 @@ export async function POST(request: NextRequest) {
     } catch (error) {
         console.error('Approval error:', error);
         return NextResponse.json(
-            { error: 'Failed to approve registration', details: String(error) },
+            { error: 'Failed to approve registration' },
             { status: 500 }
         );
     }
