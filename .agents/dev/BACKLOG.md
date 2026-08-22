@@ -8612,24 +8612,18 @@ Live-reproduced exactly as described: navigated to a real match's URL that had j
 
 ---
 
-### BUG-238 — WS Server Reads JWT `payload.id` for Logger Identity, But Every Real Token Carries `payload.userId` — Single-Writer Clock Authority Silently Never Engages
+### ~~BUG-238~~ — FALSE POSITIVE, Retracted — WS Server's `payload.id` Read Is Correct for Real Logger Tokens
 
-**Status:** OPEN — found session 53, 2026-08-21, while live-testing `BACKLOG-151`'s dual-logger fix (unrelated to that fix itself — surfaced by reading `ws-server/index.js` in full to understand the real-time channel).
-**Priority:** HIGH — Tier 0. Directly threatens Flow C's "score/clock updates without refresh" and the documented under-5-second latency target for the match clock specifically, though `event:new`/score broadcasts (a separate, correctly-wired path via `events/route.ts`'s `after(broadcastMatchEvent(...))`) are unaffected — this is scoped to the live match *clock/timer* only.
+**Status:** WONT FIX — retracted, 2026-08-22 (session 53 continuation). Filed in error the same session, never actually reached staging/production risk. Left here (struck through) rather than deleted so the mistake and its lesson aren't lost.
 
-**Problem:** `ws-server/index.js`'s socket auth middleware (`io.use(...)`, around line 178-200) does:
-```js
-const payload = jwt.verify(token, secret);
-socket.data.loggerId = payload.id;
-```
-But every real token this app ever issues is signed by `generateToken(userId, email, role)` (`src/lib/auth.ts`), which produces `{ userId, email, role }` — confirmed the only signer used app-wide (`src/app/api/auth/login/route.ts:76` calls `generateToken(user.id, user.email, normalizedRole)`, the canonical login path). There is no `id` field on any real payload, only `userId`. So `socket.data.loggerId` is `undefined` for every real logger connection, always.
+**Original claim (wrong):** that `ws-server/index.js` reading `payload.id` for logger identity was a bug because "every real token this app issues" carries `payload.userId` instead — based on checking only `generateToken()` in `src/lib/auth.ts` (used by `/api/auth/login`, the admin/viewer login path) and wrongly generalizing it to loggers too.
 
-This directly breaks `match:time:update`'s single-writer clock-authority check (`isAssignedLogger(socket, matchId)`, `ws-server/index.js` ~line 231-250), which calls the internal assignment-check endpoint with `loggerId=encodeURIComponent(socket.data.loggerId)` — i.e. the literal string `"undefined"` for every real logger, which cannot match any real `match_logger_assignments` row. Every real logger's `match:time:update` emit (both `FootballLogger.tsx:609` and `BasketballLogger.tsx:848` emit this on every clock tick) gets rejected with `clock:not-assigned`, silently — no error surfaces to the logger UI, the clock socket event just never reaches viewers via this path.
+**Why it's wrong:** loggers have their own, separate, deliberate signing path that was never checked before filing. `src/app/api/loggers/auth/route.ts:88` (the actual logger login endpoint `src/app/logger/page.tsx` calls) signs `{ id: logger.id, email, role }` — no `userId` field at all. `src/app/api/auth/refresh/route.ts`'s logger branch (line 57) mints the same shape on refresh, with its own comment stating exactly why: `// Logger tokens use { id } to match what /api/loggers/auth signs`. Grepped every `jwt.sign`/`SignJWT` call site in `src/app/api` to confirm — these two are the only places that ever mint a logger token, both use `{ id, ... }`, consistently. `ws-server/index.js`'s `payload.id` read is correct and matches real logger tokens exactly as designed; there is no bug here.
 
-**Confirmed via static code read across all three points (signer, WS auth middleware, assignment-check consumer) — not yet confirmed via a live WS connection trace** (e.g. watching `ws-server`'s own console for a real `[Single-Writer]` rejection log during a real logger session, or checking whether some other fallback mechanism keeps the public clock display working despite this). The code evidence is unambiguous, but per this project's own evidence standard, a live trace is the stronger proof and hasn't been run yet — worth doing before or alongside the fix.
+**Root cause of the false positive:** read one signer (`generateToken`, the admin path) and treated it as universal without checking whether a role-specific alternate signer existed, despite the codebase's own `auth.ts` comment two lines above `verifyAuth()` already saying so explicitly ("Logger JWTs use `{ id, email, role }`; admin JWTs use `{ userId, email, role }`") — the comment was read past, not acted on, while writing the original bug report. Caught the same session, before any fix was attempted or shipped, while debugging an unrelated 401 in `BACKLOG-151`'s own live dual-logger test (a hand-signed test token used `userId` instead of `id`, which is what actually needed fixing — in the throwaway test script, not the app).
 
-**Fix (not built):** change `socket.data.loggerId = payload.id;` to `socket.data.loggerId = payload.userId;` in `ws-server/index.js`'s auth middleware — a one-line fix, but `ws-server` is a separately-deployed Railway process (not part of the Vercel/Next.js deploy), so shipping it requires its own deploy step, not just a `dev`→`main` merge. Needs a real live logger clock-tick test after deploying (watch `match:time:updated` actually reach a subscribed viewer session) before closing.
+**Lesson:** when a "different token shape for different roles" comment already exists in the code being read, that is itself the fact to verify against, not a detail to skim past en route to a conclusion drawn from a single code path. A one-file static read is not enough evidence for a cross-cutting auth claim in a codebase already known (from this same file's own comments) to have more than one signer.
 
-**Found:** session 53, 2026-08-21, incidentally during `BACKLOG-151`'s dual-logger live-verification prep.
+**Found (filed in error):** session 53, 2026-08-21. **Retracted:** session 53 continuation, 2026-08-22, before any fix was attempted.
 
 ---
