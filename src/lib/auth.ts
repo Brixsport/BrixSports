@@ -86,6 +86,19 @@ export async function getAuthUser(request: NextRequest): Promise<AuthenticatedUs
         // (e.g. a field operator who also has a fan account, and logged in via the
         // viewer login path). Try the loggers table first; fall back to users if
         // not found there so the session resolves correctly in both cases.
+        const toAuthenticatedLogger = (logger: typeof loggers.$inferSelect): AuthenticatedUser => ({
+            id: logger.id,
+            email: logger.email ?? '',
+            name: logger.name,
+            role: 'logger',
+            avatar: null,
+            coverImage: null,
+            bio: null,
+            favoriteTeamId: null,
+            createdAt: logger.createdAt,
+            updatedAt: null,
+        });
+
         if (authData.role === 'logger') {
             const loggerResult = await db
                 .select()
@@ -96,18 +109,7 @@ export async function getAuthUser(request: NextRequest): Promise<AuthenticatedUs
             const logger = loggerResult[0];
 
             if (logger) {
-                return {
-                    id: logger.id,
-                    email: logger.email ?? '',
-                    name: logger.name,
-                    role: 'logger',
-                    avatar: null,
-                    coverImage: null,
-                    bio: null,
-                    favoriteTeamId: null,
-                    createdAt: logger.createdAt,
-                    updatedAt: null,
-                };
+                return toAuthenticatedLogger(logger);
             }
             // Not in loggers table — fall through to users table lookup below.
         }
@@ -121,6 +123,26 @@ export async function getAuthUser(request: NextRequest): Promise<AuthenticatedUs
         const user = userResult[0];
 
         if (!user) {
+            // BUG-239: a `loggers` row's own `role` column isn't guaranteed to be
+            // exactly 'logger' (a real staging row was found with role='admin').
+            // If the token's claimed role wasn't 'logger' (so the fast path above
+            // was skipped) and no matching `users` row exists either, check
+            // `loggers` as a last resort before giving up — otherwise a stale/
+            // incorrect `loggers.role` value permanently 401s a real, active
+            // logger the moment their token gets re-signed from that DB row
+            // (e.g. on /api/auth/refresh).
+            if (authData.role !== 'logger') {
+                const loggerResult = await db
+                    .select()
+                    .from(loggers)
+                    .where(eq(loggers.id, authData.userId))
+                    .limit(1);
+
+                const logger = loggerResult[0];
+                if (logger) {
+                    return toAuthenticatedLogger(logger);
+                }
+            }
             return null;
         }
 
