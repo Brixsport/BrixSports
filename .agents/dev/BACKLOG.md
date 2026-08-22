@@ -8646,3 +8646,18 @@ The break: `src/app/api/auth/refresh/route.ts`'s logger branch signs a fresh tok
 **Found:** session 53 continuation, 2026-08-22, incidentally during `BACKLOG-151`'s live dual-logger concurrency verification.
 
 ---
+
+### BUG-240 — iOS Install-Prompt Bottom-Sheet Covers the Primary Submit Button on Mobile Admin Forms, Silently Eating the Tap
+
+**Status:** OPEN — found session 53 continuation, 2026-08-22, by a dispatched beta-tester agent running the Three Critical Flows on a real `iphone-16` device emulation (real iOS Safari UA, so the UA-sniff gate below genuinely fires — this is not a desktop-only false trigger). Reproduced twice independently (a combined full-session run and a standalone Flow A run), both hitting the identical failure.
+**Priority:** HIGH — this is Flow A (Match Creation), one of CLAUDE.md's own Three Critical Flows, on the primary supported logger/admin device class (iPhone). A real admin filling out the Create Match form on an iPhone past the 30s mark gets this exact overlay with no error, no feedback — the tap just does nothing, indistinguishable from a hang.
+
+**Problem, confirmed via direct source read, not just the visual symptom:** `src/components/pwa/IOSInstallPrompt.tsx` auto-shows a bottom-sheet 30 seconds after page load for any UA matching `/iphone|ipad|ipod/i` who hasn't dismissed it in the last 7 days and hasn't installed the PWA (lines 14-46). It renders as `className="fixed bottom-20 left-4 right-4 ... z-50"` (line 66) — a fixed-position, near-full-width-on-mobile overlay pinned near the bottom of the viewport, at a z-index high enough to sit above normal page content. On the admin Create Match form specifically, this lands directly on top of the form's primary action button once the admin has spent 30+ seconds filling in fixture details (entirely plausible — the form has team pickers, a friendly-type toggle, description/venue text fields). The agent's screenshot (`beta-tester-skill/beta-tests/20260822-084704.../screenshots/004-*.png`) shows this exactly: "INSTALL BRIXSPORT / Add to your home screen..." fully covering the lower form area including where the submit control sits.
+
+**Consequence:** a tap that lands on the overlay never reaches the real button underneath — the create-match request never fires, `page.waitForResponse` (in the agent's own script) timed out at 30s waiting for a network call that was never made. A real user gets the same silent non-response; nothing tells them why the form didn't submit.
+
+**Fix (not built):** the install prompt needs to not intercept pointer events over form-submission areas while an admin is actively mid-form — options include: suppress/delay the prompt entirely on admin routes (`appType === 'admin'` already exists as a prop, per line 7 — an admin filling a form is not the audience for a "install the viewer PWA" nudge in the first place), detect an open form/modal and defer showing, or simply lower it further/shrink its footprint so it can't overlap a submit button docked at the same screen position. Scoping out the admin surface entirely via the existing `appType` prop is the smallest, most targeted fix and doesn't touch the viewer-facing prompt at all.
+
+**Found:** session 53 continuation, 2026-08-22, by a dispatched `beta-tester` agent (3-flow, `iphone-16` viewport run) — see `beta-tester-skill/beta-tests/20260822-081124_admin-logger-viewer-sequential-personas-_three-critical-flows-full-session_iphone-16/report.md` and the standalone `20260822-081936_admin_flow-a-match-creation_iphone-16/report.md` for the full visual trace (screenshots + video) both reports independently captured this.
+
+---
