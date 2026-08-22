@@ -157,7 +157,7 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
     const [pendingFoulPlayerId, setPendingFoulPlayerId] = useState<string | null>(null);
 
     // Pre-match States
-    const [viewState, setViewState] = useState<'loading' | 'check_lineup' | 'confirm_lineup' | 'active'>('loading');
+    const [viewState, setViewState] = useState<'loading' | 'check_lineup' | 'confirm_lineup' | 'active' | 'load_error'>('loading');
     const [lineups, setLineups] = useState<any>({ home: null, away: null });
     const [showCommsModal, setShowCommsModal] = useState(false);
     const [comms, setComms] = useState<any[]>([]);
@@ -345,14 +345,23 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
     useEffect(() => {
         let unsubscribe: (() => void) | null = null;
 
+        // BUG-241: none of these 4 fetches had a timeout, so a hang on any one
+        // of them (e.g. eligible-players on a match with an incomplete draft
+        // lineup) left the component on 'loading' forever with no error shown.
+        const fetchWithTimeout = (url: string, ms = 15000) => {
+            const controller = new AbortController();
+            const timer = setTimeout(() => controller.abort(), ms);
+            return fetch(url, { signal: controller.signal }).finally(() => clearTimeout(timer));
+        };
+
         const init = async () => {
             try {
                 // Fetch teams, all players, and eligible players for this match
                 const [teamsRes, playersRes, lineupsRes, eligibleRes] = await Promise.all([
-                    fetch('/api/teams'),
-                    fetch('/api/players'),
-                    fetch(`/api/matches/${match.id}/lineup`),
-                    fetch(`/api/matches/${match.id}/eligible-players`)
+                    fetchWithTimeout('/api/teams'),
+                    fetchWithTimeout('/api/players'),
+                    fetchWithTimeout(`/api/matches/${match.id}/lineup`),
+                    fetchWithTimeout(`/api/matches/${match.id}/eligible-players`)
                 ]);
 
                 const teamsData = await teamsRes.json();
@@ -537,6 +546,7 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
             } catch (err) {
                 console.error("Failed to init logger:", err);
                 setIsLoading(false);
+                setViewState('load_error');
             }
         };
 
@@ -1379,6 +1389,27 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
         return (
             <div className="min-h-screen bg-[#050505] text-white flex items-center justify-center">
                 <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-primary"></div>
+            </div>
+        );
+    }
+
+    if (viewState === 'load_error') {
+        return (
+            <div className="min-h-screen bg-[#050505] text-white flex flex-col items-center justify-center p-8 space-y-6">
+                <div className="w-24 h-24 bg-red-500/10 rounded-full flex items-center justify-center mb-4">
+                    <Activity size={48} className="text-red-500/60" />
+                </div>
+                <h2 className="text-2xl font-display italic uppercase">Failed to Load Match</h2>
+                <p className="text-white/40 text-center max-w-sm">
+                    Could not load this match's data — the connection may be slow or a request timed out. Check your connection and retry.
+                </p>
+                <button
+                    onClick={() => window.location.reload()}
+                    className="flex items-center gap-2 px-6 py-3 bg-primary text-black font-bold rounded-xl hover:scale-105 transition-transform"
+                >
+                    <Activity size={18} />
+                    Retry
+                </button>
             </div>
         );
     }
