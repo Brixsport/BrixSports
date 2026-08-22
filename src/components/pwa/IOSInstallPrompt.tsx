@@ -57,13 +57,25 @@ export function IOSInstallPrompt({ appType = 'user' }: { appType?: 'user' | 'adm
         return null;
     }
 
+    // BUG-240: docked at the bottom, this card sat directly on top of
+    // form/screen action bars on admin and logger surfaces (confirmed:
+    // covered the Create Match submit button, silently eating the tap).
+    // Both of those surfaces dock their own primary actions at the bottom
+    // (submit buttons, clock controls) -- top-docked (below the header) has
+    // no equivalent known collision. Viewer keeps its original bottom
+    // position, unaffected -- this is scoped to admin/logger only.
+    const isWorkflowSurface = appType === 'admin';
+    const dockingClassName = isWorkflowSurface
+        ? 'fixed top-20 left-4 right-4 md:left-auto md:right-4 md:w-[420px] z-50'
+        : 'fixed bottom-20 left-4 right-4 md:left-auto md:right-4 md:w-[420px] z-50';
+
     return (
         <AnimatePresence>
             <motion.div
-                initial={{ y: 100, opacity: 0 }}
+                initial={{ y: isWorkflowSurface ? -100 : 100, opacity: 0 }}
                 animate={{ y: 0, opacity: 1 }}
-                exit={{ y: 100, opacity: 0 }}
-                className="fixed bottom-20 left-4 right-4 md:left-auto md:right-4 md:w-[420px] z-50"
+                exit={{ y: isWorkflowSurface ? -100 : 100, opacity: 0 }}
+                className={dockingClassName}
             >
                 <div className="bg-gradient-to-br from-primary/20 via-primary/10 to-transparent border border-primary/30 rounded-3xl p-6 backdrop-blur-xl shadow-2xl shadow-primary/20">
                     <button

@@ -147,6 +147,14 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
         loggerId: currentLogger?.id || 'unknown',
         loggerName: currentLogger?.name || 'Unknown Logger',
         enabled: !!currentLogger,
+        // BACKLOG-151: real-time arrival instead of waiting for the next 15s poll.
+        // Mirrors the shape the poll's own setEvents(merged) already uses below
+        // (events here are stored SyncEvent-shaped, not a separate MatchEvent
+        // reconstruction like FootballLogger's stateManager needs).
+        onIncomingEvent: (event) => {
+            if (!currentLogger || event.loggerId === currentLogger.id) return;
+            setEvents(prev => (prev.some(e => e.id === event.id) ? prev : [...prev, event]));
+        },
     });
 
     // WebSocket -- BasketballLogger never had this at all before (BUG-153's audit

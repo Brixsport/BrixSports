@@ -19,6 +19,30 @@ import { useWebSocket } from '@/hooks/useWebSocket';
 import { MultiLoggerStatus } from '@/components/MultiLoggerStatus';
 import { getMatchStateManager, destroyMatchStateManager, MatchStateManager, MatchState, FootballEventType, MatchPeriod } from '@/lib/match-state-manager';
 import type { SyncEvent } from '@/lib/multiLogger';
+
+// BACKLOG-151: shared by both the 10s poll sync and the new real-time WS push
+// (see useMultiLogger's onIncomingEvent) -- one reconstruction path for
+// "SyncEvent from another logger" -> "local MatchEvent", not two copies that
+// could drift. manager.mergeExternalEvents() already dedupes by id.
+function reconstructMatchEventFromSync(s: SyncEvent, matchId: string, manager: MatchStateManager): any {
+    return {
+        id: s.id,
+        matchId,
+        type: s.type as any,
+        absoluteMinute: s.minute,
+        displayMinute: s.minute, // Approximation
+        second: s.second,
+        period: s.minute <= 45 ? 'FIRST_HALF' : 'SECOND_HALF', // Rough heuristic
+        playerId: s.playerId || null,
+        playerSnapshot: s.playerId ? manager.createPlayerSnapshot(s.playerId) : null,
+        relatedPlayerId: s.relatedPlayerId || null,
+        relatedPlayerSnapshot: s.relatedPlayerId ? manager.createPlayerSnapshot(s.relatedPlayerId) : null,
+        teamId: s.teamId,
+        detail: s.detail,
+        createdAt: s.timestamp instanceof Date ? s.timestamp : new Date(s.timestamp),
+        loggerId: s.loggerId,
+    };
+}
 import { getPrimaryTeam } from '@/lib/player-affiliation-utils';
 import { TeamLogo } from '@/lib/utils/team-logo';
 
@@ -133,7 +157,7 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
     const [pendingFoulPlayerId, setPendingFoulPlayerId] = useState<string | null>(null);
 
     // Pre-match States
-    const [viewState, setViewState] = useState<'loading' | 'check_lineup' | 'confirm_lineup' | 'active'>('loading');
+    const [viewState, setViewState] = useState<'loading' | 'check_lineup' | 'confirm_lineup' | 'active' | 'load_error'>('loading');
     const [lineups, setLineups] = useState<any>({ home: null, away: null });
     const [showCommsModal, setShowCommsModal] = useState(false);
     const [comms, setComms] = useState<any[]>([]);
@@ -321,14 +345,23 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
     useEffect(() => {
         let unsubscribe: (() => void) | null = null;
 
+        // BUG-241: none of these 4 fetches had a timeout, so a hang on any one
+        // of them (e.g. eligible-players on a match with an incomplete draft
+        // lineup) left the component on 'loading' forever with no error shown.
+        const fetchWithTimeout = (url: string, ms = 15000) => {
+            const controller = new AbortController();
+            const timer = setTimeout(() => controller.abort(), ms);
+            return fetch(url, { signal: controller.signal }).finally(() => clearTimeout(timer));
+        };
+
         const init = async () => {
             try {
                 // Fetch teams, all players, and eligible players for this match
                 const [teamsRes, playersRes, lineupsRes, eligibleRes] = await Promise.all([
-                    fetch('/api/teams'),
-                    fetch('/api/players'),
-                    fetch(`/api/matches/${match.id}/lineup`),
-                    fetch(`/api/matches/${match.id}/eligible-players`)
+                    fetchWithTimeout('/api/teams'),
+                    fetchWithTimeout('/api/players'),
+                    fetchWithTimeout(`/api/matches/${match.id}/lineup`),
+                    fetchWithTimeout(`/api/matches/${match.id}/eligible-players`)
                 ]);
 
                 const teamsData = await teamsRes.json();
@@ -513,6 +546,7 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
             } catch (err) {
                 console.error("Failed to init logger:", err);
                 setIsLoading(false);
+                setViewState('load_error');
             }
         };
 
@@ -640,6 +674,12 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
         loggerId: currentLogger?.id || 'unknown',
         loggerName: currentLogger?.name || 'Unknown Logger',
         enabled: !!currentLogger,
+        // BACKLOG-151: real-time arrival instead of waiting for the next 10s poll.
+        onIncomingEvent: (event) => {
+            const manager = stateManager.current;
+            if (!manager || event.loggerId === currentLogger?.id) return;
+            manager.mergeExternalEvents([reconstructMatchEventFromSync(event, match.id, manager)]);
+        },
     });
 
     // Periodic Sync
@@ -671,30 +711,12 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
             try {
                 const merged = await syncEvents(syncableEvents);
 
-                // Convert back to MatchEvent
+                // Convert back to MatchEvent (dedup against already-held events is
+                // handled inside mergeExternalEvents itself, no need to duplicate it here)
                 const externalEvents: any[] = merged.map(s => {
-                    // Check if we already have it
                     const existing = currentEvents.find(ce => ce.id === s.id);
                     if (existing) return existing;
-
-                    // Reconstruct
-                    return {
-                        id: s.id,
-                        matchId: match.id,
-                        type: s.type as any,
-                        absoluteMinute: s.minute,
-                        displayMinute: s.minute, // Approximation
-                        second: s.second,
-                        period: s.minute <= 45 ? 'FIRST_HALF' : 'SECOND_HALF', // Rough heuristic
-                        playerId: s.playerId || null,
-                        playerSnapshot: s.playerId ? manager.createPlayerSnapshot(s.playerId) : null,
-                        relatedPlayerId: s.relatedPlayerId || null,
-                        relatedPlayerSnapshot: s.relatedPlayerId ? manager.createPlayerSnapshot(s.relatedPlayerId) : null,
-                        teamId: s.teamId,
-                        detail: s.detail,
-                        createdAt: s.timestamp instanceof Date ? s.timestamp : new Date(s.timestamp),
-                        loggerId: s.loggerId
-                    };
+                    return reconstructMatchEventFromSync(s, match.id, manager);
                 });
 
                 manager.mergeExternalEvents(externalEvents);
@@ -1367,6 +1389,27 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
         return (
             <div className="min-h-screen bg-[#050505] text-white flex items-center justify-center">
                 <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-primary"></div>
+            </div>
+        );
+    }
+
+    if (viewState === 'load_error') {
+        return (
+            <div className="min-h-screen bg-[#050505] text-white flex flex-col items-center justify-center p-8 space-y-6">
+                <div className="w-24 h-24 bg-red-500/10 rounded-full flex items-center justify-center mb-4">
+                    <Activity size={48} className="text-red-500/60" />
+                </div>
+                <h2 className="text-2xl font-display italic uppercase">Failed to Load Match</h2>
+                <p className="text-white/40 text-center max-w-sm">
+                    Could not load this match's data — the connection may be slow or a request timed out. Check your connection and retry.
+                </p>
+                <button
+                    onClick={() => window.location.reload()}
+                    className="flex items-center gap-2 px-6 py-3 bg-primary text-black font-bold rounded-xl hover:scale-105 transition-transform"
+                >
+                    <Activity size={18} />
+                    Retry
+                </button>
             </div>
         );
     }

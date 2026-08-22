@@ -5,12 +5,23 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { SyncEvent, EventConflict, mergeEvents, detectConflicts } from '@/lib/multiLogger';
+import { useSocket } from './useWebSocket';
 
 interface UseMultiLoggerProps {
     matchId: string;
     loggerId: string;
     loggerName: string;
     enabled?: boolean;
+    // BACKLOG-151: called the instant another logger's event arrives over the
+    // WS `logger:event` channel (see broadcastEvent/below) -- lets the caller
+    // (FootballLogger/BasketballLogger) fold it into local state immediately
+    // via their existing manager.mergeExternalEvents(), the same reconstruction
+    // path the 10s poll already used. Real-time conflict *detection* still runs
+    // on the next poll tick (detectConflicts needs the full local event set,
+    // which this hook doesn't hold) -- this closes the "never arrives until
+    // the poll" gap, not the "conflict flagged instantly" gap. Documented
+    // limitation, not silently dropped.
+    onIncomingEvent?: (event: SyncEvent) => void;
 }
 
 interface LoggerInfo {
@@ -25,6 +36,7 @@ export function useMultiLogger({
     loggerId,
     loggerName,
     enabled = true,
+    onIncomingEvent,
 }: UseMultiLoggerProps) {
     const [activeLoggers, setActiveLoggers] = useState<LoggerInfo[]>([]);
     const [conflicts, setConflicts] = useState<EventConflict[]>([]);
@@ -33,6 +45,14 @@ export function useMultiLogger({
 
     const heartbeatInterval = useRef<NodeJS.Timeout | null>(null);
     const pollInterval = useRef<NodeJS.Timeout | null>(null);
+
+    // BACKLOG-151: real cross-device push, using the WS server's already-built
+    // (but previously unused by this hook) logger:join/logger:broadcast-event
+    // channel (ws-server/index.js) -- shares the app's one singleton socket
+    // connection rather than opening a second one.
+    const { socket, isConnected: wsConnected } = useSocket();
+    const onIncomingEventRef = useRef(onIncomingEvent);
+    onIncomingEventRef.current = onIncomingEvent;
 
     /**
      * Join the match as a logger
@@ -173,12 +193,16 @@ export function useMultiLogger({
     }, [matchId, isConnected]);
 
     /**
-     * Broadcast event to other loggers
+     * Broadcast event to other loggers. BACKLOG-151: this used to only fire a
+     * same-tab window CustomEvent (never left the browser tab). Now also emits
+     * over the shared WS socket's logger:broadcast-event channel -- the server
+     * (ws-server/index.js) relays it to every other logger:join'd socket for
+     * this match as logger:event, in real time. The window event is kept too
+     * (cheap, and something in-tab may still listen for it).
      */
     const broadcastEvent = useCallback((event: SyncEvent) => {
         if (!isConnected) return;
 
-        // Dispatch custom event for local listeners
         if (typeof window !== 'undefined') {
             window.dispatchEvent(new CustomEvent('MULTI_LOGGER_EVENT', {
                 detail: {
@@ -189,15 +213,49 @@ export function useMultiLogger({
                 },
             }));
         }
-    }, [matchId, loggerId, loggerName, isConnected]);
+
+        if (socket && wsConnected) {
+            socket.emit('logger:broadcast-event', { matchId, event: { ...event, loggerId, loggerName } });
+        }
+    }, [matchId, loggerId, loggerName, isConnected, socket, wsConnected]);
 
     /**
-     * Resolve a conflict
+     * Resolve a conflict. BACKLOG-151: this used to only flip a local React
+     * flag -- the DB and every public viewer kept seeing the conflicting data
+     * exactly as before. For keep-first/keep-second (the only resolutions the
+     * UI actually offers -- MultiLoggerStatus.tsx never renders a "merge"
+     * button), now really deletes the losing event server-side via the
+     * existing, already-atomic DELETE /api/matches/[id]/events/[eventId]
+     * route (score/stat revert + WS broadcast all handled there already).
+     * keep-both and merge intentionally make no server call -- keep-both
+     * means both events are legitimately real, and a real field-level merge
+     * is out of scope here (never exposed in the UI, so never invoked).
+     * Best-effort: if the delete 404s (e.g. the "losing" event was only
+     * local/unsynced, never actually persisted), still resolve locally
+     * rather than leaving the banner stuck -- matches this codebase's
+     * existing "don't throw on best-effort cleanup" pattern (see
+     * revertPlayerStat in events/[eventId]/route.ts).
      */
-    const resolveConflict = useCallback((
+    const resolveConflict = useCallback(async (
         conflictId: string,
         resolution: 'keep-first' | 'keep-second' | 'keep-both' | 'merge'
     ) => {
+        const conflict = conflicts.find(c => c.id === conflictId);
+
+        if (conflict && (resolution === 'keep-first' || resolution === 'keep-second')) {
+            const loserEvent = resolution === 'keep-first' ? conflict.event2 : conflict.event1;
+            try {
+                const res = await fetch(`/api/matches/${matchId}/events/${loserEvent.id}`, {
+                    method: 'DELETE',
+                });
+                if (!res.ok && res.status !== 404) {
+                    console.error(`Failed to delete losing event ${loserEvent.id} for conflict ${conflictId}: ${res.status}`);
+                }
+            } catch (error) {
+                console.error(`Failed to resolve conflict ${conflictId} server-side:`, error);
+            }
+        }
+
         setConflicts(prev =>
             prev.map(c =>
                 c.id === conflictId
@@ -205,7 +263,7 @@ export function useMultiLogger({
                     : c
             )
         );
-    }, []);
+    }, [conflicts, matchId]);
 
     // Join match on mount
     useEffect(() => {
@@ -219,6 +277,53 @@ export function useMultiLogger({
             }
         };
     }, [enabled, joinMatch, leaveMatch]);
+
+    // BACKLOG-151: real-time logger presence + event push over the shared WS
+    // socket, alongside (not replacing) the REST join/leave above and the 10s
+    // poll below -- REST still tracks DB-backed presence for other consumers
+    // (e.g. an admin view), the poll stays as a reconciliation fallback if the
+    // socket ever drops. This effect is what actually closes BACKLOG-151's
+    // "never leaves the browser tab" gap.
+    useEffect(() => {
+        if (!enabled || !socket || !wsConnected) return;
+
+        socket.emit('logger:join', { matchId, loggerId, loggerName });
+
+        const handleSyncResponse = ({ loggers }: { loggers: { loggerId: string; loggerName: string }[] }) => {
+            setActiveLoggers(
+                loggers
+                    .filter(l => l.loggerId !== loggerId)
+                    .map(l => ({ ...l, joinedAt: new Date(), lastActivity: new Date() }))
+            );
+        };
+        const handleLoggerJoined = ({ loggerId: joinedId, loggerName: joinedName }: { loggerId: string; loggerName: string }) => {
+            if (joinedId === loggerId) return;
+            setActiveLoggers(prev =>
+                prev.some(l => l.loggerId === joinedId)
+                    ? prev
+                    : [...prev, { loggerId: joinedId, loggerName: joinedName, joinedAt: new Date(), lastActivity: new Date() }]
+            );
+        };
+        const handleLoggerLeft = ({ loggerId: leftId }: { loggerId: string }) => {
+            setActiveLoggers(prev => prev.filter(l => l.loggerId !== leftId));
+        };
+        const handleLoggerEvent = (event: SyncEvent) => {
+            onIncomingEventRef.current?.(event);
+        };
+
+        socket.on('sync-response', handleSyncResponse);
+        socket.on('logger-joined', handleLoggerJoined);
+        socket.on('logger-left', handleLoggerLeft);
+        socket.on('logger:event', handleLoggerEvent);
+
+        return () => {
+            socket.emit('logger:leave', { matchId, loggerId });
+            socket.off('sync-response', handleSyncResponse);
+            socket.off('logger-joined', handleLoggerJoined);
+            socket.off('logger-left', handleLoggerLeft);
+            socket.off('logger:event', handleLoggerEvent);
+        };
+    }, [enabled, socket, wsConnected, matchId, loggerId, loggerName]);
 
     // Setup heartbeat
     useEffect(() => {

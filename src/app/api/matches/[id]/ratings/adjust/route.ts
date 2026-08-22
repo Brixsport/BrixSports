@@ -221,8 +221,8 @@ export async function GET(
 
             const suggestion = RatingCalculator.getSuggestedRange(position, teamCleanSheet, teamWon);
             const description = RatingCalculator.getRatingDescription(r.rating.autoRating);
-            const lineupStatus = getPlayerLineupStatus(r.playerId, playerTeamId);
-            const wasSubbedOn = subbedOnPlayerIds.has(r.playerId);
+            const lineupStatus = getPlayerLineupStatus(r.rating.playerId, playerTeamId);
+            const wasSubbedOn = subbedOnPlayerIds.has(r.rating.playerId);
 
             // A player should be rated if:
             // 1. They were in the starting XI, OR
