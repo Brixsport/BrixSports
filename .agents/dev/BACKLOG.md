@@ -8763,3 +8763,18 @@ The score (`1-0`) is correct and updated without a manual refresh — the propag
 **Found:** session 53 continuation, 2026-08-22, relayed via cross-session message from `brixsports-v2-42`, originating from Richard.
 
 ---
+
+### BUG-243 — `MatchStatusBadge`'s Live Minute Reads `undefined` Instead of the Real Clock Value
+
+**Status:** OPEN — found via `tsc --noEmit` triage, session 53 continuation, 2026-08-22, not yet fixed.
+**Priority:** HIGH — Tier 0/1, Flow C. `MatchStatusBadge` is used on `MatchDetailClient.tsx`, `LiveMatchCard.tsx`, and `FixtureCard.tsx` — real public-facing live-match surfaces, not a rarely-hit path.
+
+**Problem, confirmed via type-check + source read, not yet visually reproduced:** `MatchStatusBadge.tsx` calls `const liveTime = useMatchTimer(matchId || '')`, then `const matchTime = liveTime || initialTime`. `useMatchTimer` (`src/hooks/useWebSocket.tsx:405-440`) returns `{ time, isStale }` — an object that is always truthy, even when `time` itself is `null` — so `matchTime` is *always* `liveTime` (the wrapper object) whenever `matchId` is passed, and the `initialTime` fallback prop is dead code in practice. The component then reads `matchTime.minute`/`matchTime.extraTime` directly, but the real values live one level deeper at `liveTime.time.minute`/`liveTime.time.extraTime` — so the LIVE-status label renders `undefined'` (or similar) instead of the real match minute whenever this happens, and would show that same broken text as long as the socket hasn't yet delivered a real update (since `time` starts `null`).
+
+**Not yet confirmed which of the 3 call sites are affected** — `MatchDetailClient.tsx`, `LiveMatchCard.tsx`, `FixtureCard.tsx` may pass `matchId` differently or may already be masked by another code path; needs a live check on a real LIVE match, not just the type-level finding.
+
+**Fix (not built):** read `liveTime.time?.minute` (nested) instead of `matchTime.minute` (flat), or destructure `{time: liveMatchTime}` and merge with `initialTime` correctly, e.g. `const matchTime = liveTime.time || initialTime`.
+
+**Found:** session 53 continuation, 2026-08-22, tsc-error triage of non-`src/db/` files at Richard's request.
+
+---
