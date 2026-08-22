@@ -8627,3 +8627,22 @@ Live-reproduced exactly as described: navigated to a real match's URL that had j
 **Found (filed in error):** session 53, 2026-08-21. **Retracted:** session 53 continuation, 2026-08-22, before any fix was attempted.
 
 ---
+
+### BUG-239 — Any Logger Row Whose `loggers.role` Column Isn't Exactly `'logger'` Permanently 401s After First Token Refresh
+
+**Status:** OPEN — found and DB-confirmed live session 53 continuation, 2026-08-22, during `BACKLOG-151`'s dual-logger live-verification test (an isolated-Playwright-context dual-session run, `beta-tester-skill/dev-runs/backlog151-dual-logger-concurrency.mjs`). Not a test-harness artifact — reproduced against a real staging logger row and confirmed via a direct DB read of that row's actual `role` column.
+**Priority:** HIGH — Tier 0. Directly breaks the logger's own session for any affected row, on the FIRST real page load, not an edge case: `FootballLogger.tsx`/`BasketballLogger.tsx` both auto-call `/api/auth/refresh` on mount (`BUG-058b`/`BUG-140`'s fix, to re-seed `localStorage.authToken` after `AuthContext`'s own `/api/auth/me` check 401s for logger roles — itself expected/harmless, a separate code path). For an affected logger, that auto-refresh silently replaces their working token with one that then fails every subsequent authenticated call.
+
+**Problem, confirmed via a real staging row:** the real logger `logger_1767485400566` ("Mariam") has `loggers.role = 'admin'` in the DB (confirmed via direct read: `SELECT id, name, email, role, status FROM loggers WHERE id = 'logger_1767485400566'` → `role: "admin"`) — a real, pre-existing data fact, not something this session wrote. A second real logger row (`logger_1767730700254`, "Emmy") correctly has `role: "logger"` for comparison — so this isn't universal, it's specific to whichever rows have a non-`'logger'` value in this column.
+
+The break: `src/app/api/auth/refresh/route.ts`'s logger branch signs a fresh token using `logger.role` straight from the DB row (`{ id: logger.id, email: logger.email, role: logger.role }`) — for Mariam, that's `role: "admin"`. Every subsequent request then hits `getAuthUser()` (`src/lib/auth.ts:89`), which only checks the `loggers` table when `authData.role === 'logger'` **exactly**; any other role value (including `'admin'`, which this row's own `loggers.role` column holds) falls through to the `users` table lookup instead. Since `logger_1767485400566` has no corresponding row in `users`, that lookup returns nothing and `getAuthUser()` returns `null` — a 401 — even though the token's signature is perfectly valid and the id is a real, currently-active logger.
+
+**Live-reproduced, step by step:** a fresh, correctly-shaped test token (`role: 'logger'` explicitly, matching the real `/api/loggers/auth` shape) worked fine for the first several calls (`POST .../loggers` join succeeded, `MultiLoggerStatus` UI correctly showed "2 loggers active" for both real sessions). Then `/api/auth/refresh` fired (the app's own auto-refresh-on-mount behavior, not something the test triggered deliberately), returned 200, and silently replaced the cookie with one carrying `role: "admin"` (read straight from the DB row). Every call after that — specifically `PATCH /api/matches/[id]` (the in-app "▶ START MATCH" button's own request) — then 401'd with `{"error":"Unauthorized"}`, confirmed via the actual response body and request headers captured mid-run, not inferred.
+
+**Fix (not built), two independent angles, either closes it:**
+1. `getAuthUser()` should check the `loggers` table whenever the resolved id could plausibly be a logger — e.g. try the `loggers` table first regardless of the token's claimed role (mirroring `verifyAuth`'s own token-shape-based routing more than the role claim), falling back to `users` only if not found there. This is more robust than trusting a role string that a `loggers` row apparently doesn't reliably constrain to `'logger'`.
+2. Separately/additionally: audit why any real `loggers` row has `role = 'admin'` at all — if that's legitimate (e.g. an admin who also logs matches), the schema/access model should account for it explicitly rather than relying on an implicit "role is always literally `'logger'`" assumption baked into `getAuthUser()`'s branch condition; if it's not legitimate, it's a data cleanup item, not a code fix.
+
+**Found:** session 53 continuation, 2026-08-22, incidentally during `BACKLOG-151`'s live dual-logger concurrency verification.
+
+---
