@@ -8665,6 +8665,7 @@ The break: `src/app/api/auth/refresh/route.ts`'s logger branch signs a fresh tok
 - Verified by: live test, admin persona, `ipad-air` viewport (820x1180), against PR #22's Vercel preview deployment (same staging Turso DB — confirmed by seeing this session's own `beta-3flows-53r2` fixture and real BUSA League match data on the same page)
 - Observed result: prompt card renders with bounding box `{x:384, y:80, width:420, height:416}` — top edge at y=80, well within the top half of the 1180px-tall viewport, clear of the Create Match form and its submit button entirely. Screenshot: `beta-tester-skill/dev-runs/bug240-pr22-preview-prompt.png`. Contrast with the pre-push staging run below, which showed the same card at y=684 (bottom half) — the position genuinely changed between the two, isolating the fix as the cause.
 - Pending items: `https://brixsports-staging.vercel.app` (the primary staging URL) is still running pre-fix code and will keep showing bottom-docked until PR #22 merges and staging redeploys — expected, not a new bug. Re-check once merged if a final confirmation is wanted, but the fix itself is proven correct against the real commit.
+- **Revert note (Richard, 2026-08-22):** top-docking is not confirmed as the final desired position — flagged as possibly wanting to go back to bottom-docked. Not reverted now (leaving the shipped fix in place). If reverted later: it's an isolated diff on commit `b303b9d` (`src/components/pwa/IOSInstallPrompt.tsx`, the `appType === 'admin'` → `top-20` branch) — a clean `git revert b303b9d` or a manual swap back to `bottom-20` for that branch should do it without touching anything else from this commit.
 
 **First live-test attempt (superseded by the above, kept for history):** an earlier check against `https://brixsports-staging.vercel.app` (Flow A, admin, `ipad-air`, dedicated BUG-240 check) found the prompt still docked at the BOTTOM of the viewport (y=684), matching pre-fix behavior — screenshot: `beta-tester-skill/beta-tests/20260822-102358_admin_flow-a-match-creation_ipad-air/screenshots/005-bug-240-check-*.png`. Root cause, confirmed via `git ls-remote --heads origin feature/backlog-151-multilogger-realtime` (no match at the time): the branch carrying `b303b9d` had never been pushed to `origin`, so staging (which deploys from a pushed branch) was running pre-fix code by construction — the fix itself was never exercised by that test. Not a code regression. The branch has since been pushed and PR #22 opened, and the re-test above against that PR's own preview deployment confirms the fix works correctly.
 
@@ -8684,5 +8685,59 @@ The break: `src/app/api/auth/refresh/route.ts`'s logger branch signs a fresh tok
 **Fix (not built):** the install prompt needs to not intercept pointer events over form-submission areas while an admin is actively mid-form — options include: suppress/delay the prompt entirely on admin routes (`appType === 'admin'` already exists as a prop, per line 7 — an admin filling a form is not the audience for a "install the viewer PWA" nudge in the first place), detect an open form/modal and defer showing, or simply lower it further/shrink its footprint so it can't overlap a submit button docked at the same screen position. Scoping out the admin surface entirely via the existing `appType` prop is the smallest, most targeted fix and doesn't touch the viewer-facing prompt at all.
 
 **Found:** session 53 continuation, 2026-08-22, by a dispatched `beta-tester` agent (3-flow, `iphone-16` viewport run) — see `beta-tester-skill/beta-tests/20260822-081124_admin-logger-viewer-sequential-personas-_three-critical-flows-full-session_iphone-16/report.md` and the standalone `20260822-081936_admin_flow-a-match-creation_iphone-16/report.md` for the full visual trace (screenshots + video) both reports independently captured this.
+
+---
+
+### BUG-241 — Logger's Match-Detail View Hangs on an Indefinite Loading Spinner After Selecting an Assigned Match, With No Error Surfaced (Flow B Blocker)
+
+**Status:** OPEN, re-scoped — found session 53 continuation, 2026-08-22, during the Three Critical Flows live beta-test. **Likely root cause narrowed via live re-test** (same session, continued): reproduced the hang against a match whose lineup was only an *empty draft* (created via `/lineup-builder`'s "Save Draft" shortcut, 0 starters). Re-tested the identical flow — same match, same logger — after publishing a REAL, complete official lineup (11 starters + captain per team, via the actual admin UI: `/admin/matches` → the "Manage Lineups" icon on the match card → `/admin/match-lineups` → select match → add starters → set captain → "Publish Official Lineups", confirmed live via the Claude Browser preview pane, not a script) — **the hang did NOT reproduce.** Logger UI loaded straight to a "Confirm Lineups" screen, "Confirm & Start Match" worked, the Goal event flow worked, and the goal appeared on the public page as `1-0` within a few seconds of an anonymous tab loading it. This strongly suggests the hang is specifically triggered by a match with an incomplete/empty lineup (0 starters), not a generic timeout/network issue — most likely the `/api/matches/{id}/eligible-players` or `/api/matches/{id}/lineup` fetch (or downstream processing of an empty starters array) misbehaves specifically in that state. Still worth the `AbortController` defensive fix below regardless, but the reproduction condition is now much more specific than "any hang, any match."
+**Priority:** HIGH → still real, but re-scoped: only confirmed to affect matches with an incomplete/empty-draft lineup (a real state — e.g. an admin who started via `/lineup-builder`'s draft-save shortcut, or hasn't finished publishing yet), not confirmed against a match with a properly published lineup. A real logger tapping into such a match gets a permanent spinner with no error, no retry option, no way forward.
+
+**Reproduced twice, independently:**
+1. Full-session run (`beta-tests/20260822-104258_.../report.md`): logger dashboard itself showed "no loggable assigned match" (a separate, since-fixed test-harness selector bug), but 2× `Failed to load resource: 401` appeared in the console right after landing on `/logger`, before any match was clicked.
+2. Standalone Flow B run (`beta-tests/20260822-130104_logger_flow-b-live-event-logging_iphone-16/report.md`, `screenshots/005-BUG-*.png`): dashboard correctly showed the assigned match ("2 ASSIGNED MATCHES, 1 Live • 1 Upcoming" — confirmed via a full-page screenshot, `dev-runs/debug-logger-dashboard-full.png`), tapping its "Start Input" control fired 3× `Failed to load resource: 401` in the console within ~3 seconds, and the view then hung on a bare loading spinner (`screenshots/003-*.png` and `005-*.png` — identical spinner, no progress) for the remainder of the run. The FootballLogger UI (event buttons, clock, roster) never rendered.
+
+**Problem, confirmed via direct source read, not just the visual symptom:** `src/components/FootballLogger.tsx`'s init effect (lines 345-361) fetches four endpoints in parallel with no per-request timeout:
+```js
+const [teamsRes, playersRes, lineupsRes, eligibleRes] = await Promise.all([
+    fetch('/api/teams'),
+    fetch('/api/players'),
+    fetch(`/api/matches/${match.id}/lineup`),
+    fetch(`/api/matches/${match.id}/eligible-players`)
+]);
+```
+`Promise.all` waits for every promise to settle — if any one of these four requests never resolves (server-side hang, cold-start timeout, an internal await that never returns), the whole `init()` function stays pending forever. Critically, the surrounding `try/catch` (lines 349-540) only runs its `catch` block (which does call `setIsLoading(false)`, line 539) when something actually *throws* — a request that just never settles doesn't throw, so neither the success path (line 536) nor the catch path ever executes, and `isLoading` never flips to `false`. The spinner is permanent by construction, not a slow-but-eventually-resolving state.
+
+**Not yet isolated: which of the four calls (or something else) is actually 401ing/hanging.** The 401s observed in the console don't carry the request URL (Playwright's console-error capture only gives the message text, not the failing request), so this needs either browser devtools network-tab inspection or adding `page.on('response')` URL+status logging to a repro script to pin down exactly which endpoint(s) are responsible. `/api/auth/me` returning 401 for logger-shaped sessions is separately documented as expected/by-design (`FootballLogger.tsx` line 218 comment, and `AuthContext.checkAuth()` handles it via the `BUG-217` fix, setting `loading=false` in a `finally` regardless) — so AuthContext's own gate is very likely NOT the hang source; the hang is almost certainly inside `FootballLogger.tsx`'s own `init()`, specifically among the four `Promise.all` calls above or the `/api/competitions`/`/api/matches/[id]/config` calls a few lines later (those two are individually try/caught with their own fallback, per lines 392-403 and 463-475, so they're less likely candidates than the un-timeout-guarded `Promise.all`).
+
+**Fix (not built), two independent angles, either helps:**
+1. Add a per-request timeout (e.g. `AbortController` with a 10-15s cap) to each of the four `Promise.all` fetches in `FootballLogger.tsx`'s init, so a hung request rejects instead of stalling forever, letting the existing `catch` → `setIsLoading(false)` path do its job and at least show an error state instead of an infinite spinner.
+2. Once the timeout guard is in place (so the app fails visibly instead of silently), re-run this exact repro to find which specific endpoint was actually the slow/failing one, and fix that endpoint directly — the timeout guard alone converts a silent hang into a visible error, it doesn't fix the underlying 401/slowness.
+
+**Fix (not built) — also worth checking:** `Promise.all` fails fast on the FIRST rejection too (a `Response` with 401 status doesn't itself reject the fetch promise — only a network-level failure does — but if a later `.json()` call implicitly throws on non-JSON error bodies, that's a separate path worth checking against the four responses' actual bodies).
+
+**Found:** session 53 continuation, 2026-08-22, live beta-test, `beta-tester-skill/dev-runs/beta-test-three-critical-flows-53r2.mjs` (`solo-b` part) — see `beta-tester-skill/beta-tests/20260822-130104_logger_flow-b-live-event-logging_iphone-16/report.md` for the full visual trace.
+
+---
+
+### BUG-242 — Public Match Page Shows "NOT STARTED" Status Badge Simultaneously With a Live Score and "Match is currently live!" Text
+
+**Status:** OPEN — found session 53 continuation, 2026-08-22, live re-test of BUG-241 via the Claude Browser preview (not a script — an interactive check).
+**Priority:** MEDIUM — Flow C (Public Livescore) cosmetic/trust issue, not a functional block. A real anonymous viewer sees the score update correctly and in good time, but the page's own status badge and its own body text directly contradict each other in the same view.
+
+**Problem, observed live:** after publishing a real official lineup for match `ia6HEq87gCLHc0PvnY51m`, starting it via the logger's "Confirm & Start Match", and logging a goal, the public match page (`https://brixsports-staging.vercel.app/matches/ia6HEq87gCLHc0PvnY51m`, anonymous tab, no session) rendered:
+```
+Underrated FC UND 1 - 0 NOT STARTED Quantum FC QUA
+...
+Match Overview
+Match is currently live!
+...
+Status: NOT STARTED
+```
+The score (`1-0`) is correct and updated without a manual refresh — the propagation itself works, and within a few seconds of the anonymous tab loading (consistent with the ~10s latency already tracked elsewhere in this doc, well within a viewer's patience). But the status badge next to the score and the "Status" field both say "NOT STARTED" while the Match Overview panel's own text says "Match is currently live!" in the same render — two different pieces of UI on the same page disagreeing about whether the match has started.
+
+**Not yet root-caused:** likely two different fields being read for "status" in different parts of the page (e.g. one reads `match.status` from the initial/cached fetch, the other reads live clock/period state from the WS or polling layer) that can drift out of sync, but this wasn't traced to source — found via live UI observation only, not a code read.
+
+**Found:** session 53 continuation, 2026-08-22, live Claude Browser preview check (screenshot/page-text captured mid-session, not saved to a beta-tester report folder — this was an ad hoc interactive check, not a scripted run).
 
 ---
