@@ -53,11 +53,14 @@ const SHORT_TTL_API_PATTERNS = [
     // /api/matches -- confirmed via a real Cache Storage read that they were
     // falling through to the generic bucket (no 30s staleness check) instead.
     /^\/api\/(basketball|football|other)\/matches(\/|$|\?)/,
-    /^\/api\/competitions(\/|$|\?)/,
 ];
+// BACKLOG-226 (session 55): kept in sync with sw-user.js's identical move --
+// /api/competitions is near-static (name/logo/settings), not live-scoring
+// data, so it belongs under the SWR policy, not the 30s live-data TTL.
 const STALE_WHILE_REVALIDATE_API_PATTERNS = [
     /^\/api\/players(\/|$|\?)/,
     /^\/api\/teams(\/|$|\?)/,
+    /^\/api\/competitions(\/|$|\?)/,
 ];
 const SHORT_API_TTL_MS = 30 * 1000;
 
@@ -115,11 +118,31 @@ self.addEventListener('fetch', (event) => {
         return;
     }
 
-    // HTML documents: always network-first, never cache
-    // Stale HTML after a deploy causes missing JS chunk errors (BUG-026)
+    // HTML documents: network-first, cache the response for this specific
+    // page so a previously-visited admin/logger page (dashboard shell, logger
+    // entry/assignment list, read-only lists) is still reachable offline
+    // (BACKLOG-226) -- mirrors sw-user.js's identical fix. Only falls back to
+    // the generic /offline document when this exact URL was never visited.
+    // Safe post-BUG-244: CACHE_VERSION is build-id-scoped, so a stale
+    // document from a prior deploy can't survive into the current deploy's
+    // cache namespace -- the whole cache is wiped on activate.
     if (request.destination === 'document') {
         event.respondWith(
-            fetch(request).catch(() => caches.match('/offline'))
+            fetch(request)
+                .then((response) => {
+                    if (response.status === 200) {
+                        const responseClone = response.clone();
+                        caches.open(DYNAMIC_CACHE).then((cache) => {
+                            cache.put(request, responseClone);
+                            limitCacheSize(DYNAMIC_CACHE, MAX_DYNAMIC_CACHE_SIZE);
+                        });
+                    }
+                    return response;
+                })
+                .catch(async () => {
+                    const cached = await caches.match(request);
+                    return cached || caches.match('/offline');
+                })
         );
         return;
     }
@@ -161,9 +184,9 @@ self.addEventListener('fetch', (event) => {
             return;
         }
 
-        // Short-TTL network-first (matches, competitions): only serve a
-        // cached response on network failure if it's still within
-        // SHORT_API_TTL_MS.
+        // Short-TTL network-first (live match/score data only -- competitions
+        // moved to SWR above, session 55): only serve a cached response on
+        // network failure if it's still within SHORT_API_TTL_MS.
         if (isShortTtlApi(url.pathname)) {
             event.respondWith(
                 fetch(request)
