@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "node --no-webstorage server.js",
     "dev:turbo": "next dev --turbopack",
-    "build": "next build",
+    "build": "node scripts/inject-sw-cache-version.mjs && next build",
     "start": "NODE_ENV=production node --no-webstorage server.js",
     "start:next": "next start",
     "lint": "next lint",

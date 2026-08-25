@@ -3,7 +3,8 @@
  * Handles caching, offline support, and real-time sync for admin and logger
  */
 
-// BUG-244: v2 -> v3, same reason as sw-user.js -- see that file's comment.
+// BUG-244: CACHE_VERSION is stamped at build time -- see sw-user.js's comment
+// and scripts/inject-sw-cache-version.mjs. This literal is the local-dev fallback.
 const CACHE_VERSION = 'brixsport-admin-v3';
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const DYNAMIC_CACHE = `${CACHE_VERSION}-dynamic`;
