@@ -3,7 +3,14 @@
  * Handles caching, offline support, and push notifications for users
  */
 
-const CACHE_VERSION = 'brixsport-user-v2';
+// BUG-244: v2 -> v3 forces every client to re-run install and refresh the
+// precached /offline document, which had gone stale after a deploy changed
+// its compiled chunk hash (CACHE_VERSION has no automatic tie to the build --
+// see PWA audit, session 55 -- this bump is the immediate mitigation, not the
+// structural fix. That still needs CACHE_VERSION templated from the Vercel
+// build id/commit SHA at build time so every deploy is a genuinely different
+// SW script and this doesn't need a manual bump again next time it goes stale).
+const CACHE_VERSION = 'brixsport-user-v3';
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const DYNAMIC_CACHE = `${CACHE_VERSION}-dynamic`;
 const IMAGE_CACHE = `${CACHE_VERSION}-images`;
