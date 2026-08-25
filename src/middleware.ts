@@ -87,7 +87,17 @@ export async function middleware(request: NextRequest) {
         try {
             const { payload } = await jwtVerify(token, JWT_SECRET);
 
-            if (payload.role !== 'admin' && payload.role !== 'logger_manager') {
+            // logger_manager's only real surface is /admin/manager (see
+            // src/app/admin/manager/page.tsx) -- it fetches /api/matches and
+            // /api/loggers, both gated separately and never under /api/admin/*.
+            // Previously this check let logger_manager through the ENTIRE
+            // /admin/** and /api/admin/** tree, not just its own page.
+            const isAdmin = payload.role === 'admin';
+            const isScopedLoggerManager =
+                payload.role === 'logger_manager' &&
+                (pathname === '/admin/manager' || pathname.startsWith('/admin/manager/'));
+
+            if (!isAdmin && !isScopedLoggerManager) {
                 if (pathname.startsWith('/api/')) {
                     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
                 }
