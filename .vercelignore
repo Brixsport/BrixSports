@@ -24,8 +24,9 @@ node_modules
 # too) explicitly rather than relying on that alone.
 .agents/*
 
-# Scripts (not needed for production)
-scripts/
+# Scripts 
+scripts/*
+!scripts/inject-sw-cache-version.mjs
 
 # Test files
 **/*.test.ts
