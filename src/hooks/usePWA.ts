@@ -39,6 +39,50 @@ export function usePWA(swPath: string, scope?: string, appType: 'user' | 'admin'
     return { registration, isRegistered, error };
 }
 
+// BUG-244 follow-up: a stale bundle reference anywhere in the app (not just
+// the SW-precached /offline document that BUG-244 itself covered) throws
+// "Loading chunk N failed" the moment a deploy removes/renames the chunk a
+// still-open tab is trying to lazy-load. Previously this crashed to a raw
+// error with no recovery -- the only existing handling was the manual
+// "Reload Page" button in components/admin/ErrorBoundary.tsx, which requires
+// the user to notice and act. This is the standard mitigation: detect the
+// specific chunk-load signature (both the thrown-error and unhandled-
+// rejection forms, since dynamic `import()` failures surface as the latter)
+// and reload once. Capped to one reload per tab session via sessionStorage
+// so a genuinely-offline user (reload will just fail the same way) doesn't
+// get stuck in a reload loop -- they fall through to the SW's own
+// network-first-with-/offline-fallback behavior instead.
+const CHUNK_ERROR_PATTERN = /Loading (chunk|CSS chunk) [\w.-]+ failed|ChunkLoadError/i;
+const CHUNK_RELOAD_SESSION_KEY = 'brix-chunk-reload-at';
+const CHUNK_RELOAD_COOLDOWN_MS = 10_000;
+
+export function useChunkLoadErrorRecovery() {
+    useEffect(() => {
+        const reloadOnce = () => {
+            const last = sessionStorage.getItem(CHUNK_RELOAD_SESSION_KEY);
+            const now = Date.now();
+            if (last && now - parseInt(last, 10) < CHUNK_RELOAD_COOLDOWN_MS) return;
+            sessionStorage.setItem(CHUNK_RELOAD_SESSION_KEY, String(now));
+            window.location.reload();
+        };
+
+        const handleError = (event: ErrorEvent) => {
+            if (CHUNK_ERROR_PATTERN.test(event.message || '')) reloadOnce();
+        };
+        const handleRejection = (event: PromiseRejectionEvent) => {
+            const message = event.reason?.message || String(event.reason || '');
+            if (CHUNK_ERROR_PATTERN.test(message)) reloadOnce();
+        };
+
+        window.addEventListener('error', handleError);
+        window.addEventListener('unhandledrejection', handleRejection);
+        return () => {
+            window.removeEventListener('error', handleError);
+            window.removeEventListener('unhandledrejection', handleRejection);
+        };
+    }, []);
+}
+
 export function useOnlineStatus() {
     const [isOnline, setIsOnline] = useState(true);
 

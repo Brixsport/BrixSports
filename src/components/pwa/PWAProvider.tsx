@@ -1,6 +1,6 @@
 'use client';
 
-import { usePWA } from '@/hooks/usePWA';
+import { usePWA, useChunkLoadErrorRecovery } from '@/hooks/usePWA';
 import { InstallPrompt } from './InstallPrompt';
 import { OfflineIndicator, OfflineBadge } from './OfflineIndicator';
 import { UpdatePrompt } from './UpdatePrompt';
@@ -25,6 +25,7 @@ export function PWAProvider({
     appType = 'user',
 }: PWAProviderProps & { scope?: string }) {
     usePWA(swPath, scope, appType);
+    useChunkLoadErrorRecovery();
 
 
     // If we are on admin/logger but this provider is for the user SW,

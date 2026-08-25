@@ -125,8 +125,21 @@ export function UpdatePrompt() {
         }
     };
 
+    // BUG-244 follow-up: dismissing used to hide this permanently for the rest
+    // of the tab's life, leaving a waiting worker (and its stale build) in
+    // place with zero further nudge -- a logger who dismisses once could run
+    // a fully stale build through an entire live match with no other prompt.
+    // A literal forced reload on dismiss was considered and rejected: forcing
+    // a reload out from under an active logger mid-match risks interrupting
+    // in-flight event logging (CLAUDE.md: "No page refresh required to
+    // continue logging mid-match"). Snoozing and re-surfacing instead keeps
+    // the nudge alive without ever reloading anything the user didn't ask for.
+    const UPDATE_SNOOZE_MS = 15 * 60 * 1000;
     const handleDismiss = () => {
         setShowPrompt(false);
+        window.setTimeout(() => {
+            if (registration?.waiting) setShowPrompt(true);
+        }, UPDATE_SNOOZE_MS);
     };
 
     return (
