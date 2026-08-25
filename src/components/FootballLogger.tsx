@@ -1753,16 +1753,21 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                                 if (!stateManager.current || isStartingMatch) return;
                                 setIsStartingMatch(true);
                                 try {
+                                    // BUG-242: status and currentPeriod used to go out as two sequential
+                                    // PATCHes (status first, awaited; currentPeriod second, fire-and-forget).
+                                    // Each PATCH broadcasts independently via its own after() hook, so a
+                                    // viewer's page could receive status:'LIVE' before currentPeriod ever
+                                    // arrived -- rendering "Match is currently live!" next to a stale
+                                    // "NOT STARTED" period badge for however long the second broadcast/poll
+                                    // took to land. Single atomic PATCH closes that window entirely.
                                     const res = await fetch(`/api/matches/${match.id}`, {
                                         method: 'PATCH',
                                         headers: { 'Content-Type': 'application/json' },
-                                        body: JSON.stringify({ status: 'LIVE' }),
+                                        body: JSON.stringify({ status: 'LIVE', currentPeriod: 'FIRST_HALF' }),
                                     });
                                     if (!res.ok) throw new Error(`Server returned ${res.status}`);
                                     // PATCH confirmed — now transition local state and start the clock
                                     stateManager.current.transitionStatus('FIRST_HALF');
-                                    // Persist period to DB — non-blocking
-                                    persistMatchPatch({ currentPeriod: 'FIRST_HALF' }, 'First Half start');
                                     // MATCH_START notification now sent server-side from matches/[id]/route.ts's
                                     // PATCH handler when currentPeriod transitions to FIRST_HALF — this client
                                     // fetch was double-sending it (BUG-204 sweep), removed.
