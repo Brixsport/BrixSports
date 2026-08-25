@@ -160,6 +160,12 @@ Standing anti-patterns and constraints: see `CLAUDE.md`.
 
 2026-06-17 — mirror script (UPDATE) silently no-ops when target rows don't exist on prod — `rowsAffected: 0` for all 30 new players because UPDATE finds no matching IDs. New player rows require INSERT not UPDATE. Always check whether target rows exist on prod before writing a mirror script; if new profiles may be absent, build an INSERT-with-skip-existing script instead.
 
+2026-08-25 — Sequential status+period PATCHes on match start produced a contradictory public UI (BUG-242) — each PATCH broadcasts independently, so a viewer could see status:'LIVE' before the period PATCH's broadcast landed, showing "NOT STARTED" next to "Match is currently live!". Never split fields that must render consistently together into separate PATCH calls when each has its own independent broadcast — combine into one atomic PATCH instead.
+
+2026-08-25 — useMatchTimer()'s wrapper object read directly instead of destructuring .time, twice independently in one session (MatchStatusBadge.tsx, BUG-243; MatchOverlay.tsx, found alongside it) — the hook returns { time, isStale }, always truthy as an object even when time itself is null, so a bare truthy check never catches the bug. Always destructure { time } from useMatchTimer() on sight; never assign or check its return value directly.
+
+2026-08-25 — getAuthUser() trusted the JWT's own role claim to gate a loggers-table lookup, but a real loggers row's role column isn't guaranteed to equal 'logger' (BUG-239, a real row had role='admin') — checking DB rows by a token-carried field the DB itself doesn't enforce as constant is fragile; fall back to checking the table the id actually plausibly belongs to before giving up.
+
 2026-06-17 — UI form required attribute blocks valid partial profiles — Jersey # and Assigned Team marked `required` in HTML prevented BUSALYMPICS-only players (no team, no jersey) from being created, even though the API and DB allow it. Browser enforces HTML required before the request is sent. Prevention: only add `required` to inputs that the server also enforces as required.
 
 2026-06-17 — Backfill script without sport guard (BUG-033) — college affiliation backfill inserted all players with matching college field into football college team IDs, regardless of sport — always join through the player primary team sport before any affiliation INSERT; add AND (primary_team.sport = 'Football' OR no primary team) guard to every college backfill script.

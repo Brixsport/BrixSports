@@ -8342,7 +8342,7 @@ Live-reproduced exactly as described: navigated to a real match's URL that had j
 
 **Evidence:** `tsc --noEmit` — 47 errors, zero new.
 
-**Found:** defer list, items 14-15. **Item 14 fixed:** session 53, 2026-08-21. **Item 15:** planned, not built, pending real Upstash credentials.
+**Found:** defer list, items 14-15. **Item 14 fixed:** session 53, 2026-08-21. **Item 15:** planned, not built, pending real Upstash credentials. Reconfirmed OPEN/deferred session 55, 2026-08-25 (item 9 of that session's Tier 0/1 sequence) — Richard's explicit call: defer to next session, still no Upstash account provisioned. Plan above unchanged and still current.
 
 ---
 
@@ -8650,9 +8650,16 @@ Live-reproduced exactly as described: navigated to a real match's URL that had j
 
 ---
 
-### BUG-239 — Any Logger Row Whose `loggers.role` Column Isn't Exactly `'logger'` Permanently 401s After First Token Refresh
+### ~~BUG-239~~ — Any Logger Row Whose `loggers.role` Column Isn't Exactly `'logger'` Permanently 401s After First Token Refresh
 
-**Status:** SHIPPED, not yet live-verified — session 53 continuation, 2026-08-22. Fix angle 1 from below implemented: `src/lib/auth.ts`'s `getAuthUser()` now tries the `loggers` table as a last-resort fallback (extracted into a small `toAuthenticatedLogger()` helper, shared with the existing fast path) whenever the token's claimed role isn't `'logger'` AND no matching `users` row exists either — so a `loggers` row with `role='admin'` (like Mariam's) now correctly resolves as a logger instead of 401ing. No extra DB query added to the common admin/viewer path (only pays the fallback query cost when the primary `users` lookup already came up empty). Fix angle 2 (auditing why any real `loggers` row has `role='admin'` at all) not done — data question for Richard, not a code fix.
+**Status:** RESOLVED — live-verified session 55, 2026-08-25.
+**Evidence:**
+- Commit: `41ac8d8` (session 53 continuation)
+- Verified by: real staging HTTP round-trip against Mariam's actual row (`logger_1767485400566`, `loggers.role='admin'`, no matching `users` row — the exact repro this entry describes), token signed with `role: 'admin'` matching her DB row's real value, injected into a real Claude Browser session (cookie + localStorage) against `brixsports-staging.vercel.app`
+- Observed result: `GET /api/loggers/me → 200` with real data (`{"id":"logger_1767485400566","name":"Mariam",...,"stats":{"totalEvents":154,"loggedMatches":2}}`), `GET /api/loggers/logger_1767485400566 → 200`, dashboard rendered "ACTIVE SESSION: MARIAM" with real assigned-match/event counts — previously this exact combination 401'd permanently
+- Pending items: none for the reported symptom. Fix angle 2 (auditing why any real `loggers` row has `role='admin'`) still not done — data question for Richard, not a code fix.
+
+**Previously:** SHIPPED, not yet live-verified — session 53 continuation, 2026-08-22. Fix angle 1 from below implemented: `src/lib/auth.ts`'s `getAuthUser()` now tries the `loggers` table as a last-resort fallback (extracted into a small `toAuthenticatedLogger()` helper, shared with the existing fast path) whenever the token's claimed role isn't `'logger'` AND no matching `users` row exists either — so a `loggers` row with `role='admin'` (like Mariam's) now correctly resolves as a logger instead of 401ing. No extra DB query added to the common admin/viewer path (only pays the fallback query cost when the primary `users` lookup already came up empty). Fix angle 2 (auditing why any real `loggers` row has `role='admin'` at all) not done — data question for Richard, not a code fix.
 **Previously:** OPEN — found and DB-confirmed live session 53 continuation, 2026-08-22, during `BACKLOG-151`'s dual-logger live-verification test (an isolated-Playwright-context dual-session run, `beta-tester-skill/dev-runs/backlog151-dual-logger-concurrency.mjs`). Not a test-harness artifact — reproduced against a real staging logger row and confirmed via a direct DB read of that row's actual `role` column.
 **Priority:** HIGH — Tier 0. Directly breaks the logger's own session for any affected row, on the FIRST real page load, not an edge case: `FootballLogger.tsx`/`BasketballLogger.tsx` both auto-call `/api/auth/refresh` on mount (`BUG-058b`/`BUG-140`'s fix, to re-seed `localStorage.authToken` after `AuthContext`'s own `/api/auth/me` check 401s for logger roles — itself expected/harmless, a separate code path). For an affected logger, that auto-refresh silently replaces their working token with one that then fails every subsequent authenticated call.
 
@@ -8702,9 +8709,16 @@ The break: `src/app/api/auth/refresh/route.ts`'s logger branch signs a fresh tok
 
 ---
 
-### BUG-241 — Logger's Match-Detail View Hangs on an Indefinite Loading Spinner After Selecting an Assigned Match, With No Error Surfaced (Flow B Blocker)
+### ~~BUG-241~~ — Logger's Match-Detail View Hangs on an Indefinite Loading Spinner After Selecting an Assigned Match, With No Error Surfaced (Flow B Blocker)
 
-**Status:** SHIPPED, not yet live-verified — session 53 continuation, 2026-08-22. Fix built per the "Fix (not built)" plan below, angle 1: `src/components/FootballLogger.tsx`'s init effect now wraps all four `Promise.all` fetches (`/api/teams`, `/api/players`, `/api/matches/{id}/lineup`, `/api/matches/{id}/eligible-players`) in a local `fetchWithTimeout()` helper (`AbortController`, 15s cap each), and the outer `catch` block now sets a new `viewState === 'load_error'` (in addition to the existing `setIsLoading(false)`) instead of leaving the UI on whatever it last rendered. New render branch shows a clear "Failed to Load Match" message with a Retry button (`window.location.reload()`), matching `CLAUDE.md`'s "never appear to succeed when it didn't" rule. This converts the silent-forever-spinner into a visible, recoverable error state — it does not fix whichever endpoint is actually slow/hanging on an empty-draft-lineup match (angle 2, still open, needs the endpoint itself isolated and fixed).
+**Status:** RESOLVED for the confirmed repro condition (published lineup) — live-verified session 55, 2026-08-25. Angle 2 (the actual endpoint slowness on an empty-draft lineup) remains unconfirmed/unfixed — see below.
+**Evidence:**
+- Commit: `dbb6355` (session 53 continuation)
+- Verified by: real staging session as the real assigned logger (Ibrahim, `logger_1784832869756`) on a real UPCOMING match (`ZMBbLfLIoXVCkgJv7c8j2`) with a real published lineup (11 starters + captain, both teams)
+- Observed result: match loaded straight to the Confirm Lineups screen with no spinner, no hang; "Confirm & Start Match" → active logging view loaded cleanly; goal logged successfully. Matches the session-53 finding that the hang is specific to empty-draft-lineup matches, not a general issue.
+- Pending items: angle 2 (isolating and fixing whichever endpoint actually hangs on an empty-draft-lineup match) still not attempted — no such match was available/used in this verification pass.
+
+**Previously:** SHIPPED, not yet live-verified — session 53 continuation, 2026-08-22. Fix built per the "Fix (not built)" plan below, angle 1: `src/components/FootballLogger.tsx`'s init effect now wraps all four `Promise.all` fetches (`/api/teams`, `/api/players`, `/api/matches/{id}/lineup`, `/api/matches/{id}/eligible-players`) in a local `fetchWithTimeout()` helper (`AbortController`, 15s cap each), and the outer `catch` block now sets a new `viewState === 'load_error'` (in addition to the existing `setIsLoading(false)`) instead of leaving the UI on whatever it last rendered. New render branch shows a clear "Failed to Load Match" message with a Retry button (`window.location.reload()`), matching `CLAUDE.md`'s "never appear to succeed when it didn't" rule. This converts the silent-forever-spinner into a visible, recoverable error state — it does not fix whichever endpoint is actually slow/hanging on an empty-draft-lineup match (angle 2, still open, needs the endpoint itself isolated and fixed).
 **Previously:** found session 53 continuation, 2026-08-22, during the Three Critical Flows live beta-test. **Likely root cause narrowed via live re-test** (same session, continued): reproduced the hang against a match whose lineup was only an *empty draft* (created via `/lineup-builder`'s "Save Draft" shortcut, 0 starters). Re-tested the identical flow — same match, same logger — after publishing a REAL, complete official lineup (11 starters + captain per team, via the actual admin UI: `/admin/matches` → the "Manage Lineups" icon on the match card → `/admin/match-lineups` → select match → add starters → set captain → "Publish Official Lineups", confirmed live via the Claude Browser preview pane, not a script) — **the hang did NOT reproduce.** Logger UI loaded straight to a "Confirm Lineups" screen, "Confirm & Start Match" worked, the Goal event flow worked, and the goal appeared on the public page as `1-0` within a few seconds of an anonymous tab loading it. This strongly suggests the hang is specifically triggered by a match with an incomplete/empty lineup (0 starters), not a generic timeout/network issue — most likely the `/api/matches/{id}/eligible-players` or `/api/matches/{id}/lineup` fetch (or downstream processing of an empty starters array) misbehaves specifically in that state. Still worth the `AbortController` defensive fix below regardless, but the reproduction condition is now much more specific than "any hang, any match."
 **Priority:** HIGH → still real, but re-scoped: only confirmed to affect matches with an incomplete/empty-draft lineup (a real state — e.g. an admin who started via `/lineup-builder`'s draft-save shortcut, or hasn't finished publishing yet), not confirmed against a match with a properly published lineup. A real logger tapping into such a match gets a permanent spinner with no error, no retry option, no way forward.
 
@@ -8735,9 +8749,16 @@ const [teamsRes, playersRes, lineupsRes, eligibleRes] = await Promise.all([
 
 ---
 
-### BUG-242 — Public Match Page Shows "NOT STARTED" Status Badge Simultaneously With a Live Score and "Match is currently live!" Text
+### ~~BUG-242~~ — Public Match Page Shows "NOT STARTED" Status Badge Simultaneously With a Live Score and "Match is currently live!" Text
 
-**Status:** SHIPPED, not yet live-verified — session 55, 2026-08-25. Root-caused via source read (not previously done — original entry below was found via live UI observation only): `FootballLogger.tsx`'s "▶ Start Match" button fired two *sequential* PATCH requests — `{status: 'LIVE'}` (awaited) followed by a fire-and-forget `persistMatchPatch({currentPeriod: 'FIRST_HALF'})`. Each PATCH broadcasts independently via `matches/[id]/route.ts`'s own `after()` hook, so a viewer's page could receive `status:'LIVE'` (driving `isLive`/"Match is currently live!") before the `currentPeriod` broadcast/poll ever landed — leaving `MatchDetailClient.tsx`'s `displayPeriod` fallback (`match.currentPeriod ?? match.status`) stuck on the DB's stale `'NOT_STARTED'` default for however long that gap took (consistent with the already-tracked ~10s broadcast latency, BUG-119). **Fix:** combined into a single atomic PATCH (`{status: 'LIVE', currentPeriod: 'FIRST_HALF'}`) in `FootballLogger.tsx`, closing the window entirely — one broadcast, both fields always consistent. Confirmed the `POST /api/events` scoring path does NOT independently flip `status` to `'LIVE'` (ruled out as an alternate cause). Not yet live-tested against a real match.
+**Status:** RESOLVED — live-verified session 55, 2026-08-25.
+**Evidence:**
+- Commit: `b96c0c0`
+- Verified by: real staging match (`ZMBbLfLIoXVCkgJv7c8j2`) started via the real "▶ Start Match" button as its real assigned logger, a second, independent anonymous browser tab loaded the public match page immediately after
+- Observed result: live-minute badge (red dot, "0'") and "Match is currently live!" text agreed on first load — no "NOT STARTED" contradiction
+- Pending items: none
+
+**Root cause** (found via source read, session 55 — original entry below was found via live UI observation only): `FootballLogger.tsx`'s "▶ Start Match" button fired two *sequential* PATCH requests — `{status: 'LIVE'}` (awaited) followed by a fire-and-forget `persistMatchPatch({currentPeriod: 'FIRST_HALF'})`. Each PATCH broadcasts independently via `matches/[id]/route.ts`'s own `after()` hook, so a viewer's page could receive `status:'LIVE'` (driving `isLive`/"Match is currently live!") before the `currentPeriod` broadcast/poll ever landed — leaving `MatchDetailClient.tsx`'s `displayPeriod` fallback (`match.currentPeriod ?? match.status`) stuck on the DB's stale `'NOT_STARTED'` default for however long that gap took (consistent with the already-tracked ~10s broadcast latency, BUG-119). **Fix:** combined into a single atomic PATCH (`{status: 'LIVE', currentPeriod: 'FIRST_HALF'}`) in `FootballLogger.tsx`, closing the window entirely — one broadcast, both fields always consistent. Confirmed the `POST /api/events` scoring path does NOT independently flip `status` to `'LIVE'` (ruled out as an alternate cause).
 **Previously** (session 53 continuation, 2026-08-22, live re-test of BUG-241 via the Claude Browser preview — not a script, an interactive check):
 
 **Priority:** MEDIUM — Flow C (Public Livescore) cosmetic/trust issue, not a functional block. A real anonymous viewer sees the score update correctly and in good time, but the page's own status badge and its own body text directly contradict each other in the same view.
@@ -8761,22 +8782,38 @@ The score (`1-0`) is correct and updated without a manual refresh — the propag
 
 ### BACKLOG-226 — No Real Offline/Caching Strategy Across the Platform; Concrete Skeleton-Loader Race on `/admin/matches`
 
-**Status:** OPEN — filed session 53 continuation, 2026-08-22. Relayed from Richard via a peer session (`brixsports-v2-42`), not yet scoped or started.
-**Priority:** Medium — Richard's own framing: "sounds like a real workstream, not a quick fix," not urgent, queued for later.
+**Status:** OPEN, partially narrowed — filed session 53 continuation, 2026-08-22; re-scoped session 55, 2026-08-25. Added to the active Tier 0/1 sequence (item 9, folded in alongside item 7's stale-docs pass) rather than left fully deferred.
+**Priority:** Medium — Richard's own framing at filing: "sounds like a real workstream, not a quick fix." BUG-244's root cause (below) is the one piece of this that was actually pre-launch-blocking; that piece is now shipped.
 
 **Ask, as relayed:** BrixSports has no full offline support, and several areas could benefit from proper caching strategies — stale-while-revalidate on list fetches, service-worker cache layers where the PWA infra already exists (logger side has one; admin doesn't), etc.
 
+**Correction, session 55:** "admin doesn't [have an offline queue]" is now stale as originally framed — `src/lib/admin-offline-queue.ts` (`syncAdminChanges()`, `pendingAdminChanges` store) is live and wired into both `FootballLogger.tsx` and `BasketballLogger.tsx` for period-transition PATCH/undo-DELETE writes (`BUG-142` scope). It is NOT a general-purpose queue for all admin writes.
+
+**Second correction, same session, my own error:** I initially wrote here that "admin doesn't have a service worker" — that was wrong, not re-verified before writing. `admin/layout.tsx` mounts `sw-admin.js` (shared with `/logger`, per `logger/layout.tsx`) — it's been live this whole time, with its own push notifications, per-route API TTL policy, and the offline-write-queue described above. The real, narrower gap (now fixed, see below): `sw-admin.js` had the exact same document-caching hole `sw-user.js` had pre-fix — network-first HTML with no cached-page fallback, so a previously-visited admin/logger page was just as unreachable offline as an unvisited one. Fixed identically to `sw-user.js`'s fix: successful document responses are now cached, and a network failure falls back to the last-cached copy of that specific page before falling to `/offline`. Also moved `/api/competitions` from the 30s live-data TTL to SWR in `sw-admin.js`, mirroring the same move in `sw-user.js` (the two files' own comments already commit to staying in sync). Net effect: an admin's dashboard shell and read-only list pages (teams, players, competitions, the pages actually in `STATIC_ASSETS`), and a logger's entry/assignment-list page, are now cache-then-serve once visited — same "see whatever you last saw" model as the viewer fix, deliberately NOT extended to live match data or the active logging screen (still network-first/`NEVER_CACHE`, unchanged, by design).
+
 **Concrete repro that motivated the ask:** `/admin/matches` showed a raw skeleton-loader race during a peer session's beta-test — the matches list starts at 0/0/0/0 with shimmer placeholders and takes a beat to actually fetch. A real admin could get caught by this too, e.g. clicking a "Manage Lineups" icon before the real list has rendered. Screenshot available from the peer session if needed.
 
-**Not scoped:** which surfaces beyond `/admin/matches` need this, whether a shared SWR/React Query layer is the right fix vs. targeted skeleton-state guards, and whether admin needs its own service worker (logger/viewer already have `sw-admin.js`/`sw-user.js` per `IOSInstallPrompt.tsx`'s `swPath` prop — admin's own caching story specifically hasn't been audited).
+**Folded in from the session-55 PWA offline-resilience audit** (BUG-244's root cause is the same "no deploy-safe caching strategy" theme this entry already names — tracked under BUG-244 itself, not duplicated here, but summarized for this entry's own context):
+- Pre-launch blocker (now shipped): `CACHE_VERSION` not tied to the build → stale precached documents (`/offline` and any other `STATIC_ASSETS` entry) chunk-404 after any deploy that changes their output. See `BUG-244`.
+- Also shipped alongside it: global `ChunkLoadError` window-level recovery (`useChunkLoadErrorRecovery`), and `UpdatePrompt` dismiss-then-resurface so a logger can't silently run a fully stale build through an entire match.
+- Still open, future hardening, not pre-launch-blocking: `/admin/matches`'s skeleton-loader race and a general admin SWR/React-Query strategy; extending `pendingAdminChanges` beyond period-transition/undo to a general admin-write queue; iOS storage-eviction resilience (`navigator.storage.persist()` unsupported — unmitigable, design-around only); merging admin+logger SW manifests (deliberately deferred per `PWA_LIMITATIONS.md:139-161`, not a bug).
 
-**Found:** session 53 continuation, 2026-08-22, relayed via cross-session message from `brixsports-v2-42`, originating from Richard.
+**Not scoped:** which surfaces beyond `/admin/matches` need a fetch-layer fix, and whether a shared SWR/React Query layer is the right approach vs. targeted skeleton-state guards for that specific race (the SW-level document/API caching fixed this session is a different layer — it fixes offline reachability of already-rendered pages, not the loading-race on first render while online).
+
+**Found:** session 53 continuation, 2026-08-22, relayed via cross-session message from `brixsports-v2-42`, originating from Richard. Re-scoped session 55, 2026-08-25 following the PWA offline-resilience audit and `BUG-244`'s fix.
 
 ---
 
-### BUG-243 — `MatchStatusBadge`'s Live Minute Reads `undefined` Instead of the Real Clock Value
+### ~~BUG-243~~ — `MatchStatusBadge`'s Live Minute Reads `undefined` Instead of the Real Clock Value
 
-**Status:** SHIPPED, not yet live-verified — session 55, 2026-08-25. Fixed exactly per the "Fix (not built)" plan below: `MatchStatusBadge.tsx` now destructures `const { time: liveTime } = useMatchTimer(matchId || '')` instead of using the wrapper object directly. **Also found the identical bug independently in `MatchOverlay.tsx`** (not previously tracked, same root cause — `const liveTime = useMatchTimer(match.id)` fed straight into `setMatchTime(liveTime)`, clobbering the component's typed `{minute, extraTime, half, period, announcedStoppage}` state with the wrapper shape on the very first WS tick): fixed to destructure `time` and merge only the WS-sourced fields (`minute`/`extraTime`/`half`/`period`) into previous state, preserving `announcedStoppage` (which is set from a separate DOM CustomEvent, not the WS timer). Both fixes also cleared their own pre-existing `tsc --noEmit` errors for these two files. Not yet live-tested against a real match.
+**Status:** RESOLVED for `MatchStatusBadge.tsx`/`MatchDetailClient.tsx` — live-verified session 55, 2026-08-25. `MatchOverlay.tsx`'s identical fix not independently live-verified (see Pending items).
+**Evidence:**
+- Commit: `4b617ae`
+- Verified by: real staging match (`ZMBbLfLIoXVCkgJv7c8j2`), a real Goal event logged, public match page (`MatchStatusBadge`/`MatchDetailClient`) observed at load and again after a 20s wait
+- Observed result: live-minute badge never rendered literal `undefined` — showed `0'` throughout the observation window (score correctly updated to 1-0 via WS broadcast in the same window)
+- Pending items: `MatchOverlay.tsx`'s identical fix (same root cause, same fix pattern) was not independently re-verified live — could not locate the homepage's overlay-modal trigger in the verification session; a click that was expected to open it instead navigated to the full match page. High confidence given it's the same fix as the confirmed-passing file, but not visually confirmed. Also noted, not yet filed as its own item: the live minute did not visibly tick upward during the 20s observation window on the public page — a possibly distinct, new finding (WS time-tick delivery to anonymous viewers), not a recurrence of this bug's literal-`undefined` symptom.
+
+Fixed exactly per the "Fix (not built)" plan below: `MatchStatusBadge.tsx` now destructures `const { time: liveTime } = useMatchTimer(matchId || '')` instead of using the wrapper object directly. **Also found the identical bug independently in `MatchOverlay.tsx`** (not previously tracked, same root cause — `const liveTime = useMatchTimer(match.id)` fed straight into `setMatchTime(liveTime)`, clobbering the component's typed `{minute, extraTime, half, period, announcedStoppage}` state with the wrapper shape on the very first WS tick): fixed to destructure `time` and merge only the WS-sourced fields (`minute`/`extraTime`/`half`/`period`) into previous state, preserving `announcedStoppage` (which is set from a separate DOM CustomEvent, not the WS timer). Both fixes also cleared their own pre-existing `tsc --noEmit` errors for these two files.
 **Previously:** OPEN — found via `tsc --noEmit` triage, session 53 continuation, 2026-08-22, not yet fixed.
 **Priority:** HIGH — Tier 0/1, Flow C. `MatchStatusBadge` is used on `MatchDetailClient.tsx`, `LiveMatchCard.tsx`, and `FixtureCard.tsx` — real public-facing live-match surfaces, not a rarely-hit path.
 
@@ -8792,7 +8829,7 @@ The score (`1-0`) is correct and updated without a manual refresh — the propag
 
 ### BUG-244 — `/offline` PWA Fallback Page Itself 500s With `Loading chunk N failed` After a Deploy (Stale Service-Worker Cache)
 
-**Status:** SHIPPED (immediate mitigation), not yet live-verified — session 55, 2026-08-25. Structural fix still open (see below).
+**Status:** SHIPPED (mitigation + structural fix), not yet live-verified — session 55, 2026-08-25.
 **Priority:** HIGH — can 500 a real user's whole session on staging/prod with a branded-but-broken error page, confirmed live by Richard (screenshot, staging).
 
 **Problem, live-reported by Richard with a screenshot:** on `brixsports-staging.vercel.app`, hit a "500 — Houston, we have a problem!" page with error detail `Loading chunk 9734 failed. (error: https://brixsports-staging.vercel.app/_next/static/chunks/app/offline/page-46e4c0de3dd0ed00.js)`.
@@ -8801,9 +8838,30 @@ The score (`1-0`) is correct and updated without a manual refresh — the propag
 
 **Fix (shipped, immediate mitigation):** `CACHE_VERSION` bumped `v2 → v3` in both `public/sw-user.js` and `public/sw-admin.js`, forcing every client to re-run `install` and refresh the precached `/offline` document on next visit. This clears today's specific staleness but doesn't prevent recurrence.
 
-**Fix (not built) — structural, needed to prevent recurrence:** tie `CACHE_VERSION` to the build (Vercel git commit SHA or Next `BUILD_ID`), templated into the SW files at build time via a small `postbuild` script, so every deploy is a genuinely different SW script and this class of bug can't reoccur without a manual version bump. Also flagged, not built: a global `ChunkLoadError` window-level recovery handler (currently only exists as a manual "Reload Page" button in `src/components/admin/ErrorBoundary.tsx`), and no forced-reload fallback when a user dismisses `UpdatePrompt.tsx`'s "Update Available" banner (a logger who dismisses can run a fully stale build through an entire live match).
+**Fix (shipped, structural, commit `21da29b`):** `scripts/inject-sw-cache-version.mjs` runs as a prebuild step (`"build": "node scripts/inject-sw-cache-version.mjs && next build"` in `package.json`) and rewrites `CACHE_VERSION` in both `public/sw-user.js` and `public/sw-admin.js` to `<prefix>-<VERCEL_GIT_COMMIT_SHA>` (falls back to a local timestamp id off-Vercel), so every deploy ships a byte-different SW script and this class of bug can't recur from a forgotten manual bump. Dry-run verified locally (fake SHA in, correct stamped output confirmed in both files, then reverted before commit) — not yet verified against a real Vercel build. The `v3` literals committed in both files remain as the local-dev fallback only.
+
+**Also shipped, same session (separate, smaller hardening items found by the same PWA audit — not the BUG-244 repro itself, but the same root theme):**
+- Global `ChunkLoadError` recovery: `useChunkLoadErrorRecovery()` (`src/hooks/usePWA.ts`) listens for both the thrown-error and unhandled-rejection forms of a stale-chunk failure anywhere in the app, force-reloads once, capped via `sessionStorage` to one reload per 10s so a genuinely-offline user doesn't loop. Wired into `PWAProvider.tsx` (mounted app-wide, not just admin's manual "Reload Page" button in `ErrorBoundary.tsx`).
+- `UpdatePrompt.tsx` dismissal fallback: dismissing no longer hides the "Update Available" banner permanently — it re-surfaces after a 15-minute snooze if a worker is still waiting. A literal forced reload on dismiss was considered and rejected (would risk interrupting a logger mid-match, against `CLAUDE.md`'s "no page refresh required to continue logging mid-match" rule) — snooze-and-resurface keeps the nudge alive without ever reloading anything the user didn't ask for.
+- Neither independently live-verified yet (both are source-confirmed only).
 
 **Found:** session 55, 2026-08-25, live-reported by Richard with a staging screenshot; root-caused via a dedicated background PWA/offline-resilience audit covering caching strategy, offline queue infra, and iOS limitations more broadly (full findings not yet transcribed into BACKLOG — see session 55's `BUILD_JOURNAL.md` entry when written).
+
+---
+
+### ~~BUG-245~~ — `logger_manager` Role Granted Full `/admin/**` + `/api/admin/**` Access, Not Just Its Own `/admin/manager` Page
+
+**Status:** RESOLVED — session 55, 2026-08-25.
+**Evidence:**
+- Commit: `2bd34b0` (this session, item 6 of the Tier 0/1 sequence).
+- Root cause: `src/middleware.ts`'s admin-route gate (`payload.role !== 'admin' && payload.role !== 'logger_manager'`) and `src/app/admin/layout.tsx`'s identical check both treated `logger_manager` as fully equivalent to `admin` for the ENTIRE `/admin/**` page tree and `/api/admin/**` route tree, not just `logger_manager`'s one real page (`src/app/admin/manager/page.tsx`, which only calls `/api/matches` and `/api/loggers` — both already gated separately, neither under `/api/admin/*`).
+- Fix: `middleware.ts` now scopes `logger_manager` to `pathname === '/admin/manager' || pathname.startsWith('/admin/manager/')` only; every other `/admin/**` page and all of `/api/admin/**` now requires `admin` specifically. `admin/layout.tsx` left unchanged — it only gates "is this role admin-shell-eligible at all" (still correctly true for both roles), and middleware runs first on every request so it's the actual path-scoping enforcement point; no page or API data ever reaches a `logger_manager` request outside `/admin/manager` regardless of what layout/sidebar renders.
+- Verified by: source read + trace only (`tsc --noEmit` not yet re-run this change, no live token test against a real `logger_manager` account yet). **Not live-verified.**
+- Pending items: live-verify with a real `logger_manager`-role token that `/admin/teams` (or any other admin page) now redirects/403s while `/admin/manager` still works; confirm `tsc --noEmit` stays clean.
+
+**Also folds in `BACKLOG-158` item 6** (docs/code reconciliation gap: `logger_manager` isn't in `CLAUDE.md`'s stated Actor Model at all) — that's a separate stale-docs item, tracked under item 7 of this session's sequence, not fixed by this code change.
+
+**Found:** session 55 background admin/permissions security audit, 2026-08-25.
 
 ---
 
