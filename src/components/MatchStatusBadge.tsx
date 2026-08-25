@@ -16,7 +16,7 @@ interface MatchStatusBadgeProps {
 
 export default function MatchStatusBadge({ status, className = '', matchId, matchTime: initialTime }: MatchStatusBadgeProps) {
     // Subscribe to real-time updates if matchId is provided
-    const liveTime = useMatchTimer(matchId || '');
+    const { time: liveTime } = useMatchTimer(matchId || '');
     const matchTime = liveTime || initialTime;
 
     const getStatusConfig = () => {

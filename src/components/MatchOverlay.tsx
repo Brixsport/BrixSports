@@ -49,7 +49,7 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
   const { events: liveEvents, latestEvent, socket, isConnected } = useMatchEvents(match.id);
   const liveRatings = usePlayerRatings(match.id);
   const viewerCount = useMatchViewers(match.id);
-  const liveTime = useMatchTimer(match.id);
+  const { time: liveTime } = useMatchTimer(match.id);
   const liveLineups = useLineupUpdates(match.id);
   
   // Re-fetch match data on WebSocket reconnection to ensure state consistency
@@ -183,7 +183,13 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
   // Sync match time from WebSocket updates
   useEffect(() => {
     if (liveTime) {
-      setMatchTime(liveTime);
+      setMatchTime(prev => ({
+        ...prev,
+        minute: liveTime.minute,
+        extraTime: liveTime.extraTime,
+        half: liveTime.half,
+        period: liveTime.period,
+      }));
     }
   }, [liveTime]);
 
