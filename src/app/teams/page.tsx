@@ -89,8 +89,11 @@ export default function TeamsPage() {
             if (filter === 'all') {
                 const response = await fetch('/api/teams');
                 if (!response.ok) throw new Error('Failed to fetch teams');
+                // /api/teams returns a bare array, not { teams: [...] } -- every other
+                // caller in this codebase (admin/teams, admin/players, profile,
+                // OnboardingModal) already consumes it this way.
                 const result = await response.json();
-                data = result.teams || [];
+                data = Array.isArray(result) ? result : [];
             } else {
                 // Determine sport for competition
                 const comp = currentComps.find(c => c.name === filter);

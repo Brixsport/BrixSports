@@ -5,7 +5,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
-import { teams, players, matches, basketballPlayerStats, playerTeamAffiliations, squadPlayers } from '@/db/schema';
+import { teams, players, matches, basketballPlayerStats, playerTeamAffiliations, squadPlayers, standings } from '@/db/schema';
 import { eq, or, desc, and, sql, inArray } from 'drizzle-orm';
 import { enrichPlayersWithAffiliations, toPublicPlayer } from '@/lib/player-data';
 import { getResolvedInstitutionalData } from '@/lib/player-affiliation-utils';
@@ -186,32 +186,51 @@ export async function GET(
         const enrichedUpcoming = await enrichMatches(upcomingMatches);
 
         // Calculate team statistics
-        // Use stored stats from database if they exist, otherwise calculate from recent matches
+        // BACKLOG-097 follow-up: `teams`' own played/won/drawn/lost/goalsFor/goalsAgainst/points
+        // columns are a cross-competition snapshot computed under a single hardcoded 3/1/0
+        // points rule (see standingsService.ts's syncTeamOverallRecord comment), while
+        // `standings` is per-competition under each competition's real points rule -- the two
+        // provably disagree for any team in more than one competition. `standings` is the
+        // correct source; read from it instead of `team.*`. `finishedMatches`/`enrichedRecent`
+        // (last 10 matches only) remains the fallback for a team with no standings rows yet
+        // (e.g. genuinely hasn't played, or a data gap before any recalc has run).
         const finishedMatches = enrichedRecent.filter(m => m.status === 'FINISHED');
 
-        // Check if team has stored stats (played field is not null/undefined)
-        const useStoredStats = team.played !== null && team.played !== undefined;
+        const teamStandingsRows = await db
+            .select()
+            .from(standings)
+            .where(
+                competitionId
+                    ? and(eq(standings.teamId, id), eq(standings.competitionId, competitionId))
+                    : eq(standings.teamId, id)
+            );
 
-        const stats = {
-            played: useStoredStats ? (team.played ?? 0) : finishedMatches.length,
-            won: useStoredStats ? (team.won ?? 0) : finishedMatches.filter(m => {
-                if (m.isHome) return m.homeScore > m.awayScore;
-                return m.awayScore > m.homeScore;
-            }).length,
-            drawn: useStoredStats ? (team.drawn ?? 0) : finishedMatches.filter(m => m.homeScore === m.awayScore).length,
-            lost: useStoredStats ? (team.lost ?? 0) : finishedMatches.filter(m => {
-                if (m.isHome) return m.homeScore < m.awayScore;
-                return m.awayScore < m.homeScore;
-            }).length,
-            goalsFor: useStoredStats ? (team.goalsFor ?? 0) : finishedMatches.reduce((sum, m) => {
-                return sum + (m.isHome ? m.homeScore : m.awayScore);
-            }, 0),
-            goalsAgainst: useStoredStats ? (team.goalsAgainst ?? 0) : finishedMatches.reduce((sum, m) => {
-                return sum + (m.isHome ? m.awayScore : m.homeScore);
-            }, 0),
-            goalDifference: 0,
-            points: useStoredStats ? (team.points ?? 0) : 0 // Add points
-        };
+        const useStoredStats = teamStandingsRows.length > 0;
+
+        const stats = useStoredStats
+            ? teamStandingsRows.reduce(
+                (acc, row) => ({
+                    played: acc.played + (row.played ?? 0),
+                    won: acc.won + (row.won ?? 0),
+                    drawn: acc.drawn + (row.drawn ?? 0),
+                    lost: acc.lost + (row.lost ?? 0),
+                    goalsFor: acc.goalsFor + (row.goalsFor ?? 0),
+                    goalsAgainst: acc.goalsAgainst + (row.goalsAgainst ?? 0),
+                    goalDifference: 0,
+                    points: acc.points + (row.points ?? 0),
+                }),
+                { played: 0, won: 0, drawn: 0, lost: 0, goalsFor: 0, goalsAgainst: 0, goalDifference: 0, points: 0 }
+            )
+            : {
+                played: finishedMatches.length,
+                won: finishedMatches.filter(m => (m.isHome ? m.homeScore > m.awayScore : m.awayScore > m.homeScore)).length,
+                drawn: finishedMatches.filter(m => m.homeScore === m.awayScore).length,
+                lost: finishedMatches.filter(m => (m.isHome ? m.homeScore < m.awayScore : m.awayScore < m.homeScore)).length,
+                goalsFor: finishedMatches.reduce((sum, m) => sum + (m.isHome ? m.homeScore : m.awayScore), 0),
+                goalsAgainst: finishedMatches.reduce((sum, m) => sum + (m.isHome ? m.awayScore : m.homeScore), 0),
+                goalDifference: 0,
+                points: 0,
+            };
 
         if (!useStoredStats) {
             // Basic points calculation if not stored

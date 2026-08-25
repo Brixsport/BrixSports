@@ -1,9 +1,10 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse, after } from 'next/server';
 import { db } from '@/db';
 import { matches, matchEvents, playerStats } from '@/db/schema';
 import { eq, and, or } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { getAuthUser } from '@/lib/auth';
+import { recalculateStandingsForMatch } from '@/lib/standingsService';
 
 export async function POST(request: NextRequest) {
     try {
@@ -317,6 +318,20 @@ export async function POST(request: NextRequest) {
                 matchId,
                 eventsInserted
             };
+        });
+
+        // BUG-245: this route inserts a FINISHED match directly, bypassing
+        // matches/[id]/route.ts's PATCH handler entirely -- which is the only
+        // other place that triggers recalculateStandingsForMatch. Without this,
+        // a backfilled match sits outside standings/teams indefinitely unless
+        // some other later match for the same team+competition happens to
+        // trigger a fresh recompute that incidentally scans it in.
+        after(async () => {
+            try {
+                await recalculateStandingsForMatch(result.matchId);
+            } catch (error) {
+                console.error('Error recalculating standings after backfill:', error);
+            }
         });
 
         return NextResponse.json(
