@@ -21,7 +21,7 @@ export async function GET(request: Request) {
                 : undefined;
 
             if (competitionId && matchByName) {
-                conditions.push(or(eq(standings.competitionId, competitionId), matchByName));
+                conditions.push(or(eq(standings.competitionId, competitionId), matchByName)!);
             } else if (competitionId) {
                 conditions.push(eq(standings.competitionId, competitionId));
             } else if (matchByName) {

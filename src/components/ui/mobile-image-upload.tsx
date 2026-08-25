@@ -50,12 +50,24 @@ export default function MobileImageUpload({
   const [uploadProgress, setUploadProgress] = useState(0);
   const [dragActive, setDragActive] = useState(false);
 
-  // Get aspect ratio for Cloudinary
+  // Human-readable aspect ratio label, for display only
   const getAspectRatio = () => {
     switch (aspectRatio) {
       case 'square': return '1:1';
       case 'video': return '16:9';
       case 'portrait': return '9:16';
+      default: return undefined;
+    }
+  };
+
+  // Cloudinary's croppingAspectRatio option takes a numeric ratio, not the
+  // "W:H" display string above -- passing the string was a silent no-op
+  // (widget option type mismatch, cropping never actually constrained).
+  const getAspectRatioNumber = (): number | undefined => {
+    switch (aspectRatio) {
+      case 'square': return 1;
+      case 'video': return 16 / 9;
+      case 'portrait': return 9 / 16;
       default: return undefined;
     }
   };
@@ -149,7 +161,7 @@ export default function MobileImageUpload({
     maxFileSize: maxSize * 1024 * 1024, // Convert to bytes
     formats: allowedFormats,
     cropping: aspectRatio !== 'free',
-    croppingAspectRatio: getAspectRatio(),
+    croppingAspectRatio: getAspectRatioNumber(),
     multiple: false,
     resourceType: 'image',
     clientAllowedFormats: allowedFormats,

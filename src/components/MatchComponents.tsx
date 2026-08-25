@@ -2,7 +2,8 @@
 
 import { motion } from 'framer-motion';
 import { Trophy, Activity, ArrowRight, Star } from 'lucide-react';
-import { TEAMS, Match } from '@/lib/mock-data';
+import { TEAMS } from '@/lib/mock-data';
+import { Match } from '@/types';
 
 export function MatchTimeline({ events }: { events: any[] }) {
   return (

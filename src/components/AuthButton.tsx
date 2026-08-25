@@ -10,7 +10,7 @@ export default function AuthButton() {
 
     // Check both NextAuth and custom auth
     const isLoggedIn = session || isAuthenticated;
-    const userData = session?.user || user;
+    const userData = (session?.user || user) as { name?: string | null; image?: string | null; avatar?: string } | undefined;
 
     if (nextAuthStatus === 'loading') {
         return (

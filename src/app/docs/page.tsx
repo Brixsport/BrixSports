@@ -5,14 +5,14 @@ import {
     BookOpen, Code, Database, Rocket, Settings, Users,
     FileCode, GitBranch, Terminal, Package, Layers,
     Zap, Shield, Globe, Search, ChevronRight, ExternalLink,
-    Copy, Check, Menu, X
+    Copy, Check, Menu, X, type LucideIcon
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 interface DocSection {
     id: string;
     title: string;
-    icon: React.ElementType;
+    icon: LucideIcon;
     content: React.ReactNode;
 }
 

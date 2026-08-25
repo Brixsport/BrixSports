@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
 import { staffComms, users } from '@/db/schema';
 import { eq, desc, and } from 'drizzle-orm';
-import { v4 as uuidv4 } from 'uuid';
+import { nanoid } from 'nanoid';
 import { getAuthUser, resolveEffectiveUserId } from '@/lib/auth';
 
 export async function GET(request: NextRequest) {
@@ -71,7 +71,7 @@ export async function POST(request: NextRequest) {
         }
 
         const newComm = {
-            id: uuidv4(),
+            id: nanoid(),
             matchId,
             userId,
             content,

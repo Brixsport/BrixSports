@@ -17,7 +17,7 @@ export async function GET(request: Request) {
         const conditions = [notInArray(matches.sport, sportsToExclude)];
         if (status) conditions.push(eq(matches.status, status));
         if (competitionId) {
-            conditions.push(or(eq(matches.competitionId, competitionId), eq(matches.competition, competition || '')));
+            conditions.push(or(eq(matches.competitionId, competitionId), eq(matches.competition, competition || ''))!);
         } else if (competition) {
             conditions.push(eq(matches.competition, competition));
         }

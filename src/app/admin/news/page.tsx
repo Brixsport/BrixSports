@@ -663,8 +663,8 @@ function NewsCard({ article, isSelected, onToggleSelect, onEdit, onDelete }: {
 }
 
 function EnhancedNewsEditor({ formData, setFormData, onSubmit, onClose, isEditing, entityId, isSaving, lastSaved, autoSaveEnabled, onToggleAutoSave }: {
-    formData: any;
-    setFormData: (data: any) => void;
+    formData: FormData;
+    setFormData: React.Dispatch<React.SetStateAction<FormData>>;
     onSubmit: (e: React.FormEvent) => void;
     onClose: () => void;
     isEditing: boolean;
@@ -782,7 +782,6 @@ function EnhancedNewsEditor({ formData, setFormData, onSubmit, onClose, isEditin
                             <ImageUpload
                                 value={formData.imageUrl}
                                 onChange={(url) => setFormData({ ...formData, imageUrl: url })}
-                                onRemove={() => setFormData({ ...formData, imageUrl: '' })}
                                 folder="brixsports/news/images"
                                 publicId={entityId}
                                 tags={['news-image']}

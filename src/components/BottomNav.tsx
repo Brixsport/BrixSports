@@ -2,13 +2,13 @@
 
 import { usePathname, useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
-import { Calendar, Trophy, User } from 'lucide-react';
+import { Calendar, Trophy, User, type LucideIcon } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 
 interface NavItem {
     id: string;
     label: string;
-    icon: React.ElementType;
+    icon: LucideIcon;
     path: string;
     badge?: number;
 }

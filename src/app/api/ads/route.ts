@@ -37,7 +37,7 @@ export async function GET(request: NextRequest) {
     await db
       .update(advertisements)
       .set({
-        impressions: ad.impressions + 1,
+        impressions: (ad.impressions ?? 0) + 1,
       })
       .where(eq(advertisements.id, ad.id));
 

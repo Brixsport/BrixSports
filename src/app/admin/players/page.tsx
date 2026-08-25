@@ -608,7 +608,7 @@ function AdminPlayersPageContent() {
                                         <div>
                                             <label className="block text-[10px] font-black uppercase tracking-widest text-white/40 mb-2 italic">Assigned Team</label>
                                             <select
-                                                value={formData.teamId}
+                                                value={formData.teamId ?? ''}
                                                 onChange={e => setFormData({ ...formData, teamId: e.target.value })}
                                                 className="w-full bg-white/5 border border-white/10 rounded-[1.25rem] px-5 py-4 focus:outline-none focus:border-primary/50 font-bold transition-all appearance-none"
                                             >

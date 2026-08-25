@@ -1336,6 +1336,7 @@ function TeamDetailContent() {
                                                                     p.jerseyName?.toLowerCase().includes(row.linkSearch.toLowerCase()),
                                                               ).slice(0, 5)
                                                             : [];
+                                                        const resolvedPlayerId = row.resolution.mode === 'existing' ? row.resolution.playerId : null;
                                                         return (
                                                             <tr
                                                                 key={i}
@@ -1390,7 +1391,7 @@ function TeamDetailContent() {
                                                                     {row.resolution.mode === 'existing' && (
                                                                         <div className="flex items-center gap-2">
                                                                             <span className="text-[10px] font-bold text-white/60 truncate max-w-[120px]">
-                                                                                {roster.find((p) => p.playerId === row.resolution.playerId)?.name ?? row.resolution.playerId.slice(0, 8)}
+                                                                                {roster.find((p) => p.playerId === resolvedPlayerId)?.name ?? resolvedPlayerId?.slice(0, 8)}
                                                                             </span>
                                                                             <button
                                                                                 onClick={() => updateCsvRow(i, { resolution: { mode: 'new' }, linkSearch: '' })}
