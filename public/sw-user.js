@@ -138,23 +138,32 @@ self.addEventListener('fetch', (event) => {
     // build-id-scoped (see top of file), so a stale document from a prior
     // deploy can never survive into the current deploy's cache namespace --
     // the entire cache is wiped on activate, not selectively invalidated.
+    //
+    // The cache write is wrapped in event.waitUntil() -- confirmed live
+    // against a real staging deploy (session 55) that without it, the write
+    // silently never happens: event.respondWith()'s own promise resolves as
+    // soon as fetch() resolves, and the browser is free to suspend/terminate
+    // the SW once that response is delivered, racing the un-awaited
+    // caches.open().then(cache.put(...)) chain. Same fire-and-forget class of
+    // bug this codebase already has documented history with (BUG-119).
     if (request.destination === 'document') {
+        const fetchPromise = fetch(request).then((response) => {
+            if (response.status === 200) {
+                const responseClone = response.clone();
+                event.waitUntil(
+                    caches.open(DYNAMIC_CACHE).then((cache) => {
+                        cache.put(request, responseClone);
+                        return limitCacheSize(DYNAMIC_CACHE, MAX_DYNAMIC_CACHE_SIZE);
+                    })
+                );
+            }
+            return response;
+        });
         event.respondWith(
-            fetch(request)
-                .then((response) => {
-                    if (response.status === 200) {
-                        const responseClone = response.clone();
-                        caches.open(DYNAMIC_CACHE).then((cache) => {
-                            cache.put(request, responseClone);
-                            limitCacheSize(DYNAMIC_CACHE, MAX_DYNAMIC_CACHE_SIZE);
-                        });
-                    }
-                    return response;
-                })
-                .catch(async () => {
-                    const cached = await caches.match(request);
-                    return cached || caches.match('/offline');
-                })
+            fetchPromise.catch(async () => {
+                const cached = await caches.match(request);
+                return cached || caches.match('/offline');
+            })
         );
         return;
     }
@@ -210,10 +219,12 @@ self.addEventListener('fetch', (event) => {
                     .then((response) => {
                         const responseClone = response.clone();
                         if (response.status === 200) {
-                            caches.open(API_CACHE).then((cache) => {
-                                cache.put(request, responseClone);
-                                limitCacheSize(API_CACHE, MAX_API_CACHE_SIZE);
-                            });
+                            event.waitUntil(
+                                caches.open(API_CACHE).then((cache) => {
+                                    cache.put(request, responseClone);
+                                    return limitCacheSize(API_CACHE, MAX_API_CACHE_SIZE);
+                                })
+                            );
                         }
                         return response;
                     })
@@ -232,10 +243,12 @@ self.addEventListener('fetch', (event) => {
                 .then((response) => {
                     const responseClone = response.clone();
                     if (response.status === 200) {
-                        caches.open(API_CACHE).then((cache) => {
-                            cache.put(request, responseClone);
-                            limitCacheSize(API_CACHE, MAX_API_CACHE_SIZE);
-                        });
+                        event.waitUntil(
+                            caches.open(API_CACHE).then((cache) => {
+                                cache.put(request, responseClone);
+                                return limitCacheSize(API_CACHE, MAX_API_CACHE_SIZE);
+                            })
+                        );
                     }
                     return response;
                 })
@@ -263,10 +276,12 @@ self.addEventListener('fetch', (event) => {
 
                     return fetch(request).then((response) => {
                         const responseClone = response.clone();
-                        caches.open(IMAGE_CACHE).then((cache) => {
-                            cache.put(request, responseClone);
-                            limitCacheSize(IMAGE_CACHE, MAX_IMAGE_CACHE_SIZE);
-                        });
+                        event.waitUntil(
+                            caches.open(IMAGE_CACHE).then((cache) => {
+                                cache.put(request, responseClone);
+                                return limitCacheSize(IMAGE_CACHE, MAX_IMAGE_CACHE_SIZE);
+                            })
+                        );
                         return response;
                     });
                 })
@@ -290,10 +305,12 @@ self.addEventListener('fetch', (event) => {
         fetch(request)
             .then((response) => {
                 const responseClone = response.clone();
-                caches.open(DYNAMIC_CACHE).then((cache) => {
-                    cache.put(request, responseClone);
-                    limitCacheSize(DYNAMIC_CACHE, MAX_DYNAMIC_CACHE_SIZE);
-                });
+                event.waitUntil(
+                    caches.open(DYNAMIC_CACHE).then((cache) => {
+                        cache.put(request, responseClone);
+                        return limitCacheSize(DYNAMIC_CACHE, MAX_DYNAMIC_CACHE_SIZE);
+                    })
+                );
                 return response;
             })
             .catch(() => {

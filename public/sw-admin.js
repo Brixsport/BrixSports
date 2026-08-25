@@ -126,23 +126,30 @@ self.addEventListener('fetch', (event) => {
     // Safe post-BUG-244: CACHE_VERSION is build-id-scoped, so a stale
     // document from a prior deploy can't survive into the current deploy's
     // cache namespace -- the whole cache is wiped on activate.
+    //
+    // Cache write wrapped in event.waitUntil() -- confirmed live against a
+    // real staging deploy (session 55) that without it, the write silently
+    // never happens (SW can be suspended right after respondWith() resolves,
+    // racing the un-awaited cache.put()). Same class as this project's own
+    // BUG-119.
     if (request.destination === 'document') {
+        const fetchPromise = fetch(request).then((response) => {
+            if (response.status === 200) {
+                const responseClone = response.clone();
+                event.waitUntil(
+                    caches.open(DYNAMIC_CACHE).then((cache) => {
+                        cache.put(request, responseClone);
+                        return limitCacheSize(DYNAMIC_CACHE, MAX_DYNAMIC_CACHE_SIZE);
+                    })
+                );
+            }
+            return response;
+        });
         event.respondWith(
-            fetch(request)
-                .then((response) => {
-                    if (response.status === 200) {
-                        const responseClone = response.clone();
-                        caches.open(DYNAMIC_CACHE).then((cache) => {
-                            cache.put(request, responseClone);
-                            limitCacheSize(DYNAMIC_CACHE, MAX_DYNAMIC_CACHE_SIZE);
-                        });
-                    }
-                    return response;
-                })
-                .catch(async () => {
-                    const cached = await caches.match(request);
-                    return cached || caches.match('/offline');
-                })
+            fetchPromise.catch(async () => {
+                const cached = await caches.match(request);
+                return cached || caches.match('/offline');
+            })
         );
         return;
     }
@@ -193,10 +200,12 @@ self.addEventListener('fetch', (event) => {
                     .then((response) => {
                         if (response.status === 200) {
                             const responseClone = response.clone();
-                            caches.open(API_CACHE).then((cache) => {
-                                cache.put(request, responseClone);
-                                limitCacheSize(API_CACHE, MAX_API_CACHE_SIZE);
-                            });
+                            event.waitUntil(
+                                caches.open(API_CACHE).then((cache) => {
+                                    cache.put(request, responseClone);
+                                    return limitCacheSize(API_CACHE, MAX_API_CACHE_SIZE);
+                                })
+                            );
                         }
                         return response;
                     })
@@ -214,10 +223,12 @@ self.addEventListener('fetch', (event) => {
                 .then((response) => {
                     if (response.status === 200) {
                         const responseClone = response.clone();
-                        caches.open(API_CACHE).then((cache) => {
-                            cache.put(request, responseClone);
-                            limitCacheSize(API_CACHE, MAX_API_CACHE_SIZE);
-                        });
+                        event.waitUntil(
+                            caches.open(API_CACHE).then((cache) => {
+                                cache.put(request, responseClone);
+                                return limitCacheSize(API_CACHE, MAX_API_CACHE_SIZE);
+                            })
+                        );
                     }
                     return response;
                 })
@@ -249,10 +260,12 @@ self.addEventListener('fetch', (event) => {
         fetch(request)
             .then((response) => {
                 const responseClone = response.clone();
-                caches.open(DYNAMIC_CACHE).then((cache) => {
-                    cache.put(request, responseClone);
-                    limitCacheSize(DYNAMIC_CACHE, MAX_DYNAMIC_CACHE_SIZE);
-                });
+                event.waitUntil(
+                    caches.open(DYNAMIC_CACHE).then((cache) => {
+                        cache.put(request, responseClone);
+                        return limitCacheSize(DYNAMIC_CACHE, MAX_DYNAMIC_CACHE_SIZE);
+                    })
+                );
                 return response;
             })
             .catch(() => {
