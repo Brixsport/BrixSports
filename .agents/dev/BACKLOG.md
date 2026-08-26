@@ -6713,6 +6713,8 @@ No `clearTimeout` exists anywhere in the file. The effect that sets `stateManage
 
 **Fix (not built):** retire the legacy `/api/events`-fed pipeline and `players.rating` field (or repoint it to read from `playerRatings` at query time), consolidate to one `RatingCalculator` implementation, and add a real "ratings not yet available" state to the Power Ranking card so basketball's empty state doesn't look identical to "nothing logged yet."
 
+**Update, session 57, 2026-08-26:** a full ground-truth re-audit (Richard) plus an `architect`-agent implementation plan now exist for this. Recommendation: freeze `players.rating` (keep the column, don't drop — no destructive migration needed) rather than repoint-via-view; route every reader through a new shared `src/lib/playerRatingSummary.ts` accessor over the `playerRatings` table instead. Verification surfaced three findings not in the original session-47D audit, filed separately: `BACKLOG-248` (a live admin PATCH write path to `players.rating` the "dead field" framing missed), `BACKLOG-249` (`ratings/adjust`'s admin correction UI is actually broken today, not just untested — lineup key mismatch), `BACKLOG-250` (a fourth, fabricated rating source on the basketball MVP leaderboard). Plan is phased across a minimum of 4 sessions — explicitly flagged as exceeding one session. Not started; Richard's call is to file findings now and pick a start session later.
+
 **Found:** session 47D, by a background audit agent doing a full read-only trace of the player/team/competition data system.
 
 ---
@@ -9012,6 +9014,42 @@ Fixed exactly per the "Fix (not built)" plan below: `MatchStatusBadge.tsx` now d
 **Not yet a measured problem** — dataset is still small (dozens-to-low-hundreds of rows per entity, per the sitemap's own `MAX_PER_ENTITY` comment), so there's no evidence of an actual slow query yet. This is a proactive scale-readiness item, not a fix for an observed symptom.
 **Why deferred:** touches the live DB schema — per `CLAUDE.md`'s Schema Migrations rule, requires `db:push` against staging first, verification, then prod, logged in `RUNLOG.md`. Richard chose to skip for this session rather than do it same-session as an unplanned add-on.
 **Suggested next step, not yet built:** add `index()` defs to `schema.ts` for `matches(sport, status)`, `matchEvents(matchId, minute)`, `players(teamId)`, `footballPlayerStats(playerId, season)`, `basketballPlayerStats(playerId, season)` — then `db:push` staging → verify → prod, per standard migration process.
+
+**Found:** session 57, 2026-08-26.
+
+---
+
+### BACKLOG-248 — `players.rating` Has a Live Admin Write Path the "Dead Field" Framing Missed
+
+**Status:** OPEN — found session 57, 2026-08-26, by the `architect` agent verifying `BACKLOG-159`'s ground-truth audit against current code.
+**Priority:** HIGH — feeds directly into `BACKLOG-159`'s storage-model decision; must close before that field can be safely retired as a read source.
+**Problem:** `BACKLOG-159` states "the only writer is the dead legacy `/api/events` route." That's no longer true (may never have been fully true — not re-verified against the original session-47D snapshot). `PATCH /api/players/[id]` (`src/app/api/players/[id]/route.ts:450-455`) whitelists `'rating'` as an admin-editable field. So an admin editing a player's profile today can still write an arbitrary value into `players.rating`, live, through a real reachable endpoint — separate from the dead Pipeline A.
+**Why it matters:** any plan to freeze/retire `players.rating` as a read source (per `BACKLOG-159`'s recommended fix) is incomplete unless this write path is also closed. Otherwise an admin edit silently writes a number that every retired-reader now ignores — confusing, not dangerous, but a real gap in the redesign plan if skipped.
+**Fix (not built):** remove `'rating'` from the PATCH whitelist at `players/[id]/route.ts:452` as part of `BACKLOG-159` Phase 3 (storage consolidation). Not a standalone fix — sequenced with the rest of that work.
+
+**Found:** session 57, 2026-08-26.
+
+---
+
+### BACKLOG-249 — `ratings/adjust` Admin Correction UI Is Broken Live: Lineup Key Mismatch (`startingXI`/`substitutes` vs `starters`/`bench`)
+
+**Status:** OPEN — found session 57, 2026-08-26, by the `architect` agent. Corrects a prior misdiagnosis (see below).
+**Priority:** HIGH — the only admin UI for correcting auto-computed match ratings has been non-functional for every real match since it shipped.
+**Problem:** a session-54 fix (per `BUILD_JOURNAL.md`) changed `adjust/route.ts`'s lineup-status read from `r.rating.playerId` to (implicitly) something else, believed at the time to fix `shouldBeRated` always being `false`. Re-verified this session: **that diagnosis was inverted — `r.rating.playerId` was already correct** given the select shape `{ rating: playerRatings, player: players }`. The real, still-live bug is at `adjust/route.ts:202-203`: it reads `teamLineup.startingXI` / `teamLineup.substitutes`, but every real published lineup is persisted under `starters` / `bench` (enforced at `lineup/publish/route.ts:78,85`, `admin/match-lineups/[id]/route.ts:79`, and consumed correctly under those same names by `ratings/initialize/route.ts:65-66` and `ratingsService.ts:67-70`). `getPlayerLineupStatus()` therefore returns `'unknown'` for every player, `shouldBeRated` is false for everyone except players explicitly subbed on, and `playableRatings` comes back near-empty. **The originally-reported symptom (empty/wrong correction UI) is still live, just from a different root cause than previously believed.**
+**Secondary defect, same block:** `adjust/route.ts:220` picks the home/away lineup key using `r.player?.teamId` (the player's *current* team affiliation) instead of `r.rating.teamId` (the team actually stored on that rating row) — wrong for any player who has since transferred.
+**Adjacent, not in scope here:** the same phantom `startingXI`/`substitutes` shape also appears at `lineup/route.ts:121-122` and `admin/match-lineups/[id]/route.ts:115-116`, silently no-op'ing squad validation there too. Worth its own entry if picked up — not bundled into this fix.
+**Fix (not built):** `adjust/route.ts:202-203` → read `.starters`/`.bench` instead of `.startingXI`/`.substitutes`; `:220` → use `r.rating.teamId` instead of `r.player?.teamId`. Then a real live test per `.agents/rules/backlog.md`'s evidence-block standard: real FINISHED match with a published lineup, submit an adjustment, DB read-back confirming `final_rating`/`adjusted_by`/`adjustment_time` persisted correctly. No BACKLOG/BUG entry existed for this before now — file evidence against this entry when the test runs.
+
+**Found:** session 57, 2026-08-26.
+
+---
+
+### BACKLOG-250 — Basketball MVP Leaderboard Shows a Fabricated Rating, Not a Real One
+
+**Status:** OPEN — found session 57, 2026-08-26, by the `architect` agent during the `BACKLOG-159` verification pass.
+**Priority:** HIGH — direct violation of the standing "never fabricate data" rule, on a publicly visible number.
+**Problem:** `src/app/api/basketball/leaderboard/mvp/route.ts:58` — `rating: 8.0 + (count * 0.2), // Derived rating`. This is not sourced from either real rating pipeline (`BACKLOG-159`'s Pipeline B/`playerRatings` table, or the dead Pipeline A) — it's a made-up formula based on some event `count`, labeled "Derived rating" as if it were computed from real match data. This is currently the *only* place basketball shows any rating number at all, since `BACKLOG-146`'s guard blocks basketball from the real pipeline.
+**Fix (not built):** delete the fabricated formula; return an explicit "not yet rated" / null state for basketball MVP ratings until `BACKLOG-159` Phase 5 (basketball stat-extraction coverage) lands and there's a real number to show.
 
 **Found:** session 57, 2026-08-26.
 
