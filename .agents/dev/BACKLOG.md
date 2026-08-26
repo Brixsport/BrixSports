@@ -8984,6 +8984,8 @@ Fixed exactly per the "Fix (not built)" plan below: `MatchStatusBadge.tsx` now d
 - `/players/compare`: real comparison (`LIGHT` vs `MARK`, both Vikings/Rim Reapers Basketball) rendered a working "All Seasons" dropdown with a real, correct option (`2025/2026`, LIGHT's actual `basketballPlayerStats` season).
 - `/competitions/[id]/standings`: since no real competition has a sibling season yet, created one throwaway sibling row (`throwaway-standings-verify-56-*`, cloned from the real `BUSA LEAGUE FOOTBALL` row with `season='2026/2027'`, all timestamp fields written correctly as seconds this time) to genuinely exercise the multi-season branch. Confirmed live: dropdown appeared showing both `2025/2026`/`2026/2027` correctly ordered newest-first, selecting the throwaway season navigated to `/competitions/{throwawayId}/standings`, page re-rendered with the throwaway's own real data (status `UPCOMING`, its description). Throwaway row deleted after, confirmed via a post-delete count query; real `BUSA LEAGUE FOOTBALL` row untouched throughout.
 
+**Sequencing note, Richard's call, session 56:** when the stats-reconstruction migration (`BACKLOG-126`'s deferred "Option B" — replaying every player's `match_events` history to split the frozen lifetime baseline by real season, scoped separately per this same session's own decision) is eventually picked up, bundle it with a full competition-seeding walkthrough that exercises the season/competitions/standings flow together end to end against real multi-season data — rather than verifying each piece in isolation with throwaway rows again, since real multi-season competition data won't exist until that migration (or a real season rollover) actually happens.
+
 **Found:** session 56, 2026-08-26.
 
 ---
