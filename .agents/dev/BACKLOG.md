@@ -6713,7 +6713,7 @@ No `clearTimeout` exists anywhere in the file. The effect that sets `stateManage
 
 **Fix (not built):** retire the legacy `/api/events`-fed pipeline and `players.rating` field (or repoint it to read from `playerRatings` at query time), consolidate to one `RatingCalculator` implementation, and add a real "ratings not yet available" state to the Power Ranking card so basketball's empty state doesn't look identical to "nothing logged yet."
 
-**Update, session 57, 2026-08-26:** a full ground-truth re-audit (Richard) plus an `architect`-agent implementation plan now exist for this. Recommendation: freeze `players.rating` (keep the column, don't drop — no destructive migration needed) rather than repoint-via-view; route every reader through a new shared `src/lib/playerRatingSummary.ts` accessor over the `playerRatings` table instead. Verification surfaced three findings not in the original session-47D audit, filed separately: `BACKLOG-248` (a live admin PATCH write path to `players.rating` the "dead field" framing missed), `BACKLOG-249` (`ratings/adjust`'s admin correction UI is actually broken today, not just untested — lineup key mismatch), `BACKLOG-250` (a fourth, fabricated rating source on the basketball MVP leaderboard). Plan is phased across a minimum of 4 sessions — explicitly flagged as exceeding one session. Not started; Richard's call is to file findings now and pick a start session later.
+**Update, session 57, 2026-08-26:** a full ground-truth re-audit (Richard) plus an `architect`-agent implementation plan now exist for this. Recommendation: freeze `players.rating` (keep the column, don't drop — no destructive migration needed) rather than repoint-via-view; route every reader through a new shared `src/lib/playerRatingSummary.ts` accessor over the `playerRatings` table instead. Verification surfaced three findings not in the original session-47D audit, filed separately: `BACKLOG-248` (a live admin PATCH write path to `players.rating` the "dead field" framing missed), `BACKLOG-249` (`ratings/adjust`'s admin correction UI is actually broken today, not just untested — lineup key mismatch), `BACKLOG-250` (a fourth, fabricated rating source on the basketball MVP leaderboard). Plan is phased across a minimum of 4 sessions — explicitly flagged as exceeding one session. Not started; Richard's call is to file findings now and pick a start session later. **Each phase filed as its own trackable entry, in dependency order:** `BACKLOG-251` (Phase 0+1, baseline + fix `ratings/adjust` — blocking prerequisite) → `BACKLOG-252` (Phase 2, delete dead Pipeline A) → `BACKLOG-253` (Phase 3, storage consolidation, largest phase) → `BACKLOG-254` (Phase 4, UI sweep) → `BACKLOG-255` (Phase 5, basketball coverage, closes `BACKLOG-146`).
 
 **Found:** session 47D, by a background audit agent doing a full read-only trace of the player/team/competition data system.
 
@@ -9050,6 +9050,83 @@ Fixed exactly per the "Fix (not built)" plan below: `MatchStatusBadge.tsx` now d
 **Priority:** HIGH — direct violation of the standing "never fabricate data" rule, on a publicly visible number.
 **Problem:** `src/app/api/basketball/leaderboard/mvp/route.ts:58` — `rating: 8.0 + (count * 0.2), // Derived rating`. This is not sourced from either real rating pipeline (`BACKLOG-159`'s Pipeline B/`playerRatings` table, or the dead Pipeline A) — it's a made-up formula based on some event `count`, labeled "Derived rating" as if it were computed from real match data. This is currently the *only* place basketball shows any rating number at all, since `BACKLOG-146`'s guard blocks basketball from the real pipeline.
 **Fix (not built):** delete the fabricated formula; return an explicit "not yet rated" / null state for basketball MVP ratings until `BACKLOG-159` Phase 5 (basketball stat-extraction coverage) lands and there's a real number to show.
+
+**Found:** session 57, 2026-08-26.
+
+---
+
+### BACKLOG-251 — Ratings Redesign Phase 0+1: Baseline + Fix `ratings/adjust` (BLOCKING PREREQUISITE)
+
+**Status:** OPEN — planned session 57, 2026-08-26, by the `architect` agent (`BACKLOG-159`'s full phased plan). First of 5 phases, run together per the plan.
+**Priority:** HIGH — every later phase depends on this baseline existing, and the Phase 1 fix is a genuinely broken live feature independent of the rest of the redesign.
+**Depends on:** nothing. **Blocks:** `BACKLOG-252`–`255` below (the plan assumes this phase's baseline script exists before later phases evaluate their own before/after state).
+**Scope:**
+1. Branch `feature/ratings-redesign` off `dev`. `tsc --noEmit` baseline to a scratchpad file, record the count.
+2. Write `dev/audit-ratings-state.mjs` — counts `player_ratings` rows, distinct matches rated, `players` rows where `rating != 7.0`, any `final_rating IS NOT NULL`. This is the before-picture every later phase's evidence block references. Log in `RUNLOG.md`.
+3. **The actual fix, tracked in full detail at `BACKLOG-249`:** `ratings/adjust/route.ts:202-203,220` lineup-key mismatch (`startingXI`/`substitutes` → `starters`/`bench`; `r.player?.teamId` → `r.rating.teamId`), then a real live test against a FINISHED match with a published lineup, DB read-back per the evidence-block standard.
+4. File `BACKLOG-249`'s adjacent finding (the same phantom `startingXI`/`substitutes` shape at `lineup/route.ts:121-122` and `admin/match-lineups/[id]/route.ts:115-116`, silently no-op'ing squad validation) as its own separate entry if picked up during this pass — not bundled into the fix itself.
+
+**Found:** session 57, 2026-08-26.
+
+---
+
+### BACKLOG-252 — Ratings Redesign Phase 2: Delete Dead Pipeline A
+
+**Status:** OPEN — planned session 57, 2026-08-26, by the `architect` agent. Own session, own commit — highest-risk phase in the plan.
+**Priority:** HIGH.
+**Depends on:** `BACKLOG-251`.
+**Scope:**
+1. Delete `src/app/api/events/route.ts` only. **Do not delete the `src/app/api/events/` directory** — `src/app/api/events/sync/route.ts` lives underneath it and is a separate, also-dead, separately-tracked concern; deleting the whole directory is a real risk called out explicitly by the architect.
+2. Copy `src/lib/services/rating-calculator.ts` to `dev/reference-rating-calculator.ts.bak` (salvage source for Phase 5's basketball work — `calculateBasketballRating` and `calculateStatsFromEvents`'s basketball branch are worth keeping; `calculateTrackRating` is not — its data source doesn't exist in the live logger, don't salvage it). Then delete the original.
+3. Remove the `/api/events` entry at `src/app/api/admin/infrastructure/route.ts:24`.
+4. `tsc --noEmit` — confirm no new errors. **Then a real Flow B smoke test: log one live event through the actual logger UI and confirm it still saves and appears publicly.** This is the single highest-risk moment in the whole plan — an accidental deletion adjacent to the live event path would break match logging outright.
+
+**Found:** session 57, 2026-08-26.
+
+---
+
+### BACKLOG-253 — Ratings Redesign Phase 3: Storage Consolidation (Largest Phase — Expect Sub-Commits)
+
+**Status:** OPEN — planned session 57, 2026-08-26, by the `architect` agent. Own session — flagged as likely needing its own internal sub-commit split (touches ~8+ API files, over CLAUDE.md's 5-file threshold).
+**Priority:** HIGH.
+**Depends on:** `BACKLOG-252`.
+**Scope:**
+1. Create `src/lib/playerRatingSummary.ts` — a single shared, batched accessor (accepts an array of `playerId`s, not one-at-a-time, to avoid N+1) returning `{ averageRating, matchesRated, motmCount }` sourced from `playerRatings`. This becomes the one place the `COALESCE(finalRating, autoRating)`/`AVG` logic lives — the pattern already proven at `leaders/route.ts:32`.
+2. Repoint every read path to it, one file per logical commit: `players/[id]/route.ts:326,366`, `players/[id]/stats/route.ts:102`, `players/stats/leaders/route.ts:75,172,288`, `matches/[id]/route.ts:172,463` (**Flow C — public match page, must be manually verified live after this specific commit**), `teams/[id]/route.ts:61`, `players/bulk/route.ts:38`.
+3. **Closes `BACKLOG-248`** — remove `'rating'` from the PATCH whitelist at `players/[id]/route.ts:452`.
+4. **Closes `BACKLOG-250`** — delete the fabricated formula at `basketball/leaderboard/mvp/route.ts:58`; explicit "not yet rated" state until Phase 5.
+5. Public responses through the new accessor must expose only the aggregate number — no `adjustedBy`/`adjustmentNotes`/raw breakdown (not on `CLAUDE.md`'s explicit banned list, but `adjustedBy` is an internal actor id and belongs in the same class).
+
+**Found:** session 57, 2026-08-26.
+
+---
+
+### BACKLOG-254 — Ratings Redesign Phase 4: UI Sweep
+
+**Status:** OPEN — planned session 57, 2026-08-26, by the `architect` agent. Own session.
+**Priority:** MEDIUM.
+**Depends on:** `BACKLOG-253`.
+**Scope:**
+1. Remove the frozen-column rating badge at `PlayerDetailClient.tsx:185-190` — keep only the derived tile at `:595-596` (closes the "two different rating numbers on one profile" issue the audit confirmed).
+2. Repoint the remaining components to the new accessor and replace every `|| '7.0'` / `|| 0` fallback with an explicit not-rated state (never fabricate a plausible-looking default — same rule `BACKLOG-250` is filed under): `xi/page.tsx:184,444`, `PlayerComparison.tsx:72,81`, `PlayerComparisonModal.tsx:82,100,180-182`, `PlayerProfileOverlay.tsx:140,239`, `MatchLineups.tsx:62,90,278-279,412-416`, `TeamProfileOverlay.tsx:338,345`, `PlayerStatsModal.tsx:35`, `PlayerPerformanceGraphs.tsx:74`.
+3. `SearchOverlay.tsx:88` — sorts by the frozen column today, meaning every "Top Rated" sort is currently a tie; repoint to the derived average or remove the sort option if derived data is too sparse to sort meaningfully yet.
+4. Fix or remove the always-wrong `hasRatings`/`ratingsCount` badge at `admin/match-ratings/page.tsx:188-192` (no route anywhere sets those fields — unfiled bug the architect confirmed during verification).
+
+**Found:** session 57, 2026-08-26.
+
+---
+
+### BACKLOG-255 — Ratings Redesign Phase 5: Basketball Coverage
+
+**Status:** OPEN — planned session 57, 2026-08-26, by the `architect` agent. Own session. **Closes `BACKLOG-146`** on completion.
+**Priority:** MEDIUM.
+**Depends on:** `BACKLOG-252` (needs the salvaged reference file), `BACKLOG-253` (needs the shared accessor to exist).
+**Scope:**
+1. Create `src/lib/ratings/basketball.ts` from the salvaged logic (`dev/reference-rating-calculator.ts.bak`'s `calculateBasketballRating` + basketball branch of `calculateStatsFromEvents`) — basketball's stat vocabulary (Field Goal/Three Pointer/Free Throw/Rebound/Steal/Block/Turnover) shares almost nothing with the football keyword matcher, so this is a separate module, not a branch inside the existing function.
+2. Convert `ratingsService.ts:44-47`'s current throw-guard into a real sport dispatcher.
+3. Change the trigger per the architect's Q2 recommendation: fire on the match's `FINISHED` status transition plus a manual admin "Calculate Ratings" button, not per-event as football currently does — the existing per-event `after()` hook runs a sequential SELECT+UPDATE per player on *every single event*, a real unmeasured contributor to Flow B's ~9.9s latency already open on the readiness checklist. **Re-measure Flow B latency after this change — do not assume it improved, confirm it.**
+4. Live-verify against a real finished basketball match with a published lineup, same evidence standard as Phase 1.
+5. Track & field: explicitly **not implemented** — `calculateTrackRating`'s data source (a `Finish` event carrying `{position, time}`) doesn't exist in the live logger. Do not build against data that isn't produced.
 
 **Found:** session 57, 2026-08-26.
 
