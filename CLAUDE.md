@@ -111,8 +111,7 @@ Any implementation touching these flows requires explicit manual testing before 
 - memberships
 
 Public match response: scores, status, teams, competition, venue, startTime, events (type, minute, team, player jersey name only)
-Public player response: name, jerseyName, number, position, team name, rating
-
+Public player response: name, jerseyName, number, position, team name, rating, career/transfer history 
 ---
 
 ## Feature Volatility
@@ -134,9 +133,8 @@ Public player response: name, jerseyName, number, position, team name, rating
 - Ads feature (recently added, untested under load) — no currently-open BACKLOG/BUG item found against it; kept 🔴 on "untested under load" alone, not a known bug
 - Lineup Builder — **re-audited session 51/53**: `BUG-219` (publish crash), `BUG-220` (no publish path + unenforced lock), `BUG-221` (unauthenticated draft-lineup leak) all RESOLVED and live-verified. Still 🔴: `BACKLOG-220`'s architecture cleanup (dead duplicate rendering code, non-atomic write race, no formation-change confirm) remains OPEN — the critical/security bugs are gone, the structural fragility is not
 - Transfers page — *(the news/rumor-announcement page at `/admin/transfers`, distinct from the new season-readiness roster-transfer UI at `/admin/roster-transfers`, which is 🟢, freshly built and live-verified session 53)*. Original citation (`BUG-004`, hardcoded `createdBy`) RESOLVED since session 3 — kept 🔴 conservatively since this page hasn't been re-audited since, not because the original reason still holds
-- User management admin panel — original citation (`BUG-002`, missing auth) RESOLVED since session 3 — kept 🔴 conservatively, not re-audited since. `CLAUDE.md`'s own Admin/Match Management stakeholder note (Aug 7) flags real, current over-broad-access concerns here independent of `BUG-002`
+- User management admin panel — original citation (`BUG-002`, missing auth) RESOLVED since session 3 — kept 🔴 conservatively, not re-audited since. 
 - News / articles — original citation (`BUG-006`, XSS) RESOLVED since session 3 — kept 🔴 conservatively, not re-audited since
-- ~~`src/app/api/auth/test/route.ts`~~ — file deleted (confirmed, `BUG-003`), no longer applicable; leaving struck through rather than removing the line so the history isn't lost
 
 ---
 

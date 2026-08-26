@@ -382,6 +382,23 @@ export async function GET(
         const { email: _email, profileId: _profileId, ...playerPublic } = player;
         const playerPayload = isAdmin ? player : playerPublic;
 
+        // Public, curated subset of affiliationHistory -- team, sport, season,
+        // and date range only. No role/status/nicknames/internal affiliation id
+        // (those stay admin-only via the raw affiliationHistory field below).
+        // Deliberately public per Richard's call, session 56: nothing in this
+        // shape is on CLAUDE.md's banned-fields list -- it's the same "which
+        // club, which season" info a fixture card already shows.
+        const careerHistory = affiliationHistory.map((h) => ({
+            teamId: h.team.id,
+            teamName: h.team.name,
+            sport: h.team.sport,
+            affiliationType: h.affiliation.affiliationType,
+            season: h.affiliation.season,
+            startDate: h.affiliation.startDate,
+            endDate: h.affiliation.endDate,
+            isActive: h.affiliation.isActive,
+        }));
+
         return NextResponse.json({
             player: {
                 ...playerPayload,
@@ -389,7 +406,9 @@ export async function GET(
                     ...team,
                     sport: playerSport,
                 },
-                // memberships, organizationAffiliations, and affiliationHistory are
+                careerHistory,
+                // memberships, organizationAffiliations, and the raw
+                // affiliationHistory (role/status/nicknames included) stay
                 // admin-only (CLAUDE.md banned public fields)
                 ...(isAdmin ? { memberships, organizationAffiliations, affiliationHistory } : {}),
                 relatedProfiles,

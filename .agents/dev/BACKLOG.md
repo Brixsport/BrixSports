@@ -8895,3 +8895,48 @@ Fixed exactly per the "Fix (not built)" plan below: `MatchStatusBadge.tsx` now d
 - Pending items: commit (deliberately held this session), and a live check that Cloudinary cropping now actually constrains to the selected ratio on a real upload (no DB write involved, so no DB-state evidence block applies here — this is a client-side widget-option bug, visual confirmation is the only meaningful test).
 
 ---
+
+### `BACKLOG-126` — Session 56 Live Browser Walkthrough of `/admin/roster-transfers` on Staging + Career History Made Public
+
+**Status:** Live-verified via a real browser session against `https://brixsports-staging.vercel.app` (not just direct DB/HTTP scripts as in session 53) — first genuine click-through of the shipped feature.
+**Evidence:**
+- Real admin session (short-lived JWT signed via `dev/setup-transfer-walkthrough-56.mjs`, cookie-injected — no password typed into the login form, per this session's own credential-handling rule) driving the actual `/admin/roster-transfers` page.
+- Throwaway player (`Session56 Throwaway Player`, jersey `S56 THROW #77`) created affiliated with Agenda FC, searched for and selected in the real UI, transferred to Allianz FC via the real form (Confirm Transfer click), success banner rendered correctly ("Session56 Throwaway Player transferred to Allianz FC.").
+- **DB confirmed correct immediately**: Agenda FC row closed (`isActive=0`, `endDate` set), Allianz FC row opened (`isActive=1`, correct `season`).
+- **New-team eligibility confirmed live** against the real public API: `GET /api/teams/busa-allianz` now lists the player on its roster; `GET /api/teams/busa-agenda` no longer does.
+- **Name/jersey/number confirmed unchanged**: `players.name`/`jerseyName`/`number` live on the player row, not the affiliation — untouched by the transfer, confirmed identical before/after. Per-affiliation `jerseyNumber`/`position` (optional transfer-form fields) correctly `null` since left blank.
+- Throwaway player + affiliation rows fully deleted after (`dev/cleanup-transfer-walkthrough-56.mjs`), confirmed via post-delete count query. Real teams (`busa-agenda`, `busa-allianz`) confirmed untouched.
+- **Real caching bug found and root-caused mid-walkthrough** — see `BACKLOG-227` below.
+
+**Also shipped, same session (Richard's call, prompted by testing this live):** transfer/career history made **public** on the player profile, not admin-only. New curated `careerHistory` field on `GET /api/players/[id]` (`src/app/api/players/[id]/route.ts`) — team name/id, sport, affiliation type, season, start/end date, active flag only; deliberately excludes the raw affiliation `id`/`role`/`status`/`nicknames`, which stay admin-only via the existing `affiliationHistory` field. Nothing in the curated shape is on `CLAUDE.md`'s banned-fields list (verified against that list directly, not assumed) — `CLAUDE.md`'s "Public player response" line updated to document it. Rendered as a "Career History" card on the public player profile (`src/app/players/[id]/PlayerDetailClient.tsx`, Overview tab sidebar, below Player Info). **Verified live, cookie genuinely cleared** (not just `credentials: 'omit'`, which turned out not to strip an already-set `document.cookie` in this browser tool — caught and corrected before trusting the first negative result): an anonymous request to the same endpoint gets `name`/`team` but no `affiliationHistory`/`memberships`/`email`/`profileId` — confirms the admin-only fields still don't leak, and the new public field is additive, not a broadening of the existing gate. `tsc --noEmit`: 19 total (18 known baseline + 1 unrelated `.next/types` NextAuth generated-type artifact, not touching either file this session edited) — zero new errors in `players/[id]/route.ts` or `PlayerDetailClient.tsx`.
+
+**Also resolves session 55's open question** ("whether to move standings onto the same SWR policy as competitions/news/players/teams"): Richard's call, session 56 — yes. `public/sw-user.js` and `public/sw-admin.js` both gained `/^\/api\/(football\/|basketball\/)?standings(\/|$|\?)/` in `STALE_WHILE_REVALIDATE_API_PATTERNS`, mirroring the existing players/teams/competitions treatment exactly. Not yet deployed/live-verified — SW changes only take effect after a real build+deploy, out of reach of this session's browser-preview tooling against the already-deployed staging URL.
+
+**Found:** session 56, 2026-08-26.
+
+---
+
+### BACKLOG-227 — Admin PWA's Stale-While-Revalidate Policy on `/api/players*` Can Show an Admin Their Own Just-Completed Roster Transfer as Not-Yet-Happened
+
+**Status:** OPEN — root-caused, not fixed. Flagged rather than silently patched, matching this project's own convention (see `BACKLOG-223`) — the fix is a real policy tradeoff (SWR's instant-load benefit vs. immediate read-after-write consistency for a specific mutation), not a pure bug fix, and deserves an explicit call rather than a silent change mid-feature-test.
+**Priority:** Low — Tier 2 (roster/season management, not live-match-critical), self-corrects within roughly a minute with no data loss (the underlying write is always correct immediately; only the *admin's own next read* of the same URL can be stale for one cycle)
+**Filed:** 2026-08-26 (session 56), found live while walkthrough-testing `BACKLOG-126`'s roster-transfer UI on staging
+
+**Problem, confirmed live and fully root-caused, not theoretical:**
+- Immediately after a real `POST /api/admin/players/[id]/transfer` succeeded (200, correct `fromTeamId`/`toTeamId` in the response, DB confirmed correct via direct query), the admin UI's own follow-up read (`/admin/roster-transfers`' `fetchHistory()` call, which re-fetches `GET /api/players/[id]`) rendered the **pre-transfer** team/history — the just-closed old team still showing `ACTIVE`, no new-team row visible at all.
+- Reproduced a second, independent way: a full fresh page navigation + a fresh player search (`GET /api/players/search?q=...`) a few minutes later **also** returned the stale pre-transfer team for the exact same query string used once before the transfer.
+- **Ruled out DB/Turso replication lag directly**: a same-process, same-connection write-then-read (`dev/investigate-cache-56.mjs`) and a separate-connection immediate read were both instantly consistent — no staleness at the database layer at all.
+- **Ruled out Vercel/CDN or Next.js route caching**: a raw HTTP reproduction against the real deployed API (`dev/investigate-cache-56b.mjs`, POST transfer then 5 back-to-back GETs, headers captured) showed **zero** staleness — every GET immediately after the POST returned the correct new team, `x-vercel-cache: MISS` every time, no caching involved at the origin.
+- **Root cause, confirmed by reading source**: `public/sw-admin.js`'s `STALE_WHILE_REVALIDATE_API_PATTERNS` includes `/^\/api\/players(\/|$|\?)/` (added session 55, `BACKLOG-226`, intended for near-static player fields like name/position/nationality). The SW's SWR handler (`sw-admin.js` ~line 177) serves any cached match for a matching URL **immediately**, kicking off a background revalidation fetch that updates the cache only for the *next* read of that same URL. Since `/admin/roster-transfers` calls `fetchHistory()` on player-select (caching the pre-transfer response under that exact URL) and then calls it again after a successful transfer (same URL, same cache key), the second call is served the SW's stale first-cached copy by design — not a bug in the SWR mechanism itself, but a mismatch between "near-static reference data" (true for most player fields) and the genuinely mutation-adjacent `affiliationHistory`/current-team fields this same endpoint now also carries since `BACKLOG-126`.
+- The raw script reproduction (`investigate-cache-56b.mjs`) not showing staleness makes sense in hindsight — a Node script has no Service Worker; only a real browser session under `sw-admin.js`'s scope is affected. This is why the first reproduction attempt (through the app) showed the bug and the second (bypassing the browser) didn't — not a flaky repro, two different code paths.
+
+**Impact:** an admin who transfers a player and immediately re-checks that same player's transfer history (or re-searches for them) can see incorrect, pre-transfer data for one read cycle (self-corrects on the read after, once the background revalidation completes — confirmed by the walkthrough's own later reads all returning correct data). No data is lost or wrong in the DB at any point; this is a display-trust issue only, same class as `BUG-242`/`BUG-243` but lower stakes (admin tooling, not the public livescore).
+
+**Fix options (not built, for whoever picks this up):**
+1. Narrow `STALE_WHILE_REVALIDATE_API_PATTERNS`'s player pattern to exclude the specific paths that read mutation-adjacent data (`/api/players/search`, `/api/players/[id]` when called right after a write) — loses SWR's speed benefit for those specific calls.
+2. Have the roster-transfer POST handler (or the page, client-side) explicitly evict the affected `Cache Storage` entries (the transferred player's `/api/players/[id]` URL, plus any admin-active search query) immediately after a successful transfer — a "write invalidates its own cached reads" pattern, more surgical, doesn't touch the public player-profile page's own read-heavy benefit from SWR.
+3. Accept it as-is (lowest priority, self-corrects, Tier 2 feature) — just document the "check twice" caveat for admins doing back-to-back transfers.
+
+**Found:** session 56, 2026-08-26, live browser walkthrough of `BACKLOG-126`.
+
+---

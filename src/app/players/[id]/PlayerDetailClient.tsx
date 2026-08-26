@@ -5,7 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import {
     ArrowLeft, Star, Trophy, Target, Shield,
-    TrendingUp, Activity, Calendar, Award, UserPlus, Search
+    TrendingUp, Activity, Calendar, Award, UserPlus, Search, History
 } from 'lucide-react';
 import Link from 'next/link';
 import { format } from 'date-fns';
@@ -77,6 +77,12 @@ export default function PlayerDetailClient() {
         } catch (error) {
             console.error('Error fetching comparison:', error);
         }
+    };
+
+    const formatHistoryDate = (value: string | null) => {
+        if (!value) return null;
+        const d = new Date(value);
+        return isNaN(d.getTime()) ? null : format(d, 'MMM yyyy');
     };
 
     const getEventIcon = (eventType: string, sport?: string) => {
@@ -403,6 +409,41 @@ export default function PlayerDetailClient() {
                                     </div>
                                 </div>
                             </div>
+
+                            {/* Career History */}
+                            {player.careerHistory?.length > 0 && (
+                                <div className="p-6 bg-white/5 rounded-2xl border border-white/10">
+                                    <h3 className="font-bold text-lg mb-4 flex items-center gap-2">
+                                        <History className="w-5 h-5" />
+                                        Career History
+                                    </h3>
+                                    <div className="space-y-2">
+                                        {player.careerHistory.map((h: any, idx: number) => {
+                                            const start = formatHistoryDate(h.startDate);
+                                            const end = formatHistoryDate(h.endDate);
+                                            return (
+                                                <div
+                                                    key={idx}
+                                                    className="flex items-start justify-between gap-3 text-sm border-b border-white/5 last:border-0 pb-2 last:pb-0"
+                                                >
+                                                    <div>
+                                                        <div className="font-medium">{h.teamName}</div>
+                                                        <div className="text-xs text-white/40">
+                                                            {h.season}
+                                                            {start ? ` · ${start} – ${end ?? 'present'}` : ''}
+                                                        </div>
+                                                    </div>
+                                                    {h.isActive && (
+                                                        <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wide px-2 py-1 rounded-full bg-green-500/10 text-green-400">
+                                                            Current
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     </div>
                 )}
