@@ -194,7 +194,12 @@ export async function GET(request: NextRequest) {
         if (excludedPlayerIds.has(p.id)) continue;
 
         const affils = affiliationsByPlayer.get(p.id) ?? [];
-        const currentTeams: CurrentTeam[] = affils.map((a) => ({
+        // BACKLOG-227 follow-up, session 56: affiliationsByPlayer intentionally
+        // holds both active and past rows (the excludeTeamId check above needs
+        // both), but "currentTeams" means current -- past/closed affiliations
+        // (e.g. a player's old club after a roster transfer) must not appear
+        // here, only in the admin-only affiliationHistory/careerHistory fields.
+        const currentTeams: CurrentTeam[] = affils.filter((a) => a.isActive).map((a) => ({
             teamId: a.teamId,
             teamName: a.teamName,
             shortName: a.shortName,
