@@ -9004,3 +9004,15 @@ Fixed exactly per the "Fix (not built)" plan below: `MatchStatusBadge.tsx` now d
 **Found:** session 57, 2026-08-26.
 
 ---
+
+### BACKLOG-247 — No Explicit DB Indexes Anywhere in `schema.ts`
+
+**Status:** OPEN — found session 57, 2026-08-26, during a roadmap quick-wins review (`SYSTEM_IMPROVEMENT_ROADMAP.md` §2.1). Skipped for this session, Richard's explicit call.
+**Problem:** `grep -c "index("` on `src/db/schema.ts` returns 0 — no table defines an explicit index. Several hot-path columns are queried constantly with no index backing them: `matches.status` (every livescore/list query filters on this), `matchEvents.matchId` (every event-log read), `players.teamId`, `footballPlayerStats`/`basketballPlayerStats` on `(playerId, season)` (every profile/comparison/standings read). `users.email` and a few other `.unique()` columns already get an implicit unique index from Drizzle/SQLite — those are fine as-is; this is specifically about the non-unique, high-traffic lookup columns.
+**Not yet a measured problem** — dataset is still small (dozens-to-low-hundreds of rows per entity, per the sitemap's own `MAX_PER_ENTITY` comment), so there's no evidence of an actual slow query yet. This is a proactive scale-readiness item, not a fix for an observed symptom.
+**Why deferred:** touches the live DB schema — per `CLAUDE.md`'s Schema Migrations rule, requires `db:push` against staging first, verification, then prod, logged in `RUNLOG.md`. Richard chose to skip for this session rather than do it same-session as an unplanned add-on.
+**Suggested next step, not yet built:** add `index()` defs to `schema.ts` for `matches(sport, status)`, `matchEvents(matchId, minute)`, `players(teamId)`, `footballPlayerStats(playerId, season)`, `basketballPlayerStats(playerId, season)` — then `db:push` staging → verify → prod, per standard migration process.
+
+**Found:** session 57, 2026-08-26.
+
+---
