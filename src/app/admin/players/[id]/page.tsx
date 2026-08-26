@@ -7,7 +7,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { TeamLogo } from '@/lib/utils/team-logo';
 import {
     ArrowLeft, Edit, Save, X, Star, User,
-    Building2, Shield, Activity, AlertCircle, Loader2
+    Building2, Shield, Activity, AlertCircle, Loader2, ArrowRightLeft
 } from 'lucide-react';
 
 interface Player {
@@ -288,13 +288,22 @@ export default function PlayerDetailPage() {
                     </div>
                     <div className="flex items-center gap-2">
                         {!editMode ? (
-                            <button
-                                onClick={() => setEditMode(true)}
-                                className="flex items-center gap-2 px-4 py-2 bg-primary text-black rounded-xl font-black uppercase italic text-[10px] tracking-widest hover:scale-[1.02] active:scale-[0.98] transition-all"
-                            >
-                                <Edit size={14} strokeWidth={3} />
-                                Edit Profile
-                            </button>
+                            <>
+                                <Link
+                                    href={`/admin/roster-transfers?playerId=${playerId}`}
+                                    className="flex items-center gap-2 px-4 py-2 border border-white/10 rounded-xl font-black uppercase italic text-[10px] tracking-widest hover:bg-white/5 transition-all"
+                                >
+                                    <ArrowRightLeft size={14} strokeWidth={3} />
+                                    Transfer
+                                </Link>
+                                <button
+                                    onClick={() => setEditMode(true)}
+                                    className="flex items-center gap-2 px-4 py-2 bg-primary text-black rounded-xl font-black uppercase italic text-[10px] tracking-widest hover:scale-[1.02] active:scale-[0.98] transition-all"
+                                >
+                                    <Edit size={14} strokeWidth={3} />
+                                    Edit Profile
+                                </button>
+                            </>
                         ) : (
                             <>
                                 <button

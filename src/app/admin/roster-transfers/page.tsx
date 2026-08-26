@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { ArrowRight, Search, CheckCircle, AlertCircle, History } from 'lucide-react';
 
 interface PlayerResult {
@@ -55,6 +56,15 @@ function formatDate(value: string | null) {
 // /api/players/[id]'s affiliationHistory field. No bulk-transfer mode; one
 // transfer at a time, matching the original plan's "minimal" scope.
 export default function RosterTransfersPage() {
+    return (
+        <Suspense fallback={<div className="min-h-screen bg-neutral-950 text-white p-6 flex items-center justify-center text-white/40 text-sm">Loading...</div>}>
+            <RosterTransfersInner />
+        </Suspense>
+    );
+}
+
+function RosterTransfersInner() {
+    const searchParams = useSearchParams();
     const [query, setQuery] = useState('');
     const [results, setResults] = useState<PlayerResult[]>([]);
     const [searching, setSearching] = useState(false);
@@ -118,6 +128,40 @@ export default function RosterTransfersPage() {
         setMessage(null);
         fetchHistory(player.id);
     };
+
+    // Entry point from a player's own admin profile (/admin/players/[id]'s
+    // "Transfer" button) -- carries playerId through so the admin doesn't have
+    // to re-search for the player they were just looking at. Uses the admin
+    // player-detail endpoint directly (memberships, already isActive-filtered
+    // at the query level) rather than /api/players/search, since we already
+    // have the exact id and don't need fuzzy matching.
+    useEffect(() => {
+        const playerId = searchParams.get('playerId');
+        if (!playerId) return;
+        fetch(`/api/players/${playerId}`)
+            .then((res) => res.json())
+            .then((data) => {
+                const p = data.player;
+                if (!p) return;
+                const currentTeams = (p.memberships ?? []).map((m: any) => ({
+                    teamId: m.team.id,
+                    teamName: m.team.name,
+                    affiliationType: m.affiliation.affiliationType,
+                    isPrimary: !!m.affiliation.isPrimary,
+                }));
+                selectPlayer({
+                    id: p.id,
+                    name: p.name,
+                    jerseyName: p.jerseyName ?? null,
+                    position: p.position,
+                    college: p.college ?? null,
+                    university: p.university,
+                    currentTeams,
+                });
+            })
+            .catch(() => {});
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     const resetForm = () => {
         setSelectedPlayer(null);
