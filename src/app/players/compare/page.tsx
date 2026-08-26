@@ -35,6 +35,7 @@ function PlayerCompareContent() {
     const player1Id = searchParams.get('player1');
     const player2Id = searchParams.get('player2');
     const sport = searchParams.get('sport');
+    const season = searchParams.get('season'); // BACKLOG-229
 
     const [player1, setPlayer1] = useState<any>(null);
     const [player2, setPlayer2] = useState<any>(null);
@@ -94,7 +95,8 @@ function PlayerCompareContent() {
             if (shouldFetchComparison) {
                 setComparisonError(null);
                 try {
-                    const res = await fetch(`/api/players/compare?player1=${player1Id}&player2=${player2Id}`);
+                    const seasonQuery = season ? `&season=${encodeURIComponent(season)}` : '';
+                    const res = await fetch(`/api/players/compare?player1=${player1Id}&player2=${player2Id}${seasonQuery}`);
                     const data = await res.json();
                     if (res.ok) {
                         setComparisonData(data);
@@ -121,7 +123,7 @@ function PlayerCompareContent() {
         };
 
         loadData();
-    }, [player1Id, player2Id]); // Only re-run when URL params change
+    }, [player1Id, player2Id, season]); // Only re-run when URL params change
 
     const searchPlayers = async (query: string, playerSlot: 1 | 2) => {
         if (!query.trim()) {
@@ -199,6 +201,13 @@ function PlayerCompareContent() {
         router.push(`/players/compare?${params.toString()}`);
     };
 
+    const changeSeason = (newSeason: string) => {
+        const params = new URLSearchParams(searchParams.toString());
+        if (newSeason) params.set('season', newSeason);
+        else params.delete('season');
+        router.push(`/players/compare?${params.toString()}`);
+    };
+
     const shareComparison = async () => {
         const url = window.location.href;
 
@@ -236,6 +245,18 @@ function PlayerCompareContent() {
                         </Link>
 
                         <div className="flex items-center gap-2">
+                            {hasComparison && comparisonData?.availableSeasons?.length > 0 && (
+                                <select
+                                    value={season || ''}
+                                    onChange={(e) => changeSeason(e.target.value)}
+                                    className="px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-sm font-bold focus:outline-none focus:border-primary/50"
+                                >
+                                    <option value="">All Seasons</option>
+                                    {comparisonData.availableSeasons.map((s: string) => (
+                                        <option key={s} value={s}>{s}</option>
+                                    ))}
+                                </select>
+                            )}
                             {hasComparison && (
                                 <>
                                     <button

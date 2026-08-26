@@ -65,6 +65,7 @@ export async function GET(request: NextRequest) {
 
         // Query parameters
         const sport = searchParams.get('sport'); // Filter by sport
+        const season = searchParams.get('season'); // Filter by season (BACKLOG-229)
         const includeStats = searchParams.get('includeStats') === 'true';
 
         // Get competitions from database
@@ -78,6 +79,14 @@ export async function GET(request: NextRequest) {
             filteredCompetitions = filteredCompetitions.filter(c =>
                 c.isMultiSport || c.sport === sport
             );
+        }
+        // Built from the sport-filtered set BEFORE the season filter narrows
+        // `filteredCompetitions` below, so a season-scoped response still tells
+        // the caller what other seasons of the same competition exist (BACKLOG-229)
+        // -- needed for a season-picker UI even when the main list is filtered.
+        const allSeasonsGroups = buildCompetitionGroups(filteredCompetitions);
+        if (season) {
+            filteredCompetitions = filteredCompetitions.filter(c => c.season === season);
         }
 
         // If includeStats, fetch additional data
@@ -141,7 +150,7 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({
             competitions: filteredCompetitions,
             total: filteredCompetitions.length,
-            groups: buildCompetitionGroups(filteredCompetitions),
+            groups: allSeasonsGroups,
         });
     } catch (error) {
         console.error('Error fetching competitions:', error);

@@ -8969,3 +8969,18 @@ Fixed exactly per the "Fix (not built)" plan below: `MatchStatusBadge.tsx` now d
 **Found:** session 56, 2026-08-26.
 
 ---
+
+### BACKLOG-229 — Season Filter Added to Competition Standings, Player Comparison, and the Public Competitions List
+
+**Status:** RESOLVED, session 56, 2026-08-26.
+**Problem:** none of the three surfaces most likely to need a "which season" control had one — `/players/compare` had zero season awareness (compared whatever stats rows existed, unfiltered), `/competitions` listed every competition row as its own pill with no grouping (a 3-season league would show 3 identically-named pills with no way to tell them apart), and `/competitions/[id]/standings` had no way to switch seasons at all short of guessing a different competition id in the URL.
+**Fix, three pieces, all additive (no existing query/response shape removed):**
+1. **`/api/competitions`** — new `?season=` filter on the GET. `groups` (the existing series-grouping data, `buildCompetitionGroups()`) is always computed from the pre-season-filter set so a season-scoped response can still tell the caller what other seasons of the same competition exist — needed for a season picker even when the main list is narrowed.
+2. **`/api/players/compare`** — new `?season=` filter, applied to both `footballPlayerStats`/`basketballPlayerStats` lookups alongside the pre-existing (previously unused by any frontend) `?competition=` filter. New `availableSeasons` field in the response — the union of both players' own distinct stats-row seasons, always unfiltered by the season param, so the UI can build a dropdown even after filtering.
+3. **UI**: `/players/compare` gained a season `<select>` in the header (all-time by default, only rendered once `availableSeasons` has entries); `/competitions/[id]/standings` gained a season `<select>` that looks up this competition's sibling seasons via `/api/competitions?sport=X` + `groups`, navigating to the sibling's own standings page on change (each season is a genuinely separate competition row/id, not a param on one row); `/competitions` (public list) now groups its pill row by competition series (one pill per league, not one per season-row) and shows a season `<select>` next to the existing season/status badge, switching `selectedComp` client-side using the already-fetched `groups` data (no extra request).
+**Known, inherited, explicitly-flagged risk, not fixed here:** all three build on `buildCompetitionGroups()`'s existing exact-name-string-match grouping (`sport::name::hostOrganizationId`) — the same structural fragility session 53's standings/comp-stats audit already flagged (`RUNLOG.md`, 2026-08-21: "nothing stops a differently-worded name... from silently breaking that link"). A season filter surfaces that same heuristic more prominently (a season picker that silently doesn't include a real sibling season because its name was typed slightly differently is a worse failure mode than a hidden data gap), but doesn't introduce a new one. The proper fix (a real FK-based competition-series concept) was already recommended in that audit, pending Richard's confirm, and remains out of scope here — deliberately not bundled in per this session's own explicit scoping decision (season-filter now, any grouping-model rework separately).
+**Verified:** `tsc --noEmit` clean across all 5 touched files (2 API routes, 3 pages), zero new errors. **Not yet live-verified against deployed staging** — code changes, require a real deploy.
+
+**Found:** session 56, 2026-08-26.
+
+---

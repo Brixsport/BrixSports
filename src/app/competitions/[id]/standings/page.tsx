@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo, useEffect } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     Trophy, TrendingUp, Award, Shield, Target, AlertCircle,
@@ -150,12 +150,18 @@ type TabType = 'standings' | 'scorers' | 'assists' | 'discipline' | 'rules';
 
 export default function CompetitionStandingsPage() {
     const { id } = useParams();
+    const router = useRouter();
     const competitionId = id as string;
 
     const [activeTab, setActiveTab] = useState<TabType>('standings');
     const [expandedRow, setExpandedRow] = useState<string | null>(null);
     const [compData, setCompData] = useState<any>(null);
     const [isLoadingComp, setIsLoadingComp] = useState(true);
+    // BACKLOG-229: sibling seasons of this same competition series (same name/
+    // sport/host org, per api/competitions' own groups grouping), so a viewer
+    // can switch which season's standings they're looking at without leaving
+    // the page. Empty/single-entry when this competition has no other seasons.
+    const [siblingSeasons, setSiblingSeasons] = useState<{ id: string; season: string | null }[]>([]);
 
     const { standings, loading: isLoadingStandings } = useLiveStandings({
         competitionId
@@ -178,6 +184,28 @@ export default function CompetitionStandingsPage() {
         };
         fetchCompDetail();
     }, [competitionId]);
+
+    useEffect(() => {
+        if (!compData?.sport) return;
+        const fetchSiblingSeasons = async () => {
+            try {
+                const res = await fetch(`/api/competitions?sport=${encodeURIComponent(compData.sport)}`);
+                if (!res.ok) return;
+                const data = await res.json();
+                const group = (data.groups || []).find((g: any) =>
+                    g.seasons.some((s: any) => s.id === competitionId)
+                );
+                if (group && group.seasons.length > 1) {
+                    setSiblingSeasons(group.seasons.map((s: any) => ({ id: s.id, season: s.season })));
+                } else {
+                    setSiblingSeasons([]);
+                }
+            } catch (err) {
+                console.error('Error fetching sibling seasons:', err);
+            }
+        };
+        fetchSiblingSeasons();
+    }, [compData?.sport, compData?.name, competitionId]);
 
     const tabs: { key: TabType; label: string; icon: React.ReactNode }[] = [
         { key: 'standings', label: 'Standings', icon: <Trophy size={14} /> },
@@ -228,9 +256,21 @@ export default function CompetitionStandingsPage() {
                 <div>
                     <div className="flex items-center gap-3 mb-2">
                         <Trophy size={16} className="text-primary" />
-                        <span className="text-[10px] font-black uppercase tracking-widest text-white/40">
-                            {compData.season}
-                        </span>
+                        {siblingSeasons.length > 1 ? (
+                            <select
+                                value={competitionId}
+                                onChange={(e) => router.push(`/competitions/${e.target.value}/standings`)}
+                                className="text-[10px] font-black uppercase tracking-widest text-white/60 bg-white/5 border border-white/10 rounded-lg px-2 py-1 focus:outline-none focus:border-primary/50"
+                            >
+                                {siblingSeasons.map((s) => (
+                                    <option key={s.id} value={s.id}>{s.season || 'Unknown Season'}</option>
+                                ))}
+                            </select>
+                        ) : (
+                            <span className="text-[10px] font-black uppercase tracking-widest text-white/40">
+                                {compData.season}
+                            </span>
+                        )}
                     </div>
                     <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
                         <div>

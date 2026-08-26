@@ -22,6 +22,20 @@ interface Competition {
   logo?: string | null;
 }
 
+// BACKLOG-229: mirrors api/competitions' own buildCompetitionGroups() shape --
+// one entry per competition "series" (same name/sport/host org across seasons),
+// `seasons` sorted newest-first. Known fragility inherited as-is: grouping is
+// exact-name-string matching, not a real FK-based series concept (flagged in
+// the standings/comp-stats audit, session 53) -- a differently-worded name for
+// a new season silently won't link up here either.
+interface CompetitionGroup {
+  groupKey: string;
+  name: string;
+  sport: SportType | null;
+  latest: Competition;
+  seasons: Competition[];
+}
+
 interface Standing {
   id: string;
   teamId: string;
@@ -76,6 +90,7 @@ function CompetitionsContent() {
   const [view, setView] = useState<'standings' | 'matches' | 'brackets'>('standings');
   const [selectedSport, setSelectedSport] = useState<SportType>('All');
   const [competitions, setCompetitions] = useState<Competition[]>([]);
+  const [groups, setGroups] = useState<CompetitionGroup[]>([]);
   const [selectedComp, setSelectedComp] = useState<Competition | null>(null);
   const [standings, setStandings] = useState<Standing[]>([]);
   const [matches, setMatches] = useState<Match[]>([]);
@@ -94,6 +109,7 @@ function CompetitionsContent() {
 
         if (data.competitions) {
           setCompetitions(data.competitions);
+          setGroups(data.groups || []);
 
           let defaultComp = null;
           // Try from URL
@@ -170,6 +186,17 @@ function CompetitionsContent() {
     ? competitions
     : competitions.filter(c => c.isMultiSport || c.sport === selectedSport);
 
+  // BACKLOG-229: one pill per competition series (deduped across seasons),
+  // not one per raw row -- avoids showing e.g. 3 identical "BUSA League
+  // Football" pills for 3 season-instances with no way to tell them apart.
+  const filteredGroups = selectedSport === 'All'
+    ? groups
+    : groups.filter(g => g.latest.isMultiSport || g.sport === selectedSport);
+
+  const selectedGroup = selectedComp
+    ? groups.find(g => g.seasons.some(s => s.id === selectedComp.id))
+    : undefined;
+
   if (loading && competitions.length === 0) {
     return (
       <div className="min-h-screen bg-[#050505] flex items-center justify-center">
@@ -191,8 +218,26 @@ function CompetitionsContent() {
             <div>
               <div className="flex items-center gap-2 mb-2">
                 <Trophy size={14} className="text-primary" />
+                {selectedGroup && selectedGroup.seasons.length > 1 ? (
+                  <select
+                    value={selectedComp?.id || ''}
+                    onChange={(e) => {
+                      const chosen = selectedGroup.seasons.find(s => s.id === e.target.value);
+                      if (chosen) setSelectedComp(chosen);
+                    }}
+                    className="text-[10px] font-black uppercase tracking-widest text-white/60 bg-white/5 border border-white/10 rounded-lg px-2 py-0.5 focus:outline-none focus:border-primary/50"
+                  >
+                    {selectedGroup.seasons.map((s) => (
+                      <option key={s.id} value={s.id}>{s.season || 'Unknown Season'}</option>
+                    ))}
+                  </select>
+                ) : (
+                  <span className="text-[10px] font-black uppercase tracking-widest text-white/40">
+                    {selectedComp?.season || 'Current Season'}
+                  </span>
+                )}
                 <span className="text-[10px] font-black uppercase tracking-widest text-white/40">
-                  {selectedComp?.season || 'Current Season'} • {selectedComp?.status || 'Active'}
+                  • {selectedComp?.status || 'Active'}
                 </span>
               </div>
               <h1 className="font-display text-2xl md:text-5xl tracking-tighter italic uppercase leading-none mb-2">
@@ -239,10 +284,10 @@ function CompetitionsContent() {
                   key={sport}
                   onClick={() => {
                     setSelectedSport(sport);
-                    const firstForSport = sport === 'All'
-                      ? competitions[0]
-                      : competitions.find(c => c.sport === sport);
-                    if (firstForSport) setSelectedComp(firstForSport);
+                    const firstGroupForSport = sport === 'All'
+                      ? groups[0]
+                      : groups.find(g => g.sport === sport);
+                    if (firstGroupForSport) setSelectedComp(firstGroupForSport.latest);
                   }}
                   className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${selectedSport === sport ? 'bg-primary text-black' : 'text-white/40 hover:text-white'}`}
                 >
@@ -253,20 +298,20 @@ function CompetitionsContent() {
             </div>
           </div>
 
-          {filteredCompetitions.length > 0 && (
+          {filteredGroups.length > 0 && (
             <div className="flex justify-center gap-2 overflow-x-auto pb-2 scrollbar-hide">
-              {filteredCompetitions.map((comp) => (
+              {filteredGroups.map((group) => (
                 <button
-                  key={comp.id}
+                  key={group.groupKey}
                   onClick={() => {
-                    setSelectedComp(comp);
-                    if (comp.sport && comp.sport !== selectedSport) {
-                      setSelectedSport(comp.sport as SportType);
+                    setSelectedComp(group.latest);
+                    if (group.sport && group.sport !== selectedSport) {
+                      setSelectedSport(group.sport as SportType);
                     }
                   }}
-                  className={`px-4 py-2 rounded-full text-[10px] font-bold uppercase tracking-widest whitespace-nowrap transition-all border ${selectedComp?.id === comp.id ? 'border-primary text-primary bg-primary/10' : 'border-white/10 text-white/40 hover:text-white'}`}
+                  className={`px-4 py-2 rounded-full text-[10px] font-bold uppercase tracking-widest whitespace-nowrap transition-all border ${selectedGroup?.groupKey === group.groupKey ? 'border-primary text-primary bg-primary/10' : 'border-white/10 text-white/40 hover:text-white'}`}
                 >
-                  {comp.name}
+                  {group.name}
                 </button>
               ))}
             </div>
