@@ -61,6 +61,10 @@ const STALE_WHILE_REVALIDATE_API_PATTERNS = [
     /^\/api\/players(\/|$|\?)/,
     /^\/api\/teams(\/|$|\?)/,
     /^\/api\/competitions(\/|$|\?)/,
+    // Session 56, Richard's call: standings recompute on every match FINISH
+    // (BACKLOG-097), so like players/teams this is "changes occasionally, not
+    // every second" -- not Tier 0 live-score data, which stays on the 30s TTL.
+    /^\/api\/(football\/|basketball\/)?standings(\/|$|\?)/,
 ];
 const SHORT_API_TTL_MS = 30 * 1000;
 
