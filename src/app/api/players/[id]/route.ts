@@ -9,7 +9,7 @@ import { players, teams, matchEvents, matches, playerStats, basketballPlayerStat
 import { eq, desc, and, sql, ne, inArray } from 'drizzle-orm';
 import { getAuthUser } from '@/lib/auth';
 import { enrichPlayersWithAffiliations, syncPlayerOrganizationAffiliations } from '@/lib/player-data';
-import { CURRENT_SEASON } from '@/lib/rosterService';
+import { getCurrentSeason } from '@/lib/rosterService';
 
 interface RouteParams {
     params: {
@@ -213,9 +213,10 @@ export async function GET(
         // regression caught by checking real data before trusting the first
         // version of this fix. Falls back to whichever season the most recently
         // updated row belongs to, rather than going empty or blending seasons.
+        const currentSeason = await getCurrentSeason();
         function pickEffectiveSeasonRows<T extends { season: string; updatedAt: Date | null }>(rows: T[]): T[] {
             if (rows.length === 0) return [];
-            const currentSeasonRows = rows.filter((r) => r.season === CURRENT_SEASON);
+            const currentSeasonRows = rows.filter((r) => r.season === currentSeason);
             if (currentSeasonRows.length > 0) return currentSeasonRows;
             const latestSeason = [...rows].sort(
                 (a, b) => (b.updatedAt?.getTime() ?? 0) - (a.updatedAt?.getTime() ?? 0)
@@ -529,7 +530,7 @@ export async function PATCH(
                     startDate: updated[0].createdAt || new Date(),
                     jerseyNumber: updated[0].number,
                     position: updated[0].position,
-                    season: CURRENT_SEASON,
+                    season: await getCurrentSeason(),
                     createdAt: updated[0].createdAt || new Date(),
                 });
             }

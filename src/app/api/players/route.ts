@@ -5,7 +5,7 @@ import { playerTeamAffiliations, players, teams } from '@/db/schema';
 import { getAuthUser } from '@/lib/auth';
 import { enrichPlayersWithAffiliations, toPublicPlayer, type EnrichedPlayer, syncPlayerOrganizationAffiliations } from '@/lib/player-data';
 import { getPrimaryTeam, getResolvedInstitutionalData, playerMatchesInstitutionFilters } from '@/lib/player-affiliation-utils';
-import { CURRENT_SEASON } from '@/lib/rosterService';
+import { getCurrentSeason } from '@/lib/rosterService';
 import { checkRateLimit } from '@/lib/rate-limit';
 
 function playerMatchesSearch(player: EnrichedPlayer, query: string) {
@@ -189,7 +189,7 @@ export async function POST(request: Request) {
                 startDate: newPlayer[0].createdAt || new Date(),
                 jerseyNumber: newPlayer[0].number,
                 position: newPlayer[0].position,
-                season: CURRENT_SEASON,
+                season: await getCurrentSeason(),
                 createdAt: newPlayer[0].createdAt || new Date(),
             });
         }

@@ -10,6 +10,7 @@ import { SCORING_POINT_VALUES } from '@/lib/scoring';
 import { calculateAndSaveRatings } from '@/lib/ratingsService';
 import { sendMatchEventNotification } from '@/lib/notifications/match-notification-service';
 import { getNotifiableEventType } from '@/lib/notifications/notification-rules';
+import { getCurrentSeason } from '@/lib/rosterService';
 
 // Notification-reliability fix: this trigger used to fire from the logger's own
 // browser tab only (MatchStateManager.triggerNotification -> window CustomEvent ->
@@ -487,9 +488,9 @@ export async function POST(
 // frozen legacy/lifetime baseline (Option A, Richard's call) — never written to again by
 // this function once a real season is derivable, and never replayed/reconciled here.
 // Matches with no competitionId (schema allows it, though non-friendly matches should
-// always have one) fall back to CURRENT_SEASON rather than the legacy '2024' bucket, so
-// new data never silently merges into the frozen baseline.
-const CURRENT_SEASON_FALLBACK = '2026/2027';
+// always have one) fall back to the current season (BACKLOG-228, admin-settable via
+// getCurrentSeason()/system_settings) rather than the legacy '2024' bucket, so new
+// data never silently merges into the frozen baseline.
 
 // Helper function to update player stats
 async function updatePlayerStats(
@@ -503,7 +504,7 @@ async function updatePlayerStats(
     try {
         const { basketballPlayerStats, footballPlayerStats, competitions } = await import('@/db/schema');
 
-        let season = CURRENT_SEASON_FALLBACK;
+        let season = await getCurrentSeason();
         if (competitionId) {
             const competition = await db
                 .select({ season: competitions.season })

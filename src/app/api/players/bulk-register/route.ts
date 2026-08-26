@@ -14,7 +14,7 @@ import { playerTeamAffiliations, players, teams, competitions } from '@/db/schem
 import { getPlayerProfileId } from '@/db/utils/player-profile';
 import { ensureOrganizationEntity, syncPlayerOrganizationAffiliations } from '@/lib/player-data';
 import { getAuthUser } from '@/lib/auth';
-import { CURRENT_SEASON } from '@/lib/rosterService';
+import { getCurrentSeason } from '@/lib/rosterService';
 
 interface PlayerInput {
     name: string;
@@ -94,7 +94,7 @@ export async function POST(request: NextRequest) {
         // Derive the real season from the competition being registered for, same
         // pattern as updatePlayerStats() -- falls back to CURRENT_SEASON (the
         // upcoming season) only when no competition is supplied.
-        let registrationSeason = CURRENT_SEASON;
+        let registrationSeason = await getCurrentSeason();
         if (competitionId) {
             const competition = await db
                 .select({ season: competitions.season })

@@ -23,7 +23,7 @@ import { eq } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { ensureOrganizationEntity, syncPlayerOrganizationAffiliations } from '@/lib/player-data';
 import { getAuthUser } from '@/lib/auth';
-import { CURRENT_SEASON } from '@/lib/rosterService';
+import { getCurrentSeason } from '@/lib/rosterService';
 
 export async function POST(request: NextRequest) {
     try {
@@ -63,7 +63,7 @@ export async function POST(request: NextRequest) {
         // Derive the real season from the competition being registered for, same
         // pattern as updatePlayerStats()/bulk-register -- competitionId is NOT NULL
         // on teamRegistrations, so this is always available.
-        let registrationSeason = CURRENT_SEASON;
+        let registrationSeason = await getCurrentSeason();
         const competition = await db
             .select({ season: competitions.season })
             .from(competitions)

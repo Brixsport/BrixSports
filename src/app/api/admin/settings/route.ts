@@ -19,6 +19,14 @@ const DEFAULT_SETTINGS = {
     'algorithm.rating.min': { value: '1.0', type: 'number', category: 'algorithm', description: 'Minimum player rating' },
 
     // System Settings
+    // BACKLOG-228 (session 56): was a hardcoded CURRENT_SEASON constant in
+    // rosterService.ts requiring a code edit + redeploy to roll forward. Now
+    // the single admin-editable source of truth for roster transfers, new
+    // roster/player affiliations, and live match-event stat writes with no
+    // competitionId to derive a season from. Format must stay "YYYY/YYYY" --
+    // nothing validates that shape server-side yet (type: 'string' has no
+    // extra check, unlike 'number'/'boolean' above), so change it carefully.
+    'system.season.current': { value: '2026/2027', type: 'string', category: 'system', description: 'Current season for new roster transfers, affiliations, and stat writes (format: YYYY/YYYY)' },
     'system.maintenance.mode': { value: 'false', type: 'boolean', category: 'system', description: 'Enable maintenance mode' },
     'system.registration.enabled': { value: 'true', type: 'boolean', category: 'system', description: 'Allow new user registrations' },
     'system.notifications.enabled': { value: 'true', type: 'boolean', category: 'system', description: 'Enable push notifications' },
