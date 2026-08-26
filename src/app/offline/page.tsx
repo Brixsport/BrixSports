@@ -1,9 +1,20 @@
 'use client';
 
+import { useEffect } from 'react';
 import { WifiOff, RefreshCw, Home } from 'lucide-react';
 import Link from 'next/link';
 
 export default function OfflinePage() {
+    // The address bar still holds the real destination URL when the SW serves
+    // this document as a fetch fallback (respondWith doesn't navigate), so a
+    // reload here retries the original page, not /offline itself. This just
+    // removes the need for the user to notice reconnection and tap Try Again.
+    useEffect(() => {
+        const handleOnline = () => window.location.reload();
+        window.addEventListener('online', handleOnline);
+        return () => window.removeEventListener('online', handleOnline);
+    }, []);
+
     return (
         <div className="min-h-screen bg-[#050505] text-white flex items-center justify-center p-4">
             <div className="max-w-md w-full text-center">
