@@ -8989,3 +8989,18 @@ Fixed exactly per the "Fix (not built)" plan below: `MatchStatusBadge.tsx` now d
 **Found:** session 56, 2026-08-26.
 
 ---
+
+### BACKLOG-246 — `/offline` Fallback Page Had No Auto-Retry on Network Restore
+
+**Status:** SHIPPED — 2026-08-26 (commit `dd55f0b`). **Not yet live-verified** — Richard's explicit call this session: test on staging later rather than fight the local dev server (it was slow to boot / intermittently unreachable via the preview tool this session, unrelated to the fix itself).
+**Problem:** Richard reported `/offline`'s "Try Again" button "doesn't refresh the page, or [go to] the acc[ount] link we were going to before the fallback intercepted it, or on network restore." Code investigation (`src/app/offline/page.tsx`, `public/sw-user.js`): the "Try Again" button's `window.location.reload()` was actually already correct — `sw-user.js`'s fetch handler does `caches.match(request)` bound to the *original* navigation request, so `respondWith` serves the offline document's body without changing the browser's address bar; `window.location` inside the offline page still holds the real destination URL (e.g. `/account`, not `/offline`), so a reload does retry the real page once network is back. The actual gap: no `online` event listener on the page at all — the user had to notice reconnection themselves and tap the button; nothing happened automatically.
+**Fix:** added a `useEffect` registering `window.addEventListener('online', () => window.location.reload())`, mirroring the identical pattern already used in `OfflineIndicator.tsx`, `FootballLogger.tsx`, and `BasketballLogger.tsx`. `tsc --noEmit` clean (0 new errors; 19 pre-existing errors elsewhere unaffected).
+**Evidence:**
+- Commit: `dd55f0b`
+- Verified by: `tsc --noEmit` type-check only — no live/staging test run yet
+- Observed result: no new TypeScript errors in `src/app/offline/page.tsx` or elsewhere
+- Pending items: live staging verification (kill network on a real device/DevTools, confirm auto-reload actually fires and lands back on the originally-intercepted URL, not just `/offline`) — deferred to whenever staging testing for this session's batch happens, per Richard's explicit call.
+
+**Found:** session 57, 2026-08-26.
+
+---
