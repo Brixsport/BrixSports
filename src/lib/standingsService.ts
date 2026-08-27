@@ -1,6 +1,6 @@
 import { db } from '@/db';
 import { matches, standings, teams, competitionSportSettings, competitionTeamEntries, matchEvents } from '@/db/schema';
-import { eq, and, or, isNull, inArray, asc, desc } from 'drizzle-orm';
+import { eq, and, or, isNull, inArray, notInArray, asc, desc } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 
 // Same normalization as rating-calculator.ts's normalizeType — match_events.type
@@ -35,6 +35,35 @@ export const STANDINGS_ORDER_BY = [
 
 const DEFAULT_POINTS_FOR_WIN = 3;
 const DEFAULT_POINTS_FOR_DRAW = 1;
+
+// BACKLOG-275: knockout-stage results must not count toward league/group
+// standings. `matches.round` is free text with no enum constraint — these are
+// the exact strings confirmed live via `SELECT DISTINCT round` (dev/query-distinct-rounds.mjs,
+// 2026-08-27) across BUSA LEAGUE FOOTBALL / BUSALYMPICS (FOOTBALL) / NPUGA
+// (BASKETBALL) / NPUGA (FOOTBALL), plus the clean enum values planned for the
+// 2026/2027 Swiss-format competition's own knockout stage (BACKLOG-267/280) —
+// not yet in the DB, included so this list doesn't need a second fix once that
+// competition starts finishing knockout matches. Every current league/group
+// value (`"Group A"`, `"Round 1"`, `"Match Day 1"`, `"Group Stage"`, `"Group Day 1"`,
+// `""`) is deliberately absent from this list — only add a string here if it
+// names a knockout round.
+const KNOCKOUT_ROUNDS = [
+    // Historical free-text variants, confirmed live 2026-08-27
+    '3rd Place',
+    '3rd Place Playoff',
+    'Final',
+    'Quarter Finals',
+    'Quarter-Final',
+    'Semifinals',
+    'Semi-Final',
+    // Clean enum variants planned for future competitions (BACKLOG-267/280)
+    'FINAL',
+    'THIRD_PLACE',
+    'SEMI_FINAL',
+    'QUARTER_FINAL',
+    'ROUND_16',
+    'ROUND_32',
+];
 
 interface TeamRecord {
     played: number;
@@ -80,6 +109,11 @@ async function aggregateTeamRecord(
         eq(matches.status, 'FINISHED'),
         eq(matches.sport, sport),
         or(eq(matches.homeTeamId, teamId), eq(matches.awayTeamId, teamId)),
+        // BACKLOG-275: exclude knockout-round matches from league/group aggregation.
+        // `round` is nullable — notInArray() alone evaluates to SQL NULL (not TRUE)
+        // for a null-round row, which would silently drop every league/group match
+        // too. Must explicitly re-include null rounds via isNull().
+        or(isNull(matches.round), notInArray(matches.round, KNOCKOUT_ROUNDS)),
     ];
     if (competitionFilter !== 'all') {
         conditions.push(competitionFilter ? eq(matches.competitionId, competitionFilter) : isNull(matches.competitionId));
