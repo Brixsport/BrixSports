@@ -7,7 +7,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
     ArrowLeft, Trophy, Users, Layout, Shield, Search,
     Plus, X, Save, Trash2, Filter, ChevronRight,
-    Trophy as TrophyIcon, Settings, Calendar
+    Trophy as TrophyIcon, Settings, Calendar, Shuffle
 } from 'lucide-react';
 import { useToast } from '@/hooks/useToast';
 import { ToastContainer } from '@/components/admin/Toast';
@@ -290,6 +290,13 @@ export default function CompetitionTeamsPage() {
                     </div>
 
                     <div className="flex items-center gap-3">
+                        <Link
+                            href={`/admin/competitions/${id}/draw`}
+                            className="flex items-center gap-2 bg-white/5 border border-white/10 text-white px-6 py-4 rounded-2xl font-black uppercase italic tracking-widest text-sm hover:bg-white/10 transition-colors"
+                        >
+                            <Shuffle size={18} />
+                            Draw
+                        </Link>
                         <button
                             onClick={handleSave}
                             disabled={isSaving}

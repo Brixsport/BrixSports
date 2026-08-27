@@ -9570,6 +9570,8 @@ Fixed exactly per the "Fix (not built)" plan below: `MatchStatusBadge.tsx` now d
 
 **Tooling finding, not a code bug:** `window.confirm()` inside a Browser-pane-driven click was silently auto-dismissed as "cancel" by the automation layer on the first attempt (no matches created, no error) — worth knowing for any future browser-driven test of a confirm-gated action in this environment. Resolved by stubbing `window.confirm = () => true` before the click; the underlying Publish/Unpublish logic itself was never in question once tested this way.
 
+**Entry-point gap caught and fixed, same session:** the draw page had zero discoverable entry point anywhere in the admin UI (URL-only) — same class of gap `BACKLOG-126`'s roster-transfer page had before its own fix. Richard caught it directly ("how did we get to the draw page??"). Added a "Draw" button to `/admin/competitions/[id]/page.tsx`'s header (next to "Save Changes"), linking to `/admin/competitions/[id]/draw`. Added unconditionally (not gated on team count or format) — the draw page itself already handles a non-20-team competition gracefully via its existing validation (422). `tsc --noEmit` clean of new errors.
+
 **Found:** session 59, 2026-08-27. **Built:** session 60, 2026-08-27 (staging only).
 
 ---
