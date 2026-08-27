@@ -9437,7 +9437,7 @@ Fixed exactly per the "Fix (not built)" plan below: `MatchStatusBadge.tsx` now d
 **Fix:** new `evictStaleStandingsCache()` in `[id]/page.tsx`, called after a successful save, evicting `/api/standings?competitionId=...` from the SW's API cache before the page's own refetch. Both this and `BACKLOG-227`'s helper now match `n.includes('-admin-') && n.endsWith('-api')`, not just the suffix.
 
 **Evidence:**
-- Commit: `[pending]`
+- Commit: `b607b88`
 - Verified by: `tsc --noEmit` clean of new errors in both touched files. Live re-verification of the corrected eviction (both this fix and the `BACKLOG-227` correction) not yet re-run — needs a fresh push+deploy cycle.
 
 **Found:** session 59, 2026-08-27.
