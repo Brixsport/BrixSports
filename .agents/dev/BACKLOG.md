@@ -9502,10 +9502,14 @@ Fixed exactly per the "Fix (not built)" plan below: `MatchStatusBadge.tsx` now d
 
 ### BACKLOG-277 — Swiss-Engine Phase 1: Pure Draw Algorithm (`POT_CIRCLE_V1`)
 
-**Status:** OPEN — planned session 59, 2026-08-27, by the `architect` agent.
+**Status:** SHIPPED to staging — session 59, 2026-08-27.
 **Priority:** MEDIUM-HIGH — the actual new mechanism this whole initiative is for; zero DB dependency, fully unit-testable offline.
-**Scope:** new `src/lib/competitionDraw.ts` (DB-import-free, same convention as `standingsSort.ts`) — `buildPots`, `computeLeaguePhaseDraw` (pot-circle pairing, 4 rounds, no repeat opponents, proof: R4 reuses R1's pot-pair at a different offset), `assignHomeAway` (deterministic, asserted 2-home/2-away per team, Eulerian-circuit fallback if the simple rule fails its own assertion), `validateDraw`, `suggestSeedPairings` (generic top-N seeding for the knockout stage, reused by `BACKLOG-280`). New `dev/verify-draw.mjs` — asserts 40 matches, 4 per team, 4 distinct opponents, 2 home/2 away, no team twice in a round, run against several seed permutations.
-**Depends on:** nothing (pure functions). **Blocks:** `BACKLOG-278`/`279` (the draw persistence API needs this to compute a draw to persist).
+**Fix:** `src/lib/competitionDraw.ts` (DB-import-free, same convention as `standingsSort.ts`) — `buildPots`, `computeLeaguePhaseDraw` (pot-circle pairing, 4 rounds, no repeat opponents), `assignHomeAway` (greedy running-count balance first, Hierholzer's-algorithm Eulerian-circuit orientation as a mathematically-guaranteed fallback if greedy doesn't land exactly 2-home/2-away for every team), `validateDraw`, `suggestSeedPairings` (generic top-N seeding, reused by `BACKLOG-280`'s knockout form). `dev/verify-draw.ts` (`.ts` not `.mjs` — runs via `tsx` so it can import the real TS module directly, no build step).
+
+**Evidence:**
+- Commit: `[pending]`
+- Verified by: `dev/verify-draw.ts` — 26 checks, all passing: full validation (no repeat opponents, exactly 4 games/team, exactly 2 home/2 away/team, no team playing twice in one round) against the alphabetical seed order **and 20 independently-shuffled random seed permutations**, plus rejection tests for wrong team counts (16, 24) and odd-N knockout seeding. `tsc --noEmit` clean of new errors.
+- **Correction, checked directly rather than assumed:** the greedy running-count balance is NOT what's actually producing correct results — instrumented separately and confirmed **greedy fails to reach an exact 2-home/2-away split on all 21 of 21 tested seed orders** (alphabetical + 20 random permutations). Makes sense in hindsight: `computeLeaguePhaseDraw`'s pot-circle construction structurally makes pot 1 the "A-side" in all 4 of its pairings and pot 4 the "B-side" in all 4 of its — a bias greedy's per-pairing local choice can't fully undo. The Eulerian-circuit orientation (Hierholzer's algorithm) is doing 100% of the real work for this specific draw shape, every time, not acting as a rare fallback. `assignHomeAway` stays structurally correct either way (it's a genuinely general function, not POT_CIRCLE_V1-specific, and greedy may still help for a differently-shaped graph elsewhere) — but for this codebase's one actual caller, treat the Eulerian path as the load-bearing one, not the exception.
 
 **Found:** session 59, 2026-08-27.
 
