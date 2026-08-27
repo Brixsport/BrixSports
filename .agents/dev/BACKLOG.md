@@ -9603,3 +9603,219 @@ Fixed exactly per the "Fix (not built)" plan below: `MatchStatusBadge.tsx` now d
 **Found:** session 59, 2026-08-27.
 
 ---
+
+### BACKLOG-284 — Figma Redesign Reconciliation, Master Entry: Competitions-Tab Product Decision (Directory-First vs. Pinned-Default)
+
+**Status:** RESOLVED — Richard's call, session 61, 2026-08-27: **directory-first (option a)**. Bottom-nav "Competitions" → competitions directory (Figma node `2168:1495`) → tap a competition → hub. Confirmed directly in response to the `architect` agent's own recommendation.
+**Priority:** HIGH — blocking gate; every other competitions-tab phase's route shape depends on this answer.
+**Context:** A full OGO BRIXSPORTS Figma file (`pFyvF0aBQff7wwTJorYiqs`, 42 top-level screens across onboarding/home/competitions/match/team/player) was audited screen-by-screen against real staging routes this session (extraction technique documented externally at `C:\Users\Wise\Desktop\Agent-Ops\techniques\figma-mcp-screen-inventory.md` — reusable, not project-specific, kept out of this repo). The design was built directly against real seeded data (team/player/competition names match staging verbatim), confirming it's the intended target, not a speculative concept.
+**Problem:** `src/app/competitions/page.tsx` (the actual bottom-nav-reachable route — see `BACKLOG-285` for why this, not `/football`/`/basketball`, is the live one) picks a **pinned default competition** (lines ~121-124, a `.name.toUpperCase().includes('BUSA')` string match against `data.competitions[0]` as fallback) instead of showing Figma's directory screen first. This doesn't scale — football alone has 4 concurrent competitions (BUSA, BUSALYMPICS, NPUGA, Gentlemen FC) — and a user has no way to reach any competition other than the hardcoded pinned one without knowing its URL.
+**Figma `2168:1495` (the directory screen), confirmed by crop inspection, not guessed:** top sport-filter tabs (ALL/FOOTBALL/BASKETBALL/OTHER), a flat list of every competition (star-favoritable per row), one row shown inline-expanded with its 2-3 nearest matches as a preview.
+**Backend note (architect finding):** no migration needed — `userFavorites` (`src/db/schema.ts` line 522) is already a generic `favoriteType`/`favoriteId` table, so competition favoriting slots in directly.
+**Points to:** `BACKLOG-289` (build the directory screen itself, depends on this decision + `BACKLOG-287`).
+
+**Found:** session 61, 2026-08-27 (architect-planned; product decision resolved same session by Richard).
+
+---
+
+### BACKLOG-285 — Figma Redesign Reconciliation: Which Competition-Detail Implementation Survives
+
+**Status:** RESOLVED — Richard's call, session 61, 2026-08-27: confirmed the architect's recommendation. **Keep `/competitions`' code path** (the one the bottom nav actually reaches), port `/football`'s Bracket/Stats/Teams/Players tab implementations into it, **delete `/football`, `/basketball`, and `/competitions/[id]/standings`** outright.
+**Priority:** HIGH — blocks `BACKLOG-290` and everything sequenced after it; also blocks `BACKLOG-286`'s cleanup scope.
+**Problem — three separate implementations of "competition detail" currently exist:**
+1. **`src/app/competitions/page.tsx`** — the one actually reachable from `BottomNav.tsx`. Sport segmented control (FOOTBALL/BASKETBALL/TRACK) + series pills (e.g. "BUSA LEAGUE"/"NPUGA SPECIAL EDITION"/"INTERCOLLEGE") + STANDINGS/MATCHES/BRACKETS tabs. Live-verified: closely matches Figma's competition-hub screens (node `923`/`2257` local coords in the audited sheet — visually the *same* hub frame duplicated once per active tab, not two different screens; confirmed with Richard directly).
+2. **`src/app/football/page.tsx` + `src/app/basketball/page.tsx`** — richer, 6 tabs (STANDINGS/MATCHES/**BRACKET**/STATS/**TEAMS**/**PLAYERS**, `football/page.tsx` line 340), Bracket tab genuinely rendered (line 538+). **Architect grepped every `.tsx` under `src/` for internal links to `/football` or `/basketball` and found zero** — these routes are fully orphaned, reachable only by typing the URL directly. Also: lines 109-110/590 flag STATS/TEAMS/PLAYERS as fetched **globally**, not scoped to the competition — a real correctness bug (a competition-scoped page showing all-sport-wide rosters/leaders), not just a comment, must not be ported silently if these tabs get merged into (1).
+3. **`src/app/competitions/[id]/standings/page.tsx`** — 5 tabs (`standings/scorers/assists/discipline/rules`), reached via `competitions/[id]/page.tsx`'s 9-line redirect. `TopScorersTable players={[]}` / `TopAssistsTable players={[]}` (lines 341-343) are hardcoded empty — dead on arrival. **Worse than previously audited this session:** lines ~16-150 define a `mockCompetitionData` object with entirely fabricated teams ("UNILAG Marines", "UNIBEN Royals", "NUGA Football Championship 2024") — grep-confirmed referenced only at its own definition, i.e. ~135 lines of fabricated data sitting live in a shipped public route. This is a direct `CLAUDE.md` anti-pattern ("never fabricate, mock, or hardcode data to make an error disappear") already in production, independent of the redesign.
+**Recommendation (architect):** keep (1), port (2)'s Bracket/Stats/Teams/Players tabs in (fixing the global-fetch scoping bug during the port, not after), delete (2) and (3) outright. Needs Richard's explicit sign-off because it deletes shipped routes.
+**Points to:** `BACKLOG-286` (delete the mock-backed route), `BACKLOG-288` (orphan `/football`/`/basketball` cleanup), `BACKLOG-290` (the actual tab-porting consolidation).
+
+**Found:** session 61, 2026-08-27, by the `architect` agent.
+
+---
+
+### BACKLOG-286 — Delete the Mock-Data-Backed `/competitions/[id]/standings` Route
+
+**Status:** OPEN — cheap, independently shippable, no design/decision dependency. Ships regardless of how `BACKLOG-285` resolves.
+**Priority:** MEDIUM-HIGH — removes ~135 lines of fabricated data from a live public route (see `BACKLOG-285` finding #3) plus 3 permanently-dead tabs (`scorers`/`assists` hardcoded empty, `discipline` untested).
+**Fix:** delete `src/app/competitions/[id]/standings/page.tsx` and its `mockCompetitionData`; retarget `src/app/competitions/[id]/page.tsx`'s redirect to whatever route wins `BACKLOG-285`.
+**Depends on:** nothing structurally (pure deletion, reversible by revert). Retarget target depends on `BACKLOG-285`.
+
+**Found:** session 61, 2026-08-27, by the `architect` agent.
+
+---
+
+### BACKLOG-287 — Live Bug: `/competitions`' ALL/TRACK Sport Tabs Fire Requests at Nonexistent `/api/all/*` and `/api/track/*` (Silent Empty State, No Error)
+
+**Status:** OPEN — live bug on the bottom-nav-reachable route, found by the `architect` agent while auditing, not previously known.
+**Priority:** HIGH — silent data loss on a real, reachable, default-visible UI path. The "ALL" tab is the leftmost/default segmented-control option in Figma's own design.
+**Problem:** `src/app/competitions/page.tsx` (lines 154, 160, 169) builds fetch URLs as `` `/api/${selectedSport.toLowerCase()}/standings` `` and `` `/api/${selectedSport.toLowerCase()}/matches` ``. A glob of `src/app/api/{all,track,football,basketball}/**/route.ts` confirms only `football` and `basketball` route variants exist — `all` and `track` do not. Selecting the **ALL** or **TRACK** sport tab therefore hits `/api/all/standings` (404) and `/api/track/standings` (404); the page swallows this and renders an empty standings/matches/brackets view with no error surfaced to the user, violating `CLAUDE.md`'s "no silent failures" rule.
+**Fix (not built):** either resolve the fetch endpoint from the selected competition's own `sport` field instead of the raw tab value, or render an explicit "no data for this sport" state instead of a silently empty table (if `ALL`/`TRACK` genuinely has no backing API yet).
+**Depends on:** nothing. **Blocks:** should land before any visual reskin work on the hub (`BACKLOG-290`/`293`) so that work isn't built on top of a silently-broken data path.
+
+**Found:** session 61, 2026-08-27, by the `architect` agent.
+
+---
+
+### BACKLOG-288 — Orphaned `/football` and `/basketball` Routes: Add to Nav or Delete
+
+**Status:** OPEN — mechanical consequence of `BACKLOG-285`.
+**Priority:** MEDIUM.
+**Problem:** see `BACKLOG-285` finding #2 — zero internal links to either route anywhere in `src/`. If they survive the consolidation decision they need a real entry point; if not, delete outright.
+**Must include:** confirming neither route is a logger's or admin's actual entry point before deletion — verified this session that `/competitions/[id]/standings` is public-only, **not yet verified for `/football`/`/basketball`**.
+**Depends on:** `BACKLOG-285`. **Blocks:** `BACKLOG-290` (must land first so the consolidation isn't merging into a moving target).
+
+**Found:** session 61, 2026-08-27, by the `architect` agent.
+
+---
+
+### BACKLOG-289 — Competitions Directory Screen (Figma `2168:1495`)
+
+**Status:** OPEN — the actual net-new screen `BACKLOG-284`'s decision calls for.
+**Priority:** HIGH — this is the missing top-level screen the whole reconciliation effort is anchored on.
+**Scope:** flat list of every competition across sports, sport-tab filtered, each row star-favoritable (backend already exists, see `BACKLOG-284`), one row expandable inline showing its 2-3 nearest matches.
+**Data source:** existing `GET /api/competitions` `groups` array (already deduped per series via `buildCompetitionGroups()` — see `BACKLOG-291` for that function's own fragility). The inline match preview needs a bounded, batched per-competition match fetch — **must carry an explicit `.limit()` and must not N+1 across the whole directory list.**
+**Depends on:** `BACKLOG-284` (resolved), `BACKLOG-287` (consumes the sport-filter path it fixes).
+
+**Found:** session 61, 2026-08-27, by the `architect` agent.
+
+---
+
+### BACKLOG-290 — Consolidate onto One Competition Hub (Port `/football`'s Bracket/Stats/Teams/Players Tabs Into `/competitions/[id]`)
+
+**Status:** OPEN.
+**Priority:** HIGH.
+**Scope:** port `/football/page.tsx`'s Bracket/Stats/Teams/Players tab implementations into the surviving hub (`/competitions/[id]`, replacing today's redirect with a real page), then delete `/football` and `/basketball`. **Must fix the global-fetch scoping bug (`BACKLOG-285` finding #2, `football/page.tsx` lines 109-110/590) during the port, not silently carry it forward** — a competition-scoped page must not render all-sport-wide rosters/stat-leaders.
+**Depends on:** `BACKLOG-285` (resolved), `BACKLOG-288` (orphan check), `BACKLOG-289` (the hub needs a real parent screen to be navigated from).
+**Collision risk, flagged by the architect:** `BACKLOG-282`'s scope (Swiss-engine optional public matchday grouping) is literally `competitions/page.tsx`'s Matches tab — **sequence `BACKLOG-282` after this entry, or fold it in, to avoid two sessions independently reshaping the same tab.**
+
+**Found:** session 61, 2026-08-27, by the `architect` agent.
+
+---
+
+### BACKLOG-291 — Harden `buildCompetitionGroups()` From Name-String Matching to a Real Series FK (Flag, Not Yet a Build)
+
+**Status:** OPEN — flagged a third time now (session 53 audit, session 56 `BACKLOG-229`, now here). Still "pending Richard's confirm."
+**Priority:** MEDIUM — not urgent today, but the Figma redesign is the first place a *user-facing screen* (the series-pills row on the competition hub) now directly depends on this grouping being reliable; previously it only affected an internal admin convenience.
+**Problem:** `src/app/api/competitions/route.ts` lines 22-24, `getCompetitionGroupKey`/`buildCompetitionGroups`, keys on `` `${sport}::${name.trim().toLowerCase()}::${hostOrganizationId}` ``. This groups **seasons of the same competition**, not sport-family pills as such — a competition rename mid-season silently splits a series in two; two differently-run competitions sharing a display name under one host silently merge into one series. Drives both the hub's series-pills row and the season `<select>` (`BACKLOG-229`).
+**Fix:** not decided — a real `competitionSeries` FK table is the structural fix, but it's a schema change and explicitly a decision for Richard, not an assumed build. **FLAG if this gets pulled forward as PRODUCTION-tier hardening without Richard explicitly asking for it** — project tier is MVP→PRODUCTION and this reads as premature hardening on an MVP deadline unless the redesign specifically needs it.
+**Depends on:** sequenced after `BACKLOG-290` (hub consolidated onto one consumer) and before `BACKLOG-292` (Brackets tab depends on series identity being stable).
+
+**Found:** session 61, 2026-08-27, by the `architect` agent.
+
+---
+
+### BACKLOG-292 — Public Brackets Tab: Coordinate With `BACKLOG-280`, Do Not Build a Parallel Bracket Representation
+
+**Status:** OPEN — explicit sequencing note, not a build.
+**Priority:** HIGH (correctness — avoids duplicated bracket logic).
+**Finding:** Figma's Brackets tab is very likely the intended public read-surface for `BACKLOG-280` (Swiss-engine knockout bracket service + admin manual-entry UI, still OPEN/not started). `competitions/page.tsx` line 169 already fetches `/api/brackets` and renders a `brackets` view today.
+**Rule:** this phase is **read-only public rendering against `BACKLOG-280`'s data model** (`bracketNodes` + the new `loserNextMatchId` column) — must land *after* `BACKLOG-280`, must not build a second parallel bracket representation.
+**Also depends on `BACKLOG-275` staying fixed:** any standings rendering this phase touches must preserve the `or(isNull(matches.round), notInArray(matches.round, KNOCKOUT_ROUNDS))` exclusion added session 60 — **do not reintroduce a round-unfiltered aggregation.**
+**Depends on:** `BACKLOG-280`, `BACKLOG-275` (already fixed, staging).
+
+**Found:** session 61, 2026-08-27, by the `architect` agent.
+
+---
+
+### BACKLOG-293 — Sport-Variant Standings Columns (Football P/W/D/L/GF/GA/GD/PTS vs. Basketball P/W/L/PCT/GD/PTS)
+
+**Status:** OPEN.
+**Priority:** LOW-MEDIUM — visual/DTO shaping only.
+**Scope:** one `StandingsTable` component, column set selected by sport. PCT is derived (wins/played), not stored — compute in the DTO, do not add a stored column.
+**Depends on:** `BACKLOG-291`, `BACKLOG-292` (written once against the settled hub, not twice).
+**Blocked on content:** the Figma `Comp-Stats` frame (the Stats tab of the competition hub) renders **completely blank** — no content, no placeholder. Confirmed by direct visual inspection, not assumed unfinished. Needs Richard to supply the actual stats-tab content/spec before this entry has anything real to build against.
+
+**Found:** session 61, 2026-08-27, by the `architect` agent. **Blank-frame gap found:** session 61, 2026-08-27, UI/UX pass.
+
+---
+
+### BACKLOG-294 — Match Detail: Reconcile Tabs, Make URL-Addressable (Figma vs. Live)
+
+**Status:** OPEN.
+**Priority:** MEDIUM.
+**Problem:** live `src/app/matches/[id]/MatchDetailClient.tsx` has 7 tabs (`overview/predictions/timeline/stats/lineups/h2h/polls`, all client `useState`, not URL-addressable); Figma shows 4 (Lineups/Timeline/Stats/Standings, the last being an inline mini group-table not present live).
+**UX requirement, not just cleanup (UI/UX pass, session 61):** URL-addressable tabs are a real user-facing requirement here, not a technical nicety — without them there's no shareable link to "this match's lineup," no bookmarking a specific tab, and the browser back button exits the whole page instead of stepping back through tab history. Treat `?tab=` (or a nested route) as in-scope for this entry, not a follow-up.
+**Flag:** the Lineups tab intersects `BACKLOG-220`, still OPEN and 🔴 High Volatility per `CLAUDE.md` (Lineup Builder architecture cleanup — dead duplicate rendering code, non-atomic write race). Read-only rendering should be safe; any change beyond styling needs an explicit brief before touching it. Do not deep-link this tab without checking exposure against the Live Event Readiness Checklist's still-OPEN "hide all 🔴 features" item.
+**Depends on:** nothing structurally; sequence after the competitions-tab work (Phases 0-3 above) since it's a separate screen family.
+
+**Found:** session 61, 2026-08-27, by the `architect` agent.
+
+---
+
+### BACKLOG-295 — Team Detail: URL-Addressable Tabs, Figma's Win-Rate Donut + Form Strip
+
+**Status:** OPEN.
+**Priority:** LOW — mostly visual. `src/app/teams/[id]/TeamDetailClient.tsx`'s existing tabs (`overview/players/fixtures/stats`) already near-exactly match Figma's 5 views structurally.
+**UX requirement (UI/UX pass, session 61):** same URL-addressability requirement as `BACKLOG-294` — shareable/bookmarkable tab state, real back-button behavior. In scope here too, not deferred.
+
+**Found:** session 61, 2026-08-27, by the `architect` agent.
+
+---
+
+### BACKLOG-296 — Player Detail + Compare Screens Against Figma's Player Overview
+
+**Status:** OPEN — not diffed this session, audit before scoping.
+**Priority:** LOW.
+**Constraint:** must respect the public-player field allowlist in `CLAUDE.md` (name, jerseyName, number, position, team name, rating, career/transfer history) — Figma's career card is already within it, confirmed by inspection.
+
+**Found:** session 61, 2026-08-27, by the `architect` agent.
+
+---
+
+### BACKLOG-297 — Search Screen: Add Teams/Players/Matches/Competitions Filter Tabs
+
+**Status:** OPEN — `/search` exists, not diffed against Figma this session.
+**Priority:** LOW.
+**Constraint:** every result query needs an explicit `.limit()`.
+
+**Found:** session 61, 2026-08-27, by the `architect` agent.
+
+---
+
+### BACKLOG-298 — Onboarding Flow: PREFERENCES (`2244:2319`) + Profile Photo (`2247:2472`) — Genuinely Net-New UI, No Live Equivalent
+
+**Status:** OPEN.
+**Priority:** LOW — sequenced last of the visual phases; the only phase in this whole plan that is net-new UI rather than a reskin of something already live.
+**Confirmed via glob:** no `/onboarding` or `/preferences` route exists anywhere in `src/app`.
+**Backend already exists, no migration needed:** `users.avatar` (`src/db/schema.ts` line 485), `users.favoriteTeamId` (488), `users.favoriteSports` (515), `/api/users/[id]/preferences` all already present. Cloudinary already handles image upload elsewhere in the app — reuse, don't rebuild.
+
+**Found:** session 61, 2026-08-27, by the `architect` agent.
+
+---
+
+### BACKLOG-299 — Home Feed Visual Polish Only (Correction: Structure Already Matches Figma)
+
+**Status:** OPEN — lowest priority in the entire plan.
+**Priority:** LOW.
+**Correction to initial audit assumption:** `src/app/page.tsx` was assumed to be missing Figma's top sport-tab row. **Wrong** — line 39 (`activeSport` state) + lines 457-468 already render exactly `['ALL', 'FOOTBALL', 'BASKETBALL', 'OTHER']` above the status pills (line 478+, `ALL/LIVE/FINISHED/UPCOMING/FAVORITES`). The home screen already matches Figma's `Footy home.png`/`Bball home.png` (`2151:4`/`2158:69`) IA on both tab rows. Remaining work is card styling, date-group headers, and spacing only.
+
+**Found:** session 61, 2026-08-27, by the `architect` agent.
+
+---
+
+### BACKLOG-300 — Desktop/Responsive Layout: No Coverage Above Mobile Width, Anywhere (Blocking Design Decision, Not in Figma)
+
+**Status:** RESOLVED (decision) — Richard's call, session 61, 2026-08-27: **option (a)**, mobile is the majority focus. Tablet/desktop should be "not bad" (i.e. a capped-width, centered fallback — not the current edge-pinned ~330px column with 76% dead space) but is **explicitly NOT a priority** — do not sequence real desktop-breakpoint design work ahead of the mobile-focused phases above. The cheap centered-column fix can land whenever convenient; a genuine desktop redesign is out of scope unless requested later.
+**Priority:** LOW (downgraded from HIGH now that the decision itself is made — the remaining work is cheap and non-blocking, not undecided).
+**Problem:** live-verified at a real 1440×900 viewport (`javascript_tool` computed-style check + screenshot, not guessed): the entire site's content stays pinned to a fixed ~330px mobile-width column at the top-left of the screen, `max-width: none` but no reflow logic at all — roughly **76% of the screen is dead black space** on any desktop-sized viewport. This isn't one page; it reproduced on the home feed and is architecturally a global-layout issue, not a per-page one.
+**Why this blocks more than it looks like:** every one of the 42 Figma frames audited this session is 390px mobile-only — there is **no design spec anywhere in the file for anything above phone width**. This means the desktop question can't be answered by "match the Figma" the way every other phase in this plan can; it needs an actual decision.
+**Options for Richard:**
+  (a) Mobile-only commitment — cap the content column's max-width and center it on wider viewports (cheap, ~1 CSS change per layout shell, consistent with this being a PWA built loggers-mobile-first per `CLAUDE.md`); accept that desktop visitors see a centered phone-shaped app, not a redesigned desktop layout.
+  (b) Commission real desktop breakpoints — genuinely new design work with no existing Figma spec to build from; meaningfully larger scope than every other item in this plan.
+**Depends on:** nothing structurally. Decision resolved above — `BACKLOG-289`/`290`'s layout shell should apply the capped-width centered fallback as a small, low-priority addition whenever convenient, not as a blocking prerequisite.
+
+**Found:** session 61, 2026-08-27, UI/UX pass (live desktop-viewport check). **Decision resolved:** same session.
+
+---
+
+### BACKLOG-301 — Missing Screen: Unified Favorites Hub
+
+**Status:** OPEN — genuine IA gap, absent from the Figma catalog too (not something Figma already speced and the audit missed).
+**Priority:** MEDIUM.
+**Problem:** favoriting exists as scattered, disconnected UI — a star icon on competition-directory rows (Figma `2168:1495`, backed by the already-existing generic `userFavorites` table, see `BACKLOG-284`), and a `FAVORITES` filter pill on the home match feed. There is no single screen showing everything a user has favorited (teams, competitions, players) across the app. A user who favorites a team from a future team-detail page has no path back to a consolidated favorites list — each favorite type is only visible from wherever it was favorited.
+**Scope (not yet designed against a Figma spec — this is new, not a reskin):** one screen, tabbed or sectioned by favorite type (Teams / Competitions / Players), reading from the existing `userFavorites` table (`favoriteType`/`favoriteId`, `src/db/schema.ts` line 522) — no schema change needed, matches `BACKLOG-284`'s finding that the backend already supports generic favoriting.
+**Depends on:** `BACKLOG-289` (reuses its favoriting wiring on the competitions directory as the first real consumer of `userFavorites`).
+
+**Found:** session 61, 2026-08-27, UI/UX pass.
+
+---
