@@ -9159,17 +9159,33 @@ Fixed exactly per the "Fix (not built)" plan below: `MatchStatusBadge.tsx` now d
 
 ### BACKLOG-257 — Payload Audit Phase 0: Banned-Field Leak + Missing `.limit()` on the Homepage Match Routes (BLOCKING COMPLIANCE ISSUE)
 
-**Status:** OPEN — found session 57, 2026-08-26, by the `architect` agent. Small, well-scoped, no consumer contract changes.
-**Priority:** HIGH — a live, currently-shipping leak of internal fields to unauthenticated public viewers, on the busiest page in the app.
-**Depends on:** nothing. **Blocks:** nothing else, but is the recommended starting point of `BACKLOG-256`.
+**Status:** SHIPPED — session 59, 2026-08-27. Items 1, 2, and 4 done; item 3 (the separate `basketball/teams/route.ts` hardcoded allowlist) deliberately left out — different file, not touched by this pass, not folded in.
+**Priority:** HIGH — was a live, currently-shipping leak of internal fields to unauthenticated public viewers, on the busiest page in the app.
+**Depends on:** nothing. **Blocks:** nothing else, was the recommended starting point of `BACKLOG-256`.
 **Scope:**
-1. `src/app/api/football/matches/route.ts`, `src/app/api/basketball/matches/route.ts`, `src/app/api/other/matches/route.ts` — replace the `...match`/`...m` full-row spread with an explicit allow-list DTO, matching exactly what `src/app/page.tsx`'s transform map (lines 87-174) actually reads: `id, sport, homeTeamId, awayTeamId, homeScore, awayScore, shootoutHomeScore, shootoutAwayScore, status, currentPeriod, startTime, venue, competition, competitionId, round, stats`. Drop `lineups` (never read on home), all 8 `livestream*` columns, `highlightsUrl`, `matchday`, `groupName`, the three `*Override` booleans, `friendlyType`, `friendlyDescription`, `competitionLevel`, `matchType`, `createdAt`, `updatedAt` — and critically, the 5 banned fields (`loggerId`, `approvalStatus`, `managerNotes`, `approvedBy`, `approvedAt`).
-2. Same three files — add `.limit(100)`; replace `db.select().from(teams).all()` with `inArray(teams.id, Array.from(teamIds))`, using the `teamIds` Set that is already built in each file and currently unused (dead code).
-3. `basketball/teams/route.ts` — separately noted: filters teams via a **hardcoded six-name allowlist** (`['TBK','Titans','Storm','Rim Reapers','Vikings','Siberia']`). Not part of this fix's core scope but adjacent — worth fixing in the same pass if touching this file.
-4. `src/app/api/matches/live/route.ts` — **delete outright.** Grep-confirmed zero consumers anywhere in `src/`. Currently has no `.limit()`, a full-row spread (same banned-field leak), and a broken double `leftJoin` on unaliased `teams`. If Richard wants it kept for some future use, it needs the same `.limit()` + DTO + aliased-join treatment as the three files above — deletion is cheaper and removes a leaking surface with zero known cost.
-**Verification:** `curl -s <preview>/api/football/matches | wc -c` before/after; `curl ... | jq '.matches[0] | keys'` before/after showing the 5 banned fields present → absent. DevTools Network on `/`, record total transferred bytes for the 3-request home fetch and the 15s poll tick size, before vs after.
+1. `src/app/api/football/matches/route.ts`, `src/app/api/basketball/matches/route.ts`, `src/app/api/other/matches/route.ts` — replaced the `...match`/`...m` full-row spread with an explicit allow-list DTO (`PUBLIC_MATCH_FIELDS`), matching exactly what `src/app/page.tsx`'s transform map, `src/app/football/page.tsx`, and `src/app/basketball/page.tsx` actually read — verified against all three real consumers, not just the one the architect cited: `id, sport, homeTeamId, awayTeamId, homeScore, awayScore, shootoutHomeScore, shootoutAwayScore, status, currentPeriod, startTime, venue, competition, competitionId, round, stats`. The 5 banned fields (`loggerId`, `approvalStatus`, `managerNotes`, `approvedBy`, `approvedAt`) are gone, confirmed via live response inspection.
+2. Same three files — added `.limit(100)`; replaced the unscoped `db.select().from(teams).all()` with `inArray(teams.id, Array.from(teamIds))` (guarded for the empty-set case), using the `teamIds` Set that was already built but unused in each file.
+3. `basketball/teams/route.ts`'s hardcoded allowlist — **not done**, separate file, out of this pass's scope.
+4. `src/app/api/matches/live/route.ts` — **deleted.** Independently re-confirmed zero consumers via `read_network_requests` on a real homepage load (no request to this path) before deleting, not just a static grep.
 
-**Found:** session 57, 2026-08-26.
+**Evidence:**
+- Commit: `[pending, next commit]`
+- Verified by: live fetch against the real staging DB via the local dev server, direct field-key inspection on all 3 routes' real responses (`footballHasBanned: false`, `basketballHasBanned: false`, no banned keys present); homepage loaded live afterward, real match data rendering correctly (31 BUSA football matches, BUSALYMPICS football/basketball, GENTLEMEN FC LEAGUE all present); `GET /api/matches/live` confirmed `404` post-delete; `tsc --noEmit` clean of new errors in any touched file (surfaced an unrelated pre-existing finding instead — see `BACKLOG-269`)
+- Observed result: all 3 routes return the trimmed DTO shape only; deleted route gone; homepage renders unchanged
+- Pending items: none for this entry. `basketball/teams/route.ts`'s hardcoded allowlist (item 3) and the rest of `BACKLOG-256`'s phases (`258`-`262`) remain separately open.
+
+**Found:** session 57, 2026-08-26. **Fixed:** session 59, 2026-08-27.
+
+---
+
+### BACKLOG-269 — 10 Dynamic API Routes Use a Pre-Next-15 `params` Shape, Failing `tsc` Once `.next/types` Compiles Them
+
+**Status:** OPEN — found session 59, 2026-08-27, incidentally while live-verifying `BACKLOG-257`/`268` (a browser call to `/api/competitions/[id]/standings` triggered Next to compile+typecheck that route for the first time this session, surfacing the mismatch). Not caused by this session's edits to any of these files — pre-existing, just not previously typechecked because `.next/types` hadn't been generated for these specific routes yet.
+**Priority:** LOW — Next.js 15.3.8 tolerates the old shape at runtime (confirmed: `/api/competitions/[id]/standings` served real data throughout this session with zero runtime error), this is a `tsc`-only failure, not a live bug. Worth fixing before it silently accumulates further, not urgent.
+**Problem:** App Router route handlers in Next 15 must type `params` as `Promise<{...}>`, not a plain object. 10 files still use the old plain-object `interface RouteParams { params: { id: string } }` pattern: `src/app/api/competitions/[id]/route.ts`, `src/app/api/competitions/[id]/standings/route.ts`, `src/app/api/brackets/[id]/route.ts`, `src/app/api/competitions/[id]/eligible-players/route.ts`, `src/app/api/competitions/[id]/match-settings/route.ts`, `src/app/api/competitions/[id]/stats/route.ts`, `src/app/api/competitions/[id]/teams/route.ts`, `src/app/api/players/[id]/performance/route.ts`, `src/app/api/teams/[id]/form/route.ts`, `src/app/api/transfers/[id]/route.ts`.
+**Fix (not built):** for each file, change `params: { id: string }` to `params: Promise<{ id: string }>` and `await params` before use (or destructure via `const { id } = await params`). Mechanical, one pattern repeated 10 times — a good candidate for a single focused pass rather than folding into unrelated work.
+
+**Found:** session 59, 2026-08-27.
 
 ---
 
@@ -9329,7 +9345,7 @@ Fixed exactly per the "Fix (not built)" plan below: `MatchStatusBadge.tsx` now d
 **Fix:** `standings.yellowCards`/`redCards` columns (additive migration); `standingsService.ts`'s `aggregateTeamRecord()` now counts cards from `match_events`, normalized the same way as `rating-calculator.ts` (not the naive strict-equality pattern `team-stats-calculator.ts` has); new exported `STANDINGS_ORDER_BY` (Drizzle) is the single source of DB-level ordering, adopted by all 4 API consumers + `.limit(500)` added to the 2 that were missing it; new `src/lib/standingsSort.ts` (no DB import) holds the equivalent JS `compareStandings()` for the client-side `useLiveStandings.ts` hook, so the client sort doesn't pull in server-only `@/db` code. Admin bulk-upsert POST at `/api/standings` also fixed to include the two new columns in its `onConflictDoUpdate` set (previously would have silently reset them to insert-time values on every re-save).
 
 **Evidence:**
-- Commit: not yet committed (staged locally, pending)
+- Commit: `35f4164`
 - Verified by: `dev/backfill-standings-cards.mjs` dry-run → apply → dry-run again (0 remaining diff, confirms idempotency); live call against the real staging DB via the local dev server showing populated, correctly-ordered `yellowCards`/`redCards` in `/api/football/standings`'s real response; `tsc --noEmit` clean of new errors (38 pre-existing, all in `src/db/*` scripts + one `nextauth` route, none in files touched this session)
 - Observed result: 20 of 50 staging `standings` rows backfilled (all BUSA League Football; 0 elsewhere, expected — cards are a football-specific concept in current data)
 - Pending items: **prod migration + backfill not yet run** (staging-first-then-verify-then-prod, per `CLAUDE.md`). Code not yet committed. Found, not fixed as part of this pass: `/api/competitions/[id]/standings` filters by exact `competition.name` string match, which never matches this competition's group-suffixed `standings.competition` values — pre-existing bug, same class the football/basketball routes already work around, confirmed unrelated to this change (reproduces identically before and after).

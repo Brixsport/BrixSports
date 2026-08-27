@@ -1,7 +1,30 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/db';
 import { matches, teams } from '@/db/schema';
-import { eq, and, or } from 'drizzle-orm';
+import { eq, and, or, inArray } from 'drizzle-orm';
+
+// Public DTO -- must never include CLAUDE.md's banned fields (loggerId,
+// approvalStatus, managerNotes, approvedBy, approvedAt) or anything else not
+// actually read by a real consumer. Field list verified against every known
+// consumer of this route: src/app/page.tsx's transform map, src/app/football/page.tsx.
+const PUBLIC_MATCH_FIELDS = {
+    id: matches.id,
+    sport: matches.sport,
+    homeTeamId: matches.homeTeamId,
+    awayTeamId: matches.awayTeamId,
+    homeScore: matches.homeScore,
+    awayScore: matches.awayScore,
+    shootoutHomeScore: matches.shootoutHomeScore,
+    shootoutAwayScore: matches.shootoutAwayScore,
+    status: matches.status,
+    currentPeriod: matches.currentPeriod,
+    startTime: matches.startTime,
+    venue: matches.venue,
+    competition: matches.competition,
+    competitionId: matches.competitionId,
+    round: matches.round,
+    stats: matches.stats,
+};
 
 export async function GET(request: Request) {
     try {
@@ -23,29 +46,33 @@ export async function GET(request: Request) {
 
         // Get all football matches
         const footballMatches = await db
-            .select()
+            .select(PUBLIC_MATCH_FIELDS)
             .from(matches)
             .where(whereConditions)
+            .limit(100)
             .all();
 
-        // Fetch teams separately to avoid column issues
+        // Fetch only the teams actually referenced, not the whole table.
         const teamIds = new Set<string>();
         footballMatches.forEach(m => {
             teamIds.add(m.homeTeamId);
             teamIds.add(m.awayTeamId);
         });
 
-        const allTeams = await db
-            .select({
-                id: teams.id,
-                name: teams.name,
-                shortName: teams.shortName,
-                logo: teams.logo,
-                university: teams.university,
-                color: teams.color,
-            })
-            .from(teams)
-            .all();
+        const allTeams = teamIds.size > 0
+            ? await db
+                .select({
+                    id: teams.id,
+                    name: teams.name,
+                    shortName: teams.shortName,
+                    logo: teams.logo,
+                    university: teams.university,
+                    color: teams.color,
+                })
+                .from(teams)
+                .where(inArray(teams.id, Array.from(teamIds)))
+                .all()
+            : [];
 
         const teamMap = new Map(allTeams.map(t => [t.id, t]));
 
