@@ -423,6 +423,8 @@ export const standings = sqliteTable('standings', {
     goalsAgainst: integer('goals_against').default(0),
     goalDifference: integer('goal_difference').default(0),
     points: integer('points').default(0),
+    yellowCards: integer('yellow_cards').default(0),
+    redCards: integer('red_cards').default(0),
     groupName: text('group_name'), // Nullable until draw is complete
     updatedAt: integer('updated_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
 });

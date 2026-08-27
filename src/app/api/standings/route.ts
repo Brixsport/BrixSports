@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
 import { standings } from '@/db/schema';
-import { eq, desc, and, sql } from 'drizzle-orm';
+import { eq, and, sql } from 'drizzle-orm';
 import { getAuthUser } from '@/lib/auth';
+import { STANDINGS_ORDER_BY } from '@/lib/standingsService';
 
 export async function GET(request: Request) {
     try {
@@ -27,7 +28,7 @@ export async function GET(request: Request) {
             with: {
                 team: true
             },
-            orderBy: [desc(standings.points), desc(standings.goalDifference)],
+            orderBy: STANDINGS_ORDER_BY,
             limit: 500,
         });
 
@@ -69,6 +70,8 @@ export async function POST(request: NextRequest) {
             goalsAgainst: entry.goalsAgainst || 0,
             goalDifference: (entry.goalsFor || 0) - (entry.goalsAgainst || 0),
             points: entry.points || 0,
+            yellowCards: entry.yellowCards || 0,
+            redCards: entry.redCards || 0,
             groupName: entry.groupName || null,
             updatedAt: new Date(),
         }));
@@ -85,6 +88,8 @@ export async function POST(request: NextRequest) {
                 goalsAgainst: sql`excluded.goals_against`,
                 goalDifference: sql`excluded.goal_difference`,
                 points: sql`excluded.points`,
+                yellowCards: sql`excluded.yellow_cards`,
+                redCards: sql`excluded.red_cards`,
                 groupName: sql`excluded.group_name`,
                 updatedAt: new Date(),
             }

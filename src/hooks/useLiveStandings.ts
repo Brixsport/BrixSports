@@ -7,6 +7,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useSocket } from '@/hooks/useWebSocket';
+import { compareStandings } from '@/lib/standingsSort';
 
 export interface StandingRow {
     position: number;
@@ -22,6 +23,8 @@ export interface StandingRow {
     goalsAgainst: number;
     goalDifference: number;
     points: number;
+    yellowCards: number;
+    redCards: number;
     groupName?: string | null;
     form: string[];
 }
@@ -82,14 +85,12 @@ export function useLiveStandings({
                     goalsAgainst: standing.goalsAgainst,
                     goalDifference: standing.goalDifference,
                     points: standing.points,
+                    yellowCards: standing.yellowCards ?? 0,
+                    redCards: standing.redCards ?? 0,
                     groupName: standing.groupName,
                     form: standing.form || [],
                 }))
-                .sort((a: StandingRow, b: StandingRow) => {
-                    if (b.points !== a.points) return b.points - a.points;
-                    if (b.goalDifference !== a.goalDifference) return b.goalDifference - a.goalDifference;
-                    return b.goalsFor - a.goalsFor;
-                });
+                .sort(compareStandings);
 
             setStandings(transformedStandings);
         } catch (err) {

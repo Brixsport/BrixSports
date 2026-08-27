@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/db';
 import { standings, teams } from '@/db/schema';
-import { eq, desc, and, or, sql } from 'drizzle-orm';
+import { eq, and, or, sql } from 'drizzle-orm';
+import { STANDINGS_ORDER_BY } from '@/lib/standingsService';
 
 export async function GET(request: Request) {
     try {
@@ -33,7 +34,8 @@ export async function GET(request: Request) {
             .select()
             .from(standings)
             .where(conditions.length > 1 ? and(...conditions) : conditions[0])
-            .orderBy(desc(standings.points), desc(standings.goalDifference))
+            .orderBy(...STANDINGS_ORDER_BY)
+            .limit(500)
             .all();
 
         const transformedStandings = await Promise.all(

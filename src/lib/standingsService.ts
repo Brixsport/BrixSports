@@ -1,7 +1,28 @@
 import { db } from '@/db';
-import { matches, standings, teams, competitionSportSettings, competitionTeamEntries } from '@/db/schema';
-import { eq, and, or, isNull } from 'drizzle-orm';
+import { matches, standings, teams, competitionSportSettings, competitionTeamEntries, matchEvents } from '@/db/schema';
+import { eq, and, or, isNull, inArray, asc, desc } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
+
+// Same normalization as rating-calculator.ts's normalizeType — match_events.type
+// arrives inconsistently ('Yellow Card', 'YELLOW_CARD', 'yellow-card', ...).
+// A naive strict-equality match (the pattern team-stats-calculator.ts uses)
+// silently undercounts. Keep these two normalizers in sync if either changes.
+function normalizeEventType(type: string): string {
+    return type.toLowerCase().replace(/[\s_-]+/g, '');
+}
+
+// Points -> GD -> Goals For -> Yellow Cards (fewer better) -> Red Cards (fewer
+// better) -> teamId (total order). Single source of truth for every DB-level
+// standings query. Mirror any change here in standingsSort.ts's compareStandings
+// (the client-safe, DB-import-free JS equivalent used by useLiveStandings.ts).
+export const STANDINGS_ORDER_BY = [
+    desc(standings.points),
+    desc(standings.goalDifference),
+    desc(standings.goalsFor),
+    asc(standings.yellowCards),
+    asc(standings.redCards),
+    asc(standings.teamId),
+];
 
 // BACKLOG-097: standings were never recalculated anywhere in the codebase — the
 // `standings` table's only writer was a manual admin bulk-upsert, and `teams`'
@@ -24,6 +45,8 @@ interface TeamRecord {
     goalsAgainst: number;
     goalDifference: number;
     points: number;
+    yellowCards: number;
+    redCards: number;
 }
 
 async function getPointsRule(competitionId: string | null, sport: string) {
@@ -64,6 +87,7 @@ async function aggregateTeamRecord(
 
     const teamMatches = await db
         .select({
+            id: matches.id,
             homeTeamId: matches.homeTeamId,
             awayTeamId: matches.awayTeamId,
             homeScore: matches.homeScore,
@@ -85,6 +109,22 @@ async function aggregateTeamRecord(
         else lost++;
     }
 
+    let yellowCards = 0, redCards = 0;
+    if (teamMatches.length > 0) {
+        const events = await db
+            .select({ type: matchEvents.type })
+            .from(matchEvents)
+            .where(and(
+                inArray(matchEvents.matchId, teamMatches.map(m => m.id)),
+                eq(matchEvents.teamId, teamId)
+            ));
+        for (const e of events) {
+            const normalized = normalizeEventType(e.type);
+            if (normalized === 'yellowcard') yellowCards++;
+            else if (normalized === 'redcard') redCards++;
+        }
+    }
+
     return {
         played,
         won,
@@ -94,6 +134,8 @@ async function aggregateTeamRecord(
         goalsAgainst,
         goalDifference: goalsFor - goalsAgainst,
         points: won * pointsForWin + drawn * pointsForDraw,
+        yellowCards,
+        redCards,
     };
 }
 

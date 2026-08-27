@@ -9307,3 +9307,33 @@ Fixed exactly per the "Fix (not built)" plan below: `MatchStatusBadge.tsx` now d
 - Pending items: none for this specific fix. Systemic prevention (checking by fuzzy name match / by organization before creating a new team) documented as a lesson in `known-issues.md`, not enforced by any guard in code.
 
 ---
+
+### BACKLOG-267 — BUSA League 2026/2027 Football (Male): Swiss-Pairing Engine + Top-8 Knockout Bracket (Master Entry)
+
+**Status:** OPEN — planned session 59, 2026-08-27, by the `architect` agent (full plan: schema/service/algorithm/bracket/admin-flow, 13 implementation steps in dependency order). Phase 1 below shipped to staging same session; everything past it (the pairing algorithm itself, the bracket mechanism, admin routes/UI) is explicitly on hold pending further product decisions — Richard's own call, not a technical blocker.
+**Priority:** MEDIUM-HIGH — next season's format, not live-match-critical today, but genuinely new competition-format engineering with no existing analog in the codebase (see `.agents/dev/BUSA_LEAGUE_2026_2027_FORMAT_PROPOSAL.md`).
+**Scope:** 20 teams, 4 Swiss rounds (each team faces 4 different opponents, round N+1 pairing depends on round N results), top 8 → QF → SF → 3rd Place → Final.
+**Confirmed so far:** card tiebreaker direction (fewer cards ranks higher); no same-college pairing avoidance in v1 (retrofittable later per architect); venue is a single stadium (uni sports complex) → neutral, so the architect's conditional "drop the home/away balancing rule" applies once pairing is built.
+**Still open, blocking the rest of the build:** round-1 seeding order + pairing shape (fold vs. adjacent), QF/knockout draw shape (fixed 1v8/2v7/3v6/4v5 vs. reseeded each round) — both explicitly flagged by Richard as needing more discussion, not yet decided.
+**Points to:** `BACKLOG-268` (Phase 1, SHIPPED to staging). Phases 2+ (pairing algorithm, bracket service, admin routes/UI) not yet individually filed — numbering held until the two open questions above are resolved, since the architect's plan for those phases may shift depending on the answers.
+
+**Found:** session 59, 2026-08-27.
+
+---
+
+### BACKLOG-268 — Swiss-Format Phase 1: Standings Tiebreaker Consolidation (Points → GD → Goals → Cards → teamId)
+
+**Status:** SHIPPED to staging, not yet run on prod — session 59, 2026-08-27.
+**Priority:** MEDIUM — also fixes two live rule violations independent of the Swiss work (see below).
+**Problem (architect finding, not in the original proposal doc):** `standingsService.ts` had no shared sort at all — five separate consumers each did their own, three different chains, two of them (`/api/football/standings`, `/api/basketball/standings`) with no `.limit()` at all.
+**Fix:** `standings.yellowCards`/`redCards` columns (additive migration); `standingsService.ts`'s `aggregateTeamRecord()` now counts cards from `match_events`, normalized the same way as `rating-calculator.ts` (not the naive strict-equality pattern `team-stats-calculator.ts` has); new exported `STANDINGS_ORDER_BY` (Drizzle) is the single source of DB-level ordering, adopted by all 4 API consumers + `.limit(500)` added to the 2 that were missing it; new `src/lib/standingsSort.ts` (no DB import) holds the equivalent JS `compareStandings()` for the client-side `useLiveStandings.ts` hook, so the client sort doesn't pull in server-only `@/db` code. Admin bulk-upsert POST at `/api/standings` also fixed to include the two new columns in its `onConflictDoUpdate` set (previously would have silently reset them to insert-time values on every re-save).
+
+**Evidence:**
+- Commit: not yet committed (staged locally, pending)
+- Verified by: `dev/backfill-standings-cards.mjs` dry-run → apply → dry-run again (0 remaining diff, confirms idempotency); live call against the real staging DB via the local dev server showing populated, correctly-ordered `yellowCards`/`redCards` in `/api/football/standings`'s real response; `tsc --noEmit` clean of new errors (38 pre-existing, all in `src/db/*` scripts + one `nextauth` route, none in files touched this session)
+- Observed result: 20 of 50 staging `standings` rows backfilled (all BUSA League Football; 0 elsewhere, expected — cards are a football-specific concept in current data)
+- Pending items: **prod migration + backfill not yet run** (staging-first-then-verify-then-prod, per `CLAUDE.md`). Code not yet committed. Found, not fixed as part of this pass: `/api/competitions/[id]/standings` filters by exact `competition.name` string match, which never matches this competition's group-suffixed `standings.competition` values — pre-existing bug, same class the football/basketball routes already work around, confirmed unrelated to this change (reproduces identically before and after).
+
+**Found:** session 59, 2026-08-27.
+
+---
