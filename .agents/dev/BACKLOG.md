@@ -9281,18 +9281,24 @@ Fixed exactly per the "Fix (not built)" plan below: `MatchStatusBadge.tsx` now d
 
 ### BACKLOG-259 — Payload Audit Phase 2: Match Detail Poll — De-Duplicate Repeated Team Objects
 
-**Status:** OPEN — found session 57, 2026-08-26, by the `architect` agent. Closes `BACKLOG-172.2`. Sits on the real-time update mechanism (`CLAUDE.md`: 🟡 Caution, explicit manual testing required before deploy).
-**Priority:** MEDIUM-HIGH — real bytes saved on a Three-Critical-Flow-adjacent route, but requires consumer updates, unlike Phases 0/1.
-**Depends on:** none directly, but verifying its latency claim needs a working logger — **`BUG-241` was the blocker for this** (RESOLVED session 55 for the confirmed repro; see the corrected memory note this session). Should be unblocked now, worth a quick re-check before verifying this phase.
-**Scope:**
-1. `src/app/api/matches/[id]/route.ts` — hoist the two team objects out of the per-event rows. Return `teams: { [teamId]: {...} }` once in the response; each event carries `teamId` only. In a 40-event football match this removes 39 duplicate copies of each team object.
-2. **Consumer update required in the same change, not after:** every place reading `event.team.*` in `MatchDetailClient.tsx` and `src/components/MatchOverlay.tsx` must resolve through the new map instead. This is exactly the class of break `known-issues.md` already documents happening before (a field dropped from a response silently breaking a client that depended on it) — do not ship step 1 without this in the same commit.
-3. Same file — replace the full `players` row spread in the events join with the five fields the DTO at lines 124-132 already narrows to; batch the `relatedPlayer` N+1 lookup into one `inArray` call (this closes `BACKLOG-172.2`).
-4. **Do not touch the WS layer** — `src/lib/socket.ts` already emits true deltas (`event:new` = one event, `match:score:updated` = scores only) and `MatchDetailClient.tsx` already merges them incrementally. The re-send problem is entirely on the REST poll side (10s disconnect fallback + 25s reconciliation), not the socket.
-5. **Deferred, own session:** add `?since=<ISO>` to `/api/matches/[id]` so the 25s reconciliation poll fetches only events newer than the last one held, instead of the full match + up to 500 events. Largest single sustained-bandwidth win during a live match, but changes the response contract and needs its own verification pass.
-**Verification:** with a real live match running, record response size before/after step 1. Separately measure event-save → public-display latency against the ~9.9s baseline already on the readiness checklist — **if it doesn't move, say so explicitly rather than assuming it improved**; the poll payload may not be the actual bottleneck.
+**Status:** SHIPPED — session 60, 2026-08-27/28. Closes `BACKLOG-172.2`. Sits on the real-time update mechanism (`CLAUDE.md`: 🟡 Caution) — verified per below, not just code-reviewed.
+**Priority:** MEDIUM-HIGH.
+**Depends on:** none. `BUG-241` (the logger blocker) is resolved; not needed for this phase's own verification since no new events were logged, only existing ones re-fetched.
+**Scope, as actually shipped (deviates from the original plan in one place, explained below):**
+1. `src/app/api/matches/[id]/route.ts` — removed the per-event `team` object entirely (was a full `{id, name, shortName, logo, color}` object copied onto every event row). **Deviation from the original plan:** the plan called for adding a new top-level `teams: {[teamId]: {...}}` map to the response. A real consumer grep (`event\.team\.` across `src`) found only one live consumer of `event.team.*` — `src/components/LiveMatchTimeline.tsx` — and it already receives `homeTeam`/`awayTeam` as separate props (from `match.homeTeam`/`match.awayTeam`, unchanged by this phase). Adding a `teams` map would have been a redundant new field solving an already-solved problem, so it was skipped; the component resolves each event's team via `event.teamId === homeTeam.id` instead.
+2. **Consumer update, same commit:** `src/components/LiveMatchTimeline.tsx` — `isHomeTeam` now derived from `event.teamId` instead of `event.team?.id`; the team badge renders from a locally-derived `eventTeam` (`isHomeTeam ? homeTeam : awayTeam`) instead of `event.team`. **`MatchDetailClient.tsx` and `MatchOverlay.tsx` needed no changes** — neither actually reads `event.team.*` (both already used `event.teamId` directly); the original plan's citation of both files was inaccurate, same class of stale citation as `BACKLOG-171`'s. `src/components/MatchTimeline.tsx` (a second, differently-located component with the same exported name) does read `event.team.*` but is dead code — confirmed via grep, never imported anywhere in `src/` — left untouched.
+3. Same file — events join narrowed from `player: players` (full row) to 5 explicit fields (`id, name, jerseyName, number, position`); the per-event `relatedPlayerId` N+1 lookup batched into one `inArray` query with a `Map` for O(1) resolution.
+4. WS layer (`src/lib/socket.ts`) untouched, as directed.
+5. Item 5 (`?since=` incremental reconciliation) — not built, deferred as originally scoped; still needs its own session and contract-change verification.
 
-**Found:** session 57, 2026-08-26.
+**Evidence:**
+- `tsc --noEmit`: 0 new errors (same 38 pre-existing baseline as `BACKLOG-258`).
+- Live API verification (real BUSA League match `8Mek2CA7KPlnk1EQ647jx`, 154 real events, not seeded): confirmed via direct response inspection — zero events carry a `team` key; `player`/`relatedPlayer` both narrowed to the 5 expected fields; response size 76,415 bytes. Reconstructing the old per-event team-object shape on top of this response estimates ~105,367 bytes for the same data under the old shape — **≈28% reduction from the team de-dup alone**, before counting the additional (unmeasured separately) savings from narrowing the full `players` row.
+- Live UI, partial: `/matches/[id]` page loaded against the real match and rendered correctly through the new API shape (Overview tab: "5 - 0 FT", venue, competition, "Full Time" — all correct), and clicking the Timeline tab visibly switched its active-tab styling, confirming the `activeTab` state and click wiring work. **Not fully confirmed:** the rendered Timeline event list itself (team-color badges from the new `eventTeam` derivation) — this session's Browser pane reported itself hidden/non-interactive partway through (`"the Browser pane is currently hidden"`), and the shared dev server (3 concurrent sessions on this machine) crashed and, after restart, took 400+ seconds to recompile `/matches/[id]` under the current load, making a second attempt impractical in-session. Flagging this honestly rather than claiming a check that didn't complete — the change is a small, type-consistent substitution following the identical `event.teamId === homeTeam.id` pattern already proven correct elsewhere in this same file (and in `MatchOverlay.tsx`), so risk is low, but the specific visual hasn't been eyeballed.
+- Not caused by this change: the dev-server crash (process gone entirely, not just slow) — restarted via `.claude/launch.json`'s `dev` config; peers notified before and after.
+- Pending items: item 5 (`?since=` incremental poll), and a full visual confirmation of the Timeline tab's event badges when the shared server/pane cooperate.
+
+**Found:** session 57, 2026-08-26. **Fixed:** session 60, 2026-08-27/28.
 
 ---
 
@@ -9876,6 +9882,25 @@ Fixed exactly per the "Fix (not built)" plan below: `MatchStatusBadge.tsx` now d
 **Depends on:** `BACKLOG-289` (reuses its favoriting wiring on the competitions directory as the first real consumer of `userFavorites`).
 
 **Found:** session 61, 2026-08-27, UI/UX pass.
+
+---
+
+### BACKLOG-303 — BUSA League Basketball (2025/26): Semis + Finals Series Never Backfilled, Real Schedule Now Known
+
+**Status:** OPEN — data-entry task, not an engineering one. Filed session 60, 2026-08-27.
+**Priority:** LOW-MEDIUM — historical/completed competition, doesn't block anything live. Purely a data-completeness gap.
+**Problem:** `dev/busa-league-canonical-schedule.md` already noted BUSA League Basketball's Semis/Final were "deliberately out of scope" and never added to `matches` — confirmed directly against real data this session (`BACKLOG-302`'s audit): only `Round 1`-`10` exist, zero bracket/knockout rows, despite the competition's `format` field claiming `league-knockout`.
+**Real schedule, supplied directly by Richard this session (not previously documented anywhere in this repo):**
+- 7 Jan 2026, 5:00 PM — Semi-Final 1: **1 v 4** (seed matchup, not team names — resolve against final `Round 10` standings once picking this up)
+- 8 Jan 2026, 5:00 PM — Semi-Final 2: **2 v 3**
+- 11 Jan 2026, 5:00 PM — Finals Game 1 — **score not known, "in the air"**
+- 14 Jan 2026, 5:00 PM — Finals Game 2 — score not known
+- 16 Jan 2026, 5:00 PM — Finals Game 3 — score not known
+Best-of-3 Finals series, not a single match — matches this competition's real playoff format, distinct from `BACKLOG-280`'s single-elimination top-8 bracket shape.
+**Not done:** no scores exist for any of the 5 games above (even the two Semis have dates/pairings but no result yet supplied) — nothing to backfill into `matches` until scores are sourced. Team identity for seeds 1-4 also needs resolving against the real final `Round 1`-`10` standings before pairings can be written concretely.
+**If/when backfilled:** revisit `BACKLOG-302`'s `pure-league` classification for this competition — it would become `group-knockout` or a new `pure-league-with-playoffs` variant (round-robin regular season + a seeded knockout, no groups) once these stages exist in the DB. Don't reclassify preemptively before the data exists.
+
+**Found:** session 60, 2026-08-27, via Richard directly (cross-referencing `dev/busa-league-canonical-schedule.md`'s existing note, which flagged the gap but didn't have the actual schedule).
 
 ---
 

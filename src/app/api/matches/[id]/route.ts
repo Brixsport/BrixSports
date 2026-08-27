@@ -6,7 +6,7 @@
 import { NextRequest, NextResponse, after } from 'next/server';
 import { db } from '@/db';
 import { matches, teams, matchEvents, players, bracketNodes, teamForm, headToHead } from '@/db/schema';
-import { eq, desc, sql } from 'drizzle-orm';
+import { eq, desc, sql, inArray } from 'drizzle-orm';
 import { playerRatings } from '@/db/schema-ratings';
 import { getAuthUser } from '@/lib/auth';
 import { isLoggerAssigned } from '@/lib/match-logger-helpers';
@@ -81,63 +81,59 @@ export async function GET(
         // Competition is stored as text field in matches table
         const competition = match.match.competition;
 
-        // Fetch match events with player and team details
+        // BACKLOG-259: narrow player join to the 5 fields actually used (was
+        // selecting the full players row, one per event) and drop the team
+        // join entirely -- no more full team object repeated on every event
+        // row (was 39 duplicate copies in a 40-event match). Consumers
+        // resolve a team per event via event.teamId against the match-level
+        // homeTeam/awayTeam already in this response (verified: the only real
+        // consumer reading event.team, src/components/LiveMatchTimeline.tsx,
+        // already receives homeTeam/awayTeam as separate props).
+        const EVENT_PLAYER_FIELDS = {
+            id: players.id,
+            name: players.name,
+            jerseyName: players.jerseyName,
+            number: players.number,
+            position: players.position,
+        };
+
         const eventsData = await db
             .select({
                 event: matchEvents,
-                player: players,
-                team: {
-                    id: teams.id,
-                    name: teams.name,
-                    shortName: teams.shortName,
-                    logo: teams.logo,
-                    color: teams.color,
-                },
+                player: EVENT_PLAYER_FIELDS,
             })
             .from(matchEvents)
             .leftJoin(players, eq(matchEvents.playerId, players.id))
-            .leftJoin(teams, eq(matchEvents.teamId, teams.id))
             .where(eq(matchEvents.matchId, matchId))
             .orderBy(desc(matchEvents.minute), desc(matchEvents.second))
             .limit(500);
 
-        // Process events to include related player data
-        const events = await Promise.all(
-            eventsData.map(async (row) => {
-                let relatedPlayer = null;
-                if (row.event.relatedPlayerId) {
-                    const [rp] = await db
-                        .select({
-                            id: players.id,
-                            name: players.name,
-                            jerseyName: players.jerseyName,
-                            number: players.number,
-                            position: players.position,
-                        })
-                        .from(players)
-                        .where(eq(players.id, row.event.relatedPlayerId));
-                    relatedPlayer = rp ?? null;
-                }
+        // BACKLOG-259: batch the relatedPlayer lookup (e.g. a Goal's assister)
+        // into one query instead of one per event that has a relatedPlayerId --
+        // was a genuine N+1 inside the events map.
+        const relatedPlayerIds = Array.from(new Set(
+            eventsData
+                .map(row => row.event.relatedPlayerId)
+                .filter((id): id is string => !!id)
+        ));
+        const relatedPlayersList = relatedPlayerIds.length > 0
+            ? await db.select(EVENT_PLAYER_FIELDS).from(players).where(inArray(players.id, relatedPlayerIds))
+            : [];
+        const relatedPlayerMap = new Map(relatedPlayersList.map(p => [p.id, p]));
 
-                // BUG-018: explicit DTO — loggerId is a banned public field
-                const { loggerId: _l, ...publicEvent } = row.event;
-                return {
-                    ...publicEvent,
-                    player: row.player
-                        ? {
-                            id: row.player.id,
-                            name: row.player.name,
-                            jerseyName: (row.player as any).jerseyName ?? null,
-                            number: row.player.number,
-                            position: row.player.position,
-                        }
-                        : null,
-                    relatedPlayer,
-                    team: row.team,
-                    value: row.event.value ? JSON.parse(row.event.value) : null,
-                };
-            })
-        );
+        // Process events to include related player data
+        const events = eventsData.map((row) => {
+            // BUG-018: explicit DTO — loggerId is a banned public field
+            const { loggerId: _l, ...publicEvent } = row.event;
+            return {
+                ...publicEvent,
+                player: row.player?.id ? row.player : null,
+                relatedPlayer: row.event.relatedPlayerId
+                    ? (relatedPlayerMap.get(row.event.relatedPlayerId) ?? null)
+                    : null,
+                value: row.event.value ? JSON.parse(row.event.value) : null,
+            };
+        });
 
         // Note: Player time tracking and eye points features not yet implemented in schema
 

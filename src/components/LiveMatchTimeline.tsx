@@ -399,7 +399,12 @@ export default function LiveMatchTimeline({ events, homeTeam, awayTeam, eyePoint
                     {/* Events */}
                     <div className="space-y-4">
                         {periodEvents.map((event, index) => {
-                            const isHomeTeam = event.team?.id === homeTeam.id;
+                            // BACKLOG-259: the API no longer sends a full team object per
+                            // event (was 39 duplicate copies in a 40-event match) -- resolve
+                            // via teamId against the homeTeam/awayTeam props instead, which
+                            // this component already receives independently.
+                            const isHomeTeam = event.teamId === homeTeam.id;
+                            const eventTeam = event.teamId ? (isHomeTeam ? homeTeam : awayTeam) : null;
 
                             return (
                                 <motion.div
@@ -474,13 +479,13 @@ export default function LiveMatchTimeline({ events, homeTeam, awayTeam, eyePoint
                                                 {getEventDescription(event)}
 
                                                 {/* Team Badge */}
-                                                {event.team && (
+                                                {eventTeam && (
                                                     <div className="mt-2 inline-flex items-center gap-2 px-2 py-1 rounded-lg bg-white/5">
                                                         <div
                                                             className="w-3 h-3 rounded-full"
-                                                            style={{ backgroundColor: event.team.color }}
+                                                            style={{ backgroundColor: eventTeam.color }}
                                                         />
-                                                        <span className="text-xs font-medium">{event.team.name}</span>
+                                                        <span className="text-xs font-medium">{eventTeam.name}</span>
                                                     </div>
                                                 )}
 
