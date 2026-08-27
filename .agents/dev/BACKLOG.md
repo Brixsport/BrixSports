@@ -9260,17 +9260,22 @@ Fixed exactly per the "Fix (not built)" plan below: `MatchStatusBadge.tsx` now d
 
 ### BACKLOG-258 — Payload Audit Phase 1: `/live` Page + `/api/matches` List Trimming
 
-**Status:** OPEN — found session 57, 2026-08-26, by the `architect` agent. Closes `BACKLOG-171` and `BACKLOG-172.1`.
+**Status:** SHIPPED — session 60, 2026-08-27. Closes `BACKLOG-171` and `BACKLOG-172.1`.
 **Priority:** HIGH.
-**Depends on:** none (independent of `BACKLOG-257`, can run before or after).
+**Depends on:** none. Independent of `BACKLOG-257` (already shipped session 59).
 **Scope:**
-1. `src/app/live/page.tsx:31` — change to `fetch('/api/matches?status=LIVE')`, delete the client-side `.filter()` at line 35. The route already supports `?status=`. Cuts the response from all ~50 matches to the 0-3 actually live.
-2. `src/app/api/matches/route.ts` — remove the per-match `events` fetch and the `events` key from the list response (this is `BACKLOG-171`'s filed fix). Grep-confirmed safe: no list consumer reads it. **Corrects `BACKLOG-171`'s own text** — it cites `src/components/LiveUpdates.tsx` as a caller, but that component actually calls `/api/matches/[id]/events`, a different route; update that entry's citation when this ships.
-3. Same file — drop `lineups` from the list response (no list consumer reads it); replace `db.select()` with an explicit field list matching the DTO already destructured at lines 71-78.
-4. Same file — honour the `?limit=` query param with the project's standard clamp (`Math.min(Math.max(1, parseInt(...)), 100)`, per `BACKLOG-169`'s established pattern) instead of the current hardcoded `.limit(50)` that silently ignores it. Three call sites already pass `limit` and are silently getting 50 regardless: `admin/livestreams/page.tsx:82` (`limit=100`), `favourites/page.tsx:50` (`limit=20`), `admin/match-ratings/page.tsx:46` (`limit=50`).
-**Verification:** `curl -s '<preview>/api/matches' | wc -c` vs `curl -s '<preview>/api/matches?status=LIVE' | wc -c` during a real live match. Load `/live`, confirm live-match cards still render logo/name/score/venue/time identically.
+1. `src/app/live/page.tsx:31` — changed to `fetch('/api/matches?status=LIVE')`, removed the client-side `.filter()`. The route already supported `?status=`.
+2. `src/app/api/matches/route.ts` — removed the per-match `events` fetch (was up to 200 rows fetched+serialized per match) and the `events` key from the list response. **Corrects `BACKLOG-171`'s own citation** — it named `src/components/LiveUpdates.tsx` as the caller; that component actually calls `/api/matches/[id]/events`, a different route. No list consumer read `events` on this route (grep-confirmed).
+3. Same file — dropped `lineups` from the response; replaced `db.select()` (full row) with an explicit `MATCH_LIST_FIELDS` allow-list (every column except the 4 always-banned fields, `lineups`, dropped separately) — same class of fix as `BACKLOG-257`'s DTO, retires `BACKLOG-174`'s fragility concern for this file too. `loggerId` still admin-gated exactly as before, just moved from a post-fetch JS destructure into the query itself.
+4. Item 4 (honour `?limit=` clamp) was **already done** by `BACKLOG-276` before this session — found the clamp (`Math.min(Math.max(1, parseInt(...)), 200)`) already in place when I read the file; the three call sites cited in the original scope (`admin/livestreams`, `favourites`, `admin/match-ratings`) already get their requested limits.
 
-**Found:** session 57, 2026-08-26.
+**Evidence:**
+- Verified by: live curl against the running dev server (already-live BUSA/BUSALYMPICS data, not seeded) — `curl '.../api/matches?status=LIVE'` → 1207 bytes, 1 match, keys confirmed present (`id...updatedAt, homeTeam, awayTeam`) with `events`, `lineups`, `loggerId`, and all 4 banned fields absent. `curl '.../api/matches'` (unfiltered, default limit) → 59132 bytes for 50 matches, same key check. `/live` page loaded live in-browser (after clearing a stale SW registration unrelated to this change — see below): "1 matches live now", Underrated FC 4–0 Quantum FC rendered with logo/score/venue/time identical to pre-change.
+- `tsc --noEmit`: 0 new errors (38 pre-existing errors, all in `src/db/*` scripts and `squads`/`nextauth` routes, unrelated to either touched file).
+- Noted, not caused by this change: the shared dev server (3 concurrent sessions on this machine, `brixsports-v2-82`/`9b`/`c9`, all in the same working directory per Richard's explicit call this session) was mid-recompile/serving stale SW-cached chunks during the first verification pass — resolved itself once the recompile settled; unregistering the stale SW confirmed it wasn't code-related.
+- Pending items: none for this entry.
+
+**Found:** session 57, 2026-08-26. **Fixed:** session 60, 2026-08-27.
 
 ---
 

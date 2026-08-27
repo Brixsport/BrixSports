@@ -28,12 +28,10 @@ export default function LiveCenter() {
     useEffect(() => {
         async function fetchLiveMatches() {
             try {
-                const response = await fetch('/api/matches');
+                const response = await fetch('/api/matches?status=LIVE');
                 const data = await response.json();
 
-                // Filter for live matches
-                const live = data.filter((m: Match) => m.status === 'LIVE');
-                setLiveMatches(live);
+                setLiveMatches(data);
             } catch (error) {
                 console.error('Error fetching live matches:', error);
             } finally {

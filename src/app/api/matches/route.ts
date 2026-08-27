@@ -1,9 +1,60 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
-import { matches, matchEvents, teams } from '@/db/schema';
+import { matches, teams } from '@/db/schema';
 import { eq, and, inArray, or, desc, sql } from 'drizzle-orm'; // inArray kept for teams fetch
 import { getAuthUser } from '@/lib/auth';
 import { checkRateLimit } from '@/lib/rate-limit';
+
+// BACKLOG-258: explicit allow-list, not `db.select()` (full row). Every
+// matches column except the CLAUDE.md-banned four (approvalStatus,
+// managerNotes, approvedBy, approvedAt) plus lineups (dropped from the list
+// response separately -- no list consumer reads it, and it can be a large
+// JSON blob). loggerId is selected here and conditionally stripped per-request
+// below (admin-only), same behavior as before this change, just moved out of
+// the JS destructure and into the query itself -- also retires BACKLOG-174's
+// fragility concern for this file: a newly added sensitive column is absent
+// by default instead of leaking until someone remembers to exclude it.
+const MATCH_LIST_FIELDS = {
+    id: matches.id,
+    sport: matches.sport,
+    homeTeamId: matches.homeTeamId,
+    awayTeamId: matches.awayTeamId,
+    homeScore: matches.homeScore,
+    awayScore: matches.awayScore,
+    status: matches.status,
+    startTime: matches.startTime,
+    venue: matches.venue,
+    competition: matches.competition,
+    competitionId: matches.competitionId,
+    matchType: matches.matchType,
+    competitionLevel: matches.competitionLevel,
+    friendlyType: matches.friendlyType,
+    friendlyDescription: matches.friendlyDescription,
+    loggerId: matches.loggerId,
+    stats: matches.stats,
+    highlightsUrl: matches.highlightsUrl,
+    livestreamUrl: matches.livestreamUrl,
+    livestreamType: matches.livestreamType,
+    livestreamEnabled: matches.livestreamEnabled,
+    livestreamStartTime: matches.livestreamStartTime,
+    round: matches.round,
+    matchday: matches.matchday,
+    groupName: matches.groupName,
+    livestreamEndTime: matches.livestreamEndTime,
+    livestreamViewers: matches.livestreamViewers,
+    livestreamChatEnabled: matches.livestreamChatEnabled,
+    livestreamChatUrl: matches.livestreamChatUrl,
+    penaltiesEnabledOverride: matches.penaltiesEnabledOverride,
+    allowDrawsOverride: matches.allowDrawsOverride,
+    extraTimeEnabledOverride: matches.extraTimeEnabledOverride,
+    currentPeriod: matches.currentPeriod,
+    minute: matches.minute,
+    extraTime: matches.extraTime,
+    shootoutHomeScore: matches.shootoutHomeScore,
+    shootoutAwayScore: matches.shootoutAwayScore,
+    createdAt: matches.createdAt,
+    updatedAt: matches.updatedAt,
+};
 
 export async function GET(request: NextRequest) {
     try {
@@ -34,7 +85,7 @@ export async function GET(request: NextRequest) {
         const limit = Math.min(Math.max(1, parseInt(searchParams.get('limit') || '50', 10) || 50), 200);
         const offset = Math.max(0, parseInt(searchParams.get('offset') || '0', 10) || 0);
 
-        let query = db.select().from(matches);
+        let query = db.select(MATCH_LIST_FIELDS).from(matches);
         let countQuery = db.select({ count: sql<number>`count(*)` }).from(matches);
 
         const conditions = [];
@@ -79,41 +130,33 @@ export async function GET(request: NextRequest) {
         // Create a map for quick access
         const teamsMap = new Map(teamsList.map(t => [t.id, t]));
 
-        // Fetch events for each match
-        const matchesWithDetails = await Promise.all(
-            allMatches.map(async (match) => {
-                const events = await db.select().from(matchEvents).where(eq(matchEvents.matchId, match.id)).limit(200);
-                const homeTeam = teamsMap.get(match.homeTeamId);
-                const awayTeam = teamsMap.get(match.awayTeamId);
+        // BACKLOG-258: no per-match events fetch here anymore -- no list
+        // consumer read the `events` key (grep-confirmed; LiveUpdates.tsx
+        // actually calls /api/matches/[id]/events, a different route), and it
+        // was up to 200 rows fetched and serialized per match in the list.
+        // Same for `lineups`: no list consumer reads it either.
+        const matchesWithDetails = allMatches.map((match) => {
+            const homeTeam = teamsMap.get(match.homeTeamId);
+            const awayTeam = teamsMap.get(match.awayTeamId);
 
-                const {
-                    loggerId,
-                    approvalStatus: _as,
-                    managerNotes: _mn,
-                    approvedBy: _ab,
-                    approvedAt: _aa,
-                    ...publicMatch
-                } = match;
+            const { loggerId, ...publicMatch } = match;
 
-                return {
-                    ...publicMatch,
-                    ...(isAdmin && { loggerId }),
-                    events,
-                    stats: match.stats ? JSON.parse(match.stats) : {},
-                    lineups: match.lineups ? JSON.parse(match.lineups) : null,
-                    homeTeam: homeTeam ? {
-                        name: homeTeam.name,
-                        shortName: homeTeam.shortName,
-                        logo: homeTeam.logo
-                    } : null,
-                    awayTeam: awayTeam ? {
-                        name: awayTeam.name,
-                        shortName: awayTeam.shortName,
-                        logo: awayTeam.logo
-                    } : null,
-                };
-            })
-        );
+            return {
+                ...publicMatch,
+                ...(isAdmin && { loggerId }),
+                stats: match.stats ? JSON.parse(match.stats) : {},
+                homeTeam: homeTeam ? {
+                    name: homeTeam.name,
+                    shortName: homeTeam.shortName,
+                    logo: homeTeam.logo
+                } : null,
+                awayTeam: awayTeam ? {
+                    name: awayTeam.name,
+                    shortName: awayTeam.shortName,
+                    logo: awayTeam.logo
+                } : null,
+            };
+        });
 
         return NextResponse.json(matchesWithDetails, {
             headers: {
