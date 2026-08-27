@@ -9857,3 +9857,55 @@ Fixed exactly per the "Fix (not built)" plan below: `MatchStatusBadge.tsx` now d
 **Found:** session 61, 2026-08-27, UI/UX pass.
 
 ---
+
+### BACKLOG-302 — Multi-Format Competition Structure: Draw/Bracket Admin UX Generalization (Product Direction, Filed Not Built)
+
+**Status:** OPEN — filed session 60, 2026-08-27, per Richard's explicit direction ("don't derail, file it in full for the next session"). Nothing built against this entry; `BACKLOG-277`–`280`'s BUSA-specific Swiss engine ships independently and is not blocked by it.
+**Priority:** MEDIUM-HIGH — doesn't block BUSA 2026/2027 shipping, but blocks the Draw/Knockout admin buttons from correctly showing/hiding per competition, and blocks `BACKLOG-292`/`293` (Figma redesign's public Brackets tab + standings columns) from knowing which UI shape to render for which competition.
+
+**Trigger:** while reviewing `BACKLOG-280`'s new "Draw"/"Knockout" buttons (added unconditionally to every competition's admin page), Richard pointed out that real, already-live competitions in this DB have genuinely different structures the current tooling doesn't distinguish between:
+- **Pure league, no knockout at all** (Premier-League style) — some format needs zero bracket UI, ever.
+- **NPUGA (Football/Basketball)** — group stage + knockout, already built and live (confirmed via `BACKLOG-275`'s own round-value audit: real `QUARTER_FINAL`/`SEMI_FINAL`/`FINAL`/`3RD_PLACE` rounds exist in the data).
+- **BUSALYMPICS** — knockout limited to a Final only, no bracket tree.
+- **Old BUSA League Football (2025/2026)** — confirmed via the same `BACKLOG-275` audit to use `Group A`/`B`/`C`/`D` round-robin, feeding a cross-group knockout pairing (`Quarter Finals`/`Semifinals`/`3rd Place`/`Final` rounds also present) — structurally a *different* knockout-seeding shape (group winners/runners-up cross-paired, e.g. A1 vs B2) than `BACKLOG-280`'s fixed top-8-single-table bracket.
+- **New BUSA League Football (2026/2027)** — the Swiss pot-circle single table (no groups) + top-8 bracket, exactly what `BACKLOG-277`–`280` built this session.
+
+So at least 4-5 distinct real structures exist in production data today; this session's admin tooling (`/draw`, `/knockout`) is hardcoded for exactly one of them (20-team Swiss + top-8 bracket) but appears unconditionally on every competition regardless.
+
+**Scope framing, Richard's own words — important for whoever picks this up:** this is "visual redesign layered over already-built functionality, not a from-scratch feature build. Most of the underlying data/routes already exist." Confirmed true at the data-model level: `bracketNodes`, `matches`, `standings`, and the generic `GET /api/brackets` read route already store/render *any* bracket shape — a node doesn't know or care whether it's BUSA's top-8 or a cross-group pairing. What's actually missing is narrower than a full rebuild:
+1. **Creation-side generalization** — a group-stage fixture generator and a cross-group-pairing knockout generator don't exist yet (only BUSA's specific 20-team draw and top-8 bracket do); the older/other competitions' data was built via direct admin match entry or one-off scripts, not a reusable generator.
+2. **Admin configuration UX** — some way to say "this competition is pure-league / group+knockout / Final-only / Swiss+top8" and have the Draw/Knockout entry points (and their exact form) respond accordingly.
+3. **Public UI polish** — render whichever structure actually applies, with **grayed-out/TBD placeholder slots** for knockout rounds that haven't been reached yet, rather than hiding the tab entirely or showing nothing (see UI references below).
+
+**Reference UI patterns supplied by Richard this session** (SofaScore-style — see chat for the actual screenshots, not reproduced here):
+- A mobile bracket-tree view with cascading connector lines between rounds (Round of 16 → ... → Final), each match card showing both teams' flags/scores.
+- A "Compact view" toggle switching the same bracket data between a dense row list and the full tree — same data, two densities, worth considering for our own bracket display.
+- Group standings with **tiered, color-coded qualification zones inline in the table** (e.g. green "Playoffs" band, blue "Europa League" band within one group) — directly relevant to any format with a qualification cutoff (top-8 for BUSA 2026/2027, groups feeding knockout for NPUGA/old-BUSA).
+- The real, already-live BUSA League Football (2025/2026) staging page already has a working "BRACKETS" tab, confirming `/api/brackets`-backed bracket rendering predates this session and is already in production for at least one competition — this session's job is to generalize *creation*, not invent public rendering from zero.
+
+**Draw-algorithm structural findings, filed for whoever generalizes `competitionDraw.ts`** (worked out via direct Q&A this session, not previously documented):
+1. **Pot count (4) is a copied convention, not derived from team count.** Pot *size* is what scales: teams ÷ pot-count. Real UCL: 36÷4=9. BUSA: 20÷4=5.
+2. **Games-per-team is an independent design choice from pot count.** Real UCL chose 8 (2 opponents per pot, including your own pot — 2×4=8, no repeats needed). BUSA's proposal chose 4, which is *not* a clean multiple of "pots faced" under either design below.
+3. **Two structurally different pot-pairing designs exist, both worth evaluating for any future Swiss-style competition:**
+   - **(a) Current implementation** — exclude your own pot, draw from the 3 *other* pots. 4 games ÷ 3 other pots doesn't divide evenly, forcing one pot-pairing to repeat (against a different individual team) to reach the 4th game. Works for *any* pot size (odd or even), at the cost of the asymmetry (already flagged and signed off, `BACKLOG-267` question 1).
+   - **(b) Include-your-own-pot design (real UCL's actual rule)** — 1 opponent from *each* of the 4 pots including your own, giving a clean 4 games with **zero repeats**. **Only works if pot size is even** — an odd pot size (BUSA's 5) can't be perfectly paired within a single intra-pot round (someone's always left over), which is exactly why this design wasn't usable for 20 teams. **Would work cleanly for a future competition with 16 teams (pots of 4) or 24 teams (pots of 6).**
+4. `computeLeaguePhaseDraw` is hardcoded to exactly 20 teams / exactly 4 pots (`seedOrder.length !== 20` throws; `const [pot1,pot2,pot3,pot4] = pots` destructures exactly 4 names; the round-definitions are hand-enumerated for that specific pot count) — generalizing to arbitrary team/pot counts is a real algorithm rewrite per pot-count/size combination, not a config change.
+
+**Admin UX direction, Richard's steer:**
+- Move the Draw/Knockout entry points out of always-visible plain header buttons (what `BACKLOG-280` shipped as a stopgap) and into an **"Advanced Settings" dropdown/section** on the competition admin page — scales better once more format-specific settings exist (group-generator config, cross-group pairing rules, etc.), rather than accumulating more top-level buttons per format.
+- **Gate/grey entry points by actual eligibility** (team count matching what the selected structure needs), not show them unconditionally as `BACKLOG-280` currently does.
+- **Public side:** if a competition's knockout stage hasn't started yet (no bracket created), show grayed-out/TBD placeholder slots in the Brackets tab (matching the SofaScore reference above) rather than hiding the tab or rendering nothing.
+
+**Explicit cross-references, read before starting either:**
+- `BACKLOG-292` (Figma redesign, session 61) — the public Brackets tab must coordinate with `BACKLOG-280`'s data model (now shipped, staging), not build a parallel one. The *same* "which structure does this competition use" question this entry raises applies directly to `292`'s scope — read both together.
+- `BACKLOG-293` — sport-variant standings columns; likely also needs a per-format table variant (single Swiss table vs. grouped table vs. plain league table), not just a per-sport column set.
+- `BACKLOG-267`/`275`–`280` — the BUSA-specific Swiss engine this entry does **not** replace or block. It ships as-is for the 2026/2027 season; this entry is about generalizing the *admin tooling* to also cleanly support the other, already-live, differently-shaped competitions without hiding or breaking the BUSA-specific path.
+
+**Not decided — for the next session to resolve, not assume:**
+- Whether to give competitions a real, code-consumed "structure" field (replacing today's purely decorative `format` column) or keep gating heuristic (team count + existing data shape).
+- Whether "Advanced Settings" is a dropdown, an accordion section, or a modal.
+- Whether old/other-format competitions need a real generalized creation UI (group generator, cross-group pairing generator) at all, given their data is historical/complete — or whether the generalization work should focus only on *rendering* (public side + admin gating) and leave creation for those formats to the existing manual/script-based flows, since nothing is actively extending them.
+
+**Found:** session 60, 2026-08-27.
+
+---
