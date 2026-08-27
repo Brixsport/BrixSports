@@ -14,6 +14,7 @@ import { broadcastToMatch, broadcastGlobalNotification } from '@/lib/socket';
 import { sendMatchEventNotification } from '@/lib/notifications/match-notification-service';
 import { getNotifiablePeriodType } from '@/lib/notifications/notification-rules';
 import { recalculateStandingsForMatch } from '@/lib/standingsService';
+import { advanceBracketForMatch } from '@/lib/bracketService';
 import { checkRateLimit } from '@/lib/rate-limit';
 
 export async function GET(
@@ -682,6 +683,19 @@ export async function PATCH(
                     await recalculateStandingsForMatch(matchId);
                 } catch (error) {
                     console.error('Error recalculating standings:', error);
+                }
+            });
+
+            // BACKLOG-280: knockout bracket advancement -- own try/catch, own
+            // after() call, deliberately isolated from the standings recalc
+            // above so a bracket failure can never block or break it. No-ops
+            // silently for the overwhelming majority of matches (not part of
+            // any bracket).
+            after(async () => {
+                try {
+                    await advanceBracketForMatch(matchId);
+                } catch (error) {
+                    console.error('Error advancing bracket:', error);
                 }
             });
         }

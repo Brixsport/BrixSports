@@ -7,7 +7,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
     ArrowLeft, Trophy, Users, Layout, Shield, Search,
     Plus, X, Save, Trash2, Filter, ChevronRight,
-    Trophy as TrophyIcon, Settings, Calendar, Shuffle
+    Trophy as TrophyIcon, Settings, Calendar, Shuffle, Award
 } from 'lucide-react';
 import { useToast } from '@/hooks/useToast';
 import { ToastContainer } from '@/components/admin/Toast';
@@ -296,6 +296,13 @@ export default function CompetitionTeamsPage() {
                         >
                             <Shuffle size={18} />
                             Draw
+                        </Link>
+                        <Link
+                            href={`/admin/competitions/${id}/knockout`}
+                            className="flex items-center gap-2 bg-white/5 border border-white/10 text-white px-6 py-4 rounded-2xl font-black uppercase italic tracking-widest text-sm hover:bg-white/10 transition-colors"
+                        >
+                            <Award size={18} />
+                            Knockout
                         </Link>
                         <button
                             onClick={handleSave}
