@@ -9492,7 +9492,7 @@ Fixed exactly per the "Fix (not built)" plan below: `MatchStatusBadge.tsx` now d
 **Depends on:** nothing. **Blocks:** the draw/bracket UI (`BACKLOG-279`/`280`) needs the matchday filter to render sanely.
 
 **Evidence:**
-- Commit: `[pending]`
+- Commit: `dc1bee3`
 - Verified by: `tsc --noEmit` clean of new errors in all three touched files (38 baseline pre-existing errors unaffected).
 - Pending items: live browser verification of the Load More button + stat-card counts not yet done.
 
