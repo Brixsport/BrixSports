@@ -107,12 +107,20 @@ function AdminLoggersPageContent() {
         fetchData();
     }, []);
 
+    // BACKLOG-283: this page previously fetched a bare `/api/matches` (default
+    // limit 50, newest-first), which could silently drop older active matches
+    // from coverage once total matches (finished + active) exceeded 50 -- this
+    // page only ever uses `matches` as "active matches" (see coverageStats/
+    // activeMatches below), so fetching directly by status is both correct and
+    // simpler than paginating through the full bare list.
     const fetchData = async () => {
         setLoading(true);
         try {
-            const [loggersRes, matchesRes, analyticsRes] = await Promise.all([
+            const [liveRes, upcomingRes, halfTimeRes, loggersRes, analyticsRes] = await Promise.all([
+                fetch('/api/matches?status=LIVE&limit=200'),
+                fetch('/api/matches?status=UPCOMING&limit=200'),
+                fetch('/api/matches?status=HALF_TIME&limit=200'),
                 fetch('/api/loggers'),
-                fetch('/api/matches'),
                 fetch('/api/analytics/loggers')
             ]);
 
@@ -120,13 +128,18 @@ function AdminLoggersPageContent() {
                 const body = await loggersRes.json().catch(() => ({}));
                 throw new Error(body.error || 'Failed to load loggers');
             }
-            if (!matchesRes.ok) {
-                const body = await matchesRes.json().catch(() => ({}));
-                throw new Error(body.error || 'Failed to load matches');
+            for (const [label, res] of [['live', liveRes], ['upcoming', upcomingRes], ['half-time', halfTimeRes]] as const) {
+                if (!res.ok) {
+                    const body = await res.json().catch(() => ({}));
+                    throw new Error(body.error || `Failed to load ${label} matches`);
+                }
             }
 
             const loggersData = await loggersRes.json();
-            const matchesData = await matchesRes.json();
+            const [liveData, upcomingData, halfTimeData] = await Promise.all([
+                liveRes.json(), upcomingRes.json(), halfTimeRes.json()
+            ]);
+            const matchesData = [...liveData, ...upcomingData, ...halfTimeData];
             const analyticsData = analyticsRes.ok ? await analyticsRes.json() : null;
 
             setLoggers(Array.isArray(loggersData) ? loggersData : []);

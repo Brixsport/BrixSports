@@ -21,6 +21,7 @@ async function readListResponse(res: Response, label: string): Promise<any[]> {
 
 function AdminPageContent() {
   const [matches, setMatches] = useState<any[]>([]);
+  const [totalMatchCount, setTotalMatchCount] = useState(0);
   const [teams, setTeams] = useState<any[]>([]);
   const [loggers, setLoggers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -29,19 +30,32 @@ function AdminPageContent() {
   useEffect(() => {
     async function fetchData() {
       try {
-        const [matchesRes, teamsRes, loggersRes] = await Promise.all([
-          fetch('/api/matches'),
+        // BACKLOG-283: this page previously fetched a bare `/api/matches`
+        // (default limit 50, newest-first) -- every stat/table here except
+        // "Total Matches" only needs non-finished matches, so fetching by
+        // status directly avoids silently dropping older active matches
+        // once total matches (100+, mostly historical backfill) exceeded 50.
+        // "Total Matches" itself reads the real count off X-Total-Count.
+        const [liveRes, upcomingRes, halfTimeRes, teamsRes, loggersRes, countRes] = await Promise.all([
+          fetch('/api/matches?status=LIVE&limit=200'),
+          fetch('/api/matches?status=UPCOMING&limit=200'),
+          fetch('/api/matches?status=HALF_TIME&limit=200'),
           fetch('/api/teams'),
-          fetch('/api/loggers')
+          fetch('/api/loggers'),
+          fetch('/api/matches?limit=1')
         ]);
 
-        const [matchesData, teamsData, loggersData] = await Promise.all([
-          readListResponse(matchesRes, 'matches'),
+        const [liveData, upcomingData, halfTimeData, teamsData, loggersData] = await Promise.all([
+          readListResponse(liveRes, 'live matches'),
+          readListResponse(upcomingRes, 'upcoming matches'),
+          readListResponse(halfTimeRes, 'half-time matches'),
           readListResponse(teamsRes, 'teams'),
           readListResponse(loggersRes, 'loggers')
         ]);
+        const matchesData = [...liveData, ...upcomingData, ...halfTimeData];
 
         setMatches(matchesData);
+        setTotalMatchCount(countRes.ok ? parseInt(countRes.headers.get('X-Total-Count') || '0', 10) : matchesData.length);
         setTeams(teamsData);
         setLoggers(loggersData);
       } catch (error) {
@@ -258,7 +272,7 @@ function AdminPageContent() {
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-bold italic">Total Matches</span>
-                  <span className="text-xs font-bold text-primary">{matches.length}</span>
+                  <span className="text-xs font-bold text-primary">{totalMatchCount}</span>
                 </div>
               </div>
               <Link href="/admin/settings" className="block w-full py-3 md:py-4 border border-white/10 rounded-xl md:rounded-2xl text-[8px] md:text-[10px] font-black uppercase tracking-widest hover:bg-white/5 transition-colors text-center">
