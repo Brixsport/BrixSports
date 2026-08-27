@@ -67,6 +67,12 @@ export async function GET(request: NextRequest) {
         const sport = searchParams.get('sport'); // Filter by sport
         const season = searchParams.get('season'); // Filter by season (BACKLOG-229)
         const includeStats = searchParams.get('includeStats') === 'true';
+        // BACKLOG-283: same clamp pattern as /api/matches (BACKLOG-276) --
+        // response body/shape stays the same (`competitions`/`total`/`groups`),
+        // `total` reflects the full filtered count, `competitions` is now the
+        // requested page of it.
+        const limit = Math.min(Math.max(1, parseInt(searchParams.get('limit') || '50', 10) || 50), 200);
+        const offset = Math.max(0, parseInt(searchParams.get('offset') || '0', 10) || 0);
 
         // Get competitions from database
         let query = db.select().from(competitions);
@@ -88,6 +94,8 @@ export async function GET(request: NextRequest) {
         if (season) {
             filteredCompetitions = filteredCompetitions.filter(c => c.season === season);
         }
+
+        const totalFiltered = filteredCompetitions.length;
 
         // If includeStats, fetch additional data
         if (includeStats) {
@@ -141,16 +149,28 @@ export async function GET(request: NextRequest) {
             );
 
             return NextResponse.json({
-                competitions: competitionsWithStats,
-                total: competitionsWithStats.length,
+                competitions: competitionsWithStats.slice(offset, offset + limit),
+                total: totalFiltered,
                 groups: buildCompetitionGroups(competitionsWithStats),
+            }, {
+                headers: {
+                    'X-Total-Count': String(totalFiltered),
+                    'X-Limit': String(limit),
+                    'X-Offset': String(offset),
+                },
             });
         }
 
         return NextResponse.json({
-            competitions: filteredCompetitions,
-            total: filteredCompetitions.length,
+            competitions: filteredCompetitions.slice(offset, offset + limit),
+            total: totalFiltered,
             groups: allSeasonsGroups,
+        }, {
+            headers: {
+                'X-Total-Count': String(totalFiltered),
+                'X-Limit': String(limit),
+                'X-Offset': String(offset),
+            },
         });
     } catch (error) {
         console.error('Error fetching competitions:', error);

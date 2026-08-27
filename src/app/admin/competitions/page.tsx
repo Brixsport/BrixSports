@@ -457,11 +457,15 @@ function CompetitionModal({ mode, entityId, initialData, initialMatchSettings, o
     );
 }
 
+const COMPETITIONS_PAGE_SIZE = 50;
+
 function AdminCompetitionsPageContent() {
     const [isLoading, setIsLoading] = useState(true);
     const [showCreateModal, setShowCreateModal] = useState(false);
     const [isCreating, setIsCreating] = useState(false);
     const [competitions, setCompetitions] = useState<Competition[]>([]);
+    const [totalCompetitionCount, setTotalCompetitionCount] = useState(0);
+    const [isLoadingMore, setIsLoadingMore] = useState(false);
     const { toasts, removeToast, success, error } = useToast();
 
     const [deleteDialog, setDeleteDialog] = useState({
@@ -482,7 +486,7 @@ function AdminCompetitionsPageContent() {
     const fetchCompetitions = async () => {
         setIsLoading(true);
         try {
-            const response = await fetch('/api/competitions?includeStats=true');
+            const response = await fetch(`/api/competitions?includeStats=true&limit=${COMPETITIONS_PAGE_SIZE}&offset=0`);
 
             if (!response.ok) {
                 throw new Error('Failed to fetch competitions');
@@ -494,11 +498,37 @@ function AdminCompetitionsPageContent() {
                 scope: c.level === 'inter-university' ? 'external' : 'internal'
             }));
             setCompetitions(mappedCompetitions);
+            setTotalCompetitionCount(data.total ?? mappedCompetitions.length);
         } catch (err) {
             error('Failed to load competitions. Please try again.');
             console.error('Error fetching competitions:', err);
         } finally {
             setIsLoading(false);
+        }
+    };
+
+    // BACKLOG-283: previously fetched a bare `/api/competitions?includeStats=true`
+    // (no limit/offset), silently capped at the API's default of 50 with no
+    // indication more existed. Not a live issue today (8 real rows), but
+    // matches the /admin/matches pagination pattern for when that changes.
+    const loadMoreCompetitions = async () => {
+        setIsLoadingMore(true);
+        try {
+            const res = await fetch(`/api/competitions?includeStats=true&limit=${COMPETITIONS_PAGE_SIZE}&offset=${competitions.length}`);
+            if (res.ok) {
+                const data = await res.json();
+                const nextPage = data.competitions.map((c: any) => ({
+                    ...c,
+                    scope: c.level === 'inter-university' ? 'external' : 'internal'
+                }));
+                setCompetitions(prev => [...prev, ...nextPage]);
+                setTotalCompetitionCount(data.total ?? competitions.length + nextPage.length);
+            }
+        } catch (err) {
+            error('Failed to load more competitions. Please try again.');
+            console.error('Error loading more competitions:', err);
+        } finally {
+            setIsLoadingMore(false);
         }
     };
 
@@ -681,7 +711,7 @@ function AdminCompetitionsPageContent() {
                                 <Trophy className="text-primary" size={24} />
                                 <span className="text-white/60 text-sm">Total Competitions</span>
                             </div>
-                            <p className="text-3xl font-bold">{competitions.length}</p>
+                            <p className="text-3xl font-bold">{totalCompetitionCount}</p>
                         </div>
                         <div className="bg-white/5 rounded-2xl p-6 border border-white/10">
                             <div className="flex items-center gap-3 mb-2">
@@ -799,6 +829,21 @@ function AdminCompetitionsPageContent() {
                             <Trophy size={48} className="mx-auto mb-4 opacity-20" />
                             <p className="text-white/40 font-bold text-lg">No competitions found</p>
                             <p className="text-white/20">Create your first competition to get started</p>
+                        </div>
+                    )}
+
+                    {!isLoading && competitions.length < totalCompetitionCount && (
+                        <div className="flex flex-col items-center gap-3 py-8">
+                            <p className="text-[10px] font-black uppercase tracking-widest text-white/40">
+                                Showing {competitions.length} of {totalCompetitionCount}
+                            </p>
+                            <button
+                                onClick={loadMoreCompetitions}
+                                disabled={isLoadingMore}
+                                className="px-8 py-3 bg-white/5 border border-white/10 rounded-xl text-xs font-black uppercase tracking-widest hover:bg-white/10 transition-colors disabled:opacity-50"
+                            >
+                                {isLoadingMore ? 'Loading...' : 'Load More'}
+                            </button>
                         </div>
                     )}
                 </div>
