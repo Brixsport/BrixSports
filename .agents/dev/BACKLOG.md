@@ -9169,7 +9169,7 @@ Fixed exactly per the "Fix (not built)" plan below: `MatchStatusBadge.tsx` now d
 4. `src/app/api/matches/live/route.ts` — **deleted.** Independently re-confirmed zero consumers via `read_network_requests` on a real homepage load (no request to this path) before deleting, not just a static grep.
 
 **Evidence:**
-- Commit: `[pending, next commit]`
+- Commit: `9f6ed48`
 - Verified by: live fetch against the real staging DB via the local dev server, direct field-key inspection on all 3 routes' real responses (`footballHasBanned: false`, `basketballHasBanned: false`, no banned keys present); homepage loaded live afterward, real match data rendering correctly (31 BUSA football matches, BUSALYMPICS football/basketball, GENTLEMEN FC LEAGUE all present); `GET /api/matches/live` confirmed `404` post-delete; `tsc --noEmit` clean of new errors in any touched file (surfaced an unrelated pre-existing finding instead — see `BACKLOG-269`)
 - Observed result: all 3 routes return the trimmed DTO shape only; deleted route gone; homepage renders unchanged
 - Pending items: none for this entry. `basketball/teams/route.ts`'s hardcoded allowlist (item 3) and the rest of `BACKLOG-256`'s phases (`258`-`262`) remain separately open.
