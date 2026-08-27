@@ -6,7 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
 import { users } from '@/db/schema';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { getAuthUser } from '@/lib/auth';
 
 export async function GET(request: NextRequest) {
@@ -16,7 +16,20 @@ export async function GET(request: NextRequest) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
-        const allUsers = await db.select({
+        // BACKLOG-283: this previously had zero .limit() clause -- an
+        // unbounded full-table scan, the exact anti-pattern CLAUDE.md
+        // flags. Clamp pattern matches the rest of the codebase (BACKLOG-169).
+        const { searchParams } = new URL(request.url);
+        const limit = Math.min(Math.max(1, parseInt(searchParams.get('limit') || '50', 10) || 50), 200);
+        const offset = Math.max(0, parseInt(searchParams.get('offset') || '0', 10) || 0);
+        const role = searchParams.get('role');
+
+        const countQuery = db.select({ count: sql<number>`count(*)` }).from(users);
+        const [{ count: totalCount }] = role
+            ? await countQuery.where(eq(users.role, role))
+            : await countQuery;
+
+        let listQuery = db.select({
             id: users.id,
             name: users.name,
             email: users.email,
@@ -25,11 +38,21 @@ export async function GET(request: NextRequest) {
             createdAt: users.createdAt,
             updatedAt: users.updatedAt,
         }).from(users);
+        if (role) {
+            listQuery = listQuery.where(eq(users.role, role)) as typeof listQuery;
+        }
+        const pagedUsers = await listQuery.limit(limit).offset(offset);
 
         return NextResponse.json({
-            users: allUsers,
-            total: allUsers.length,
+            users: pagedUsers,
+            total: totalCount,
             timestamp: new Date().toISOString(),
+        }, {
+            headers: {
+                'X-Total-Count': String(totalCount),
+                'X-Limit': String(limit),
+                'X-Offset': String(offset),
+            },
         });
     } catch (error) {
         console.error('Error fetching users:', error);
