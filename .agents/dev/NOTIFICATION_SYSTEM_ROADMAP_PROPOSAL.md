@@ -176,14 +176,33 @@ lifecycle (not generic ideas):
 **Backlog for later (in priority order once the scheduler exists):**
 1. "Match going LIVE with no assigned logger" — admin alert.
 2. Assigned-logger T-60/T-15 reminder.
-3. Logger session-expiry warning.
-4. Lineup-not-published reminder.
+3. ~~Logger session-expiry warning.~~ **BUILT — see correction below.**
+4. ~~Lineup-not-published reminder.~~ **BUILT — see correction below.**
 5. The rest of the table above.
 
 **Design note for whoever builds these:** add a role/assignment targeting function alongside
 the existing team-follow one rather than overloading `sendMatchEventNotification()` — the
 audience derivation is genuinely different and mixing them will make both harder to reason
 about.
+
+**Correction — session 55, 2026-08-25 (stale-docs pass):** the framing above ("nothing can ship
+before the scheduler exists") is no longer accurate for 2 of these 5 items — both were built
+session 53 (`BACKLOG.md` "Item 9 — Reminder Scheduler"), one week after this doc was written,
+via architectures that don't need `vercel.json`'s `crons` block at all:
+- **Logger session-expiry** shipped as a **client-side** warning (`SessionExpiryBanner`,
+  decodes the JWT's own `exp` claim from `localStorage`), not a server push — sidesteps the
+  scheduler entirely because loggers have no server-side session table to poll in the first
+  place.
+- **Lineup-not-published** shipped as a real query-time check added directly to
+  `reminders/check/route.ts` (`checkLineupNotPublished`), dedup'd via `notificationSendLog`,
+  live-verified against real staging data (`tsx`-run, not through the actual cron trigger).
+
+**What's still genuinely true and still blocking:** `vercel.json` still has no `crons` block
+(re-confirmed this pass) — so `checkLineupNotPublished` and the pre-existing
+`match-reminders`/`reminders/check` routes are built/correct but **still never invoked in
+production**, exactly as this document originally said. The scheduler gap is real; it's just no
+longer accurate to say *nothing* has been built pending it. Items 1, 2, and 5 remain genuinely
+unbuilt and genuinely blocked on the same missing `crons` block.
 
 ---
 

@@ -9131,3 +9131,179 @@ Fixed exactly per the "Fix (not built)" plan below: `MatchStatusBadge.tsx` now d
 **Found:** session 57, 2026-08-26.
 
 ---
+
+### BACKLOG-256 — API Payload Audit: Over-Fetching, Over-Returning, and a Live Banned-Field Leak on the Homepage
+
+**Status:** OPEN — audited session 57, 2026-08-26, by the `architect` agent. Master entry, points to phased sub-entries below. Not started; Richard's call is to file findings now, come back to Phase 0 (the compliance fix) in a dedicated pass rather than same-session.
+**Priority:** HIGH overall — Phase 0 specifically is a live compliance issue, not just a performance nice-to-have.
+
+**Headline finding:** `src/app/api/football/matches/route.ts`, `src/app/api/basketball/matches/route.ts`, `src/app/api/other/matches/route.ts` — the three routes backing the homepage (`src/app/page.tsx`, polled every 15s, the highest-traffic page in the app) — spread the full DB row (`...match`) into the public response. **Five fields on `CLAUDE.md`'s own banned-public-fields list are currently leaking to every unauthenticated visitor:** `loggerId`, `approvalStatus`, `managerNotes`, `approvedBy`, `approvedAt`. Not caught by the earlier session-47E payload audit (`BACKLOG-171`–`174`) — that pass only covered `/api/matches`, not these three sport-specific routes. Same three files also have **no `.limit()` at all** (a direct architecture-rule violation) and re-fetch the entire `teams` table on every request despite already building an unused `teamIds` Set (dead code in all three).
+
+**Scope of the full audit, beyond the headline finding:** every high-traffic public route was checked for unused-field over-fetching, N+1 queries, and response-shape duplication (e.g. a full team object repeated once per match event instead of returned once by reference). Full detail, file-by-file, is in the phase entries below. General pattern confirmed across the codebase: `db.select()` (full row) instead of an explicit field list is the default, not the exception, on public routes.
+
+**Explicitly NOT recommended:** introducing GraphQL, tRPC, or any new query layer — this is MVP tier: select fewer columns, trim response shapes, stop re-sending unchanged nested objects. The existing WS layer (`src/lib/socket.ts`) already emits true deltas and does not need this treatment — the re-send problem is entirely on the REST poll side (10s fallback + 25s reconciliation on the match detail page), not the socket.
+
+**Phases, in priority order (traffic × bytes saved):**
+- `BACKLOG-257` — Phase 0: the banned-field leak + missing `.limit()` (3 files) + delete the dead, zero-consumer `/api/matches/live` route. Small, no consumer contract changes, closes a real compliance issue. **Recommended starting point whenever this is picked up.**
+- `BACKLOG-258` — Phase 1: `/live` page + `/api/matches` list trimming (closes `BACKLOG-171`, `BACKLOG-172.1`)
+- `BACKLOG-259` — Phase 2: match detail poll payload — de-duplicate the team object repeated per event (closes `BACKLOG-172.2`)
+- `BACKLOG-260` — Phase 3: sport hub routes (football/basketball players & teams)
+- `BACKLOG-261` — Phase 4: lower-traffic trims (news, teams/[id], search, players route) — **touches 🔴 Lineup Builder's data source in one step, flagged explicitly in that entry**
+- `BACKLOG-262` — bundled minor findings surfaced in passing (not part of the payload work itself)
+
+**Verification standard for all phases (not "it compiles"):** a real before/after response-size comparison via `dev/measure-payloads.mjs` (new script, to be written) against a live deployment — byte count, gzip size, and `jq '... | keys'` confirming specific fields present → absent. Phase 2's latency claim specifically must be re-measured against the live ~9.9s Flow B/C baseline already on the readiness checklist, not assumed to have improved.
+
+**Found:** session 57, 2026-08-26.
+
+---
+
+### BACKLOG-257 — Payload Audit Phase 0: Banned-Field Leak + Missing `.limit()` on the Homepage Match Routes (BLOCKING COMPLIANCE ISSUE)
+
+**Status:** OPEN — found session 57, 2026-08-26, by the `architect` agent. Small, well-scoped, no consumer contract changes.
+**Priority:** HIGH — a live, currently-shipping leak of internal fields to unauthenticated public viewers, on the busiest page in the app.
+**Depends on:** nothing. **Blocks:** nothing else, but is the recommended starting point of `BACKLOG-256`.
+**Scope:**
+1. `src/app/api/football/matches/route.ts`, `src/app/api/basketball/matches/route.ts`, `src/app/api/other/matches/route.ts` — replace the `...match`/`...m` full-row spread with an explicit allow-list DTO, matching exactly what `src/app/page.tsx`'s transform map (lines 87-174) actually reads: `id, sport, homeTeamId, awayTeamId, homeScore, awayScore, shootoutHomeScore, shootoutAwayScore, status, currentPeriod, startTime, venue, competition, competitionId, round, stats`. Drop `lineups` (never read on home), all 8 `livestream*` columns, `highlightsUrl`, `matchday`, `groupName`, the three `*Override` booleans, `friendlyType`, `friendlyDescription`, `competitionLevel`, `matchType`, `createdAt`, `updatedAt` — and critically, the 5 banned fields (`loggerId`, `approvalStatus`, `managerNotes`, `approvedBy`, `approvedAt`).
+2. Same three files — add `.limit(100)`; replace `db.select().from(teams).all()` with `inArray(teams.id, Array.from(teamIds))`, using the `teamIds` Set that is already built in each file and currently unused (dead code).
+3. `basketball/teams/route.ts` — separately noted: filters teams via a **hardcoded six-name allowlist** (`['TBK','Titans','Storm','Rim Reapers','Vikings','Siberia']`). Not part of this fix's core scope but adjacent — worth fixing in the same pass if touching this file.
+4. `src/app/api/matches/live/route.ts` — **delete outright.** Grep-confirmed zero consumers anywhere in `src/`. Currently has no `.limit()`, a full-row spread (same banned-field leak), and a broken double `leftJoin` on unaliased `teams`. If Richard wants it kept for some future use, it needs the same `.limit()` + DTO + aliased-join treatment as the three files above — deletion is cheaper and removes a leaking surface with zero known cost.
+**Verification:** `curl -s <preview>/api/football/matches | wc -c` before/after; `curl ... | jq '.matches[0] | keys'` before/after showing the 5 banned fields present → absent. DevTools Network on `/`, record total transferred bytes for the 3-request home fetch and the 15s poll tick size, before vs after.
+
+**Found:** session 57, 2026-08-26.
+
+---
+
+### BACKLOG-258 — Payload Audit Phase 1: `/live` Page + `/api/matches` List Trimming
+
+**Status:** OPEN — found session 57, 2026-08-26, by the `architect` agent. Closes `BACKLOG-171` and `BACKLOG-172.1`.
+**Priority:** HIGH.
+**Depends on:** none (independent of `BACKLOG-257`, can run before or after).
+**Scope:**
+1. `src/app/live/page.tsx:31` — change to `fetch('/api/matches?status=LIVE')`, delete the client-side `.filter()` at line 35. The route already supports `?status=`. Cuts the response from all ~50 matches to the 0-3 actually live.
+2. `src/app/api/matches/route.ts` — remove the per-match `events` fetch and the `events` key from the list response (this is `BACKLOG-171`'s filed fix). Grep-confirmed safe: no list consumer reads it. **Corrects `BACKLOG-171`'s own text** — it cites `src/components/LiveUpdates.tsx` as a caller, but that component actually calls `/api/matches/[id]/events`, a different route; update that entry's citation when this ships.
+3. Same file — drop `lineups` from the list response (no list consumer reads it); replace `db.select()` with an explicit field list matching the DTO already destructured at lines 71-78.
+4. Same file — honour the `?limit=` query param with the project's standard clamp (`Math.min(Math.max(1, parseInt(...)), 100)`, per `BACKLOG-169`'s established pattern) instead of the current hardcoded `.limit(50)` that silently ignores it. Three call sites already pass `limit` and are silently getting 50 regardless: `admin/livestreams/page.tsx:82` (`limit=100`), `favourites/page.tsx:50` (`limit=20`), `admin/match-ratings/page.tsx:46` (`limit=50`).
+**Verification:** `curl -s '<preview>/api/matches' | wc -c` vs `curl -s '<preview>/api/matches?status=LIVE' | wc -c` during a real live match. Load `/live`, confirm live-match cards still render logo/name/score/venue/time identically.
+
+**Found:** session 57, 2026-08-26.
+
+---
+
+### BACKLOG-259 — Payload Audit Phase 2: Match Detail Poll — De-Duplicate Repeated Team Objects
+
+**Status:** OPEN — found session 57, 2026-08-26, by the `architect` agent. Closes `BACKLOG-172.2`. Sits on the real-time update mechanism (`CLAUDE.md`: 🟡 Caution, explicit manual testing required before deploy).
+**Priority:** MEDIUM-HIGH — real bytes saved on a Three-Critical-Flow-adjacent route, but requires consumer updates, unlike Phases 0/1.
+**Depends on:** none directly, but verifying its latency claim needs a working logger — **`BUG-241` was the blocker for this** (RESOLVED session 55 for the confirmed repro; see the corrected memory note this session). Should be unblocked now, worth a quick re-check before verifying this phase.
+**Scope:**
+1. `src/app/api/matches/[id]/route.ts` — hoist the two team objects out of the per-event rows. Return `teams: { [teamId]: {...} }` once in the response; each event carries `teamId` only. In a 40-event football match this removes 39 duplicate copies of each team object.
+2. **Consumer update required in the same change, not after:** every place reading `event.team.*` in `MatchDetailClient.tsx` and `src/components/MatchOverlay.tsx` must resolve through the new map instead. This is exactly the class of break `known-issues.md` already documents happening before (a field dropped from a response silently breaking a client that depended on it) — do not ship step 1 without this in the same commit.
+3. Same file — replace the full `players` row spread in the events join with the five fields the DTO at lines 124-132 already narrows to; batch the `relatedPlayer` N+1 lookup into one `inArray` call (this closes `BACKLOG-172.2`).
+4. **Do not touch the WS layer** — `src/lib/socket.ts` already emits true deltas (`event:new` = one event, `match:score:updated` = scores only) and `MatchDetailClient.tsx` already merges them incrementally. The re-send problem is entirely on the REST poll side (10s disconnect fallback + 25s reconciliation), not the socket.
+5. **Deferred, own session:** add `?since=<ISO>` to `/api/matches/[id]` so the 25s reconciliation poll fetches only events newer than the last one held, instead of the full match + up to 500 events. Largest single sustained-bandwidth win during a live match, but changes the response contract and needs its own verification pass.
+**Verification:** with a real live match running, record response size before/after step 1. Separately measure event-save → public-display latency against the ~9.9s baseline already on the readiness checklist — **if it doesn't move, say so explicitly rather than assuming it improved**; the poll payload may not be the actual bottleneck.
+
+**Found:** session 57, 2026-08-26.
+
+---
+
+### BACKLOG-260 — Payload Audit Phase 3: Sport Hub Routes (Football/Basketball Players & Teams)
+
+**Status:** OPEN — found session 57, 2026-08-26, by the `architect` agent. 6-7 files touched — **must sub-commit** per `CLAUDE.md`'s >5-file rule (football pair, then basketball pair).
+**Priority:** MEDIUM.
+**Depends on:** `BACKLOG-257`/`258` conceptually (same pattern), not technically blocking.
+**Scope:**
+1. `src/app/api/football/players/route.ts` — add `.limit(100)` (currently has none); replace `...player` spread with an allow-list (`id, name, jerseyName, number, position, rating, image`); replace the per-player full nested `team` object with `{ id, shortName, logo }` — the only three fields `football/page.tsx:621-622` actually reads.
+2. `src/app/api/football/teams/route.ts` + `src/app/api/basketball/teams/route.ts` — `football/page.tsx:604-608` renders only `team.id/logo/name/shortName` and never touches the nested `players` array. Replace the current N+1 (one query per team) with a single batched `count` per team; return `playerCount` only, drop the nested `players` array entirely.
+3. **Consumer check required:** `src/components/TeamProfileOverlay.tsx` receives the selected team object from somewhere — confirm it refetches `/api/teams/[id]` independently rather than reading `team.players` off the hub payload, before dropping the nested array.
+4. Verify `src/app/basketball/page.tsx`/`football/page.tsx`'s `players.slice(0, 30)` render still fills correctly after the `.limit(100)` is added.
+**Verification:** per-route byte delta + screenshot confirming the football/basketball hub pages render unchanged.
+
+**Found:** session 57, 2026-08-26.
+
+---
+
+### BACKLOG-261 — Payload Audit Phase 4: Lower-Traffic Trims (News, Team Detail, Search, Players)
+
+**Status:** OPEN — found session 57, 2026-08-26, by the `architect` agent. 5 routes + `player-data.ts` + N consumers — **clearly >5 files, must sub-commit per route.** One step touches 🔴 High Volatility territory — see below.
+**Priority:** LOW-MEDIUM.
+**Depends on:** none directly.
+**Scope:**
+1. `src/app/api/news/route.ts` — omit `content` (full article body) from the **list** response only; `/api/news/[id]` keeps it. `src/app/news/page.tsx`'s `NewsArticle` interface already omits `content`, so no consumer change needed. (Separately noticed, do not bundle: `?status=` on this route is caller-controlled and unauthenticated — `?status=draft` currently reads unpublished articles. File as its own bug if picked up.)
+2. `src/app/api/teams/[id]/route.ts:109-118` — replace the full-table `players` scan (no `.limit()` at all today) with a `university`-filtered query + `.limit(500)`; return only `{ id, name, number, position }` for `universityPlayers` (all `TeamDetailClient.tsx:486-506` renders). DTO the `recentMatches`/`upcomingMatches` full rows (same banned-field class as `BACKLOG-257`) and batch the opponent N+1 lookup.
+3. `src/app/api/search/route.ts:176` — replace `...row.match` spread with an allow-list DTO (closes a banned-field leak here too, same fields as `BACKLOG-257`); batch the away-team N+1 lookup.
+4. `src/app/api/players/route.ts` + `src/lib/player-data.ts`'s `enrichPlayersWithAffiliations` — skip the memberships/organizationAffiliations queries entirely when `isAdmin === false`, since `toPublicPlayer` discards them anyway for non-admins. Narrow the attached `team` object to `{ id, name, shortName, logo, university, sport }`.
+5. **🔴 High Volatility caution, explicit:** step 4 feeds `src/app/lineup-builder/page.tsx` (🔴, `BACKLOG-220`'s structural fragility still OPEN) along with `xi/page.tsx`, `draft/page.tsx`, `PlayerProfileOverlay.tsx`, and both loggers. **Recommend cutting step 4 from scope entirely, or gating it behind its own explicit brief** — do not fold it into a routine payload-trim pass given `CLAUDE.md`'s standing "do not touch without explicit brief" rule for this feature.
+**Verification:** per-route byte delta + screenshot-level confirmation of unchanged rendering in each consumer.
+
+**Found:** session 57, 2026-08-26.
+
+---
+
+### BACKLOG-262 — Minor Findings Surfaced During the Payload Audit (Bundled, Not Part of the Payload Work Itself)
+
+**Status:** OPEN — found session 57, 2026-08-26, by the `architect` agent while auditing consumers for `BACKLOG-256`. Unrelated bugs, bundled per project convention for incidental low-priority findings.
+**Priority:** LOW-MEDIUM — both are real, silent functional bugs, not payload issues.
+**Findings:**
+1. **`src/app/favourites/page.tsx:50` sends `?status=upcoming` (lowercase) against a DB storing `UPCOMING`** — the query never matches, so that page's upcoming-matches section has always rendered empty. Compounded by reading `data.matches` from a route that actually returns a bare array.
+2. **`src/app/admin/notifications/composer/page.tsx:136` sends `?status=LIVE,UPCOMING`** (comma-joined), which becomes a literal `eq(status, 'LIVE,UPCOMING')` on the server — always zero rows. The composer's match-targeting dropdown for this filter has never returned any match.
+3. **`src/app/api/basketball/teams/route.ts` filters on a hardcoded six-name allowlist** (`['TBK','Titans','Storm','Rim Reapers','Vikings','Siberia']`) — any new basketball team outside that list is silently invisible to this route. Noted separately at `BACKLOG-257` item 3 as adjacent to that fix.
+4. **`src/app/api/players/stats/leaders/route.ts:16` has an unclamped `limit` param** that `BACKLOG-169`'s earlier clamp sweep missed.
+**Fix (not built):** each is a small, independent fix — `?status=` casing/format on the two call sites (item 1/2), extend or replace the hardcoded team-name list with a real query (item 3), apply the standard clamp pattern (item 4).
+
+**Found:** session 57, 2026-08-26.
+
+---
+
+### BACKLOG-263 — Live Goal Events Don't Credit an Assist When Only `relatedPlayerId` Is Set (No Companion `Assist` Event)
+
+**Status:** OPEN — found session 57, 2026-08-26, during a BUSA League Basketball/Football stats-vs-events cross-check requested by Richard. Live data-integrity bug, currently affecting real matches, not just historical backfill.
+**Priority:** HIGH — silently undercounts real players' career assist stats, on the actual live match-logging path, not just backfilled data.
+**Problem:** `src/app/api/matches/[id]/events/route.ts:432-439` only calls `updatePlayerStats()` for the event's own `playerId`, using the event's own `type`. There is a special case crediting `relatedPlayerId` for `PENALTY_SAVED` (crediting the keeper's save), but **no equivalent case for `GOAL`** — when a Goal event is logged with `relatedPlayerId` set (the assister) but no separate standalone `Assist` event exists, the assister's stats are never updated at all.
+**Why this is live, not just historical:** `FootballLogger.tsx`'s "Goal/Penalty + Assist chain" (lines 977-984, the mechanism `BUG-143` already documents) normally auto-generates a companion `Assist` event via a delayed `confirmEvent('Assist', ...)` call whenever a goal is logged with an assister selected — so in the *normal* case this bug is masked. But it is not guaranteed: the 3rd Place match (`8Mek2CA7KPlnk1EQ647jx`, genuinely live-logged, not backfilled) has 5 real goal-assists recorded only via `Goal.relatedPlayerId`, with zero companion `Assist` events — confirmed live in `football_player_stats`: **Francis Abbey and Muiz Kazeem show 0 assists despite each having 1 real assist; Opeyemi Ajani shows 1 instead of the real 3.** Root cause of *why* that match's companion events never fired is unconfirmed — possibly predates the current chain mechanism, possibly the delayed `setTimeout` chain got interrupted (a tab close/reload mid-match, the same class of fragility `BUG-143`'s own comment already flags). Either way, the underlying gap in the stats-update code is real and would reproduce again any time the client-side chain fails to fire for any reason — this should not depend entirely on client-side reliability.
+**Fix (not built):** add a `relatedPlayerId`-crediting branch for `GOAL`/`PENALTY` events, mirroring the existing `PENALTY_SAVED` → keeper pattern, so the server-side stats update no longer depends entirely on the client successfully firing a second event.
+**Also not built:** a one-time data correction for the 3 known-undercounted 3rd Place match players' `football_player_stats.assists` (Francis Abbey +1, Muiz Kazeem +1, Opeyemi Ajani +2) — separate from the code fix above.
+
+**Found:** session 57, 2026-08-26.
+
+---
+
+### BACKLOG-264 — Admin Team-Management Page Renders Raw Cloudinary URLs as Overlapping Text Instead of the Logo Image
+
+**Status:** OPEN — found session 58, 2026-08-27, by Richard while reviewing BUSA League Basketball's `/admin/competitions/[id]` team-management view. Cosmetic/UX bug, not a data-correctness issue — deferred by Richard at the time ("let's resolve later the image url render"), filed now per that instruction.
+**Priority:** LOW-MEDIUM — visually broken (raw `https://res.cloudinary.com/...` URL strings printed as text, overlapping the team name/group labels) but does not affect underlying data; every team's `logo` field itself holds a valid, working Cloudinary URL.
+**Problem:** on the admin team-management page (screenshot: BUSA LEAGUE BASKETBALL, "Team Management" tab, "Assigned Teams (6)" list), each team row shows the literal logo URL as overlapping text instead of rendering an `<img>`. Not yet root-caused — candidates, none confirmed: the component renders `{team.logo}` as text instead of `<img src={team.logo}>`; a `TeamLogo`-style wrapper component isn't used on this specific admin view (unlike the public-facing pages, which already route logos through `isValidLogo()`/`TeamLogo` per `known-issues.md`'s 2026-06-14 entry); or a CSS layout issue causing the alt-text/URL to render visibly instead of being hidden behind a broken-image state.
+**Fix (not built):** locate the exact admin component rendering this list (likely under `src/app/admin/competitions/[id]/...` or a shared team-management component), confirm whether it's missing the `TeamLogo` wrapper or has a raw text/URL binding, fix to use the existing logo-rendering convention.
+
+**Found:** session 58, 2026-08-27.
+
+---
+
+### ~~BACKLOG-265~~ — Raw Backfill Scripts Never Write `competition_team_entries`/`standings` (Systemic, Not NPUGA-Specific)
+
+**Status:** RESOLVED (partial — see Pending items) — 2026-08-27, session 58.
+**Priority:** HIGH — made the Teams Directory and Standings tab show "no data" for real, live-built competitions.
+**Problem:** any raw `INSERT INTO matches`/`teams` backfill script bypasses the app's own write path for `competition_team_entries` (only written by `/api/admin/teams/[teamId]/competitions`) and `standings` (only written by `recalculateStandingsForMatch()`, called from the match-PATCH route). Confirmed systemic via a full audit of every competition's `(matches, entries, standings)` counts: `NPUGA (FOOTBALL)` 16/0/0, `BUSALYMPICS (BASKETBALL)` 4/0/0, `BUSA LEAGUE BASKETBALL` 30/0/6 (standings partial-self-healed by live matches), `GENTLEMEN FC LEAGUE (AUGUST)` 1/0/0.
+**Fix:** `dev/npuga-populate-entries-and-standings.ts` (NPUGA Football + Basketball, BUSALYMPICS Basketball) and `dev/fix-busa-basketball-entries.mjs` (BUSA League Basketball's missing entries only, standings already correct) — re-implements `recalculateStandingsForMatch`'s aggregation logic standalone. Both staging and prod.
+
+**Evidence:**
+- Commit: none (dev/ scripts only, no app-code change — this was a data-repair op, not a code fix)
+- Verified by: DB query before/after (`dev/check-all-comps-both-dbs.mjs`) showing entries/standings row counts matching team counts on both DBs; live-verified through the real staging Teams Directory UI for `NPUGA (FOOTBALL)`/`NPUGA (BASKETBALL)` (exactly 10 teams each, correct standings numbers) after working around a PWA service-worker cache staleness issue (see `known-issues.md` 2026-08-27)
+- Observed result: all 4 affected competitions now show correct entries/standings on both DBs
+- Pending items: **`GENTLEMEN FC LEAGUE (AUGUST)` still not fixed** (1 match, low priority, not touched). No code fix applied to the root cause (a raw script bypassing the service layer) — future backfill scripts must remember to call this same populate step; nothing prevents the mistake from recurring.
+
+---
+
+### ~~BACKLOG-266~~ — NPUGA Team-Creation Script Created 18 Duplicate Team Rows (9 of 10 Universities Already Had a Pre-Existing Shell)
+
+**Status:** RESOLVED — 2026-08-27, session 58.
+**Priority:** HIGH — real duplicate production data, visible to any admin/user browsing the Teams Directory.
+**Problem:** this session's `dev/create-npuga-football-teams.mjs`/`dev/create-npuga-basketball-teams.mjs` created a new team row per university without checking for an existing one first. 9 of the 10 NPUGA universities (all except Bells) already had a pre-existing multi-sport team row from an earlier, unrelated seed (~190 days prior) — 5 caught immediately via an exact-name-match check (ABUAD, Christopher/Unichris, Bowen, Trinity, JABU), 4 more (Achievers, Adeleke, Redeemer's, Venite) missed by that same check because the pre-existing rows use a shorter university-name string, only caught later via Richard spotting "Afe Babalola University" listed 3 times on the live Teams Directory and a subsequent full "Browse All Teams" review.
+**Fix:** `dev/npuga-fix-duplicate-teams.mjs` (made idempotent for the two-pass fix) — repointed every `matches`/`competition_team_entries`/`standings`/competition winner-ref off each of the 18 duplicates onto the real pre-existing team id, then deleted the now-orphaned duplicates. All 18 pre-existing targets confirmed empty shells (0 matches/entries/standings/players) before touching anything, on both staging and prod. `dev/npuga-fix-team-orgs.mjs` separately linked the 2 genuinely-new Bells rows to `org_bells-university-of-technology` (the only university with no pre-existing shell at all).
+
+**Evidence:**
+- Commit: none (dev/ scripts only)
+- Verified by: DB query (0 remaining duplicate ids on both DBs) + live staging UI check (Teams Directory for both `NPUGA (FOOTBALL)`/`NPUGA (BASKETBALL)` showing exactly 10 teams, no duplicates, every link resolving correctly) after working around the PWA service-worker cache staleness noted above
+- Observed result: 0 duplicate team rows remain; all matches/entries/standings/competition winner-refs correctly point at the real team ids
+- Pending items: none for this specific fix. Systemic prevention (checking by fuzzy name match / by organization before creating a new team) documented as a lesson in `known-issues.md`, not enforced by any guard in code.
+
+---
