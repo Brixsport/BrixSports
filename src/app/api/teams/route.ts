@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
 import { teams } from '@/db/schema';
+import { sql } from 'drizzle-orm';
 import { getAuthUser } from '@/lib/auth';
 import { checkRateLimit } from '@/lib/rate-limit';
 
@@ -14,8 +15,26 @@ export async function GET(request: NextRequest) {
             );
         }
 
-        const allTeams = await db.select().from(teams).limit(500);
-        return NextResponse.json(allTeams);
+        // BACKLOG-283: same header pattern as /api/matches (BACKLOG-276), but
+        // the default limit stays 500 (the pre-existing safety cap), NOT 50 --
+        // ~10 other pages (match-creation team dropdowns, roster-transfers,
+        // notifications composer, etc.) call this bare expecting the full
+        // list, and team count realistically exceeds 50. Only a caller that
+        // explicitly passes `limit` opts into a smaller page.
+        const { searchParams } = new URL(request.url);
+        const limit = Math.min(Math.max(1, parseInt(searchParams.get('limit') || '500', 10) || 500), 500);
+        const offset = Math.max(0, parseInt(searchParams.get('offset') || '0', 10) || 0);
+
+        const [{ count: totalCount }] = await db.select({ count: sql<number>`count(*)` }).from(teams);
+        const pagedTeams = await db.select().from(teams).limit(limit).offset(offset);
+
+        return NextResponse.json(pagedTeams, {
+            headers: {
+                'X-Total-Count': String(totalCount),
+                'X-Limit': String(limit),
+                'X-Offset': String(offset),
+            },
+        });
     } catch (error) {
         console.error('Error fetching teams:', error);
         return NextResponse.json({ error: 'Failed to fetch teams' }, { status: 500 });

@@ -63,6 +63,14 @@ export async function GET(request: Request) {
         const department = searchParams.get('department');
         const college = searchParams.get('college');
         const university = searchParams.get('university');
+        // BACKLOG-283: default stays 500 (the pre-existing safety cap), NOT
+        // 50 -- admin/past-matches/import/page.tsx calls this bare expecting
+        // the full 309-player roster, and other pages may too. Only a caller
+        // that explicitly passes `limit` opts into a smaller page. Only
+        // applies to the general listing branch below (ids/teamId are
+        // targeted lookups, already bounded by their own query).
+        const limit = Math.min(Math.max(1, parseInt(searchParams.get('limit') || '500', 10) || 500), 500);
+        const offset = Math.max(0, parseInt(searchParams.get('offset') || '0', 10) || 0);
 
         if (ids) {
             const playerIds = ids.split(',').map((id) => id.trim()).filter(Boolean);
@@ -129,7 +137,20 @@ export async function GET(request: Request) {
             enrichedPlayers = enrichedPlayers.filter((player) => playerMatchesSearch(player, search));
         }
 
-        return NextResponse.json({ success: true, players: enrichedPlayers.map((p) => toPublicPlayer(p, isAdmin)) });
+        const total = enrichedPlayers.length;
+        const pagedPlayers = enrichedPlayers.slice(offset, offset + limit);
+
+        return NextResponse.json({
+            success: true,
+            players: pagedPlayers.map((p) => toPublicPlayer(p, isAdmin)),
+            total,
+        }, {
+            headers: {
+                'X-Total-Count': String(total),
+                'X-Limit': String(limit),
+                'X-Offset': String(offset),
+            },
+        });
     } catch (error) {
         console.error('Error fetching players:', error);
         return NextResponse.json({ success: false, error: 'Failed to fetch players' }, { status: 500 });
