@@ -8943,7 +8943,7 @@ Fixed exactly per the "Fix (not built)" plan below: `MatchStatusBadge.tsx` now d
 
 **Evidence:**
 - Commit: `0e05613`
-- Verified by: `tsc --noEmit` clean of new errors. Live re-verification of the actual transfer→no-staleness cycle **not yet done** — needs a real transfer + real SW-scoped browser session; blocked by the same dev-server outage as `BACKLOG-271`/`264`, picking back up via staging.
+- Verified by: `tsc --noEmit` clean of new errors. **Correction, session 59 continued:** the original fix's cache-matching (`.find(n => n.endsWith('-api'))`) was itself buggy — caught live while verifying `BACKLOG-274` on the same page family, see that entry for the full root cause. Fixed alongside it (`n.includes('-admin-') && n.endsWith('-api')`). Live re-verification of the actual transfer→no-staleness cycle with the corrected matching still not yet done — needs a real transfer + real SW-scoped browser session on staging.
 
 **Found:** session 56, 2026-08-26, live browser walkthrough of `BACKLOG-126`. **Fixed:** session 59, 2026-08-27.
 
@@ -9423,6 +9423,22 @@ Fixed exactly per the "Fix (not built)" plan below: `MatchStatusBadge.tsx` now d
 - Verified by: `dev/backfill-standings-cards.mjs` dry-run → apply → dry-run again (0 remaining diff, confirms idempotency); live call against the real staging DB via the local dev server showing populated, correctly-ordered `yellowCards`/`redCards` in `/api/football/standings`'s real response; `tsc --noEmit` clean of new errors (38 pre-existing, all in `src/db/*` scripts + one `nextauth` route, none in files touched this session)
 - Observed result: 20 of 50 staging `standings` rows backfilled (all BUSA League Football; 0 elsewhere, expected — cards are a football-specific concept in current data)
 - Pending items: **prod migration + backfill not yet run** (staging-first-then-verify-then-prod, per `CLAUDE.md`). Code not yet committed. Found, not fixed as part of this pass: `/api/competitions/[id]/standings` filters by exact `competition.name` string match, which never matches this competition's group-suffixed `standings.competition` values — pre-existing bug, same class the football/basketball routes already work around, confirmed unrelated to this change (reproduces identically before and after).
+
+**Found:** session 59, 2026-08-27.
+
+---
+
+### BACKLOG-274 — Team Management Page Can Show a Stale Team List After Save (Same Staleness Class as `BACKLOG-227`, Different Endpoint)
+
+**Status:** SHIPPED to staging — session 59, 2026-08-27. Also fixed a latent bug in `BACKLOG-227`'s own fix, caught while investigating this one (see below).
+**Priority:** MEDIUM — live-reproduced twice via direct DOM checks (not a tool-read timing artifact) on the exact page `BACKLOG-271`'s DELETE fix was just verified on, directly undermining confidence in that verification if left unfixed.
+**Problem:** found while live-verifying `BACKLOG-271` on real staging — removed a team, saved (`DELETE` then `POST`, both confirmed `200`, DB directly confirmed correct via a `cache: 'no-store'` fetch), but the page's own post-save refetch still showed the removed team. Root cause: `sw-admin.js`'s `STALE_WHILE_REVALIDATE_API_PATTERNS` includes `/^\/api\/(football\/|basketball\/)?standings(\/|$|\?)/` (added session 56, `BACKLOG-097`-adjacent, intended for "standings change occasionally, not every second") — same mechanism as `BACKLOG-227`, different endpoint, same page family.
+**Also caught in the process:** `BACKLOG-227`'s own fix (`evictStaleAdminApiCache` in `roster-transfers/page.tsx`) matched the SW cache by `.find(n => n.endsWith('-api'))` — but Cache Storage is origin-scoped, not per-service-worker, and `sw-user.js` (registered at scope `/`) has its own `-api`-suffixed cache sitting alongside `sw-admin.js`'s (scope `/admin`). Confirmed live via direct `caches.keys()` inspection on this exact admin page: `brixsport-user-*-api` sorted before `brixsport-admin-*-api`, so `.find()` would have silently evicted the wrong cache, leaving the original `BACKLOG-227` staleness unfixed in practice. Fixed alongside this entry.
+**Fix:** new `evictStaleStandingsCache()` in `[id]/page.tsx`, called after a successful save, evicting `/api/standings?competitionId=...` from the SW's API cache before the page's own refetch. Both this and `BACKLOG-227`'s helper now match `n.includes('-admin-') && n.endsWith('-api')`, not just the suffix.
+
+**Evidence:**
+- Commit: `[pending]`
+- Verified by: `tsc --noEmit` clean of new errors in both touched files. Live re-verification of the corrected eviction (both this fix and the `BACKLOG-227` correction) not yet re-run — needs a fresh push+deploy cycle.
 
 **Found:** session 59, 2026-08-27.
 

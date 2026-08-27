@@ -14,6 +14,28 @@ import { ToastContainer } from '@/components/admin/Toast';
 import SkeletonLoader from '@/components/admin/SkeletonLoader';
 import { TeamLogo } from '@/lib/utils/team-logo';
 
+// Found live, session 59, while verifying BACKLOG-271 on staging: after a
+// successful save, this page's own refetch of /api/standings?competitionId=
+// can be served a stale pre-save copy by sw-admin.js's SWR policy on
+// /^\/api\/(football\/|basketball\/)?standings(\/|$|\?)/ -- same staleness
+// class BACKLOG-227 fixed for /api/players*, reproduced twice via direct DOM
+// checks (not a tool-read timing artifact). Cache Storage is origin-scoped,
+// not per-SW -- sw-user.js also has a "-api"-suffixed cache, so matching must
+// require "-admin-" too or this can silently evict the wrong SW's cache
+// (the exact mistake caught and fixed in roster-transfers/page.tsx first).
+async function evictStaleStandingsCache(competitionId: string) {
+    if (typeof window === 'undefined' || !('caches' in window)) return;
+    try {
+        const cacheNames = await caches.keys();
+        const apiCacheName = cacheNames.find((n) => n.includes('-admin-') && n.endsWith('-api'));
+        if (!apiCacheName) return;
+        const cache = await caches.open(apiCacheName);
+        await cache.delete(`/api/standings?competitionId=${competitionId}`);
+    } catch {
+        // Best-effort only.
+    }
+}
+
 interface Team {
     id: string;
     name: string;
@@ -197,6 +219,7 @@ export default function CompetitionTeamsPage() {
             }
 
             success('Competition teams saved successfully');
+            await evictStaleStandingsCache(competition.id);
             fetchData(); // Refresh to get correct IDs
         } catch (err) {
             error('Network error while saving');

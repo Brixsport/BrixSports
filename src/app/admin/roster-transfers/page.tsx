@@ -17,7 +17,11 @@ async function evictStaleAdminApiCache(urls: string[]) {
     if (typeof window === 'undefined' || !('caches' in window)) return;
     try {
         const cacheNames = await caches.keys();
-        const apiCacheName = cacheNames.find((n) => n.endsWith('-api'));
+        // Cache Storage is origin-scoped, not per-SW -- sw-user.js's cache also
+        // ends in "-api" and can sort first, which would silently evict the
+        // wrong service worker's cache on this admin-only page (caught live,
+        // session 59: brixsport-user-*-api existed alongside brixsport-admin-*-api).
+        const apiCacheName = cacheNames.find((n) => n.includes('-admin-') && n.endsWith('-api'));
         if (!apiCacheName) return;
         const cache = await caches.open(apiCacheName);
         await Promise.all(urls.map((url) => cache.delete(url)));
