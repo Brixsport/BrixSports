@@ -65,16 +65,26 @@ export async function GET(request: NextRequest) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
+        // BACKLOG-283: these three queries previously had zero .limit() clause
+        // -- an unbounded full-table scan, the exact anti-pattern CLAUDE.md
+        // flags. Safety caps below (raise if any of these genuinely exceed the
+        // cap); the response itself is separately paginated below via
+        // limit/offset since parent/count relationships need the full set to
+        // resolve correctly, not just the current page.
+        const { searchParams } = new URL(request.url);
+        const limit = Math.min(Math.max(1, parseInt(searchParams.get('limit') || '50', 10) || 50), 200);
+        const offset = Math.max(0, parseInt(searchParams.get('offset') || '0', 10) || 0);
+
         const [organizationRows, teamRows, affiliationRows] = await Promise.all([
-            db.select().from(organizations).orderBy(asc(organizations.name)),
+            db.select().from(organizations).orderBy(asc(organizations.name)).limit(500),
             db.select({
                 id: teams.id,
                 ownerOrganizationId: teams.ownerOrganizationId,
-            }).from(teams),
+            }).from(teams).limit(500),
             db.select({
                 id: playerOrganizationAffiliations.id,
                 organizationId: playerOrganizationAffiliations.organizationId,
-            }).from(playerOrganizationAffiliations),
+            }).from(playerOrganizationAffiliations).limit(5000),
         ]);
 
         const organizationsById = new Map(organizationRows.map((organization) => [organization.id, organization]));
@@ -123,9 +133,19 @@ export async function GET(request: NextRequest) {
             },
         }));
 
+        const total = enrichedOrganizations.length;
+        const pagedOrganizations = enrichedOrganizations.slice(offset, offset + limit);
+
         return NextResponse.json({
             success: true,
-            organizations: enrichedOrganizations,
+            organizations: pagedOrganizations,
+            total,
+        }, {
+            headers: {
+                'X-Total-Count': String(total),
+                'X-Limit': String(limit),
+                'X-Offset': String(offset),
+            },
         });
     } catch (error) {
         console.error('Error fetching organizations:', error);
