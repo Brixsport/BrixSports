@@ -9418,7 +9418,7 @@ Fixed exactly per the "Fix (not built)" plan below: `MatchStatusBadge.tsx` now d
 - **`allowDraws` hardcode, located precisely:** `src/app/api/matches/[id]/route.ts` PATCH, returning `422` if a knockout-round match ends level with no shootout scores either — plus a real risk flagged: `FootballLogger.tsx`'s offline-queue logic must correctly treat a 422 as "don't retry," not queue it for infinite retry like a network failure. Named as the single most likely way this work could break Flow B if rushed.
 - **13 real files touched, ~7 new files**, phased low-risk-first (pure draw-algorithm logic with zero DB dependency, unit-testable offline, before anything schema/API/UI). Full file list and phase breakdown in the architect's own output, not duplicated here — ask to see it again if picking this up.
 - **7 questions still need a product-owner answer before implementation starts:** (1) the round-4 repeat-pot-pair asymmetry noted above — acceptable? (2) should this also finally enforce the *stored* `allowDraws` setting for non-knockout matches, or only the new hardcoded knockout check — enabling the former changes behavior for every existing competition that has never had it enforced; (3) matchday scheduling — fixed calendar dates per matchday, or admin picks each match's time at publish; (4) venue — hardcoded single stadium, or still admin-selectable per match; (5) post-publish corrections — plan is unpublish → delete UPCOMING matches → edit → republish, blocked once any match goes LIVE/FINISHED, acceptable?; (6) a genuine tie for the 8th and final knockout slot is currently broken by `teamId` alphabetically — fine given the admin can override any bracket slot manually, or does it need a real playoff?; (7) confirm the league phase and knockout share one `competitionId` (assumed, needs `BACKLOG-275`'s round-exclusion fix) rather than being split into two competition rows.
-**Points to:** `BACKLOG-268` (Phase 1, SHIPPED to staging + prod data, prod app code pending a `main` promotion). `BACKLOG-275` (the newly-found live standings-pollution bug, blocking correctness for this competition's own knockout stage). Phases 2+ (pairing algorithm, bracket service, admin routes/UI) not yet individually filed — numbering held until the 7 questions above are answered.
+**Points to:** `BACKLOG-268` (standings/tiebreaker, SHIPPED to staging + prod data, prod app code pending a `main` promotion), `BACKLOG-275` (live standings-pollution bug, blocking correctness for this competition's own knockout stage, not yet fixed), `BACKLOG-276` (query/limit prerequisites), `BACKLOG-277` (pure draw algorithm), `BACKLOG-278` (schema + draw persistence API), `BACKLOG-279` (draw publish + admin UI), `BACKLOG-280` (knockout bracket service + admin UI), `BACKLOG-281` (`allowDraws` hardcode + logger enforcement), `BACKLOG-282` (optional public matchday grouping). All phases now filed; several still need answers to the 7 open questions above before their exact shape is final.
 
 **Found:** session 59, 2026-08-27.
 
@@ -9472,6 +9472,83 @@ Fixed exactly per the "Fix (not built)" plan below: `MatchStatusBadge.tsx` now d
 **The fix (per the architect, not yet applied):** exclude knockout rounds from the aggregation — but naively, since `round` is nullable and almost always null for non-knockout matches, a plain `notInArray(matches.round, KNOCKOUT_ROUNDS)` evaluates to SQL `NULL` (not `TRUE`) for every null-round row, which would silently **zero out every competition's standings**, not just fix the knockout ones. Must be `or(isNull(matches.round), notInArray(matches.round, KNOCKOUT_ROUNDS))`. Also note the *real* round strings in use today are inconsistent free text (`'Quarter Finals'` vs `'Quarter-Final'`, `'Semifinals'` vs `'Semi-Final'`, `'3rd Place'` vs `'3rd Place Playoff'` — confirmed via a `SELECT DISTINCT round` query) — the exclusion list needs to match actual historical values, not just the clean enum strings (`QUARTER_FINAL` etc.) planned for the new Swiss competition's own rounds.
 **Also needed:** a one-time decision on whether to **recompute the 4 affected competitions' standings** once the code is fixed (`teams`'s own snapshot columns are affected too, via `syncTeamOverallRecord`) — these are marked `status: completed`, so silently changing their final tables is a real call, not a mechanical one. Not done, not decided.
 **Not fixed as part of this session** — found during planning, flagged rather than silently patched, since it changes real historical data across 4 completed competitions and needs an explicit go-ahead.
+
+**Found:** session 59, 2026-08-27.
+
+---
+
+### BACKLOG-276 — Swiss-Engine Phase 0b: `/api/matches` + `/api/brackets` Query/Limit Prerequisites
+
+**Status:** OPEN — planned session 59, 2026-08-27, by the `architect` agent. Independent of the 7 open product-owner questions on `BACKLOG-267` — safe to build now.
+**Priority:** MEDIUM — hard prerequisite for the Swiss competition specifically (48 matches, current `/api/matches` GET caps at 50 with no round/matchday filter), plus fixes two independent rule violations.
+**Scope:** `src/app/api/matches/route.ts` GET — add `matchday`/`round` query params, raise/paginate `.limit()`. `src/app/api/brackets/route.ts` GET — add missing `.limit()` (CLAUDE.md violation); fix `roundOrder` to include `THIRD_PLACE` (currently omitted, so `indexOf` returns -1 and the 3rd-place match sorts before the Final).
+**Depends on:** nothing. **Blocks:** the draw/bracket UI (`BACKLOG-279`/`280`) needs the matchday filter to render sanely.
+
+**Found:** session 59, 2026-08-27.
+
+---
+
+### BACKLOG-277 — Swiss-Engine Phase 1: Pure Draw Algorithm (`POT_CIRCLE_V1`)
+
+**Status:** OPEN — planned session 59, 2026-08-27, by the `architect` agent.
+**Priority:** MEDIUM-HIGH — the actual new mechanism this whole initiative is for; zero DB dependency, fully unit-testable offline.
+**Scope:** new `src/lib/competitionDraw.ts` (DB-import-free, same convention as `standingsSort.ts`) — `buildPots`, `computeLeaguePhaseDraw` (pot-circle pairing, 4 rounds, no repeat opponents, proof: R4 reuses R1's pot-pair at a different offset), `assignHomeAway` (deterministic, asserted 2-home/2-away per team, Eulerian-circuit fallback if the simple rule fails its own assertion), `validateDraw`, `suggestSeedPairings` (generic top-N seeding for the knockout stage, reused by `BACKLOG-280`). New `dev/verify-draw.mjs` — asserts 40 matches, 4 per team, 4 distinct opponents, 2 home/2 away, no team twice in a round, run against several seed permutations.
+**Depends on:** nothing (pure functions). **Blocks:** `BACKLOG-278`/`279` (the draw persistence API needs this to compute a draw to persist).
+
+**Found:** session 59, 2026-08-27.
+
+---
+
+### BACKLOG-278 — Swiss-Engine Phase 2: `competitionDraws` Schema + Draw Persistence API
+
+**Status:** OPEN — planned session 59, 2026-08-27, by the `architect` agent. Needs a real `db:push`/SQL-direct migration (BACKLOG-040 blocks `db:push`), staging first per `CLAUDE.md`.
+**Priority:** MEDIUM-HIGH.
+**Scope:** new `competitionDraws` table (one JSON-blob row per draw: seed order, algorithm, computed pairings, `DRAFT`/`PUBLISHED`/`SUPERSEDED` status) — a reviewable staging area distinct from `matches`, so a ceremony correction never means editing live fixtures. Also adds nullable `bracketNodes.loserNextMatchId` (needed for the 3rd-place match, which winner-only `nextMatchId` can't express). New `POST/GET /api/admin/competitions/[id]/draws` (admin-gated, `.limit()` on GET, team list sourced from `standings` per the corrected source-of-truth) and `GET/PATCH/DELETE .../draws/[drawId]` (PATCH re-validates server-side on every edit; refuses edits once `PUBLISHED`).
+**Depends on:** `BACKLOG-277` (the draw algorithm this API calls). **Blocks:** `BACKLOG-279`.
+
+**Found:** session 59, 2026-08-27.
+
+---
+
+### BACKLOG-279 — Swiss-Engine Phase 3: Draw Publish + Admin Seed-Order/Review UI
+
+**Status:** OPEN — planned session 59, 2026-08-27, by the `architect` agent. Flagged by the architect as the single highest-risk piece of the whole plan.
+**Priority:** HIGH — the point where a draft draw becomes 40 real `matches` rows.
+**Scope:** `POST .../draws/[drawId]/publish` — validate, delete any prior UPCOMING matches recorded from an earlier publish of the same draw (idempotent-safe retry), single batched `db.insert(matches).values([...40])` (one statement = atomic), write match ids back, mark `PUBLISHED`. Explicitly does NOT reuse `POST /api/matches` (mass-assignment risk — `id`/`approvedBy`/`loggerId` are client-settable there today, a separate pre-existing issue not fixed by this work). New `src/app/admin/competitions/[id]/draw/page.tsx` — seed-order editor (drag/admin-set order, `TeamLogo` for crests), Compute, review grid by matchday with per-pairing swap, per-match startTime/venue, Publish behind an explicit confirm.
+**Depends on:** `BACKLOG-276`, `BACKLOG-278`. **Needs answers to `BACKLOG-267`'s open questions 3 (matchday scheduling shape), 4 (venue), 5 (post-publish correction flow) before the UI's exact fields can be finalized** — the publish mechanics above don't depend on those answers, the editor's field list does.
+
+**Found:** session 59, 2026-08-27.
+
+---
+
+### BACKLOG-280 — Swiss-Engine Phase 4: Knockout Bracket Service + Manual-Entry Admin UI
+
+**Status:** OPEN — planned session 59, 2026-08-27, by the `architect` agent.
+**Priority:** HIGH — includes wiring into the live match-FINISHED path (🟡 Flow B risk, needs manual mobile testing before deploy).
+**Scope:** new `src/lib/bracketService.ts` — `createKnockoutStructure` (all 8 `bracketNodes` up front — QF×4/SF×2/3rd×1/Final×1 — only QF gets real `matches` rows, since `matches.homeTeamId`/`awayTeamId` are `.notNull()`), `advanceBracketForMatch(matchId)` (winner from score, falling back to shootout scores when level; writes into `nextMatchId`/`loserNextMatchId`; creates the next `matches` row once a node has both teams). New `src/app/admin/competitions/[id]/knockout/page.tsx` — competition-agnostic manual bracket form (any top-N, not BUSA-specific), pre-filled via `suggestSeedPairings` from the live table, every slot editable. Wire `advanceBracketForMatch` into the existing FINISHED-transition `after()` block in `matches/[id]/route.ts`, in its own try/catch so a bracket failure can never break the standings recalc.
+**Depends on:** `BACKLOG-275` (knockout results must not double-count into league standings before this ships), `BACKLOG-277` (`suggestSeedPairings`), `BACKLOG-278`'s schema work (draws table + `loserNextMatchId`). **Needs an answer to `BACKLOG-267`'s open question 6** (tie-for-8th-place resolution) before the "who's in the top 8" step is fully specified.
+
+**Found:** session 59, 2026-08-27.
+
+---
+
+### BACKLOG-281 — Swiss-Engine Phase 5: `allowDraws` Knockout Hardcode + Logger Enforcement
+
+**Status:** OPEN — planned session 59, 2026-08-27, by the `architect` agent. Flagged risk: touches the live match-FINISHED PATCH path (🟡 status transitions) and the mobile logger (🟡 Flow B).
+**Priority:** HIGH — the specific failure mode to test for: a wrongly-routed 422 landing in the offline queue would retry forever and could silently lose a real final-whistle action.
+**Scope:** `src/lib/matchConfig.ts` — `DECISIVE_RESULT_ROUNDS` + `requiresDecisiveResult(round)`. `src/app/api/matches/[id]/route.ts` PATCH — after status-enum validation, before the DB write: if `requiresDecisiveResult` and regulation + shootout scores are both level, return `422` (`KNOCKOUT_DRAW_NOT_ALLOWED`) rather than allowing the FINISHED transition. `FootballLogger.tsx` — verify `persistMatchPatch` treats a 4xx as final (not a network-failure retry candidate) **before** wiring this in; surface the 422 message; disable the "End" button when a knockout match is level, leaving Extra Time/Penalties as the only path. `admin/matches/page.tsx` — render the real server error instead of a generic toast.
+**Depends on:** nothing structurally, but should land after `BACKLOG-280`'s bracket wiring is stable so both FINISHED-path changes aren't landing at once. **Needs an answer to `BACKLOG-267`'s open question 2** (whether to also finally enforce the *stored* `allowDraws` setting for non-knockout matches, or only this new hardcoded knockout check) before the PATCH guard's exact condition is final.
+
+**Found:** session 59, 2026-08-27.
+
+---
+
+### BACKLOG-282 — Swiss-Engine Phase 6: Public Matchday Grouping (Optional)
+
+**Status:** OPEN — planned session 59, 2026-08-27, by the `architect` agent. Lowest priority of the whole plan, explicitly optional.
+**Priority:** LOW — cosmetic, public-facing polish once the rest works.
+**Scope:** `src/app/competitions/page.tsx` — group the Matches tab by matchday for competitions using the new format.
+**Depends on:** `BACKLOG-279` (matches need real `matchday` values to group by).
 
 **Found:** session 59, 2026-08-27.
 
