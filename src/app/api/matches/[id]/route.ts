@@ -15,6 +15,7 @@ import { sendMatchEventNotification } from '@/lib/notifications/match-notificati
 import { getNotifiablePeriodType } from '@/lib/notifications/notification-rules';
 import { recalculateStandingsForMatch } from '@/lib/standingsService';
 import { advanceBracketForMatch } from '@/lib/bracketService';
+import { requiresDecisiveResult } from '@/lib/matchConfig';
 import { checkRateLimit } from '@/lib/rate-limit';
 
 export async function GET(
@@ -659,6 +660,45 @@ export async function PATCH(
             if (body.managerNotes !== undefined) updateData.managerNotes = body.managerNotes;
             if (body.approvedBy) updateData.approvedBy = body.approvedBy;
             if (body.approvedAt) updateData.approvedAt = new Date(body.approvedAt);
+        }
+
+        // BACKLOG-281: knockout-round matches must produce a decisive result,
+        // regardless of the competition's stored allowDraws setting -- checked
+        // here, after status-enum validation, before the write. Reads the
+        // CURRENT DB row for round/scores rather than trusting the body: a
+        // logger's FINISH action only ever sends { status: 'FINISHED' } (scores
+        // arrive earlier via the event-driven path, BUG-052), and shootout
+        // scores are written exclusively by events/route.ts's PEN_SCORED
+        // handler, never this route -- so by the time this PATCH runs, the DB
+        // row already holds the authoritative values. An admin-supplied
+        // homeScore/awayScore in THIS same request (already validated above)
+        // takes precedence as the effective final score if present.
+        if (body.status === 'FINISHED') {
+            const [current] = await db
+                .select({
+                    round: matches.round,
+                    homeScore: matches.homeScore,
+                    awayScore: matches.awayScore,
+                    shootoutHomeScore: matches.shootoutHomeScore,
+                    shootoutAwayScore: matches.shootoutAwayScore,
+                })
+                .from(matches)
+                .where(eq(matches.id, matchId));
+
+            if (current && requiresDecisiveResult(current.round)) {
+                const effectiveHome = updateData.homeScore ?? current.homeScore ?? 0;
+                const effectiveAway = updateData.awayScore ?? current.awayScore ?? 0;
+                if (effectiveHome === effectiveAway) {
+                    const shootoutHome = current.shootoutHomeScore ?? 0;
+                    const shootoutAway = current.shootoutAwayScore ?? 0;
+                    if (shootoutHome === shootoutAway) {
+                        return NextResponse.json({
+                            error: 'This is a knockout-round match and cannot finish level -- use Extra Time or Penalties to reach a decisive result.',
+                            code: 'KNOCKOUT_DRAW_NOT_ALLOWED',
+                        }, { status: 422 });
+                    }
+                }
+            }
         }
 
         await db

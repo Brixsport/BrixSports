@@ -13,6 +13,7 @@ import { X, Activity, Save, Undo2, Clock, Play, Pause, Settings, Lock as LockIco
 // in a separate file. Importing from the shared module closes that gap here
 // too, for free, and removes the duplication.
 import { queueOfflineEvent, queueAdminChange, jwtSecondsRemaining } from '@/lib/admin-offline-queue';
+import { requiresDecisiveResult } from '@/lib/matchConfig';
 import { useAuth } from '@/hooks/useAuth';
 import { useMultiLogger } from '@/hooks/useMultiLogger';
 import { useWebSocket } from '@/hooks/useWebSocket';
@@ -142,6 +143,11 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
     // never drift from the DB-authoritative shootoutHomeScore/shootoutAwayScore.
     const [showShootoutModal, setShowShootoutModal] = useState(false);
     const [shootoutScore, setShootoutScore] = useState<{ home: number; away: number } | null>(null);
+    // BACKLOG-281: mirrors the server's own decisive-result check (matches/[id]/route.ts
+    // PATCH) so the logger sees this blocked before wasting a round-trip on a 422 --
+    // the server remains the actual source of truth, this is UX only.
+    const knockoutLevelBlock = requiresDecisiveResult(match.round) && homeScore === awayScore
+        && (currentPeriod !== 'PENALTY_SHOOTOUT' || (shootoutScore?.home ?? 0) === (shootoutScore?.away ?? 0));
     // BACKLOG-190: IFAB Law 10.3 -- "each kick is taken by a different player,
     // and all eligible players must take a kick before any player can take a
     // second kick." Tracks who has already kicked *this round* per team; once a
@@ -1235,7 +1241,14 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                     stats: matchState?.stats
                 }),
             });
-            if (!res.ok) throw new Error(`Server returned ${res.status}`);
+            if (!res.ok) {
+                // BACKLOG-281: surface the real reason (e.g. a level knockout
+                // match rejected with KNOCKOUT_DRAW_NOT_ALLOWED) instead of a
+                // generic message -- the logger needs to know to use Extra
+                // Time/Penalties instead of retrying the same action.
+                const body = await res.json().catch(() => null);
+                throw new Error(body?.error || `Server returned ${res.status}`);
+            }
             // PATCH confirmed — transition local state to FINISHED
             stateManager.current?.transitionStatus('FINISHED');
 
@@ -1255,7 +1268,7 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
             alert('Match finalized.');
         } catch (e) {
             console.error(e);
-            alert('Error saving match result.');
+            alert(e instanceof Error ? e.message : 'Error saving match result.');
         } finally {
             setIsSaving(false);
         }
@@ -1832,8 +1845,9 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
                     )}
 
                     {currentPeriod !== 'NOT_STARTED' && (
-                        <button onClick={handleFinalize} disabled={isSaving}
-                            className="py-2.5 px-4 bg-white/5 border border-white/10 text-white/60 font-bold uppercase tracking-widest rounded-xl text-xs active:scale-95 transition-transform">
+                        <button onClick={handleFinalize} disabled={isSaving || knockoutLevelBlock}
+                            title={knockoutLevelBlock ? 'Knockout match is level -- use Extra Time or Penalties to reach a decisive result' : undefined}
+                            className="py-2.5 px-4 bg-white/5 border border-white/10 text-white/60 font-bold uppercase tracking-widest rounded-xl text-xs active:scale-95 transition-transform disabled:opacity-30 disabled:cursor-not-allowed">
                             {isSaving ? '...' : '🏁 End'}
                         </button>
                     )}
