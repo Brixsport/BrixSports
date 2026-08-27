@@ -9523,12 +9523,26 @@ Fixed exactly per the "Fix (not built)" plan below: `MatchStatusBadge.tsx` now d
 
 ### BACKLOG-278 — Swiss-Engine Phase 2: `competitionDraws` Schema + Draw Persistence API
 
-**Status:** OPEN — planned session 59, 2026-08-27, by the `architect` agent. Needs a real `db:push`/SQL-direct migration (BACKLOG-040 blocks `db:push`), staging first per `CLAUDE.md`.
+**Status:** SHIPPED to staging — session 60, 2026-08-27. Planned session 59 by the `architect` agent.
 **Priority:** MEDIUM-HIGH.
 **Scope:** new `competitionDraws` table (one JSON-blob row per draw: seed order, algorithm, computed pairings, `DRAFT`/`PUBLISHED`/`SUPERSEDED` status) — a reviewable staging area distinct from `matches`, so a ceremony correction never means editing live fixtures. Also adds nullable `bracketNodes.loserNextMatchId` (needed for the 3rd-place match, which winner-only `nextMatchId` can't express). New `POST/GET /api/admin/competitions/[id]/draws` (admin-gated, `.limit()` on GET, team list sourced from `standings` per the corrected source-of-truth) and `GET/PATCH/DELETE .../draws/[drawId]` (PATCH re-validates server-side on every edit; refuses edits once `PUBLISHED`).
 **Depends on:** `BACKLOG-277` (the draw algorithm this API calls). **Blocks:** `BACKLOG-279`.
 
-**Found:** session 59, 2026-08-27.
+**Built, session 60, 2026-08-27:**
+- `src/db/schema.ts` — `competitionDraws` table (`competition_draws`: `id`, `competition_id` FK→competitions cascade, `sport`, `algorithm` default `POT_CIRCLE_V1`, `seed_order`/`pots`/`pairings` as JSON text, `status` default `DRAFT`, `published_match_ids` nullable JSON (set only by the future publish step), `created_by` FK→users, timestamps). `bracketNodes` gained nullable `loserNextMatchId`.
+- **Migration — SQL-direct** (`db:push` still blocked by `BACKLOG-040`), `dev/migrate-backlog278-competition-draws.mjs` (dry-run by default, `--env=staging|prod --apply`), same convention as `dev/create-team-ratings-table.mjs`. Applied to staging; **prod not yet run**.
+- `src/app/api/admin/competitions/[id]/draws/route.ts` (GET list + POST create) and `.../draws/[drawId]/route.ts` (GET + PATCH + DELETE) — admin-gated (`getAuthUser` + `role==='admin'`), `.limit(50)` on the list GET, roster validated against `standings` (not `competitionTeamEntries`, per `BACKLOG-267`'s corrected source-of-truth), rejects a seedOrder that's the wrong size or contains unregistered/duplicate team IDs, recomputes+re-validates via `computeLeaguePhaseDraw`/`assignHomeAway`/`validateDraw` on every POST and PATCH, refuses PATCH/DELETE once `status==='PUBLISHED'` (409).
+- `tsc --noEmit`: diffed byte-for-byte against the pre-change baseline — identical except one cosmetic difference in a `.next/types` auto-generated union-type ordering (unrelated to this change). Zero new errors.
+
+**Live-verified end-to-end**, local dev server (`localhost:3000`) pointed at the real staging DB, via the Browser pane's `fetch()` (not curl — this sandbox can't reach the dev server's port directly) with a real signed admin JWT:
+- **Validation path** against a real competition (`BUSA LEAGUE FOOTBALL`, 16 real teams): POST with a 2-team seedOrder correctly 422'd (`"seedOrder has 2 team(s), but this competition has 16 registered"`).
+- **Full happy path** against a throwaway 20-team competition (`dev/setup-backlog278-verify.mjs`, cleaned up after via `dev/cleanup-backlog278-verify.mjs`): POST created a DRAFT draw (201, 40 pairings, 4 pots); GET list and GET single both correct; client-side re-validation of the returned pairings confirmed every team has exactly 4 games, exactly 2 home/2 away, and 4 distinct opponents (matches `dev/verify-draw.ts`'s own checks). PATCH with a reordered/rotated seedOrder correctly recomputed (new seed order reflected, still 40 pairings); a wrong-sized PATCH correctly 422'd.
+- **PUBLISHED lock**: manually flipped the throwaway draw's status to `PUBLISHED` — PATCH and DELETE both correctly 409'd (`"Cannot edit/delete a published draw"`); flipped back to `DRAFT`, DELETE then succeeded (200) and a follow-up GET correctly 404'd.
+- **Investigated and root-caused a false alarm, not a bug:** an unauthenticated (no `Authorization` header) GET initially returned `200` with real data instead of `401`. Traced directly rather than assumed: the Browser pane's persistent profile had a real, valid `httpOnly authToken` cookie already set on `localhost:3000` from actual prior dev-server use (invisible to `document.cookie`, but still auto-attached by `fetch()`'s default `credentials: 'same-origin'`) — re-testing the identical request with `credentials: 'omit'` correctly returned `401`. No code change needed; the auth gate works as written.
+
+**Not yet done:** prod migration (`--env=prod --apply`) and the draw-publish endpoint (`BACKLOG-279`, separate phase).
+
+**Found:** session 59, 2026-08-27. **Built:** session 60, 2026-08-27 (staging only).
 
 ---
 

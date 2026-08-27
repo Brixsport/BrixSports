@@ -441,6 +441,10 @@ export const bracketNodes = sqliteTable('bracket_nodes', {
     title: text('title').notNull(),
     matchId: text('match_id').references(() => matches.id),
     nextMatchId: text('next_match_id'),
+    // BACKLOG-278: winner-only nextMatchId can't express a 3rd-place match
+    // (fed by both semifinal LOSERS, not a winner). Nullable, unused by
+    // existing brackets.
+    loserNextMatchId: text('loser_next_match_id'),
     homeTeamId: text('home_team_id').references(() => teams.id),
     awayTeamId: text('away_team_id').references(() => teams.id),
     homeScore: integer('home_score'),
@@ -449,6 +453,27 @@ export const bracketNodes = sqliteTable('bracket_nodes', {
     round: text('round'),
     position: integer('position'),
     createdAt: integer('created_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
+});
+
+// Competition Draws (BACKLOG-278) — a reviewable, editable-before-publish
+// staging area for a computed league-phase draw (see src/lib/competitionDraw.ts).
+// Deliberately NOT written straight into `matches` — a real draw ceremony
+// might need a correction before it's final. `matches.status` was considered
+// and rejected as a place to model this (that enum is load-bearing for the
+// logger, public livescore, notifications, and standings recalc).
+export const competitionDraws = sqliteTable('competition_draws', {
+    id: text('id').primaryKey(),
+    competitionId: text('competition_id').notNull().references(() => competitions.id, { onDelete: 'cascade' }),
+    sport: text('sport').notNull(),
+    algorithm: text('algorithm').notNull().default('POT_CIRCLE_V1'),
+    seedOrder: text('seed_order').notNull(), // JSON string[] — ceremony seed order
+    pots: text('pots'), // JSON string[][], nullable — algorithm-specific (POT_CIRCLE_V1 only, for now)
+    pairings: text('pairings').notNull(), // JSON DrawPairing[] — computed round/home/away
+    status: text('status').notNull().default('DRAFT'), // 'DRAFT' | 'PUBLISHED' | 'SUPERSEDED'
+    publishedMatchIds: text('published_match_ids'), // JSON string[], set only by the publish step (BACKLOG-279)
+    createdBy: text('created_by').notNull().references(() => users.id),
+    createdAt: integer('created_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
+    updatedAt: integer('updated_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
 });
 
 // Users table
@@ -1133,6 +1158,8 @@ export type Standing = typeof standings.$inferSelect;
 export type NewStanding = typeof standings.$inferInsert;
 export type BracketNode = typeof bracketNodes.$inferSelect;
 export type NewBracketNode = typeof bracketNodes.$inferInsert;
+export type CompetitionDraw = typeof competitionDraws.$inferSelect;
+export type NewCompetitionDraw = typeof competitionDraws.$inferInsert;
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
 export type UserPreference = typeof userPreferences.$inferSelect;
