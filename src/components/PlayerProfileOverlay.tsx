@@ -269,7 +269,7 @@ export function PlayerProfileOverlay({ player: initialPlayer, onClose, sport }: 
                 <>
                   <StatCard label="Goals" value={stats.goals || 0} color="green" />
                   <StatCard label="Assists" value={stats.assists || 0} color="blue" />
-                  <StatCard label="Appearances" value={stats.appearances || 0} color="purple" />
+                  <StatCard label="Appearances" value={stats.appearances || '-'} color="purple" />
                   <StatCard label="Yellow Cards" value={stats.yellowCards || 0} color="yellow" />
                 </>
               )}
@@ -293,7 +293,7 @@ function InfoMeta({ icon, label, value }: { icon: React.ReactNode; label: string
   );
 }
 
-function StatCard({ label, value, color }: { label: string; value: number; color: string }) {
+function StatCard({ label, value, color }: { label: string; value: number | string; color: string }) {
   const colorClasses: Record<string, string> = {
     green: 'text-green-500',
     blue: 'text-blue-500',

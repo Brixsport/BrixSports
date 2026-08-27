@@ -227,7 +227,7 @@ export default function PlayerDetailClient() {
                         {/* Quick Stats */}
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                             <div className="text-center p-4 bg-white/5 rounded-xl border border-white/10">
-                                <div className="text-2xl font-bold text-primary">{stats.appearances}</div>
+                                <div className="text-2xl font-bold text-primary">{stats.appearances || '-'}</div>
                                 <div className="text-xs text-white/60">Apps</div>
                             </div>
                             {playerSport === 'Basketball' ? (
@@ -597,7 +597,7 @@ export default function PlayerDetailClient() {
                                         </div>
                                         <div className="flex justify-between">
                                             <span className="text-white/60">Appearances</span>
-                                            <span className="font-bold text-2xl">{stats.appearances}</span>
+                                            <span className="font-bold text-2xl">{stats.appearances || '-'}</span>
                                         </div>
                                         <div className="flex justify-between">
                                             <span className="text-white/60">Goal Contributions</span>
