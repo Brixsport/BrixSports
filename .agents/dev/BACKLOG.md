@@ -9417,7 +9417,14 @@ Fixed exactly per the "Fix (not built)" plan below: `MatchStatusBadge.tsx` now d
 - **Knockout bracket:** confirmed as planned — pure manual admin entry, pre-filled with a suggested 1v8/2v7/3v6/4v5 seeding from the live table, every slot admin-editable, works for any future top-N knockout, not BUSA-specific. Uses the existing half-built `bracketNodes` table (`PATCH /api/brackets/[id]` already does winner-advancement, confirmed still accurate) plus a new `loserNextMatchId` column (needed for the 3rd-place match, which the winner-only `nextMatchId` can't express). New `advanceBracketForMatch()` needed to actually call that advancement from the match-FINISHED hook (currently nothing does).
 - **`allowDraws` hardcode, located precisely:** `src/app/api/matches/[id]/route.ts` PATCH, returning `422` if a knockout-round match ends level with no shootout scores either — plus a real risk flagged: `FootballLogger.tsx`'s offline-queue logic must correctly treat a 422 as "don't retry," not queue it for infinite retry like a network failure. Named as the single most likely way this work could break Flow B if rushed.
 - **13 real files touched, ~7 new files**, phased low-risk-first (pure draw-algorithm logic with zero DB dependency, unit-testable offline, before anything schema/API/UI). Full file list and phase breakdown in the architect's own output, not duplicated here — ask to see it again if picking this up.
-- **7 questions still need a product-owner answer before implementation starts:** (1) the round-4 repeat-pot-pair asymmetry noted above — acceptable? (2) should this also finally enforce the *stored* `allowDraws` setting for non-knockout matches, or only the new hardcoded knockout check — enabling the former changes behavior for every existing competition that has never had it enforced; (3) matchday scheduling — fixed calendar dates per matchday, or admin picks each match's time at publish; (4) venue — hardcoded single stadium, or still admin-selectable per match; (5) post-publish corrections — plan is unpublish → delete UPCOMING matches → edit → republish, blocked once any match goes LIVE/FINISHED, acceptable?; (6) a genuine tie for the 8th and final knockout slot is currently broken by `teamId` alphabetically — fine given the admin can override any bracket slot manually, or does it need a real playoff?; (7) confirm the league phase and knockout share one `competitionId` (assumed, needs `BACKLOG-275`'s round-exclusion fix) rather than being split into two competition rows.
+- **All 7 questions now resolved, session 59 continued:**
+  1. Round-4 repeat-pot-pair asymmetry — accepted as-is, structurally necessary given odd pot size.
+  2. `allowDraws` — only the new hardcoded knockout-round check ships; the stored per-competition setting stays unenforced everywhere else, not retroactively turned on.
+  3. Matchday scheduling — **admin sets each match's real startTime/venue at publish time**, not a bulk fixed-calendar-date-per-matchday shortcut.
+  4. Venue — **admin-editable per match** (defaults to the one stadium, but stays a real field — covers a rare relocation exception with no code change).
+  5. Post-publish corrections — accepted as planned (unpublish → delete UPCOMING matches → edit → republish, blocked once any match is LIVE/FINISHED).
+  6. Tie for 8th place — **flag it, admin overrides.** Richard's clarification: the existing tiebreaker chain (GD, goals, cards) already resolves almost every real tie; `teamId` is only the final fallback for a genuine dead-even case. No new playoff-match type — just a visible warning in the knockout-bracket UI so the admin knows they're overriding a real tie, not silently picking one alphabetically.
+  7. League phase and knockout share **one `competitionId`** — confirmed, no split into two competition rows. Makes `BACKLOG-275`'s round-exclusion fix a hard prerequisite, not optional.
 **Points to:** `BACKLOG-268` (standings/tiebreaker, SHIPPED to staging + prod data, prod app code pending a `main` promotion), `BACKLOG-275` (live standings-pollution bug, blocking correctness for this competition's own knockout stage, not yet fixed), `BACKLOG-276` (query/limit prerequisites), `BACKLOG-277` (pure draw algorithm), `BACKLOG-278` (schema + draw persistence API), `BACKLOG-279` (draw publish + admin UI), `BACKLOG-280` (knockout bracket service + admin UI), `BACKLOG-281` (`allowDraws` hardcode + logger enforcement), `BACKLOG-282` (optional public matchday grouping). All phases now filed; several still need answers to the 7 open questions above before their exact shape is final.
 
 **Found:** session 59, 2026-08-27.
@@ -9479,10 +9486,15 @@ Fixed exactly per the "Fix (not built)" plan below: `MatchStatusBadge.tsx` now d
 
 ### BACKLOG-276 — Swiss-Engine Phase 0b: `/api/matches` + `/api/brackets` Query/Limit Prerequisites
 
-**Status:** OPEN — planned session 59, 2026-08-27, by the `architect` agent. Independent of the 7 open product-owner questions on `BACKLOG-267` — safe to build now.
-**Priority:** MEDIUM — hard prerequisite for the Swiss competition specifically (48 matches, current `/api/matches` GET caps at 50 with no round/matchday filter), plus fixes two independent rule violations.
-**Scope:** `src/app/api/matches/route.ts` GET — add `matchday`/`round` query params, raise/paginate `.limit()`. `src/app/api/brackets/route.ts` GET — add missing `.limit()` (CLAUDE.md violation); fix `roundOrder` to include `THIRD_PLACE` (currently omitted, so `indexOf` returns -1 and the 3rd-place match sorts before the Final).
+**Status:** SHIPPED to staging, expanded beyond the original scope — session 59, 2026-08-27.
+**Priority:** MEDIUM — hard prerequisite for the Swiss competition specifically (48 matches), plus fixes two independent rule violations.
+**Fix:** `src/app/api/matches/route.ts` GET — added `matchday`/`round` query params; clamped `limit` (default 50, cap 200, standard project pattern); added `offset` + an `X-Total-Count`/`X-Limit`/`X-Offset` response-header trio for pagination (kept the JSON body a bare array — non-breaking for the many existing consumers). `src/app/api/brackets/route.ts` GET — added missing `.limit(200)`; fixed `roundOrder` to include `THIRD_PLACE` (was omitted, `indexOf` returned -1, sorted before the Final). **Expanded scope, Richard's request mid-session:** `/admin/matches/page.tsx` was fetching bare `/api/matches` with zero pagination UI and stat cards that silently counted only the loaded 50 (not the real total) — added real "Load More" pagination reading the new headers, plus per-status counts (`fetchStatusCounts`, one `limit=1` call per status) so the Live/Upcoming/Finished cards show true totals, not just what's loaded. The rest of the admin-pagination sweep filed separately as `BACKLOG-283`.
 **Depends on:** nothing. **Blocks:** the draw/bracket UI (`BACKLOG-279`/`280`) needs the matchday filter to render sanely.
+
+**Evidence:**
+- Commit: `[pending]`
+- Verified by: `tsc --noEmit` clean of new errors in all three touched files (38 baseline pre-existing errors unaffected).
+- Pending items: live browser verification of the Load More button + stat-card counts not yet done.
 
 **Found:** session 59, 2026-08-27.
 
@@ -9549,6 +9561,20 @@ Fixed exactly per the "Fix (not built)" plan below: `MatchStatusBadge.tsx` now d
 **Priority:** LOW — cosmetic, public-facing polish once the rest works.
 **Scope:** `src/app/competitions/page.tsx` — group the Matches tab by matchday for competitions using the new format.
 **Depends on:** `BACKLOG-279` (matches need real `matchday` values to group by).
+
+**Found:** session 59, 2026-08-27.
+
+---
+
+### BACKLOG-283 — Admin List Pages With No Pagination, Beyond `/admin/matches` (Fixed This Session)
+
+**Status:** OPEN — found session 59, 2026-08-27, while extending `BACKLOG-276`'s API changes into real pagination for `/admin/matches` (Richard's own request: "we need pagination across admin/comps, matches as well, check other places"). `/admin/matches` itself is DONE this session (Load More + real total-count stat cards, see `RUNLOG.md`); this entry is the rest of the sweep.
+**Priority:** MEDIUM — not broken today (current data volumes are small), but the same silent-cap pattern as `/admin/matches` had (a hardcoded/default API limit with zero UI indication more rows exist) is present across most other admin list pages.
+**Scope, confirmed via a grep sweep of `src/app/admin/**/page.tsx`:**
+- `fetch('/api/matches')` bare, no limit/pagination awareness at all: `admin/loggers/page.tsx`, `admin/manager/page.tsx`, `admin/page.tsx` (main dashboard).
+- `fetch('/api/competitions?includeStats=true')` — `admin/competitions/page.tsx`. Lower urgency: `/api/competitions` already caps at 500 and only 8 real rows exist today, but no page/offset support either.
+- Not audited in depth, worth a second look when picked up: `admin/players/page.tsx` (`/api/players`), `admin/teams/page.tsx` (`/api/teams`), `admin/access/page.tsx` (`/api/admin/users`), `admin/organizations/page.tsx`.
+**Fix (not built):** same pattern as this session's `/api/matches` fix — `offset` param + `X-Total-Count` response header (non-breaking, existing bare-array consumers keep working), then a real "Load More" or page-number control per page. Do one page at a time rather than a single sweeping change, given each page's stat cards/filters need individual checking (the same "stat card counts only the loaded page" bug found in `/admin/matches` may exist elsewhere too).
 
 **Found:** session 59, 2026-08-27.
 

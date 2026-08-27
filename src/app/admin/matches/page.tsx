@@ -68,6 +68,10 @@ function AdminMatchesPageContent() {
     const [isUpdating, setIsUpdating] = useState(false);
     const [filterStatus, setFilterStatus] = useState<string>('all');
     const [matches, setMatches] = useState<Match[]>([]);
+    const [totalMatchCount, setTotalMatchCount] = useState(0);
+    const [statusCounts, setStatusCounts] = useState<Record<string, number>>({});
+    const [isLoadingMore, setIsLoadingMore] = useState(false);
+    const MATCHES_PAGE_SIZE = 50;
     const [teams, setTeams] = useState<Team[]>([]);
     const [competitions, setCompetitions] = useState<Competition[]>([]);
     const { toasts, removeToast, success, error } = useToast();
@@ -155,22 +159,68 @@ function AdminMatchesPageContent() {
         setIsLoading(true);
         try {
             const [matchesRes, teamsRes, compsRes] = await Promise.all([
-                fetch('/api/matches'),
+                fetch(`/api/matches?limit=${MATCHES_PAGE_SIZE}&offset=0`),
                 fetch('/api/teams'),
                 fetch('/api/competitions')
             ]);
 
-            if (matchesRes.ok) setMatches(await matchesRes.json());
+            if (matchesRes.ok) {
+                setMatches(await matchesRes.json());
+                setTotalMatchCount(parseInt(matchesRes.headers.get('X-Total-Count') || '0', 10));
+            }
             if (teamsRes.ok) setTeams(await teamsRes.json());
             if (compsRes.ok) {
                 const compsData = await compsRes.json();
                 setCompetitions(compsData.competitions);
             }
+            fetchStatusCounts();
         } catch (err) {
             error('Failed to load matches data. Please try again.');
             console.error('Error fetching data:', err);
         } finally {
             setIsLoading(false);
+        }
+    };
+
+    // BACKLOG-276: Live/Upcoming/Finished cards previously counted only the
+    // loaded page (matches.filter(...)), silently undercounting once more
+    // than MATCHES_PAGE_SIZE matches existed for a status. limit=1 per
+    // status is enough to read the real total off X-Total-Count.
+    const fetchStatusCounts = async () => {
+        const statuses = ['LIVE', 'UPCOMING', 'HALF_TIME', 'FINISHED'];
+        try {
+            const results = await Promise.all(
+                statuses.map(s => fetch(`/api/matches?status=${s}&limit=1`))
+            );
+            const counts: Record<string, number> = {};
+            statuses.forEach((s, i) => {
+                counts[s] = parseInt(results[i].headers.get('X-Total-Count') || '0', 10);
+            });
+            setStatusCounts(counts);
+        } catch (err) {
+            console.error('Error fetching status counts:', err);
+        }
+    };
+
+    // BACKLOG-276: this page previously fetched a bare `/api/matches` (no
+    // limit/offset), silently capped at the API's default of 50 with no
+    // indication more existed -- "Total Matches" showed the loaded count,
+    // not the real total. Now paginated, with the real total from the
+    // X-Total-Count header driving the stat card and the Load More button.
+    const loadMoreMatches = async () => {
+        setIsLoadingMore(true);
+        try {
+            const res = await fetch(`/api/matches?limit=${MATCHES_PAGE_SIZE}&offset=${matches.length}`);
+            if (res.ok) {
+                const nextPage: Match[] = await res.json();
+                setMatches(prev => [...prev, ...nextPage]);
+                setTotalMatchCount(parseInt(res.headers.get('X-Total-Count') || '0', 10));
+            }
+        } catch (err) {
+            error('Failed to load more matches. Please try again.');
+            console.error('Error loading more matches:', err);
+        } finally {
+            setIsLoadingMore(false);
         }
     };
 
@@ -390,10 +440,10 @@ function AdminMatchesPageContent() {
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-12">
-                    <StatCard label="Total Matches" value={matches.length.toString()} icon={<Calendar className="text-primary" size={24} />} />
-                    <StatCard label="Live" value={matches.filter(m => m.status === 'LIVE').length.toString()} icon={<div className="w-3 h-3 bg-red-500 rounded-full animate-pulse" />} />
-                    <StatCard label="Upcoming" value={matches.filter(m => m.status === 'UPCOMING').length.toString()} icon={<Calendar className="text-blue-500" size={24} />} />
-                    <StatCard label="Finished" value={matches.filter(m => m.status === 'FINISHED').length.toString()} icon={<Trophy className="text-yellow-500" size={24} />} />
+                    <StatCard label="Total Matches" value={totalMatchCount.toString()} icon={<Calendar className="text-primary" size={24} />} />
+                    <StatCard label="Live" value={(statusCounts.LIVE ?? 0).toString()} icon={<div className="w-3 h-3 bg-red-500 rounded-full animate-pulse" />} />
+                    <StatCard label="Upcoming" value={(statusCounts.UPCOMING ?? 0).toString()} icon={<Calendar className="text-blue-500" size={24} />} />
+                    <StatCard label="Finished" value={(statusCounts.FINISHED ?? 0).toString()} icon={<Trophy className="text-yellow-500" size={24} />} />
                 </div>
 
                 <div className="flex items-center gap-3 mb-8">
@@ -525,6 +575,21 @@ function AdminMatchesPageContent() {
                                     <Calendar size={48} className="mx-auto mb-6 opacity-10" />
                                     <h4 className="font-display italic text-2xl uppercase mb-2">No matches found</h4>
                                     <p className="text-[10px] font-black uppercase tracking-widest text-white/20">Expand your filters or schedule a new fixture</p>
+                                </div>
+                            )}
+
+                            {matches.length < totalMatchCount && (
+                                <div className="flex flex-col items-center gap-3 py-8">
+                                    <p className="text-[10px] font-black uppercase tracking-widest text-white/40">
+                                        Showing {matches.length} of {totalMatchCount}
+                                    </p>
+                                    <button
+                                        onClick={loadMoreMatches}
+                                        disabled={isLoadingMore}
+                                        className="px-8 py-3 bg-white/5 border border-white/10 rounded-xl text-xs font-black uppercase tracking-widest hover:bg-white/10 transition-colors disabled:opacity-50"
+                                    >
+                                        {isLoadingMore ? 'Loading...' : 'Load More'}
+                                    </button>
                                 </div>
                             )}
                         </>

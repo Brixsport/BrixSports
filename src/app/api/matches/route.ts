@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
 import { matches, matchEvents, teams } from '@/db/schema';
-import { eq, and, inArray, or, desc } from 'drizzle-orm'; // inArray kept for teams fetch
+import { eq, and, inArray, or, desc, sql } from 'drizzle-orm'; // inArray kept for teams fetch
 import { getAuthUser } from '@/lib/auth';
 import { checkRateLimit } from '@/lib/rate-limit';
 
@@ -24,14 +24,26 @@ export async function GET(request: NextRequest) {
         const status = searchParams.get('status');
         const competitionId = searchParams.get('competitionId');
         const competition = searchParams.get('competition');
+        const matchday = searchParams.get('matchday');
+        const round = searchParams.get('round');
+        // BACKLOG-276: the generic default-50-most-recent window can push a
+        // specific competition's own matches out entirely once other
+        // competitions are active -- matchday/round let a caller ask for an
+        // exact slice instead of relying on recency. Clamp pattern matches
+        // the rest of the codebase (BACKLOG-169).
+        const limit = Math.min(Math.max(1, parseInt(searchParams.get('limit') || '50', 10) || 50), 200);
+        const offset = Math.max(0, parseInt(searchParams.get('offset') || '0', 10) || 0);
 
         let query = db.select().from(matches);
+        let countQuery = db.select({ count: sql<number>`count(*)` }).from(matches);
 
         const conditions = [];
 
         if (sport) conditions.push(eq(matches.sport, sport));
         if (loggerId) conditions.push(eq(matches.loggerId, loggerId));
         if (status) conditions.push(eq(matches.status, status));
+        if (matchday) conditions.push(eq(matches.matchday, parseInt(matchday, 10)));
+        if (round) conditions.push(eq(matches.round, round));
 
         if (competitionId) {
             conditions.push(or(eq(matches.competitionId, competitionId), eq(matches.competition, competition || '')));
@@ -41,9 +53,15 @@ export async function GET(request: NextRequest) {
 
         if (conditions.length > 0) {
             query = query.where(and(...conditions)) as typeof query;
+            countQuery = countQuery.where(and(...conditions)) as typeof countQuery;
         }
 
-        const allMatches = await query.orderBy(desc(matches.createdAt)).limit(50);
+        // Total count for pagination UI -- a separate lightweight query rather
+        // than changing the response body shape (many admin pages consume this
+        // route as a bare array today; a header keeps them working unchanged).
+        const [{ count: totalCount }] = await countQuery;
+
+        const allMatches = await query.orderBy(desc(matches.createdAt)).limit(limit).offset(offset);
 
         // Collect all unique team IDs
         const teamIds = new Set<string>();
@@ -97,7 +115,13 @@ export async function GET(request: NextRequest) {
             })
         );
 
-        return NextResponse.json(matchesWithDetails);
+        return NextResponse.json(matchesWithDetails, {
+            headers: {
+                'X-Total-Count': String(totalCount),
+                'X-Limit': String(limit),
+                'X-Offset': String(offset),
+            },
+        });
     } catch (error) {
         console.error('Error fetching matches:', error);
         return NextResponse.json({ error: 'Failed to fetch matches' }, { status: 500 });

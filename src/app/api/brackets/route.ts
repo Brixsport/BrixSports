@@ -52,7 +52,8 @@ export async function GET(request: NextRequest) {
         const nodes = await db
             .select()
             .from(bracketNodes)
-            .where(and(...conditions));
+            .where(and(...conditions))
+            .limit(200);
 
         // Group nodes by round
         const rounds = nodes.reduce((acc, node) => {
@@ -114,8 +115,9 @@ export async function GET(request: NextRequest) {
             })
         );
 
-        // Sort rounds by typical tournament order
-        const roundOrder = ['FINAL', 'SEMI_FINAL', 'QUARTER_FINAL', 'ROUND_16', 'ROUND_32'];
+        // Sort rounds by typical tournament order. THIRD_PLACE was previously
+        // omitted -- indexOf returned -1, sorting it before FINAL (BACKLOG-276).
+        const roundOrder = ['FINAL', 'THIRD_PLACE', 'SEMI_FINAL', 'QUARTER_FINAL', 'ROUND_16', 'ROUND_32'];
         enrichedRounds.sort((a, b) => {
             const aIndex = roundOrder.indexOf(a.round);
             const bIndex = roundOrder.indexOf(b.round);
