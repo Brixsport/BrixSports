@@ -71,7 +71,50 @@ export async function PATCH(
         }
 
         const body = await req.json();
-        const { seedOrder } = body;
+        const { seedOrder, pairingUpdates } = body;
+
+        if (seedOrder !== undefined && pairingUpdates !== undefined) {
+            return NextResponse.json({ error: 'Provide either seedOrder or pairingUpdates, not both' }, { status: 422 });
+        }
+
+        // pairingUpdates: targeted edits to an already-computed draw's per-match
+        // scheduling (startTime/venue) or a home/away swap -- does NOT touch team
+        // assignment or recompute the draw. Identified by (round, index), the
+        // stable position the algorithm assigns each pairing.
+        if (pairingUpdates !== undefined) {
+            if (!Array.isArray(pairingUpdates) || pairingUpdates.length === 0) {
+                return NextResponse.json({ error: 'pairingUpdates (non-empty array) is required' }, { status: 422 });
+            }
+
+            const currentPairings: Array<{ round: number; index: number; homeTeamId: string; awayTeamId: string; startTime?: string | null; venue?: string | null }> = JSON.parse(draw.pairings);
+            const byKey = new Map(currentPairings.map(p => [`${p.round}:${p.index}`, p]));
+
+            for (const upd of pairingUpdates) {
+                const key = `${upd.round}:${upd.index}`;
+                const pairing = byKey.get(key);
+                if (!pairing) {
+                    return NextResponse.json({ error: `No pairing found for round ${upd.round}, index ${upd.index}` }, { status: 422 });
+                }
+                if (upd.swapHomeAway) {
+                    const tmp = pairing.homeTeamId;
+                    pairing.homeTeamId = pairing.awayTeamId;
+                    pairing.awayTeamId = tmp;
+                }
+                if (upd.startTime !== undefined) {
+                    if (upd.startTime !== null && isNaN(new Date(upd.startTime).getTime())) {
+                        return NextResponse.json({ error: `Invalid startTime for round ${upd.round}, index ${upd.index}: ${upd.startTime}` }, { status: 422 });
+                    }
+                    pairing.startTime = upd.startTime;
+                }
+                if (upd.venue !== undefined) {
+                    pairing.venue = upd.venue;
+                }
+            }
+
+            const updated = { pairings: JSON.stringify(currentPairings), updatedAt: new Date() };
+            await db.update(competitionDraws).set(updated).where(eq(competitionDraws.id, draw.id));
+            return NextResponse.json({ draw: toDrawDTO({ ...draw, ...updated }) });
+        }
 
         if (!Array.isArray(seedOrder) || seedOrder.length === 0) {
             return NextResponse.json({ error: 'seedOrder (array of team IDs) is required' }, { status: 422 });

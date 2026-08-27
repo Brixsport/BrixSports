@@ -9548,12 +9548,29 @@ Fixed exactly per the "Fix (not built)" plan below: `MatchStatusBadge.tsx` now d
 
 ### BACKLOG-279 — Swiss-Engine Phase 3: Draw Publish + Admin Seed-Order/Review UI
 
-**Status:** OPEN — planned session 59, 2026-08-27, by the `architect` agent. Flagged by the architect as the single highest-risk piece of the whole plan.
+**Status:** SHIPPED to staging — session 60, 2026-08-27. Planned session 59 by the `architect` agent, flagged as the single highest-risk piece of the whole plan.
 **Priority:** HIGH — the point where a draft draw becomes 40 real `matches` rows.
 **Scope:** `POST .../draws/[drawId]/publish` — validate, delete any prior UPCOMING matches recorded from an earlier publish of the same draw (idempotent-safe retry), single batched `db.insert(matches).values([...40])` (one statement = atomic), write match ids back, mark `PUBLISHED`. Explicitly does NOT reuse `POST /api/matches` (mass-assignment risk — `id`/`approvedBy`/`loggerId` are client-settable there today, a separate pre-existing issue not fixed by this work). New `src/app/admin/competitions/[id]/draw/page.tsx` — seed-order editor (drag/admin-set order, `TeamLogo` for crests), Compute, review grid by matchday with per-pairing swap, per-match startTime/venue, Publish behind an explicit confirm.
-**Depends on:** `BACKLOG-276`, `BACKLOG-278`. **Needs answers to `BACKLOG-267`'s open questions 3 (matchday scheduling shape), 4 (venue), 5 (post-publish correction flow) before the UI's exact fields can be finalized** — the publish mechanics above don't depend on those answers, the editor's field list does.
+**Depends on:** `BACKLOG-276`, `BACKLOG-278`. **Needs answers to `BACKLOG-267`'s open questions 3 (matchday scheduling shape), 4 (venue), 5 (post-publish correction flow) before the UI's exact fields can be finalized** — all three resolved in `BACKLOG-267` (admin sets real startTime/venue per match at publish; venue admin-editable, defaults to none; unpublish→edit→republish, blocked once any match is LIVE/FINISHED).
 
-**Found:** session 59, 2026-08-27.
+**Built, session 60, 2026-08-27:**
+- `src/app/api/admin/competitions/[id]/draws/[drawId]/publish/route.ts` — `POST` (publish) builds an explicit, server-controlled `matches` field set from the draw's stored pairings (no client-supplied fields at all, sidestepping `POST /api/matches`'s known mass-assignment risk entirely rather than just avoiding it); rejects if any pairing is missing `startTime`/`venue` (422, lists which); idempotent-retry-safe (a republish deletes only its own prior matches, and only if every one of them is still `UPCOMING` — aborts 409 listing any that progressed); single batched `db.insert(matches).values([...40])`; writes `publishedMatchIds` back, sets `status='PUBLISHED'`. `DELETE` (unpublish) — the other half of `BACKLOG-267`'s resolved correction flow: deletes the draw's still-`UPCOMING` matches (409 abort if any progressed) and reverts the draw to `DRAFT` so it can be edited (via the existing PATCH) and republished.
+- `.../draws/[drawId]/route.ts` PATCH extended (not a new route) with a second edit mode: `pairingUpdates` (array of `{round, index, startTime?, venue?, swapHomeAway?}`) for targeted per-match scheduling/home-away-swap edits that don't touch team assignment or trigger a recompute — distinct from the existing `seedOrder` mode (full recompute). Still refuses both once `status==='PUBLISHED'`.
+- `src/app/admin/competitions/[id]/draw/page.tsx` — seed-order editor (up/down reorder, no drag-and-drop library — dependency-free, matches this project's ship-over-perfect bias), grouped-by-matchday review grid (swap button, `datetime-local` + venue inputs per pairing, saved via `pairingUpdates` on click/blur), Publish behind `window.confirm`, Unpublish behind its own confirm when already published.
+- `tsc --noEmit`: zero new errors (only the same `.next/types` cache-ordering noise already present in the baseline).
+
+**Live-verified end-to-end through the real UI** (not just API calls), local dev server against the real staging DB, throwaway 20-team competition (`dev/setup-backlog278-verify.mjs`/`cleanup-backlog278-verify.mjs`):
+- Seed-order editor rendered all 20 teams in 4 pots correctly; **Compute Draw** click → real `POST` (201) → review grid rendered correctly across all 4 matchdays.
+- **Swap** click → real `PATCH` → home/away genuinely swapped, confirmed surviving a full page reload.
+- Bulk-set `startTime`+`venue` on all 40 pairings via the same `pairingUpdates` path the UI's inputs use.
+- **Publish** click (behind a stubbed `window.confirm` — see finding below) → real `POST .../publish` (200) → UI showed "Published 40 matches.", status flipped to `PUBLISHED`. **Independently confirmed via direct DB query**: exactly 40 real `matches` rows for the throwaway competition, correct `home_team_id`/`away_team_id` (swap preserved), `start_time`, `venue`, `matchday`, `round: null` (correctly excluded from `BACKLOG-275`'s knockout-round standings filter), `status: UPCOMING`.
+- **Unpublish** click → real `DELETE` (200) → DB-confirmed: all 40 matches deleted, draw reverted to `status: DRAFT`, `published_match_ids: null`.
+- **Republish** (via direct API call) → 200, 40 fresh matches, `status: PUBLISHED` again — confirms the full unpublish→edit→republish correction cycle from `BACKLOG-267`'s resolved answer works, not just the one-shot publish path.
+- All throwaway data (1 competition, 20 teams, 20 standings rows, 1 draw, 40 matches created across the publish/republish cycle) confirmed deleted after.
+
+**Tooling finding, not a code bug:** `window.confirm()` inside a Browser-pane-driven click was silently auto-dismissed as "cancel" by the automation layer on the first attempt (no matches created, no error) — worth knowing for any future browser-driven test of a confirm-gated action in this environment. Resolved by stubbing `window.confirm = () => true` before the click; the underlying Publish/Unpublish logic itself was never in question once tested this way.
+
+**Found:** session 59, 2026-08-27. **Built:** session 60, 2026-08-27 (staging only).
 
 ---
 
