@@ -8942,7 +8942,7 @@ Fixed exactly per the "Fix (not built)" plan below: `MatchStatusBadge.tsx` now d
 **Fix (implemented):** `src/app/admin/roster-transfers/page.tsx`'s new `evictStaleAdminApiCache()` — finds the active SW API cache by name suffix (`-api`, since the cache name carries a build-time-injected version and can't be hardcoded), deletes the transferred player's `/api/players/[id]` entry and the current search query's `/api/players/search?...` entry, called right after a successful transfer and before `fetchHistory()` re-reads.
 
 **Evidence:**
-- Commit: `[pending]`
+- Commit: `0e05613`
 - Verified by: `tsc --noEmit` clean of new errors. Live re-verification of the actual transfer→no-staleness cycle **not yet done** — needs a real transfer + real SW-scoped browser session; blocked by the same dev-server outage as `BACKLOG-271`/`264`, picking back up via staging.
 
 **Found:** session 56, 2026-08-26, live browser walkthrough of `BACKLOG-126`. **Fixed:** session 59, 2026-08-27.
@@ -9203,7 +9203,7 @@ Fixed exactly per the "Fix (not built)" plan below: `MatchStatusBadge.tsx` now d
 **Fix:** `{!!competition.numberOfGroups && (...)}`.
 
 **Evidence:**
-- Commit: `[pending]`
+- Commit: `0e05613`
 - Verified by: live re-check against the real staging DB via the local dev server — `BUSA LEAGUE BASKETBALL` ("6/6 teams"), `NPUGA (FOOTBALL)`/`NPUGA (BASKETBALL)` ("10/10 teams"), and the new 2026/2027 row all render clean, no stray "0", confirmed via direct page-text capture.
 - Observed result: fixed on every competition with `numberOfGroups === 0`, no change to competitions that do have groups.
 
@@ -9219,7 +9219,7 @@ Fixed exactly per the "Fix (not built)" plan below: `MatchStatusBadge.tsx` now d
 **Fix:** added `DELETE` to `/api/standings` (admin-gated, bulk `{ ids: [...] }`, matching the existing bulk-POST convention). `[id]/page.tsx` now tracks `removedIds` (any team removed locally that had a real saved `id`) and `handleSave` calls `DELETE` for those before the POST, guarding the POST itself against an empty `entries` array (would 400 if every team were removed).
 
 **Evidence:**
-- Commit: `[pending]`
+- Commit: `0e05613`
 - Verified by: `tsc --noEmit` clean of new errors. Full live add→save→remove→save round-trip **not yet re-run** — the local dev server went down mid-verification (external process, not one this session controls); picking back up via a staging push+deploy instead.
 - Pending items: confirm the actual DELETE-then-reload cycle against real data once staging is live.
 
@@ -9235,7 +9235,7 @@ Fixed exactly per the "Fix (not built)" plan below: `MatchStatusBadge.tsx` now d
 **Fix:** not a hard block, deliberately — a real season may legitimately need to add/drop a team mid-setup. Added a `teamCountColor()` helper (duplicated in both `page.tsx` and `[id]/page.tsx`) driving a color cue — amber under target, green on target, red over target — applied to both the Team Management page's "Total Teams" stat and the list card's count (`BACKLOG-273`, same underlying data).
 
 **Evidence:**
-- Commit: `[pending]`
+- Commit: `0e05613`
 - Verified by: live check against real staging data via the local dev server before it went down — `GENTLEMEN FC LEAGUE (AUGUST)` (2/4 teams) and the new BUSA Football 2026/2027 row (0/20) both rendered `text-amber-400`; five fully-registered competitions (6/6, 16/16, 4/4 ×2, 10/10 ×2) all rendered `text-green-400` — confirmed by reading the actual applied class names, not just visually.
 - Pending items: no over-target case exists in real data yet to confirm the red state renders — logic is symmetric with the confirmed amber/green branches, low risk.
 
@@ -9251,7 +9251,7 @@ Fixed exactly per the "Fix (not built)" plan below: `MatchStatusBadge.tsx` now d
 **Fix:** added `stats?: { matchesCount; teamsCount; standingsCount }` to the interface, card now renders `{stats.teamsCount}/{numberOfTeams} teams` with `BACKLOG-272`'s color cue.
 
 **Evidence:**
-- Commit: `[pending]`
+- Commit: `0e05613`
 - Verified by: live check against real staging data — see `BACKLOG-272`'s evidence, same change, same verification pass.
 
 **Found:** session 59, 2026-08-27.
@@ -9360,7 +9360,7 @@ Fixed exactly per the "Fix (not built)" plan below: `MatchStatusBadge.tsx` now d
 **Fix:** replaced both spans with the existing `TeamLogo` component (`src/lib/utils/team-logo.tsx`), matching the convention already used on public-facing pages.
 
 **Evidence:**
-- Commit: `[pending]`
+- Commit: `0e05613`
 - Verified by: `tsc --noEmit` clean of new errors. Live visual re-check (screenshot/DOM inspection of the actual rendered logos) **not yet done** — blocked by the same dev-server outage as `BACKLOG-271`; picking back up via staging.
 
 **Found:** session 58, 2026-08-27. **Root-caused and fixed:** session 59, 2026-08-27.
