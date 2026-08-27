@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
 import { standings } from '@/db/schema';
-import { eq, and, sql } from 'drizzle-orm';
+import { eq, and, sql, inArray } from 'drizzle-orm';
 import { getAuthUser } from '@/lib/auth';
 import { STANDINGS_ORDER_BY } from '@/lib/standingsService';
 
@@ -103,5 +103,39 @@ export async function POST(request: NextRequest) {
     } catch (error) {
         console.error('Error in bulk standings operation:', error);
         return NextResponse.json({ error: 'Failed to process standings' }, { status: 500 });
+    }
+}
+
+// BACKLOG-271: previously missing entirely -- removing a team from a
+// competition via the admin UI updated local state only, with no way to
+// actually delete the persisted standings row. Bulk-by-id, matching the
+// existing bulk-POST convention.
+export async function DELETE(request: NextRequest) {
+    try {
+        const authUser = await getAuthUser(request);
+        if (!authUser) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+        if (authUser.role !== 'admin') {
+            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+        }
+
+        const body = await request.json();
+        const { ids } = body;
+
+        if (!Array.isArray(ids) || ids.length === 0) {
+            return NextResponse.json({ error: 'Invalid request: Expected an array of ids' }, { status: 400 });
+        }
+
+        const result = await db.delete(standings).where(inArray(standings.id, ids)).returning({ id: standings.id });
+
+        return NextResponse.json({
+            success: true,
+            deletedCount: result.length,
+            deletedIds: result.map(r => r.id),
+        });
+    } catch (error) {
+        console.error('Error deleting standings entries:', error);
+        return NextResponse.json({ error: 'Failed to delete standings entries' }, { status: 500 });
     }
 }

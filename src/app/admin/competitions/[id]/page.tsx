@@ -12,6 +12,7 @@ import {
 import { useToast } from '@/hooks/useToast';
 import { ToastContainer } from '@/components/admin/Toast';
 import SkeletonLoader from '@/components/admin/SkeletonLoader';
+import { TeamLogo } from '@/lib/utils/team-logo';
 
 interface Team {
     id: string;
@@ -41,6 +42,15 @@ interface StandingEntry {
     team?: Team;
 }
 
+// BACKLOG-272: soft visibility only, no hard cap enforced -- mirrors the
+// same helper in the competitions list page.
+function teamCountColor(assigned: number, target?: number): string {
+    if (!target) return 'text-primary';
+    if (assigned < target) return 'text-amber-400';
+    if (assigned > target) return 'text-red-400';
+    return 'text-green-400';
+}
+
 export default function CompetitionTeamsPage() {
     const { id } = useParams();
     const router = useRouter();
@@ -53,6 +63,10 @@ export default function CompetitionTeamsPage() {
     const [allTeams, setAllTeams] = useState<Team[]>([]);
     const [searchQuery, setSearchQuery] = useState('');
     const [showAddTeamModal, setShowAddTeamModal] = useState(false);
+    // BACKLOG-271: ids of previously-saved standings rows removed locally
+    // this session -- POST alone never deleted them, so Save must explicitly
+    // DELETE these before/alongside upserting whatever remains.
+    const [removedIds, setRemovedIds] = useState<string[]>([]);
 
     useEffect(() => {
         fetchData();
@@ -60,6 +74,7 @@ export default function CompetitionTeamsPage() {
 
     const fetchData = async () => {
         setIsLoading(true);
+        setRemovedIds([]);
         try {
             const [compRes, teamsRes, standingsRes] = await Promise.all([
                 fetch(`/api/competitions/${id}`),
@@ -113,6 +128,12 @@ export default function CompetitionTeamsPage() {
     };
 
     const handleRemoveTeam = (teamId: string) => {
+        const target = competitionTeams.find(t => t.teamId === teamId);
+        if (target?.id) {
+            // Was a real, already-saved standings row -- must be explicitly
+            // deleted on Save, not just dropped from local state.
+            setRemovedIds([...removedIds, target.id]);
+        }
         setCompetitionTeams(competitionTeams.filter(t => t.teamId !== teamId));
     };
 
@@ -127,7 +148,24 @@ export default function CompetitionTeamsPage() {
         setIsSaving(true);
 
         try {
-            // Prepare entries for the standings table
+            // BACKLOG-271: teams removed locally must be actually deleted --
+            // the POST below is upsert-only and would otherwise leave their
+            // rows in the DB untouched forever.
+            if (removedIds.length > 0) {
+                const delResponse = await fetch('/api/standings', {
+                    method: 'DELETE',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ids: removedIds }),
+                });
+                if (!delResponse.ok) {
+                    error('Failed to remove some teams');
+                    setIsSaving(false);
+                    return;
+                }
+            }
+
+            // Prepare entries for the standings table -- may be empty if
+            // every team was removed and none remain to upsert.
             const entries = competitionTeams.map(t => ({
                 id: t.id,
                 teamId: t.teamId,
@@ -144,18 +182,22 @@ export default function CompetitionTeamsPage() {
                 points: 0
             }));
 
-            const response = await fetch('/api/standings', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ entries })
-            });
+            if (entries.length > 0) {
+                const response = await fetch('/api/standings', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ entries })
+                });
 
-            if (response.ok) {
-                success('Competition teams saved successfully');
-                fetchData(); // Refresh to get correct IDs
-            } else {
-                error('Failed to save changes');
+                if (!response.ok) {
+                    error('Failed to save changes');
+                    setIsSaving(false);
+                    return;
+                }
             }
+
+            success('Competition teams saved successfully');
+            fetchData(); // Refresh to get correct IDs
         } catch (err) {
             error('Network error while saving');
             console.error(err);
@@ -280,9 +322,7 @@ export default function CompetitionTeamsPage() {
                                                     className="bg-white/5 border border-white/10 rounded-2xl p-4 flex items-center justify-between group hover:border-primary/50 transition-all shadow-xl"
                                                 >
                                                     <div className="flex items-center gap-4">
-                                                        <div className="w-12 h-12 bg-white/5 rounded-xl flex items-center justify-center group-hover:bg-primary/10 transition-colors">
-                                                            <span className="text-2xl">{entry.team?.logo || '🛡️'}</span>
-                                                        </div>
+                                                        <TeamLogo logo={entry.team?.logo} name={entry.team?.name || 'Team'} size="md" />
                                                         <div>
                                                             <p className="text-sm font-black uppercase tracking-tight">{entry.team?.name}</p>
                                                             <p className="text-[10px] text-white/40 font-bold uppercase">{entry.team?.university}</p>
@@ -324,7 +364,9 @@ export default function CompetitionTeamsPage() {
                             <div className="space-y-4">
                                 <div className="p-4 bg-white/5 rounded-2xl border border-white/5">
                                     <p className="text-[10px] font-black uppercase tracking-widest text-white/40 mb-1">Total Teams</p>
-                                    <p className="text-2xl font-display italic text-primary">{competitionTeams.length}</p>
+                                    <p className={`text-2xl font-display italic ${teamCountColor(competitionTeams.length, competition.numberOfTeams)}`}>
+                                        {competitionTeams.length}{!!competition.numberOfTeams && `/${competition.numberOfTeams}`}
+                                    </p>
                                 </div>
                                 <div className="p-4 bg-white/5 rounded-2xl border border-white/5">
                                     <p className="text-[10px] font-black uppercase tracking-widest text-white/40 mb-1">Target Teams</p>
@@ -392,7 +434,7 @@ export default function CompetitionTeamsPage() {
                                         className="w-full flex items-center justify-between p-4 bg-white/5 rounded-2xl border border-white/10 hover:border-primary/50 transition-all group disabled:opacity-30"
                                     >
                                         <div className="flex items-center gap-4">
-                                            <span className="text-2xl">{team.logo || '🛡️'}</span>
+                                            <TeamLogo logo={team.logo} name={team.name} size="sm" />
                                             <div className="text-left">
                                                 <p className="text-sm font-black uppercase tracking-tight">{team.name}</p>
                                                 <p className="text-[10px] text-white/40 font-bold uppercase">{team.university}</p>

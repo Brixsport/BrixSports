@@ -4,6 +4,29 @@ import { Suspense, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { ArrowRight, Search, CheckCircle, AlertCircle, History } from 'lucide-react';
 
+// BACKLOG-227: sw-admin.js's stale-while-revalidate policy on /api/players*
+// (added for near-static fields like name/position) also covers the
+// genuinely mutation-adjacent affiliationHistory this page reads right after
+// a write -- serving the pre-transfer cached copy for one read cycle. Fix
+// option 2 from that entry: evict the specific cached reads a transfer
+// affects, rather than narrowing the SWR pattern (which would lose the
+// speed benefit for the read-heavy public player profile page too). The
+// cache name carries a build-time-injected version, so match by suffix
+// instead of hardcoding it.
+async function evictStaleAdminApiCache(urls: string[]) {
+    if (typeof window === 'undefined' || !('caches' in window)) return;
+    try {
+        const cacheNames = await caches.keys();
+        const apiCacheName = cacheNames.find((n) => n.endsWith('-api'));
+        if (!apiCacheName) return;
+        const cache = await caches.open(apiCacheName);
+        await Promise.all(urls.map((url) => cache.delete(url)));
+    } catch {
+        // Best-effort only -- a failed eviction just means the existing
+        // one-cycle staleness (already documented, low priority) persists.
+    }
+}
+
 interface PlayerResult {
     id: string;
     name: string;
@@ -192,6 +215,10 @@ function RosterTransfersInner() {
                 setNewTeamId('');
                 setJerseyNumber('');
                 setPosition('');
+                await evictStaleAdminApiCache([
+                    `/api/players/${selectedPlayer.id}`,
+                    `/api/players/search?q=${encodeURIComponent(query.trim())}&limit=15`,
+                ]);
                 await fetchHistory(selectedPlayer.id);
             } else {
                 setMessage({ type: 'error', text: data.error || 'Transfer failed' });

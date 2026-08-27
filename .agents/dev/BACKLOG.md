@@ -8920,7 +8920,7 @@ Fixed exactly per the "Fix (not built)" plan below: `MatchStatusBadge.tsx` now d
 
 ### BACKLOG-227 — Admin PWA's Stale-While-Revalidate Policy on `/api/players*` Can Show an Admin Their Own Just-Completed Roster Transfer as Not-Yet-Happened
 
-**Status:** OPEN — root-caused, not fixed. Flagged rather than silently patched, matching this project's own convention (see `BACKLOG-223`) — the fix is a real policy tradeoff (SWR's instant-load benefit vs. immediate read-after-write consistency for a specific mutation), not a pure bug fix, and deserves an explicit call rather than a silent change mid-feature-test.
+**Status:** SHIPPED to staging — session 59, 2026-08-27, option 2 below chosen (Richard's "do all 6" go-ahead).
 **Priority:** Low — Tier 2 (roster/season management, not live-match-critical), self-corrects within roughly a minute with no data loss (the underlying write is always correct immediately; only the *admin's own next read* of the same URL can be stale for one cycle)
 **Filed:** 2026-08-26 (session 56), found live while walkthrough-testing `BACKLOG-126`'s roster-transfer UI on staging
 
@@ -8934,12 +8934,18 @@ Fixed exactly per the "Fix (not built)" plan below: `MatchStatusBadge.tsx` now d
 
 **Impact:** an admin who transfers a player and immediately re-checks that same player's transfer history (or re-searches for them) can see incorrect, pre-transfer data for one read cycle (self-corrects on the read after, once the background revalidation completes — confirmed by the walkthrough's own later reads all returning correct data). No data is lost or wrong in the DB at any point; this is a display-trust issue only, same class as `BUG-242`/`BUG-243` but lower stakes (admin tooling, not the public livescore).
 
-**Fix options (not built, for whoever picks this up):**
-1. Narrow `STALE_WHILE_REVALIDATE_API_PATTERNS`'s player pattern to exclude the specific paths that read mutation-adjacent data (`/api/players/search`, `/api/players/[id]` when called right after a write) — loses SWR's speed benefit for those specific calls.
-2. Have the roster-transfer POST handler (or the page, client-side) explicitly evict the affected `Cache Storage` entries (the transferred player's `/api/players/[id]` URL, plus any admin-active search query) immediately after a successful transfer — a "write invalidates its own cached reads" pattern, more surgical, doesn't touch the public player-profile page's own read-heavy benefit from SWR.
-3. Accept it as-is (lowest priority, self-corrects, Tier 2 feature) — just document the "check twice" caveat for admins doing back-to-back transfers.
+**Fix options considered:**
+1. Narrow `STALE_WHILE_REVALIDATE_API_PATTERNS`'s player pattern — loses SWR's speed benefit for those specific calls. Not chosen.
+2. **Chosen.** Have the page explicitly evict the affected `Cache Storage` entries immediately after a successful transfer — surgical, doesn't touch the public player-profile page's read-heavy SWR benefit.
+3. Accept as-is. Not chosen, given option 2 is cheap and targeted.
 
-**Found:** session 56, 2026-08-26, live browser walkthrough of `BACKLOG-126`.
+**Fix (implemented):** `src/app/admin/roster-transfers/page.tsx`'s new `evictStaleAdminApiCache()` — finds the active SW API cache by name suffix (`-api`, since the cache name carries a build-time-injected version and can't be hardcoded), deletes the transferred player's `/api/players/[id]` entry and the current search query's `/api/players/search?...` entry, called right after a successful transfer and before `fetchHistory()` re-reads.
+
+**Evidence:**
+- Commit: `[pending]`
+- Verified by: `tsc --noEmit` clean of new errors. Live re-verification of the actual transfer→no-staleness cycle **not yet done** — needs a real transfer + real SW-scoped browser session; blocked by the same dev-server outage as `BACKLOG-271`/`264`, picking back up via staging.
+
+**Found:** session 56, 2026-08-26, live browser walkthrough of `BACKLOG-126`. **Fixed:** session 59, 2026-08-27.
 
 ---
 
@@ -9189,6 +9195,69 @@ Fixed exactly per the "Fix (not built)" plan below: `MatchStatusBadge.tsx` now d
 
 ---
 
+### BACKLOG-270 — Competition List Cards Render a Literal "0" When `numberOfGroups` Is Exactly 0
+
+**Status:** SHIPPED to staging — session 59, 2026-08-27.
+**Priority:** LOW-MEDIUM — visually broken text on the busiest admin list page, but harmless to data. Was already live in production data, not hypothetical: `BUSA LEAGUE BASKETBALL`, `NPUGA (FOOTBALL)`, and the new `BUSA LEAGUE FOOTBALL` (2026/2027) competition rows all showed a stray "0" between the team count and the "MANAGE TEAMS" button.
+**Problem:** `src/app/admin/competitions/page.tsx:751` — `{competition.numberOfGroups && (<span>...</span>)}`. Classic JSX falsy-zero gotcha: `&&` only suppresses `false`/`null`/`undefined`/`''`, not `0` — when `numberOfGroups === 0`, the expression evaluates to `0` and React renders it as a literal text node.
+**Fix:** `{!!competition.numberOfGroups && (...)}`.
+
+**Evidence:**
+- Commit: `[pending]`
+- Verified by: live re-check against the real staging DB via the local dev server — `BUSA LEAGUE BASKETBALL` ("6/6 teams"), `NPUGA (FOOTBALL)`/`NPUGA (BASKETBALL)` ("10/10 teams"), and the new 2026/2027 row all render clean, no stray "0", confirmed via direct page-text capture.
+- Observed result: fixed on every competition with `numberOfGroups === 0`, no change to competitions that do have groups.
+
+**Found:** session 59, 2026-08-27.
+
+---
+
+### BACKLOG-271 — Removing a Team From a Competition Never Actually Deletes Its Standings Row
+
+**Status:** SHIPPED to staging, live end-to-end round-trip not yet re-verified after the dev-server restart (was blocked mid-verification) — session 59, 2026-08-27.
+**Priority:** MEDIUM — a real, currently-shipping workflow gap on the season-provisioning path this project is actively building toward; not data-corrupting (nothing writes garbage), but there was no way to correct an over-registration mistake without a direct DB script.
+**Problem:** `src/app/admin/competitions/[id]/page.tsx`'s `handleRemoveTeam` (~line 115) only called `setCompetitionTeams(competitionTeams.filter(...))` — pure local React state, no API call. `handleSave` then POSTed whatever remained in local state to `/api/standings`, an **upsert-only** bulk endpoint (`onConflictDoUpdate`) — `/api/standings` had no `DELETE` handler at all. Net effect: clicking the trash icon on an already-saved team, then Save, removed it from the on-screen list but left its `standings` row in the DB untouched, forever. Reproduced live this session — the only way found to actually remove the 5 test rows created for `BACKLOG-267`'s workflow test was a direct DB script (`dev/revert-swiss-workflow-test-59.mjs`, deleted after use).
+**Fix:** added `DELETE` to `/api/standings` (admin-gated, bulk `{ ids: [...] }`, matching the existing bulk-POST convention). `[id]/page.tsx` now tracks `removedIds` (any team removed locally that had a real saved `id`) and `handleSave` calls `DELETE` for those before the POST, guarding the POST itself against an empty `entries` array (would 400 if every team were removed).
+
+**Evidence:**
+- Commit: `[pending]`
+- Verified by: `tsc --noEmit` clean of new errors. Full live add→save→remove→save round-trip **not yet re-run** — the local dev server went down mid-verification (external process, not one this session controls); picking back up via a staging push+deploy instead.
+- Pending items: confirm the actual DELETE-then-reload cycle against real data once staging is live.
+
+**Found:** session 59, 2026-08-27.
+
+---
+
+### BACKLOG-272 — No Cap or Warning When Registered Teams Exceed (or Fall Short of) a Competition's `numberOfTeams` Target
+
+**Status:** SHIPPED to staging (visibility only, per the fix scope below — deliberately not a hard cap) — session 59, 2026-08-27.
+**Priority:** LOW-MEDIUM — not a crash or data-integrity risk, but a real gap on the season-provisioning path: nothing stops an admin from over- or under-registering a competition with no visibility into the mismatch until someone notices manually.
+**Problem:** `src/app/admin/competitions/[id]/page.tsx`'s `handleAddTeam` (~line 97) only guarded against an exact-duplicate `teamId` — no check anywhere against `competition.numberOfTeams`. Neither the client nor the server (`/api/standings` POST) enforced or even surfaced the target count during registration.
+**Fix:** not a hard block, deliberately — a real season may legitimately need to add/drop a team mid-setup. Added a `teamCountColor()` helper (duplicated in both `page.tsx` and `[id]/page.tsx`) driving a color cue — amber under target, green on target, red over target — applied to both the Team Management page's "Total Teams" stat and the list card's count (`BACKLOG-273`, same underlying data).
+
+**Evidence:**
+- Commit: `[pending]`
+- Verified by: live check against real staging data via the local dev server before it went down — `GENTLEMEN FC LEAGUE (AUGUST)` (2/4 teams) and the new BUSA Football 2026/2027 row (0/20) both rendered `text-amber-400`; five fully-registered competitions (6/6, 16/16, 4/4 ×2, 10/10 ×2) all rendered `text-green-400` — confirmed by reading the actual applied class names, not just visually.
+- Pending items: no over-target case exists in real data yet to confirm the red state renders — logic is symmetric with the confirmed amber/green branches, low risk.
+
+**Found:** session 59, 2026-08-27.
+
+---
+
+### BACKLOG-273 — Competition List Cards Show Only the Target Team Count, Never the Actual Registered Count
+
+**Status:** SHIPPED to staging — session 59, 2026-08-27.
+**Priority:** LOW — pure visibility gap, no data issue.
+**Problem:** `src/app/admin/competitions/page.tsx` fetches `/api/competitions?includeStats=true`, and the API already returned `stats: { matchesCount, teamsCount, standingsCount }` per competition — but the `Competition` interface never declared `stats`, and the card only rendered the static `numberOfTeams` target, never the actual registered count.
+**Fix:** added `stats?: { matchesCount; teamsCount; standingsCount }` to the interface, card now renders `{stats.teamsCount}/{numberOfTeams} teams` with `BACKLOG-272`'s color cue.
+
+**Evidence:**
+- Commit: `[pending]`
+- Verified by: live check against real staging data — see `BACKLOG-272`'s evidence, same change, same verification pass.
+
+**Found:** session 59, 2026-08-27.
+
+---
+
 ### BACKLOG-258 — Payload Audit Phase 1: `/live` Page + `/api/matches` List Trimming
 
 **Status:** OPEN — found session 57, 2026-08-26, by the `architect` agent. Closes `BACKLOG-171` and `BACKLOG-172.1`.
@@ -9285,12 +9354,16 @@ Fixed exactly per the "Fix (not built)" plan below: `MatchStatusBadge.tsx` now d
 
 ### BACKLOG-264 — Admin Team-Management Page Renders Raw Cloudinary URLs as Overlapping Text Instead of the Logo Image
 
-**Status:** OPEN — found session 58, 2026-08-27, by Richard while reviewing BUSA League Basketball's `/admin/competitions/[id]` team-management view. Cosmetic/UX bug, not a data-correctness issue — deferred by Richard at the time ("let's resolve later the image url render"), filed now per that instruction.
+**Status:** SHIPPED to staging — found session 58, 2026-08-27, by Richard; root-caused and fixed session 59, 2026-08-27.
 **Priority:** LOW-MEDIUM — visually broken (raw `https://res.cloudinary.com/...` URL strings printed as text, overlapping the team name/group labels) but does not affect underlying data; every team's `logo` field itself holds a valid, working Cloudinary URL.
-**Problem:** on the admin team-management page (screenshot: BUSA LEAGUE BASKETBALL, "Team Management" tab, "Assigned Teams (6)" list), each team row shows the literal logo URL as overlapping text instead of rendering an `<img>`. Not yet root-caused — candidates, none confirmed: the component renders `{team.logo}` as text instead of `<img src={team.logo}>`; a `TeamLogo`-style wrapper component isn't used on this specific admin view (unlike the public-facing pages, which already route logos through `isValidLogo()`/`TeamLogo` per `known-issues.md`'s 2026-06-14 entry); or a CSS layout issue causing the alt-text/URL to render visibly instead of being hidden behind a broken-image state.
-**Fix (not built):** locate the exact admin component rendering this list (likely under `src/app/admin/competitions/[id]/...` or a shared team-management component), confirm whether it's missing the `TeamLogo` wrapper or has a raw text/URL binding, fix to use the existing logo-rendering convention.
+**Problem:** `src/app/admin/competitions/[id]/page.tsx` — **two confirmed locations**, both the same root cause: line 284 (`<span className="text-2xl">{entry.team?.logo || '🛡️'}</span>`, the assigned-teams list) and line 395 (`<span className="text-2xl">{team.logo || '🛡️'}</span>`, the Add Team modal's team-picker list). Both render `team.logo` — a Cloudinary URL string — directly as JSX text content instead of via `<img src={team.logo}>` or the existing `TeamLogo`/`isValidLogo()` wrapper the public-facing pages already use (`known-issues.md`'s 2026-06-14 entry). The `|| '🛡️'` fallback only fires when `logo` is falsy, so a team with a real logo URL shows the raw string; a team with no logo correctly shows the shield emoji — that asymmetry is exactly why it looked intermittent before being root-caused.
+**Fix:** replaced both spans with the existing `TeamLogo` component (`src/lib/utils/team-logo.tsx`), matching the convention already used on public-facing pages.
 
-**Found:** session 58, 2026-08-27.
+**Evidence:**
+- Commit: `[pending]`
+- Verified by: `tsc --noEmit` clean of new errors. Live visual re-check (screenshot/DOM inspection of the actual rendered logos) **not yet done** — blocked by the same dev-server outage as `BACKLOG-271`; picking back up via staging.
+
+**Found:** session 58, 2026-08-27. **Root-caused and fixed:** session 59, 2026-08-27.
 
 ---
 

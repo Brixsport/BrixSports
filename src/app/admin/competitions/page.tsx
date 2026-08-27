@@ -26,6 +26,16 @@ interface Competition {
     isMultiSport?: boolean;
     description?: string;
     logo?: string;
+    stats?: { matchesCount: number; teamsCount: number; standingsCount: number };
+}
+
+// BACKLOG-272: soft visibility only, no hard cap enforced anywhere -- a real
+// season setup legitimately needs to add/drop teams before it's final.
+function teamCountColor(assigned: number, target?: number): string {
+    if (!target) return 'text-white';
+    if (assigned < target) return 'text-amber-400';
+    if (assigned > target) return 'text-red-400';
+    return 'text-green-400';
 }
 
 const defaultFormData = {
@@ -743,12 +753,14 @@ function AdminCompetitionsPageContent() {
                                                 <p className="font-semibold">{competition.season}</p>
                                             </div>
                                         </div>
-                                        {competition.numberOfTeams && (
+                                        {!!competition.numberOfTeams && (
                                             <div className="flex items-center gap-6 mt-4 text-sm">
                                                 <span className="text-white/60">
-                                                    <span className="font-bold text-white">{competition.numberOfTeams}</span> teams
+                                                    <span className={`font-bold ${teamCountColor(competition.stats?.teamsCount ?? 0, competition.numberOfTeams)}`}>
+                                                        {competition.stats?.teamsCount ?? 0}/{competition.numberOfTeams}
+                                                    </span> teams
                                                 </span>
-                                                {competition.numberOfGroups && (
+                                                {!!competition.numberOfGroups && (
                                                     <span className="text-white/60">
                                                         <span className="font-bold text-white">{competition.numberOfGroups}</span> groups
                                                     </span>
