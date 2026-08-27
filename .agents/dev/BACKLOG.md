@@ -9213,14 +9213,14 @@ Fixed exactly per the "Fix (not built)" plan below: `MatchStatusBadge.tsx` now d
 
 ### BACKLOG-271 — Removing a Team From a Competition Never Actually Deletes Its Standings Row
 
-**Status:** SHIPPED to staging, live end-to-end round-trip not yet re-verified after the dev-server restart (was blocked mid-verification) — session 59, 2026-08-27.
+**Status:** SHIPPED and live-verified on real staging — session 59, 2026-08-27.
 **Priority:** MEDIUM — a real, currently-shipping workflow gap on the season-provisioning path this project is actively building toward; not data-corrupting (nothing writes garbage), but there was no way to correct an over-registration mistake without a direct DB script.
 **Problem:** `src/app/admin/competitions/[id]/page.tsx`'s `handleRemoveTeam` (~line 115) only called `setCompetitionTeams(competitionTeams.filter(...))` — pure local React state, no API call. `handleSave` then POSTed whatever remained in local state to `/api/standings`, an **upsert-only** bulk endpoint (`onConflictDoUpdate`) — `/api/standings` had no `DELETE` handler at all. Net effect: clicking the trash icon on an already-saved team, then Save, removed it from the on-screen list but left its `standings` row in the DB untouched, forever. Reproduced live this session — the only way found to actually remove the 5 test rows created for `BACKLOG-267`'s workflow test was a direct DB script (`dev/revert-swiss-workflow-test-59.mjs`, deleted after use).
 **Fix:** added `DELETE` to `/api/standings` (admin-gated, bulk `{ ids: [...] }`, matching the existing bulk-POST convention). `[id]/page.tsx` now tracks `removedIds` (any team removed locally that had a real saved `id`) and `handleSave` calls `DELETE` for those before the POST, guarding the POST itself against an empty `entries` array (would 400 if every team were removed).
 
 **Evidence:**
 - Commit: `0e05613`
-- Verified by: `tsc --noEmit` clean of new errors. Full live add→save→remove→save round-trip **not yet re-run** — the local dev server went down mid-verification (external process, not one this session controls); picking back up via a staging push+deploy instead.
+- Verified by: full live add→save→remove→save round-trip against real staging data (`WsLlqWlLVIjW4HpjDf8cV`) — added Joga-Bonito + Wolves FC, saved (`POST 200`), removed Joga-Bonito, saved (`DELETE 200` then `POST 200` for the remainder), confirmed via a direct `cache:'no-store'` DB read that only Wolves FC remained. Repeated to remove the last team too (`DELETE 200`, `entries.length === 0` correctly skipped the POST), confirmed DB back to 0 rows.
 - Pending items: confirm the actual DELETE-then-reload cycle against real data once staging is live.
 
 **Found:** session 59, 2026-08-27.
@@ -9361,7 +9361,7 @@ Fixed exactly per the "Fix (not built)" plan below: `MatchStatusBadge.tsx` now d
 
 **Evidence:**
 - Commit: `0e05613`
-- Verified by: `tsc --noEmit` clean of new errors. Live visual re-check (screenshot/DOM inspection of the actual rendered logos) **not yet done** — blocked by the same dev-server outage as `BACKLOG-271`; picking back up via staging.
+- Verified by: live on real staging, both spots — direct DOM check confirmed real `<img>` tags (not text) in the Add Team modal before adding; a screenshot after adding showed Wolves FC's actual crest rendering in the assigned-teams list, not the raw Cloudinary URL.
 
 **Found:** session 58, 2026-08-27. **Root-caused and fixed:** session 59, 2026-08-27.
 
@@ -9438,7 +9438,8 @@ Fixed exactly per the "Fix (not built)" plan below: `MatchStatusBadge.tsx` now d
 
 **Evidence:**
 - Commit: `b607b88`
-- Verified by: `tsc --noEmit` clean of new errors in both touched files. Live re-verification of the corrected eviction (both this fix and the `BACKLOG-227` correction) not yet re-run — needs a fresh push+deploy cycle.
+- Verified by: real staging round-trip (same session as `BACKLOG-271`'s final verification) — removed the last remaining team and saved; the page's own post-save state immediately showed `Assigned Teams (0)` / "No teams assigned yet" with no stale entry, confirmed via direct DOM read straight after the save click (previously this exact sequence showed the stale pre-delete list). DB independently confirmed at 0 rows via `cache:'no-store'`.
+- Not directly re-tested: `BACKLOG-227`'s own scenario (a real roster transfer + immediate re-read) — the underlying cache-matching bug is identical and now fixed the same way, proven working here, but no live transfer was re-run specifically.
 
 **Found:** session 59, 2026-08-27.
 
