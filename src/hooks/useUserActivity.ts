@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { getClientErrorMessage } from '@/lib/client-error';
 import { getRelativeTime, getActivityColor } from '@/components/ActivityFeed';
 import type { ActivityItem } from '@/components/ActivityFeed';
 
@@ -69,7 +70,7 @@ export function useUserActivity({
 
             setActivities(transformedActivities);
         } catch (err) {
-            setError(err instanceof Error ? err.message : 'An error occurred');
+            setError(getClientErrorMessage(err, 'An error occurred'));
         } finally {
             setLoading(false);
         }

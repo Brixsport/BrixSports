@@ -6,6 +6,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { getClientErrorMessage } from '@/lib/client-error';
 import { useSocket } from '@/hooks/useWebSocket';
 import { compareStandings } from '@/lib/standingsSort';
 
@@ -94,7 +95,7 @@ export function useLiveStandings({
 
             setStandings(transformedStandings);
         } catch (err) {
-            setError(err instanceof Error ? err.message : 'An error occurred');
+            setError(getClientErrorMessage(err, 'An error occurred'));
         } finally {
             setLoading(false);
         }

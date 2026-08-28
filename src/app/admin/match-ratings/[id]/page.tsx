@@ -246,7 +246,7 @@ export default function MatchRatingsAdjustPage() {
             router.push(`/admin/match-ratings`);
 
         } catch (err) {
-            const errorMessage = err instanceof Error ? err.message : 'Failed to save ratings';
+            const errorMessage = getClientErrorMessage(err, 'Failed to save ratings');
             console.error('[Publish Ratings] Error:', err);
             setError(errorMessage);
         } finally {

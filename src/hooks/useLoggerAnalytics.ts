@@ -4,6 +4,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
+import { getClientErrorMessage } from '@/lib/client-error';
 
 export interface LoggerMetrics {
     totalEvents: number;
@@ -85,7 +86,7 @@ export function useLoggerAnalytics({
                 setAnalytics(null);
             }
         } catch (err) {
-            setError(err instanceof Error ? err.message : 'Unknown error');
+            setError(getClientErrorMessage(err, 'Unknown error'));
             console.error('Error fetching analytics:', err);
         } finally {
             setIsLoading(false);

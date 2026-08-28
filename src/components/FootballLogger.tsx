@@ -14,6 +14,7 @@ import { X, Activity, Save, Undo2, Clock, Play, Pause, Settings, Lock as LockIco
 // too, for free, and removes the duplication.
 import { queueOfflineEvent, queueAdminChange, jwtSecondsRemaining } from '@/lib/admin-offline-queue';
 import { requiresDecisiveResult } from '@/lib/matchRules';
+import { getClientErrorMessage } from '@/lib/client-error';
 import { useAuth } from '@/hooks/useAuth';
 import { useMultiLogger } from '@/hooks/useMultiLogger';
 import { useWebSocket } from '@/hooks/useWebSocket';
@@ -1268,7 +1269,10 @@ export function FootballLogger({ match, onExit, currentLogger }: FootballLoggerP
             alert('Match finalized.');
         } catch (e) {
             console.error(e);
-            alert(e instanceof Error ? e.message : 'Error saving match result.');
+            // A raw fetch()/TypeError ("Failed to fetch") is not user-facing text --
+            // same BUG-198 shape as the client pages audit covered, just missed
+            // here since this file wasn't one of the originally flagged pages.
+            alert(getClientErrorMessage(e, 'Error saving match result.'));
         } finally {
             setIsSaving(false);
         }

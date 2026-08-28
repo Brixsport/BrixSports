@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { getClientErrorMessage } from '@/lib/client-error';
 
 export interface UserProfile {
     id: string;
@@ -75,7 +76,7 @@ export function useUserProfile({ userId, includeStats = true }: UseUserProfileOp
             setPreferences(data.preferences);
             setStats(data.stats);
         } catch (err) {
-            setError(err instanceof Error ? err.message : 'An error occurred');
+            setError(getClientErrorMessage(err, 'An error occurred'));
         } finally {
             setLoading(false);
         }
@@ -201,7 +202,7 @@ export function useUserPreferences(userId: string) {
             const data = await response.json();
             setPreferences(data.preferences);
         } catch (err) {
-            setError(err instanceof Error ? err.message : 'An error occurred');
+            setError(getClientErrorMessage(err, 'An error occurred'));
         } finally {
             setLoading(false);
         }
