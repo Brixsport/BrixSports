@@ -6,6 +6,7 @@ import { eq, and, sql } from 'drizzle-orm';
 import { getAuthUser } from '@/lib/auth';
 import { broadcastEventDeleted, broadcastScoreUpdate } from '@/lib/socket';
 import { SCORING_POINT_VALUES } from '@/lib/scoring';
+import { safeParseEventValue } from '@/lib/eventValue';
 
 // Reverts one stat increment for a player when an event is deleted.
 // Mirrors updatePlayerStats in events/route.ts — same guards must apply at call site.
@@ -307,7 +308,7 @@ export async function DELETE(
         // JSON (BUG-126/BUG-132) — parse it the same way the POST route's own
         // isBasketballScore gate does, so a deleted *miss* (value 0/absent) correctly
         // never triggers a revert, mirroring the credit-time gate exactly.
-        const parsedValue = event.value != null ? JSON.parse(event.value) : null;
+        const parsedValue = safeParseEventValue(event.value);
         const isBasketballScore =
             match?.sport === 'Basketball' &&
             typeof parsedValue === 'number' && parsedValue > 0 &&

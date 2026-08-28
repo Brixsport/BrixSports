@@ -18,6 +18,7 @@ import { recalculateStandingsForMatch } from '@/lib/standingsService';
 import { advanceBracketForMatch } from '@/lib/bracketService';
 import { requiresDecisiveResult } from '@/lib/matchRules';
 import { checkRateLimit } from '@/lib/rate-limit';
+import { safeParseEventValue } from '@/lib/eventValue';
 
 export async function GET(
     request: NextRequest,
@@ -132,7 +133,7 @@ export async function GET(
                 relatedPlayer: row.event.relatedPlayerId
                     ? (relatedPlayerMap.get(row.event.relatedPlayerId) ?? null)
                     : null,
-                value: row.event.value ? JSON.parse(row.event.value) : null,
+                value: safeParseEventValue(row.event.value),
             };
         });
 
