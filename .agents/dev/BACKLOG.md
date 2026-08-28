@@ -9914,8 +9914,8 @@ Best-of-3 Finals series, not a single match — matches this competition's real 
 
 ### BACKLOG-302 — Multi-Format Competition Structure: Draw/Bracket Admin UX Generalization (Product Direction, Filed Not Built)
 
-**Status:** OPEN — filed session 60, 2026-08-27, per Richard's explicit direction ("don't derail, file it in full for the next session"). Nothing built against this entry; `BACKLOG-277`–`280`'s BUSA-specific Swiss engine ships independently and is not blocked by it.
-**Priority:** MEDIUM-HIGH — doesn't block BUSA 2026/2027 shipping, but blocks the Draw/Knockout admin buttons from correctly showing/hiding per competition, and blocks `BACKLOG-292`/`293` (Figma redesign's public Brackets tab + standings columns) from knowing which UI shape to render for which competition.
+**Status:** PARTIALLY SHIPPED — admin-side (schema + gating) built and committed session 60 continued, 2026-08-27, staging: `483ab5f` (`competitions.structure` schema column, Advanced Settings dropdown replacing `BACKLOG-280`'s plain Draw/Knockout buttons, create/edit form field, both `/api/competitions` routes) + `e5d3ee2` (RUNLOG evidence for the migration/backfill — see `RUNLOG.md`, 2026-08-27 "BACKLOG-302 competitions.structure schema + backfill" entry, for the full 8-competition classification evidence). Scope explicitly limited to rendering + gating only, per Richard's own choice — **not built**: creation-side generalization (group-stage fixture generator, cross-group-pairing knockout generator) and the public-rendering side (coordinate with `BACKLOG-292`/`293`). Migration is staging-only — prod not yet run.
+**Priority:** MEDIUM-HIGH — admin gating now correct; public Brackets tab / standings still don't know which UI shape to render for which competition (blocks `BACKLOG-292`/`293`).
 
 **Trigger:** while reviewing `BACKLOG-280`'s new "Draw"/"Knockout" buttons (added unconditionally to every competition's admin page), Richard pointed out that real, already-live competitions in this DB have genuinely different structures the current tooling doesn't distinguish between:
 - **Pure league, no knockout at all** (Premier-League style) — some format needs zero bracket UI, ever.
@@ -9955,9 +9955,9 @@ So at least 4-5 distinct real structures exist in production data today; this se
 - `BACKLOG-293` — sport-variant standings columns; likely also needs a per-format table variant (single Swiss table vs. grouped table vs. plain league table), not just a per-sport column set.
 - `BACKLOG-267`/`275`–`280` — the BUSA-specific Swiss engine this entry does **not** replace or block. It ships as-is for the 2026/2027 season; this entry is about generalizing the *admin tooling* to also cleanly support the other, already-live, differently-shaped competitions without hiding or breaking the BUSA-specific path.
 
+**Resolved this session:** real `structure` field (not a heuristic) — see Status line above. "Advanced Settings" implemented as a dropdown.
+
 **Not decided — for the next session to resolve, not assume:**
-- Whether to give competitions a real, code-consumed "structure" field (replacing today's purely decorative `format` column) or keep gating heuristic (team count + existing data shape).
-- Whether "Advanced Settings" is a dropdown, an accordion section, or a modal.
 - Whether old/other-format competitions need a real generalized creation UI (group generator, cross-group pairing generator) at all, given their data is historical/complete — or whether the generalization work should focus only on *rendering* (public side + admin gating) and leave creation for those formats to the existing manual/script-based flows, since nothing is actively extending them.
 
 **Found:** session 60, 2026-08-27.
