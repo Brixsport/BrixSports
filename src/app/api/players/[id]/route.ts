@@ -10,6 +10,7 @@ import { eq, desc, and, sql, ne, inArray } from 'drizzle-orm';
 import { getAuthUser } from '@/lib/auth';
 import { enrichPlayersWithAffiliations, syncPlayerOrganizationAffiliations } from '@/lib/player-data';
 import { getCurrentSeason } from '@/lib/rosterService';
+import { getPlayerRatingSummaries } from '@/lib/playerRatingSummary';
 
 interface RouteParams {
     params: {
@@ -39,6 +40,11 @@ export async function GET(
                 { status: 404 }
             );
         }
+
+        // BACKLOG-253: real career rating, sourced from playerRatings via the
+        // shared accessor -- players.rating is a frozen/legacy default (7.0),
+        // never updated by the real ratings pipeline.
+        const ownRatingSummary = (await getPlayerRatingSummaries([id])).get(id) ?? null;
 
         // Get player's active memberships and primary team
         let team = null;
@@ -323,7 +329,9 @@ export async function GET(
             redCards: footballSeasonStats ? (footballSeasonStats.redCards || 0) : redCards,
 
             // Calculated averages
-            rating: player.rating || 0,
+            rating: ownRatingSummary?.averageRating ?? null,
+            matchesRated: ownRatingSummary?.matchesRated ?? 0,
+            motmCount: ownRatingSummary?.motmCount ?? 0,
             pointsPerGame: basketballSeasonStats
                 ? ((basketballSeasonStats.gamesPlayed || 0) > 0 ? ((basketballSeasonStats.totalPoints || 0) / basketballSeasonStats.gamesPlayed).toFixed(1) : '0.0')
                 : (totalStats.totalAppearances > 0 ? (totalStats.totalPoints / totalStats.totalAppearances).toFixed(1) : '0.0'),
@@ -358,12 +366,11 @@ export async function GET(
         // Check for related profiles (Multi-sport)
         const relatedProfiles = [];
         if (player.profileId) {
-            const relatedPlayers = await db
+            const relatedPlayersRaw = await db
                 .select({
                     id: players.id,
                     name: players.name,
                     position: players.position,
-                    rating: players.rating,
                     teamName: teams.name,
                     teamId: teams.id,
                     sport: teams.sport
@@ -376,6 +383,14 @@ export async function GET(
                         ne(players.id, id) // Exclude current profile
                     )
                 );
+
+            // BACKLOG-253: real rating per related profile, same accessor as
+            // the main player above -- batched, not one query per profile.
+            const relatedRatingSummaries = await getPlayerRatingSummaries(relatedPlayersRaw.map((p) => p.id));
+            const relatedPlayers = relatedPlayersRaw.map((p) => ({
+                ...p,
+                rating: relatedRatingSummaries.get(p.id)?.averageRating ?? null,
+            }));
 
             relatedProfiles.push(...relatedPlayers);
         }
@@ -447,9 +462,13 @@ export async function PATCH(
 
         // Whitelist only valid players table columns to avoid passing unknown fields to Drizzle
         // (players table has no updatedAt column — only createdAt)
+        // BACKLOG-248/253: 'rating' removed -- players.rating is a frozen
+        // legacy field, real rating now lives in playerRatings (see
+        // playerRatingSummary.ts). An admin edit here used to silently write
+        // a value every real reader now ignores.
         const allowedFields = [
             'name', 'jerseyName', 'number', 'teamId', 'position',
-            'rating', 'eyePoints', 'age', 'height', 'weight',
+            'eyePoints', 'age', 'height', 'weight',
             'nationality', 'college', 'department', 'university',
             'image', 'marketValue', 'profileId', 'email', 'attributes',
         ] as const;
