@@ -134,9 +134,18 @@ export async function POST(
         try {
             result = await calculateAndSaveRatings(matchId);
         } catch (err) {
-            const message = err instanceof Error ? err.message : 'Failed to calculate ratings';
-            const status = message === 'Match not found' ? 404 : message === 'No lineups found for this match' ? 400 : 500;
-            return NextResponse.json({ error: message }, { status });
+            console.error('[Calculate Ratings] Error:', err);
+            const rawMessage = err instanceof Error ? err.message : '';
+            // Only these two are deliberate, developer-authored validation messages
+            // safe to show as-is (src/lib/ratingsService.ts). Anything else --
+            // including a real DB failure -- must not reach the client verbatim.
+            if (rawMessage === 'Match not found') {
+                return NextResponse.json({ error: rawMessage }, { status: 404 });
+            }
+            if (rawMessage === 'No lineups found for this match') {
+                return NextResponse.json({ error: rawMessage }, { status: 400 });
+            }
+            return NextResponse.json({ error: 'Failed to calculate ratings' }, { status: 500 });
         }
 
         return NextResponse.json({
