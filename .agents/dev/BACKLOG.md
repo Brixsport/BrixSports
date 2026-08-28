@@ -9085,7 +9085,7 @@ Fixed exactly per the "Fix (not built)" plan below: `MatchStatusBadge.tsx` now d
 
 ### BACKLOG-252 — Ratings Redesign Phase 2: Delete Dead Pipeline A
 
-**Status:** RESOLVED (static verification complete; live UI smoke test outstanding — see caveat below) — delegated session `brixsports-v2-fa`, 2026-08-27/28.
+**Status:** RESOLVED, fully live-verified — delegated session `brixsports-v2-fa`, 2026-08-27/28.
 **Priority:** HIGH.
 **Depends on:** `BACKLOG-251` (done).
 **Done:**
@@ -9095,9 +9095,14 @@ Fixed exactly per the "Fix (not built)" plan below: `MatchStatusBadge.tsx` now d
 3. Removed the `/api/events` entry at `src/app/api/admin/infrastructure/route.ts:24` (was line 24 in the endpoint-monitoring list, confirmed no other logic references it).
 4. **Pre-deletion safety check (before touching anything):** grepped for every possible importer of all three files being deleted. Zero real code references anywhere in `src/` beyond the files being deleted themselves and the `admin/infrastructure` monitoring-list entry (already removed) — confirmed via multiple independent patterns, not a single grep. Specifically checked the actual live event-save path, `src/app/api/matches/[id]/events/route.ts` (what `FootballLogger.tsx`/`BasketballLogger.tsx` really POST to) — zero references to any deleted file; its only cross-reference into ratings territory is `calculateAndSaveRatings` from `ratingsService.ts` (untouched by this phase, though see `BACKLOG-306` for a separate real bug there).
 5. `tsc --noEmit`: 22 errors vs. the 19-error baseline — the 3 extra are all `.next/types/app/api/players/[id]/route.ts` auto-generated type artifacts (documented "flaky `.next/types` cache-noise" per `CLAUDE.md`'s own baseline caveat), unrelated to any file this phase touched. Zero new errors in any real source file.
-**Caveat, honestly flagged rather than skipped:** step 4's own "real Flow B smoke test: log one live event through the actual logger UI" was **not completed**. The shared local dev server was reachable via a plain page load at the start of this phase, but the Browser pane became consistently unreachable partway through (8+ navigate attempts, all timing out or "denied/failed") — likely contention with `brixsports-v2-37`'s concurrent live-HTTP verification against the same dev server for `BACKLOG-280`/`281`. Given the exhaustive static verification above (zero importers of any deleted file, confirmed against the actual live event route specifically) plus a clean `tsc`, confidence is high this phase didn't break Flow B — but that's not the same as having actually watched a real event save and appear publicly. **Flagged for a follow-up live re-verification before real match-day reliance**, same pattern already established for `BACKLOG-280`/`281` this session.
+6. **Live Flow B smoke test, completed after `brixsports-v2-37` moved off the local dev server** (they pushed to `origin/dev` and switched to staging-based testing, freeing the port — see below for the earlier contention). Restarted the dev server under this session's own management. The `/logger` page itself hit a client-side rendering crash unrelated to this phase (`Cannot read properties of undefined (reading 'isTTY')`, inside React DOM's dev-mode webpack client / `<ClientPageRoot>` error boundary — reproduced on reload, not present on `/admin` or the public home page, confirmed via `read_console_messages` to originate in `react-dom-webpack-client.browser.development.js`, not any app file; almost certainly this automated-browser environment tripping Next's Fast Refresh/dev-overlay machinery under a heavy component tree, not a regression from this phase's changes). Rather than let a framework-level dev-overlay quirk block the actual thing being verified, called the real live route directly via the Browser pane's own authenticated `fetch()` (same technique this project already uses when a full page load isn't practical) against real match `ZMBbLfLIoXVCkgJv7c8j2` (UPCOMING, published lineups, real assigned logger token for Ibrahim/`logger_1784832869756`):
+   - `POST /api/matches/ZMBbLfLIoXVCkgJv7c8j2/events` (real Yellow Card, real player Chibuzor) → **201**, real event row created and DB-confirmed.
+   - `GET /api/matches/ZMBbLfLIoXVCkgJv7c8j2/events` **with `credentials: 'omit'` (genuinely unauthenticated)** → **200**, the event appears with `loggerId`/`loggerName` correctly stripped (NDPR compliance path, confirmed working) and every other field intact. This is the "appears publicly" half of the smoke test, done for real.
+   - Cleaned up immediately after: deleted the test event, confirmed 0 events remain for the match; confirmed `status`/`homeScore`/`awayScore`/`currentPeriod` all unchanged from before the test.
+**Earlier contention note (resolved):** the Browser pane was consistently unreachable for roughly 15 minutes mid-phase — traced to `brixsports-v2-37` running concurrent live-HTTP verification against the same shared local dev server for `BACKLOG-280`/`281`. Resolved once they pushed to `origin/dev` and moved their own testing to staging.
+**Separately filed, not dismissed:** the `/logger` page's own client-side crash hit during this phase's verification is real and reproducible (not a one-off), and this session's reasoning that it's environment-specific rather than a real user-facing bug is a judgment call, not a proof — filed as `BACKLOG-310` for someone with a real (non-automated) browser to confirm either way.
 
-**Found:** session 57, 2026-08-26. **Resolved (static):** delegated session `brixsports-v2-fa`, 2026-08-27/28.
+**Found:** session 57, 2026-08-26. **Resolved, fully live-verified:** delegated session `brixsports-v2-fa`, 2026-08-27/28.
 
 ---
 
@@ -10013,7 +10018,7 @@ So at least 4-5 distinct real structures exist in production data today; this se
 
 ### BACKLOG-309 — `'SUBSTITUTION'` vs Real `'Substitution'` Event-Type Casing Mismatch, Multiple Files
 
-**Status:** OPEN — found delegated session `brixsports-v2-fa` while implementing `BACKLOG-249` (found in `adjust/route.ts`, since fixed there), traced further by `brixsports-v2-7e` (payload-audit session) across the rest of the codebase.
+**Status:** PARTIALLY RESOLVED — #1 fixed (`BACKLOG-249`), #2/#3 resolved by deletion (`BACKLOG-252`, landed). #4 (`events/sync/route.ts`) remains genuinely open, live/dead status still unclear.
 **Priority:** flagged, not yet triaged for severity — see per-file breakdown below, spans from "already fixed, dead validation code" to "genuinely unclear if live."
 **Problem:** every real logger writes `match_events.type = 'Substitution'` (title case — confirmed via direct DB scan, zero `'SUBSTITUTION'` rows exist anywhere; also confirmed at the write site, `FootballLogger.tsx` lines 899/940/958/1958/2009 and `BasketballLogger.tsx` lines 304/680/700/890/893/1517). Several read sites compare against the all-caps `'SUBSTITUTION'` instead, which never matches:
 1. **`src/app/api/matches/[id]/ratings/adjust/route.ts`** — FIXED as part of `BACKLOG-249` (this session). Was silently excluding every played substitute from `shouldBeRated`.
@@ -10025,5 +10030,20 @@ So at least 4-5 distinct real structures exist in production data today; this se
 **Fix (not built):** #1 already done. #2/#3 — no fix needed, resolved by `BACKLOG-252`'s deletion. #4 — pending the live/dead resolution above.
 
 **Found:** delegated sessions `brixsports-v2-fa` + `brixsports-v2-7e`, 2026-08-27/28.
+
+---
+
+### BACKLOG-310 — `/logger` Page Client-Side Crash: `Cannot read properties of undefined (reading 'isTTY')`
+
+**Status:** OPEN, unverified in a real browser — found delegated session `brixsports-v2-fa`, 2026-08-27/28, while live-verifying `BACKLOG-252`.
+**Priority:** flagged as potentially CRITICAL pending confirmation — if this is a real bug rather than an automated-browser artifact, it breaks the actual live match-logging UI for every real logger.
+**Problem:** navigating to `/logger?matchId=<real UPCOMING match with published lineups>` against the local dev server consistently (reproduced on repeat) rendered a full-page "500 / Application error" with `Cannot read properties of undefined (reading 'isTTY')`. Traced via `read_console_messages` to originate inside React DOM's dev-mode webpack client bundle (`react-dom-webpack-client.browser.development.js`), caught by the `<ClientPageRoot>` error boundary — **not** inside any app source file (`grep -r isTTY src/` returns zero matches). Did not reproduce on `/admin` or the public home page in the same session.
+**This session's working theory (not proven):** the automated Browser-pane tool used for this session's verification work is tripping some Next.js Fast Refresh / dev-overlay code path that expects a real terminal/stdio environment (`isTTY` is a Node `process.stdout`/`stderr` property, not normally something client-side React code touches directly — suggests dev-only tooling, not production code). `/logger` renders an unusually heavy client component tree (`FootballLogger.tsx`, WebSocket setup, offline queue, multiple dynamic imports) relative to the two pages that didn't crash, which is consistent with a dev-overlay/HMR edge case being more likely to surface there, but this is circumstantial, not confirmed.
+**Why not fixed or dismissed here:** no app code was found to be the cause, so there's nothing in `src/` to point a fix at yet. Equally, "probably just the automation tooling" is a judgment call under time pressure, not a verified conclusion — this needs a real, non-automated browser (a human, or a different verification path) to confirm whether `/logger` genuinely loads correctly in production/normal dev conditions before this is closed as a non-issue.
+**Workaround used to complete `BACKLOG-252`'s own smoke test:** bypassed the page entirely, called the real event-logging API directly via the Browser pane's authenticated `fetch()` — see `BACKLOG-252`'s evidence block. That confirms the underlying API path is healthy; it says nothing about whether the actual logger-facing UI is.
+
+**Found:** delegated session `brixsports-v2-fa`, 2026-08-27/28.
+
+---
 
 ---
