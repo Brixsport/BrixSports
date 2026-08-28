@@ -16,7 +16,7 @@ import { sendMatchEventNotification } from '@/lib/notifications/match-notificati
 import { getNotifiablePeriodType } from '@/lib/notifications/notification-rules';
 import { recalculateStandingsForMatch } from '@/lib/standingsService';
 import { advanceBracketForMatch } from '@/lib/bracketService';
-import { requiresDecisiveResult } from '@/lib/matchConfig';
+import { requiresDecisiveResult } from '@/lib/matchRules';
 import { checkRateLimit } from '@/lib/rate-limit';
 
 export async function GET(

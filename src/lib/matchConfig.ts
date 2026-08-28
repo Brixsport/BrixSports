@@ -132,19 +132,8 @@ export async function getMatchConfig(matchId: string) {
     return { config, matchId: match.id, sport: match.sport, match };
 }
 
-// BACKLOG-281: knockout-round matches must produce a decisive result (a
-// winner via extra time/penalties, never a level FINISHED score) regardless
-// of the stored allowDraws setting above -- Richard's explicit call
-// (BACKLOG-267 question 2) was to hardcode this check rather than extend
-// competitionSportSettings with a phase concept. Uses the same clean enum
-// round strings bracketService.ts (BACKLOG-280) writes onto matches it
-// creates -- already in standingsService.ts's KNOCKOUT_ROUNDS exclusion list
-// (BACKLOG-275) too. Deliberately excludes the historical free-text round
-// variants ('Quarter Finals', 'Semifinals', etc.) -- those belong to
-// already-completed competitions; this only ever runs against a match that
-// hasn't finished yet.
-export const DECISIVE_RESULT_ROUNDS = ['QUARTER_FINAL', 'SEMI_FINAL', 'THIRD_PLACE', 'FINAL'];
-
-export function requiresDecisiveResult(round: string | null | undefined): boolean {
-    return !!round && DECISIVE_RESULT_ROUNDS.includes(round);
-}
+// requiresDecisiveResult()/DECISIVE_RESULT_ROUNDS moved to './matchRules'
+// (BACKLOG-310) -- they're pure and were being imported by a client
+// component, which pulled this whole file's '@/db' import (and dotenv's
+// browser-unsafe top-level side effect) into the browser bundle. Import
+// from '@/lib/matchRules' instead.

@@ -13,7 +13,7 @@ import { X, Activity, Save, Undo2, Clock, Play, Pause, Settings, Lock as LockIco
 // in a separate file. Importing from the shared module closes that gap here
 // too, for free, and removes the duplication.
 import { queueOfflineEvent, queueAdminChange, jwtSecondsRemaining } from '@/lib/admin-offline-queue';
-import { requiresDecisiveResult } from '@/lib/matchConfig';
+import { requiresDecisiveResult } from '@/lib/matchRules';
 import { useAuth } from '@/hooks/useAuth';
 import { useMultiLogger } from '@/hooks/useMultiLogger';
 import { useWebSocket } from '@/hooks/useWebSocket';
