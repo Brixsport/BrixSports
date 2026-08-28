@@ -55,7 +55,13 @@ export async function GET() {
                     mvpCount: count,
                     team: info.team,
                     teamLogo: info.logo,
-                    rating: 8.0 + (count * 0.2), // Derived rating
+                    // BACKLOG-250: was a fabricated formula (8.0 + count*0.2)
+                    // with no basis in real match data. Basketball is blocked
+                    // from the real ratings pipeline by BACKLOG-146's guard,
+                    // so there is no real number to show yet -- explicit null
+                    // ("not yet rated") until Phase 5 lands basketball
+                    // coverage, rather than a made-up one.
+                    rating: null,
                 };
             })
             .sort((a, b) => b.mvpCount - a.mvpCount);
