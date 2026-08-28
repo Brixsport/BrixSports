@@ -9027,7 +9027,7 @@ Fixed exactly per the "Fix (not built)" plan below: `MatchStatusBadge.tsx` now d
 
 ### BACKLOG-248 — `players.rating` Has a Live Admin Write Path the "Dead Field" Framing Missed
 
-**Status:** OPEN — found session 57, 2026-08-26, by the `architect` agent verifying `BACKLOG-159`'s ground-truth audit against current code.
+**Status:** RESOLVED — closed by `BACKLOG-253` (Phase 3), delegated session `brixsports-v2-fa`, 2026-08-27/28. `'rating'` removed from the PATCH whitelist at `players/[id]/route.ts` — full evidence in `BACKLOG-253`.
 **Priority:** HIGH — feeds directly into `BACKLOG-159`'s storage-model decision; must close before that field can be safely retired as a read source.
 **Problem:** `BACKLOG-159` states "the only writer is the dead legacy `/api/events` route." That's no longer true (may never have been fully true — not re-verified against the original session-47D snapshot). `PATCH /api/players/[id]` (`src/app/api/players/[id]/route.ts:450-455`) whitelists `'rating'` as an admin-editable field. So an admin editing a player's profile today can still write an arbitrary value into `players.rating`, live, through a real reachable endpoint — separate from the dead Pipeline A.
 **Why it matters:** any plan to freeze/retire `players.rating` as a read source (per `BACKLOG-159`'s recommended fix) is incomplete unless this write path is also closed. Otherwise an admin edit silently writes a number that every retired-reader now ignores — confusing, not dangerous, but a real gap in the redesign plan if skipped.
@@ -9059,7 +9059,7 @@ Fixed exactly per the "Fix (not built)" plan below: `MatchStatusBadge.tsx` now d
 
 ### BACKLOG-250 — Basketball MVP Leaderboard Shows a Fabricated Rating, Not a Real One
 
-**Status:** OPEN — found session 57, 2026-08-26, by the `architect` agent during the `BACKLOG-159` verification pass.
+**Status:** RESOLVED — closed by `BACKLOG-253` (Phase 3), delegated session `brixsports-v2-fa`, 2026-08-27/28. Fabricated formula replaced with explicit `null` — full evidence in `BACKLOG-253`.
 **Priority:** HIGH — direct violation of the standing "never fabricate data" rule, on a publicly visible number.
 **Problem:** `src/app/api/basketball/leaderboard/mvp/route.ts:58` — `rating: 8.0 + (count * 0.2), // Derived rating`. This is not sourced from either real rating pipeline (`BACKLOG-159`'s Pipeline B/`playerRatings` table, or the dead Pipeline A) — it's a made-up formula based on some event `count`, labeled "Derived rating" as if it were computed from real match data. This is currently the *only* place basketball shows any rating number at all, since `BACKLOG-146`'s guard blocks basketball from the real pipeline.
 **Fix (not built):** delete the fabricated formula; return an explicit "not yet rated" / null state for basketball MVP ratings until `BACKLOG-159` Phase 5 (basketball stat-extraction coverage) lands and there's a real number to show.
@@ -9108,17 +9108,22 @@ Fixed exactly per the "Fix (not built)" plan below: `MatchStatusBadge.tsx` now d
 
 ### BACKLOG-253 — Ratings Redesign Phase 3: Storage Consolidation (Largest Phase — Expect Sub-Commits)
 
-**Status:** OPEN — planned session 57, 2026-08-26, by the `architect` agent. Own session — flagged as likely needing its own internal sub-commit split (touches ~8+ API files, over CLAUDE.md's 5-file threshold).
+**Status:** RESOLVED — delegated session `brixsports-v2-fa`, 2026-08-27/28. 6 commits (`93862dd`, `571486e`, `49b286c`, `b2b9bb3`, `4bbdaa8`, `3642a94`), one file per commit as instructed. `tsc --noEmit` clean at the 19-error baseline throughout.
 **Priority:** HIGH.
-**Depends on:** `BACKLOG-252`.
-**Scope:**
-1. Create `src/lib/playerRatingSummary.ts` — a single shared, batched accessor (accepts an array of `playerId`s, not one-at-a-time, to avoid N+1) returning `{ averageRating, matchesRated, motmCount }` sourced from `playerRatings`. This becomes the one place the `COALESCE(finalRating, autoRating)`/`AVG` logic lives — the pattern already proven at `leaders/route.ts:32`.
-2. Repoint every read path to it, one file per logical commit: `players/[id]/route.ts:326,366`, `players/[id]/stats/route.ts:102`, `players/stats/leaders/route.ts:75,172,288`, `matches/[id]/route.ts:172,463` (**Flow C — public match page, must be manually verified live after this specific commit**), `teams/[id]/route.ts:61`, `players/bulk/route.ts:38`.
-3. **Closes `BACKLOG-248`** — remove `'rating'` from the PATCH whitelist at `players/[id]/route.ts:452`.
-4. **Closes `BACKLOG-250`** — delete the fabricated formula at `basketball/leaderboard/mvp/route.ts:58`; explicit "not yet rated" state until Phase 5.
-5. Public responses through the new accessor must expose only the aggregate number — no `adjustedBy`/`adjustmentNotes`/raw breakdown (not on `CLAUDE.md`'s explicit banned list, but `adjustedBy` is an internal actor id and belongs in the same class).
+**Depends on:** `BACKLOG-252` (done).
+**Done:**
+1. `src/lib/playerRatingSummary.ts` built exactly as specified — batched by `playerId` array, `{ averageRating, matchesRated, motmCount }`, `averageRating` is `null` (not a fabricated 0) when a player has no rating history at all.
+2. **Two of the plan's own citations were wrong, corrected during implementation (same pattern as `BACKLOG-249`/`251` earlier this session — verify, don't trust the plan blind):**
+   - `players/bulk/route.ts:38` is a POST handler's write-time default for newly-created players (`rating: player.rating || 7.0`), not a read path — a brand-new player legitimately has no rating history yet. **Not touched**, correctly out of scope.
+   - `matches/[id]/route.ts:463` is already-correct code (a single-match-scoped merge reading real `playerRatings` via `finalRating ?? autoRating`) — not a bug, and semantically different from this accessor's cross-match career average. The real bug in that file was at line ~170 (a basketball no-lineup fallback using `event.player.rating || 7.0`), not cited by the plan at all.
+   - All other citations (`players/[id]/route.ts:326,366,452`, `players/[id]/stats/route.ts:102`, `players/stats/leaders/route.ts:75,172,288`, `teams/[id]/route.ts:61`, `basketball/leaderboard/mvp/route.ts:58`) verified accurate against real code before touching anything.
+3. **Extra fix beyond the plan's citations, found while implementing:** `teams/[id]/route.ts` sorted both its squad and default-roster player lists by `ORDER BY players.rating` (DB-level) — same frozen-field problem as the display bug, just for ordering instead of the value shown. Fixed to sort in JS on the real batched average. The university-pool query in the same file has the identical stale-sort issue but its output never displays a rating field at all (already narrowed per `BACKLOG-261`) — deferred, noted rather than silently left, not worth a platform-wide rating batch to reorder an unlabeled list.
+4. **Closes `BACKLOG-248`** — `'rating'` removed from the PATCH whitelist at `players/[id]/route.ts`.
+5. **Closes `BACKLOG-250`** — fabricated formula replaced with an explicit `null` ("not yet rated") at `basketball/leaderboard/mvp/route.ts`, per the plan's own instruction (basketball has no real data to show yet, blocked by `BACKLOG-146`'s guard — routing through the accessor would just return the same `null`, done directly instead).
+6. Public responses expose only `averageRating`/`matchesRated`/`motmCount` — no `adjustedBy`/notes/breakdown, satisfied by the accessor's own return shape.
+**Flow C live verification — real finding, not a clean pass:** attempted a real live check (basketball match `busa-basketball-1`, no lineups, 143 events — the exact branch this phase's `matches/[id]/route.ts` change touches) via the Browser pane's authenticated `fetch()`, same technique as `BACKLOG-252`. Got a real `500`. Traced via server logs to a **pre-existing, unrelated bug** — `JSON.parse(row.event.value)` throws on real basketball box-score event data (`value: made`, an unquoted raw string, not valid JSON) earlier in the same route, before the rating logic this phase touched is ever reached. Confirmed unrelated to this phase's changes (untouched code, reproduces identically regardless of this session's commits) and confirmed **not isolated to this one match** — checked all 20 real basketball matches missing lineups, 100% hit the identical crash. Filed as `BACKLOG-312` (**CRITICAL** — public-facing, live, widespread), not fixed here (different bug, deserves its own session). Verified this phase's own accessor logic instead via direct DB reproduction (the same 16 real player IDs from this match's events, confirmed the batched query executes correctly and correctly returns an empty result set — basketball has zero rating history platform-wide, per `BACKLOG-146`'s guard, so `null` is the correct output). **A true end-to-end live pass of this specific change is still outstanding**, blocked on `BACKLOG-312` being fixed first — flagged for re-verification once that lands, same pattern as `BACKLOG-280`/`281`/`252`'s own caveats this session.
 
-**Found:** session 57, 2026-08-26.
+**Found:** session 57, 2026-08-26. **Resolved:** delegated session `brixsports-v2-fa`, 2026-08-27/28.
 
 ---
 
@@ -10051,9 +10056,9 @@ So at least 4-5 distinct real structures exist in production data today; this se
 
 **Broader gap this surfaces, beyond `BACKLOG-310` itself — relates directly to `BUG-236`:** `/logger` has no `BUG-236`-style guard — that fix kept `/matches/[id]` *usable* on a bad response (stale-but-working, per `CLAUDE.md`'s real-time rule); `/logger` instead falls all the way through to the generic `error.tsx` catch-all, which fully blocks the page with no in-place recovery. For a live match logger specifically, a full-page hard-stop (however nicely styled) is a Tier 0 incident if it fires mid-match. Two separate fixes once picked back up: (1) find and remove/guard the actual offending import, (2) decide whether `/logger` needs its own narrower error boundary (survive a subtree failure without losing the whole page) independent of whatever (1) turns out to be.
 
-**Status held at OPEN, priority raised to CONFIRMED-real-bug** (no longer "pending confirmation" — the production-build repro settles that question, even though the exact offending import is still unidentified). **Handed to `brixsports-v2-38`, 2026-08-28** — related and critical enough to work in parallel rather than wait; that session already has `BACKLOG-252`/ratings-redesign context on this exact code path. `154`/`150` queued for this session to resume after `/clear` instead.
+**Status held at OPEN, priority raised to CONFIRMED-real-bug** (no longer "pending confirmation" — the production-build repro settles that question, even though the exact offending import is still unidentified). **Correction (same day):** Richard's first call was to hand this to `brixsports-v2-38`, but that was reconsidered mid-flow — that session was heads-down on Ratings Redesign Phase 3 (`BACKLOG-253`) and shouldn't split focus — so it was re-routed to the session that had been `brixsports-v2-7e`, reconnected as `brixsports-v2-77`. See `BUILD_JOURNAL.md`'s same-day continuation entry (commit `8740735`) for the full account; this entry's earlier "handed to v2-38" line was never updated after that correction. `154`/`150` queued for the originating session (`v2-37`/formerly the same thread) to resume after `/clear` instead.
 
-**Found:** delegated session `brixsports-v2-fa`, 2026-08-27/28. **Independently reproduced + theory revised:** session `brixsports-v2-37`, 2026-08-28. **Handed off to `brixsports-v2-38`:** 2026-08-28.
+**Found:** delegated session `brixsports-v2-fa`, 2026-08-27/28. **Independently reproduced + theory revised:** session `brixsports-v2-37`, 2026-08-28. **Handed off to `brixsports-v2-77`** (corrected from an initial `brixsports-v2-38` routing): 2026-08-28.
 
 ---
 
@@ -10066,5 +10071,19 @@ So at least 4-5 distinct real structures exist in production data today; this se
 **Before picking this up:** audit exactly what `xi/page.tsx`, `draft/page.tsx`, and `lineup-builder/page.tsx` read off a player object from this route — none of those three were traced this session (only `PlayerProfileOverlay.tsx`'s needs were established, via the parallel trace done for `BACKLOG-260`'s football/basketball routes, which do NOT include organizationAffiliations/memberships and are a different route entirely). Do not assume the football/basketball trace transfers — `/api/players` is genuinely different code (`player-data.ts`'s `enrichPlayersWithAffiliations`/`toPublicPlayer`), and Lineup Builder specifically may depend on affiliation data the other routes don't carry.
 
 **Found:** session 57, 2026-08-26, by the `architect` agent. **Split out, reason documented:** session 62, 2026-08-28.
+
+---
+
+### BACKLOG-312 — CRITICAL: Every Basketball Match Without Lineups 500s on Its Public Match Page
+
+**Status:** OPEN — found delegated session `brixsports-v2-fa`, 2026-08-27/28, while live-verifying `BACKLOG-253`'s Flow C change.
+**Priority:** CRITICAL — public-facing, live, and widespread: confirmed **every** basketball match currently missing lineups (20 real matches checked, `busa-basketball-1/2/3/7/8/9/10/11/12/13/14/15/18/22/23/24/26/28/29/30` — zero exceptions) 500s on `GET /api/matches/[id]`, which means the public `/matches/[id]` page for every one of them is broken right now.
+**Problem:** `matches/[id]/route.ts`'s event-processing map does `value: row.event.value ? JSON.parse(row.event.value) : null` (around line 135). Real `match_events.value` for basketball box-score events (`type: 'Field Goal'`/`'Three Pointer'`/'`Free Throw'`, ids prefixed `bball-box-*`) is stored as the **raw unquoted string** `made` — not valid JSON (would need to be the string `"made"`, quoted, to parse). `JSON.parse('made')` throws `SyntaxError: Unexpected token 'm', "made" is not valid JSON`, uncaught, crashing the whole route with a 500 before it reaches any of the rating/lineup logic below it.
+**Confirmed unrelated to `BACKLOG-253`:** this is not a regression from the ratings-redesign work happening the same session — the failing line is pure pre-existing code, untouched by any of this session's commits. Verified directly: queried `match_events.value` for all 20 affected matches, 100% have this exact `"made"`-as-raw-string shape; the crash reproduces on the unmodified route logic, purely from the data shape, nothing to do with `players.rating` or the new `playerRatingSummary.ts` accessor.
+**Likely scope:** probably affects every basketball match backfilled via whatever produced the `bball-box-*` event rows (a systematic box-score import, not hand-entered) — the 20 matches found here were specifically the ones *without* lineups (the query used to find `BACKLOG-253`'s Flow C test target), so there may be more affected matches that also have lineups and were not checked by this query.
+**Fix (not built):** either (a) don't unconditionally `JSON.parse` — check if the string is valid JSON first and fall back to the raw string, or (b) fix `value` at the data layer for these rows to store properly-quoted JSON (`"made"` not `made`). (a) is safer/faster to ship since it doesn't require a data migration and handles any other similarly-malformed rows the same way; (b) is more correct long-term. Needs a decision on which, and a real live-verify after (open a previously-broken match's public page, confirm 200 + real data).
+**Not fixed here:** out of scope for `BACKLOG-253` (different bug entirely, discovered by accident while verifying it) and CRITICAL enough that it deserves a focused session of its own rather than a rushed fix folded into unrelated work.
+
+**Found:** delegated session `brixsports-v2-fa`, 2026-08-27/28.
 
 ---
