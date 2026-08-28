@@ -104,7 +104,16 @@ export async function GET(
 
         // UNIVERSITY POOL — all students eligible to represent this university
         // Football analogy: all Spaniards (university affiliation) who can play for Spain (University Team)
-        let universityPlayers: typeof teamPlayers = [];
+        // BACKLOG-261: NOT narrowed to a DB-level `WHERE university = X` filter,
+        // deliberately -- getResolvedInstitutionalData() resolves university
+        // with priority (org affiliation name > players.university column >
+        // team.university fallback), which can legitimately differ from the
+        // raw column. A naive DB filter on the raw column would silently drop
+        // or wrongly include players. Fetch-all-then-resolve is kept exactly
+        // as before for correctness; only the OUTPUT shape is narrowed below,
+        // to the 4 fields TeamDetailClient.tsx:486-506 actually renders
+        // (grep-confirmed against every consumer of this route).
+        let universityPlayers: Array<{ id: string; name: string; number: number; position: string }> = [];
         if (team.university && !competitionId) {
             const allPlayers = await db
                 .select()
@@ -114,7 +123,12 @@ export async function GET(
             const enrichedPlayers = await enrichPlayersWithAffiliations(allPlayers);
             universityPlayers = enrichedPlayers
                 .filter((player) => getResolvedInstitutionalData(player, player.team).university === team.university)
-                .map(({ team: _team, ...player }) => toPublicPlayer(player, isAdmin));
+                .map((player) => ({
+                    id: player.id,
+                    name: player.name,
+                    number: player.number,
+                    position: player.position,
+                }));
         }
 
         // Get player stats (Basketball)
@@ -132,9 +146,29 @@ export async function GET(
             });
         }
 
+        // BACKLOG-261: explicit allow-list -- every matches column except the
+        // 5 CLAUDE.md-banned fields plus everything else TeamDetailClient.tsx
+        // doesn't read (grep-confirmed: id, startTime, isHome (computed),
+        // status, homeScore, awayScore, competition, venue, opponent.name,
+        // opponent.shortName -- the only fields read across both the recent
+        // and upcoming sections). homeTeamId/awayTeamId kept in the query
+        // (needed to compute isHome/opponent) but dropped from the final
+        // shape below.
+        const TEAM_MATCH_FIELDS = {
+            id: matches.id,
+            homeTeamId: matches.homeTeamId,
+            awayTeamId: matches.awayTeamId,
+            status: matches.status,
+            homeScore: matches.homeScore,
+            awayScore: matches.awayScore,
+            startTime: matches.startTime,
+            venue: matches.venue,
+            competition: matches.competition,
+        };
+
         // Get recent matches (last 10)
         const recentMatches = await db
-            .select()
+            .select(TEAM_MATCH_FIELDS)
             .from(matches)
             .where(
                 or(
@@ -147,7 +181,7 @@ export async function GET(
 
         // Get upcoming matches (next 10)
         const upcomingMatches = await db
-            .select()
+            .select(TEAM_MATCH_FIELDS)
             .from(matches)
             .where(
                 and(
@@ -161,29 +195,37 @@ export async function GET(
             .orderBy(matches.startTime)
             .limit(10);
 
-        // Fetch opponent details for matches
-        const enrichMatches = async (matchList: any[]) => {
-            return Promise.all(
-                matchList.map(async (match) => {
-                    const isHome = match.homeTeamId === id;
-                    const opponentId = isHome ? match.awayTeamId : match.homeTeamId;
+        // BACKLOG-261: batch the opponent lookup into one query instead of
+        // one per match (was a real N+1 across up to 20 matches).
+        const opponentIds = Array.from(new Set(
+            [...recentMatches, ...upcomingMatches].map(m => m.homeTeamId === id ? m.awayTeamId : m.homeTeamId)
+        ));
+        const opponentTeams = opponentIds.length > 0
+            ? await db
+                .select({ id: teams.id, name: teams.name, shortName: teams.shortName })
+                .from(teams)
+                .where(inArray(teams.id, opponentIds))
+            : [];
+        const opponentMap = new Map(opponentTeams.map(t => [t.id, { name: t.name, shortName: t.shortName }]));
 
-                    const [opponent] = await db
-                        .select()
-                        .from(teams)
-                        .where(eq(teams.id, opponentId));
+        const enrichMatches = (matchList: typeof recentMatches) =>
+            matchList.map(({ homeTeamId, awayTeamId, homeScore, awayScore, ...match }) => {
+                const isHome = homeTeamId === id;
+                const opponentId = isHome ? awayTeamId : homeTeamId;
+                return {
+                    ...match,
+                    // homeScore/awayScore are nullable columns; every downstream
+                    // consumer (stats/form calc below, TeamDetailClient.tsx)
+                    // does numeric comparisons assuming a real score.
+                    homeScore: homeScore ?? 0,
+                    awayScore: awayScore ?? 0,
+                    isHome,
+                    opponent: opponentMap.get(opponentId) ?? null,
+                };
+            });
 
-                    return {
-                        ...match,
-                        isHome,
-                        opponent,
-                    };
-                })
-            );
-        };
-
-        const enrichedRecent = await enrichMatches(recentMatches);
-        const enrichedUpcoming = await enrichMatches(upcomingMatches);
+        const enrichedRecent = enrichMatches(recentMatches);
+        const enrichedUpcoming = enrichMatches(upcomingMatches);
 
         // Calculate team statistics
         // BACKLOG-097 follow-up: `teams`' own played/won/drawn/lost/goalsFor/goalsAgainst/points
