@@ -57,9 +57,12 @@ export default function PlayerDetailClient() {
 
         setSearching(true);
         try {
-            const res = await fetch(`/api/search?q=${encodeURIComponent(query)}&type=players&limit=10`);
+            const res = await fetch(`/api/search?q=${encodeURIComponent(query)}&category=players&limit=10`);
             const data = await res.json();
-            setSearchResults(data.players || []);
+            // BACKLOG-254: was reading data.players (always undefined -- the route
+            // nests results under `results.players`), so this search silently
+            // returned zero results every time regardless of query.
+            setSearchResults(data.results?.players || []);
         } catch (error) {
             console.error('Error searching players:', error);
         } finally {
@@ -182,14 +185,6 @@ export default function PlayerDetailClient() {
                                 )}
                             </div>
 
-                            {/* Rating */}
-                            {player.rating && (
-                                <div className="flex items-center gap-2">
-                                    <Star className="w-6 h-6 text-yellow-500 fill-current" />
-                                    <span className="text-3xl font-bold">{player.rating.toFixed(1)}</span>
-                                    <span className="text-white/60">Rating</span>
-                                </div>
-                            )}
                         </div>
                         {/* Related Profiles (Multi-sport) */}
                         {player.relatedProfiles && player.relatedProfiles.length > 0 && (
@@ -593,7 +588,7 @@ export default function PlayerDetailClient() {
                                     <div className="space-y-3">
                                         <div className="flex justify-between">
                                             <span className="text-white/60">Rating</span>
-                                            <span className="font-bold text-2xl text-primary">{stats.rating.toFixed(1)}</span>
+                                            <span className="font-bold text-2xl text-primary">{stats.rating != null ? stats.rating.toFixed(1) : 'Not yet rated'}</span>
                                         </div>
                                         <div className="flex justify-between">
                                             <span className="text-white/60">Appearances</span>
@@ -686,10 +681,10 @@ export default function PlayerDetailClient() {
                                                             {result.position} • {result.team?.name}
                                                         </div>
                                                     </div>
-                                                    {result.rating && (
+                                                    {result.averageRating != null && (
                                                         <div className="flex items-center gap-1">
                                                             <Star className="w-4 h-4 text-yellow-500 fill-current" />
-                                                            <span className="font-bold">{result.rating.toFixed(1)}</span>
+                                                            <span className="font-bold">{result.averageRating.toFixed(1)}</span>
                                                         </div>
                                                     )}
                                                 </button>
@@ -721,7 +716,7 @@ export default function PlayerDetailClient() {
 
                                 {/* Comparison */}
                                 <PlayerComparison
-                                    player1={{ ...player, stats }}
+                                    player1={{ ...player, rating: stats.rating, stats }}
                                     player2={comparePlayer}
                                     sport={player.team?.sport || 'Football'}
                                 />

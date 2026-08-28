@@ -4,6 +4,7 @@ import { matches, teams } from '@/db/schema';
 import { eq, and, inArray, or, desc, sql } from 'drizzle-orm'; // inArray kept for teams fetch
 import { getAuthUser } from '@/lib/auth';
 import { checkRateLimit } from '@/lib/rate-limit';
+import { playerRatings } from '@/db/schema-ratings';
 
 // BACKLOG-258: explicit allow-list, not `db.select()` (full row). Every
 // matches column except the CLAUDE.md-banned four (approvalStatus,
@@ -70,6 +71,7 @@ export async function GET(request: NextRequest) {
         const isAdmin = authUser?.role === 'admin';
 
         const { searchParams } = new URL(request.url);
+        const includeRatingsStatus = searchParams.get('includeRatingsStatus') === '1';
         const sport = searchParams.get('sport');
         const loggerId = searchParams.get('loggerId');
         const status = searchParams.get('status');
@@ -130,6 +132,23 @@ export async function GET(request: NextRequest) {
         // Create a map for quick access
         const teamsMap = new Map(teamsList.map(t => [t.id, t]));
 
+        // BACKLOG-254: admin/match-ratings/page.tsx's hasRatings/ratingsCount badge
+        // was always false -- no route ever set those fields. Admin-only, opt-in
+        // (not part of every /api/matches response) to keep this generic list route's
+        // default shape unchanged for its many other consumers.
+        let ratingsCountByMatchId = new Map<string, number>();
+        if (includeRatingsStatus && isAdmin && allMatches.length > 0) {
+            const ratingRows = await db
+                .select({
+                    matchId: playerRatings.matchId,
+                    count: sql<number>`count(*)`,
+                })
+                .from(playerRatings)
+                .where(inArray(playerRatings.matchId, allMatches.map(m => m.id)))
+                .groupBy(playerRatings.matchId);
+            ratingsCountByMatchId = new Map(ratingRows.map(r => [r.matchId, Number(r.count)]));
+        }
+
         // BACKLOG-258: no per-match events fetch here anymore -- no list
         // consumer read the `events` key (grep-confirmed; LiveUpdates.tsx
         // actually calls /api/matches/[id]/events, a different route), and it
@@ -141,10 +160,26 @@ export async function GET(request: NextRequest) {
 
             const { loggerId, ...publicMatch } = match;
 
+            // Same crash class as BACKLOG-312 -- an uncaught JSON.parse here would
+            // 500 the whole list (this route backs the public /live page, Flow C)
+            // for every match, not just the one with malformed stats.
+            let parsedStats: Record<string, unknown> = {};
+            if (match.stats) {
+                try {
+                    parsedStats = JSON.parse(match.stats);
+                } catch (e) {
+                    console.error(`Error parsing stats for match ${match.id}:`, e);
+                }
+            }
+
             return {
                 ...publicMatch,
                 ...(isAdmin && { loggerId }),
-                stats: match.stats ? JSON.parse(match.stats) : {},
+                ...(includeRatingsStatus && isAdmin && {
+                    hasRatings: (ratingsCountByMatchId.get(match.id) ?? 0) > 0,
+                    ratingsCount: ratingsCountByMatchId.get(match.id) ?? 0,
+                }),
+                stats: parsedStats,
                 homeTeam: homeTeam ? {
                     name: homeTeam.name,
                     shortName: homeTeam.shortName,

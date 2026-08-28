@@ -137,7 +137,7 @@ export function PlayerProfileOverlay({ player: initialPlayer, onClose, sport }: 
                   <div className="absolute inset-0 bg-primary/10 opacity-0 group-hover:opacity-100 transition-opacity"></div>
                 </div>
                 <div className="absolute -bottom-4 -right-4 w-16 h-16 bg-primary rounded-2xl flex items-center justify-center text-black font-black text-xl border-4 border-[#050505]">
-                  {player.rating?.toFixed(1) || '7.0'}
+                  {stats.rating != null ? stats.rating.toFixed(1) : '-'}
                 </div>
               </div>
 
@@ -236,7 +236,7 @@ export function PlayerProfileOverlay({ player: initialPlayer, onClose, sport }: 
                         <div className="flex items-center gap-4">
                           <span className="text-xs font-bold italic">{eventCount > 0 ? eventSummary : '-'}</span>
                           <span className={`px-2 py-1 rounded-lg font-black text-xs ${eventCount > 0 ? 'bg-primary/20 text-primary' : 'bg-white/10 text-white/40'}`}>
-                            {player.rating?.toFixed(1) || '7.0'}
+                            {matchData.rating != null ? matchData.rating.toFixed(1) : '-'}
                           </span>
                         </div>
                       </div>

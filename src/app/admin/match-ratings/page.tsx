@@ -43,14 +43,17 @@ export default function MatchRatingsListPage() {
     const fetchMatches = async () => {
         try {
             setLoading(true);
-            const response = await fetch('/api/matches?status=FINISHED&limit=50');
+            const response = await fetch('/api/matches?status=FINISHED&limit=50&includeRatingsStatus=1');
 
             if (!response.ok) {
                 throw new Error('Failed to fetch matches');
             }
 
             const data = await response.json();
-            setMatches(data.matches || []);
+            // BACKLOG-254: /api/matches returns a bare array, not { matches: [...] } --
+            // this was reading data.matches (always undefined), so the list was
+            // silently empty regardless of how many finished matches existed.
+            setMatches(Array.isArray(data) ? data : []);
         } catch (err) {
             setError(getClientErrorMessage(err, 'Failed to load matches'));
         } finally {

@@ -8,7 +8,7 @@ interface PlayerWithDetails {
     name: string;
     number: number;
     position: string;
-    rating?: number;
+    rating?: number | null;
     image?: string;
     team?: {
         id: string;
@@ -69,7 +69,7 @@ export function PlayerComparison({ player1, player2, sport }: PlayerComparisonPr
                         <div className="flex items-center justify-center gap-2 mb-1">
                             <Star className="w-5 h-5 text-yellow-500 fill-yellow-500" />
                             <span className="text-3xl font-display italic text-primary">
-                                {player1.rating?.toFixed(1) || '7.0'}
+                                {player1.rating ? player1.rating.toFixed(1) : 'Not yet rated'}
                             </span>
                         </div>
                         <p className="text-xs text-white/60">{player1.name}</p>
@@ -78,7 +78,7 @@ export function PlayerComparison({ player1, player2, sport }: PlayerComparisonPr
                         <div className="flex items-center justify-center gap-2 mb-1">
                             <Star className="w-5 h-5 text-yellow-500 fill-yellow-500" />
                             <span className="text-3xl font-display italic text-primary">
-                                {player2.rating?.toFixed(1) || '7.0'}
+                                {player2.rating ? player2.rating.toFixed(1) : 'Not yet rated'}
                             </span>
                         </div>
                         <p className="text-xs text-white/60">{player2.name}</p>

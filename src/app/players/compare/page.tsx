@@ -64,7 +64,9 @@ function PlayerCompareContent() {
                         const res = await fetch(`/api/players/${player1Id}`);
                         if (res.ok) {
                             const data = await res.json();
-                            setPlayer1(data.player || data);
+                            // BACKLOG-254: data.player.rating is the frozen legacy column
+                            // (BACKLOG-253) -- override with the real career accessor.
+                            setPlayer1({ ...(data.player || data), rating: data.stats?.rating ?? null });
                         }
                     } catch (error) {
                         console.error('Error fetching player 1:', error);
@@ -81,7 +83,7 @@ function PlayerCompareContent() {
                         const res = await fetch(`/api/players/${player2Id}`);
                         if (res.ok) {
                             const data = await res.json();
-                            setPlayer2(data.player || data);
+                            setPlayer2({ ...(data.player || data), rating: data.stats?.rating ?? null });
                         }
                     } catch (error) {
                         console.error('Error fetching player 2:', error);
@@ -548,11 +550,11 @@ function PlayerSelector({
                                             {result.position} • {result.team?.name}
                                         </div>
                                     </div>
-                                    {result.rating && (
+                                    {result.averageRating != null && (
                                         <div className="flex items-center gap-1 flex-shrink-0">
                                             <Star className="w-3 h-3 text-yellow-500 fill-yellow-500" />
                                             <span className="text-sm font-bold">
-                                                {result.rating.toFixed(1)}
+                                                {result.averageRating.toFixed(1)}
                                             </span>
                                         </div>
                                     )}

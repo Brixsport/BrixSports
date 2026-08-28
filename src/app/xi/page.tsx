@@ -24,7 +24,7 @@ interface Player {
     name: string;
     position: string;
     team: string;
-    rating: number;
+    averageRating: number | null;
     imageUrl: string | null;
 }
 
@@ -181,7 +181,7 @@ export default function BuildYourXIPage() {
         return matchesSearch && matchesPosition;
     });
 
-    const teamRating = positions.reduce((sum, pos) => sum + (pos.player?.rating || 0), 0) / 11;
+    const teamRating = positions.reduce((sum, pos) => sum + (pos.player?.averageRating || 0), 0) / 11;
 
     return (
         <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
@@ -441,7 +441,7 @@ export default function BuildYourXIPage() {
                                                     {player.position}
                                                 </span>
                                                 <span className="text-lg font-bold text-white">
-                                                    {player.rating}
+                                                    {player.averageRating != null ? player.averageRating.toFixed(1) : '-'}
                                                 </span>
                                             </div>
                                         </motion.button>

@@ -7,6 +7,16 @@ import { enrichPlayersWithAffiliations, toPublicPlayer, type EnrichedPlayer, syn
 import { getPrimaryTeam, getResolvedInstitutionalData, playerMatchesInstitutionFilters } from '@/lib/player-affiliation-utils';
 import { getCurrentSeason } from '@/lib/rosterService';
 import { checkRateLimit } from '@/lib/rate-limit';
+import { getPlayerRatingSummaries } from '@/lib/playerRatingSummary';
+
+// BACKLOG-254: players.rating is the frozen legacy column (BACKLOG-253) --
+// attach the real career-average accessor so list consumers (e.g. xi/page.tsx)
+// stop reading it. Adds `averageRating` alongside the existing `rating` field
+// rather than replacing it, since this route's consumers aren't fully audited.
+async function withAverageRating<T extends { id: string }>(list: T[]): Promise<(T & { averageRating: number | null })[]> {
+    const summaries = await getPlayerRatingSummaries(list.map((p) => p.id));
+    return list.map((p) => ({ ...p, averageRating: summaries.get(p.id)?.averageRating ?? null }));
+}
 
 function playerMatchesSearch(player: EnrichedPlayer, query: string) {
     const normalizedQuery = query.trim().toLowerCase();
@@ -82,7 +92,7 @@ export async function GET(request: Request) {
             const enriched = await enrichPlayersWithAffiliations(foundPlayers);
             return NextResponse.json({
                 success: true,
-                players: enriched.map((p) => toPublicPlayer(p, isAdmin)),
+                players: await withAverageRating(enriched.map((p) => toPublicPlayer(p, isAdmin))),
             });
         }
 
@@ -114,7 +124,7 @@ export async function GET(request: Request) {
             const enrichedTeamPlayers = await enrichPlayersWithAffiliations(Array.from(combinedMap.values()));
             return NextResponse.json({
                 success: true,
-                players: enrichedTeamPlayers.map((p) => toPublicPlayer(p, isAdmin)),
+                players: await withAverageRating(enrichedTeamPlayers.map((p) => toPublicPlayer(p, isAdmin))),
             });
         }
 
@@ -142,7 +152,7 @@ export async function GET(request: Request) {
 
         return NextResponse.json({
             success: true,
-            players: pagedPlayers.map((p) => toPublicPlayer(p, isAdmin)),
+            players: await withAverageRating(pagedPlayers.map((p) => toPublicPlayer(p, isAdmin))),
             total,
         }, {
             headers: {

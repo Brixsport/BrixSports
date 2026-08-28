@@ -50,7 +50,7 @@ interface Player {
     number: number;
     teamId: string;
     position: string;
-    rating: number;
+    rating: number | null;
     eyePoints: number;
     team?: Team;
 }

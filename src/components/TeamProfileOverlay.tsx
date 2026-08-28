@@ -20,7 +20,7 @@ interface Player {
     number: number;
     teamId: string;
     position: string;
-    rating: number;
+    rating: number | null;
     eyePoints: number;
     team?: Team;
 }
@@ -335,14 +335,14 @@ export function TeamProfileOverlay({ team, onClose, onSelectPlayer, sport = 'Bas
                                                         <div>
                                                             <h3 className="font-bold text-lg flex items-center gap-2">
                                                                 {player.name}
-                                                                {player.rating >= 8 && <Star size={16} className="text-primary fill-primary" />}
+                                                                {player.rating != null && player.rating >= 8 && <Star size={16} className="text-primary fill-primary" />}
                                                             </h3>
                                                             <p className="text-sm text-white/40">
                                                                 #{player.number} • {player.position}
                                                             </p>
                                                         </div>
                                                         <div className="px-3 py-1 bg-primary/20 text-primary rounded-lg font-bold text-sm">
-                                                            {player.rating.toFixed(1)}
+                                                            {player.rating != null ? player.rating.toFixed(1) : '-'}
                                                         </div>
                                                     </div>
                                                     <div className="flex items-center gap-4 text-xs text-white/60">

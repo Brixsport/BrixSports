@@ -8,6 +8,7 @@ import { db } from '@/db';
 import { players, footballPlayerStats, basketballPlayerStats } from '@/db/schema';
 import { eq, and } from 'drizzle-orm';
 import { enrichPlayersWithAffiliations } from '@/lib/player-data';
+import { getPlayerRatingSummaries } from '@/lib/playerRatingSummary';
 
 /**
  * GET player comparison
@@ -204,6 +205,15 @@ export async function GET(request: NextRequest) {
         ]);
         const availableSeasons = Array.from(new Set([...seasons1, ...seasons2])).sort();
 
+        // BACKLOG-254: player1.rating/player2.rating below come from the raw
+        // `...player1`/`...player2` spread -- players.rating, the frozen legacy
+        // column (BACKLOG-253). Override with the real career accessor so
+        // PlayerComparison.tsx's "Overall Rating" tile isn't showing the same
+        // stale default for every player.
+        const ratingSummaries = await getPlayerRatingSummaries([player1Id, player2Id]);
+        const rating1 = ratingSummaries.get(player1Id)?.averageRating ?? null;
+        const rating2 = ratingSummaries.get(player2Id)?.averageRating ?? null;
+
         // Determine comparison summary based on primary sport
         const primarySport = team1?.sport || 'Football';
         let summary: any = {};
@@ -233,11 +243,13 @@ export async function GET(request: NextRequest) {
         const comparison = {
             player1: {
                 ...player1,
+                rating: rating1,
                 team: team1,
                 stats: stats1,
             },
             player2: {
                 ...player2,
+                rating: rating2,
                 team: team2,
                 stats: stats2,
             },

@@ -11,6 +11,7 @@ import { enrichPlayersWithAffiliations, toPublicPlayer } from '@/lib/player-data
 import { getPrimaryTeam, getResolvedInstitutionalData } from '@/lib/player-affiliation-utils';
 import { getAuthUser } from '@/lib/auth';
 import { checkRateLimit } from '@/lib/rate-limit';
+import { getPlayerRatingSummaries } from '@/lib/playerRatingSummary';
 
 function playerMatchesQuery(
     player: Awaited<ReturnType<typeof enrichPlayersWithAffiliations>>[number],
@@ -125,7 +126,7 @@ export async function GET(request: NextRequest) {
                 .limit(limit * 4);
 
             const enrichedPlayers = await enrichPlayersWithAffiliations(candidatePlayers);
-            results.players = enrichedPlayers
+            const matchedPlayers = enrichedPlayers
                 .filter((player) => {
                     const primaryTeam = getPrimaryTeam(player);
                     if (sport && primaryTeam?.sport !== sport) {
@@ -137,11 +138,17 @@ export async function GET(request: NextRequest) {
                     // never sees in the response (BACKLOG-167).
                     return playerMatchesQuery(player, query);
                 })
-                .slice(0, limit)
-                .map((player) => toPublicPlayer({
-                    ...player,
-                    team: getPrimaryTeam(player),
-                }, isAdmin));
+                .slice(0, limit);
+
+            // BACKLOG-254: `rating` below is players.rating, the frozen legacy
+            // column (BACKLOG-253) -- SearchOverlay.tsx's "Top Rated" sort was a
+            // no-op tie against it. Attach the real career accessor alongside it.
+            const ratingSummaries = await getPlayerRatingSummaries(matchedPlayers.map((p) => p.id));
+            results.players = matchedPlayers.map((player) => toPublicPlayer({
+                ...player,
+                team: getPrimaryTeam(player),
+                averageRating: ratingSummaries.get(player.id)?.averageRating ?? null,
+            }, isAdmin));
         }
 
         if (!category || category === 'all' || category === 'matches') {

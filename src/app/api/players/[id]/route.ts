@@ -11,6 +11,7 @@ import { getAuthUser } from '@/lib/auth';
 import { enrichPlayersWithAffiliations, syncPlayerOrganizationAffiliations } from '@/lib/player-data';
 import { getCurrentSeason } from '@/lib/rosterService';
 import { getPlayerRatingSummaries } from '@/lib/playerRatingSummary';
+import { playerRatings } from '@/db/schema-ratings';
 
 interface RouteParams {
     params: {
@@ -188,8 +189,27 @@ export async function GET(
             ? await db.select({ id: teams.id, name: teams.name, shortName: teams.shortName }).from(teams).where(inArray(teams.id, recentTeamIds))
             : [];
         const teamById = new Map(recentTeams.map(t => [t.id, t]));
+
+        // BACKLOG-254: PlayerProfileOverlay.tsx's per-match "recent performances"
+        // badge had no per-match rating source at all and was showing the frozen
+        // career-wide players.rating (BACKLOG-253) for every row. Real per-match
+        // ratings, batched over just these <=5 matches.
+        const recentMatchIds = [...seenMatchIds];
+        const recentMatchRatings = recentMatchIds.length > 0
+            ? await db
+                .select({
+                    matchId: playerRatings.matchId,
+                    finalRating: playerRatings.finalRating,
+                    autoRating: playerRatings.autoRating,
+                })
+                .from(playerRatings)
+                .where(and(eq(playerRatings.playerId, id), inArray(playerRatings.matchId, recentMatchIds)))
+            : [];
+        const ratingByMatchId = new Map(recentMatchRatings.map(r => [r.matchId, r.finalRating ?? r.autoRating]));
+
         const recentMatchesWithTeams = recentMatchesWithEvents.map(m => ({
             ...m,
+            rating: m.match?.id ? ratingByMatchId.get(m.match.id) ?? null : null,
             match: m.match ? {
                 ...m.match,
                 homeTeam: m.match.homeTeamId ? teamById.get(m.match.homeTeamId) ?? null : null,

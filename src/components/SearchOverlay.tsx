@@ -20,7 +20,7 @@ interface Player {
   number: number;
   position: string;
   teamId: number;
-  rating?: number;
+  averageRating?: number | null;
   eyePoints?: number;
   team?: Team;
 }
@@ -85,7 +85,9 @@ export function SearchOverlay({ onClose, onSelectTeam, onSelectPlayer }: SearchO
 
   // Sort players based on selected option
   const sortedPlayers = [...players].sort((a, b) => {
-    if (sortBy === 'rating') return (b.rating || 0) - (a.rating || 0);
+    // BACKLOG-254: was sorting on the frozen legacy `rating` column (BACKLOG-253),
+    // making "Top Rated" a no-op tie for every player. Unrated (null) sinks last.
+    if (sortBy === 'rating') return (b.averageRating ?? -1) - (a.averageRating ?? -1);
     if (sortBy === 'points') return (b.eyePoints || 0) - (a.eyePoints || 0);
     return a.name.localeCompare(b.name);
   });
@@ -225,7 +227,7 @@ export function SearchOverlay({ onClose, onSelectTeam, onSelectPlayer }: SearchO
                       <div className="flex items-center gap-2">
                         <h4 className="font-bold uppercase italic text-sm group-hover:text-secondary transition-colors">{player.name}</h4>
                         <span className="text-[10px] bg-secondary/10 text-secondary px-1.5 py-0.5 rounded font-black italic">
-                          {sortBy === 'points' ? (player.eyePoints || 0) : (player.rating || 0).toFixed(1)}
+                          {sortBy === 'points' ? (player.eyePoints || 0) : (player.averageRating != null ? player.averageRating.toFixed(1) : '-')}
                         </span>
                       </div>
                       <p className="text-[10px] text-white/40 uppercase tracking-wider">{player.position} • {player.team?.shortName || 'N/A'}</p>
