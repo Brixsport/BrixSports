@@ -10100,3 +10100,32 @@ So at least 4-5 distinct real structures exist in production data today; this se
 **Found:** delegated session `brixsports-v2-fa`, 2026-08-27/28.
 
 ---
+
+### BACKLOG-313 — Error-Message Hygiene: `USER_FACING_ERROR_MESSAGES_AUDIT.md` Re-Verification + 7 Newly-Found Instances
+
+**Status:** RESOLVED — 2026-08-28, `brixsports-v2-77`.
+**Priority:** Medium — no live security leak of the severity `USER_FACING_ERROR_MESSAGES_AUDIT.md`'s High items described (those were already fixed before this session), but the newly-found instances were real, live gaps of the same two shapes.
+**Ask:** Richard asked for direct confirmation that `USER_FACING_ERROR_MESSAGES_AUDIT.md` (session 49, research-only, no fixes applied at the time) had actually been fully mitigated — not just documented — and that the underlying bug *class* (raw error leaks; silent failures with no user feedback) couldn't resurface as a hard blocker elsewhere.
+**Found on verification:** the audit's own recommended fix (extract `AuthContext.tsx`'s safe pattern into a shared utility) had already been built and adopted somewhere between session 49 and now — `src/lib/client-error.ts`'s `getClientErrorMessage()`, used in exactly the ~13 client files the audit flagged. All ~15 server-side raw-leak instances across 11 route files were already clean. `/api/notifications/diagnose`'s missing auth check was already closed. `BasketballLogger.tsx`'s two flagged silent-failure spots (and effectively every other failure path in that file) already had explicit `setEventSaveError` feedback. None of this session's fix.
+
+**What this session actually did — a full re-sweep beyond the original audit's file list**, not just re-checking its claims: grepped the whole `src/` tree for both bug shapes (`instanceof Error` without a `TypeError`/`SyntaxError` guard; `alert()`/JSX rendering a caught error's raw `.message`; `catch` blocks with only `console.error` and no state update) and read every hit. Found and fixed:
+1. `src/components/FootballLogger.tsx` — finalize-match `alert(e.message)`, unguarded.
+2. `src/app/admin/match-ratings/[id]/page.tsx` — a third catch block (its other two were already fixed) with the same unguarded shape.
+3. `src/hooks/useUserProfile.ts`, `useUserActivity.ts`, `useLoggerAnalytics.ts`, `useLiveStandings.ts` — all four `setError(err instanceof Error ? err.message : fallback)` after a raw `fetch()`, same gap (5 call sites across the 4 files, `useUserProfile.ts` had two).
+4. `src/app/api/matches/[id]/ratings/route.ts` — the calculate-ratings endpoint returned `err.message` verbatim for any failure from `calculateAndSaveRatings()` (real DB work); only two of its throws are deliberate validation messages, everything else (including a real DB error) was leaking raw.
+5. `src/components/MatchLoggerUI.tsx` — silent initial-events-load failure, same shape as `BasketballLogger`'s already-fixed `BACKLOG-134`: `console.error` only, zero on-screen indication, indistinguishable from "this match has no events yet," risking duplicate logging.
+
+All five fixed by converging onto `getClientErrorMessage` (1-3), an allowlist of known-safe messages with a generic fallback for anything else (4), and a dismissible warning banner matching the other loggers' pattern (5).
+
+**Checked and confirmed as false positives, deliberately not touched:**
+- `api/admin/competitions/[id]/draws/route.ts` + `.../draws/[drawId]/route.ts` — `err.message` passthrough from `computeLeaguePhaseDraw`/`assignHomeAway` (`src/lib/competitionDraw.ts`), which has **zero imports** — fully pure/self-contained, every possible throw is deliberate validation text, never DB/fetch internals. Only superficially matches the leak shape.
+- `src/components/ErrorReporter.tsx` — raw `error.message` in a `postMessage` call, but gated behind `window.parent !== window`; dev/tooling instrumentation, inert on a normal top-level page load.
+- `src/app/error.tsx`, `src/app/logger/error.tsx`, `src/components/logger/LoggerErrorBoundary.tsx` — all show `error.message` on a full crash screen. This is the established, accepted pattern for crash boundaries specifically (a support-facing detail plus digest), industry-standard, and pre-existing in the root `error.tsx` before this session — not the same context as a routine API-response leak.
+- `src/app/admin/past-matches/import/page.tsx` — raw file-parse-library error message; the original audit already assessed this as "arguably acceptable" diagnostic detail in an admin-only file-upload debugging context. Left as that judgment call, not re-litigated.
+- `src/lib/offline-queue.ts`, `src/lib/offline/sync-manager.ts` (client-side), `src/lib/email.ts`, `src/lib/notifications/match-notification-service.ts` (server-side) — all use the same `instanceof Error` shape, but traced each to its actual sink: none render raw to an end user. The offline-queue/sync-manager error arrays are internal retry/diagnostic data, not rendered by `FootballLogger`/`BasketballLogger`. `email.ts`'s SES/nodemailer errors are `console.error`'d only, never returned in an API response (`forgot-password/route.ts` confirmed). `match-notification-service.ts`'s error is written to `logNotificationSend`, an admin-only notification-history audit log — legitimate operational visibility, same class as `/api/admin/infrastructure`'s already-accepted diagnostic surface.
+
+**Verified:** `tsc --noEmit` clean (same 38 pre-existing `src/db/*`-script baseline errors, zero new).
+
+**Found + fixed:** `brixsports-v2-77`, 2026-08-28, same session as `BACKLOG-310`.
+
+---
