@@ -4,7 +4,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { and, desc, eq, like, or, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, like, or, sql } from 'drizzle-orm';
 import { db } from '@/db';
 import { competitions, matches, players, teams } from '@/db/schema';
 import { enrichPlayersWithAffiliations, toPublicPlayer } from '@/lib/player-data';
@@ -155,30 +155,53 @@ export async function GET(request: NextRequest) {
                 ? and(matchFilters, eq(matches.sport, sport))
                 : matchFilters;
 
+            // BACKLOG-261: explicit allow-list on the matches side (was
+            // `...row.match`, a full-row spread -- same banned-field leak
+            // class as BACKLOG-257) traced against every real consumer
+            // (GlobalSearch.tsx, src/app/search/page.tsx -- SearchOverlay.tsx
+            // and the player-search callers never read `results.matches` at
+            // all, grep-confirmed): id, status, homeScore, awayScore,
+            // startTime, competition, plus home/away team name+shortName.
+            const SEARCH_MATCH_FIELDS = {
+                id: matches.id,
+                awayTeamId: matches.awayTeamId,
+                status: matches.status,
+                homeScore: matches.homeScore,
+                awayScore: matches.awayScore,
+                startTime: matches.startTime,
+                competition: matches.competition,
+            };
+            const SEARCH_TEAM_FIELDS = {
+                name: teams.name,
+                shortName: teams.shortName,
+            };
+
             const matchResults = await db
                 .select({
-                    match: matches,
-                    homeTeam: teams,
+                    match: SEARCH_MATCH_FIELDS,
+                    homeTeam: SEARCH_TEAM_FIELDS,
                 })
                 .from(matches)
                 .leftJoin(teams, eq(matches.homeTeamId, teams.id))
                 .where(matchWhere)
                 .limit(limit);
 
-            results.matches = await Promise.all(
-                matchResults.map(async (row) => {
-                    const [awayTeam] = await db
-                        .select()
-                        .from(teams)
-                        .where(eq(teams.id, row.match.awayTeamId));
+            // BACKLOG-261: batch the away-team lookup into one query instead
+            // of one per matched row (was a real N+1).
+            const awayTeamIds = Array.from(new Set(matchResults.map(r => r.match.awayTeamId)));
+            const awayTeamsList = awayTeamIds.length > 0
+                ? await db.select({ id: teams.id, ...SEARCH_TEAM_FIELDS }).from(teams).where(inArray(teams.id, awayTeamIds))
+                : [];
+            const awayTeamMap = new Map(awayTeamsList.map(t => [t.id, { name: t.name, shortName: t.shortName }]));
 
-                    return {
-                        ...row.match,
-                        homeTeam: row.homeTeam,
-                        awayTeam,
-                    };
-                })
-            );
+            results.matches = matchResults.map(({ match, homeTeam }) => {
+                const { awayTeamId, ...publicMatch } = match;
+                return {
+                    ...publicMatch,
+                    homeTeam,
+                    awayTeam: awayTeamMap.get(awayTeamId) ?? null,
+                };
+            });
         }
 
         if (!category || category === 'all' || category === 'competitions') {
