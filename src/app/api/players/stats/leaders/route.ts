@@ -4,6 +4,7 @@ import { players, playerStats, basketballPlayerStats, playerRatings, matches } f
 import { eq, desc, and, sql } from 'drizzle-orm';
 import { enrichPlayersWithAffiliations } from '@/lib/player-data';
 import { getPrimaryTeam } from '@/lib/player-affiliation-utils';
+import { getPlayerRatingSummaries } from '@/lib/playerRatingSummary';
 
 // GET /api/players/stats/leaders - Get top performing players
 export async function GET(request: NextRequest) {
@@ -72,7 +73,11 @@ export async function GET(request: NextRequest) {
                             number: result.player!.number,
                             position: result.player!.position,
                             image: result.player!.image,
-                            rating: result.player!.rating,
+                            // BACKLOG-253: this branch already computes a real
+                            // average via COALESCE(finalRating, autoRating)
+                            // above (averageRatingExpr) -- reuse it instead of
+                            // the frozen players.rating default.
+                            rating: averageRating,
                         },
                         team: primaryTeam ? {
                             id: primaryTeam.id,
@@ -154,6 +159,10 @@ export async function GET(request: NextRequest) {
                     .filter((player): player is NonNullable<typeof player> => Boolean(player))
             );
             const playerMap = new Map(enrichedPlayers.map((player) => [player.id, player]));
+            // BACKLOG-253: real career rating, batched over this page's players.
+            const ratingSummaries = await getPlayerRatingSummaries(
+                results.filter(r => r.player).map(r => r.player!.id)
+            );
 
             const leaders = results
                 .filter(r => r.player)
@@ -169,7 +178,7 @@ export async function GET(request: NextRequest) {
                         number: r.player!.number,
                         position: r.player!.position,
                         image: r.player!.image,
-                        rating: r.player!.rating,
+                        rating: ratingSummaries.get(r.player!.id)?.averageRating ?? null,
                     },
                     team: primaryTeam ? {
                         id: primaryTeam.id,
@@ -270,6 +279,10 @@ export async function GET(request: NextRequest) {
                 .filter((player): player is NonNullable<typeof player> => Boolean(player))
         );
         const playerMap = new Map(enrichedPlayers.map((player) => [player.id, player]));
+        // BACKLOG-253: real career rating, batched over this page's players.
+        const ratingSummaries = await getPlayerRatingSummaries(
+            results.filter(r => r.player).map(r => r.player!.id)
+        );
 
         const leaders = results
             .filter(r => r.player)
@@ -285,7 +298,7 @@ export async function GET(request: NextRequest) {
                     number: r.player!.number,
                     position: r.player!.position,
                     image: r.player!.image,
-                    rating: r.player!.rating,
+                    rating: ratingSummaries.get(r.player!.id)?.averageRating ?? null,
                 },
                 team: primaryTeam ? {
                     id: primaryTeam.id,
