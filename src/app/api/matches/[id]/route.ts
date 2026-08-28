@@ -9,6 +9,7 @@ import { matches, teams, matchEvents, players, bracketNodes, teamForm, headToHea
 import { eq, desc, sql, inArray } from 'drizzle-orm';
 import { playerRatings } from '@/db/schema-ratings';
 import { getAuthUser } from '@/lib/auth';
+import { getPlayerRatingSummaries } from '@/lib/playerRatingSummary';
 import { isLoggerAssigned } from '@/lib/match-logger-helpers';
 import { broadcastToMatch, broadcastGlobalNotification } from '@/lib/socket';
 import { sendMatchEventNotification } from '@/lib/notifications/match-notification-service';
@@ -153,6 +154,14 @@ export async function GET(
             const homePlayerStats: any = {};
             const awayPlayerStats: any = {};
 
+            // BACKLOG-253: real (career-average) rating instead of the frozen
+            // players.rating default -- batched once here, not per-event, to
+            // avoid N+1 inside the forEach below. Career-wide rather than
+            // strictly this-match-scoped (playerRatings has no per-match
+            // fallback-lineup consumer today); still a real improvement over
+            // a hardcoded 7.0 for every player with no rating history at all.
+            const eventPlayerIds = Array.from(new Set(events.map((e: any) => e.playerId).filter(Boolean)));
+            const eventPlayerRatings = await getPlayerRatingSummaries(eventPlayerIds);
 
             // Calculate player stats from events and track first appearance
             events.forEach((event: any) => {
@@ -167,7 +176,7 @@ export async function GET(
                         name: event.player.name,
                         number: event.player.number,
                         position: event.player.position,
-                        rating: event.player.rating || 7.0,
+                        rating: eventPlayerRatings.get(event.playerId)?.averageRating ?? null,
                         firstAppearance: event.minute || 0,
                         stats: {
                             points: 0,
