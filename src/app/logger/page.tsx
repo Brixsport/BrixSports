@@ -9,6 +9,7 @@ import { TeamLogo } from '@/lib/utils/team-logo';
 import { FootballLogger } from '@/components/FootballLogger';
 import { TrackLogger } from '@/components/TrackLogger';
 import { SessionExpiryBanner } from '@/components/logger/SessionExpiryBanner';
+import { LoggerErrorBoundary } from '@/components/logger/LoggerErrorBoundary';
 
 import { Match, Logger } from '@/db/schema';
 
@@ -233,7 +234,9 @@ export default function LoggerPage() {
     return (
       <>
         <SessionExpiryBanner />
-        {sportLogger}
+        <LoggerErrorBoundary onExitMatch={() => setSelectedMatchId(null)}>
+          {sportLogger}
+        </LoggerErrorBoundary>
       </>
     );
   }
