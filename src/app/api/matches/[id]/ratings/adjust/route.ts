@@ -180,9 +180,14 @@ export async function GET(
             .where(eq(matchEvents.matchId, matchId));
 
         // Find all players who were subbed ON (entered the game)
+        // BACKLOG-249 follow-on finding: real match_events always store this as
+        // 'Substitution' (title case), never 'SUBSTITUTION' -- confirmed via a
+        // direct DB scan, zero rows anywhere ever matched the all-caps string.
+        // wasSubbedOn was therefore always false, silently excluding every real
+        // played-substitute from ratings regardless of the starters/bench fix.
         const subbedOnPlayerIds = new Set<string>();
         events.forEach(event => {
-            if (event.type === 'SUBSTITUTION' && event.relatedPlayerId) {
+            if (event.type === 'Substitution' && event.relatedPlayerId) {
                 // relatedPlayerId is the player who came ON in a substitution
                 subbedOnPlayerIds.add(event.relatedPlayerId);
             }
@@ -199,9 +204,9 @@ export async function GET(
             
             if (!teamLineup) return 'unknown';
             
-            const startingXI = teamLineup.startingXI || [];
+            const startingXI = teamLineup.starters || [];
             const substitutes = teamLineup.substitutes || [];
-            
+
             const isStarter = startingXI.some((p: any) => p.playerId === playerId);
             const isSubstitute = substitutes.some((p: any) => p.playerId === playerId);
             
@@ -217,7 +222,7 @@ export async function GET(
             const awayScore = match.awayScore ?? 0;
             const teamCleanSheet = homeScore === 0 || awayScore === 0;
             const teamWon = homeScore > awayScore || awayScore > homeScore;
-            const playerTeamId = r.player?.teamId || '';
+            const playerTeamId = r.rating.teamId || '';
 
             const suggestion = RatingCalculator.getSuggestedRange(position, teamCleanSheet, teamWon);
             const description = RatingCalculator.getRatingDescription(r.rating.autoRating);
