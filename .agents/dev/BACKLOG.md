@@ -9085,17 +9085,19 @@ Fixed exactly per the "Fix (not built)" plan below: `MatchStatusBadge.tsx` now d
 
 ### BACKLOG-252 — Ratings Redesign Phase 2: Delete Dead Pipeline A
 
-**Status:** OPEN — planned session 57, 2026-08-26, by the `architect` agent. Own session, own commit — highest-risk phase in the plan.
+**Status:** RESOLVED (static verification complete; live UI smoke test outstanding — see caveat below) — delegated session `brixsports-v2-fa`, 2026-08-27/28.
 **Priority:** HIGH.
-**Depends on:** `BACKLOG-251`.
-**Scope:**
-1. Delete `src/app/api/events/route.ts` only. **Do not delete the `src/app/api/events/` directory** — `src/app/api/events/sync/route.ts` lives underneath it and is a separate, also-dead, separately-tracked concern; deleting the whole directory is a real risk called out explicitly by the architect.
-1b. **Added during `BACKLOG-249`/`306`/`309`'s investigation (delegated session, 2026-08-27/28):** `src/lib/services/substitution-manager.ts` is imported *only* by `events/route.ts` (grep-confirmed, `brixsports-v2-7e`) — becomes fully orphaned the moment step 1 lands. Delete it too, same commit as step 1 (it's dead code exposed by the same deletion, not a separate concern).
-2. Copy `src/lib/services/rating-calculator.ts` to `dev/reference-rating-calculator.ts.bak` (salvage source for Phase 5's basketball work — `calculateBasketballRating` and `calculateStatsFromEvents`'s basketball branch are worth keeping; `calculateTrackRating` is not — its data source doesn't exist in the live logger, don't salvage it). Then delete the original.
-3. Remove the `/api/events` entry at `src/app/api/admin/infrastructure/route.ts:24`.
-4. `tsc --noEmit` — confirm no new errors. **Then a real Flow B smoke test: log one live event through the actual logger UI and confirm it still saves and appears publicly.** This is the single highest-risk moment in the whole plan — an accidental deletion adjacent to the live event path would break match logging outright.
+**Depends on:** `BACKLOG-251` (done).
+**Done:**
+1. Deleted `src/app/api/events/route.ts`. `src/app/api/events/sync/route.ts` and its directory untouched — confirmed still present after the delete (`ls src/app/api/events/` shows only `sync/` remaining).
+1b. Deleted `src/lib/services/substitution-manager.ts` in the same commit (orphaned by step 1, per `BACKLOG-309`'s investigation).
+2. `src/lib/services/rating-calculator.ts` copied to `dev/reference-rating-calculator.ts.bak` (gitignored, confirmed present, 11182 bytes) before deleting the original.
+3. Removed the `/api/events` entry at `src/app/api/admin/infrastructure/route.ts:24` (was line 24 in the endpoint-monitoring list, confirmed no other logic references it).
+4. **Pre-deletion safety check (before touching anything):** grepped for every possible importer of all three files being deleted. Zero real code references anywhere in `src/` beyond the files being deleted themselves and the `admin/infrastructure` monitoring-list entry (already removed) — confirmed via multiple independent patterns, not a single grep. Specifically checked the actual live event-save path, `src/app/api/matches/[id]/events/route.ts` (what `FootballLogger.tsx`/`BasketballLogger.tsx` really POST to) — zero references to any deleted file; its only cross-reference into ratings territory is `calculateAndSaveRatings` from `ratingsService.ts` (untouched by this phase, though see `BACKLOG-306` for a separate real bug there).
+5. `tsc --noEmit`: 22 errors vs. the 19-error baseline — the 3 extra are all `.next/types/app/api/players/[id]/route.ts` auto-generated type artifacts (documented "flaky `.next/types` cache-noise" per `CLAUDE.md`'s own baseline caveat), unrelated to any file this phase touched. Zero new errors in any real source file.
+**Caveat, honestly flagged rather than skipped:** step 4's own "real Flow B smoke test: log one live event through the actual logger UI" was **not completed**. The shared local dev server was reachable via a plain page load at the start of this phase, but the Browser pane became consistently unreachable partway through (8+ navigate attempts, all timing out or "denied/failed") — likely contention with `brixsports-v2-37`'s concurrent live-HTTP verification against the same dev server for `BACKLOG-280`/`281`. Given the exhaustive static verification above (zero importers of any deleted file, confirmed against the actual live event route specifically) plus a clean `tsc`, confidence is high this phase didn't break Flow B — but that's not the same as having actually watched a real event save and appear publicly. **Flagged for a follow-up live re-verification before real match-day reliance**, same pattern already established for `BACKLOG-280`/`281` this session.
 
-**Found:** session 57, 2026-08-26.
+**Found:** session 57, 2026-08-26. **Resolved (static):** delegated session `brixsports-v2-fa`, 2026-08-27/28.
 
 ---
 
