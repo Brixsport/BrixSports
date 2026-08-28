@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/db';
-import { teams, players, playerTeamAffiliations } from '@/db/schema';
-import { eq, inArray, and } from 'drizzle-orm';
+import { teams, playerTeamAffiliations } from '@/db/schema';
+import { eq, inArray, and, sql } from 'drizzle-orm';
 
 export async function GET() {
     try {
@@ -9,40 +9,45 @@ export async function GET() {
         const allTeams = await db.select().from(teams).all();
 
         // Filter basketball teams (the ones we just created)
+        // BACKLOG-262 item 3: hardcoded name list, not touched here -- separate,
+        // already-filed issue, out of this pass's scope.
         const basketballTeamNames = ['TBK', 'Titans', 'Storm', 'Rim Reapers', 'Vikings', 'Siberia'];
         const basketballTeams = allTeams.filter(team =>
             basketballTeamNames.includes(team.name)
         );
 
-        // Fetch players for each team via affiliations
-        const teamsWithPlayers = await Promise.all(
-            basketballTeams.map(async (team) => {
-                const teamPlayerRows = await db
-                    .select({ player: players })
-                    .from(playerTeamAffiliations)
-                    .innerJoin(players, eq(playerTeamAffiliations.playerId, players.id))
-                    .where(
-                        and(
-                            eq(playerTeamAffiliations.teamId, team.id),
-                            eq(playerTeamAffiliations.isActive, true)
-                        )
-                    )
-                    .all();
+        const teamIds = basketballTeams.map(t => t.id);
 
-                const teamPlayers = teamPlayerRows.map(row => row.player);
+        // BACKLOG-260: single batched count instead of one players query per
+        // team (was a real N+1). No consumer reads the nested players array
+        // (same pattern as football/teams/route.ts -- dropped entirely,
+        // playerCount kept).
+        const counts = teamIds.length > 0
+            ? await db
+                .select({
+                    teamId: playerTeamAffiliations.teamId,
+                    count: sql<number>`count(*)`,
+                })
+                .from(playerTeamAffiliations)
+                .where(and(
+                    inArray(playerTeamAffiliations.teamId, teamIds),
+                    eq(playerTeamAffiliations.isActive, true)
+                ))
+                .groupBy(playerTeamAffiliations.teamId)
+                .all()
+            : [];
 
-                return {
-                    ...team,
-                    players: teamPlayers,
-                    playerCount: teamPlayers.length,
-                };
-            })
-        );
+        const countMap = new Map(counts.map(c => [c.teamId, c.count]));
+
+        const teamsWithPlayerCount = basketballTeams.map(team => ({
+            ...team,
+            playerCount: countMap.get(team.id) ?? 0,
+        }));
 
         return NextResponse.json({
             success: true,
-            teams: teamsWithPlayers,
-            count: teamsWithPlayers.length,
+            teams: teamsWithPlayerCount,
+            count: teamsWithPlayerCount.length,
         });
     } catch (error) {
         console.error('Error fetching basketball teams:', error);
