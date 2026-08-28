@@ -10,6 +10,7 @@ import { eq, or, desc, and, sql, inArray } from 'drizzle-orm';
 import { enrichPlayersWithAffiliations, toPublicPlayer } from '@/lib/player-data';
 import { getResolvedInstitutionalData } from '@/lib/player-affiliation-utils';
 import { getAuthUser } from '@/lib/auth';
+import { getPlayerRatingSummaries } from '@/lib/playerRatingSummary';
 
 interface RouteParams {
     params: Promise<{
@@ -58,7 +59,6 @@ export async function GET(
                         position: players.position,
                         avatar: players.image,
                         nationality: players.nationality,
-                        rating: players.rating,
                     }
                 })
                 .from(squadPlayers)
@@ -70,16 +70,24 @@ export async function GET(
                     )
                 )
                 .leftJoin(players, eq(squadPlayers.playerId, players.id))
-                .orderBy(desc(players.rating))
                 .all();
+
+            // BACKLOG-253: real career rating, batched -- players.rating is a
+            // frozen legacy default, both for display and for the sort below
+            // (previously sorted by the same frozen field).
+            const squadRatingSummaries = await getPlayerRatingSummaries(
+                squad.filter(s => s.player !== null).map(s => s.player!.id)
+            );
 
             teamPlayers = squad
                 .filter(s => s.player !== null)
                 .map(s => ({
                     ...s.player,
+                    rating: squadRatingSummaries.get(s.player!.id)?.averageRating ?? null,
                     squadRole: s.squadPlayer.role,
                     squadNumber: s.squadPlayer.squadNumber,
-                }));
+                }))
+                .sort((a, b) => (b.rating ?? -Infinity) - (a.rating ?? -Infinity));
 
             squadInfo = {
                 competitionId,
@@ -96,10 +104,20 @@ export async function GET(
                         eq(playerTeamAffiliations.teamId, id),
                         eq(playerTeamAffiliations.isActive, true)
                     )
-                )
-                .orderBy(desc(players.rating));
+                );
 
-            teamPlayers = teamPlayerRows.map(row => toPublicPlayer(row.player, isAdmin));
+            // BACKLOG-253: real career rating, batched -- same reasoning as
+            // the squad branch above.
+            const affiliationRatingSummaries = await getPlayerRatingSummaries(
+                teamPlayerRows.map(row => row.player.id)
+            );
+
+            teamPlayers = teamPlayerRows
+                .map(row => ({
+                    ...toPublicPlayer(row.player, isAdmin),
+                    rating: affiliationRatingSummaries.get(row.player.id)?.averageRating ?? null,
+                }))
+                .sort((a: any, b: any) => (b.rating ?? -Infinity) - (a.rating ?? -Infinity));
         }
 
         // UNIVERSITY POOL — all students eligible to represent this university
