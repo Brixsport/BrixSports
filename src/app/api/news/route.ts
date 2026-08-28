@@ -69,8 +69,22 @@ export async function GET(request: NextRequest) {
             .from(news)
             .where(and(...conditions));
 
+        // BACKLOG-261: omit the full article body from the LIST response for
+        // non-admin callers -- src/app/news/page.tsx's own NewsArticle type
+        // never reads `content`. Kept for admins: src/app/admin/news/page.tsx's
+        // handleEdit() populates the edit form straight from this list response
+        // (article.content), with no separate by-id fetch -- omitting it
+        // unconditionally would have silently broken every admin edit. Public
+        // detail route (/api/news/[id]) is untouched and keeps content for
+        // everyone, as before.
+        const authUser = await getAuthUser(request).catch(() => null);
+        const isAdmin = authUser?.role === 'admin';
+        const responseArticles = isAdmin
+            ? newsArticles
+            : newsArticles.map(({ content, ...rest }) => rest);
+
         return NextResponse.json({
-            news: newsArticles,
+            news: responseArticles,
             pagination: {
                 total: totalCount[0]?.count || 0,
                 limit,
