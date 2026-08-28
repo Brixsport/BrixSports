@@ -151,6 +151,7 @@ export async function PATCH(
             name,
             sport,
             format,
+            structure,
             season,
             startDate,
             endDate,
@@ -187,6 +188,7 @@ export async function PATCH(
         if (name !== undefined) updateData.name = name;
         if (sport !== undefined) updateData.sport = sport;
         if (format !== undefined) updateData.format = format;
+        if (structure !== undefined) updateData.structure = structure || null;
         if (season !== undefined) updateData.season = season;
         if (startDate !== undefined) updateData.startDate = new Date(startDate);
         if (endDate !== undefined) updateData.endDate = new Date(endDate);

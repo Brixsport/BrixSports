@@ -196,7 +196,7 @@ export async function POST(request: NextRequest) {
 
         const body = await request.json();
         const {
-            name, sport, format, season, status,
+            name, sport, format, structure, season, status,
             numberOfTeams, numberOfGroups, teamsPerGroup,
             level, scope, rules, description, isMultiSport, logo
         } = body;
@@ -214,6 +214,7 @@ export async function POST(request: NextRequest) {
             sport: sport || null,
             isMultiSport: !!isMultiSport,
             format,
+            structure: structure || null,
             season,
             status: status || 'upcoming',
             numberOfTeams: numberOfTeams || 0,

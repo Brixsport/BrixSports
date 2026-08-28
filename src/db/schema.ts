@@ -229,7 +229,18 @@ export const competitions = sqliteTable('competitions', {
     name: text('name').notNull(),
     sport: text('sport'),
     isMultiSport: integer('is_multi_sport', { mode: 'boolean' }).default(false),
-    format: text('format').notNull(), // 'league' | 'knockout' | 'group_knockout'
+    format: text('format').notNull(), // 'league' | 'knockout' | 'group_knockout' -- decorative label, no code consumers (confirmed session 61 audit); NOT the same as `structure` below
+    // BACKLOG-302: the real, code-consumed competition shape -- 'pure-league' |
+    // 'group-knockout' | 'final-only-ko' | 'swiss-top8'. Nullable: null means
+    // not yet classified (a brand-new or test/stub competition), NOT "no
+    // structure" -- admin UI must treat null as "hide format-specific
+    // controls," never assume a default. Added precisely because `format`
+    // above was confirmed wrong for 2 of 8 real competitions (BUSA League
+    // Basketball labeled group-knockout with zero brackets ever created;
+    // BUSALYMPICS Football labeled group-knockout but is actually a
+    // round-robin + single Final) -- a decorative field silently drifting
+    // from reality is exactly the failure mode this column exists to avoid.
+    structure: text('structure'),
     season: text('season').notNull(),
     logo: text('logo'),
     startDate: integer('start_date', { mode: 'timestamp' }),

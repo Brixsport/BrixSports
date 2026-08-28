@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     ArrowLeft, Trophy, Users, Layout, Shield, Search,
-    Plus, X, Save, Trash2, Filter, ChevronRight,
+    Plus, X, Save, Trash2, Filter, ChevronRight, ChevronDown,
     Trophy as TrophyIcon, Settings, Calendar, Shuffle, Award
 } from 'lucide-react';
 import { useToast } from '@/hooks/useToast';
@@ -50,6 +50,9 @@ interface Competition {
     name: string;
     sport: string;
     format: string;
+    // BACKLOG-302: the real, code-consumed shape -- distinct from `format`
+    // above (decorative, no code consumers). Null means not yet classified.
+    structure?: 'pure-league' | 'group-knockout' | 'final-only-ko' | 'swiss-top8' | null;
     season: string;
     status: string;
     numberOfTeams?: number;
@@ -73,6 +76,26 @@ function teamCountColor(assigned: number, target?: number): string {
     return 'text-green-400';
 }
 
+// BACKLOG-302: which format-specific admin controls apply to a competition's
+// real structure. `format` is decorative (no code consumers) -- this reads
+// `structure` instead, confirmed necessary since 2 of 8 real competitions had
+// a `format` value that didn't match their actual live data. A pure-league or
+// final-only-ko competition has no bracket/draw concept at all; group-knockout
+// needs a top-N knockout stage (BACKLOG-280's generic bracket) but not a
+// league-phase draw (that's swiss-top8-specific, BACKLOG-277/278/279).
+function advancedSettingsFor(structure: Competition['structure']): Array<{ label: string; href: string; icon: typeof Shuffle }> {
+    if (structure === 'swiss-top8') {
+        return [
+            { label: 'Draw', href: 'draw', icon: Shuffle },
+            { label: 'Knockout', href: 'knockout', icon: Award },
+        ];
+    }
+    if (structure === 'group-knockout') {
+        return [{ label: 'Knockout', href: 'knockout', icon: Award }];
+    }
+    return [];
+}
+
 export default function CompetitionTeamsPage() {
     const { id } = useParams();
     const router = useRouter();
@@ -85,6 +108,7 @@ export default function CompetitionTeamsPage() {
     const [allTeams, setAllTeams] = useState<Team[]>([]);
     const [searchQuery, setSearchQuery] = useState('');
     const [showAddTeamModal, setShowAddTeamModal] = useState(false);
+    const [showAdvancedMenu, setShowAdvancedMenu] = useState(false);
     // BACKLOG-271: ids of previously-saved standings rows removed locally
     // this session -- POST alone never deleted them, so Save must explicitly
     // DELETE these before/alongside upserting whatever remains.
@@ -290,20 +314,49 @@ export default function CompetitionTeamsPage() {
                     </div>
 
                     <div className="flex items-center gap-3">
-                        <Link
-                            href={`/admin/competitions/${id}/draw`}
-                            className="flex items-center gap-2 bg-white/5 border border-white/10 text-white px-6 py-4 rounded-2xl font-black uppercase italic tracking-widest text-sm hover:bg-white/10 transition-colors"
-                        >
-                            <Shuffle size={18} />
-                            Draw
-                        </Link>
-                        <Link
-                            href={`/admin/competitions/${id}/knockout`}
-                            className="flex items-center gap-2 bg-white/5 border border-white/10 text-white px-6 py-4 rounded-2xl font-black uppercase italic tracking-widest text-sm hover:bg-white/10 transition-colors"
-                        >
-                            <Award size={18} />
-                            Knockout
-                        </Link>
+                        <div className="relative">
+                            <button
+                                onClick={() => setShowAdvancedMenu(v => !v)}
+                                className="flex items-center gap-2 bg-white/5 border border-white/10 text-white px-6 py-4 rounded-2xl font-black uppercase italic tracking-widest text-sm hover:bg-white/10 transition-colors"
+                            >
+                                <Settings size={18} />
+                                Advanced Settings
+                                <ChevronDown size={14} className={`transition-transform ${showAdvancedMenu ? 'rotate-180' : ''}`} />
+                            </button>
+                            <AnimatePresence>
+                                {showAdvancedMenu && (
+                                    <>
+                                        {/* Click-outside catcher */}
+                                        <div className="fixed inset-0 z-10" onClick={() => setShowAdvancedMenu(false)} />
+                                        <motion.div
+                                            initial={{ opacity: 0, y: -8 }}
+                                            animate={{ opacity: 1, y: 0 }}
+                                            exit={{ opacity: 0, y: -8 }}
+                                            className="absolute right-0 top-full mt-2 w-56 bg-[#0a0a0a] border border-white/10 rounded-2xl shadow-2xl overflow-hidden z-20"
+                                        >
+                                            {competition && advancedSettingsFor(competition.structure).length > 0 ? (
+                                                advancedSettingsFor(competition.structure).map(({ label, href, icon: Icon }) => (
+                                                    <Link
+                                                        key={href}
+                                                        href={`/admin/competitions/${id}/${href}`}
+                                                        onClick={() => setShowAdvancedMenu(false)}
+                                                        className="flex items-center gap-3 px-5 py-4 text-sm font-bold uppercase tracking-widest text-white hover:bg-white/5 transition-colors border-b border-white/5 last:border-0"
+                                                    >
+                                                        <Icon size={16} className="text-primary" />
+                                                        {label}
+                                                    </Link>
+                                                ))
+                                            ) : (
+                                                <div className="px-5 py-4 text-xs text-white/40">
+                                                    No advanced settings for this competition's format
+                                                    {!competition?.structure && ' (structure not set)'}.
+                                                </div>
+                                            )}
+                                        </motion.div>
+                                    </>
+                                )}
+                            </AnimatePresence>
+                        </div>
                         <button
                             onClick={handleSave}
                             disabled={isSaving}
