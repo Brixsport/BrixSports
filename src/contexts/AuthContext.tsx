@@ -2,6 +2,31 @@
 
 import { createContext, useContext, useEffect, useState, useCallback, ReactNode } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
+import { getPushService } from '@/lib/notifications/push-service';
+
+// BACKLOG-150 follow-up: the schema already flips an anonymous push subscription's
+// userId to a real account for free on a same-browser re-subscribe (endpoint is
+// globally unique -- see anonymous-subscriber.ts's own comment), but nothing ever
+// triggered that re-subscribe. Best-effort, fire-and-forget: only acts if this
+// browser already has an active push subscription (an anonymous viewer who never
+// enabled push has nothing to hand off), and never surfaces an error to the login/
+// signup flow -- a failed handoff just leaves the subscription anonymous, same as
+// today, not a regression.
+function reSubscribePushForHandoff(userId: string) {
+    if (typeof window === 'undefined' || !('serviceWorker' in navigator) || !('PushManager' in window)) {
+        return;
+    }
+    getPushService()
+        .isSubscribed()
+        .then((subscribed) => {
+            if (subscribed) {
+                return getPushService().subscribe(userId);
+            }
+        })
+        .catch((error) => {
+            console.error('[AuthContext] Push subscription handoff failed:', error);
+        });
+}
 
 interface User {
     id: string;
@@ -153,6 +178,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 }
                 setUser(data.user);
                 setIsAuthModalOpen(false);
+                reSubscribePushForHandoff(data.user.id);
 
                 // Redirect to return URL if set
                 if (returnUrl) {
@@ -189,6 +215,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 }
                 setUser(data.user);
                 setIsAuthModalOpen(false);
+                reSubscribePushForHandoff(data.user.id);
 
                 // Redirect to return URL if set
                 if (returnUrl) {
