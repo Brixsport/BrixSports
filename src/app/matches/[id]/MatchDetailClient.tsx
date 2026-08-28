@@ -11,7 +11,6 @@ import {
     Activity, BarChart3, Share2, Star, Bell, Trophy, Play
 } from 'lucide-react';
 import { useFavorites } from '@/hooks/useFavorites';
-import MatchStatusBadge from '@/components/MatchStatusBadge';
 import LiveMatchTimeline from '@/components/LiveMatchTimeline';
 import LiveStats from '@/components/LiveStats';
 import MatchLineups from '@/components/MatchLineups';

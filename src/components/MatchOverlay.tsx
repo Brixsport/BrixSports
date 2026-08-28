@@ -3,10 +3,12 @@
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Image from 'next/image';
-import { Play, X, Trophy, Users, BarChart3, Clock, Star, MapPin, Calendar, Share2, Heart, RefreshCw, AlertCircle, Target, MessageSquare, Table } from 'lucide-react';
+import { Play, X, Trophy, Users, BarChart3, Clock, Star, MapPin, Calendar, Share2, Heart, AlertCircle, MessageSquare, Table } from 'lucide-react';
 import { Team, Player, Match, MatchEvent } from '@/types';
 import { useFavorites } from '@/hooks/useFavorites';
 import { useNotifications } from './Notifications';
+import LiveMatchStatus from './LiveMatchStatus';
+import LiveMatchTimeline from './LiveMatchTimeline';
 // BACKSCOPED: 2026-06-08 — BACKLOG-028. Reinstate when: Predictions + Polls built (Phase 7)
 // import { MatchPredictionCard } from '@/components/predictions/MatchPredictionCard';
 // import { MatchVotePoll } from '@/components/predictions/MatchVotePoll';
@@ -881,19 +883,24 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
                     </span>
                   </div>
 
-                  {/* Status Pill */}
+                  {/* Status Pill — BACKLOG-154: was a fourth hand-rolled red-dot/label
+                      implementation, now consumes the same LiveMatchStatus component
+                      as the homepage cards so the live styling can't drift again. */}
                   <div className="mt-[-10px] bg-[#0a0a0a] px-3 py-1 rounded-full border border-white/10 flex items-center gap-1.5 shadow-lg relative z-20">
-                    {match.status === 'LIVE' && ['FIRST_HALF', 'SECOND_HALF', 'EXTRA_TIME_1', 'EXTRA_TIME_2', 'PENALTY_SHOOTOUT'].includes(matchTime.period || '') && <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse shadow-[0_0_8px_rgba(239,68,68,0.6)]" />}
-                    <span className={`text-[10px] sm:text-xs font-bold uppercase tracking-wider ${match.status === 'LIVE' ? 'text-red-500' : 'text-white/60'}`}>
+                    {match.status === 'LIVE' ? (
                       <div className="flex items-center gap-1">
-                        {getStatusText()}
-                        {match.status === 'LIVE' && matchTime.announcedStoppage && matchTime.announcedStoppage > 0 && (
+                        <LiveMatchStatus matchId={match.id} sport={match.sport} variant="default" fallbackPeriod={matchTime.period} />
+                        {matchTime.announcedStoppage && matchTime.announcedStoppage > 0 && (
                           <span className="ml-1 px-1 py-0.5 bg-white/10 rounded text-[9px] text-white font-bold border border-white/20">
                             +{matchTime.announcedStoppage}
                           </span>
                         )}
                       </div>
-                    </span>
+                    ) : (
+                      <span className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-white/60">
+                        {getStatusText()}
+                      </span>
+                    )}
                   </div>
                 </div>
 
@@ -1177,64 +1184,27 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
               </motion.div>
             )}
 
-            {/* Timeline Tab */}
+            {/* Timeline Tab — BACKLOG-154: was a third hand-rolled event renderer that
+                bypassed BUG-083's case-normalization and had no basketball-aware period
+                labeling; now shares LiveMatchTimeline with the canonical match-detail
+                page. eyePoints is always [] here — the canonical page's own `eyePoints`
+                is itself always undefined in practice (matchData comes from this same
+                `/api/matches/[id]` route, which never returns that field), so this
+                matches existing real-world behavior exactly, not a regression. */}
             {activeTab === 'timeline' && (
               <motion.div
                 key="timeline"
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -20 }}
-                className="relative py-4 px-4"
               >
-                {/* Central Line */}
-                <div className="absolute left-[50%] top-6 bottom-6 w-px bg-white/10 -translate-x-1/2" />
-
-                {match.events && match.events.length > 0 ? (
-                  <div className="space-y-8 relative">
-                    {[...match.events].reverse().map((event, index) => {
-                      const isHomeTeam = event.teamId === match.homeTeamId;
-                      const isGoal = event.type === 'Goal';
-                      const isSub = event.type === 'Substitution';
-                      const isCard = event.type.includes('Card');
-
-                      return (
-                        <div key={event.id || index} className={`flex items-center w-full ${isHomeTeam ? 'flex-row' : 'flex-row-reverse'}`}>
-
-                          {/* Event Content Card */}
-                          <div className={`w-[calc(50%-2rem)] ${isHomeTeam ? 'pr-4 text-right' : 'pl-4 text-left'}`}>
-                            <div className="flex flex-col gap-1">
-                              <div className={`flex items-center gap-2 ${isHomeTeam ? 'justify-end' : 'justify-start'}`}>
-                                {isGoal && <div className="p-1.5 rounded-full bg-primary/20 text-primary"><Target size={14} /></div>}
-                                {isSub && <div className="p-1.5 rounded-full bg-green-500/20 text-green-500"><RefreshCw size={14} /></div>}
-                                {event.type === 'Red Card' && <div className="w-3 h-4 bg-red-500 rounded-sm shadow-sm" />}
-                                {event.type === 'Yellow Card' && <div className="w-3 h-4 bg-yellow-500 rounded-sm shadow-sm" />}
-
-                                <span className="font-bold text-sm text-white">{event.detail}</span>
-                              </div>
-                              <span className="text-[10px] uppercase font-bold text-white/40 tracking-wider">{event.type}</span>
-                            </div>
-                          </div>
-
-                          {/* Center Time Marker */}
-                          <div className="w-16 flex justify-center relative z-10">
-                            <div className="w-8 h-8 rounded-full bg-[#1a1a1a] border border-white/10 flex items-center justify-center text-xs font-bold text-white/60 shadow-lg">
-                              {event.minute}'
-                            </div>
-                          </div>
-
-                          {/* Empty spacer for opposite side */}
-                          <div className="w-[calc(50%-2rem)]" />
-                        </div>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <div className="py-12 text-center bg-white/5 rounded-xl border border-white/10">
-                    <Clock className="mx-auto mb-3 text-white/20" size={48} />
-                    <p className="text-white/60 text-sm">No events yet</p>
-                    <p className="text-white/40 text-xs mt-1">Match events will appear here as they happen</p>
-                  </div>
-                )}
+                <LiveMatchTimeline
+                  events={match.events || []}
+                  homeTeam={homeTeam}
+                  awayTeam={awayTeam}
+                  eyePoints={[]}
+                  sport={match.sport}
+                />
               </motion.div>
             )}
 

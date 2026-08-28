@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Image from 'next/image';
-import { X, Trophy, BarChart3, Table, Star, MapPin, Calendar, MessageSquare, Play } from 'lucide-react';
+import { X, Trophy, BarChart3, Table, Star, MapPin, Calendar, MessageSquare, Play, Clock } from 'lucide-react';
 import { Match } from '@/types';
 // BACKSCOPED: 2026-06-08 — BACKLOG-028. Reinstate when: Predictions + Polls built (Phase 7)
 // import { MatchPredictionCard } from '@/components/predictions/MatchPredictionCard';
@@ -11,6 +11,8 @@ import { Match } from '@/types';
 import { LivestreamChat } from '@/components/livestream/LivestreamChat';
 import { LivestreamPlayer } from '@/components/livestream/LivestreamPlayer';
 import { StatBar } from '@/components/StatBar';
+import LiveMatchStatus from '@/components/LiveMatchStatus';
+import LiveMatchTimeline from '@/components/LiveMatchTimeline';
 
 interface BasketballMatchOverlayProps {
     match: Match;
@@ -38,7 +40,7 @@ export function BasketballMatchOverlay({ match, onClose, onSelectTeam, onSelectP
             fetchStandings();
         } else if (activeTab === 'scout') {
             fetchMvpLeaderboard();
-        } else if (activeTab === 'lineups' || activeTab === 'stats') {
+        } else if (activeTab === 'lineups' || activeTab === 'stats' || activeTab === 'timeline') {
             fetchMatchDetails();
         }
     }, [activeTab]);
@@ -106,6 +108,7 @@ export function BasketballMatchOverlay({ match, onClose, onSelectTeam, onSelectP
         { id: 'overview', label: 'Overview', icon: Trophy },
         { id: 'lineups', label: 'Lineups', icon: Star },
         { id: 'stats', label: 'Stats', icon: BarChart3 },
+        { id: 'timeline', label: 'Timeline', icon: Clock },
         { id: 'standings', label: 'Standings', icon: Table },
         { id: 'scout', label: 'Scout Report', icon: Star },
         // Conditional tabs based on match status
@@ -222,8 +225,18 @@ export function BasketballMatchOverlay({ match, onClose, onSelectTeam, onSelectP
                                         {match.awayScore}
                                     </span>
                                 </div>
-                                <div className="px-3 py-1 bg-white/10 rounded-full text-xs font-bold uppercase tracking-wider">
-                                    {match.status === 'FINISHED' ? 'FT' : match.status}
+                                {/* BACKLOG-154: this had zero live/red styling at all -- the
+                                    only one of the four match-status surfaces that didn't.
+                                    Now shares LiveMatchStatus with the homepage cards and
+                                    MatchOverlay.tsx instead of a third hand-rolled pill. */}
+                                <div className="px-3 py-1 bg-white/10 rounded-full flex items-center gap-1.5">
+                                    {match.status === 'LIVE' ? (
+                                        <LiveMatchStatus matchId={match.id} sport="basketball" variant="default" />
+                                    ) : (
+                                        <span className="text-xs font-bold uppercase tracking-wider">
+                                            {match.status === 'FINISHED' ? 'FT' : match.status === 'UPCOMING' ? new Date(match.startTime).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : match.status}
+                                        </span>
+                                    )}
                                 </div>
                             </div>
 
@@ -616,6 +629,42 @@ export function BasketballMatchOverlay({ match, onClose, onSelectTeam, onSelectP
                             </motion.div>
                         )}
 
+                        {/* Timeline Tab — BACKLOG-154: basketball had no play-by-play feed
+                            of any kind. Shares LiveMatchTimeline with the football overlay
+                            and the canonical match-detail page instead of a fifth bespoke
+                            renderer. events source (matchDetails from `/api/matches/[id]`)
+                            currently 500s for basketball matches missing lineups until
+                            BACKLOG-312 lands -- same known dependency BACKLOG-253 already
+                            flagged for this same route. */}
+                        {activeTab === 'timeline' && (
+                            <motion.div
+                                key="timeline"
+                                initial={{ opacity: 0, y: 20 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                exit={{ opacity: 0, y: -20 }}
+                            >
+                                {loading ? (
+                                    <div className="py-20 text-center">
+                                        <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+                                        <p className="text-white/40">Loading timeline...</p>
+                                    </div>
+                                ) : (
+                                    // Deliberately the literal lowercase 'basketball', not
+                                    // match.sport ('Basketball') -- LiveMatchTimeline's own
+                                    // SAVE/BLOCK commentary branch does a bare `sport ===
+                                    // 'basketball'` check with no .toLowerCase(), unlike its
+                                    // other sport checks. Passing match.sport as-is would
+                                    // silently fall through to football-flavored commentary.
+                                    <LiveMatchTimeline
+                                        events={matchDetails?.events || []}
+                                        homeTeam={match.homeTeam}
+                                        awayTeam={match.awayTeam}
+                                        eyePoints={[]}
+                                        sport="basketball"
+                                    />
+                                )}
+                            </motion.div>
+                        )}
 
                         {/* Standings Tab */}
                         {activeTab === 'standings' && (
