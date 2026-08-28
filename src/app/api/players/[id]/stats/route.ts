@@ -4,6 +4,7 @@ import { players, playerStats } from '@/db/schema';
 import { eq, and } from 'drizzle-orm';
 import { enrichPlayersWithAffiliations } from '@/lib/player-data';
 import { getAuthUser } from '@/lib/auth';
+import { getPlayerRatingSummary } from '@/lib/playerRatingSummary';
 
 // GET /api/players/[id]/stats - Get player statistics
 export async function GET(
@@ -34,6 +35,9 @@ export async function GET(
 
         const [enrichedPlayer] = await enrichPlayersWithAffiliations([player.player]);
         const playerTeam = enrichedPlayer?.team ?? null;
+
+        // BACKLOG-253: real career rating, not the frozen players.rating default.
+        const ratingSummary = await getPlayerRatingSummary(playerId);
 
         // Build stats query
         let statsQuery = db
@@ -99,7 +103,7 @@ export async function GET(
                     logo: playerTeam.logo,
                 } : null,
                 image: player.player.image,
-                rating: player.player.rating,
+                rating: ratingSummary.averageRating,
             },
             stats: stats,
             totals,
