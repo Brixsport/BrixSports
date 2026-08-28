@@ -4237,3 +4237,38 @@ Item 3 (lineup builder redesign) — **held at Richard's explicit request**, to 
 **Deferred, unchanged:** `BACKLOG-312` (CRITICAL, claimed by `v2-39` this cycle). The 4 untracked `.agents/dev/*.md` docs — still nobody's, still uncommitted, still Richard's call. `BACKLOG-154`/`150` — `v2-55`'s scope, not started here.
 
 **Next session/turn:** nothing outstanding from this session's own scope. Check whether `v2-39` closed `BACKLOG-312` and whether `v2-55` made progress on `154`/`150` before picking new work.
+
+---
+
+### Session 62 — 2026-08-28
+
+**Focus:** Picked up `BACKLOG-154` (viewer-surface consistency: unify 4 separate status/timeline implementations, delete confirmed-dead components) and `BACKLOG-150`'s queued follow-up (anonymous-to-authenticated push subscription handoff), per Richard's explicit "resume on 154 and 150" directive. Session name churned `v2-55` → `v2-fc` mid-session. Coordinated live with two concurrent peer sessions in the same working directory throughout (`v2-39`, later `v2-2d`, on `BACKLOG-312`/Ratings Phase 4; `v2-9c` on an error-message hygiene re-audit) — same multi-session pattern as sessions 60-61.
+
+**Built — `BACKLOG-154`:**
+- `MatchOverlay.tsx` and `BasketballMatchOverlay.tsx` both repointed onto the existing `LiveMatchStatus`/`LiveMatchTimeline` shared components instead of each hand-rolling its own status pill/timeline — cuts the independent-implementation count rather than adding a fifth. `BasketballMatchOverlay.tsx` previously had zero live/red styling and no timeline tab at all; both are new capability there, not just refactored.
+- Deleted 5 confirmed-dead files after re-verifying zero live imports fresh (session 47D's finding had aged, didn't trust it blind): `LiveMatchCard.tsx`, `FixtureCard.tsx`, `MatchStatusBadge.tsx`, `NotificationPermission.tsx`, `useNotificationPrompt.ts`. Removed `MatchDetailClient.tsx`'s one dead `MatchStatusBadge` import (the file had been renamed/moved since session 47D's original citation of `matches/[id]/page.tsx`, post-`BACKLOG-189`'s server/client split — same dead import, just relocated).
+- Deliberately left unfixed: finding 4 (`MatchOverlay`'s football-only Stats tab, still no structural guard, still unreachable per current routing) and finding 6 (`BACKLOG-096` status re-check) — out of scope for a styling/consistency pass.
+- Commit `c7c6e2b`.
+
+**Built — `BACKLOG-150` follow-up:**
+- `reSubscribePushForHandoff()` added to `AuthContext.tsx`, wired into both `login()` and `register()`: if the browser already has an active push subscription, silently re-POSTs it under the just-authenticated `userId`, flipping the DB row off the `anonymous-push-subscriber` sentinel via `POST /api/notifications/subscribe`'s existing-row update path (already-correct plumbing from session 49, no server-side changes needed). No-op and silent on failure by design.
+- Commit `bce0e93`.
+
+**Bugs encountered (root cause, not just "fixed"):**
+- **Shared-working-tree commit mixing:** staged `AuthContext.tsx` via explicit `git add`, but `v2-39`'s subsequent plain `git commit -m "..."` (no path restriction) swept it into their unrelated `BACKLOG-312`-closure commit (`c71ba3b`) — whatever sits in the index at commit time goes in, regardless of which session staged it or when. Caught immediately (flagged the diff to `v2-39`), fixed cleanly since neither commit had been pushed yet: `v2-39` `git reset --soft HEAD~1`'d their commit, leaving `AuthContext.tsx` unstaged-but-intact for me to recommit myself. Lesson: `git commit -m "..." -- <path>` (explicit path restriction on the commit itself, not just on `add`) is the actual safety net in a shared working tree — staging and committing aren't atomic across concurrent sessions. Logged to `known-issues.md` and `global-patterns/patterns.md`.
+- **Local dev server unusable under 3-session contention** (same recurring issue as sessions 60/61) — `tsc --noEmit` still ran fine (background, ~3min), but the Browser pane preview hung/timed out. Per Richard's explicit call, pivoted to push-to-`dev` + verify against `brixsports-staging.vercel.app` instead of waiting out the local server.
+
+**Verified:**
+- `tsc --noEmit`: exit 0, zero errors (full clean baseline this session, not just "no new errors").
+- Staging (`brixsports-staging.vercel.app`): `BasketballMatchOverlay`'s new Timeline tab and status badge live-clicked against a real finished BUSALYMPICS match (College of Management Sciences Basketball 52-41) — `FT` badge correct, Timeline tab renders `LiveMatchTimeline`'s real empty state, not a crash or placeholder. Canonical `/matches/[id]` page re-checked post-dead-import-removal, unaffected.
+- Not live-verified: `MatchOverlay.tsx`'s (football) repointed pill/timeline — turned out to be unreachable from the current homepage even pre-existing (`page.tsx`'s match-card click does `router.push` to `/matches/[id]`, never sets the `selectedMatch` state that would mount the overlay; not something this session broke). Also moot per Richard's mid-session redirect: `/basketball`/`/football` are being folded into `/comps`, stopped testing those routes on his instruction. `BACKLOG-150`'s actual end-to-end handoff (anonymous subscribe → login → DB flip) not click-tested — needs a real notification-permission grant + login on one browser session, not safely automatable here.
+
+**Scope creep / rejected:** none beyond the two explicitly-deferred findings above (4 and 6), both flagged in `BACKLOG.md` rather than silently dropped.
+
+**Deferred, explicit:**
+- `MatchOverlay.tsx` live click-through — once `/comps` consolidation lands and there's a stable mount path again.
+- `BACKLOG-150`'s real end-to-end handoff test.
+- Findings 4 and 6 from `BACKLOG-154`'s original filing.
+- The 4 untracked `.agents/dev/*.md` docs — still nobody's, still uncommitted (unchanged from sessions 60-61).
+
+**Next session/turn — exact first task:** no explicit next task assigned yet; `/basketball`/`/football` → `/comps` consolidation is the direction Richard flagged mid-session but didn't scope further. Check current peer state (`v2-2d` was heading into Ratings Phase 4/`BACKLOG-254`) and get direction from Richard on the `/comps` consolidation scope before starting anything new.

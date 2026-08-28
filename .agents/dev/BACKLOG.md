@@ -6513,6 +6513,12 @@ No `clearTimeout` exists anywhere in the file. The effect that sets `stateManage
 
 **Follow-up filed, not built:** no automatic anonymous-to-authenticated subscription handoff. The schema supports it for free if a re-subscribe happens (`endpoint` is already globally unique, so a same-browser authenticated re-subscribe correctly flips `userId` from the sentinel to the real account on the existing row, and `pushSubscriptionMatches` rows survive the flip since they're keyed to the subscription id, not `userId`) — but nothing currently triggers that re-subscribe call. Needs a small login/signup-time hook ("do I already have an active push subscription in this browser? re-POST it now that there's a session") — not built this session, flagged for whenever the anonymous UI ships.
 
+**Follow-up RESOLVED — session `brixsports-v2-55`, 2026-08-28.** Added `reSubscribePushForHandoff()` in `AuthContext.tsx`, called from both `login()` and `register()` right after `setUser()` succeeds: if this browser already has an active push subscription (checked via `getPushService().isSubscribed()`), silently re-POSTs it under the just-authenticated `userId` via the existing `getPushService().subscribe(userId)` path — no new server-side code needed, since `POST /api/notifications/subscribe`'s existing-endpoint branch already does the right thing (updates `userId` on the matching row). No-op, no error surfaced to the login/signup UI, for a viewer who never enabled push. Fire-and-forget by design, matching how the rest of push enrollment already degrades silently on failure.
+**Evidence:**
+- Commit: `bce0e93`
+- Verified by: `tsc --noEmit` (exit 0, zero errors) and direct code review against the already-live-verified `POST /api/notifications/subscribe` route logic (session 49's own evidence block covers that route's existing-row update-`userId` path) — the new code is a thin trigger onto plumbing that was already proven correct, not new server logic.
+- Pending items: not live-clicked end-to-end (anonymous subscribe → real login → DB row flip) this session — would need a real anonymous push subscription (notification permission grant) followed by a real login on the same browser session, not safely automatable in this environment. Worth a real click-through pass whenever `/comps` consolidation settles and there's a stable page to drive it from.
+
 ---
 
 ### BACKLOG-151 — Multi-Logger Sync Is Poll-Only: Real-Time Broadcast and Conflict Resolution Are Both No-Ops
@@ -6610,7 +6616,7 @@ No `clearTimeout` exists anywhere in the file. The effect that sets `stateManage
 
 ### BACKLOG-154 — Viewer-Surface Consistency Debt: Status Styling, Timeline Rendering, and Dead Components
 
-**Status:** OPEN — found session 47D, not fixed
+**Status:** RESOLVED — session `brixsports-v2-55`, 2026-08-28, findings 1-3 and 5. Findings 4 and 6 explicitly not fixed (see below).
 **Priority:** LOW/MEDIUM — cosmetic/consistency issues, no functional breakage beyond what's already filed above
 
 **Findings, bundled:**
@@ -6621,7 +6627,17 @@ No `clearTimeout` exists anywhere in the file. The effect that sets `stateManage
 5. **Dead/orphaned components:** `LiveMatchCard.tsx`, `FixtureCard.tsx` (unused anywhere), `MatchStatusBadge.tsx` (only reachable via those two, plus one dead import in `matches/[id]/page.tsx` that's never actually rendered), `NotificationPermission.tsx`, `useNotificationPrompt.ts` (both dead per `BUG-150` above). Not actively harmful, but a real risk that a future session "fixes" one of these thinking it reaches production when it doesn't.
 6. **`BACKLOG-096`** ("no server-side WS emit on event save," filed 2026-06-19, still shows `Status: OPEN`) appears substantially superseded by `BUG-116`'s later fix (server-side broadcast landed session 43) — worth a status re-check and likely closure next time that entry is touched.
 
-**Found:** session 47D, by a background audit agent doing a full read-only trace of the public viewer experience.
+**Fix (findings 1-3):** `MatchOverlay.tsx` and `BasketballMatchOverlay.tsx` both repointed onto the same `LiveMatchStatus`/`LiveMatchTimeline` components the homepage cards and `MatchDetailClient.tsx` already use, instead of hand-rolling their own copies — cuts the count of independent status/timeline implementations rather than adding a fifth. `BasketballMatchOverlay.tsx` gained both a live-styled status badge (previously plain `bg-white/10` text, zero live/red styling) and a real Timeline tab (previously none at all) — new functionality there, not just a refactor. `/matches/[id]`'s own header (already spec-correct) was deliberately left untouched — it's 🟢 Stable/verified, not part of this fix's blast radius.
+**Fix (finding 5):** deleted all 5 dead files after re-verifying zero live imports fresh (session 47D's finding had aged — re-grepped the whole `src/` tree, not assumed still true). `MatchDetailClient.tsx`'s (the post-`BACKLOG-189` successor to the file session 47D actually cited) one dead `MatchStatusBadge` import removed too.
+**Not fixed — finding 4:** `MatchOverlay.tsx`'s Stats tab is still football-only; still not reachable with a basketball match per current routing, still no structural guard. Left as originally filed — out of scope for a styling/timeline consistency pass.
+**Not fixed — finding 6:** `BACKLOG-096` status re-check not done this pass; still needs its own look.
+
+**Evidence:**
+- Commit: `c7c6e2b`
+- Verified by: `tsc --noEmit` (exit 0, zero errors — full clean baseline, not just "no new errors"). Live-verified against `https://brixsports-staging.vercel.app` (local dev server too slow under multi-session contention this session, per Richard's call to verify via staging instead): `/basketball`'s BUSALYMPICS competition, a real FINISHED match (College of Management Sciences Basketball 52-41) — status badge correctly renders `FT`; new Timeline tab renders `LiveMatchTimeline`'s real empty state ("No events yet") rather than crashing or showing a placeholder, confirming the wiring (props, fetch-on-tab-change, sport-literal handling) is structurally correct. Canonical `/matches/[id]` page (`MatchDetailClient.tsx`) re-checked post-dead-import-removal — unaffected, its own Overview/Timeline tabs still render correctly with real event data.
+- Pending items: `MatchOverlay.tsx`'s (football) live-styled status pill and repointed Timeline tab were not live-clicked this session — `/basketball`/`/football` routes are being deprecated in favor of `/comps` (Richard's redirect, mid-session) and `MatchOverlay` itself turned out to be effectively unreachable from the current homepage (`page.tsx`'s match-card click handler does `router.push` to `/matches/[id]`, never sets the `selectedMatch` state that would mount the overlay — a separate, pre-existing latent-dead-code condition, not introduced by this fix). Code-reviewed directly instead: same `LiveMatchStatus`/`LiveMatchTimeline` components already proven live-correct via the basketball overlay and the homepage `MatchCard.tsx`, called with the same prop shapes. Worth a real click-through once `/comps` consolidation lands and a real mount path exists again.
+
+**Found:** session 47D, by a background audit agent doing a full read-only trace of the public viewer experience. **Fixed:** session `brixsports-v2-55`, 2026-08-28.
 
 ---
 
