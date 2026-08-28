@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { useState } from 'react';
 import { MatchEvent } from '@/db/schema';
+import { safeParseEventValue } from '@/lib/eventValue';
 
 interface MatchTimelineProps {
     events: (MatchEvent & {
@@ -392,7 +393,7 @@ export function MatchTimeline({ events, homeTeam, awayTeam, sport, showFilters =
                                                                 className="mt-3 pt-3 border-t border-white/10 text-xs text-white/60"
                                                             >
                                                                 <pre className="whitespace-pre-wrap">
-                                                                    {JSON.stringify(JSON.parse(event.value), null, 2)}
+                                                                    {JSON.stringify(safeParseEventValue(event.value), null, 2)}
                                                                 </pre>
                                                             </motion.div>
                                                         )}
