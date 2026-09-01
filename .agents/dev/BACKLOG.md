@@ -9957,7 +9957,7 @@ Fixed exactly per the "Fix (not built)" plan below: `MatchStatusBadge.tsx` now d
 
 ### BACKLOG-301 — Missing Screen: Unified Favorites Hub
 
-**Status:** SHIPPED 2026-09-01, staging live-test pending. Built without waiting on `BACKLOG-289` (Richard's explicit call) — see below for how the dependency was actually resolved.
+**Status:** RESOLVED 2026-09-01, live-verified full round-trip on staging. Built without waiting on `BACKLOG-289` (Richard's explicit call) — see below for how the dependency was actually resolved.
 **Priority:** MEDIUM.
 **Problem:** favoriting exists as scattered, disconnected UI — a star icon on competition-directory rows (Figma `2168:1495`, backed by the already-existing generic `userFavorites` table, see `BACKLOG-284`), and a `FAVORITES` filter pill on the home match feed. There is no single screen showing everything a user has favorited (teams, competitions, players) across the app. A user who favorites a team from a future team-detail page has no path back to a consolidated favorites list — each favorite type is only visible from wherever it was favorited.
 **Originally filed depending on `BACKLOG-289`** (the not-yet-built Competitions Directory screen), for reuse of its favoriting wiring. Re-examined before building: `/favourites/page.tsx` already exists and is already ~80% of a real hub (Teams + Players sections, reading via `useFavorites.ts`, which already syncs to the real `userFavorites` table via `/api/users/favorites` for logged-in users, `localStorage` fallback for anonymous). The only real gap was Competitions — no live UI anywhere lets a user favorite one, and the hub had no section for it. Built directly against the existing `/competitions` page (also already live) as the favoriting entry point instead of waiting on `BACKLOG-289`'s not-yet-built directory screen — same end result (a real place to star a competition), no new screen required, `BACKLOG-289` can still supersede this entry point later without needing to touch `/favourites` or `useFavorites.ts` again.
@@ -9968,9 +9968,9 @@ Fixed exactly per the "Fix (not built)" plan below: `MatchStatusBadge.tsx` now d
 - `src/app/favourites/page.tsx` — new "Favorite Competitions" section (same card style as Teams/Players), fetches each favorited competition via `GET /api/competitions/[id]`, links to `/competitions/[id]/standings`. Header count and empty-state check updated to include competitions.
 
 **Evidence:**
-- Commit: (pending — see next commit)
-- Verified by: `tsc --noEmit` clean (18-error baseline, zero new in any of the 4 touched files). Not yet live-clicked (star toggle → DB write → hub display round-trip) — code-reviewed directly against the existing, already-verified team/player pattern this mirrors.
-- Pending items: live-verify the full round-trip on staging — star a real competition as a real logged-in user, confirm it persists (DB, not just optimistic local state) and shows up on `/favourites`.
+- Commit: `4efd9b4`
+- Verified by: `tsc --noEmit` clean (18-error baseline, zero new). Full live round-trip on staging with a real admin JWT: clicked the star on `/competitions` (BUSA LEAGUE BASKETBALL) → `POST /api/users/favorites` returned `201`. **DB queried directly** (`dev/check-favorite-backlog301.mjs`): real `user_favorites` row existed, `favorite_type: 'competition'`, joined against the real `competitions` table to confirm `favorite_id` actually resolves to "BUSA LEAGUE BASKETBALL" / Basketball. Navigated to `/favourites`: rendered "FAVORITE COMPETITIONS (1) — BUSA LEAGUE BASKETBALL / Basketball" — the real name, not the raw ID (confirms the GET-lookup fix). Cleaned up via `DELETE`, re-queried DB, row confirmed gone.
+- Pending items: none.
 
 **Found:** session 61, 2026-08-27, UI/UX pass. **Built:** session `brixsports-v2-ea`, 2026-09-01.
 
