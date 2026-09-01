@@ -46,17 +46,38 @@ interface RatingBreakdown {
     positionBonus: number;
 }
 
+// BACKLOG-318: configurable via /admin/settings' "Algorithm Configuration"
+// (src/lib/ratingConfig.ts, server-only -- deliberately not imported here
+// since this file is imported by a 'use client' page). Callers that don't
+// pass a config (or pass a partial one) fall back to these -- keeps this
+// class usable standalone with no DB dependency.
+export interface RatingCalculatorConfig {
+    baseRating: number;
+    maxRating: number;
+    minRating: number;
+    eyePointWeight: number;
+}
+
 export class RatingCalculator {
     private static readonly BASE_RATING = 6.0;
     private static readonly MAX_RATING = 10.0;
     private static readonly MIN_RATING = 1.0;
+    private static readonly EYE_POINT_WEIGHT = 0.4;
 
     /**
      * Calculate auto-rating based on logged events
      * Improved algorithm with better scaling and position-specific logic
      */
-    static calculateAutoRating(stats: PlayerStats): { rating: number; breakdown: RatingBreakdown } {
-        let rating = this.BASE_RATING;
+    static calculateAutoRating(
+        stats: PlayerStats,
+        config?: Partial<RatingCalculatorConfig>
+    ): { rating: number; breakdown: RatingBreakdown } {
+        const baseRating = config?.baseRating ?? this.BASE_RATING;
+        const maxRating = config?.maxRating ?? this.MAX_RATING;
+        const minRating = config?.minRating ?? this.MIN_RATING;
+        const eyePointWeight = config?.eyePointWeight ?? this.EYE_POINT_WEIGHT;
+
+        let rating = baseRating;
         const breakdown: RatingBreakdown = {
             goals: 0,
             assists: 0,
@@ -134,7 +155,7 @@ export class RatingCalculator {
         // Special moments (key passes, tackles, saves, etc.)
         if (stats.eyePoints > 0) {
             // Eye points are valuable but capped to prevent inflation
-            const eyeValue = Math.min(stats.eyePoints * 0.4, 1.5);
+            const eyeValue = Math.min(stats.eyePoints * eyePointWeight, 1.5);
             breakdown.eyePoints = eyeValue;
             rating += eyeValue;
         }
@@ -330,7 +351,7 @@ export class RatingCalculator {
         }
 
         // Cap rating between MIN and MAX
-        rating = Math.max(this.MIN_RATING, Math.min(this.MAX_RATING, rating));
+        rating = Math.max(minRating, Math.min(maxRating, rating));
 
         return {
             rating: Math.round(rating * 10) / 10, // Round to 1 decimal
@@ -423,8 +444,10 @@ export class RatingCalculator {
     /**
      * Validate final rating
      */
-    static validateRating(rating: number): boolean {
-        return rating >= this.MIN_RATING && rating <= this.MAX_RATING;
+    static validateRating(rating: number, config?: Partial<Pick<RatingCalculatorConfig, 'minRating' | 'maxRating'>>): boolean {
+        const minRating = config?.minRating ?? this.MIN_RATING;
+        const maxRating = config?.maxRating ?? this.MAX_RATING;
+        return rating >= minRating && rating <= maxRating;
     }
 
     /**

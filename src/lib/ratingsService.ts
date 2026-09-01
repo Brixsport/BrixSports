@@ -3,6 +3,7 @@ import { playerRatings, teamRatings } from '@/db/schema-ratings';
 import { matches, players, matchEvents } from '@/db/schema';
 import { eq, and, sql } from 'drizzle-orm';
 import { RatingCalculator } from '@/lib/ratingCalculator';
+import { getRatingConfig } from '@/lib/ratingConfig';
 
 // BACKLOG-124: this was previously only reachable via events/route.ts making an
 // internal HTTP self-fetch to POST /api/matches/[id]/ratings -- which forwarded no
@@ -150,11 +151,16 @@ export async function calculateAndSaveRatings(matchId: string) {
         playerStats.set(playerId, stats);
     }
 
+    // BACKLOG-318: fetched once per match-event, not per player -- this loop runs
+    // on the live per-event hot path (see BACKLOG-159/255's note on its latency
+    // contribution), and getRatingConfig() is itself cached (60s) on top of that.
+    const ratingConfig = await getRatingConfig();
+
     const updatedRatings = [];
     const teamPlayerRatings = new Map<string, { total: number; count: number; goals: number }>();
 
     for (const [playerId, stats] of playerStats.entries()) {
-        const { rating, breakdown } = RatingCalculator.calculateAutoRating(stats);
+        const { rating, breakdown } = RatingCalculator.calculateAutoRating(stats, ratingConfig);
 
         if (!teamPlayerRatings.has(stats.teamId)) {
             teamPlayerRatings.set(stats.teamId, { total: 0, count: 0, goals: 0 });

@@ -5,6 +5,7 @@ import { matches, players, matchEvents } from '@/db/schema';
 import { eq, and, or } from 'drizzle-orm';
 import { getAuthUser } from '@/lib/auth';
 import { RatingCalculator } from '@/lib/ratingCalculator';
+import { getRatingConfig } from '@/lib/ratingConfig';
 
 /**
  * GET /api/matches/[id]/ratings/adjust
@@ -333,6 +334,10 @@ export async function POST(
             );
         }
 
+        // BACKLOG-318: min/max now come from /admin/settings' Algorithm
+        // Configuration instead of the hardcoded 1.0/10.0.
+        const ratingConfig = await getRatingConfig();
+
         // Validate and update each rating
         const updated = [];
         const errors = [];
@@ -341,10 +346,10 @@ export async function POST(
             const { playerId, finalRating, notes, isMotM } = adjustment;
 
             // Validate rating
-            if (!RatingCalculator.validateRating(finalRating)) {
+            if (!RatingCalculator.validateRating(finalRating, ratingConfig)) {
                 errors.push({
                     playerId,
-                    error: `Invalid rating: ${finalRating}. Must be between 1.0 and 10.0`
+                    error: `Invalid rating: ${finalRating}. Must be between ${ratingConfig.minRating} and ${ratingConfig.maxRating}`
                 });
                 continue;
             }
