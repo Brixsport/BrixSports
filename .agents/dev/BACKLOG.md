@@ -6786,9 +6786,9 @@ No `clearTimeout` exists anywhere in the file. The effect that sets `stateManage
 3. **`/xi` ("Build Your XI") has no sport-awareness in its player picker — RESOLVED 2026-09-01.** `GET /api/players` gained an optional `sport` filter (`src/app/api/players/route.ts`, matches via `getPrimaryTeam(player)?.sport` — additive, backward-compatible, no existing caller affected since it only filters when passed). `/xi/page.tsx`'s player fetch now passes `sport=Football`, since every formation this page supports (4-4-2/4-3-3/3-5-2, GK/CB/CM/ST-style positions) is football-only anyway — a basketball player never belonged in these slots. The displayed team-rating tile still reads the dead `players.rating` field (`BACKLOG-159`) — deliberately not touched here, that's its own deferred item, not part of this fix.
 
 **Evidence (finding 3):**
-- Commit: (pending — see next commit)
-- Verified by: `tsc --noEmit` clean (18-error baseline + 1 unrelated transient `.next/types` build-artifact line, zero in either touched file).
-- Pending items: not live-clicked this session (checked cross-session first whether `/xi` was in scope for another session's Figma/UI lineup work before touching it — confirmed clear to proceed).
+- Commit: `3e88040`
+- Verified by: `tsc --noEmit` clean (18-error baseline + 1 unrelated transient `.next/types` build-artifact line, zero in either touched file). Live on staging: `GET /api/players?limit=500&sport=Football` → 327 players, `?sport=Basketball` → 95 players, zero ID overlap between the two sets — confirms the filter genuinely partitions by sport rather than coincidentally returning plausible counts.
+- Pending items: none. (Checked cross-session first whether `/xi` was in scope for another session's Figma/UI lineup work before touching it — confirmed clear to proceed.)
 
 **Found:** session 47D, by a background audit agent doing a full read-only trace of the player/team/competition data system.
 
