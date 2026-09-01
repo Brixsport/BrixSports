@@ -10329,3 +10329,16 @@ Net effect: `MatchLineups.tsx` (the component the public `/matches/[id]` Lineups
 **Found + Fixed:** session `brixsports-v2-ab`, 2026-09-01.
 
 ---
+
+### BACKLOG-320 — Football `RatingCalculator`: Goals Score Zero Rating Credit for Position Abbreviations Outside Its Hardcoded Substring List (e.g. `LW`, `RW`, `RM`, `LM`)
+
+**Status:** OPEN — found in passing, session continued 2026-09-01, while live-regression-testing `BACKLOG-255`'s sport-dispatcher refactor against football (confirming no behavior change vs. pre-refactor).
+**Priority:** MEDIUM — silently wrong output (a real goal contributes 0 to the scorer's rating) on a non-critical-flow feature, not a crash.
+**Problem:** `RatingCalculator.calculateAutoRating()` (`src/lib/ratingCalculator.ts`)'s goal-scoring block only awards `goalValue` inside one of five `if`/`else if` branches keyed to `position.includes(...)` substring checks (`'gk'`, `isDefensive` = `'def'`/`'cb'`/`'lb'`/`'rb'`, `'cdm'`/`'dm'`, `isMidfield` = `'mid'`/`'cm'`/`'cdm'`/`'cam'`, `isAttacking` = `'fw'`/`'st'`/`'cf'`/`'wing'`) — there is no final `else` catch-all. A position string that matches none of them (confirmed live: `'LW'` — Left Wing, a real, common position, does **not** contain the substring `'wing'` since it's only 2 characters) falls through every branch, so `goalValue` stays `0` and `breakdown.goals = 0` even though the player genuinely scored. `getSuggestedRange()`'s own position matching a few lines down has the same gap (falls through to its `Default` case) — same root cause, not separately verified live this session.
+**Confirmed live:** real throwaway match, real player (`busa-joga-player-17`, position `LW`) logged a real `Goal` event via the real `POST /api/matches/[id]/events` route, match PATCHed to FINISHED, real `player_ratings` row read back: `autoRating: 6.2`, `breakdown.goals: 0` — the only non-zero component was the flat `positionBonus: 0.15` (full-match, not-substituted bonus, applies regardless of position). A `CB` teammate's Yellow Card/Tackle/Foul in the same test correctly produced non-zero `cards`/`fouls` breakdown values, confirming the extraction pipeline itself is fine — this is isolated to the goal-scoring position-multiplier branch specifically.
+**Likely affected positions:** any abbreviation that doesn't literally contain one of the hardcoded substrings — `LW`/`RW`/`RM`/`LM` confirmed by the substring logic (none contain `'wing'`, `'mid'`, or any defensive/GK substring); `AM` alone (without `'cam'`) would also fall through since `isMidfield` requires `'cam'` specifically, not the bare `am` substring. Not exhaustively tested beyond the one live case.
+**Fix (not built):** either add an explicit catch-all `else` branch (e.g. treat any unrecognized position as a neutral/attacking-equivalent multiplier) to the goal-scoring block, or normalize position strings to a small fixed enum before this function runs so every real position value is guaranteed to match one branch. Same class of fix likely applies to `getSuggestedRange()`'s fallthrough. Out of `BACKLOG-255`'s scope (that entry only touched basketball + the sport dispatcher, football's own extraction/calculation logic was deliberately left untouched) — filed separately rather than fixed inline.
+
+**Found:** session continued, 2026-09-01, while regression-testing `BACKLOG-255`.
+
+---
