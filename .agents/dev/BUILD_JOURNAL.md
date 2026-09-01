@@ -4316,3 +4316,36 @@ Item 3 (lineup builder redesign) — **held at Richard's explicit request**, to 
 - `tsc --noEmit` clean after both fixes (still the 18-error baseline).
 
 **Deferred, explicit, added this continuation:** `BACKLOG-316` (bracket race condition — needs its own session). The 4 remaining unaudited `JSON.parse` call sites `BACKLOG-314` still lists.
+
+---
+
+### Session 64 — 2026-09-01
+
+**Focus:** BACKLOG-255 (Ratings Redesign Phase 5 — basketball ratings coverage), the last open item in the Ratings Redesign series (BACKLOG-251-255). Session shared this working directory with multiple concurrent peer sessions throughout (BACKLOG-301 favorites hub, a Figma/lineup UI worktree, BACKLOG-161 sport-filter work).
+
+**Built:**
+- `src/lib/ratings/basketball.ts` (new) — basketball-specific stat extraction (`calculateBasketballStatsFromEvents`) and rating calculation (`calculateBasketballRating`), covering Field Goal/Three Pointer/Free Throw/Rebound/Assist/Steal/Block/Turnover/Foul/Technical Foul. Not a straight port of the scoped reference (`dev/reference-rating-calculator.ts.bak`) — that file's extraction counted every shot event as a make with no miss distinction; rewrote against the real DB event shape instead (`value` is the point value on a make, `0` on a miss; assists credited via `relatedPlayerId`, not `assistPlayerId` — that name is client-state-only).
+- `src/lib/ratingsService.ts` — `calculateAndSaveRatings()`'s throw-guard converted into a real sport dispatcher (football branch untouched, basketball branches to the new module).
+- `src/lib/ratingCalculator.ts` — exported `PlayerStats` (was unexported, needed for the dispatcher's Map typing).
+- `src/db/schema-ratings.ts` — `playerRatings.ratingBreakdown`'s type widened to a union of both sports' shapes.
+- `src/app/api/matches/[id]/events/route.ts` / `src/app/api/matches/[id]/route.ts` — moved the rating-recalc trigger from per-live-event to the match's `FINISHED` transition (isolated `after()`, same pattern as the existing standings/bracket hooks), per the architect's own BACKLOG-255 scope note that the old per-event trigger was a real, unmeasured contributor to Flow B's ~9.9s latency.
+
+**Bugs encountered, root cause:**
+- The salvaged reference file's basketball stat extraction (`.bak`) was itself buggy — it would have shipped a made/miss-blind rating model if ported as originally scoped. Root cause: it predates the real live logger's event shape and was never updated against it. Caught by reading `BasketballLogger.tsx`'s own live-tested client logic before writing the server-side version, not by trusting the salvaged file.
+- `calculateBasketballStatsFromEvents`'s first version used `Number(e.value) > 0` for the made/miss check, which silently misreads box-score-backfilled events (`value` stored as the raw string `'made'`/`'missed'`, per `BACKLOG-312`/`314`) as always missed. Not reachable today (no backfilled match has a published lineup), but fixed via `safeParseEventValue` (the same helper `matches/[id]/route.ts` already uses for the identical ambiguity) rather than left as a latent trap.
+- Found, filed, **not fixed** (out of scope): `BACKLOG-320` — football's `RatingCalculator.calculateAutoRating()` gives zero rating credit for a real goal when the scorer's position string doesn't match any of its hardcoded substring checks (confirmed live: `LW` doesn't contain `'wing'`). Pre-existing, found while regression-testing the sport dispatcher against football, unrelated to this session's own changes.
+- **Real git-index race, twice this session** — this working directory is shared live with concurrent peer sessions, and plain `git add`/`git commit` (no path restriction) operates on whatever's staged process-wide, not per-session. First incident: a peer's `git commit` (no pathspec) swept up this session's staged `events/route.ts`/`matches/[id]/route.ts` changes into their own unrelated favorites-hub commit — caught immediately from the commit's file list (line counts didn't match the stated scope), the peer did `git reset --soft HEAD^` + `git restore --staged` on just the foreign files, then recommitted clean; zero content loss throughout, confirmed via diff stat before and after. Lesson generalized to `~/.claude/knowledge/global-patterns/patterns.md` (see below) since this is a cross-project risk, not BrixSports-specific.
+- **Unrelated environment corruption, not caused by this session** — a different concurrent session's interrupted `npm install` left `node_modules/typescript` truncated (confirmed: `lib.es5.d.ts` line count shorter than the line number `tsc` was erroring on) plus a corrupted local npm cache (219 corrupted entries). Diagnosed and fixed by that other session (`npm cache verify` + targeted `npm install typescript@5.9.3 --no-save` matching the existing lockfile pin); this session just waited for the fix and confirmed clean afterward rather than attempting its own reinstall mid-race.
+
+**Resolved:**
+- BACKLOG-255 fully closed — live-verified against a real throwaway basketball match (no real basketball match with a published lineup exists on the DB to test against instead, confirmed by survey) and regression-checked against a real throwaway football match (confirmed byte-identical output to the pre-refactor logic). Full hand-verified numbers in `RUNLOG.md`'s 2026-09-01 entries.
+- BACKLOG-146 closed as a side effect (the original guard BACKLOG-255 was scoped to replace).
+
+**Deferred, explicit:**
+- `BACKLOG-320` (football goal-rating position bug) — filed, not fixed, own follow-up.
+- `basketball/leaderboard/mvp/route.ts` — still returns `null` ratings; wiring it to real per-player data needs a name→playerId resolution step this session deliberately did not build (misattribution risk on a name collision).
+- Flow B latency's specific numeric improvement — not controlled-A/B'd against the pre-change code; only the structural claim (removed a sequential SELECT+UPDATE-per-player from the event hot path) and post-change local steady-state numbers (~1.0-1.5s/event) are confirmed.
+
+**Scope creep / rejected:** none beyond the two proactive additions already listed as "Resolved"/"Bugs encountered" above (the football regression check and the value-shape defensive fix) — both were done and documented rather than silently skipped or silently expanded further.
+
+**Next session/turn — exact first task:** `/ship`'s remaining steps (code review, audit, log sanitization, ship clearance) for this same BACKLOG-255 work — already in progress in this same conversation, continuing directly after this checkpoint. If picked up fresh instead: BACKLOG-320 is the next standalone task (small, isolated, already root-caused).
