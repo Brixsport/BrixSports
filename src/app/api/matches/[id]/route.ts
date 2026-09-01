@@ -196,26 +196,37 @@ export async function GET(
 
                 const playerStats = playerMap[event.playerId].stats;
 
+                // BACKLOG-314: this switch matched on '2PT_MADE'/'3PT_MADE'/'FREE_THROW'/
+                // 'REBOUND'/'ASSIST'/'STEAL'/'BLOCK' -- the same dead case-label bug
+                // BACKLOG-139 already fixed in the team-stats block below. Real event
+                // types (both live and backfilled) are 'Field Goal'/'Three Pointer'/
+                // 'Free Throw'/'Rebound'/'Assist'/'Steal'/'Block'. Every case here was
+                // dead on arrival, so every player's points/rebounds/assists/steals/
+                // blocks in this fallback lineup were always 0. Same made/miss shape
+                // handling as the team-stats block just above (live: numeric; backfilled:
+                // raw 'made'/'missed' string).
+                const made = typeof event.value === 'string' ? event.value === 'made' : Number(event.value) > 0;
+
                 switch (event.type) {
-                    case '2PT_MADE':
-                        playerStats.points += 2;
+                    case 'Field Goal':
+                        if (made) playerStats.points += 2;
                         break;
-                    case '3PT_MADE':
-                        playerStats.points += 3;
+                    case 'Three Pointer':
+                        if (made) playerStats.points += 3;
                         break;
-                    case 'FREE_THROW':
-                        playerStats.points += 1;
+                    case 'Free Throw':
+                        if (made) playerStats.points += 1;
                         break;
-                    case 'REBOUND':
+                    case 'Rebound':
                         playerStats.rebounds++;
                         break;
-                    case 'ASSIST':
+                    case 'Assist':
                         playerStats.assists++;
                         break;
-                    case 'STEAL':
+                    case 'Steal':
                         playerStats.steals++;
                         break;
-                    case 'BLOCK':
+                    case 'Block':
                         playerStats.blocks++;
                         break;
                 }
@@ -400,7 +411,15 @@ export async function GET(
             events.forEach((event: any) => {
                 const isHomeTeam = event.teamId === match.match.homeTeamId;
                 const prefix = isHomeTeam ? 'home' : 'away';
-                const made = Number(event.value) > 0;
+                // BACKLOG-314: event.value's shape depends on the event's source, not just
+                // its type -- live-logged events carry a real JSON number (2/3/1 on a make,
+                // 0 on a miss, per BasketballLogger.tsx's own convention), but box-score
+                // backfilled events (dev/generate-basketball-events-from-boxscores.mjs)
+                // carry the raw string 'made'/'missed'/null (safeParseEventValue falls back
+                // to the raw string since it isn't valid JSON). `Number(event.value) > 0`
+                // only ever handled the live shape -- Number('made') is NaN, so every
+                // backfilled make silently counted as a miss.
+                const made = typeof event.value === 'string' ? event.value === 'made' : Number(event.value) > 0;
 
                 switch (event.type) {
                     case 'Field Goal':
