@@ -118,6 +118,15 @@ export class RatingCalculator {
                     goalValue += baseValue * 1.3; // Midfielder goal is good
                 } else if (isAttacking) {
                     goalValue += baseValue * 1.1; // Forward goal is expected
+                } else {
+                    // BACKLOG-320: a position string that matches none of the
+                    // substring checks above (e.g. 'LW'/'RW'/'RM'/'LM' -- none
+                    // contain 'wing', and bare 'AM' doesn't contain 'cam')
+                    // previously fell through every branch and scored zero
+                    // credit for a real goal. Same multiplier as isAttacking --
+                    // an unrecognized position is far more likely a wide/attacking
+                    // role than a defensive one given this app's real data.
+                    goalValue += baseValue * 1.1;
                 }
             }
 
