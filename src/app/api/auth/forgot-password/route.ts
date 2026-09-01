@@ -13,7 +13,7 @@ export async function POST(request: NextRequest) {
     try {
         // BACKLOG-080: prevents email-bombing a victim and throttles the
         // user-existence enumeration surface (timing/response-shape attacks).
-        const rl = await checkRateLimit(request, { max: 5, windowMs: 15 * 60 * 1000 });
+        const rl = await checkRateLimit(request, { max: 5, windowMs: 15 * 60 * 1000, distributed: true });
         if (rl.limited) {
             return NextResponse.json(
                 { error: 'Too many requests. Please try again shortly.' },
@@ -110,7 +110,7 @@ export async function POST(request: NextRequest) {
 export async function GET(request: NextRequest) {
     try {
         // BACKLOG-080: throttles reset-token guessing attempts.
-        const rl = await checkRateLimit(request, { max: 20, windowMs: 15 * 60 * 1000 });
+        const rl = await checkRateLimit(request, { max: 20, windowMs: 15 * 60 * 1000, distributed: true });
         if (rl.limited) {
             return NextResponse.json(
                 { error: 'Too many requests. Please try again shortly.' },
@@ -165,7 +165,7 @@ export async function GET(request: NextRequest) {
 export async function PATCH(request: NextRequest) {
     try {
         // BACKLOG-080: throttles reset-token guessing / brute-force on this write path.
-        const rl = await checkRateLimit(request, { max: 5, windowMs: 15 * 60 * 1000 });
+        const rl = await checkRateLimit(request, { max: 5, windowMs: 15 * 60 * 1000, distributed: true });
         if (rl.limited) {
             return NextResponse.json(
                 { error: 'Too many requests. Please try again shortly.' },

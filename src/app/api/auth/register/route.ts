@@ -13,7 +13,7 @@ import { checkRateLimit } from '@/lib/rate-limit';
 export async function POST(request: NextRequest) {
     try {
         // BACKLOG-080: prevents bulk/scripted account-creation spam.
-        const rl = await checkRateLimit(request, { max: 5, windowMs: 15 * 60 * 1000 });
+        const rl = await checkRateLimit(request, { max: 5, windowMs: 15 * 60 * 1000, distributed: true });
         if (rl.limited) {
             return NextResponse.json(
                 { error: 'Too many attempts. Please try again shortly.', code: 'AUTH_RATE_LIMITED' },

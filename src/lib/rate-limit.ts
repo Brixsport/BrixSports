@@ -4,15 +4,28 @@ import { Redis } from '@upstash/redis';
 import { env } from '@/lib/env';
 
 /**
- * Per-IP rate limiter. Upstash-backed (shared across all instances) when
- * UPSTASH_REDIS_REST_URL/_TOKEN are set (BACKLOG-080); falls back to an
- * in-memory, per-instance Map otherwise (local dev, or if Upstash errors).
+ * Per-IP rate limiter. Upstash-backed (shared across all instances) ONLY when
+ * a call site opts in with `distributed: true` AND UPSTASH_REDIS_REST_URL/
+ * _TOKEN are set; every other call falls back to the in-memory, per-instance
+ * Map (local dev, Upstash unset, a Redis error, or just not opted in).
+ *
+ * `distributed: true` is reserved for the auth-adjacent, low-traffic write
+ * endpoints (login/register/forgot-password, competitions/register) where
+ * real brute-force/spam protection across Vercel's warm-instance pool
+ * actually matters (BACKLOG-080). The high-traffic public GET routes
+ * (matches, players, teams, search, news, competitions, livestreams) stay
+ * on in-memory on purpose -- they were already accepting that tradeoff
+ * before this migration (BUG-053), and they're hit far more often than the
+ * auth routes, so routing them through Redis too would burn through
+ * Upstash's free-tier command quota for close to zero added security value
+ * (a scraper landing on the "wrong" warm instance mid-burst, not a
+ * brute-force/credential-stuffing risk).
  *
  * The in-memory fallback has the same known weakness the old pure-Map
  * implementation always had: each warm Vercel instance keeps its own Map,
  * so it under-counts against a burst spread across multiple instances
- * (confirmed session 53, 2026-08-20). That's why Upstash is the real fix —
- * the fallback exists only so local dev and a Redis outage don't hard-fail.
+ * (confirmed session 53, 2026-08-20). Acceptable for the public GET routes
+ * per the above; that's why the auth routes opt into the real Upstash fix.
  */
 
 // Vercel's edge network always overwrites client-supplied x-forwarded-for before this
@@ -89,7 +102,7 @@ function checkInMemory(bucketKey: string, max: number, windowMs: number): RateLi
 
 export async function checkRateLimit(
     request: NextRequest | Request,
-    opts?: { max?: number; windowMs?: number }
+    opts?: { max?: number; windowMs?: number; distributed?: boolean }
 ): Promise<RateLimitResult> {
     const max = opts?.max ?? DEFAULT_MAX;
     const windowMs = opts?.windowMs ?? DEFAULT_WINDOW_MS;
@@ -99,7 +112,7 @@ export async function checkRateLimit(
     // budget would let requesting a reset burn the attempts needed to apply it.
     const bucketKey = `${request.method}:${getPathname(request)}:${ip}:${max}:${windowMs}`;
 
-    if (!redis) {
+    if (!redis || !opts?.distributed) {
         return checkInMemory(bucketKey, max, windowMs);
     }
 

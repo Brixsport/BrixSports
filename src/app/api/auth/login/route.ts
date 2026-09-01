@@ -12,7 +12,7 @@ export async function POST(request: NextRequest) {
     try {
         // BACKLOG-080: same 5/15min shape as loggers/auth/route.ts's established
         // pattern (BUG-053) -- brute-force/credential-stuffing mitigation.
-        const rl = await checkRateLimit(request, { max: 5, windowMs: 15 * 60 * 1000 });
+        const rl = await checkRateLimit(request, { max: 5, windowMs: 15 * 60 * 1000, distributed: true });
         if (rl.limited) {
             return NextResponse.json(
                 { error: 'Too many login attempts. Please try again shortly.', code: 'AUTH_RATE_LIMITED' },
