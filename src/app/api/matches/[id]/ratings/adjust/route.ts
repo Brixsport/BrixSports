@@ -363,7 +363,21 @@ export async function POST(
         const updated: { playerId: string; autoRating: number; finalRating: number; isMotM: boolean }[] = [];
         const errors: { playerId: string; error: string }[] = [];
 
+        // BACKLOG-321: nothing previously stopped a client from submitting more
+        // than one isMotM:true in the same batch (or a second batch after an
+        // earlier one already set one) -- MotM is a single-winner-per-match
+        // concept, so a later true always wins here, clearing every other
+        // player's flag for this match first, inside the same transaction.
+        const newMotMPlayerId = adjustedRatings.find((a: any) => a?.isMotM === true)?.playerId as string | undefined;
+
         await db.transaction(async (tx) => {
+            if (newMotMPlayerId) {
+                await tx
+                    .update(playerRatings)
+                    .set({ isMotM: false })
+                    .where(and(eq(playerRatings.matchId, matchId), eq(playerRatings.isMotM, true)));
+            }
+
             for (const adjustment of adjustedRatings) {
                 const { playerId, finalRating, notes, isMotM } = adjustment;
 
