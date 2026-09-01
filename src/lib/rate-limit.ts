@@ -54,9 +54,23 @@ function getLimiter(max: number, windowMs: number): Ratelimit {
     return limiter;
 }
 
-// Keyed by ip + the specific (max, windowMs) config, not just ip -- otherwise
-// two routes with different limits calling this on the same visitor IP would
-// share one counter (the original in-memory-only version had this bug).
+// Route path, not just ip+config -- two DIFFERENT routes calling this with the
+// same (max, windowMs) shape (e.g. login and forgot-password both 5/15min)
+// would otherwise share one counter. Confirmed live on staging 2026-09-01:
+// exhausting login's budget also 429'd forgot-password, which nothing had
+// even called yet, before this was added.
+function getPathname(request: NextRequest | Request): string {
+    try {
+        return new URL(request.url).pathname;
+    } catch {
+        return 'unknown-path';
+    }
+}
+
+// Keyed by path + ip + the specific (max, windowMs) config, not just ip --
+// otherwise two routes with different limits calling this on the same
+// visitor IP would share one counter (the original in-memory-only version
+// had this bug).
 const buckets = new Map<string, { count: number; resetAt: number }>();
 
 function checkInMemory(bucketKey: string, max: number, windowMs: number): RateLimitResult {
@@ -80,7 +94,10 @@ export async function checkRateLimit(
     const max = opts?.max ?? DEFAULT_MAX;
     const windowMs = opts?.windowMs ?? DEFAULT_WINDOW_MS;
     const ip = getClientIp(request);
-    const bucketKey = `${ip}:${max}:${windowMs}`;
+    // Method too, not just path -- forgot-password's POST (request reset) and
+    // PATCH (apply reset) share a path but are distinct actions; sharing a
+    // budget would let requesting a reset burn the attempts needed to apply it.
+    const bucketKey = `${request.method}:${getPathname(request)}:${ip}:${max}:${windowMs}`;
 
     if (!redis) {
         return checkInMemory(bucketKey, max, windowMs);
