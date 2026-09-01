@@ -6,6 +6,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { SyncEvent, EventConflict, mergeEvents, detectConflicts } from '@/lib/multiLogger';
 import { useSocket } from './useWebSocket';
+import { safeParseEventValue } from '@/lib/eventValue';
 
 interface UseMultiLoggerProps {
     matchId: string;
@@ -164,7 +165,12 @@ export function useMultiLogger({
                 // string, breaking any downstream arithmetic (BasketballLogger's
                 // calculatePlayerRating: `rating += event.value` string-concatenates
                 // instead of adding, then `.toFixed()` throws on the resulting string).
-                value: e.value != null ? (typeof e.value === 'string' ? JSON.parse(e.value) : e.value) : undefined,
+                // BACKLOG-314: this route's GET never parses value at all, so a
+                // basketball box-score-imported event's raw "made" string reaches
+                // here unparsed too -- plain JSON.parse would throw and crash this
+                // 15s sync mid-match. safeParseEventValue falls back to the raw
+                // string instead.
+                value: e.value != null ? (typeof e.value === 'string' ? safeParseEventValue(e.value) : e.value) : undefined,
                 loggerId: e.loggerId || 'unknown',
                 loggerName: e.loggerName || 'Unknown Logger',
                 timestamp: new Date(e.createdAt),

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import { safeParseEventValue } from '@/lib/eventValue';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Activity, Save, Undo2, Clock, Users, TrendingUp, Target, Play, Settings } from 'lucide-react';
 import { useMultiLogger } from '@/hooks/useMultiLogger';
@@ -529,7 +530,12 @@ export function BasketballLogger({ match, onExit, currentLogger }: BasketballLog
                                 // Same falsy-zero class as BUG-126/BUG-132/BUG-133 -- `e.value ? ... : undefined`
                                 // collapsed a legitimate logged-miss `value: 0` back to undefined on every
                                 // page refresh/remount, discarding the make/miss distinction the DB actually holds.
-                                value: e.value !== undefined && e.value !== null ? (typeof e.value === 'string' ? JSON.parse(e.value) : e.value) : undefined,
+                                // BACKLOG-314: a plain JSON.parse here throws on a box-score-imported
+                                // event's raw "made" string -- caught by the outer try/catch, but that
+                                // silently drops every existing event for the match on remount (this
+                                // whole map never completes), risking duplicate logging. safeParseEventValue
+                                // falls back to the raw string instead of throwing.
+                                value: e.value !== undefined && e.value !== null ? (typeof e.value === 'string' ? safeParseEventValue(e.value) : e.value) : undefined,
                             }));
                             setEvents(transformedEvents);
                         }
