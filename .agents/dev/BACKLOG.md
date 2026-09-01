@@ -10271,7 +10271,7 @@ All five fixed by converging onto `getClientErrorMessage` (1-3), an allowlist of
 
 ### BACKLOG-319 — Match Page Lineups Never Showed Real Ratings: Merge Logic Silently No-op'd on the Actual Saved Lineup Shape
 
-**Status:** SHIPPED 2026-09-01, staging live-test pending.
+**Status:** RESOLVED 2026-09-01, live-verified on staging.
 **Priority:** HIGH — this is the exact gap Richard asked about directly ("ratings displaying on the match page??"), and real `player_ratings` rows already existed for the match used to confirm it — the pipeline computes real ratings, they just never reached the page.
 **Related but distinct from `BACKLOG-159`:** `159` is about `players.rating` (the profile-page field) being a dead, never-live-updated column. This is a separate bug in the *real* ratings pipeline's own delivery path to the match page's Lineups tab — the real pipeline works, this was purely a merge bug downstream of it.
 
@@ -10288,9 +10288,9 @@ Net effect: `MatchLineups.tsx` (the component the public `/matches/[id]` Lineups
 **Deliberately scoped to just this wiring fix, not the lineup screen itself** — Richard's own call: the Lineup Builder / match-page lineup UI needs a broader rebuild later (tracked loosely under the existing `BACKLOG-220` architecture-cleanup entry), and this fix doesn't touch or depend on that — it's a pure backend data-merge correction. `MatchLineups.tsx` → `FullPitchLineups.tsx` → `ResponsivePitch.tsx` already read `player.rating` correctly and render a rating pill whenever it's a real number `> 0`; nothing on the frontend needed to change.
 
 **Evidence:**
-- Commit: (pending — see next commit)
-- Verified by: `tsc --noEmit` clean (18-error baseline, zero new). DB-confirmed real `player_ratings` rows exist for the test match before the fix. Live staging re-fetch of `/api/matches/rdJN1-IQ9D0Rd4iziWNn0` pending.
-- Pending items: live-verify the API response actually carries real `rating` values post-fix, then visually confirm the rating pill renders on the real match page.
+- Commit: `7d72c8e`
+- Verified by: `tsc --noEmit` clean (18-error baseline, zero new). DB-confirmed real `player_ratings` rows existed for the test match before the fix (`auto_rating` 6.2/6.4/7.7...). Post-deploy, `GET /api/matches/rdJN1-IQ9D0Rd4iziWNn0` re-fetched directly from staging: `starters[0..2]` now carry `rating: 6.2`, `6.4`, `6.2` matching the DB exactly (previously `undefined` on every player). Real browser click-through on `https://brixsports-staging.vercel.app/matches/rdJN1-IQ9D0Rd4iziWNn0`'s Lineups tab, screenshot captured: color-coded rating pills render on the pitch for players with a real computed rating (6.4, 9.2, 7.3, 8.3, 8.1, 7.1, 6.2...). Players with no `player_ratings` row (e.g. subs who never featured) correctly show no fabricated number — same "never show a fake value" rule the rest of this ratings work already follows.
+- Pending items: none for this fix. The lineup screen's own UI/UX (layout, overlapping markers on congested formations) is a separate, already-acknowledged rebuild — not part of this entry's scope.
 
 **Found + Fixed:** session `brixsports-v2-ab`, 2026-09-01.
 
