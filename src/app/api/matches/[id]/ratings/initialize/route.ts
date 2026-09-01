@@ -62,8 +62,12 @@ export async function POST(
             if (!teamLineup) return [];
             let list = [];
             if (Array.isArray(teamLineup)) list = teamLineup;
-            else if (teamLineup.starters || teamLineup.bench) {
-                list = [...(teamLineup.starters || []), ...(teamLineup.bench || [])];
+            else if (teamLineup.starters || teamLineup.substitutes) {
+                // BACKLOG-306: real published lineups key the second array
+                // `substitutes`, never `bench` -- this always evaluated to
+                // `[]`, so no substitute player ever got a player_ratings row
+                // initialized, for any match, ever.
+                list = [...(teamLineup.starters || []), ...(teamLineup.substitutes || [])];
             }
             return list.map(p => ({ ...p, team: teamLabel }));
         };

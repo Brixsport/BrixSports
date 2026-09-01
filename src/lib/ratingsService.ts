@@ -64,10 +64,13 @@ export async function calculateAndSaveRatings(matchId: string) {
             return teamLineup;
         }
 
-        if (teamLineup.starters || teamLineup.bench) {
+        if (teamLineup.starters || teamLineup.substitutes) {
+            // BACKLOG-306: same fix as ratings/initialize/route.ts -- real
+            // published lineups key the second array `substitutes`, never
+            // `bench`.
             return [
                 ...(teamLineup.starters || []),
-                ...(teamLineup.bench || [])
+                ...(teamLineup.substitutes || [])
             ];
         }
 
