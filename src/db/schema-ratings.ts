@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer, real } from 'drizzle-orm/sqlite-core';
+import { sqliteTable, text, integer, real, uniqueIndex } from 'drizzle-orm/sqlite-core';
 import { sql } from 'drizzle-orm';
 
 // Player Ratings Table
@@ -85,6 +85,19 @@ export const teamRatings = sqliteTable('team_ratings', {
     createdAt: integer('created_at', { mode: 'timestamp' }).default(sql`CURRENT_TIMESTAMP`),
     updatedAt: integer('updated_at', { mode: 'timestamp' }).default(sql`CURRENT_TIMESTAMP`)
 });
+
+// BACKLOG-255 follow-up (code review CRITICAL finding): without these, two
+// concurrent calculateAndSaveRatings() calls for the same match (the FINISHED-
+// transition trigger racing the GET-route auto-calc fallback) could both INSERT
+// instead of one inserting and one updating -- confirmed live on real staging
+// data (84 duplicate player_ratings rows, 4 duplicate team_ratings rows found
+// and cleaned up, dev/migrate-backlog255-ratings-unique-index.mjs). Also the
+// onConflictDoUpdate target in ratingsService.ts.
+export const playerRatingsMatchPlayerUnique = uniqueIndex('player_ratings_match_player_unique')
+    .on(playerRatings.matchId, playerRatings.playerId);
+
+export const teamRatingsMatchTeamUnique = uniqueIndex('team_ratings_match_team_unique')
+    .on(teamRatings.matchId, teamRatings.teamId);
 
 // Import matches and players tables
 import { matches } from './schema';

@@ -1,7 +1,7 @@
 import { db } from '@/db';
 import { playerRatings, teamRatings } from '@/db/schema-ratings';
 import { matches, players, matchEvents } from '@/db/schema';
-import { eq, and, sql } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { RatingCalculator, type PlayerStats } from '@/lib/ratingCalculator';
 import { getRatingConfig } from '@/lib/ratingConfig';
 import { calculateBasketballStatsFromEvents, calculateBasketballRating, type BasketballPlayerStats } from '@/lib/ratings/basketball';
@@ -163,109 +163,101 @@ export async function calculateAndSaveRatings(matchId: string) {
     // contribution), and getRatingConfig() is itself cached (60s) on top of that.
     const ratingConfig = await getRatingConfig();
 
-    const updatedRatings = [];
+    const updatedRatings: { playerId: string; teamId: string; rating: number; breakdown: unknown }[] = [];
     // `goals` doubles as basketball's "points scored" for the team-total metric --
     // the teamRatings table has no separate points column, and this field was never
     // read anywhere outside this file (grep-confirmed), so reusing it is safe. Still
     // named `goals` because the DB column is.
     const teamPlayerRatings = new Map<string, { total: number; count: number; goals: number }>();
+    const updatedTeamRatings: { teamId: string; rating: number; playerCount: number; goals: number }[] = [];
 
-    for (const [playerId, entry] of playerStats.entries()) {
-        const { teamId } = entry;
-        const { rating, breakdown, scoreMetric } = isBasketball
-            ? { ...calculateBasketballRating(entry.basketballStats!, ratingConfig), scoreMetric: entry.basketballStats!.points }
-            : { ...RatingCalculator.calculateAutoRating(entry.footballStats!, ratingConfig), scoreMetric: entry.footballStats!.goals };
+    // Code-review finding (BACKLOG-255 follow-up): this used to be SELECT-then-
+    // branch (UPDATE if found, else INSERT) per player/team, with no DB-level
+    // uniqueness on (matchId, playerId)/(matchId, teamId) and no transaction
+    // around the loop. Two concurrent calls for the same match (confirmed live:
+    // the new FINISHED-transition trigger racing the pre-existing GET-route
+    // auto-calc fallback, which MatchOverlay.tsx fires the instant it observes
+    // FINISHED status) could both see "not found" and both INSERT -- confirmed
+    // on real staging data (84 duplicate player_ratings rows, 4 duplicate
+    // team_ratings rows found and cleaned up, migration
+    // dev/migrate-backlog255-ratings-unique-index.mjs). Now a real atomic
+    // upsert against that unique index, and the whole write phase runs in one
+    // transaction so a mid-loop failure can't leave a partial rating set with
+    // no rollback (CLAUDE.md: "Write operations that affect match state must
+    // be atomic or handle partial failure explicitly").
+    await db.transaction(async (tx) => {
+        for (const [playerId, entry] of playerStats.entries()) {
+            const { teamId } = entry;
+            const { rating, breakdown, scoreMetric } = isBasketball
+                ? { ...calculateBasketballRating(entry.basketballStats!, ratingConfig), scoreMetric: entry.basketballStats!.points }
+                : { ...RatingCalculator.calculateAutoRating(entry.footballStats!, ratingConfig), scoreMetric: entry.footballStats!.goals };
 
-        if (!teamPlayerRatings.has(teamId)) {
-            teamPlayerRatings.set(teamId, { total: 0, count: 0, goals: 0 });
-        }
-        const teamStats = teamPlayerRatings.get(teamId)!;
-        teamStats.total += rating;
-        teamStats.count += 1;
-        teamStats.goals += scoreMetric;
+            if (!teamPlayerRatings.has(teamId)) {
+                teamPlayerRatings.set(teamId, { total: 0, count: 0, goals: 0 });
+            }
+            const teamStats = teamPlayerRatings.get(teamId)!;
+            teamStats.total += rating;
+            teamStats.count += 1;
+            teamStats.goals += scoreMetric;
 
-        const existingRating = await db
-            .select()
-            .from(playerRatings)
-            .where(
-                and(
-                    eq(playerRatings.matchId, matchId),
-                    eq(playerRatings.playerId, playerId)
-                )
-            )
-            .limit(1);
-
-        if (existingRating.length > 0) {
-            await db
-                .update(playerRatings)
-                .set({
-                    autoRating: rating,
-                    ratingBreakdown: breakdown,
-                    updatedAt: new Date()
-                })
-                .where(eq(playerRatings.id, existingRating[0].id));
-        } else {
             const ratingId = `rating-${matchId}-${playerId}-${Date.now()}`;
+            await tx
+                .insert(playerRatings)
+                .values({
+                    id: ratingId,
+                    matchId,
+                    playerId,
+                    teamId,
+                    autoRating: rating,
+                    ratingBreakdown: breakdown as any
+                })
+                .onConflictDoUpdate({
+                    target: [playerRatings.matchId, playerRatings.playerId],
+                    set: {
+                        autoRating: rating,
+                        ratingBreakdown: breakdown as any,
+                        updatedAt: new Date()
+                    }
+                });
 
-            await db.insert(playerRatings).values({
-                id: ratingId,
-                matchId,
-                playerId,
-                teamId,
-                autoRating: rating,
-                ratingBreakdown: breakdown
-            });
+            updatedRatings.push({ playerId, teamId, rating, breakdown });
         }
 
-        updatedRatings.push({ playerId, teamId, rating, breakdown });
-    }
+        for (const [teamId, stats] of teamPlayerRatings.entries()) {
+            const teamRating = stats.count > 0 ? stats.total / stats.count : 6.0;
+            const roundedRating = Math.round(teamRating * 10) / 10;
 
-    const updatedTeamRatings = [];
-    for (const [teamId, stats] of teamPlayerRatings.entries()) {
-        const teamRating = stats.count > 0 ? stats.total / stats.count : 6.0;
-
-        const existingTeamRating = await db
-            .select()
-            .from(teamRatings)
-            .where(
-                and(
-                    eq(teamRatings.matchId, matchId),
-                    eq(teamRatings.teamId, teamId)
-                )
-            )
-            .limit(1);
-
-        if (existingTeamRating.length > 0) {
-            await db
-                .update(teamRatings)
-                .set({
-                    rating: Math.round(teamRating * 10) / 10,
+            const teamRatingId = `team-rating-${matchId}-${teamId}-${Date.now()}`;
+            await tx
+                .insert(teamRatings)
+                .values({
+                    id: teamRatingId,
+                    matchId,
+                    teamId,
+                    rating: roundedRating,
                     playerCount: stats.count,
                     totalPlayerRating: stats.total,
-                    goals: stats.goals,
-                    updatedAt: new Date()
+                    goals: stats.goals
                 })
-                .where(eq(teamRatings.id, existingTeamRating[0].id));
-        } else {
-            const teamRatingId = `team-rating-${matchId}-${teamId}-${Date.now()}`;
-            await db.insert(teamRatings).values({
-                id: teamRatingId,
-                matchId,
+                .onConflictDoUpdate({
+                    target: [teamRatings.matchId, teamRatings.teamId],
+                    set: {
+                        rating: roundedRating,
+                        playerCount: stats.count,
+                        totalPlayerRating: stats.total,
+                        goals: stats.goals,
+                        updatedAt: new Date()
+                    }
+                });
+
+            updatedTeamRatings.push({
                 teamId,
-                rating: Math.round(teamRating * 10) / 10,
+                rating: roundedRating,
                 playerCount: stats.count,
-                totalPlayerRating: stats.total,
                 goals: stats.goals
             });
         }
-
-        updatedTeamRatings.push({
-            teamId,
-            rating: Math.round(teamRating * 10) / 10,
-            playerCount: stats.count,
-            goals: stats.goals
-        });
-    }
+    });
 
     return {
         ratingsUpdated: updatedRatings.length,

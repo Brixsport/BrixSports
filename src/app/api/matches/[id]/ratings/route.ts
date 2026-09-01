@@ -136,14 +136,23 @@ export async function POST(
         } catch (err) {
             console.error('[Calculate Ratings] Error:', err);
             const rawMessage = err instanceof Error ? err.message : '';
-            // Only these two are deliberate, developer-authored validation messages
-            // safe to show as-is (src/lib/ratingsService.ts). Anything else --
-            // including a real DB failure -- must not reach the client verbatim.
+            // Deliberate, developer-authored validation messages (src/lib/ratingsService.ts)
+            // safe to show as-is. Anything else -- including a real DB failure -- must not
+            // reach the client verbatim.
             if (rawMessage === 'Match not found') {
                 return NextResponse.json({ error: rawMessage }, { status: 404 });
             }
             if (rawMessage === 'No lineups found for this match') {
                 return NextResponse.json({ error: rawMessage }, { status: 400 });
+            }
+            // BACKLOG-255: this allow-list had gone stale relative to
+            // ratingsService.ts's actual thrown-error surface -- the sport
+            // dispatcher's unsupported-sport error fell through to a generic,
+            // unexplained 500 instead of the clear message the code already
+            // authors. An admin clicking "Calculate Ratings" on a Track & Field
+            // match deserves the real reason, not a 500.
+            if (rawMessage.startsWith('calculateAndSaveRatings: no rating model exists for sport')) {
+                return NextResponse.json({ error: rawMessage }, { status: 422 });
             }
             return NextResponse.json({ error: 'Failed to calculate ratings' }, { status: 500 });
         }
