@@ -127,7 +127,15 @@ export async function middleware(request: NextRequest) {
         }
     }
 
-    return NextResponse.next();
+    // BACKLOG-317: admin/layout.tsx runs its own independent server-side auth
+    // check (defense-in-depth, CLAUDE.md's own rule -- middleware is a first
+    // layer only) and has no way to know the current pathname on its own
+    // (App Router layouts don't receive it as a prop). Thread it through via
+    // header so that layout can apply the same scoped logger carve-out this
+    // file just gained, instead of only ever allowing admin/logger_manager.
+    const requestHeaders = new Headers(request.headers);
+    requestHeaders.set('x-pathname', pathname);
+    return NextResponse.next({ request: { headers: requestHeaders } });
 }
 
 export const config = {
