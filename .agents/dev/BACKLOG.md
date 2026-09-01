@@ -10161,7 +10161,7 @@ So at least 4-5 distinct real structures exist in production data today; this se
 
 ### BACKLOG-314 — Basketball No-Lineup Fallback Has Its Own Silent Correctness Bugs (Surfaced By BACKLOG-312's Fix)
 
-**Status:** SHIPPED 2026-09-01, staging live-test pending. The 6-file sibling-reachability audit was already complete (2 real+fixed, 3 confirmed dead including the originally-miscited `MatchTimeline.tsx`, 1 already fixed at filing time). The 2 original correctness bugs in `matches/[id]/route.ts`'s fallback block are now fixed too.
+**Status:** RESOLVED 2026-09-01, live-verified on staging. The 6-file sibling-reachability audit was already complete (2 real+fixed, 3 confirmed dead including the originally-miscited `MatchTimeline.tsx`, 1 already fixed at filing time). The 2 original correctness bugs in `matches/[id]/route.ts`'s fallback block are now fixed too.
 **Priority:** MEDIUM — not crashing, but produces visibly wrong numbers on every basketball match that hits the no-lineup fallback in `matches/[id]/route.ts` (same 20+ matches `BACKLOG-312` covers). These bugs were always live in the code but never *reachable* — the whole route 500'd before execution ever got here. Now that `BACKLOG-312` stops the crash, they run for real and their output is real user-visible.
 **Two distinct bugs, same file (`matches/[id]/route.ts`), same fallback block:**
 1. **Player-stats switch never matches (~line 199-221):** the per-player point/rebound/assist tally switches on `event.type` values `'2PT_MADE'`/`'3PT_MADE'`/`'FREE_THROW'`/`'REBOUND'`/etc. Real box-score-imported event types are `'Field Goal'`/`'Three Pointer'`/`'Free Throw'`/`'Rebound'` — different casing and vocabulary entirely, same class of bug as the already-known `BUG-012` event-type-casing mismatch. Zero cases ever match for imported data, so every player's computed `points`/`rebounds`/`assists`/etc. in the generated fallback lineup silently stays 0.
@@ -10177,9 +10177,10 @@ So at least 4-5 distinct real structures exist in production data today; this se
 2. **Bug 2 (made/miss check) fixed:** `made = typeof event.value === 'string' ? event.value === 'made' : Number(event.value) > 0` — handles both the box-score string shape and the live-logger numeric shape correctly, applied identically in both the team-stats block (`~line 403`) and the newly-fixed player-stats block.
 
 **Evidence:**
-- Commit: (pending — see next commit)
-- Verified by: `tsc --noEmit` clean (18-error baseline, zero new). Semantics confirmed by reading the actual backfill generator script's source, not assumed.
-- Pending items: live-verify a real basketball match that hit this fallback (e.g. `busa-basketball-1`, one of `BACKLOG-312`'s originally-crashing matches) shows non-zero, correct-looking player points/team FG%/3PT% now instead of the previous flat 0s.
+- Commit: `882efa6`
+- Verified by: `tsc --noEmit` clean (18-error baseline, zero new). Semantics confirmed by reading the actual backfill generator script's source, not assumed. Live re-fetch of `GET /api/matches/busa-basketball-1` (one of `BACKLOG-312`'s originally-crashing matches) on staging post-deploy: player `KOSI` now shows `points: 18, rebounds: 3, assists: 2, steals: 4` (previously frozen at 0 for every player); team stats show `homeFieldGoalsMade: 16` of `16` attempted, `fieldGoalPercentage: [100, 100]` (previously `0` made despite `16` attempted, `[0,0]` — the exact wrong numbers `BACKLOG-312`'s own evidence block recorded).
+- Note, not a bug in this fix: the 100% FG reading looks unusual for real basketball — likely a data-completeness quirk in this specific match's original box-score capture (e.g. only made shots logged for whatever period was captured), not a logic error introduced here. The fix correctly reflects whatever `made`/`missed` values are actually stored; out of scope to investigate the source data further.
+- Pending items: none.
 
 **Found:** session `brixsports-v2-39`, 2026-08-28. **Fixed:** session `brixsports-v2-ab`/`-ea`, 2026-09-01.
 
