@@ -97,7 +97,20 @@ export async function middleware(request: NextRequest) {
                 payload.role === 'logger_manager' &&
                 (pathname === '/admin/manager' || pathname.startsWith('/admin/manager/'));
 
-            if (!isAdmin && !isScopedLoggerManager) {
+            // BACKLOG-306 follow-up: a real logger's dashboard (src/app/logger/
+            // page.tsx) links "Adjust Ratings" to /admin/match-ratings/[id] --
+            // that page, and all 3 API routes it calls
+            // (matches/[id]/ratings/route.ts, .../adjust, .../initialize),
+            // already explicitly check for `role === 'admin' || role === 'logger'`.
+            // This blanket /admin/** gate never got the matching carve-out, so a
+            // real logger clicking that link was silently redirected to `/`
+            // before the page (or its already-permissive API calls) ever ran --
+            // same shape as the logger_manager gap this file already fixed once.
+            const isScopedRatingsLogger =
+                payload.role === 'logger' &&
+                (pathname === '/admin/match-ratings' || pathname.startsWith('/admin/match-ratings/'));
+
+            if (!isAdmin && !isScopedLoggerManager && !isScopedRatingsLogger) {
                 if (pathname.startsWith('/api/')) {
                     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
                 }
