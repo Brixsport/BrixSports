@@ -44,6 +44,10 @@ export async function calculateAndSaveRatings(matchId: string) {
         throw new Error(`calculateAndSaveRatings: no rating model exists for sport "${match[0].sport}" yet (BACKLOG-255)`);
     }
 
+    // Intentionally unbounded (no .limit()) -- this must be a match's complete
+    // event history for correct stat aggregation, not a client-facing list.
+    // Truncating it would silently under-count every stat, a worse bug than the
+    // unbounded-query pattern CLAUDE.md otherwise flags.
     const events = await db
         .select()
         .from(matchEvents)

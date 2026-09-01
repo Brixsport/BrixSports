@@ -2,10 +2,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
 import { playerRatings } from '@/db/schema-ratings';
 import { matches, players, matchEvents } from '@/db/schema';
-import { eq, and, or } from 'drizzle-orm';
+import { eq, and, or, inArray } from 'drizzle-orm';
 import { getAuthUser } from '@/lib/auth';
 import { RatingCalculator } from '@/lib/ratingCalculator';
 import { getRatingConfig } from '@/lib/ratingConfig';
+import { calculateAndSaveRatings } from '@/lib/ratingsService';
 
 /**
  * GET /api/matches/[id]/ratings/adjust
@@ -90,7 +91,8 @@ export async function GET(
             })
             .from(playerRatings)
             .leftJoin(players, eq(playerRatings.playerId, players.id))
-            .where(eq(playerRatings.matchId, matchId));
+            .where(eq(playerRatings.matchId, matchId))
+            .limit(200); // a single match's roster, generous cap per CLAUDE.md's list-query rule
 
         console.log('[Ratings Adjust] Found ratings:', ratings.length);
 
@@ -98,63 +100,61 @@ export async function GET(
         if (ratings.length === 0) {
             console.log('[Ratings Adjust] No ratings found, attempting auto-calculation...');
 
-            // Call the ratings' POST handler logic internally (by making a request to itself)
-            // or better, just tell the client how to fix it via a more helpful 404
-            // but even better: Let's actually trigger the calculation here.
-
+            // BACKLOG-321: this used to self-fetch two of this route's own sibling
+            // HTTP endpoints (initialize, then calculate) -- the exact anti-pattern
+            // BACKLOG-124 already fixed once elsewhere (forwards no Authorization
+            // header, only Cookie; NEXT_PUBLIC_APP_URL points at a real deployed URL
+            // even in local dev, so this made a genuine outbound HTTPS call to
+            // itself). calculateAndSaveRatings() is self-sufficient -- it builds
+            // playerRatings rows from scratch off the match's lineups, with no
+            // dependency on ratings/initialize having run first (confirmed: this is
+            // exactly what ratings/route.ts's own GET fallback already does, calling
+            // it alone).
             try {
-                const protocol = request.headers.get('x-forwarded-proto') || 'http';
-                const host = request.headers.get('host');
-                const baseUrl = `${protocol}://${host}`;
+                await calculateAndSaveRatings(matchId);
 
-                // Initialize first
-                await fetch(`${baseUrl}/api/matches/${matchId}/ratings/initialize`, {
-                    method: 'POST',
-                    headers: { 'Cookie': request.headers.get('cookie') || '' }
-                });
+                // Re-fetch ratings
+                const newRatings = await db
+                    .select({
+                        rating: playerRatings,
+                        player: players
+                    })
+                    .from(playerRatings)
+                    .leftJoin(players, eq(playerRatings.playerId, players.id))
+                    .where(eq(playerRatings.matchId, matchId))
+                    .limit(200);
 
-                // Then calculate
-                const calcRes = await fetch(`${baseUrl}/api/matches/${matchId}/ratings`, {
-                    method: 'POST',
-                    headers: { 'Cookie': request.headers.get('cookie') || '' }
-                });
+                if (newRatings.length > 0) {
+                    const homeScore = match.homeScore ?? 0;
+                    const awayScore = match.awayScore ?? 0;
 
-                if (calcRes.ok) {
-                    // Re-fetch ratings
-                    const newRatings = await db
-                        .select({
-                            rating: playerRatings,
-                            player: players
-                        })
-                        .from(playerRatings)
-                        .leftJoin(players, eq(playerRatings.playerId, players.id))
-                        .where(eq(playerRatings.matchId, matchId));
+                    return NextResponse.json({
+                        matchId,
+                        match: match,
+                        ratings: newRatings.map(r => {
+                            const position = r.player?.position || '';
+                            // BACKLOG-321: was computed once, globally, from
+                            // homeScore/awayScore alone -- showed every AWAY
+                            // player "Clean sheet" suggestions whenever HOME kept
+                            // one, and vice versa. Scoped to the rated player's
+                            // own team.
+                            const isHome = r.rating.teamId === match.homeTeamId;
+                            const ownScore = isHome ? homeScore : awayScore;
+                            const oppScore = isHome ? awayScore : homeScore;
+                            const teamCleanSheet = oppScore === 0;
+                            const teamWon = ownScore > oppScore;
 
-                    if (newRatings.length > 0) {
-                        return NextResponse.json({
-                            matchId,
-                            match: match,
-                            ratings: newRatings.map(r => {
-                                const position = r.player?.position || '';
-                                const homeScore = match.homeScore ?? 0;
-                                const awayScore = match.awayScore ?? 0;
-
-                                // Simplified logic consistent with the rest of the route
-                                const teamCleanSheet = homeScore === 0 || awayScore === 0;
-                                const teamWon = homeScore > awayScore || awayScore > homeScore;
-
-                                return {
-                                    ...r.rating,
-                                    playerName: r.player?.name,
-                                    playerNumber: r.player?.number,
-                                    playerPosition: position,
-                                    suggestions: RatingCalculator.getSuggestedRange(position, teamCleanSheet, teamWon)
-                                };
-                            }),
-                            lineups: match.lineups ? JSON.parse(match.lineups) : null,
-                            autoCalculated: true
-                        });
-                    }
+                            return {
+                                ...r.rating,
+                                playerName: r.player?.name,
+                                playerNumber: r.player?.number,
+                                playerPosition: position,
+                                suggestions: RatingCalculator.getSuggestedRange(position, teamCleanSheet, teamWon)
+                            };
+                        }),
+                        lineups: match.lineups ? JSON.parse(match.lineups) : null,
+                        autoCalculated: true
+                    });
                 }
             } catch (e) {
                 console.error('[Ratings Adjust] Auto-calc failed:', e);
@@ -221,9 +221,15 @@ export async function GET(
             const position = r.player?.position || '';
             const homeScore = match.homeScore ?? 0;
             const awayScore = match.awayScore ?? 0;
-            const teamCleanSheet = homeScore === 0 || awayScore === 0;
-            const teamWon = homeScore > awayScore || awayScore > homeScore;
             const playerTeamId = r.rating.teamId || '';
+            // BACKLOG-321: was computed once, globally -- an away defender who
+            // conceded 3 was shown "Clean sheet -- consider 7.5-8.0" whenever
+            // HOME happened to keep one, and vice versa. Scoped per-player.
+            const isHome = playerTeamId === match.homeTeamId;
+            const ownScore = isHome ? homeScore : awayScore;
+            const oppScore = isHome ? awayScore : homeScore;
+            const teamCleanSheet = oppScore === 0;
+            const teamWon = ownScore > oppScore;
 
             const suggestion = RatingCalculator.getSuggestedRange(position, teamCleanSheet, teamWon);
             const description = RatingCalculator.getRatingDescription(r.rating.autoRating);
@@ -338,36 +344,44 @@ export async function POST(
         // Configuration instead of the hardcoded 1.0/10.0.
         const ratingConfig = await getRatingConfig();
 
-        // Validate and update each rating
-        const updated = [];
-        const errors = [];
+        // BACKLOG-321: this loop used to do one SELECT + one UPDATE per submitted
+        // rating, sequentially (up to ~2x roster-size DB round trips), with no
+        // transaction -- a mid-loop failure left a partially-adjusted rating set
+        // with no rollback. Batch-fetch every existing row up front, then do all
+        // writes inside a single transaction.
+        const playerIds = adjustedRatings
+            .map((a: any) => a?.playerId)
+            .filter((id: unknown): id is string => typeof id === 'string');
+        const existingRows = playerIds.length > 0
+            ? await db
+                .select()
+                .from(playerRatings)
+                .where(and(eq(playerRatings.matchId, matchId), inArray(playerRatings.playerId, playerIds)))
+            : [];
+        const existingByPlayerId = new Map(existingRows.map(r => [r.playerId, r]));
 
-        for (const adjustment of adjustedRatings) {
-            const { playerId, finalRating, notes, isMotM } = adjustment;
+        const updated: { playerId: string; autoRating: number; finalRating: number; isMotM: boolean }[] = [];
+        const errors: { playerId: string; error: string }[] = [];
 
-            // Validate rating
-            if (!RatingCalculator.validateRating(finalRating, ratingConfig)) {
-                errors.push({
-                    playerId,
-                    error: `Invalid rating: ${finalRating}. Must be between ${ratingConfig.minRating} and ${ratingConfig.maxRating}`
-                });
-                continue;
-            }
+        await db.transaction(async (tx) => {
+            for (const adjustment of adjustedRatings) {
+                const { playerId, finalRating, notes, isMotM } = adjustment;
 
-            try {
-                // Find existing rating
-                const existing = await db
-                    .select()
-                    .from(playerRatings)
-                    .where(
-                        and(
-                            eq(playerRatings.matchId, matchId),
-                            eq(playerRatings.playerId, playerId)
-                        )
-                    )
-                    .limit(1);
+                // BACKLOG-321: validateRating() only range-checks -- a numeric-
+                // looking string ("7.5") passes the >=/<= comparison via JS's
+                // loose coercion and would get written to a column every other
+                // reader (e.g. playerRatingSummary.ts's AVG(...)) assumes is a
+                // real number.
+                if (typeof finalRating !== 'number' || !Number.isFinite(finalRating) || !RatingCalculator.validateRating(finalRating, ratingConfig)) {
+                    errors.push({
+                        playerId,
+                        error: `Invalid rating: ${finalRating}. Must be a number between ${ratingConfig.minRating} and ${ratingConfig.maxRating}`
+                    });
+                    continue;
+                }
 
-                if (existing.length === 0) {
+                const existing = existingByPlayerId.get(playerId);
+                if (!existing) {
                     errors.push({
                         playerId,
                         error: 'Rating not found'
@@ -375,33 +389,33 @@ export async function POST(
                     continue;
                 }
 
-                // Update rating
-                await db
-                    .update(playerRatings)
-                    .set({
+                try {
+                    await tx
+                        .update(playerRatings)
+                        .set({
+                            finalRating,
+                            adjustmentNotes: notes || null,
+                            adjustedBy: user.id,
+                            adjustmentTime: new Date(),
+                            isMotM: isMotM || false,
+                            updatedAt: new Date()
+                        })
+                        .where(eq(playerRatings.id, existing.id));
+
+                    updated.push({
+                        playerId,
+                        autoRating: existing.autoRating,
                         finalRating,
-                        adjustmentNotes: notes || null,
-                        adjustedBy: user.id,
-                        adjustmentTime: new Date(),
-                        isMotM: isMotM || false,
-                        updatedAt: new Date()
-                    })
-                    .where(eq(playerRatings.id, existing[0].id));
-
-                updated.push({
-                    playerId,
-                    autoRating: existing[0].autoRating,
-                    finalRating,
-                    isMotM
-                });
-
-            } catch (error) {
-                errors.push({
-                    playerId,
-                    error: 'Failed to update rating'
-                });
+                        isMotM
+                    });
+                } catch (error) {
+                    errors.push({
+                        playerId,
+                        error: 'Failed to update rating'
+                    });
+                }
             }
-        }
+        });
 
         // Emit WebSocket event for real-time updates
         if (typeof global !== 'undefined' && (global as any).io) {
