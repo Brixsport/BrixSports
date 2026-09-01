@@ -33,7 +33,7 @@ export async function GET(
         // real WS outage would already be at the limit. 600/min covers roughly 100
         // concurrent same-IP fallback-polling viewers while still catching anything
         // polling faster than the fallback's own 10s interval, which no real viewer does.
-        const rl = checkRateLimit(request, { max: 600 });
+        const rl = await checkRateLimit(request, { max: 600 });
         if (rl.limited) {
             return NextResponse.json(
                 { error: 'Too many requests. Please try again shortly.' },

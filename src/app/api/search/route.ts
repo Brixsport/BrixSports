@@ -49,7 +49,7 @@ export async function GET(request: NextRequest) {
         // Search is the most expensive of the public GET endpoints (multiple
         // LIKE scans per request), so a tighter ceiling than the shared
         // default -- still generous enough for real campus-shared-IP traffic.
-        const rl = checkRateLimit(request, { max: 60, windowMs: 60 * 1000 });
+        const rl = await checkRateLimit(request, { max: 60, windowMs: 60 * 1000 });
         if (rl.limited) {
             return NextResponse.json(
                 { error: 'Too many requests. Please try again shortly.' },

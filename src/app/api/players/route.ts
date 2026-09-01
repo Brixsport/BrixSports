@@ -55,7 +55,7 @@ function playerMatchesSearch(player: EnrichedPlayer, query: string) {
 
 export async function GET(request: Request) {
     try {
-        const rl = checkRateLimit(request);
+        const rl = await checkRateLimit(request);
         if (rl.limited) {
             return NextResponse.json(
                 { error: 'Too many requests. Please try again shortly.' },

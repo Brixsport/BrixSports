@@ -59,7 +59,7 @@ const MATCH_LIST_FIELDS = {
 
 export async function GET(request: NextRequest) {
     try {
-        const rl = checkRateLimit(request);
+        const rl = await checkRateLimit(request);
         if (rl.limited) {
             return NextResponse.json(
                 { error: 'Too many requests. Please try again shortly.' },

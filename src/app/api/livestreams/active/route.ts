@@ -7,7 +7,7 @@ import { checkRateLimit } from '@/lib/rate-limit';
 // GET /api/livestreams/active - Get all active livestreams
 export async function GET(request: NextRequest) {
     try {
-        const rl = checkRateLimit(request);
+        const rl = await checkRateLimit(request);
         if (rl.limited) {
             return NextResponse.json(
                 { error: 'Too many requests. Please try again shortly.' },
