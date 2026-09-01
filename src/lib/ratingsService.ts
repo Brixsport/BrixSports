@@ -114,14 +114,29 @@ export async function calculateAndSaveRatings(matchId: string) {
         const countByType = (type: string) => playerEvents.filter(e => e.type === type).length;
         const countByDetail = (detailKeyword: string) => playerEvents.filter(e => e.detail?.toLowerCase().includes(detailKeyword.toLowerCase())).length;
 
+        // Code review finding (football-side pass, following the basketball-side review):
+        // three of this block's fields never matched any real event FootballLogger.tsx
+        // actually produces -- confirmed against its real event-creation code, not
+        // assumed. Goals/shots/substitution detection below are fixed; every other
+        // countByDetail(...) keyword here is unverified against real data and may have
+        // the same class of bug (tracked separately, not blocking this fix).
+        const subOutEvent = playerEvents.find(e => e.type === 'Substitution');
+
         const footballStats = {
             playerId,
             position: lineupEntry.position || player.position || 'CM',
 
-            goals: countByType('Goal'),
+            // A converted penalty logs type: 'Penalty', never 'Goal' (confirmEvent
+            // in FootballLogger.tsx) -- was silently excluded from both the goal
+            // count and the team's scoreMetric.
+            goals: countByType('Goal') + countByType('Penalty'),
             assists: countByDetail('assist'),
-            shotsOnTarget: countByType('Shot') + countByDetail('on target'),
-            shotsOffTarget: countByDetail('off target') + countByDetail('missed'),
+            // Real event types are 'Shot on Target'/'Shot off Target' -- bare 'Shot'
+            // is never emitted, so countByType('Shot') was always 0. detail on these
+            // events is just the player's name (no override exists), so the
+            // countByDetail() half was equally dead.
+            shotsOnTarget: countByType('Shot on Target'),
+            shotsOffTarget: countByType('Shot off Target'),
 
             saves: countByType('Save'),
             tackles: countByType('Tackle'),
@@ -146,13 +161,27 @@ export async function calculateAndSaveRatings(matchId: string) {
             offsides: countByType('Offside'),
 
             ownGoals: countByType('Own Goal'),
-            penaltiesScored: countByDetail('penalty scored'),
-            penaltiesMissed: countByDetail('penalty missed'),
-            penaltiesSaved: countByDetail('penalty saved'),
+            // detail on Penalty/Penalty Missed/Penalty Saved events is just the
+            // taker's name (no keyword override exists) -- countByDetail() could
+            // never match any of these. penaltiesSaved specifically credits the
+            // GOALKEEPER (ratingCalculator.ts's "GK bonus"), and the keeper is the
+            // event's relatedPlayerId, not playerId (confirmEvent('Penalty Saved',
+            // takerId, keeperId)) -- must check the unfiltered `events` list, not
+            // this player's own playerEvents, or it silently credits the taker instead.
+            penaltiesScored: countByType('Penalty'),
+            penaltiesMissed: countByType('Penalty Missed'),
+            penaltiesSaved: events.filter(e => e.type === 'Penalty Saved' && e.relatedPlayerId === playerId).length,
 
             eyePoints: playerEvents.filter(e => e.isEyePoint).length,
-            isSubstituted: playerEvents.some(e => e.type === 'Substitution' && e.detail?.includes('out')),
-            minutesPlayed: 90
+            // Substitution's real detail shape is "<incoming> IN for <outgoing>"
+            // (FootballLogger.tsx) -- never contains "out", so the old
+            // e.detail?.includes('out') check could never match. playerId on a
+            // Substitution row is the player going OUT, so any such row on this
+            // player's own events means they were subbed off. minutesPlayed was
+            // hardcoded to 90 for every player in every match -- now derived from
+            // the real event minute when a sub-off occurred.
+            isSubstituted: !!subOutEvent,
+            minutesPlayed: subOutEvent ? subOutEvent.minute : 90
         };
 
         playerStats.set(playerId, { teamId, footballStats });
