@@ -16,7 +16,9 @@ interface PerformanceData {
     goals?: number;
     assists?: number;
     fouls?: number;
-    rating: number;
+    // BACKLOG-315: real per-match rating from playerRatings, null when the
+    // match genuinely hasn't been rated yet -- never a fabricated number.
+    rating: number | null;
     minutesPlayed: number;
 }
 
@@ -70,12 +72,16 @@ export function PlayerPerformanceGraphs({
         );
     }
 
-    // Calculate statistics
-    const avgRating = data.reduce((sum, d) => sum + d.rating, 0) / data.length;
+    // Calculate statistics. BACKLOG-315: rating can be null (not yet rated) --
+    // average and trend only consider matches that actually have a real rating.
+    const ratedMatches = data.filter((d): d is PerformanceData & { rating: number } => d.rating != null);
+    const avgRating = ratedMatches.length > 0
+        ? ratedMatches.reduce((sum, d) => sum + d.rating, 0) / ratedMatches.length
+        : null;
     const totalPoints = data.reduce((sum, d) => sum + (d.points || d.goals || 0), 0);
     const totalAssists = data.reduce((sum, d) => sum + (d.assists || 0), 0);
-    const trend = data.length >= 2
-        ? data[data.length - 1].rating - data[0].rating
+    const trend = ratedMatches.length >= 2
+        ? ratedMatches[ratedMatches.length - 1].rating - ratedMatches[0].rating
         : 0;
 
     const maxValue = Math.max(...data.map(d => {
@@ -83,7 +89,7 @@ export function PlayerPerformanceGraphs({
             case 'points': return d.points || 0;
             case 'goals': return d.goals || 0;
             case 'assists': return d.assists || 0;
-            case 'rating': return d.rating;
+            case 'rating': return d.rating ?? 0;
             default: return 0;
         }
     }));
@@ -95,7 +101,7 @@ export function PlayerPerformanceGraphs({
                 <StatCard
                     icon={<Award />}
                     label="Avg Rating"
-                    value={avgRating.toFixed(1)}
+                    value={avgRating != null ? avgRating.toFixed(1) : 'N/A'}
                     color="text-primary"
                 />
                 <StatCard
@@ -170,7 +176,7 @@ export function PlayerPerformanceGraphs({
                                             case 'points': return d.points || 0;
                                             case 'goals': return d.goals || 0;
                                             case 'assists': return d.assists || 0;
-                                            case 'rating': return d.rating;
+                                            case 'rating': return d.rating ?? 0;
                                             default: return 0;
                                         }
                                     })();
@@ -192,11 +198,12 @@ export function PlayerPerformanceGraphs({
                                         case 'points': return d.points || 0;
                                         case 'goals': return d.goals || 0;
                                         case 'assists': return d.assists || 0;
-                                        case 'rating': return d.rating;
+                                        case 'rating': return d.rating ?? 0;
                                         default: return 0;
                                     }
                                 })();
                                 const y = 100 - (value / maxValue) * 100;
+                                const isUnratedPoint = selectedMetric === 'rating' && d.rating == null;
 
                                 return (
                                     <motion.circle
@@ -205,13 +212,13 @@ export function PlayerPerformanceGraphs({
                                         cy={`${y}%`}
                                         r="4"
                                         fill="currentColor"
-                                        className="text-primary cursor-pointer"
+                                        className={isUnratedPoint ? 'text-white/20 cursor-pointer' : 'text-primary cursor-pointer'}
                                         initial={{ scale: 0 }}
                                         animate={{ scale: 1 }}
                                         transition={{ delay: i * 0.05 }}
                                         whileHover={{ scale: 1.5 }}
                                     >
-                                        <title>{`${d.match}: ${value.toFixed(1)}`}</title>
+                                        <title>{`${d.match}: ${isUnratedPoint ? 'N/A' : value.toFixed(1)}`}</title>
                                     </motion.circle>
                                 );
                             })}
@@ -247,10 +254,11 @@ export function PlayerPerformanceGraphs({
                                 case 'points': return d.points || 0;
                                 case 'goals': return d.goals || 0;
                                 case 'assists': return d.assists || 0;
-                                case 'rating': return d.rating;
+                                case 'rating': return d.rating ?? 0;
                                 default: return 0;
                             }
                         })();
+                        const isUnrated = selectedMetric === 'rating' && d.rating == null;
                         const percentage = (value / maxValue) * 100;
 
                         return (
@@ -263,7 +271,7 @@ export function PlayerPerformanceGraphs({
                             >
                                 <div className="flex items-center justify-between text-sm">
                                     <span className="text-white/80 truncate max-w-[200px]">{d.match}</span>
-                                    <span className="text-primary font-bold">{value.toFixed(1)}</span>
+                                    <span className="text-primary font-bold">{isUnrated ? 'N/A' : value.toFixed(1)}</span>
                                 </div>
                                 <div className="h-6 bg-white/5 rounded-full overflow-hidden">
                                     <motion.div
