@@ -35,6 +35,11 @@ export const env = {
     cloudinaryCloud: process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME ?? '',
     cloudinaryPreset: process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET ?? '',
 
+    // Rate limiting (BACKLOG-080) — optional; absent in local dev, falls back
+    // to the in-memory limiter. Not in validateEnv()'s required list on purpose.
+    upstashRedisUrl: process.env.UPSTASH_REDIS_REST_URL ?? '',
+    upstashRedisToken: process.env.UPSTASH_REDIS_REST_TOKEN ?? '',
+
     // Convenience booleans
     isStaging: process.env.NEXT_PUBLIC_ENV === 'staging',
     isProduction: process.env.NEXT_PUBLIC_ENV === 'production',
