@@ -1,6 +1,6 @@
 import { db } from '@/db';
 import { bracketNodes, matches } from '@/db/schema';
-import { eq } from 'drizzle-orm';
+import { and, eq, isNull } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 
 // BACKLOG-280: knockout bracket service. Structure is fixed at top-8
@@ -42,58 +42,65 @@ export async function createKnockoutStructure(input: CreateKnockoutInput) {
     }
 
     const now = new Date();
-    const ids = {
+    const idsForNodes = {
         qf: [`bn_${nanoid()}`, `bn_${nanoid()}`, `bn_${nanoid()}`, `bn_${nanoid()}`] as [string, string, string, string],
         sf: [`bn_${nanoid()}`, `bn_${nanoid()}`] as [string, string],
         third: `bn_${nanoid()}`,
         final: `bn_${nanoid()}`,
     };
     // QF0(1v8) & QF1(4v5) -> SF0; QF2(2v7) & QF3(3v6) -> SF1
-    const qfNextMatch = [ids.sf[0], ids.sf[0], ids.sf[1], ids.sf[1]];
+    const qfNextMatch = [idsForNodes.sf[0], idsForNodes.sf[0], idsForNodes.sf[1], idsForNodes.sf[1]];
 
-    const qfMatchIds: string[] = [];
-    for (let i = 0; i < 4; i++) {
-        const matchId = `match_${nanoid()}`;
-        await db.insert(matches).values({
-            id: matchId,
-            sport,
-            homeTeamId: qf[i].homeTeamId,
-            awayTeamId: qf[i].awayTeamId,
-            homeScore: 0,
-            awayScore: 0,
-            status: 'UPCOMING',
-            startTime: qf[i].startTime,
-            venue: qf[i].venue,
-            competition,
-            competitionId,
-            matchType: 'competition',
-            round: 'QUARTER_FINAL',
-        });
-        qfMatchIds.push(matchId);
-    }
+    // BACKLOG-316: the 4 QF match inserts + the bracketNodes insert used to be
+    // independent statements -- a failure partway through (e.g. the 3rd insert
+    // throwing) left orphaned QF match rows with no bracket nodes referencing
+    // them. One transaction, all-or-nothing.
+    const qfMatchIds: string[] = await db.transaction(async (tx) => {
+        const ids: string[] = [];
+        for (let i = 0; i < 4; i++) {
+            const matchId = `match_${nanoid()}`;
+            await tx.insert(matches).values({
+                id: matchId,
+                sport,
+                homeTeamId: qf[i].homeTeamId,
+                awayTeamId: qf[i].awayTeamId,
+                homeScore: 0,
+                awayScore: 0,
+                status: 'UPCOMING',
+                startTime: qf[i].startTime,
+                venue: qf[i].venue,
+                competition,
+                competitionId,
+                matchType: 'competition',
+                round: 'QUARTER_FINAL',
+            });
+            ids.push(matchId);
+        }
 
-    const titles = ['Quarter-Final 1', 'Quarter-Final 2', 'Quarter-Final 3', 'Quarter-Final 4'];
-    const nodeRows = [
-        ...qf.map((slot, i) => ({
-            id: ids.qf[i], competitionId, competition, sport,
-            title: titles[i],
-            matchId: qfMatchIds[i],
-            nextMatchId: qfNextMatch[i],
-            loserNextMatchId: null,
-            homeTeamId: slot.homeTeamId, awayTeamId: slot.awayTeamId,
-            homeScore: null, awayScore: null,
-            status: 'PENDING', round: 'QUARTER_FINAL', position: i,
-            createdAt: now,
-        })),
-        { id: ids.sf[0], competitionId, competition, sport, title: 'Semi-Final 1', matchId: null, nextMatchId: ids.final, loserNextMatchId: ids.third, homeTeamId: null, awayTeamId: null, homeScore: null, awayScore: null, status: 'PENDING', round: 'SEMI_FINAL', position: 0, createdAt: now },
-        { id: ids.sf[1], competitionId, competition, sport, title: 'Semi-Final 2', matchId: null, nextMatchId: ids.final, loserNextMatchId: ids.third, homeTeamId: null, awayTeamId: null, homeScore: null, awayScore: null, status: 'PENDING', round: 'SEMI_FINAL', position: 1, createdAt: now },
-        { id: ids.third, competitionId, competition, sport, title: '3rd Place Playoff', matchId: null, nextMatchId: null, loserNextMatchId: null, homeTeamId: null, awayTeamId: null, homeScore: null, awayScore: null, status: 'PENDING', round: 'THIRD_PLACE', position: 0, createdAt: now },
-        { id: ids.final, competitionId, competition, sport, title: 'Final', matchId: null, nextMatchId: null, loserNextMatchId: null, homeTeamId: null, awayTeamId: null, homeScore: null, awayScore: null, status: 'PENDING', round: 'FINAL', position: 0, createdAt: now },
-    ];
+        const titles = ['Quarter-Final 1', 'Quarter-Final 2', 'Quarter-Final 3', 'Quarter-Final 4'];
+        const nodeRows = [
+            ...qf.map((slot, i) => ({
+                id: idsForNodes.qf[i], competitionId, competition, sport,
+                title: titles[i],
+                matchId: ids[i],
+                nextMatchId: qfNextMatch[i],
+                loserNextMatchId: null,
+                homeTeamId: slot.homeTeamId, awayTeamId: slot.awayTeamId,
+                homeScore: null, awayScore: null,
+                status: 'PENDING', round: 'QUARTER_FINAL', position: i,
+                createdAt: now,
+            })),
+            { id: idsForNodes.sf[0], competitionId, competition, sport, title: 'Semi-Final 1', matchId: null, nextMatchId: idsForNodes.final, loserNextMatchId: idsForNodes.third, homeTeamId: null, awayTeamId: null, homeScore: null, awayScore: null, status: 'PENDING', round: 'SEMI_FINAL', position: 0, createdAt: now },
+            { id: idsForNodes.sf[1], competitionId, competition, sport, title: 'Semi-Final 2', matchId: null, nextMatchId: idsForNodes.final, loserNextMatchId: idsForNodes.third, homeTeamId: null, awayTeamId: null, homeScore: null, awayScore: null, status: 'PENDING', round: 'SEMI_FINAL', position: 1, createdAt: now },
+            { id: idsForNodes.third, competitionId, competition, sport, title: '3rd Place Playoff', matchId: null, nextMatchId: null, loserNextMatchId: null, homeTeamId: null, awayTeamId: null, homeScore: null, awayScore: null, status: 'PENDING', round: 'THIRD_PLACE', position: 0, createdAt: now },
+            { id: idsForNodes.final, competitionId, competition, sport, title: 'Final', matchId: null, nextMatchId: null, loserNextMatchId: null, homeTeamId: null, awayTeamId: null, homeScore: null, awayScore: null, status: 'PENDING', round: 'FINAL', position: 0, createdAt: now },
+        ];
 
-    await db.insert(bracketNodes).values(nodeRows);
+        await tx.insert(bracketNodes).values(nodeRows);
+        return ids;
+    });
 
-    return { nodeIds: ids, qfMatchIds };
+    return { nodeIds: idsForNodes, qfMatchIds };
 }
 
 async function advanceTeamInto(nodeId: string, teamId: string) {
@@ -103,13 +110,28 @@ async function advanceTeamInto(nodeId: string, teamId: string) {
     // Idempotent-safe: a retry of the same finished match shouldn't double-place.
     if (target.homeTeamId === teamId || target.awayTeamId === teamId) return;
 
-    const slot: 'homeTeamId' | 'awayTeamId' | null = !target.homeTeamId ? 'homeTeamId' : (!target.awayTeamId ? 'awayTeamId' : null);
-    if (!slot) {
+    // BACKLOG-316: two feeder matches (e.g. both semifinals) finishing close
+    // together used to race here -- a plain select-decide-update let both
+    // calls read the node before either write landed, both claim the same
+    // "open" slot in JS, and one team silently drops out of the bracket. Let
+    // the DB arbitrate instead: a conditional UPDATE ... WHERE <slot> IS NULL
+    // only succeeds for whichever caller's write actually lands first.
+    let claimedSlot: 'homeTeamId' | 'awayTeamId' | null = null;
+    const homeClaim = await db.update(bracketNodes)
+        .set({ homeTeamId: teamId })
+        .where(and(eq(bracketNodes.id, nodeId), isNull(bracketNodes.homeTeamId)));
+    if (homeClaim.rowsAffected > 0) {
+        claimedSlot = 'homeTeamId';
+    } else {
+        const awayClaim = await db.update(bracketNodes)
+            .set({ awayTeamId: teamId })
+            .where(and(eq(bracketNodes.id, nodeId), isNull(bracketNodes.awayTeamId)));
+        if (awayClaim.rowsAffected > 0) claimedSlot = 'awayTeamId';
+    }
+    if (!claimedSlot) {
         console.error(`advanceTeamInto: bracket node ${nodeId} already has both teams filled, cannot place ${teamId}`);
         return;
     }
-
-    await db.update(bracketNodes).set({ [slot]: teamId }).where(eq(bracketNodes.id, nodeId));
 
     const updated = await db.select().from(bracketNodes).where(eq(bracketNodes.id, nodeId)).limit(1).then(r => r[0]!);
     if (updated.homeTeamId && updated.awayTeamId && !updated.matchId) {
@@ -118,6 +140,12 @@ async function advanceTeamInto(nodeId: string, teamId: string) {
         // can't be known until both semifinalists/finalists are determined by
         // actual results, so this uses "now" + a TBD venue and expects the
         // admin to correct it via the normal match-edit flow afterward.
+        //
+        // Same race shape as the slot-claim above: two concurrent callers can
+        // both observe "both teams known, no matchId yet" and both create a
+        // match row. The matchId write is the same conditional-UPDATE pattern;
+        // whichever caller loses that race deletes its own now-orphaned match
+        // row instead of leaving a phantom UPCOMING match nobody references.
         const newMatchId = `match_${nanoid()}`;
         await db.insert(matches).values({
             id: newMatchId,
@@ -134,7 +162,12 @@ async function advanceTeamInto(nodeId: string, teamId: string) {
             matchType: 'competition',
             round: updated.round,
         });
-        await db.update(bracketNodes).set({ matchId: newMatchId }).where(eq(bracketNodes.id, nodeId));
+        const matchIdClaim = await db.update(bracketNodes)
+            .set({ matchId: newMatchId })
+            .where(and(eq(bracketNodes.id, nodeId), isNull(bracketNodes.matchId)));
+        if (matchIdClaim.rowsAffected === 0) {
+            await db.delete(matches).where(eq(matches.id, newMatchId));
+        }
     }
 }
 
