@@ -7,10 +7,20 @@ import bcrypt from 'bcryptjs';
 import { generateToken, normalizeUserRole } from '@/lib/auth';
 import { sql } from 'drizzle-orm';
 import { sendWelcomeEmail } from '@/lib/email';
+import { checkRateLimit } from '@/lib/rate-limit';
 
 // POST /api/auth/register - Register new user
 export async function POST(request: NextRequest) {
     try {
+        // BACKLOG-080: prevents bulk/scripted account-creation spam.
+        const rl = await checkRateLimit(request, { max: 5, windowMs: 15 * 60 * 1000 });
+        if (rl.limited) {
+            return NextResponse.json(
+                { error: 'Too many attempts. Please try again shortly.', code: 'AUTH_RATE_LIMITED' },
+                { status: 429, headers: { 'Retry-After': String(rl.retryAfterSeconds) } }
+            );
+        }
+
         const body = await request.json();
         let { email, password, name } = body;
         const role = normalizeUserRole('user');

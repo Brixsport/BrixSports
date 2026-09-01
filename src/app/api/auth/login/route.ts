@@ -5,10 +5,21 @@ import { eq } from 'drizzle-orm';
 import bcrypt from 'bcryptjs';
 import { generateToken, normalizeUserRole } from '@/lib/auth';
 import { sql } from 'drizzle-orm';
+import { checkRateLimit } from '@/lib/rate-limit';
 
 // POST /api/auth/login - Authenticate user
 export async function POST(request: NextRequest) {
     try {
+        // BACKLOG-080: same 5/15min shape as loggers/auth/route.ts's established
+        // pattern (BUG-053) -- brute-force/credential-stuffing mitigation.
+        const rl = await checkRateLimit(request, { max: 5, windowMs: 15 * 60 * 1000 });
+        if (rl.limited) {
+            return NextResponse.json(
+                { error: 'Too many login attempts. Please try again shortly.', code: 'AUTH_RATE_LIMITED' },
+                { status: 429, headers: { 'Retry-After': String(rl.retryAfterSeconds) } }
+            );
+        }
+
         const body = await request.json();
         let { email, password } = body;
 

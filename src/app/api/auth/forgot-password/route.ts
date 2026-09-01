@@ -6,10 +6,21 @@ import crypto from 'crypto';
 import { nanoid } from 'nanoid';
 import { sendPasswordResetEmail } from '@/lib/email';
 import bcrypt from 'bcryptjs';
+import { checkRateLimit } from '@/lib/rate-limit';
 
 // POST /api/auth/forgot-password - Request password reset
 export async function POST(request: NextRequest) {
     try {
+        // BACKLOG-080: prevents email-bombing a victim and throttles the
+        // user-existence enumeration surface (timing/response-shape attacks).
+        const rl = await checkRateLimit(request, { max: 5, windowMs: 15 * 60 * 1000 });
+        if (rl.limited) {
+            return NextResponse.json(
+                { error: 'Too many requests. Please try again shortly.' },
+                { status: 429, headers: { 'Retry-After': String(rl.retryAfterSeconds) } }
+            );
+        }
+
         const body = await request.json();
         const { email } = body;
 
@@ -98,6 +109,15 @@ export async function POST(request: NextRequest) {
 // GET /api/auth/forgot-password - Verify reset token
 export async function GET(request: NextRequest) {
     try {
+        // BACKLOG-080: throttles reset-token guessing attempts.
+        const rl = await checkRateLimit(request, { max: 20, windowMs: 15 * 60 * 1000 });
+        if (rl.limited) {
+            return NextResponse.json(
+                { error: 'Too many requests. Please try again shortly.' },
+                { status: 429, headers: { 'Retry-After': String(rl.retryAfterSeconds) } }
+            );
+        }
+
         const { searchParams } = new URL(request.url);
         const token = searchParams.get('token');
 
@@ -144,6 +164,15 @@ export async function GET(request: NextRequest) {
 // PATCH /api/auth/forgot-password - Reset password with token
 export async function PATCH(request: NextRequest) {
     try {
+        // BACKLOG-080: throttles reset-token guessing / brute-force on this write path.
+        const rl = await checkRateLimit(request, { max: 5, windowMs: 15 * 60 * 1000 });
+        if (rl.limited) {
+            return NextResponse.json(
+                { error: 'Too many requests. Please try again shortly.' },
+                { status: 429, headers: { 'Retry-After': String(rl.retryAfterSeconds) } }
+            );
+        }
+
         const body = await request.json();
         const { token, newPassword } = body;
 
