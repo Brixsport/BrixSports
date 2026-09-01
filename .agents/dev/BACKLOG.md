@@ -6758,15 +6758,18 @@ No `clearTimeout` exists anywhere in the file. The effect that sets `stateManage
 
 ### BACKLOG-160 — Player Discovery Gaps: Broken Inline Compare Tab, No Player Listing Page, Two Dead `/players` Links
 
-**Status:** OPEN — found session 47D, not fixed
+**Status:** Findings 1 and 3 RESOLVED 2026-09-01. Finding 2 explicitly deferred (Richard's call — "technically not needed lowkey").
 **Priority:** MEDIUM
 
 **Findings, bundled (same investigation area):**
-1. **The inline "Compare" tab on a player's own profile page (`src/app/players/[id]/page.tsx`) is broken — always returns zero results.** It calls `/api/search?q=...&type=players&limit=10`, but `src/app/api/search/route.ts` reads the category filter from a param named `category`, not `type` — so the filter is silently ignored and every category branch runs. Worse, the response shape is `{ results: { players: [...] } }` but the handler reads `data.players` directly (always `undefined`), so `setSearchResults(data.players || [])` always sets an empty array regardless of query. The **dedicated** `/players/compare` page works correctly (right param name, right response shape) — only the inline tab variant is broken.
-2. **No player listing/directory page exists.** `src/app/players/` contains only `[id]/page.tsx` and `compare/page.tsx` — there is no `src/app/players/page.tsx`, so there's no way to browse/filter the full roster as its own destination (unlike `/teams`, which has one).
-3. **Two dead links to the nonexistent `/players` route, both 404** — `src/app/favourites/page.tsx:119` ("Back" link from an empty favourites state) and `src/app/players/compare/page.tsx:222` ("Back to Players").
+1. **The inline "Compare" tab on a player's own profile page — RESOLVED, but not by this session.** Re-checked the current code (the page has since been split into `PlayerDetailClient.tsx`) before touching anything: already fixed, with its own `BACKLOG-254` comment in place — correct `category=players` param, correct `data.results?.players` read. Side effect of `BACKLOG-254`'s earlier UI sweep, not separately tracked at the time. Nothing to do.
+2. **No player listing/directory page exists.** Still true, still open. **Deferred, Richard's explicit call this session** — not needed right now. Revisit if `/players` browsability becomes a real ask.
+3. **Two dead links to the nonexistent `/players` route — RESOLVED 2026-09-01.** `src/app/favourites/page.tsx`'s "Browse Players" now points to `/players/compare` (a real working page with its own search UI — chosen over the originally-suggested `/search?category=players` because `/search` requires typing a query first and doesn't do anything useful with a bare `category` param on load; `/players/compare` renders a real empty-state search immediately). `src/app/players/compare/page.tsx`'s own "Back to Players" link (pointing at itself would be circular, not a fix) now points home (`/`), relabeled "Back".
 
-**Fix (not built):** fix the inline Compare tab's param name (`type` → `category`) and response-shape read (`data.players` → `data.results.players`) to match the working dedicated page; build a `src/app/players/page.tsx` listing page (or point the two dead links somewhere real, like `/search?category=players`, as a cheaper interim fix).
+**Evidence (findings 1 & 3):**
+- Commits: (pending — see next commit)
+- Verified by: `tsc --noEmit` clean (18-error baseline, zero new in any touched file). Finding 1 confirmed already-fixed by direct code read, not re-tested live (no code change made). Finding 3 verified by direct read of both link targets — not live-clicked this session.
+- Pending items: none for findings 1/3. Finding 2 remains open, deferred.
 
 **Found:** session 47D, by a background audit agent doing a full read-only trace of the player/team/competition data system.
 
@@ -9954,13 +9957,22 @@ Fixed exactly per the "Fix (not built)" plan below: `MatchStatusBadge.tsx` now d
 
 ### BACKLOG-301 — Missing Screen: Unified Favorites Hub
 
-**Status:** OPEN — genuine IA gap, absent from the Figma catalog too (not something Figma already speced and the audit missed).
+**Status:** SHIPPED 2026-09-01, staging live-test pending. Built without waiting on `BACKLOG-289` (Richard's explicit call) — see below for how the dependency was actually resolved.
 **Priority:** MEDIUM.
 **Problem:** favoriting exists as scattered, disconnected UI — a star icon on competition-directory rows (Figma `2168:1495`, backed by the already-existing generic `userFavorites` table, see `BACKLOG-284`), and a `FAVORITES` filter pill on the home match feed. There is no single screen showing everything a user has favorited (teams, competitions, players) across the app. A user who favorites a team from a future team-detail page has no path back to a consolidated favorites list — each favorite type is only visible from wherever it was favorited.
-**Scope (not yet designed against a Figma spec — this is new, not a reskin):** one screen, tabbed or sectioned by favorite type (Teams / Competitions / Players), reading from the existing `userFavorites` table (`favoriteType`/`favoriteId`, `src/db/schema.ts` line 522) — no schema change needed, matches `BACKLOG-284`'s finding that the backend already supports generic favoriting.
-**Depends on:** `BACKLOG-289` (reuses its favoriting wiring on the competitions directory as the first real consumer of `userFavorites`).
+**Originally filed depending on `BACKLOG-289`** (the not-yet-built Competitions Directory screen), for reuse of its favoriting wiring. Re-examined before building: `/favourites/page.tsx` already exists and is already ~80% of a real hub (Teams + Players sections, reading via `useFavorites.ts`, which already syncs to the real `userFavorites` table via `/api/users/favorites` for logged-in users, `localStorage` fallback for anonymous). The only real gap was Competitions — no live UI anywhere lets a user favorite one, and the hub had no section for it. Built directly against the existing `/competitions` page (also already live) as the favoriting entry point instead of waiting on `BACKLOG-289`'s not-yet-built directory screen — same end result (a real place to star a competition), no new screen required, `BACKLOG-289` can still supersede this entry point later without needing to touch `/favourites` or `useFavorites.ts` again.
+**Built:**
+- `src/hooks/useFavorites.ts` — added `favoriteCompetitions`/`toggleCompetition`/`isFavoriteCompetition`, exact mirror of the existing team/player pattern (optimistic update, `localStorage` write, DB sync via `/api/users/favorites` when logged in).
+- `src/app/api/users/favorites/route.ts` — **fixed a real bug found while wiring this up**: the GET handler's `competition` case never looked anything up, it echoed the raw `favoriteId` back as `{ name: fav.favoriteId, type: 'competition' }` — every other favorite type (team/player/match) did a real DB lookup, competition was the one exception. Now does the same `db.select().from(competitions).where(eq(competitions.id, ...))` lookup as the others.
+- `src/app/competitions/page.tsx` — star toggle button next to the competition title, wired to `toggleCompetition(selectedComp.id)`.
+- `src/app/favourites/page.tsx` — new "Favorite Competitions" section (same card style as Teams/Players), fetches each favorited competition via `GET /api/competitions/[id]`, links to `/competitions/[id]/standings`. Header count and empty-state check updated to include competitions.
 
-**Found:** session 61, 2026-08-27, UI/UX pass.
+**Evidence:**
+- Commit: (pending — see next commit)
+- Verified by: `tsc --noEmit` clean (18-error baseline, zero new in any of the 4 touched files). Not yet live-clicked (star toggle → DB write → hub display round-trip) — code-reviewed directly against the existing, already-verified team/player pattern this mirrors.
+- Pending items: live-verify the full round-trip on staging — star a real competition as a real logged-in user, confirm it persists (DB, not just optimistic local state) and shows up on `/favourites`.
+
+**Found:** session 61, 2026-08-27, UI/UX pass. **Built:** session `brixsports-v2-ea`, 2026-09-01.
 
 ---
 

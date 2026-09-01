@@ -2,21 +2,22 @@
 
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Heart, Users, Calendar, TrendingUp, Star } from 'lucide-react';
+import { Heart, Users, Calendar, TrendingUp, Star, Trophy } from 'lucide-react';
 import { useFavorites } from '@/hooks/useFavorites';
 import Link from 'next/link';
 import Image from 'next/image';
 
 export default function FavouritesPage() {
-    const { favoriteTeams, favoritePlayers } = useFavorites();
+    const { favoriteTeams, favoritePlayers, favoriteCompetitions } = useFavorites();
     const [teams, setTeams] = useState<any[]>([]);
     const [players, setPlayers] = useState<any[]>([]);
+    const [competitions, setCompetitions] = useState<any[]>([]);
     const [upcomingMatches, setUpcomingMatches] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
         fetchFavoriteData();
-    }, [favoriteTeams, favoritePlayers]);
+    }, [favoriteTeams, favoritePlayers, favoriteCompetitions]);
 
     const fetchFavoriteData = async () => {
         setLoading(true);
@@ -43,6 +44,23 @@ export default function FavouritesPage() {
                     })
                 );
                 setPlayers(playersData.filter(Boolean));
+            }
+
+            // Fetch favorite competitions
+            if (favoriteCompetitions.length > 0) {
+                const competitionsData = await Promise.all(
+                    favoriteCompetitions.map(async (competitionId) => {
+                        const res = await fetch(`/api/competitions/${competitionId}`);
+                        if (res.ok) {
+                            const data = await res.json();
+                            return data.competition || null;
+                        }
+                        return null;
+                    })
+                );
+                setCompetitions(competitionsData.filter(Boolean));
+            } else {
+                setCompetitions([]);
             }
 
             // Fetch upcoming matches for favorite teams
@@ -75,7 +93,7 @@ export default function FavouritesPage() {
         );
     }
 
-    const isEmpty = teams.length === 0 && players.length === 0;
+    const isEmpty = teams.length === 0 && players.length === 0 && competitions.length === 0;
 
     return (
         <div className="min-h-screen bg-[#050505] text-white pb-24 md:pb-12">
@@ -89,7 +107,7 @@ export default function FavouritesPage() {
                                 Favourites
                             </h1>
                             <p className="text-sm text-white/60 mt-1">
-                                {teams.length} teams • {players.length} players
+                                {teams.length} teams • {players.length} players • {competitions.length} competitions
                             </p>
                         </div>
                     </div>
@@ -116,7 +134,7 @@ export default function FavouritesPage() {
                                 Browse Teams
                             </Link>
                             <Link
-                                href="/players"
+                                href="/players/compare"
                                 className="px-6 py-3 bg-white/10 text-white rounded-xl font-bold hover:bg-white/20 transition-colors"
                             >
                                 Browse Players
@@ -195,6 +213,35 @@ export default function FavouritesPage() {
                                                         </div>
                                                     </div>
                                                 )}
+                                            </div>
+                                        </Link>
+                                    ))}
+                                </div>
+                            </section>
+                        )}
+
+                        {/* Favorite Competitions */}
+                        {competitions.length > 0 && (
+                            <section>
+                                <div className="flex items-center gap-2 mb-4">
+                                    <Trophy size={18} className="text-primary" />
+                                    <h2 className="text-xl font-bold uppercase tracking-wider">
+                                        Favorite Competitions ({competitions.length})
+                                    </h2>
+                                </div>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    {competitions.map((competition) => (
+                                        <Link
+                                            key={competition.id}
+                                            href={`/competitions/${competition.id}/standings`}
+                                            className="bg-white/5 hover:bg-white/10 border border-white/10 hover:border-primary/50 rounded-xl p-4 transition-all group flex items-center gap-4"
+                                        >
+                                            <div className="w-12 h-12 bg-primary/20 rounded-xl flex items-center justify-center shrink-0">
+                                                <Trophy size={20} className="text-primary" />
+                                            </div>
+                                            <div className="flex-1 min-w-0">
+                                                <h3 className="font-bold text-sm uppercase tracking-wider truncate">{competition.name}</h3>
+                                                <p className="text-xs text-white/40">{competition.sport || 'Multi-Sport'}</p>
                                             </div>
                                         </Link>
                                     ))}
