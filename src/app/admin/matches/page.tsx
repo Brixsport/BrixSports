@@ -110,6 +110,10 @@ function AdminMatchesPageContent() {
         round: '',
         groupName: '',
         matchday: null as number | null,
+        // BACKLOG-153: score-correction fields, edit modal only -- Create always
+        // forces 0-0 (handleSubmit), these only matter once openEditModal populates them.
+        homeScore: 0,
+        awayScore: 0,
         // Per-match overrides — null means "use competition match settings"
         extraTimeEnabledOverride: null as boolean | null,
         penaltiesEnabledOverride: null as boolean | null,
@@ -263,6 +267,8 @@ function AdminMatchesPageContent() {
                     round: '',
                     groupName: '',
                     matchday: null,
+                    homeScore: 0,
+                    awayScore: 0,
                     extraTimeEnabledOverride: null,
                     penaltiesEnabledOverride: null,
                     allowDrawsOverride: null,
@@ -335,6 +341,8 @@ function AdminMatchesPageContent() {
             round: match.round || '',
             groupName: match.groupName || '',
             matchday: match.matchday || null,
+            homeScore: match.homeScore ?? 0,
+            awayScore: match.awayScore ?? 0,
             extraTimeEnabledOverride: null,
             penaltiesEnabledOverride: null,
             allowDrawsOverride: null,
@@ -387,7 +395,9 @@ function AdminMatchesPageContent() {
                             competitionLevel: formData.competitionLevel as any,
                             friendlyType: formData.friendlyType as any,
                             friendlyDescription: formData.friendlyDescription,
-                            startTime: new Date(formData.startTime).toISOString()
+                            startTime: new Date(formData.startTime).toISOString(),
+                            homeScore: formData.homeScore,
+                            awayScore: formData.awayScore,
                         }
                         : m
                 ));
@@ -909,6 +919,31 @@ function AdminMatchesPageContent() {
                                         onChange={(e) => setFormData({ ...formData, venue: e.target.value })}
                                         className="w-full bg-[#121212] border border-white/10 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-primary transition-colors text-white placeholder-white/20"
                                         placeholder="Venue name"
+                                    />
+                                </div>
+                                <div>
+                                    {/* BACKLOG-153: admin had no way to correct a bad live score --
+                                        PATCH /api/matches/[id] already accepted homeScore/awayScore,
+                                        this UI just never exposed it. */}
+                                    <label className="block text-[10px] font-black uppercase tracking-widest text-white/40 mb-2">{getTeamDisplay(editingMatch, 'home')} Score</label>
+                                    <input
+                                        type="number"
+                                        min={0}
+                                        step={1}
+                                        value={formData.homeScore}
+                                        onChange={(e) => setFormData({ ...formData, homeScore: Math.max(0, parseInt(e.target.value, 10) || 0) })}
+                                        className="w-full bg-[#121212] border border-white/10 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-primary transition-colors text-white"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-[10px] font-black uppercase tracking-widest text-white/40 mb-2">{getTeamDisplay(editingMatch, 'away')} Score</label>
+                                    <input
+                                        type="number"
+                                        min={0}
+                                        step={1}
+                                        value={formData.awayScore}
+                                        onChange={(e) => setFormData({ ...formData, awayScore: Math.max(0, parseInt(e.target.value, 10) || 0) })}
+                                        className="w-full bg-[#121212] border border-white/10 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-primary transition-colors text-white"
                                     />
                                 </div>
                             </div>
