@@ -7,7 +7,6 @@ import { nanoid } from 'nanoid';
 import { getAuthUser } from '@/lib/auth';
 import { broadcastMatchEvent, broadcastScoreUpdate, broadcastGlobalNotification } from '@/lib/socket';
 import { SCORING_POINT_VALUES } from '@/lib/scoring';
-import { calculateAndSaveRatings } from '@/lib/ratingsService';
 import { sendMatchEventNotification } from '@/lib/notifications/match-notification-service';
 import { getNotifiableEventType } from '@/lib/notifications/notification-rules';
 import { getCurrentSeason } from '@/lib/rosterService';
@@ -438,31 +437,21 @@ export async function POST(
             await updatePlayerStats(match.sport, relatedPlayerId, 'Save', match.competitionId, value);
         }
 
-        // Auto-calculate ratings after event (for live matches). Wrapped in after(),
-        // same reasoning as the broadcast calls above: this used to be a synchronous
-        // await sitting between the DB write and the response, so it delayed not just
-        // the response to the logger but also when the after()-scheduled broadcast
-        // above could even start (after() callbacks don't run until this handler's
-        // own promise resolves). Real contributor to BUG-119's remaining latency.
-        // BACKLOG-124: this used to be an HTTP self-fetch to this route's own
-        // /ratings sibling, forwarding no Cookie/Authorization header -- it 401'd and
-        // was silently swallowed on every single live event, so auto-ratings had
-        // never actually run live since this feature was written. That same
-        // self-fetch was also the exact trigger for a local-dev hang (a genuine
-        // outbound HTTPS request to a real deployed NEXT_PUBLIC_APP_URL from within
-        // the same process handling the original request). Calling the shared
-        // function directly (src/lib/ratingsService.ts) removes the HTTP round-trip
-        // entirely -- this code only runs once `authUser.role` has already been
-        // verified as admin/logger above, so there's no auth to forward or re-check.
-        if (match.status === 'LIVE') {
-            after(async () => {
-                try {
-                    await calculateAndSaveRatings(matchId);
-                } catch (error) {
-                    console.error('Error auto-calculating ratings:', error);
-                }
-            });
-        }
+        // BACKLOG-255: no longer auto-calculating ratings on every single live event.
+        // This used to run calculateAndSaveRatings() (a sequential SELECT+UPDATE per
+        // rated player) on every LIVE-status event -- a real, unmeasured contributor
+        // to Flow B's ~9.9s latency (readiness checklist). Ratings now recalculate
+        // once, on the match's FINISHED transition (src/app/api/matches/[id]/route.ts),
+        // plus on-demand via the existing admin "Calculate Ratings" button
+        // (POST /api/matches/[id]/ratings, admin/match-ratings/[id]/page.tsx) -- both
+        // already call the same shared calculateAndSaveRatings(). Known, accepted
+        // side effect (architect's Q2 recommendation, not an oversight): the match
+        // detail page's Lineups tab reads playerRatings (finalRating ?? autoRating,
+        // matches/[id]/route.ts:~483) without a status gate, so a LIVE match's
+        // displayed ratings now stay at their last-computed value (initialize/route.ts's
+        // 6.0 default, if never manually recalculated) for the rest of the match
+        // instead of updating after every event -- only FINISHED or a manual admin
+        // recalculation refreshes them. Traded deliberately for Flow B latency.
 
         return NextResponse.json({
             success: true,

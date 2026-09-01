@@ -16,6 +16,7 @@ import { sendMatchEventNotification } from '@/lib/notifications/match-notificati
 import { getNotifiablePeriodType } from '@/lib/notifications/notification-rules';
 import { recalculateStandingsForMatch } from '@/lib/standingsService';
 import { advanceBracketForMatch } from '@/lib/bracketService';
+import { calculateAndSaveRatings } from '@/lib/ratingsService';
 import { requiresDecisiveResult } from '@/lib/matchRules';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { safeParseEventValue } from '@/lib/eventValue';
@@ -783,6 +784,24 @@ export async function PATCH(
                     await advanceBracketForMatch(matchId);
                 } catch (error) {
                     console.error('Error advancing bracket:', error);
+                }
+            });
+
+            // BACKLOG-255: ratings now recalculate once, here, on the FINISHED
+            // transition -- own try/catch, own after() call, same isolation
+            // pattern as standings/bracket above so a ratings failure can never
+            // block or break either of those. Replaces the old per-live-event
+            // trigger (events/route.ts), which ran calculateAndSaveRatings on
+            // every single event and was a real, unmeasured contributor to Flow
+            // B's ~9.9s latency. No-ops (throws, caught here) for a match with
+            // no published lineups or an unsupported sport (still just
+            // football/basketball -- see ratingsService.ts) -- both pre-existing,
+            // expected conditions, not new failure modes introduced here.
+            after(async () => {
+                try {
+                    await calculateAndSaveRatings(matchId);
+                } catch (error) {
+                    console.error('Error calculating ratings on FINISHED transition:', error);
                 }
             });
         }
