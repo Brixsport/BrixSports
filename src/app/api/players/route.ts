@@ -73,6 +73,9 @@ export async function GET(request: Request) {
         const department = searchParams.get('department');
         const college = searchParams.get('college');
         const university = searchParams.get('university');
+        // BACKLOG-161: /xi's player picker had no sport filter, letting a
+        // viewer mix football and basketball players into one "team".
+        const sport = searchParams.get('sport');
         // BACKLOG-283: default stays 500 (the pre-existing safety cap), NOT
         // 50 -- admin/past-matches/import/page.tsx calls this bare expecting
         // the full 309-player roster, and other pages may too. Only a caller
@@ -138,6 +141,12 @@ export async function GET(request: Request) {
                 college: college ?? undefined,
                 department: department ?? undefined,
             }));
+        }
+
+        if (sport) {
+            enrichedPlayers = enrichedPlayers.filter((player) =>
+                getPrimaryTeam(player)?.sport?.toLowerCase() === sport.toLowerCase()
+            );
         }
 
         if (search) {

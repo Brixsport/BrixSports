@@ -6777,13 +6777,18 @@ No `clearTimeout` exists anywhere in the file. The effect that sets `stateManage
 
 ### BACKLOG-161 — Minor Data/Discoverability Findings (Bundled, Low Priority)
 
-**Status:** OPEN — found session 47D, not fixed
+**Status:** Finding 3's sport-awareness gap RESOLVED 2026-09-01. Findings 1 and 2 remain open — no concrete fix was ever prescribed for either, both are informational/design gaps, not bugs with an obvious action.
 **Priority:** LOW
 
 **Findings, bundled:**
-1. **The `headToHead` table's write path is entirely dead.** `POST /api/head-to-head` (its only writer) is never called anywhere in the app — not by any admin page, the match-finalization path, or any live script. `GET /api/head-to-head` correctly falls back to computing head-to-head stats live from the last 5 finished matches when no stored row exists (`calculateH2HStats`), which is why the feature still works end to end today — but that fallback only looks at the last 5 matches, so a long rivalry's true all-time record (which the dedicated table's schema clearly intends to track) is never actually shown, only a recent-form snapshot.
-2. **`/stats` is a team-only stats page despite the name** — the actual player leaderboards (goals/assists/points/rebounds/power-ranking) live inside the football/basketball hub pages' STATS tabs instead. Pure information-architecture/discoverability gap, not a broken feature.
-3. **`/xi` ("Build Your XI") has no sport-awareness in its player picker** — `GET /api/players?limit=100` with no sport/team filter means a viewer could technically build a "team" mixing football and basketball players. Its displayed team rating also reads the same dead `players.rating` field as `BACKLOG-159`. Low severity — this is a fan-engagement feature, not officiating-critical, and already has its own auth gap tracked (`BUG-037`, OPEN, not part of the `BUG-147` sweep).
+1. **The `headToHead` table's write path is entirely dead.** `POST /api/head-to-head` (its only writer) is never called anywhere in the app — not by any admin page, the match-finalization path, or any live script. `GET /api/head-to-head` correctly falls back to computing head-to-head stats live from the last 5 finished matches when no stored row exists (`calculateH2HStats`), which is why the feature still works end to end today — but that fallback only looks at the last 5 matches, so a long rivalry's true all-time record (which the dedicated table's schema clearly intends to track) is never actually shown, only a recent-form snapshot. Still open — wiring a real write path (when should it fire? recompute on every match finish?) is a real design decision, not a quick fix.
+2. **`/stats` is a team-only stats page despite the name** — the actual player leaderboards (goals/assists/points/rebounds/power-ranking) live inside the football/basketball hub pages' STATS tabs instead. Pure information-architecture/discoverability gap, not a broken feature. Still open, no action taken — likely reshaped by `BACKLOG-290`'s planned `/football`+`/basketball` → `/competitions` consolidation anyway, not worth touching in isolation first.
+3. **`/xi` ("Build Your XI") has no sport-awareness in its player picker — RESOLVED 2026-09-01.** `GET /api/players` gained an optional `sport` filter (`src/app/api/players/route.ts`, matches via `getPrimaryTeam(player)?.sport` — additive, backward-compatible, no existing caller affected since it only filters when passed). `/xi/page.tsx`'s player fetch now passes `sport=Football`, since every formation this page supports (4-4-2/4-3-3/3-5-2, GK/CB/CM/ST-style positions) is football-only anyway — a basketball player never belonged in these slots. The displayed team-rating tile still reads the dead `players.rating` field (`BACKLOG-159`) — deliberately not touched here, that's its own deferred item, not part of this fix.
+
+**Evidence (finding 3):**
+- Commit: (pending — see next commit)
+- Verified by: `tsc --noEmit` clean (18-error baseline + 1 unrelated transient `.next/types` build-artifact line, zero in either touched file).
+- Pending items: not live-clicked this session (checked cross-session first whether `/xi` was in scope for another session's Figma/UI lineup work before touching it — confirmed clear to proceed).
 
 **Found:** session 47D, by a background audit agent doing a full read-only trace of the player/team/competition data system.
 
