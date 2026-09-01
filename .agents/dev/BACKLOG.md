@@ -4822,11 +4822,18 @@ Configure HTTP security headers in next.config.ts: Content-Security-Policy, X-Fr
 
 ### BACKLOG-080 — Rate Limiting: Auth Endpoints
 
-**Status:** OPEN
+**Status:** SHIPPED — 2026-09-01. Code committed, not yet live-tested against a deployed environment — do not treat as RESOLVED until that's done.
 **Priority:** High
 **Filed:** 2026-06-17
 
-/api/auth/login, /api/auth/register, /api/auth/forgot-password have no rate limiting. Brute-force and credential-stuffing attacks are unmitigated. Implement IP-based rate limiting (Upstash or middleware-level) before public launch.
+**Fix:** `login`, `register`, and all three `forgot-password` handlers (POST/GET/PATCH) now call `checkRateLimit()` — 5 attempts/15min on login, register, forgot-password POST and PATCH; 20/15min on forgot-password's GET (token verification, lighter-weight). Same limits/shape as the existing `loggers/auth/route.ts` precedent (`BUG-053`).
+
+**Also changed as part of this fix, not scope creep — required by the migration itself:** `src/lib/rate-limit.ts`'s `checkRateLimit()` is now Upstash-backed (item 15's plan from the `BACKLOG-087` deferral note, below) when `UPSTASH_REDIS_REST_URL`/`_TOKEN` are set, with the original in-memory `Map` kept as a fallback for local dev and Redis-outage resilience. Upstash's REST client is inherently async, so the function itself had to become `async` — this forced updating all 9 pre-existing call sites (`matches`, `matches/[id]`, `competitions`, `competitions/register`, `players`, `search`, `teams`, `news`, `livestreams/active`) to `await` it. No behavior change for any of those 9 routes. While rewriting the bucket key, also fixed a real latent bug: the old Map was keyed by IP alone, so two routes with different limits sharing a visitor's IP shared one counter — now keyed by `ip:max:windowMs`.
+
+**Evidence:**
+- Commits: `57ca540` (deps + env), `45a29ea` (rate-limit.ts async/Upstash migration), `9d20d1d` (auth routes)
+- Verified by: `tsc --noEmit` clean of new errors (35 pre-existing `src/db/*`/`squads` baseline errors, zero in any touched file). Local dev server did not come up cleanly this session (custom `server.js`, unrelated to this change) — live 429 verification deferred to staging once deployed.
+- Pending items: live-test against staging (6 rapid POSTs to `/api/auth/login` with a bad credential, confirm the 6th returns 429 with a `Retry-After` header) once this reaches `staging.brixsports.com`. Confirm whether staging's Vercel project has `UPSTASH_REDIS_REST_URL`/`_TOKEN` set (only `.env.production` has them locally as of this session) — if not, staging will exercise the in-memory fallback path, not the real Upstash path.
 
 ---
 
@@ -8350,15 +8357,15 @@ Live-reproduced exactly as described: navigated to a real match's URL that had j
 
 ### Items 14-15 — `POST /api/competitions/register` Rate Limit + Redis/Upstash Limiter Plan
 
-**Status:** Item 14 RESOLVED, item 15 planned-not-built — 2026-08-21 (session 53, resequenced defer list).
+**Status:** Item 14 RESOLVED (2026-08-21, session 53). **Item 15 SHIPPED 2026-09-01** — Richard provisioned an Upstash account and added `UPSTASH_REDIS_REST_URL`/`_TOKEN` to `.env.production`; the plan below was executed as part of `BACKLOG-080`. Not yet live-tested against a deployed environment (see `BACKLOG-080`'s own evidence block) — do not treat as RESOLVED until that's done.
 
 **Item 14:** `src/app/api/competitions/register/route.ts`'s `POST` had a comment reading literally "Rate limiting needed (BACKLOG)" — a public, unauthenticated, self-registration write endpoint with real registration-spam risk, out of scope for item 10 (which targeted public GETs only). **Fix:** `checkRateLimit(request, { max: 10, windowMs: 60_000 })` — tighter than the GET default, since this is a write with no account requirement. Same known in-memory-per-instance limitation as every other route this session touched — not re-documented per-route, see `rate-limit.ts`'s own doc comment.
 
-**Item 15 — real Redis/Upstash-backed limiter:** genuine infrastructure work requiring an actual Upstash account and its credentials, neither of which exist in this codebase today (confirmed via grep — zero references to `upstash`/`redis` anywhere in `.env.local`, `.env.example`, or `package.json`). Not attempted — building a fake/non-functional stand-in would be worse than leaving the honest gap documented. **Concrete plan, ready to execute once Richard provisions an Upstash account:**
-1. `npm install @upstash/ratelimit @upstash/redis` (exact-pinned versions, verified on npmjs.com first per standing rule).
-2. Add `UPSTASH_REDIS_REST_URL`/`UPSTASH_REDIS_REST_TOKEN` to `env.ts` + `.env.example` (never read `process.env` directly in `src/`, per this project's own rule).
-3. Replace `rate-limit.ts`'s in-memory `Map` with `@upstash/ratelimit`'s `Ratelimit.slidingWindow(...)` backed by the Redis client — same `checkRateLimit(request, opts)` call signature at every existing call site, so no changes needed to any of the 8 routes already wired to it.
-4. This is the one change that actually closes the warm-instance-pool weakness documented in item 10/`rate-limit.ts` — a shared external store means every Vercel instance sees the same counter, unlike the current per-instance `Map`.
+**Item 15 — real Redis/Upstash-backed limiter — SHIPPED:** executed exactly per the plan below, with one correction found during implementation — `checkRateLimit`'s signature could NOT stay unchanged as originally assumed (step 3 below). Upstash's REST client (`@upstash/ratelimit` + `@upstash/redis`) is inherently async/fetch-based; `checkRateLimit` had to become `async`, which meant updating all 9 (not 8 — the plan undercounted) pre-existing call sites to `await` it. No behavior change for any of them, just mechanical. Full detail and commit hashes in `BACKLOG-080`.
+1. ~~`npm install @upstash/ratelimit @upstash/redis` (exact-pinned versions, verified on npmjs.com first per standing rule).~~ Done — `2.0.8`/`1.38.3`.
+2. ~~Add `UPSTASH_REDIS_REST_URL`/`UPSTASH_REDIS_REST_TOKEN` to `env.ts` + `.env.example`~~ Done, as optional vars (not in `validateEnv()`'s required list — local dev has no Upstash creds and falls back to in-memory).
+3. ~~Replace `rate-limit.ts`'s in-memory `Map` with `@upstash/ratelimit`'s `Ratelimit.slidingWindow(...)`~~ Done — but NOT a same-signature drop-in as this plan assumed; see correction above. In-memory `Map` kept as a fallback (env unset, or a Redis call throws), not deleted.
+4. This is the one change that actually closes the warm-instance-pool weakness documented in item 10/`rate-limit.ts` — a shared external store means every Vercel instance sees the same counter, unlike the current per-instance `Map`. **Unconfirmed whether staging's Vercel project actually has the Upstash env vars set** — only `.env.production` has them as of this session; if staging doesn't, it'll silently run the in-memory fallback instead of exercising the real fix.
 
 **Evidence:** `tsc --noEmit` — 47 errors, zero new.
 
