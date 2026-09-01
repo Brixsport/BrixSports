@@ -10268,3 +10268,30 @@ All five fixed by converging onto `getClientErrorMessage` (1-3), an allowlist of
 **Found:** session `brixsports-v2-ab`, 2026-09-01.
 
 ---
+
+### BACKLOG-319 — Match Page Lineups Never Showed Real Ratings: Merge Logic Silently No-op'd on the Actual Saved Lineup Shape
+
+**Status:** SHIPPED 2026-09-01, staging live-test pending.
+**Priority:** HIGH — this is the exact gap Richard asked about directly ("ratings displaying on the match page??"), and real `player_ratings` rows already existed for the match used to confirm it — the pipeline computes real ratings, they just never reached the page.
+**Related but distinct from `BACKLOG-159`:** `159` is about `players.rating` (the profile-page field) being a dead, never-live-updated column. This is a separate bug in the *real* ratings pipeline's own delivery path to the match page's Lineups tab — the real pipeline works, this was purely a merge bug downstream of it.
+
+**Problem:** `src/app/api/matches/[id]/route.ts`'s GET handler already has a "merge updated ratings into lineups" step (queries `player_ratings` for the match, builds a `playerId -> rating` map, and is supposed to inject it into the response's `lineups.home`/`lineups.away`). It never actually worked, for two stacked reasons:
+1. **Shape mismatch.** A saved lineup (via Lineup Builder / `admin/match-lineups`) is stored as `{ formation, starters: [...], substitutes: [...], status, publishedBy, ... }` — an object, not a bare array of players. The merge's `updatePlayerRatings` started with `if (!Array.isArray(players)) return players;`, so it silently returned the object completely untouched on every real lineup, every time.
+2. **Key mismatch.** Even ignoring (1), the merge matched ratings via `ratingMap.has(p.id)` — but lineup entries only ever carry `playerId`, never `id`. So even a bare-array-shaped lineup would have matched nothing.
+
+Net effect: `MatchLineups.tsx` (the component the public `/matches/[id]` Lineups tab actually renders) always received `player.rating === undefined` for every player, regardless of whether real ratings existed in `player_ratings` for that match.
+
+**Confirmed live, not assumed:** queried a real FINISHED football match (`rdJN1-IQ9D0Rd4iziWNn0`) with a published lineup — `player_ratings` had real rows for its starters (`auto_rating` 6.2, 6.4, 7.7...). The saved `lineups` JSON confirmed the `{starters: [...]}` wrapper shape with no `rating` field on any player entry to begin with (by design — ratings are computed post-match, not stored in the lineup blob).
+
+**Fix:** `updatePlayerRatings` now handles both the real `{starters, substitutes}` shape and a bare-array shape (in case any legacy data uses that), applying the rating map to the players nested inside `.starters`/`.substitutes` when present. Keys off `p.playerId ?? p.id` instead of just `p.id`.
+
+**Deliberately scoped to just this wiring fix, not the lineup screen itself** — Richard's own call: the Lineup Builder / match-page lineup UI needs a broader rebuild later (tracked loosely under the existing `BACKLOG-220` architecture-cleanup entry), and this fix doesn't touch or depend on that — it's a pure backend data-merge correction. `MatchLineups.tsx` → `FullPitchLineups.tsx` → `ResponsivePitch.tsx` already read `player.rating` correctly and render a rating pill whenever it's a real number `> 0`; nothing on the frontend needed to change.
+
+**Evidence:**
+- Commit: (pending — see next commit)
+- Verified by: `tsc --noEmit` clean (18-error baseline, zero new). DB-confirmed real `player_ratings` rows exist for the test match before the fix. Live staging re-fetch of `/api/matches/rdJN1-IQ9D0Rd4iziWNn0` pending.
+- Pending items: live-verify the API response actually carries real `rating` values post-fix, then visually confirm the rating pill renders on the real match page.
+
+**Found + Fixed:** session `brixsports-v2-ab`, 2026-09-01.
+
+---

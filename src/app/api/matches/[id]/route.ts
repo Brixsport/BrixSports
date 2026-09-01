@@ -464,12 +464,34 @@ export async function GET(
                         ratingMap.set(r.playerId, r.finalRating ?? r.autoRating);
                     });
 
-                    const updatePlayerRatings = (players: any[]) => {
-                        if (!Array.isArray(players)) return players;
-                        return players.map((p: any) => ({
-                            ...p,
-                            rating: ratingMap.has(p.id) ? ratingMap.get(p.id) : p.rating
-                        }));
+                    // BACKLOG-159-adjacent, found while wiring the ratings display:
+                    // saved lineups (Lineup Builder / admin/match-lineups) are stored
+                    // as { formation, starters: [...], substitutes: [...], ... }, not
+                    // a bare array -- the old `Array.isArray(players)` guard silently
+                    // no-op'd on every real lineup, so this merge never actually ran.
+                    // Also keyed off `p.id`, which lineup entries never carry (only
+                    // `p.playerId`) -- so even a bare-array shape would have matched
+                    // nothing. Confirmed live: player_ratings had real rows for a
+                    // finished match whose lineup showed no ratings at all.
+                    const applyRatings = (arr: any[]) =>
+                        arr.map((p: any) => {
+                            const pid = p.playerId ?? p.id;
+                            return {
+                                ...p,
+                                rating: ratingMap.has(pid) ? ratingMap.get(pid) : (p.rating ?? 0),
+                            };
+                        });
+
+                    const updatePlayerRatings = (entry: any) => {
+                        if (Array.isArray(entry)) return applyRatings(entry);
+                        if (entry && typeof entry === 'object') {
+                            return {
+                                ...entry,
+                                starters: Array.isArray(entry.starters) ? applyRatings(entry.starters) : entry.starters,
+                                substitutes: Array.isArray(entry.substitutes) ? applyRatings(entry.substitutes) : entry.substitutes,
+                            };
+                        }
+                        return entry;
                     };
 
                     if (lineups.home) {
