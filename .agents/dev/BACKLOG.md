@@ -10235,3 +10235,17 @@ All five fixed by converging onto `getClientErrorMessage` (1-3), an allowlist of
 **Found + Fixed:** session `brixsports-v2-39`/`-2d`, 2026-08-28. Two independent gates, both found live, neither assumed fixed until re-tested.
 
 ---
+
+### BACKLOG-318 — `/admin/settings`'s "Algorithm Configuration" Is Fully Disconnected From the Real Rating Calculator
+
+**Status:** OPEN — found session `brixsports-v2-ab`, 2026-09-01, answering Richard's direct question ("is the algorithm set from the settings").
+**Priority:** MEDIUM-HIGH — not a crash, but a real admin-facing feature that silently does nothing. An admin editing "Algorithm Configuration" reasonably believes they're changing how ratings are calculated; they aren't, at all.
+**Problem:** `/admin/settings` has a genuine, fully-functional "Algorithm Configuration" section (`src/app/admin/settings/page.tsx:163-173`) backed by 5 real, DB-persisted, editable `system_settings` rows (`src/app/api/admin/settings/route.ts:15-19`): `algorithm.eyepoint.weight` (default `0.5`), `algorithm.time.decay` (`0.02`), `algorithm.rating.baseline` (`7.0`), `algorithm.rating.max` (`10.0`), `algorithm.rating.min` (`1.0`). Saving these writes to the DB correctly — the settings CRUD itself works.
+**But `src/lib/ratingCalculator.ts`'s `RatingCalculator` class — the actual engine every real rating goes through (confirmed used by `ratingsService.ts`, `admin/match-ratings/[id]/page.tsx`, `ratings/adjust/route.ts`) — never reads `system_settings` at all.** Grepped every file referencing the `algorithm` settings category: only the settings page and the generic settings API touch it. The calculator hardcodes its own constants instead (`BASE_RATING = 6.0`, `MAX_RATING = 10.0`, `MIN_RATING = 1.0`, eye-point weight `stats.eyePoints * 0.4` capped at `1.5`) — and two of these don't even agree with the settings' own defaults (baseline `6.0` in code vs. `7.0` in settings; eye-point weight `0.4` in code vs. `0.5` in settings), which is itself evidence nobody has cross-checked these against each other since they were written.
+**Confirmed, not assumed:** read `ratingCalculator.ts` directly for every hardcoded constant, then grepped the whole `src/` tree for `category.*'algorithm'` / any read of these 5 setting keys outside the settings page + its own CRUD API. Zero hits in the calculation path.
+**Fix (not built):** either (a) wire `RatingCalculator` to actually read these 5 values (from `system_settings` directly, or via a small cached accessor, since this runs per-event/per-match, not per-request) and use them in place of the hardcoded constants, or (b) if the settings page was aspirational/never finished, remove it (or clearly mark it "not yet implemented") rather than leave it silently non-functional. Needs Richard's call on which — (a) is more work but delivers the feature the UI already promises; (b) is honest but removes a page that might be relied on for a planned future need.
+**Also worth checking while in this code, not confirmed either way:** whether `algorithm.time.decay` (`0.02`) has ANY real counterpart anywhere in the calculator's logic, hardcoded or not — not found in the read so far, flagged for whoever picks this up to confirm definitively.
+
+**Found:** session `brixsports-v2-ab`, 2026-09-01.
+
+---
