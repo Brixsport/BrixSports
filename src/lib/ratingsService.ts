@@ -5,6 +5,7 @@ import { eq, sql } from 'drizzle-orm';
 import { RatingCalculator, type PlayerStats } from '@/lib/ratingCalculator';
 import { getRatingConfig } from '@/lib/ratingConfig';
 import { calculateBasketballStatsFromEvents, calculateBasketballRating, type BasketballPlayerStats } from '@/lib/ratings/basketball';
+import { getMatchConfig } from '@/lib/matchConfig';
 
 // BACKLOG-124: this was previously only reachable via events/route.ts making an
 // internal HTTP self-fetch to POST /api/matches/[id]/ratings -- which forwarded no
@@ -95,6 +96,14 @@ export async function calculateAndSaveRatings(matchId: string) {
 
     const playerStats = new Map<string, { teamId: string; footballStats?: PlayerStats; basketballStats?: BasketballPlayerStats }>();
 
+    // BACKLOG-321 follow-up: real, admin-configurable match length (competition
+    // settings can override the 90-minute default) instead of a bare hardcoded
+    // 90 -- also the baseline a subbed-on player's partial minutes are computed
+    // against below. Fetched once per match, not per player. Basketball doesn't
+    // use minutesPlayed at all (no wired data source, per BACKLOG-255), so this
+    // is skipped for it.
+    const matchDuration = isBasketball ? 90 : (await getMatchConfig(matchId))?.config.matchDuration ?? 90;
+
     for (const lineupEntry of allPlayers) {
         const playerId = lineupEntry.playerId;
         if (!playerId) continue;
@@ -124,7 +133,23 @@ export async function calculateAndSaveRatings(matchId: string) {
         // assumed. Goals/shots/substitution detection below are fixed; every other
         // countByDetail(...) keyword here is unverified against real data and may have
         // the same class of bug (tracked separately, not blocking this fix).
+        //
+        // Substitution's playerId is the player going OUT, relatedPlayerId is the
+        // player coming IN (FootballLogger.tsx's confirmEvent('Substitution',
+        // playerComingOut, playerInId)). A player subbed off gets their real
+        // played-minutes and the early-sub penalty path; a player subbed ON gets
+        // matchDuration minus their entry minute -- NOT isSubstituted=true,
+        // deliberately: that flag drives the early-sub-off *penalty*
+        // (isSubstituted && minutesPlayed < 30), which is about being pulled early
+        // as a possible performance signal, not about entering late as a normal
+        // squad-rotation move. Leaving it false also correctly denies the
+        // full-match bonus (minutesPlayed >= 85 && !isSubstituted) since a
+        // late-entry player's own minutesPlayed will already be well under that
+        // threshold, without misapplying the unrelated penalty.
         const subOutEvent = playerEvents.find(e => e.type === 'Substitution');
+        const subInEvent = !subOutEvent
+            ? events.find(e => e.type === 'Substitution' && e.relatedPlayerId === playerId)
+            : undefined;
 
         const footballStats = {
             playerId,
@@ -144,25 +169,13 @@ export async function calculateAndSaveRatings(matchId: string) {
 
             saves: countByType('Save'),
             tackles: countByType('Tackle'),
-            tacklesMissed: countByDetail('missed tackle'),
             interceptions: countByType('Interception'),
             clearances: countByType('Clearance'),
             blocks: countByType('Block'),
 
-            passesCompleted: countByDetail('completed') + countByDetail('successful pass'),
-            passesFailed: countByDetail('failed pass') + countByDetail('incomplete'),
-            dribblesCompleted: countByDetail('successful dribble') + countByDetail('beat'),
-            dribblesFailed: countByDetail('failed dribble') + countByDetail('tackled'),
-
-            cornersWon: countByType('Corner') + countByDetail('won'),
-            cornersConceded: countByDetail('conceded corner'),
-            freeKicksWon: countByType('Free Kick') + countByDetail('fouled') + countByDetail('won free kick'),
-            freeKicksConceded: countByDetail('conceded free kick') + countByDetail('foul'),
-
             yellowCards: countByType('Yellow Card'),
             redCards: countByType('Red Card'),
             fouls: countByType('Foul'),
-            offsides: countByType('Offside'),
 
             ownGoals: countByType('Own Goal'),
             // detail on Penalty/Penalty Missed/Penalty Saved events is just the
@@ -179,13 +192,16 @@ export async function calculateAndSaveRatings(matchId: string) {
             eyePoints: playerEvents.filter(e => e.isEyePoint).length,
             // Substitution's real detail shape is "<incoming> IN for <outgoing>"
             // (FootballLogger.tsx) -- never contains "out", so the old
-            // e.detail?.includes('out') check could never match. playerId on a
-            // Substitution row is the player going OUT, so any such row on this
-            // player's own events means they were subbed off. minutesPlayed was
-            // hardcoded to 90 for every player in every match -- now derived from
-            // the real event minute when a sub-off occurred.
+            // e.detail?.includes('out') check could never match. minutesPlayed was
+            // hardcoded to 90 for every player in every match, including a player
+            // who only came on for the last few minutes -- now derived from the
+            // real event minute in both directions (subbed off, or subbed on).
             isSubstituted: !!subOutEvent,
-            minutesPlayed: subOutEvent ? subOutEvent.minute : 90
+            minutesPlayed: subOutEvent
+                ? subOutEvent.minute
+                : subInEvent
+                    ? Math.max(0, matchDuration - subInEvent.minute)
+                    : matchDuration
         };
 
         playerStats.set(playerId, { teamId, footballStats });
