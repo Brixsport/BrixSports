@@ -10185,7 +10185,7 @@ All five fixed by converging onto `getClientErrorMessage` (1-3), an allowlist of
 
 ### BACKLOG-315 — `PlayerPerformanceGraphs` Feeds Off a Third, Fabricated Rating Formula (Not the Real Accessor)
 
-**Status:** SHIPPED — session `brixsports-v2-39`/`-2d`, 2026-08-28. Found and fixed same session. `tsc --noEmit` clean at the 18-error baseline. Not yet live-verified (needs a real player with both rated and unrated matches within the timeframe window, and a real browser pass through the metric selector — not done this session).
+**Status:** SHIPPED — session `brixsports-v2-39`/`-2d`, 2026-08-28. Found and fixed same session. `tsc --noEmit` clean at the 18-error baseline. **Confirmed currently unreachable in the live app**: `PlayerPerformanceGraphs.tsx` (and therefore its only caller, `players/[id]/performance/route.ts`) has zero live imports anywhere in `src/` — same dead-component class as `MatchTimeline.tsx`/`PlayerComparisonModal.tsx`/`LiveMatchSummary.tsx` found elsewhere this session. Not a wasted fix (real hygiene, ready the moment something wires it up) but there is no live route to click-test it through right now, and the priority above should be read with that in mind — don't treat this as an active user-facing bug.
 **Priority:** MEDIUM — not a crash, but a third independent source of "the player's rating" on top of the two the whole Ratings Redesign exists to consolidate (`players.rating` frozen column, and the real `playerRatings`/`playerRatingSummary.ts` accessor). Same anti-pattern class as `BACKLOG-250` (fabricated basketball MVP formula), just not caught by that audit since this endpoint wasn't in its file list.
 **Problem:** `src/app/api/players/[id]/performance/route.ts` (backing `PlayerPerformanceGraphs.tsx`'s "Performance Over Time" chart) never touches `playerRatings` at all. Its own `calculatePlayerRating()` (lines 134-163) computes a per-match rating from a hardcoded formula (`5.0` base ± made-up weights: football `+1.5`/goal, `+1.0`/assist, `-0.1`/foul; basketball `+0.1`/point, `+0.3`/assist, `-0.2`/foul) applied to a naive event-count pass, clamped 0-10. This has no relationship to the real ratings pipeline players/admins see everywhere else on the platform — a player's performance graph and their profile's real rating can show two completely different numbers for the same match.
 **Also found in the same route, not fixed:**
@@ -10210,5 +10210,21 @@ All five fixed by converging onto `getClientErrorMessage` (1-3), an allowlist of
 **Not fixed here:** structural fix to a shipped feature's write path — deserves its own focused pass with a real concurrent-write test, not a rushed fix folded into an unrelated audit response.
 
 **Found:** session `brixsports-v2-39`, 2026-08-28 (via background audit agent, independently re-verified).
+
+---
+
+### BACKLOG-317 — Logger's "Adjust Ratings" Link Silently Redirected Every Real Logger to the Homepage
+
+**Status:** RESOLVED — session `brixsports-v2-39`/`-2d`, 2026-08-28. Found on Richard's direct steer ("there was already an existing ratings page at the /logger side having an adjust ratings") while verifying `BACKLOG-306`'s adjacent ratings work.
+**Priority:** HIGH — a whole actor tier (Logger) had a dead-on-arrival link to a real, correctly-built feature. `src/app/logger/page.tsx` shows every logger an "Adjust Ratings" button (`isRateable = match.status === 'FINISHED'`) linking to `/admin/match-ratings/[id]`. That page explicitly checks for `role === 'admin' || role === 'logger'` (line 89's own error message says so), and all 3 backing API routes (`matches/[id]/ratings/route.ts`, `.../adjust/route.ts`, `.../initialize/route.ts`) consistently allow both roles too — the page and API layers were correctly built for logger access from the start.
+**Problem:** `middleware.ts`'s blanket `/admin/**` gate never got the matching carve-out. `if (!isAdmin && !isScopedLoggerManager)` treated any non-admin, non-`logger_manager` role as forbidden — including a real `logger`, who got silently `NextResponse.redirect(new URL('/', request.url))`'d before the page (or its already-permissive API calls) ever ran. No error, no explanation, just bounced to the homepage. Exact same shape as the `logger_manager` gap this same file already fixed once (its own comment: "previously let logger_manager through the ENTIRE /admin/** tree, not just its own page") — this is the mirror-image bug (a role that *should* pass a narrow slice, blocked from all of it) that the earlier fix didn't also check for.
+**Confirmed live before fixing, not just read from code:** signed a real logger JWT (`dev/gen-logger-token-middleware-verify.mjs`), injected it (cookie + localStorage) into a real staging session, navigated to `/admin/match-ratings/busalympics-bball-m-1` — landed on the homepage, URL and content both confirm the redirect fired exactly as the code predicted.
+**Fix:** added `isScopedRatingsLogger` (`role === 'logger' && pathname` under `/admin/match-ratings`), same style as the existing `isScopedLoggerManager` carve-out, included in the pass condition.
+**Evidence:**
+- Commit: (this session, see below)
+- Verified by: staging, real logger JWT, before/after — pre-fix reproduced the redirect live (see above); post-fix pending the push below.
+- Pending items: none once the post-fix staging check (next step) confirms the page now loads for this same logger token.
+
+**Found + Fixed:** session `brixsports-v2-39`/`-2d`, 2026-08-28.
 
 ---
