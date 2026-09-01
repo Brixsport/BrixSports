@@ -18,9 +18,20 @@
 // Also note: `relatedPlayerId` (not `assistPlayerId` — that name only exists
 // in BasketballLogger's own client-side state) is the real DB column an
 // assisting player is stored under, on the scorer's own shot event.
+//
+// `value` isn't always the live logger's numeric shape either: box-score
+// backfills (BACKLOG-312/314) write the raw string 'made'/'missed' instead of
+// a JSON number. calculateAndSaveRatings() currently can't reach that data
+// (it requires a published `lineups`, and every backfilled match is
+// confirmed to have none) so this is defensive, not exercised by any live
+// path today — but cheap to handle correctly via the same safeParseEventValue
+// helper matches/[id]/route.ts's own fallback block uses for the identical
+// ambiguity, rather than assuming the numeric shape and silently miscounting
+// every backfilled make as a miss if that assumption ever stops holding.
 
 import type { MatchEvent } from '@/db/schema';
 import type { RatingConfig } from '@/lib/ratingConfig';
+import { safeParseEventValue } from '@/lib/eventValue';
 
 export interface BasketballPlayerStats {
     playerId: string;
@@ -83,9 +94,13 @@ export function calculateBasketballStatsFromEvents(
     };
 
     for (const e of playerEvents) {
-        // event.value is a TEXT column — live-logged shots store their point
-        // value as a number-shaped string on a make (2/3/1), 0 on a miss.
-        const made = Number(e.value) > 0;
+        // Live-logged shots: value is JSON, the point value on a make (2/3/1),
+        // 0 on a miss. Backfilled shots: value is the raw string 'made'/'missed'.
+        // safeParseEventValue returns whichever shape is actually there.
+        const parsedValue = safeParseEventValue(e.value);
+        const made = typeof parsedValue === 'string'
+            ? parsedValue.toLowerCase() === 'made'
+            : Number(parsedValue) > 0;
 
         switch (e.type) {
             case 'Field Goal':
