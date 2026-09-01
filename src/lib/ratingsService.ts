@@ -2,8 +2,9 @@ import { db } from '@/db';
 import { playerRatings, teamRatings } from '@/db/schema-ratings';
 import { matches, players, matchEvents } from '@/db/schema';
 import { eq, and, sql } from 'drizzle-orm';
-import { RatingCalculator } from '@/lib/ratingCalculator';
+import { RatingCalculator, type PlayerStats } from '@/lib/ratingCalculator';
 import { getRatingConfig } from '@/lib/ratingConfig';
+import { calculateBasketballStatsFromEvents, calculateBasketballRating, type BasketballPlayerStats } from '@/lib/ratings/basketball';
 
 // BACKLOG-124: this was previously only reachable via events/route.ts making an
 // internal HTTP self-fetch to POST /api/matches/[id]/ratings -- which forwarded no
@@ -30,21 +31,17 @@ export async function calculateAndSaveRatings(matchId: string) {
         throw new Error('Match not found');
     }
 
-    // BACKLOG-146/159: this function's entire stat-extraction model below (goals,
-    // tackles, corners, dribbles, offsides) is football-shaped -- it has zero
-    // basketball-aware event mapping (Field Goal/Three Pointer/Free Throw/Rebound/
-    // Assist/Steal/Block/Turnover). It never ran for basketball before tonight only
-    // because match.lineups was always empty (BACKLOG-146's original blocker,
-    // resolved by BACKLOG-141's real lineup persistence, session 47E). Without this
-    // guard, basketball matches would now silently compute and write near-meaningless
-    // ratings (almost every football-specific stat reads as 0, only 'Foul' happens
-    // to coincidentally match) the moment a lineup is confirmed -- worse than the
-    // previous "throws, does nothing" state, since it looks like real data. Real fix
-    // needs basketball-aware stat extraction (own scope, tracked in BACKLOG-159's
-    // "two disconnected rating pipelines" finding), not built here.
+    // BACKLOG-146/159/255: sport dispatcher. Football and basketball each get their
+    // own stat-extraction model below (football's keyword-matched `detail` parsing
+    // vs basketball's typed event/value model in src/lib/ratings/basketball.ts) --
+    // their event vocabularies share almost nothing. Track & field is explicitly
+    // not implemented: its only plausible data source (a `Finish` event carrying
+    // `{position, time}`) isn't produced by any live logger, so there's nothing
+    // real to build a rating model against yet (BACKLOG-255).
     const sport = (match[0].sport ?? 'Football').toLowerCase();
-    if (!sport.includes('football')) {
-        throw new Error(`calculateAndSaveRatings: no rating model exists for sport "${match[0].sport}" yet (BACKLOG-159)`);
+    const isBasketball = sport.includes('basketball');
+    if (!sport.includes('football') && !isBasketball) {
+        throw new Error(`calculateAndSaveRatings: no rating model exists for sport "${match[0].sport}" yet (BACKLOG-255)`);
     }
 
     const events = await db
@@ -92,7 +89,7 @@ export async function calculateAndSaveRatings(matchId: string) {
 
     const playersMap = new Map(playersList.map(p => [p.id, p]));
 
-    const playerStats = new Map();
+    const playerStats = new Map<string, { teamId: string; footballStats?: PlayerStats; basketballStats?: BasketballPlayerStats }>();
 
     for (const lineupEntry of allPlayers) {
         const playerId = lineupEntry.playerId;
@@ -101,14 +98,24 @@ export async function calculateAndSaveRatings(matchId: string) {
         const player = playersMap.get(playerId);
         if (!player) continue;
 
+        const teamId = lineupEntry.team === 'home' ? match[0].homeTeamId : match[0].awayTeamId;
+
+        if (isBasketball) {
+            // events passed unfiltered -- calculateBasketballStatsFromEvents needs
+            // the full match event list to credit assists via relatedPlayerId on a
+            // teammate's shot event, not just this player's own events.
+            const basketballStats = calculateBasketballStatsFromEvents(playerId, events);
+            playerStats.set(playerId, { teamId, basketballStats });
+            continue;
+        }
+
         const playerEvents = events.filter(e => e.playerId === playerId);
 
         const countByType = (type: string) => playerEvents.filter(e => e.type === type).length;
         const countByDetail = (detailKeyword: string) => playerEvents.filter(e => e.detail?.toLowerCase().includes(detailKeyword.toLowerCase())).length;
 
-        const stats = {
+        const footballStats = {
             playerId,
-            teamId: lineupEntry.team === 'home' ? match[0].homeTeamId : match[0].awayTeamId,
             position: lineupEntry.position || player.position || 'CM',
 
             goals: countByType('Goal'),
@@ -148,7 +155,7 @@ export async function calculateAndSaveRatings(matchId: string) {
             minutesPlayed: 90
         };
 
-        playerStats.set(playerId, stats);
+        playerStats.set(playerId, { teamId, footballStats });
     }
 
     // BACKLOG-318: fetched once per match-event, not per player -- this loop runs
@@ -157,18 +164,25 @@ export async function calculateAndSaveRatings(matchId: string) {
     const ratingConfig = await getRatingConfig();
 
     const updatedRatings = [];
+    // `goals` doubles as basketball's "points scored" for the team-total metric --
+    // the teamRatings table has no separate points column, and this field was never
+    // read anywhere outside this file (grep-confirmed), so reusing it is safe. Still
+    // named `goals` because the DB column is.
     const teamPlayerRatings = new Map<string, { total: number; count: number; goals: number }>();
 
-    for (const [playerId, stats] of playerStats.entries()) {
-        const { rating, breakdown } = RatingCalculator.calculateAutoRating(stats, ratingConfig);
+    for (const [playerId, entry] of playerStats.entries()) {
+        const { teamId } = entry;
+        const { rating, breakdown, scoreMetric } = isBasketball
+            ? { ...calculateBasketballRating(entry.basketballStats!, ratingConfig), scoreMetric: entry.basketballStats!.points }
+            : { ...RatingCalculator.calculateAutoRating(entry.footballStats!, ratingConfig), scoreMetric: entry.footballStats!.goals };
 
-        if (!teamPlayerRatings.has(stats.teamId)) {
-            teamPlayerRatings.set(stats.teamId, { total: 0, count: 0, goals: 0 });
+        if (!teamPlayerRatings.has(teamId)) {
+            teamPlayerRatings.set(teamId, { total: 0, count: 0, goals: 0 });
         }
-        const teamStats = teamPlayerRatings.get(stats.teamId)!;
+        const teamStats = teamPlayerRatings.get(teamId)!;
         teamStats.total += rating;
         teamStats.count += 1;
-        teamStats.goals += stats.goals;
+        teamStats.goals += scoreMetric;
 
         const existingRating = await db
             .select()
@@ -197,13 +211,13 @@ export async function calculateAndSaveRatings(matchId: string) {
                 id: ratingId,
                 matchId,
                 playerId,
-                teamId: stats.teamId,
+                teamId,
                 autoRating: rating,
                 ratingBreakdown: breakdown
             });
         }
 
-        updatedRatings.push({ playerId, teamId: stats.teamId, rating, breakdown });
+        updatedRatings.push({ playerId, teamId, rating, breakdown });
     }
 
     const updatedTeamRatings = [];

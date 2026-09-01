@@ -1,7 +1,7 @@
 // Rating Calculator - Auto-calculate player ratings based on ALL match events
 // Every event type affects the final rating
 
-interface PlayerStats {
+export interface PlayerStats {
     playerId: string;
     position: string;
     goals: number;

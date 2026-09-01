@@ -22,16 +22,31 @@ export const playerRatings = sqliteTable('player_ratings', {
     // Man of the Match
     isMotM: integer('is_motm', { mode: 'boolean' }).default(false),
 
-    // Rating breakdown (for transparency)
-    ratingBreakdown: text('rating_breakdown', { mode: 'json' }).$type<{
-        goals: number;
-        assists: number;
-        eyePoints: number;
-        cards: number;
-        shots: number;
-        fouls: number;
-        positionBonus: number;
-    }>(),
+    // Rating breakdown (for transparency). Shape is sport-dependent — football
+    // writes the first shape, basketball (BACKLOG-255) writes the second. No UI
+    // currently reads individual fields off this column (grep-confirmed), so the
+    // union costs nothing at the type level and models what's actually stored.
+    ratingBreakdown: text('rating_breakdown', { mode: 'json' }).$type<
+        | {
+              goals: number;
+              assists: number;
+              eyePoints: number;
+              cards: number;
+              shots: number;
+              fouls: number;
+              positionBonus: number;
+          }
+        | {
+              scoring: number;
+              rebounds: number;
+              assists: number;
+              steals: number;
+              blocks: number;
+              turnovers: number;
+              fouls: number;
+              eyePoints: number;
+          }
+    >(),
 
     // Timestamps
     createdAt: integer('created_at', { mode: 'timestamp' }).default(sql`CURRENT_TIMESTAMP`),
