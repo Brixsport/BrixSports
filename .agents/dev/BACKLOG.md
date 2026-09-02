@@ -9770,6 +9770,7 @@ Fixed exactly per the "Fix (not built)" plan below: `MatchStatusBadge.tsx` now d
 
 ### BACKLOG-284 — Figma Redesign Reconciliation, Master Entry: Competitions-Tab Product Decision (Directory-First vs. Pinned-Default)
 
+**Claimed:** session `brixsports-v2-cc`, 2026-09-02, on branch `feature/ui-redesign` (own worktree `work/competitions-consolidation`, per `feature/ui-redesign`'s coordination note). Working the whole BACKLOG-286→293 sequence in order — starting with `BACKLOG-286`/`287` (independent/blocking), then `BACKLOG-289`/`290` (directory screen + consolidation), `291`/`292`/`293` last. Full Competitions* Figma reference set (14 screens: directory + hub Standings/Matches/Stats tab variants, node `2164:992`) pulled and saved to `.agents/dev/figma-refs/competitions/` for visual-QA comparison against each build.
 **Status:** RESOLVED — Richard's call, session 61, 2026-08-27: **directory-first (option a)**. Bottom-nav "Competitions" → competitions directory (Figma node `2168:1495`) → tap a competition → hub. Confirmed directly in response to the `architect` agent's own recommendation.
 **Priority:** HIGH — blocking gate; every other competitions-tab phase's route shape depends on this answer.
 **Context:** A full OGO BRIXSPORTS Figma file (`pFyvF0aBQff7wwTJorYiqs`, 42 top-level screens across onboarding/home/competitions/match/team/player) was audited screen-by-screen against real staging routes this session (extraction technique documented externally at `C:\Users\Wise\Desktop\Agent-Ops\techniques\figma-mcp-screen-inventory.md` — reusable, not project-specific, kept out of this repo). The design was built directly against real seeded data (team/player/competition names match staging verbatim), confirming it's the intended target, not a speculative concept.
@@ -9799,7 +9800,7 @@ Fixed exactly per the "Fix (not built)" plan below: `MatchStatusBadge.tsx` now d
 
 ### BACKLOG-286 — Delete the Mock-Data-Backed `/competitions/[id]/standings` Route
 
-**Status:** OPEN — cheap, independently shippable, no design/decision dependency. Ships regardless of how `BACKLOG-285` resolves.
+**Status:** IN PROGRESS — session `brixsports-v2-cc`, 2026-09-02. Cheap, independently shippable, no design/decision dependency. Ships regardless of how `BACKLOG-285` resolves.
 **Priority:** MEDIUM-HIGH — removes ~135 lines of fabricated data from a live public route (see `BACKLOG-285` finding #3) plus 3 permanently-dead tabs (`scorers`/`assists` hardcoded empty, `discipline` untested).
 **Fix:** delete `src/app/competitions/[id]/standings/page.tsx` and its `mockCompetitionData`; retarget `src/app/competitions/[id]/page.tsx`'s redirect to whatever route wins `BACKLOG-285`.
 **Depends on:** nothing structurally (pure deletion, reversible by revert). Retarget target depends on `BACKLOG-285`.
@@ -9895,7 +9896,7 @@ Fixed exactly per the "Fix (not built)" plan below: `MatchStatusBadge.tsx` now d
 
 ### BACKLOG-294 — Match Detail: Reconcile Tabs, Make URL-Addressable (Figma vs. Live)
 
-**Status:** OPEN.
+**Status:** IN PROGRESS — session `brixsports-v2-dd`, 2026-09-02. Scope: everything except the Lineups tab's own rendering (owned by `brixsports-v2-ae`, `BACKLOG-322`/`323`) — see `FIGMA_REDESIGN_COORDINATION_PLAN.md`. Worktree `.claude/worktrees/match-detail-tabs`, branch `work/match-detail-tabs` off `feature/ui-redesign`.
 **Priority:** MEDIUM.
 **Problem:** live `src/app/matches/[id]/MatchDetailClient.tsx` has 7 tabs (`overview/predictions/timeline/stats/lineups/h2h/polls`, all client `useState`, not URL-addressable); Figma shows 4 (Lineups/Timeline/Stats/Standings, the last being an inline mini group-table not present live).
 **UX requirement, not just cleanup (UI/UX pass, session 61):** URL-addressable tabs are a real user-facing requirement here, not a technical nicety — without them there's no shareable link to "this match's lineup," no bookmarking a specific tab, and the browser back button exits the whole page instead of stepping back through tab history. Treat `?tab=` (or a nested route) as in-scope for this entry, not a follow-up.
