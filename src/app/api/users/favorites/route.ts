@@ -5,7 +5,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
-import { userFavorites, teams, players, matches } from '@/db/schema';
+import { userFavorites, teams, players, matches, competitions } from '@/db/schema';
 import { eq, and } from 'drizzle-orm';
 import { getAuthUser, resolveEffectiveUserId } from '@/lib/auth';
 
@@ -57,8 +57,16 @@ export async function GET(request: NextRequest) {
 
                 switch (fav.favoriteType) {
                     case 'competition':
-                        // Competitions are text fields, return the name
-                        details = { name: fav.favoriteId, type: 'competition' };
+                        // BACKLOG-301: was echoing the raw favoriteId back as "name"
+                        // instead of looking it up -- a competition favorite always
+                        // showed its own ID, never a real name/sport, unlike every
+                        // other favorite type here.
+                        const competitionData = await db
+                            .select()
+                            .from(competitions)
+                            .where(eq(competitions.id, fav.favoriteId))
+                            .limit(1);
+                        details = competitionData[0] || null;
                         break;
                     case 'team':
                         const teamData = await db

@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer, real } from 'drizzle-orm/sqlite-core';
+import { sqliteTable, text, integer, real, uniqueIndex } from 'drizzle-orm/sqlite-core';
 import { sql } from 'drizzle-orm';
 
 // Player Ratings Table
@@ -22,16 +22,31 @@ export const playerRatings = sqliteTable('player_ratings', {
     // Man of the Match
     isMotM: integer('is_motm', { mode: 'boolean' }).default(false),
 
-    // Rating breakdown (for transparency)
-    ratingBreakdown: text('rating_breakdown', { mode: 'json' }).$type<{
-        goals: number;
-        assists: number;
-        eyePoints: number;
-        cards: number;
-        shots: number;
-        fouls: number;
-        positionBonus: number;
-    }>(),
+    // Rating breakdown (for transparency). Shape is sport-dependent — football
+    // writes the first shape, basketball (BACKLOG-255) writes the second. No UI
+    // currently reads individual fields off this column (grep-confirmed), so the
+    // union costs nothing at the type level and models what's actually stored.
+    ratingBreakdown: text('rating_breakdown', { mode: 'json' }).$type<
+        | {
+              goals: number;
+              assists: number;
+              eyePoints: number;
+              cards: number;
+              shots: number;
+              fouls: number;
+              positionBonus: number;
+          }
+        | {
+              scoring: number;
+              rebounds: number;
+              assists: number;
+              steals: number;
+              blocks: number;
+              turnovers: number;
+              fouls: number;
+              eyePoints: number;
+          }
+    >(),
 
     // Timestamps
     createdAt: integer('created_at', { mode: 'timestamp' }).default(sql`CURRENT_TIMESTAMP`),
@@ -70,6 +85,19 @@ export const teamRatings = sqliteTable('team_ratings', {
     createdAt: integer('created_at', { mode: 'timestamp' }).default(sql`CURRENT_TIMESTAMP`),
     updatedAt: integer('updated_at', { mode: 'timestamp' }).default(sql`CURRENT_TIMESTAMP`)
 });
+
+// BACKLOG-255 follow-up (code review CRITICAL finding): without these, two
+// concurrent calculateAndSaveRatings() calls for the same match (the FINISHED-
+// transition trigger racing the GET-route auto-calc fallback) could both INSERT
+// instead of one inserting and one updating -- confirmed live on real staging
+// data (84 duplicate player_ratings rows, 4 duplicate team_ratings rows found
+// and cleaned up, dev/migrate-backlog255-ratings-unique-index.mjs). Also the
+// onConflictDoUpdate target in ratingsService.ts.
+export const playerRatingsMatchPlayerUnique = uniqueIndex('player_ratings_match_player_unique')
+    .on(playerRatings.matchId, playerRatings.playerId);
+
+export const teamRatingsMatchTeamUnique = uniqueIndex('team_ratings_match_team_unique')
+    .on(teamRatings.matchId, teamRatings.teamId);
 
 // Import matches and players tables
 import { matches } from './schema';

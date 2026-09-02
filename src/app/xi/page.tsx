@@ -114,7 +114,11 @@ export default function BuildYourXIPage() {
 
     const fetchPlayers = async () => {
         try {
-            const response = await fetch('/api/players?limit=100');
+            // BACKLOG-161: this page's formations/positions (GK/CB/CM/ST/etc)
+            // are football-only -- without this filter a viewer could build
+            // a "team" mixing in basketball players, which makes no sense
+            // against these slots.
+            const response = await fetch('/api/players?limit=100&sport=Football');
             const data = await response.json();
             setAvailablePlayers(data.players || []);
         } catch (error) {

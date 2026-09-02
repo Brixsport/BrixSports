@@ -239,11 +239,11 @@ function PlayerCompareContent() {
                 <div className="max-w-7xl mx-auto px-4 py-4">
                     <div className="flex items-center justify-between">
                         <Link
-                            href="/players"
+                            href="/"
                             className="flex items-center gap-2 text-white/60 hover:text-white transition-colors"
                         >
                             <ArrowLeft size={20} />
-                            <span className="text-sm font-bold">Back to Players</span>
+                            <span className="text-sm font-bold">Back</span>
                         </Link>
 
                         <div className="flex items-center gap-2">

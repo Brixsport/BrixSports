@@ -81,7 +81,8 @@ export async function POST(
         const existingRatings = await db
             .select()
             .from(playerRatings)
-            .where(eq(playerRatings.matchId, matchId));
+            .where(eq(playerRatings.matchId, matchId))
+            .limit(200);
 
         if (existingRatings.length > 0) {
             return NextResponse.json({
@@ -118,9 +119,14 @@ export async function POST(
             };
         }).filter(Boolean);
 
-        // Insert all ratings
+        // Insert all ratings. BACKLOG-321: two concurrent initialize calls for the
+        // same match could both pass the existingRatings.length === 0 check above
+        // and both reach this insert -- the player_ratings_match_player_unique
+        // index (added this session for the write-race fix elsewhere) now stops
+        // that from silently creating duplicates, but without onConflictDoNothing
+        // the losing request would 500 instead of the row simply already existing.
         if (ratingsToCreate.length > 0) {
-            await db.insert(playerRatings).values(ratingsToCreate as any);
+            await db.insert(playerRatings).values(ratingsToCreate as any).onConflictDoNothing();
         }
 
         return NextResponse.json({

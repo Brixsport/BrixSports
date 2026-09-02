@@ -64,6 +64,9 @@ export default function MatchLineups({ lineups, sport, homeTeam, awayTeam, event
                     rating: player.rating || 0,
                     position: player.position || 'MID',
                     isCaptain: player.isCaptain || false,
+                    // BACKLOG-321: was dropped here even after the API response
+                    // started carrying it -- PitchPlayer.tsx's gold highlight never
+                    // received a real value regardless of the server-side fix alone.
                     isMotM: player.isMotM || false,
                     isStarter: player.isStarter,
                     stats: player.stats,
@@ -95,6 +98,9 @@ export default function MatchLineups({ lineups, sport, homeTeam, awayTeam, event
                     rating: player.rating || 0,
                     position: player.position || 'MID',
                     isCaptain: player.isCaptain || false,
+                    // BACKLOG-321: was dropped here even after the API response
+                    // started carrying it -- PitchPlayer.tsx's gold highlight never
+                    // received a real value regardless of the server-side fix alone.
                     isMotM: player.isMotM || false,
                     isStarter: player.isStarter,
                     stats: player.stats,

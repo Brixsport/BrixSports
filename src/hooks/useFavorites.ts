@@ -5,6 +5,7 @@ import { useState, useEffect } from 'react';
 export function useFavorites() {
   const [favoriteTeams, setFavoriteTeams] = useState<string[]>([]);
   const [favoritePlayers, setFavoritePlayers] = useState<string[]>([]);
+  const [favoriteCompetitions, setFavoriteCompetitions] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
 
   // Sync with API on mount if logged in
@@ -16,8 +17,10 @@ export function useFavorites() {
         try {
           const savedTeams = localStorage.getItem('brixsport_fav_teams');
           const savedPlayers = localStorage.getItem('brixsport_fav_players');
+          const savedCompetitions = localStorage.getItem('brixsport_fav_competitions');
           if (savedTeams) setFavoriteTeams(JSON.parse(savedTeams));
           if (savedPlayers) setFavoritePlayers(JSON.parse(savedPlayers));
+          if (savedCompetitions) setFavoriteCompetitions(JSON.parse(savedCompetitions));
         } catch (e) {
           console.error("Error parsing local favorites", e);
         }
@@ -45,6 +48,17 @@ export function useFavorites() {
           const playersData = await playersRes.json();
           if (playersData.favorites) {
             setFavoritePlayers(playersData.favorites.map((f: any) => f.favoriteId));
+          }
+        }
+
+        // Fetch competitions
+        const competitionsRes = await fetch('/api/users/favorites?type=competition', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (competitionsRes.ok) {
+          const competitionsData = await competitionsRes.json();
+          if (competitionsData.favorites) {
+            setFavoriteCompetitions(competitionsData.favorites.map((f: any) => f.favoriteId));
           }
         }
 
@@ -133,16 +147,57 @@ export function useFavorites() {
     }
   };
 
+  const toggleCompetition = async (competitionId: string) => {
+    // Optimistic update
+    const isRemoving = favoriteCompetitions.includes(competitionId);
+    const newCompetitions = isRemoving
+      ? favoriteCompetitions.filter(id => id !== competitionId)
+      : [...favoriteCompetitions, competitionId];
+
+    setFavoriteCompetitions(newCompetitions);
+    localStorage.setItem('brixsport_fav_competitions', JSON.stringify(newCompetitions));
+
+    const token = localStorage.getItem('authToken');
+    if (token) {
+      try {
+        const method = isRemoving ? 'DELETE' : 'POST';
+        const url = isRemoving
+          ? `/api/users/favorites?type=competition&id=${competitionId}`
+          : '/api/users/favorites';
+
+        const body = isRemoving ? undefined : JSON.stringify({
+          favoriteType: 'competition',
+          favoriteId: competitionId
+        });
+
+        await fetch(url, {
+          method,
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body
+        });
+      } catch (error) {
+        console.error("Failed to update favorite competition:", error);
+      }
+    }
+  };
+
   const isFavoriteTeam = (teamId: string) => favoriteTeams.includes(teamId);
   const isFavoritePlayer = (playerId: string) => favoritePlayers.includes(playerId);
+  const isFavoriteCompetition = (competitionId: string) => favoriteCompetitions.includes(competitionId);
 
   return {
     favoriteTeams,
     favoritePlayers,
+    favoriteCompetitions,
     toggleTeam,
     togglePlayer,
+    toggleCompetition,
     isFavoriteTeam,
     isFavoritePlayer,
+    isFavoriteCompetition,
     loading
   };
 }

@@ -4,6 +4,7 @@ import { matches, teams, players } from '@/db/schema';
 import { eq } from 'drizzle-orm';
 import { enrichPlayersWithAffiliations } from '@/lib/player-data';
 import { getPrimaryTeam } from '@/lib/player-affiliation-utils';
+import { getPlayerRatingSummaries } from '@/lib/playerRatingSummary';
 
 export async function GET() {
     try {
@@ -34,14 +35,38 @@ export async function GET() {
             .all();
         const enrichedPlayers = await enrichPlayersWithAffiliations(allPlayers);
 
+        // BACKLOG-321: MVP names come from a match's stats.mvp string, with no
+        // playerId link at all -- resolving a real rating requires a name lookup,
+        // and a wrong match would attribute a rating to the wrong real person.
+        // Scoped to basketball players' primary team only (reduces cross-sport
+        // name collisions), and only kept when a name maps to EXACTLY one player
+        // -- any name shared by 2+ basketball players is left unresolved rather
+        // than guessed. Never fabricate a rating for a name that can't be
+        // uniquely and safely tied to a real playerId.
         const playerMap: Record<string, { team: string, logo: string }> = {};
+        const nameToPlayerIds: Record<string, string[]> = {};
         enrichedPlayers.forEach((player) => {
             const team = getPrimaryTeam(player);
-            playerMap[player.name.toUpperCase()] = {
+            if (team?.sport && !team.sport.toLowerCase().includes('basketball')) return;
+
+            const name = player.name.toUpperCase();
+            playerMap[name] = {
                 team: team?.name || 'Unknown',
                 logo: ('logo' in (team || {})) ? (team as any).logo || '/assests/Logos/BRIX-SPORT-LOGO.png' : '/assests/Logos/BRIX-SPORT-LOGO.png'
             };
+            (nameToPlayerIds[name] ??= []).push(player.id);
         });
+
+        const unambiguousPlayerIds = Object.values(nameToPlayerIds)
+            .filter(ids => ids.length === 1)
+            .map(ids => ids[0]);
+        const ratingSummaries = await getPlayerRatingSummaries(unambiguousPlayerIds);
+        const ratingByName: Record<string, number | null> = {};
+        for (const [name, ids] of Object.entries(nameToPlayerIds)) {
+            ratingByName[name] = ids.length === 1
+                ? (ratingSummaries.get(ids[0])?.averageRating ?? null)
+                : null; // ambiguous (2+ real players share this name) -- never guess
+        }
 
         // 4. Build leaderboard
         const leaderboard = Object.entries(mvpCounts)
@@ -55,13 +80,14 @@ export async function GET() {
                     mvpCount: count,
                     team: info.team,
                     teamLogo: info.logo,
-                    // BACKLOG-250: was a fabricated formula (8.0 + count*0.2)
-                    // with no basis in real match data. Basketball is blocked
-                    // from the real ratings pipeline by BACKLOG-146's guard,
-                    // so there is no real number to show yet -- explicit null
-                    // ("not yet rated") until Phase 5 lands basketball
-                    // coverage, rather than a made-up one.
-                    rating: null,
+                    // BACKLOG-250/255/321: was a fabricated formula (8.0 +
+                    // count*0.2), then an explicit null until a real ratings
+                    // pipeline existed for basketball. Now the real career
+                    // average from playerRatings (via playerRatingSummary.ts),
+                    // for any name that resolves to exactly one real basketball
+                    // player -- still null (never fabricated) for an unmatched
+                    // or ambiguous name, or a real player with no rating history.
+                    rating: ratingByName[name] ?? null,
                 };
             })
             .sort((a, b) => b.mvpCount - a.mvpCount);

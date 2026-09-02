@@ -4,6 +4,7 @@
  */
 
 import { NextRequest, NextResponse, after } from 'next/server';
+import * as Sentry from '@sentry/nextjs';
 import { db } from '@/db';
 import { matches, teams, matchEvents, players, bracketNodes, teamForm, headToHead } from '@/db/schema';
 import { eq, desc, sql, inArray } from 'drizzle-orm';
@@ -16,6 +17,7 @@ import { sendMatchEventNotification } from '@/lib/notifications/match-notificati
 import { getNotifiablePeriodType } from '@/lib/notifications/notification-rules';
 import { recalculateStandingsForMatch } from '@/lib/standingsService';
 import { advanceBracketForMatch } from '@/lib/bracketService';
+import { calculateAndSaveRatings } from '@/lib/ratingsService';
 import { requiresDecisiveResult } from '@/lib/matchRules';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { safeParseEventValue } from '@/lib/eventValue';
@@ -478,9 +480,9 @@ export async function GET(
                     .limit(100);
 
                 if (updatedRatings.length > 0) {
-                    const ratingMap = new Map();
+                    const ratingMap = new Map<string, { rating: number; isMotM: boolean }>();
                     updatedRatings.forEach(r => {
-                        ratingMap.set(r.playerId, r.finalRating ?? r.autoRating);
+                        ratingMap.set(r.playerId, { rating: r.finalRating ?? r.autoRating, isMotM: !!r.isMotM });
                     });
 
                     // BACKLOG-159-adjacent, found while wiring the ratings display:
@@ -492,12 +494,21 @@ export async function GET(
                     // `p.playerId`) -- so even a bare-array shape would have matched
                     // nothing. Confirmed live: player_ratings had real rows for a
                     // finished match whose lineup showed no ratings at all.
+                    //
+                    // BACKLOG-321: isMotM was never merged in here either -- the pitch
+                    // marker (PitchPlayer.tsx) and lineup card (ResponsivePlayerCard.tsx)
+                    // components already have real gold-highlight/badge rendering for a
+                    // real isMotM=true prop, but the actual value never reached them from
+                    // this route, so a real admin-designated Man of the Match never
+                    // visibly showed up anywhere on a real match page.
                     const applyRatings = (arr: any[]) =>
                         arr.map((p: any) => {
                             const pid = p.playerId ?? p.id;
+                            const entry = ratingMap.get(pid);
                             return {
                                 ...p,
-                                rating: ratingMap.has(pid) ? ratingMap.get(pid) : (p.rating ?? 0),
+                                rating: entry ? entry.rating : (p.rating ?? 0),
+                                isMotM: entry ? entry.isMotM : (p.isMotM ?? false),
                             };
                         });
 
@@ -770,6 +781,7 @@ export async function PATCH(
                     await recalculateStandingsForMatch(matchId);
                 } catch (error) {
                     console.error('Error recalculating standings:', error);
+                    Sentry.captureException(error, { tags: { area: 'standings-recalc' }, extra: { matchId } });
                 }
             });
 
@@ -783,6 +795,38 @@ export async function PATCH(
                     await advanceBracketForMatch(matchId);
                 } catch (error) {
                     console.error('Error advancing bracket:', error);
+                    Sentry.captureException(error, { tags: { area: 'bracket-advance' }, extra: { matchId } });
+                }
+            });
+
+            // BACKLOG-255: ratings now recalculate once, here, on the FINISHED
+            // transition -- own try/catch, own after() call, same isolation
+            // pattern as standings/bracket above so a ratings failure can never
+            // block or break either of those. Replaces the old per-live-event
+            // trigger (events/route.ts), which ran calculateAndSaveRatings on
+            // every single event and was a real, unmeasured contributor to Flow
+            // B's ~9.9s latency. No-ops (throws, caught here) for a match with
+            // no published lineups or an unsupported sport (still just
+            // football/basketball -- see ratingsService.ts) -- both pre-existing,
+            // expected conditions, not new failure modes introduced here.
+            after(async () => {
+                try {
+                    await calculateAndSaveRatings(matchId);
+                } catch (error) {
+                    console.error('Error calculating ratings on FINISHED transition:', error);
+                    // BACKLOG-321: "No lineups found"/"no rating model exists for
+                    // sport" are deliberate, developer-authored, EXPECTED outcomes
+                    // for a real fraction of matches (no published lineup, or a
+                    // sport with no rating model yet) -- not exceptional failures.
+                    // Reporting those to Sentry on every occurrence would just be
+                    // alert noise; only genuinely unexpected errors (DB failures,
+                    // etc.) are captured.
+                    const message = error instanceof Error ? error.message : '';
+                    const isExpected = message === 'No lineups found for this match'
+                        || message.startsWith('calculateAndSaveRatings: no rating model exists for sport');
+                    if (!isExpected) {
+                        Sentry.captureException(error, { tags: { area: 'ratings-calc' }, extra: { matchId } });
+                    }
                 }
             });
         }

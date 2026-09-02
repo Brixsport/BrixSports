@@ -1,13 +1,14 @@
 'use client';
 
 import { motion, AnimatePresence } from 'framer-motion';
-import { Trophy, ChevronRight, LayoutGrid, ListOrdered, Activity, Loader2, AlertCircle, Calendar, Clock, MapPin } from 'lucide-react';
+import { Trophy, ChevronRight, LayoutGrid, ListOrdered, Activity, Loader2, AlertCircle, Calendar, Clock, MapPin, Star } from 'lucide-react';
 import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Image from 'next/image';
 import MatchCalendar from '@/components/MatchCalendar';
 import { isSameDay } from 'date-fns';
 import { TeamLogo } from '@/lib/utils/team-logo';
+import { useFavorites } from '@/hooks/useFavorites';
 
 type SportType = 'All' | 'Football' | 'Basketball' | 'Track';
 
@@ -87,6 +88,7 @@ function CompetitionsContent() {
   const searchParams = useSearchParams();
   const initialComp = searchParams.get('competition');
 
+  const { isFavoriteCompetition, toggleCompetition } = useFavorites();
   const [view, setView] = useState<'standings' | 'matches' | 'brackets'>('standings');
   const [selectedSport, setSelectedSport] = useState<SportType>('All');
   const [competitions, setCompetitions] = useState<Competition[]>([]);
@@ -240,9 +242,23 @@ function CompetitionsContent() {
                   • {selectedComp?.status || 'Active'}
                 </span>
               </div>
-              <h1 className="font-display text-2xl md:text-5xl tracking-tighter italic uppercase leading-none mb-2">
-                {selectedComp?.name || 'Competition Viewer'}
-              </h1>
+              <div className="flex items-center gap-3 mb-2">
+                <h1 className="font-display text-2xl md:text-5xl tracking-tighter italic uppercase leading-none">
+                  {selectedComp?.name || 'Competition Viewer'}
+                </h1>
+                {selectedComp && (
+                  <button
+                    onClick={() => toggleCompetition(selectedComp.id)}
+                    aria-label={isFavoriteCompetition(selectedComp.id) ? 'Remove from favourites' : 'Add to favourites'}
+                    className="shrink-0 p-2 rounded-full hover:bg-white/10 transition-colors"
+                  >
+                    <Star
+                      size={20}
+                      className={isFavoriteCompetition(selectedComp.id) ? 'text-primary fill-primary' : 'text-white/40'}
+                    />
+                  </button>
+                )}
+              </div>
               <p className="text-white/60 text-sm max-w-xl">
                 {selectedComp?.description || `Managing standings, fixtures, and results for ${selectedComp?.name || 'this competition'}.`}
               </p>
