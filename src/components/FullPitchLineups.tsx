@@ -1,6 +1,8 @@
 'use client';
 
+import { Shirt } from 'lucide-react';
 import { Player } from '@/types';
+import { cn } from '@/lib/utils';
 // Import explicitly to ensure type availability (though dynamic import is used below for component)
 import type { PitchPlayer } from './lineup/ResponsivePitch';
 // We'll use a dynamic import for the component inside the render to match previous pattern if needed, 
@@ -57,8 +59,10 @@ const FORMATION_TEMPLATES: Record<string, FormationTemplate> = {
     '4-3-3': [
         { x: 50, y: 5, role: 'GK' },
         { x: 15, y: 25, role: 'DEF' }, { x: 38, y: 25, role: 'DEF' }, { x: 62, y: 25, role: 'DEF' }, { x: 85, y: 25, role: 'DEF' },
-        { x: 30, y: 50, role: 'MID' }, { x: 50, y: 45, role: 'MID' }, { x: 70, y: 50, role: 'MID' }, // Triangle usually
-        { x: 15, y: 80, role: 'FW' }, { x: 50, y: 85, role: 'FW' }, { x: 85, y: 80, role: 'FW' }
+        { x: 20, y: 50, role: 'MID' }, { x: 50, y: 45, role: 'MID' }, { x: 80, y: 50, role: 'MID' },
+        // FW shares the mid row's own x-columns (20/50/80) rather than fanning wider - matches
+        // FotMob's own lineup builder convention, calibrated directly 
+        { x: 20, y: 82, role: 'FW' }, { x: 50, y: 87, role: 'FW' }, { x: 80, y: 82, role: 'FW' }
     ],
     '4-2-3-1': [
         { x: 50, y: 5, role: 'GK' },
@@ -228,22 +232,31 @@ export function FullPitchLineups({
 }: FullPitchLineupsProps) {
     const isBasketball = sport === 'Basketball';
 
-    // Calculate goals and assists per player from events
-    const playerStats = new Map<string, { goals: number; assists: number }>();
+    // Calculate goals, assists and card status per player from events
+    const playerStats = new Map<string, { goals: number; assists: number; card?: 'yellow' | 'red'; penalty?: boolean }>();
 
     events.forEach((event: any) => {
         if (!event.playerId) return;
 
         const stats = playerStats.get(event.playerId) || { goals: 0, assists: 0 };
+        const isGoalEvent = event.type === 'Goal' || event.type === 'Penalty';
 
-        // Count goals
-        if (event.type === 'Goal') {
+        // Count goals (in-game penalty conversions count as goals too, per FootballLogger's own model)
+        if (isGoalEvent) {
             stats.goals++;
+            if (event.type === 'Penalty') stats.penalty = true;
+        }
+
+        // Track card status (Red Card supersedes an earlier Yellow Card, incl. second-yellow)
+        if (event.type === 'Yellow Card' && stats.card !== 'red') {
+            stats.card = 'yellow';
+        } else if (event.type === 'Red Card') {
+            stats.card = 'red';
         }
 
         // Count assists (check both assistPlayerId and relatedPlayerId)
         const assisterId = event.assistPlayerId || event.relatedPlayerId;
-        if (assisterId && event.type === 'Goal') {
+        if (assisterId && isGoalEvent) {
             const assisterStats = playerStats.get(assisterId) || { goals: 0, assists: 0 };
             assisterStats.assists++;
             playerStats.set(assisterId, assisterStats);
@@ -324,6 +337,7 @@ export function FullPitchLineups({
         // NEW APPROACH: Match players to slots within their role groups
         // This ensures defenders go to defender slots, forwards to forward slots, etc.
         const pitchPlayers: PitchPlayer[] = [];
+        const usedSlots = new Set<FormationSlot>();
 
         // Process each role in order
         rolesOrder.forEach(role => {
@@ -341,10 +355,15 @@ export function FullPitchLineups({
                     for (const adjRole of adjacentRoles) {
                         const adjPlayers = playersByRole[adjRole];
                         if (adjPlayers.length > slotsByRole[adjRole].length) {
-                            // This role has extra players, borrow one
-                            const borrowedPlayer = adjPlayers[slotsByRole[adjRole].length];
+                            // This role has extra players, borrow one.
+                            // Splice it out so it can't be borrowed again by a later slot in this
+                            // loop (previously used a fixed index into an array that never shrank,
+                            // so two short-handed slots could both grab the same player - the
+                            // duplicate-key/duplicate-player-on-pitch bug).
+                            const borrowedPlayer = adjPlayers.splice(slotsByRole[adjRole].length, 1)[0];
                             if (borrowedPlayer) {
                                 assignPlayerToSlot(borrowedPlayer, slot, isHome, pitchPlayers, playerStats);
+                                usedSlots.add(slot);
                                 break;
                             }
                         }
@@ -353,7 +372,25 @@ export function FullPitchLineups({
                 }
 
                 assignPlayerToSlot(playerEntry, slot, isHome, pitchPlayers, playerStats);
+                usedSlots.add(slot);
             });
+        });
+
+        // Safety net: a role can have MORE tagged players than its formation template has slots
+        // for (e.g. 3 strikers bucketed as FW but the template only has 2 FW slots). The loop above
+        // only ever borrows to fill a shortage - it has no mechanism for an overflow, so that extra
+        // real starter was previously just dropped from the pitch entirely with no trace anywhere
+        // (not on the pitch, not on the bench, since they're still isStarter:true). Make sure nobody
+        // simply vanishes: place any still-unassigned starter into any leftover unused slot.
+        const assignedIds = new Set(pitchPlayers.map(p => p.player.id));
+        const unassigned = availablePlayers.filter(p => !assignedIds.has(p.player.id));
+        const leftoverSlots = (template || []).filter(slot => !usedSlots.has(slot));
+        unassigned.forEach((playerEntry, i) => {
+            const slot = leftoverSlots[i];
+            if (slot) {
+                assignPlayerToSlot(playerEntry, slot, isHome, pitchPlayers, playerStats);
+                usedSlots.add(slot);
+            }
         });
 
         return pitchPlayers;
@@ -378,7 +415,7 @@ export function FullPitchLineups({
         slot: FormationSlot,
         isHome: boolean,
         pitchPlayers: PitchPlayer[],
-        playerStats: Map<string, { goals: number; assists: number }>
+        playerStats: Map<string, { goals: number; assists: number; card?: 'yellow' | 'red'; penalty?: boolean }>
     ) => {
         let finalX = slot.x;
         let finalY = 0;
@@ -404,6 +441,10 @@ export function FullPitchLineups({
             isMotM: !!playerEntry.isMotM,
             goals: stats.goals,
             assists: stats.assists,
+            card: stats.card,
+            penalty: stats.penalty,
+            isSubstituted: !!playerEntry.isSubstituted,
+            subMinute: playerEntry.subMinute,
         });
     };
 
@@ -481,17 +522,24 @@ export function FullPitchLineups({
                 </div>
             </div>
 
-            {/* Responsive Pitch Component - Full Width */}
-            <div className="w-full max-w-none mx-auto px-0 py-2 sm:py-3 lg:py-4">
+            {/* Responsive Pitch Component - grows with the viewport (mobile-first, but should keep
+                looking substantial on bigger screens, not shrink to a small centered card). The
+                previous bug was an aspect-ratio that got progressively TALLER at each breakpoint
+                (sm:aspect-[3/5] lg:aspect-[3/4]), so height ballooned out of proportion to width on
+                wide screens while jersey/icon sizing (a % of width) didn't grow to match - that's
+                what produced the huge dead gaps between rows. Keeping ONE fixed ratio at every
+                breakpoint means width and height now scale together, so jerseys/ratings/icons
+                (already sized as a % of the container) grow right along with the field itself. */}
+            <div className="w-full mx-auto px-0 py-2 sm:py-3 lg:py-4">
                 <div
                     className={`
                         relative
-                        w-full
+                        w-full mx-auto
                         ${variant === '5-a-side' || variant === '3x3'
-                            ? 'aspect-[1/2] max-w-[400px] mx-auto'
+                            ? 'aspect-[1/2] max-w-[420px]'
                             : variant === 'basketball'
-                                ? 'aspect-[2/3] max-w-[500px] mx-auto'
-                                : 'aspect-[7/10] sm:aspect-[3/5] lg:aspect-[3/4]'}
+                                ? 'aspect-[2/3] max-w-[520px]'
+                                : 'aspect-[3/4] max-w-[720px]'}
                     `}
                 >
                     <ResponsivePitch
@@ -505,52 +553,39 @@ export function FullPitchLineups({
                 </div>
             </div>
 
-            {/* Bench Section */}
+            {/* Substitutes - paired side-by-side rows (matches Figma: centered header between team badges, one home + one away sub per row) */}
             {(homeSubs.length > 0 || awaySubs.length > 0) && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 px-4">
-                    {/* Home Bench */}
-                    {homeSubs.length > 0 && (
-                        <div className="space-y-3">
-                            <div className="flex items-center gap-2 border-b border-white/10 pb-2">
-                                <img src={homeTeam.logo} alt={homeTeam.name} className="w-6 h-6 object-contain" />
-                                <span className="font-bold text-sm">Valid Substitutes</span>
-                            </div>
-                            <div className="grid grid-cols-1 gap-2">
-                                {homeSubs.map((sub) => (
+                <div className="px-4">
+                    <div className="flex items-center justify-between border-b border-white/10 pb-3 mb-3">
+                        <img src={homeTeam.logo} alt={homeTeam.name} className="w-6 h-6 object-contain" />
+                        <span className="font-bold text-sm text-white/80">Substitutes</span>
+                        <img src={awayTeam.logo} alt={awayTeam.name} className="w-6 h-6 object-contain" />
+                    </div>
+                    <div className="space-y-2">
+                        {Array.from({ length: Math.max(homeSubs.length, awaySubs.length) }).map((_, i) => (
+                            <div key={i} className="grid grid-cols-2 gap-3">
+                                {homeSubs[i] ? (
                                     <BenchPlayer
-                                        key={sub.player.id}
-                                        player={sub.player}
-                                        rating={sub.rating}
-                                        position={sub.position}
+                                        player={homeSubs[i].player}
+                                        rating={homeSubs[i].rating}
+                                        position={homeSubs[i].position}
                                         teamColor={homeTeam.color}
-                                        onClick={() => onPlayerClick(sub.player)}
+                                        onClick={() => onPlayerClick(homeSubs[i].player)}
                                     />
-                                ))}
-                            </div>
-                        </div>
-                    )}
-
-                    {/* Away Bench */}
-                    {awaySubs.length > 0 && (
-                        <div className="space-y-3">
-                            <div className="flex items-center gap-2 border-b border-white/10 pb-2 justify-end md:justify-start">
-                                <img src={awayTeam.logo} alt={awayTeam.name} className="w-6 h-6 object-contain order-first md:order-last" />
-                                <span className="font-bold text-sm">Valid Substitutes</span>
-                            </div>
-                            <div className="grid grid-cols-1 gap-2">
-                                {awaySubs.map((sub) => (
+                                ) : <div />}
+                                {awaySubs[i] ? (
                                     <BenchPlayer
-                                        key={sub.player.id}
-                                        player={sub.player}
-                                        rating={sub.rating}
-                                        position={sub.position}
+                                        player={awaySubs[i].player}
+                                        rating={awaySubs[i].rating}
+                                        position={awaySubs[i].position}
                                         teamColor={awayTeam.color}
-                                        onClick={() => onPlayerClick(sub.player)}
+                                        onClick={() => onPlayerClick(awaySubs[i].player)}
+                                        reverse
                                     />
-                                ))}
+                                ) : <div />}
                             </div>
-                        </div>
-                    )}
+                        ))}
+                    </div>
                 </div>
             )}
         </div>
@@ -563,9 +598,10 @@ interface BenchPlayerProps {
     position: string;
     teamColor: string;
     onClick: () => void;
+    reverse?: boolean;
 }
 
-function BenchPlayer({ player, rating, position, teamColor, onClick }: BenchPlayerProps) {
+function BenchPlayer({ player, rating, position, teamColor, onClick, reverse }: BenchPlayerProps) {
     const getRatingColor = (rating: number) => {
         if (rating === 0) return 'bg-white/10 text-white/40';
         if (rating >= 7.0) return 'bg-green-500/20 text-green-400';
@@ -576,19 +612,20 @@ function BenchPlayer({ player, rating, position, teamColor, onClick }: BenchPlay
     return (
         <div
             onClick={onClick}
-            className="flex-shrink-0 flex items-center gap-1.5 sm:gap-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg px-2 py-1.5 sm:px-3 sm:py-2 cursor-pointer transition-all hover:scale-105 active:scale-95"
+            className={cn(
+                "flex items-center gap-1.5 sm:gap-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg px-2 py-1.5 sm:px-3 sm:py-2 cursor-pointer transition-all",
+                reverse && "flex-row-reverse text-right"
+            )}
         >
-            {/* Jersey number */}
-            <div
-                className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg flex items-center justify-center text-[10px] sm:text-xs font-bold"
-                style={{ backgroundColor: teamColor + '40', color: '#fff' }}
-            >
-                {player.number}
+            {/* Jersey icon (matches on-pitch treatment) */}
+            <div className="relative w-7 h-7 sm:w-8 sm:h-8 flex items-center justify-center shrink-0">
+                <Shirt className="absolute inset-0 w-full h-full" fill={teamColor} stroke="rgba(255,255,255,0.7)" strokeWidth={1.5} />
+                <span className="relative z-10 text-[9px] sm:text-[10px] font-bold text-white">{player.number}</span>
             </div>
 
             {/* Player info */}
-            <div className="min-w-0">
-                <div className="text-xs sm:text-sm font-semibold text-white truncate max-w-[150px]">
+            <div className="min-w-0 flex-1">
+                <div className="text-xs sm:text-sm font-semibold text-white truncate">
                     {player.jerseyName || player.name.split(' ').pop()}
                 </div>
                 <div className="text-[9px] sm:text-[10px] text-white/60">{position}</div>
@@ -596,7 +633,7 @@ function BenchPlayer({ player, rating, position, teamColor, onClick }: BenchPlay
 
             {/* Rating */}
             {rating > 0 && (
-                <div className={`ml-auto px-1.5 py-0.5 sm:px-2 sm:py-1 rounded text-[10px] sm:text-xs font-bold ${getRatingColor(rating)}`}>
+                <div className={`shrink-0 px-1.5 py-0.5 sm:px-2 sm:py-1 rounded text-[10px] sm:text-xs font-bold ${getRatingColor(rating)}`}>
                     {rating.toFixed(1)}
                 </div>
             )}
