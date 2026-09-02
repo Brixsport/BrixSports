@@ -35,6 +35,8 @@ export interface PlacementPitchProps {
     onPlayerClick?: (playerId: string) => void;
     teamLabel?: string;
     className?: string;
+    /** Replaces the plain formation-label badge (top-right) with a custom control -- e.g. a formation <select> styled to sit in the same spot, FotMob-style. Defaults to the plain label when omitted (admin builder's sidebar dropdown is unaffected). */
+    formationControl?: React.ReactNode;
 }
 
 export function PlacementPitch({
@@ -47,6 +49,7 @@ export function PlacementPitch({
     onPlayerClick,
     teamLabel,
     className = '',
+    formationControl,
 }: PlacementPitchProps) {
     const formation = getFormation(formationId);
 
@@ -103,11 +106,13 @@ export function PlacementPitch({
             )}
 
             <div className="absolute top-4 right-4 z-10">
-                <div className="px-3 py-1 bg-black/50 rounded-lg backdrop-blur-md border border-white/10">
-                    <span className="text-xs font-display italic font-bold text-white uppercase tracking-wider">
-                        {formation.label}
-                    </span>
-                </div>
+                {formationControl ?? (
+                    <div className="px-3 py-1 bg-black/50 rounded-lg backdrop-blur-md border border-white/10">
+                        <span className="text-xs font-display italic font-bold text-white uppercase tracking-wider">
+                            {formation.label}
+                        </span>
+                    </div>
+                )}
             </div>
         </div>
     );

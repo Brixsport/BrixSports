@@ -14,7 +14,8 @@ import Link from 'next/link';
 import { PlacementPitch } from '@/components/lineup/PlacementPitch';
 import { PlayerSelectorPopup, type PlayerSelectorCandidate } from '@/components/lineup/PlayerSelectorPopup';
 import { useLineupPlacement, type PlacementEntry } from '@/components/lineup/useLineupPlacement';
-import { getFormationsForXi } from '@/lib/lineup/formations';
+import { getFormationsForXi, getFormation } from '@/lib/lineup/formations';
+import { seedPlacementsFromLegacy } from '@/lib/lineup/placement';
 
 declare module 'downloadjs';
 
@@ -39,6 +40,14 @@ interface SavedXI {
     createdAt: string;
 }
 
+interface Team {
+    id: string;
+    name: string;
+    shortName: string;
+    logo: string;
+    sport: string;
+}
+
 export default function LineupBuilderPage() {
     const [teamName, setTeamName] = useState('My Dream Team');
     const [availablePlayers, setAvailablePlayers] = useState<Player[]>([]);
@@ -47,6 +56,9 @@ export default function LineupBuilderPage() {
     const [popupSlotId, setPopupSlotId] = useState<string | null>(null);
     const [saving, setSaving] = useState(false);
     const [currentXiId, setCurrentXiId] = useState<string | null>(null);
+    const [realTeams, setRealTeams] = useState<Team[]>([]);
+    const [teamSearch, setTeamSearch] = useState('');
+    const [prefilling, setPrefilling] = useState<string | null>(null);
     const pitchRef = useRef<HTMLDivElement>(null);
 
     const placement = useLineupPlacement({ formationId: DEFAULT_FORMATION });
@@ -54,6 +66,7 @@ export default function LineupBuilderPage() {
     useEffect(() => {
         fetchPlayers();
         fetchMyTeams();
+        fetchRealTeams();
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
@@ -79,6 +92,49 @@ export default function LineupBuilderPage() {
             setMyTeams(data.teams || []);
         } catch (error) {
             console.error('Error fetching my teams:', error);
+        }
+    };
+
+    // FotMob's real /lineup-builder does this: pick a real club/country and it
+    // seeds the pitch with that team's actual roster, which you then swap and
+    // interchange freely -- confirmed by direct use (see BACKLOG-323). Reuses
+    // the existing bucket-match seeder (seedPlacementsFromLegacy) rather than a
+    // new algorithm; it already does exactly "map a roster's positions onto a
+    // formation's slots."
+    const fetchRealTeams = async () => {
+        try {
+            const response = await fetch('/api/teams?limit=500');
+            const data = await response.json();
+            const list: Team[] = Array.isArray(data) ? data : [];
+            setRealTeams(list.filter((t) => t.sport === 'Football'));
+        } catch (error) {
+            console.error('Error fetching teams:', error);
+        }
+    };
+
+    const handlePrefillTeam = async (team: Team) => {
+        try {
+            setPrefilling(team.id);
+            const response = await fetch(`/api/players?teamId=${team.id}`);
+            const data = await response.json();
+            const roster: Player[] = data.players || data || [];
+
+            setAvailablePlayers((prev) => {
+                const existingIds = new Set(prev.map((p) => p.id));
+                return [...prev, ...roster.filter((p) => !existingIds.has(p.id))];
+            });
+
+            const slotCount = getFormation(placement.formationId)?.slots.length ?? roster.length;
+            const starters = roster.slice(0, slotCount).map((p) => ({ playerId: p.id, position: p.position }));
+            const seeded = seedPlacementsFromLegacy(starters, placement.formationId);
+
+            placement.reset({ formationId: placement.formationId, placements: seeded });
+            setTeamName(team.name);
+            setCurrentXiId(null);
+        } catch (error) {
+            console.error('Error prefilling team:', error);
+        } finally {
+            setPrefilling(null);
         }
     };
 
@@ -227,16 +283,40 @@ export default function LineupBuilderPage() {
                         </div>
 
                         <div className="bg-white/5 border border-white/10 rounded-xl p-4">
-                            <label className="text-sm text-white/60 mb-2 block">Formation</label>
-                            <select
-                                value={placement.formationId}
-                                onChange={(e) => handleFormationChange(e.target.value)}
-                                className="w-full bg-white/10 border border-white/20 rounded-lg px-4 py-2 text-white"
-                            >
-                                {FORMATION_OPTIONS.map((f) => (
-                                    <option key={f.id} value={f.id}>{f.label}</option>
-                                ))}
-                            </select>
+                            <label className="text-sm text-white/60 mb-2 block">Pre-fill lineup</label>
+                            <input
+                                type="text"
+                                value={teamSearch}
+                                onChange={(e) => setTeamSearch(e.target.value)}
+                                placeholder="Search a team..."
+                                className="w-full bg-white/10 border border-white/20 rounded-lg px-4 py-2 text-white text-sm focus:outline-none focus:border-primary mb-2"
+                            />
+                            <div className="space-y-1 max-h-56 overflow-y-auto">
+                                {realTeams
+                                    .filter((t) =>
+                                        !teamSearch ||
+                                        t.name.toLowerCase().includes(teamSearch.toLowerCase()) ||
+                                        t.shortName.toLowerCase().includes(teamSearch.toLowerCase())
+                                    )
+                                    .slice(0, 30)
+                                    .map((t) => (
+                                        <button
+                                            key={t.id}
+                                            onClick={() => handlePrefillTeam(t)}
+                                            disabled={prefilling !== null}
+                                            className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs text-left hover:bg-white/10 transition-colors disabled:opacity-50"
+                                        >
+                                            {t.logo ? (
+                                                // eslint-disable-next-line @next/next/no-img-element
+                                                <img src={t.logo} alt="" className="w-5 h-5 rounded-full object-cover" />
+                                            ) : (
+                                                <span className="w-5 h-5 rounded-full bg-white/10" />
+                                            )}
+                                            <span className="text-white/80 truncate">{t.name}</span>
+                                            {prefilling === t.id && <span className="ml-auto text-white/40">…</span>}
+                                        </button>
+                                    ))}
+                            </div>
                             <p className="text-[10px] text-white/40 mt-2">
                                 {loadingPlayers ? 'Loading players…' : `${availablePlayers.length} players available`}
                             </p>
@@ -303,6 +383,17 @@ export default function LineupBuilderPage() {
                                 playerDetails={playerDetails}
                                 mode="edit"
                                 onSlotClick={(slotId) => setPopupSlotId(slotId)}
+                                formationControl={
+                                    <select
+                                        value={placement.formationId}
+                                        onChange={(e) => handleFormationChange(e.target.value)}
+                                        className="px-3 py-1 bg-black/50 rounded-lg backdrop-blur-md border border-white/10 text-xs font-display italic font-bold text-white uppercase tracking-wider focus:outline-none cursor-pointer"
+                                    >
+                                        {FORMATION_OPTIONS.map((f) => (
+                                            <option key={f.id} value={f.id} className="bg-neutral-900 normal-case">{f.label}</option>
+                                        ))}
+                                    </select>
+                                }
                             />
                         </div>
 
