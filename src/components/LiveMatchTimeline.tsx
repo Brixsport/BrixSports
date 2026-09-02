@@ -450,11 +450,13 @@ export default function LiveMatchTimeline({ events, homeTeam, awayTeam, eyePoint
                             return (
                                 <motion.div
                                     key={event.id}
-                                    initial={{ opacity: 0, x: isHomeTeam ? -20 : 20 }}
+                                    initial={{ opacity: 0, x: -20 }}
                                     animate={{ opacity: 1, x: 0 }}
                                     transition={{ delay: index * 0.05 }}
-                                    className={`flex items-start gap-4 ${isHomeTeam ? 'flex-row' : 'flex-row-reverse'
-                                        }`}
+                                    // BACKLOG-332: Figma's "All" view is a uniform single-column
+                                    // layout, not side-mirrored by team like Key events correctly
+                                    // is -- dropped the isHomeTeam flex-row-reverse for this path.
+                                    className="flex items-start gap-4"
                                 >
                                     {/* Time */}
                                     <div className="flex-shrink-0 w-16 text-center">
@@ -540,9 +542,6 @@ export default function LiveMatchTimeline({ events, homeTeam, awayTeam, eyePoint
                                             </div>
                                         </div>
                                     </div>
-
-                                    {/* Spacer for alignment */}
-                                    <div className="flex-shrink-0 w-16" />
                                 </motion.div>
                             );
                         })}

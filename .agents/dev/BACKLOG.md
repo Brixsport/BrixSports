@@ -10654,9 +10654,11 @@ The even-split rule wasn't invented in a vacuum — it independently reproduces 
 
 ### BACKLOG-330 — Football Stats Tab: Per-Stat Visual Treatment Doesn't Match Figma
 
-**Status:** OPEN — filed, not built.
+**Status:** SHIPPED — 2026-09-02, session `brixsports-v2-dd/7c` continuation. Live verification on Vercel preview pending.
 **Priority:** LOW-MEDIUM — visual reconciliation only, no missing data.
 **Files:** `src/components/LiveStats.tsx`.
+
+**Fix shipped:** added `StatRow` (plain value each side, leading side gets a `bg-primary` filled circle with white bold text, tie = no circle) and switched Shots/Shots on Target/Corners/Fouls/Yellow Cards to it, dropping their per-category icons. `StatBar` (dual-color bar) is untouched and still used for the disabled Possession row, Red Cards, Saves (none of those three were named in this entry's scope, left as-is), and all of basketball's categories (`BACKLOG-331` territory, not touched). Team header logos-only change scoped to `sport === 'Football'` only via a conditional — basketball's own Stats reference (`bbal-stats.jpeg`) keeps a logo+shortName header, so that path renders unchanged.
 
 Read `LiveStats.tsx` directly (not just screenshots) to ground this: every football stat category uses the same `StatBar` sub-component -- a dual-color bar, home team's color from the left, away team's color from the right, with an icon (`Target`/`Shield`/`Zap`) next to the label. Figma (`stats.jpeg`) only uses that dual-bar treatment for **Ball Possession** -- which is already disabled live, and intentionally so (`BACKLOG-192`: possession is an attacking-event-count proxy, not real tracked possession; Richard's call was to hide it rather than ship a misleading number). For every other category Figma actually shows (Shots, Shots on Target, Corners, Fouls, Yellow Cards), the real treatment is a plain number on each side with a **filled blue circle around whichever side is leading** -- no bar, no icon. Also: Figma's Stats-tab team header row shows logos only (no team name/shortName text), live repeats the name/shortName text that's already in the page header above.
 
@@ -10685,13 +10687,17 @@ Figma's basketball Stats screen (`bbal-stats.jpeg`) is not a relabeling of live'
 
 ### BACKLOG-332 — Timeline "All" View: Live Mirrors Events by Team Side, Figma Doesn't
 
-**Status:** OPEN — filed, not built.
+**Status:** SHIPPED — 2026-09-02, session `brixsports-v2-dd/7c` continuation. Live verification on Vercel preview pending.
 **Priority:** LOW -- visual/structural reconciliation, not a functional gap (BACKLOG-294's Key-events view, which *is* correctly side-mirrored per Figma, already shipped and live-verified).
 **Files:** `src/components/LiveMatchTimeline.tsx` (the pre-existing `groupedEvents`-driven card renderer used when `filter === 'all'`).
+
+**Note found while implementing this fix:** re-examining the reference image (`Timeline-full-event(commentary).jpeg`) at higher zoom shows the small icon+minute badge actually does alternate left/right by team (home events badge-left, away events badge-right) -- it's the card box itself that's uniform width/position across both sides, not a fully unmirrored single column as this entry originally characterized. Built exactly per Richard's explicit direction anyway (drop `isHomeTeam` flex-row-reverse, minute always left) since that's a two-source instruction (this entry's own scoped fix + this session's task brief both say the same thing); flagging the badge-alternation nuance here in case a follow-up pass to mirror just the badge (icon+minute together, box position unchanged) is wanted later.
 
 Re-examined `Timeline-full-event(commentary).jpeg` directly against the live "All" renderer. Live's "All" view applies the same `isHomeTeam ? 'flex-row' : 'flex-row-reverse'` mirroring the new Key-events view correctly uses -- but Figma's "All" view is **not** side-mirrored at all: every event, home or away, is the same uniform single-column left-aligned card (minute/icon on the left, description filling the rest), only the content differs by team. This was missed in the original scoping ("existing section already looked close, just needs polish") -- the actual gap is structural, not cosmetic. Separately, Figma's phrasing per event is flatter/simpler ("Yellow Card to Sofwan", "Shot Off Target by Blacko") than live's cycling flavor-text commentary templates ("Yellow card shown to X" / "The referee books X..." / etc, `getCommentaryTemplate`) -- noted as a style difference, not necessarily a defect; the flavor-text variety reads as a deliberate value-add over Figma's flatter baseline and Richard hasn't asked for it to be removed.
 
 **Fix, scoped:** drop the `isHomeTeam` mirroring for the `filter === 'all'` render path only (Key events keeps it, that one's confirmed correct against Figma) -- single-column layout, minute+icon always on the left. Leave the commentary-template phrasing as-is unless told otherwise.
+
+**Fix shipped:** removed the `isHomeTeam ? 'flex-row' : 'flex-row-reverse'` conditional (now always `flex-row`), the now-redundant trailing alignment spacer div, and made the entrance animation always slide in from the left (was `x: isHomeTeam ? -20 : 20`). The icon (inside the card) was already left-aligned regardless of team and untouched; only the outer row direction and the minute-badge side changed. `isHomeTeam` is still computed and used (for the Team Badge lookup), just no longer drives the row's flex direction.
 
 **Found:** session `brixsports-v2-7c`, 2026-09-02, same survey pass as `BACKLOG-330`/`331`.
 
