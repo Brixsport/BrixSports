@@ -12,10 +12,12 @@ export function isValidLogo(logo: string | null | undefined): boolean {
 const SIZE_PX: Record<string, number> = { sm: 32, md: 40, lg: 48 };
 
 function getInitials(name: string): string {
-    return name
-        .split(' ')
+    // Match alphanumeric words only, so punctuation-heavy names like
+    // "BUSALYMPICS (FOOTBALL)" produce "BF", not "B(" from a naive
+    // space-split grabbing the paren as a "word".
+    const words = name.match(/[A-Za-z0-9]+/g) || [];
+    return words
         .map((w) => w[0])
-        .filter(Boolean)
         .slice(0, 2)
         .join('')
         .toUpperCase();

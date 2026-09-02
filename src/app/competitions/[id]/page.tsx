@@ -1,9 +1,9 @@
 'use client';
 
 import { motion, AnimatePresence } from 'framer-motion';
-import { Trophy, LayoutGrid, ListOrdered, Activity, Loader2, AlertCircle, Calendar, Clock, MapPin, Star, ArrowLeft, Users } from 'lucide-react';
-import { useState, useEffect, useMemo } from 'react';
-import { useRouter, useParams } from 'next/navigation';
+import { LayoutGrid, ListOrdered, Activity, Loader2, AlertCircle, Calendar, Star, ArrowLeft, Users, BarChart3 } from 'lucide-react';
+import { useState, useEffect, useMemo, Suspense } from 'react';
+import { useRouter, useParams, useSearchParams } from 'next/navigation';
 import MatchCalendar from '@/components/MatchCalendar';
 import { isSameDay } from 'date-fns';
 import { TeamLogo } from '@/lib/utils/team-logo';
@@ -67,6 +67,7 @@ interface Match {
   status: string;
   venue: string;
   competition: string;
+  round?: string | null;
 }
 
 interface BracketNode {
@@ -84,13 +85,50 @@ interface BracketRound {
   matches: BracketNode[];
 }
 
-export default function CompetitionHubPage() {
+interface StatLeader {
+  rank: number;
+  player: { id: string; name: string; number: number | null; image: string | null };
+  team: { name: string } | null;
+  highlightedStat: number;
+}
+
+// Sport-appropriate leaderboard categories -- football's Goals/Assists/Yellow
+// Cards match the Figma Stats-tab reference directly; basketball has no such
+// reference, so this uses its own real stat categories (Points/Rebounds/
+// Assists) from the same /api/players/stats/leaders endpoint rather than
+// forcing football's categories onto a sport they don't apply to.
+const STAT_CATEGORIES: Record<string, { type: string; label: string }[]> = {
+  Football: [
+    { type: 'goals', label: 'Goals' },
+    { type: 'assists', label: 'Assists' },
+    { type: 'yellowCards', label: 'Yellow Cards' },
+  ],
+  Basketball: [
+    { type: 'points', label: 'Points' },
+    { type: 'rebounds', label: 'Rebounds' },
+    { type: 'assists', label: 'Assists' },
+  ],
+};
+
+type ViewTab = 'standings' | 'matches' | 'brackets' | 'stats';
+const VALID_TABS: ViewTab[] = ['standings', 'matches', 'brackets', 'stats'];
+
+function CompetitionHubContent() {
   const router = useRouter();
   const params = useParams();
+  const searchParams = useSearchParams();
   const competitionId = params.id as string;
 
   const { isFavoriteCompetition, toggleCompetition } = useFavorites();
-  const [view, setView] = useState<'standings' | 'matches' | 'brackets'>('standings');
+  const tabParam = searchParams.get('tab') as ViewTab | null;
+  const [view, setViewState] = useState<ViewTab>(VALID_TABS.includes(tabParam as ViewTab) ? (tabParam as ViewTab) : 'standings');
+  // Tabs are URL-addressable (?tab=standings|matches|brackets|stats) so each
+  // is deep-linkable/shareable, matching how Figma treats them as distinct
+  // screens rather than pure client state.
+  const setView = (tab: ViewTab) => {
+    setViewState(tab);
+    router.replace(`/competitions/${competitionId}?tab=${tab}`, { scroll: false });
+  };
   const [selectedSport, setSelectedSport] = useState<SportType>('All');
   const [competitions, setCompetitions] = useState<Competition[]>([]);
   const [groups, setGroups] = useState<CompetitionGroup[]>([]);
@@ -98,6 +136,7 @@ export default function CompetitionHubPage() {
   const [standings, setStandings] = useState<Standing[]>([]);
   const [matches, setMatches] = useState<Match[]>([]);
   const [brackets, setBrackets] = useState<BracketRound[]>([]);
+  const [statsLeaders, setStatsLeaders] = useState<Record<string, StatLeader[]>>({});
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
@@ -152,6 +191,7 @@ export default function CompetitionHubPage() {
           setStandings([]);
           setMatches([]);
           setBrackets([]);
+          setStatsLeaders({});
           return;
         }
 
@@ -172,6 +212,24 @@ export default function CompetitionHubPage() {
         const bData = await bracketRes.json();
         if (bData.rounds) setBrackets(bData.rounds);
         else setBrackets([]);
+
+        // Stats tab leaderboards -- competition-scoped from the start (the
+        // endpoint already supports competitionId; the global-fetch bug
+        // BACKLOG-290 flagged was in /football/page.tsx's calling code, not
+        // this endpoint, so this avoids that bug rather than carrying it in).
+        const categories = STAT_CATEGORIES[fetchSport] || [];
+        const statsResults = await Promise.all(
+          categories.map((cat) =>
+            fetch(`/api/players/stats/leaders?type=${cat.type}&competitionId=${selectedComp.id}&competition=${encodeURIComponent(selectedComp.name)}&sport=${fetchSport}&limit=5`)
+              .then((r) => r.json())
+              .catch(() => ({ leaders: [] }))
+          )
+        );
+        const nextStats: Record<string, StatLeader[]> = {};
+        categories.forEach((cat, i) => {
+          nextStats[cat.type] = statsResults[i]?.leaders || [];
+        });
+        setStatsLeaders(nextStats);
 
       } catch (err) {
         console.error('Error fetching details:', err);
@@ -296,66 +354,21 @@ export default function CompetitionHubPage() {
   return (
     <div className="min-h-screen bg-[#050505] text-white p-4 md:p-12">
       <div className="max-w-5xl mx-auto space-y-6 md:space-y-12">
-        <header className="space-y-6 md:space-y-8 border-b border-white/5 pb-8">
-          {/* Identity row: back + logo/name/filter block (left) -- star (end) */}
-          <div className="flex items-start justify-between gap-4">
-            <div className="flex items-start gap-4">
-              <button
-                onClick={() => router.back()}
-                aria-label="Back"
-                className="shrink-0 p-2 -ml-2 -mt-2 rounded-full hover:bg-white/10 transition-colors text-white/60 hover:text-white"
-              >
-                <ArrowLeft size={20} />
-              </button>
-              {selectedComp && (
-                <div className="w-14 h-14 md:w-20 md:h-20 shrink-0 bg-white/5 rounded-2xl border border-white/10 p-2 flex items-center justify-center">
-                  <TeamLogo logo={selectedComp.logo} name={selectedComp.name} size="lg" />
-                </div>
-              )}
-              <div className="text-left">
-                <div className="flex items-center gap-2 mb-2">
-                  <Trophy size={14} className="text-primary" />
-                  {selectedGroup && selectedGroup.seasons.length > 1 ? (
-                    <select
-                      value={selectedComp?.id || ''}
-                      onChange={(e) => {
-                        const chosen = selectedGroup.seasons.find(s => s.id === e.target.value);
-                        if (chosen) router.push(`/competitions/${chosen.id}`);
-                      }}
-                      className="text-[10px] font-black uppercase tracking-widest text-white/60 bg-white/5 border border-white/10 rounded-lg px-2 py-0.5 focus:outline-none focus:border-primary/50"
-                    >
-                      {selectedGroup.seasons.map((s) => (
-                        <option key={s.id} value={s.id}>{s.season || 'Unknown Season'}</option>
-                      ))}
-                    </select>
-                  ) : (
-                    <span className="text-[10px] font-black uppercase tracking-widest text-white/40">
-                      {selectedComp?.season || 'Current Season'}
-                    </span>
-                  )}
-                  <span className="text-[10px] font-black uppercase tracking-widest text-white/40">
-                    • {selectedComp?.status || 'Active'}
-                  </span>
-                </div>
-                <div className="flex items-center gap-3 mb-2">
-                  <h1 className="font-display text-2xl md:text-5xl tracking-tighter italic uppercase leading-none">
-                    {selectedComp?.name || 'Competition Viewer'}
-                  </h1>
-                </div>
-                {!!selectedComp?.numberOfTeams && (
-                  <div className="inline-flex items-center gap-1.5 px-3 py-1 mb-2 bg-primary/10 border border-primary/20 rounded-lg">
-                    <Users size={12} className="text-primary" />
-                    <span className="text-[10px] font-black uppercase tracking-widest text-primary">
-                      {selectedComp.numberOfTeams} Teams Registered
-                    </span>
-                  </div>
-                )}
-                <p className="text-white/60 text-sm max-w-xl">
-                  {selectedComp?.description || `Managing standings, fixtures, and results for ${selectedComp?.name || 'this competition'}.`}
-                </p>
-              </div>
-            </div>
-
+        <header className="space-y-4 border-b border-white/5 pb-8">
+          {/* Utility row: back -- star. Own row, present on every tab (Figma's
+              own Standings-tab frame vs Stats-tab frame disagree on this --
+              back+star share a row on Standings, star floats alone with no
+              back arrow at all on Stats. Splitting it out like this keeps
+              back navigation reachable from every tab, which either frame
+              alone would break.) */}
+          <div className="flex items-center justify-between">
+            <button
+              onClick={() => router.back()}
+              aria-label="Back"
+              className="shrink-0 p-2 -ml-2 rounded-full hover:bg-white/10 transition-colors text-white/60 hover:text-white"
+            >
+              <ArrowLeft size={20} />
+            </button>
             {selectedComp && (
               <button
                 onClick={() => toggleCompetition(selectedComp.id)}
@@ -368,6 +381,50 @@ export default function CompetitionHubPage() {
                 />
               </button>
             )}
+          </div>
+
+          {/* Identity block: logo + name, then season/status line, then badge --
+              no description paragraph, no boxed background behind the logo,
+              matching both Figma reference frames. */}
+          <div className="flex items-start gap-4">
+            {selectedComp && (
+              <div className="w-14 h-14 md:w-16 md:h-16 shrink-0 flex items-center justify-center">
+                <TeamLogo logo={selectedComp.logo} name={selectedComp.name} size="lg" />
+              </div>
+            )}
+            <div className="text-left">
+              <h1 className="font-display text-2xl md:text-4xl tracking-tighter italic uppercase leading-none mb-2">
+                {selectedComp?.name || 'Competition Viewer'}
+              </h1>
+              <div className="flex items-center gap-2 mb-2">
+                {selectedGroup && selectedGroup.seasons.length > 1 ? (
+                  <select
+                    value={selectedComp?.id || ''}
+                    onChange={(e) => {
+                      const chosen = selectedGroup.seasons.find(s => s.id === e.target.value);
+                      if (chosen) router.push(`/competitions/${chosen.id}`);
+                    }}
+                    className="text-[10px] font-black uppercase tracking-widest text-white/60 bg-white/5 border border-white/10 rounded-lg px-2 py-0.5 focus:outline-none focus:border-primary/50"
+                  >
+                    {selectedGroup.seasons.map((s) => (
+                      <option key={s.id} value={s.id}>{s.season || 'Unknown Season'}</option>
+                    ))}
+                  </select>
+                ) : (
+                  <span className="text-[10px] font-black uppercase tracking-widest text-white/40">
+                    {selectedComp?.season || 'Current Season'} • {selectedComp?.status || 'Active'}
+                  </span>
+                )}
+              </div>
+              {!!selectedComp?.numberOfTeams && (
+                <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-primary/10 border border-primary/20 rounded-lg">
+                  <Users size={12} className="text-primary" />
+                  <span className="text-[10px] font-black uppercase tracking-widest text-primary">
+                    {selectedComp.numberOfTeams} Teams Registered
+                  </span>
+                </div>
+              )}
+            </div>
           </div>
 
           {/* View Toggle */}
@@ -392,6 +449,13 @@ export default function CompetitionHubPage() {
             >
               <LayoutGrid size={14} />
               <span>Brackets</span>
+            </button>
+            <button
+              onClick={() => setView('stats')}
+              className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${view === 'stats' ? 'bg-primary text-black' : 'text-white/40 hover:text-white'}`}
+            >
+              <BarChart3 size={14} />
+              <span>Stats</span>
             </button>
           </div>
         </header>
@@ -501,64 +565,56 @@ export default function CompetitionHubPage() {
               )}
 
               {matches.length > 0 ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {matches
-                    .filter((match) =>
-                      selectedDate
-                        ? isSameDay(new Date(match.startTime), selectedDate)
-                        : true
-                    )
+                (() => {
+                  // Figma groups matches under a round/stage header ("BUSA LEAGUE
+                  // FOOTBALL - SEMI FINALS") rather than a flat grid. `round` is
+                  // null for regular non-knockout matches -- those fall into a
+                  // single ungrouped "Matches" bucket, so this degrades to
+                  // today's flat list exactly when there's no round data.
+                  const filtered = matches.filter((match) =>
+                    selectedDate ? isSameDay(new Date(match.startTime), selectedDate) : true
+                  );
+                  const roundOrder: string[] = [];
+                  const byRound = new Map<string, Match[]>();
+                  filtered
                     .sort((a, b) => new Date(b.startTime).getTime() - new Date(a.startTime).getTime())
-                    .map((match) => (
-                    <div key={match.id} className="bg-white/5 border border-white/10 rounded-2xl p-4 hover:border-primary/30 transition-all">
-                      <div className="flex justify-between items-center mb-4">
-                        <div className="flex items-center gap-2 text-[10px] text-white/40 font-bold uppercase tracking-widest">
-                          <Calendar size={12} />
-                          <span>{new Date(match.startTime).toLocaleDateString()}</span>
-                          <span className="w-1 h-1 bg-white/20 rounded-full" />
-                          <Clock size={12} />
-                          <span>{new Date(match.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                        </div>
-                        <span className={`text-[10px] px-2 py-0.5 rounded font-black ${match.status === 'LIVE' ? 'bg-red-500 animate-pulse' : match.status === 'FINISHED' ? 'bg-white/10 text-white/40' : 'bg-primary/20 text-primary'}`}>
-                          {match.status}
-                        </span>
-                      </div>
+                    .forEach((match) => {
+                      const key = match.round || 'Matches';
+                      if (!byRound.has(key)) {
+                        byRound.set(key, []);
+                        roundOrder.push(key);
+                      }
+                      byRound.get(key)!.push(match);
+                    });
 
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3 flex-1">
-                          <div className="text-right flex-1">
-                            <p className="font-bold text-sm uppercase truncate">{match.homeTeam?.name || 'Home'}</p>
-                          </div>
-                          <div className="w-10 h-10 bg-white/5 rounded-lg p-1 flex items-center justify-center">
-                            <TeamLogo logo={match.homeTeam?.logo} name={match.homeTeam?.name ?? ''} size="sm" />
-                          </div>
-                        </div>
-
-                        <div className="px-4 text-center">
-                          <div className="bg-white/5 px-4 py-1 rounded-lg border border-white/10">
-                            <span className="font-display italic text-xl">
-                              {match.homeScore} - {match.awayScore}
+                  return (
+                    <div className="space-y-4">
+                      {roundOrder.map((round) => (
+                        <div key={round} className="bg-white/5 border border-white/10 rounded-2xl overflow-hidden">
+                          <div className="flex items-center gap-2 px-4 py-3 bg-white/5 border-b border-white/10">
+                            <LayoutGrid size={14} className="text-primary shrink-0" />
+                            <span className="text-[10px] font-black uppercase tracking-widest truncate">
+                              {round === 'Matches' ? (selectedComp?.name || 'Matches') : `${selectedComp?.name || ''} - ${round.replace(/_/g, ' ')}`}
                             </span>
                           </div>
-                        </div>
-
-                        <div className="flex items-center gap-3 flex-1">
-                          <div className="w-10 h-10 bg-white/5 rounded-lg p-1 flex items-center justify-center">
-                            <TeamLogo logo={match.awayTeam?.logo} name={match.awayTeam?.name ?? ''} size="sm" />
+                          <div className="divide-y divide-white/5">
+                            {byRound.get(round)!.map((match) => (
+                              <div key={match.id} className="flex items-center gap-3 px-4 py-3">
+                                <TeamLogo logo={match.homeTeam?.logo} name={match.homeTeam?.name ?? ''} size="sm" />
+                                <span className="flex-1 text-sm font-bold truncate">{match.homeTeam?.name || 'Home'}</span>
+                                <span className="text-xs font-display italic text-primary shrink-0 px-2">
+                                  {match.status === 'UPCOMING' ? new Date(match.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : `${match.homeScore}-${match.awayScore}`}
+                                </span>
+                                <span className="flex-1 text-sm font-bold truncate text-right">{match.awayTeam?.name || 'Away'}</span>
+                                <TeamLogo logo={match.awayTeam?.logo} name={match.awayTeam?.name ?? ''} size="sm" />
+                              </div>
+                            ))}
                           </div>
-                          <div className="text-left flex-1">
-                            <p className="font-bold text-sm uppercase truncate">{match.awayTeam?.name || 'Away'}</p>
-                          </div>
                         </div>
-                      </div>
-
-                      <div className="mt-4 pt-4 border-t border-white/5 flex items-center gap-2 text-[10px] text-white/40 font-bold uppercase tracking-widest">
-                        <MapPin size={12} />
-                        <span>{match.venue || 'TBD'}</span>
-                      </div>
+                      ))}
                     </div>
-                  ))}
-                </div>
+                  );
+                })()
               ) : (
                 <div className="p-24 text-center bg-white/5 border border-white/10 rounded-[40px]">
                   <Calendar className="w-12 h-12 text-white/10 mx-auto mb-4" />
@@ -627,8 +683,61 @@ export default function CompetitionHubPage() {
               )}
             </motion.div>
           )}
+
+          {view === 'stats' && (
+            <motion.div
+              key="stats"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              className="space-y-6"
+            >
+              {(STAT_CATEGORIES[selectedComp?.sport || ''] || []).map((cat) => {
+                const leaders = statsLeaders[cat.type] || [];
+                return (
+                  <div key={cat.type} className="bg-white/5 border border-white/10 rounded-[32px] overflow-hidden">
+                    <div className="px-6 py-4 border-b border-white/10">
+                      <h3 className="text-sm font-black uppercase tracking-widest">{cat.label}</h3>
+                    </div>
+                    {leaders.length > 0 ? (
+                      <div className="divide-y divide-white/5">
+                        {leaders.map((leader) => (
+                          <div key={leader.player.id} className="flex items-center justify-between px-6 py-3">
+                            <div className="flex items-center gap-3 min-w-0">
+                              <div className="w-8 h-8 shrink-0 rounded-lg bg-primary/20 flex items-center justify-center text-[10px] font-black text-primary">
+                                {leader.player.number ?? '-'}
+                              </div>
+                              <div className="min-w-0">
+                                <p className="text-sm font-bold truncate">{leader.player.name}</p>
+                                <p className="text-[10px] text-white/40 uppercase tracking-widest truncate">{leader.team?.name || ''}</p>
+                              </div>
+                            </div>
+                            <span className="text-lg font-display italic text-primary shrink-0">{leader.highlightedStat}</span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-[10px] text-white/20 font-black uppercase tracking-widest text-center py-8">No data yet</p>
+                    )}
+                  </div>
+                );
+              })}
+            </motion.div>
+          )}
         </AnimatePresence>
       </div>
     </div>
+  );
+}
+
+export default function CompetitionHubPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-[#050505] flex items-center justify-center">
+        <Loader2 className="w-12 h-12 text-primary animate-spin" />
+      </div>
+    }>
+      <CompetitionHubContent />
+    </Suspense>
   );
 }
