@@ -30,11 +30,21 @@ export async function GET(
 
         // BUG-221: unpublished drafts are only visible to admin/logger. Public
         // viewers (and any unauthenticated caller) only ever see published lineups.
+        // BACKLOG-323: this route filtered out unpublished drafts correctly but
+        // never stripped publishedByName/unlockedByName from the ones it does
+        // return -- both can be an admin's email (publish/route.ts and
+        // lineup/unlock/route.ts both fall back to authUser.name || authUser.email).
+        // Same fix as the sibling GET /api/matches/[id] route.
         const authUser = await getAuthUser(request).catch(() => null);
         const canViewDrafts = authUser?.role === 'admin' || authUser?.role === 'logger';
         if (lineups && !canViewDrafts) {
             lineups = Object.fromEntries(
-                Object.entries(lineups).filter(([, teamLineup]) => (teamLineup as any)?.status === 'published')
+                Object.entries(lineups)
+                    .filter(([, teamLineup]) => (teamLineup as any)?.status === 'published')
+                    .map(([side, teamLineup]) => {
+                        const { publishedBy, publishedByName, publishedByRole, unlockedBy, unlockedByName, ...rest } = teamLineup as any;
+                        return [side, rest];
+                    })
             );
         }
 

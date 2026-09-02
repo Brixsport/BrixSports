@@ -154,9 +154,10 @@ export async function GET(
         // BACKLOG-323: this route had no auth check at all, unlike its sibling
         // GET /api/matches/[id]/lineup (which already gates drafts correctly) --
         // an unauthenticated viewer could read an unpublished draft lineup here,
-        // plus publishedByName (which can be an admin's email, per publish/
-        // route.ts's authUser.name || authUser.email fallback) on any published
-        // one. Mirror the sibling route's gate.
+        // plus publishedByName/unlockedByName (both can be an admin's email --
+        // publish/route.ts and lineup/unlock/route.ts both fall back to
+        // authUser.name || authUser.email) on any published one. Mirror the
+        // sibling route's gate.
         if (lineups && typeof lineups === 'object') {
             const authUser = await getAuthUser(request).catch(() => null);
             const canViewDraftsAndAuthorship = authUser?.role === 'admin' || authUser?.role === 'logger';
@@ -165,7 +166,7 @@ export async function GET(
                     Object.entries(lineups)
                         .filter(([, teamLineup]) => (teamLineup as any)?.status === 'published')
                         .map(([side, teamLineup]) => {
-                            const { publishedBy, publishedByName, publishedByRole, ...rest } = teamLineup as any;
+                            const { publishedBy, publishedByName, publishedByRole, unlockedBy, unlockedByName, ...rest } = teamLineup as any;
                             return [side, rest];
                         })
                 );
