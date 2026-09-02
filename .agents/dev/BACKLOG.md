@@ -9895,7 +9895,7 @@ Fixed exactly per the "Fix (not built)" plan below: `MatchStatusBadge.tsx` now d
 
 ### BACKLOG-294 — Match Detail: Reconcile Tabs, Make URL-Addressable (Figma vs. Live)
 
-**Status:** OPEN.
+**Status:** IN PROGRESS — session `brixsports-v2-dd`, 2026-09-02. Scope: everything except the Lineups tab's own rendering (owned by `brixsports-v2-ae`, `BACKLOG-322`/`323`) — see `FIGMA_REDESIGN_COORDINATION_PLAN.md`. Worktree `.claude/worktrees/match-detail-tabs`, branch `work/match-detail-tabs` off `feature/ui-redesign`.
 **Priority:** MEDIUM.
 **Problem:** live `src/app/matches/[id]/MatchDetailClient.tsx` has 7 tabs (`overview/predictions/timeline/stats/lineups/h2h/polls`, all client `useState`, not URL-addressable); Figma shows 4 (Lineups/Timeline/Stats/Standings, the last being an inline mini group-table not present live).
 **UX requirement, not just cleanup (UI/UX pass, session 61):** URL-addressable tabs are a real user-facing requirement here, not a technical nicety — without them there's no shareable link to "this match's lineup," no bookmarking a specific tab, and the browser back button exits the whole page instead of stepping back through tab history. Treat `?tab=` (or a nested route) as in-scope for this entry, not a follow-up.
