@@ -413,35 +413,36 @@ function CompetitionHubContent() {
             </div>
           </div>
 
-          {/* View Toggle */}
-          <div className="flex bg-white/5 p-1 rounded-2xl border border-white/10 overflow-x-auto">
+          {/* View Toggle -- flex-1 per tab so all 4 always fit the row width,
+              no horizontal scroll (Figma shows all 4 fitting on one line). */}
+          <div className="flex bg-white/5 p-1 rounded-2xl border border-white/10">
             <button
               onClick={() => setView('standings')}
-              className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${view === 'standings' ? 'bg-primary text-black' : 'text-white/40 hover:text-white'}`}
+              className={`flex-1 flex items-center justify-center gap-1 px-1 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${view === 'standings' ? 'bg-primary text-black' : 'text-white/40 hover:text-white'}`}
             >
-              <ListOrdered size={14} />
-              <span>Standings</span>
+              <ListOrdered size={14} className="shrink-0" />
+              <span className="truncate">Standings</span>
             </button>
             <button
               onClick={() => setView('matches')}
-              className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${view === 'matches' ? 'bg-primary text-black' : 'text-white/40 hover:text-white'}`}
+              className={`flex-1 flex items-center justify-center gap-1 px-1 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${view === 'matches' ? 'bg-primary text-black' : 'text-white/40 hover:text-white'}`}
             >
-              <Calendar size={14} />
-              <span>Matches</span>
+              <Calendar size={14} className="shrink-0" />
+              <span className="truncate">Matches</span>
             </button>
             <button
               onClick={() => setView('brackets')}
-              className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${view === 'brackets' ? 'bg-primary text-black' : 'text-white/40 hover:text-white'}`}
+              className={`flex-1 flex items-center justify-center gap-1 px-1 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${view === 'brackets' ? 'bg-primary text-black' : 'text-white/40 hover:text-white'}`}
             >
-              <LayoutGrid size={14} />
-              <span>Brackets</span>
+              <LayoutGrid size={14} className="shrink-0" />
+              <span className="truncate">Brackets</span>
             </button>
             <button
               onClick={() => setView('stats')}
-              className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${view === 'stats' ? 'bg-primary text-black' : 'text-white/40 hover:text-white'}`}
+              className={`flex-1 flex items-center justify-center gap-1 px-1 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${view === 'stats' ? 'bg-primary text-black' : 'text-white/40 hover:text-white'}`}
             >
-              <BarChart3 size={14} />
-              <span>Stats</span>
+              <BarChart3 size={14} className="shrink-0" />
+              <span className="truncate">Stats</span>
             </button>
           </div>
         </header>

@@ -115,20 +115,19 @@ export default function CompetitionsDirectoryPage() {
           <h1 className="font-display text-xl italic uppercase tracking-widest">Competitions</h1>
         </div>
 
-        {/* Sport filter */}
-        <div className="flex overflow-x-auto scrollbar-hide">
-          <div className="inline-flex bg-white/5 p-1 rounded-2xl border border-white/10 gap-1">
-            {(['All', 'Football', 'Basketball', 'Other'] as SportType[]).map((sport) => (
-              <button
-                key={sport}
-                onClick={() => setSportFilter(sport)}
-                className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${sportFilter === sport ? 'bg-primary text-black' : 'text-white/40 hover:text-white'}`}
-              >
-                <Activity size={12} />
-                {sport}
-              </button>
-            ))}
-          </div>
+        {/* Sport filter -- flex-1 per tab so all 4 fit the row width, no
+            horizontal scroll (matches the Figma directory screen). */}
+        <div className="flex bg-white/5 p-1 rounded-2xl border border-white/10">
+          {(['All', 'Football', 'Basketball', 'Other'] as SportType[]).map((sport) => (
+            <button
+              key={sport}
+              onClick={() => setSportFilter(sport)}
+              className={`flex-1 flex items-center justify-center gap-1 px-1 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${sportFilter === sport ? 'bg-primary text-black' : 'text-white/40 hover:text-white'}`}
+            >
+              <Activity size={12} className="shrink-0" />
+              <span className="truncate">{sport}</span>
+            </button>
+          ))}
         </div>
 
         {loading ? (
