@@ -719,15 +719,15 @@ export default function MatchDetailClient() {
                     </div>
 
                     {/* Tabs */}
-                    <div className="flex gap-2 border-t border-white/10 overflow-x-auto scrollbar-hide mt-4">
+                    <div className="flex gap-1 border-t border-white/10 overflow-x-auto scrollbar-hide mt-4">
                         <button
                             onClick={() => setActiveTab('overview')}
-                            className={`px-4 py-2.5 text-xs font-bold uppercase tracking-wider transition-all relative whitespace-nowrap ${activeTab === 'overview'
+                            className={`px-3 py-2 text-[10px] font-bold uppercase tracking-wider transition-all relative whitespace-nowrap ${activeTab === 'overview'
                                 ? 'text-primary'
                                 : 'text-white/60 hover:text-white'
                                 }`}
                         >
-                            <Eye className="w-3.5 h-3.5 inline mr-1.5" />
+                            <Eye className="w-2.5 h-2.5 inline mr-1" />
                             Overview
                             {activeTab === 'overview' && (
                                 <motion.div
@@ -741,12 +741,12 @@ export default function MatchDetailClient() {
                         {/* {isUpcoming && (
                             <button
                                 onClick={() => setActiveTab('predictions')}
-                                className={`px-4 py-2.5 text-xs font-bold uppercase tracking-wider transition-all relative whitespace-nowrap ${activeTab === 'predictions'
+                                className={`px-3 py-2 text-[10px] font-bold uppercase tracking-wider transition-all relative whitespace-nowrap ${activeTab === 'predictions'
                                     ? 'text-primary'
                                     : 'text-white/60 hover:text-white'
                                     }`}
                             >
-                                <TrendingUp className="w-3.5 h-3.5 inline mr-1.5" />
+                                <TrendingUp className="w-2.5 h-2.5 inline mr-1" />
                                 Predictions
                                 {activeTab === 'predictions' && (
                                     <motion.div
@@ -761,12 +761,12 @@ export default function MatchDetailClient() {
                         {!isUpcoming && (
                             <button
                                 onClick={() => setActiveTab('timeline')}
-                                className={`px-4 py-2.5 text-xs font-bold uppercase tracking-wider transition-all relative whitespace-nowrap ${activeTab === 'timeline'
+                                className={`px-3 py-2 text-[10px] font-bold uppercase tracking-wider transition-all relative whitespace-nowrap ${activeTab === 'timeline'
                                     ? 'text-primary'
                                     : 'text-white/60 hover:text-white'
                                     }`}
                             >
-                                <Activity className="w-3.5 h-3.5 inline mr-1.5" />
+                                <Activity className="w-2.5 h-2.5 inline mr-1" />
                                 Timeline
                                 {activeTab === 'timeline' && (
                                     <motion.div
@@ -781,12 +781,12 @@ export default function MatchDetailClient() {
                         {!isUpcoming && (
                             <button
                                 onClick={() => setActiveTab('stats')}
-                                className={`px-4 py-2.5 text-xs font-bold uppercase tracking-wider transition-all relative whitespace-nowrap ${activeTab === 'stats'
+                                className={`px-3 py-2 text-[10px] font-bold uppercase tracking-wider transition-all relative whitespace-nowrap ${activeTab === 'stats'
                                     ? 'text-primary'
                                     : 'text-white/60 hover:text-white'
                                     }`}
                             >
-                                <BarChart3 className="w-3.5 h-3.5 inline mr-1.5" />
+                                <BarChart3 className="w-2.5 h-2.5 inline mr-1" />
                                 Stats
                                 {activeTab === 'stats' && (
                                     <motion.div
@@ -798,12 +798,12 @@ export default function MatchDetailClient() {
                         )}
                         <button
                             onClick={() => setActiveTab('lineups')}
-                            className={`px-4 py-2.5 text-xs font-bold uppercase tracking-wider transition-all relative whitespace-nowrap ${activeTab === 'lineups'
+                            className={`px-3 py-2 text-[10px] font-bold uppercase tracking-wider transition-all relative whitespace-nowrap ${activeTab === 'lineups'
                                 ? 'text-primary'
                                 : 'text-white/60 hover:text-white'
                                 }`}
                         >
-                            <Users className="w-3.5 h-3.5 inline mr-1.5" />
+                            <Users className="w-2.5 h-2.5 inline mr-1" />
                             Lineups
                             {activeTab === 'lineups' && (
                                 <motion.div
@@ -814,12 +814,12 @@ export default function MatchDetailClient() {
                         </button>
                         <button
                             onClick={() => setActiveTab('h2h')}
-                            className={`px-4 py-2.5 text-xs font-bold uppercase tracking-wider transition-all relative whitespace-nowrap ${activeTab === 'h2h'
+                            className={`px-3 py-2 text-[10px] font-bold uppercase tracking-wider transition-all relative whitespace-nowrap ${activeTab === 'h2h'
                                 ? 'text-primary'
                                 : 'text-white/60 hover:text-white'
                                 }`}
                         >
-                            <Trophy className="w-3.5 h-3.5 inline mr-1.5" />
+                            <Trophy className="w-2.5 h-2.5 inline mr-1" />
                             H2H
                             {activeTab === 'h2h' && (
                                 <motion.div
@@ -830,12 +830,12 @@ export default function MatchDetailClient() {
                         </button>
                         <button
                             onClick={() => setActiveTab('table')}
-                            className={`px-4 py-2.5 text-xs font-bold uppercase tracking-wider transition-all relative whitespace-nowrap ${activeTab === 'table'
+                            className={`px-3 py-2 text-[10px] font-bold uppercase tracking-wider transition-all relative whitespace-nowrap ${activeTab === 'table'
                                 ? 'text-primary'
                                 : 'text-white/60 hover:text-white'
                                 }`}
                         >
-                            <Table2 className="w-3.5 h-3.5 inline mr-1.5" />
+                            <Table2 className="w-2.5 h-2.5 inline mr-1" />
                             Table
                             {activeTab === 'table' && (
                                 <motion.div
@@ -847,12 +847,12 @@ export default function MatchDetailClient() {
                         {/* BACKSCOPED: 2026-06-08 — BACKLOG-028. Reinstate when: Polls built (Phase 7) */}
                         {/* <button
                             onClick={() => setActiveTab('polls')}
-                            className={`px-4 py-2.5 text-xs font-bold uppercase tracking-wider transition-all relative whitespace-nowrap ${activeTab === 'polls'
+                            className={`px-3 py-2 text-[10px] font-bold uppercase tracking-wider transition-all relative whitespace-nowrap ${activeTab === 'polls'
                                 ? 'text-primary'
                                 : 'text-white/60 hover:text-white'
                                 }`}
                         >
-                            <BarChart3 className="w-3.5 h-3.5 inline mr-1.5" />
+                            <BarChart3 className="w-2.5 h-2.5 inline mr-1" />
                             Polls
                             {activeTab === 'polls' && (
                                 <motion.div
