@@ -1,6 +1,7 @@
 'use client';
 
-import { Loader2, Table2 } from 'lucide-react';
+import Link from 'next/link';
+import { ChevronRight, Loader2, Table2 } from 'lucide-react';
 import { useLiveStandings, StandingRow } from '@/hooks/useLiveStandings';
 import { TeamLogo } from '@/lib/utils/team-logo';
 
@@ -93,26 +94,33 @@ export default function MatchStandingsTable({ competitionId, sport, homeTeamId, 
                 </div>
             )}
             <div className="overflow-x-auto">
-                <div className="min-w-[560px]">
+                {/* No forced min-width -- Figma fits every column without scrolling; the
+                    overflow-x-auto above is a safety net for extreme cases (long team
+                    names, many teams), not the expected default. */}
+                <div>
                     {/* Header */}
-                    <div className="flex items-center gap-2 px-4 py-3 text-[10px] font-bold uppercase tracking-wider text-white/40 border-b border-white/10">
-                        <span className="w-6 text-center">Pos</span>
+                    <div className="flex items-center gap-1 px-3 py-3 text-[10px] font-bold uppercase tracking-wider text-white/40 border-b border-white/10">
+                        <span className="w-5 text-center flex-shrink-0">Pos</span>
                         <span className="flex-1">Team</span>
                         {columns.map(col => (
-                            <span key={col.key} className="w-10 text-center">{col.label}</span>
+                            <span key={col.key} className="w-8 text-center flex-shrink-0">{col.label}</span>
                         ))}
                     </div>
 
-                    {/* Rows */}
-                    {rows.map((row) => {
+                    {/* Rows -- position is the render-time index within `rows` (post
+                        group-filter), never row.position: that field is computed
+                        pre-sort inside useLiveStandings itself, so it goes stale the
+                        moment this list is sliced to one group (same reason
+                        StandingsGrid.tsx elsewhere never uses it either). */}
+                    {rows.map((row, index) => {
                         const isMatchTeam = row.teamId === homeTeamId || row.teamId === awayTeamId;
                         return (
                             <div
                                 key={row.teamId}
-                                className={`flex items-center gap-2 px-4 py-3 border-b border-white/5 last:border-b-0 ${isMatchTeam ? 'bg-white/5' : ''
+                                className={`flex items-center gap-1 px-3 py-3 border-b border-white/5 last:border-b-0 ${isMatchTeam ? 'bg-white/5' : ''
                                     }`}
                             >
-                                <span className="w-6 text-center text-sm text-white/60">{row.position}</span>
+                                <span className="w-5 text-center text-sm text-white/60 flex-shrink-0">{index + 1}</span>
                                 <div className="flex-1 flex items-center gap-2 min-w-0">
                                     <div className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center overflow-hidden flex-shrink-0">
                                         <TeamLogo logo={row.teamLogo} name={row.teamName} size="sm" />
@@ -127,7 +135,7 @@ export default function MatchStandingsTable({ competitionId, sport, homeTeamId, 
                                 {columns.map(col => (
                                     <span
                                         key={col.key}
-                                        className={`w-10 text-center text-sm ${col.key === 'points' ? 'font-bold text-primary' : 'text-white/80'}`}
+                                        className={`w-8 text-center text-sm flex-shrink-0 ${col.key === 'points' ? 'font-bold text-primary' : 'text-white/80'}`}
                                     >
                                         {formatCell(col.key, row[col.key] as number)}
                                     </span>
@@ -137,6 +145,16 @@ export default function MatchStandingsTable({ competitionId, sport, homeTeamId, 
                     })}
                 </div>
             </div>
+            {/* /competitions/[id] defaults its view state to 'standings' on load
+                (confirmed by reading the page's own useState default) -- no query
+                param needed to land there. */}
+            <Link
+                href={`/competitions/${competitionId}`}
+                className="flex items-center justify-center gap-1 px-4 py-3 text-xs font-bold uppercase tracking-widest text-white/60 hover:text-white border-t border-white/10 transition-colors"
+            >
+                View Full Standings
+                <ChevronRight className="w-3.5 h-3.5" />
+            </Link>
         </div>
     );
 }

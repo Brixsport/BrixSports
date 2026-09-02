@@ -752,13 +752,13 @@ export default function MatchDetailClient() {
                         match rather than rendering an empty row. */}
                     {(homeScorers.length > 0 || awayScorers.length > 0) && (
                         <div className="flex items-start justify-between gap-4 mt-3 text-xs text-white/70">
-                            <div className="flex-1 space-y-0.5">
+                            <div className="flex-1 space-y-0.5 text-right">
                                 {homeScorers.map(s => (
                                     <div key={s.name}>{s.name} {s.minutes.map(m => `${m}'`).join(', ')}</div>
                                 ))}
                             </div>
                             <FaFutbol className="w-3 h-3 text-white/30 flex-shrink-0 mt-1" />
-                            <div className="flex-1 space-y-0.5 text-right">
+                            <div className="flex-1 space-y-0.5">
                                 {awayScorers.map(s => (
                                     <div key={s.name}>{s.name} {s.minutes.map(m => `${m}'`).join(', ')}</div>
                                 ))}
