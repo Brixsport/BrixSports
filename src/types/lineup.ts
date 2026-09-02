@@ -6,6 +6,13 @@ export interface LineupPlayer {
     jerseyNumber: number;
     isCaptain: boolean;
     isViceCaptain: boolean;
+    // Explicit placement (BACKLOG-323) -- optional so existing position-string-only
+    // data keeps validating. slotId is the canonical identity (see
+    // src/lib/lineup/formations.ts); x/y are a denormalized render-space snapshot,
+    // re-derived server-side from slotId on write, never trusted from the client.
+    slotId?: string;
+    x?: number;
+    y?: number;
     // Player details (populated from API)
     name?: string;
     jerseyName?: string;
@@ -17,6 +24,9 @@ export interface TeamLineup {
     starters: LineupPlayer[];
     substitutes: LineupPlayer[];
     status: 'draft' | 'published';
+    // BACKLOG-323: absent or 1 = legacy (position-string, read-time inference);
+    // 2 = every starter carries a resolved slotId/x/y (see isV2Lineup()).
+    placementVersion?: number;
     publishedAt?: string;
     updatedAt?: string;
 }
@@ -74,6 +84,20 @@ export const validateLineup = (lineup: TeamLineup, sport: 'Football' | 'Basketba
     const uniqueJerseyNumbers = new Set(allJerseyNumbers);
     if (allJerseyNumbers.length !== uniqueJerseyNumbers.size) {
         errors.push('Cannot have duplicate jersey numbers');
+    }
+
+    // BACKLOG-323: if any starter carries a slotId, every starter must have one
+    // (a mixed legacy/explicit lineup can't be reliably placed), and no two
+    // starters may share the same slot.
+    const startersWithSlot = lineup.starters.filter(p => typeof p.slotId === 'string' && p.slotId.length > 0);
+    if (startersWithSlot.length > 0 && startersWithSlot.length !== lineup.starters.length) {
+        errors.push('All starters must have a slot assigned, or none -- cannot mix explicit placement with unplaced starters');
+    } else if (startersWithSlot.length > 0) {
+        const slotIds = startersWithSlot.map(p => p.slotId as string);
+        const uniqueSlotIds = new Set(slotIds);
+        if (slotIds.length !== uniqueSlotIds.size) {
+            errors.push('Cannot have two starters in the same formation slot');
+        }
     }
 
     // Warnings
