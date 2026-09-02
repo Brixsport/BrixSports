@@ -507,7 +507,9 @@ export default function MatchDetailClient() {
                 ? (e.teamId === match.homeTeamId ? match.awayTeamId : match.homeTeamId)
                 : e.teamId;
             if (scoringTeamId !== teamId) continue;
-            const rawName = e.player?.name ?? e.playerSnapshot?.name ?? e.playerSnapshot?.jerseyName ?? 'Unknown';
+            // BACKLOG-294: jersey/known-as name, not the full real name -- matches the
+            // same preference LiveMatchTimeline/KeyEventsList now use everywhere else.
+            const rawName = e.player?.jerseyName ?? e.player?.name ?? e.playerSnapshot?.jerseyName ?? e.playerSnapshot?.name ?? 'Unknown';
             const key = isOwnGoal ? `${rawName} (OG)` : rawName;
             if (!byPlayer.has(key)) byPlayer.set(key, []);
             byPlayer.get(key)!.push(e.minute);

@@ -18,6 +18,7 @@ interface Event {
     player?: {
         id: string;
         name: string;
+        jerseyName?: string;
         number: number;
     };
     // WS events from match-state-manager carry playerSnapshot instead of player
@@ -30,6 +31,7 @@ interface Event {
     relatedPlayer?: {
         id: string;
         name: string;
+        jerseyName?: string;
         number: number;
     };
     team?: {
@@ -53,6 +55,13 @@ interface LiveMatchTimelineProps {
 }
 
 const KEY_EVENT_TYPES = new Set(['GOAL', 'YELLOW_CARD', 'RED_CARD', 'SUBSTITUTION']);
+
+// BACKLOG-294: Richard's call -- show the jersey/known-as name everywhere a player
+// appears on this page, not the full real name (jerseyName is already the public
+// player-facing identity per CLAUDE.md's own field allowlist).
+function displayName(person?: { name?: string; jerseyName?: string } | null): string | undefined {
+    return person?.jerseyName || person?.name || undefined;
+}
 
 export default function LiveMatchTimeline({ events, homeTeam, awayTeam, eyePoints, sport = 'football' }: LiveMatchTimelineProps) {
     // BACKLOG-294: opens on "Key events" by default, with "All" a click away 
@@ -124,7 +133,7 @@ export default function LiveMatchTimeline({ events, homeTeam, awayTeam, eyePoint
 
     // Advanced Commentary Generators
     const generateGoalCommentary = (event: Event, seed: number) => {
-        const playerName = event.player?.name ?? event.playerSnapshot?.name ?? event.playerSnapshot?.jerseyName;
+        const playerName = displayName(event.player) ?? displayName(event.playerSnapshot);
         const isLateGame = event.minute > 85;
         const isEarlyGame = event.minute < 10;
         const detail = event.detail?.toLowerCase() || '';
@@ -173,7 +182,7 @@ export default function LiveMatchTimeline({ events, homeTeam, awayTeam, eyePoint
     };
 
     const generateBasketballScoreCommentary = (event: Event, seed: number, type: '2pt' | '3pt' | 'ft') => {
-        const playerName = event.player?.name ?? event.playerSnapshot?.name ?? event.playerSnapshot?.jerseyName ?? 'Player';
+        const playerName = displayName(event.player) ?? displayName(event.playerSnapshot) ?? 'Player';
         const isClutch = event.minute > 36; // Late 4th quarter
 
         let templates: string[] = [];
@@ -212,7 +221,7 @@ export default function LiveMatchTimeline({ events, homeTeam, awayTeam, eyePoint
     };
 
     const getEventDescription = (event: Event) => {
-        const playerName = event.player?.name ?? event.playerSnapshot?.name ?? event.playerSnapshot?.jerseyName ?? 'Unknown';
+        const playerName = displayName(event.player) ?? displayName(event.playerSnapshot) ?? 'Unknown';
         const playerNumber = event.player?.number;
         const seed = event.minute + (event.type?.length || 0) + (playerName?.length || 0) + (event.detail?.length || 0);
 
@@ -225,7 +234,7 @@ export default function LiveMatchTimeline({ events, homeTeam, awayTeam, eyePoint
                         <div className="text-sm opacity-90">
                             {playerNumber && <span className="font-mono bg-white/10 px-1 rounded mr-2">#{playerNumber}</span>}
                             {event.relatedPlayer && (
-                                <span className="text-white/70">Assist by {event.relatedPlayer.name}</span>
+                                <span className="text-white/70">Assist by {displayName(event.relatedPlayer)}</span>
                             )}
                         </div>
                     </div>
@@ -272,11 +281,11 @@ export default function LiveMatchTimeline({ events, homeTeam, awayTeam, eyePoint
                         <span className="font-bold block mb-1">🔄 Substitution</span>
                         <div className="text-sm grid gap-1">
                             <div className="text-green-400 flex items-center gap-2">
-                                <span className="text-[10px] font-bold bg-green-500/20 px-1 rounded">IN</span> {event.player?.name ?? event.playerSnapshot?.name ?? event.playerSnapshot?.jerseyName}
+                                <span className="text-[10px] font-bold bg-green-500/20 px-1 rounded">IN</span> {displayName(event.player) ?? displayName(event.playerSnapshot)}
                             </div>
                             {event.relatedPlayer && (
                                 <div className="text-red-400 flex items-center gap-2">
-                                    <span className="text-[10px] font-bold bg-red-500/20 px-1 rounded">OUT</span> {event.relatedPlayer.name}
+                                    <span className="text-[10px] font-bold bg-red-500/20 px-1 rounded">OUT</span> {displayName(event.relatedPlayer)}
                                 </div>
                             )}
                         </div>
@@ -554,7 +563,7 @@ export default function LiveMatchTimeline({ events, homeTeam, awayTeam, eyePoint
                             <div key={award.id} className="flex items-center gap-3 p-3 bg-white/5 rounded-lg">
                                 <Award className="w-5 h-5 text-purple-500" />
                                 <div>
-                                    <div className="font-semibold">{award.player?.name}</div>
+                                    <div className="font-semibold">{displayName(award.player)}</div>
                                     {award.reason && (
                                         <div className="text-sm text-white/60">{award.reason}</div>
                                     )}
@@ -619,7 +628,7 @@ function KeyEventsList({ events, homeTeam, awayTeam, sport }: KeyEventsListProps
     return (
         <div className="space-y-3">
             {rows.map(({ event, isHomeTeam, normType, scoreAtEvent }) => {
-                const playerName = event.player?.name ?? event.playerSnapshot?.name ?? event.playerSnapshot?.jerseyName ?? 'Unknown';
+                const playerName = displayName(event.player) ?? displayName(event.playerSnapshot) ?? 'Unknown';
 
                 return (
                     <div key={event.id} className={`flex items-center gap-3 ${isHomeTeam ? 'flex-row' : 'flex-row-reverse'}`}>
@@ -634,7 +643,7 @@ function KeyEventsList({ events, homeTeam, awayTeam, sport }: KeyEventsListProps
                                         (both truncating equally made the scorer's name
                                         illegible on anything but a short one). */}
                                     {event.relatedPlayer && (
-                                        <span className="text-white/50 text-sm truncate max-w-[72px] flex-shrink-0">({event.relatedPlayer.name})</span>
+                                        <span className="text-white/50 text-sm truncate max-w-[72px] flex-shrink-0">({displayName(event.relatedPlayer)})</span>
                                     )}
                                     <span className="font-bold truncate flex-1 min-w-0">{playerName}</span>
                                     <span className="flex-shrink-0">⚽</span>
@@ -651,7 +660,7 @@ function KeyEventsList({ events, homeTeam, awayTeam, sport }: KeyEventsListProps
                             )}
                             {normType === 'SUBSTITUTION' && (
                                 <>
-                                    <span className="text-red-400 truncate flex-1 min-w-0">{event.relatedPlayer?.name ?? 'Unknown'}</span>
+                                    <span className="text-red-400 truncate flex-1 min-w-0">{displayName(event.relatedPlayer) ?? 'Unknown'}</span>
                                     <ArrowRightLeft className="w-4 h-4 text-white/50 flex-shrink-0" />
                                     <span className="text-green-400 truncate flex-1 min-w-0">{playerName}</span>
                                 </>

@@ -9931,7 +9931,11 @@ Also, per Richard's request: goal-scorer list alignment changed so both sides hu
 
 **Built additionally this session, beyond the original tab-reconciliation scope:** a per-team goal-scorer list in the match header (e.g. "Wareez 59'" / "Lazzy 33', 71'" / "Surefunmi 75'"), flanking the score -- confirmed missing entirely from live (checked the actual header JSX) and present on every Figma reference screenshot for this screen family. Own goals credit the opposing team's list with an "(OG)" suffix (same own-goal detection `LiveMatchTimeline`'s `generateGoalCommentary` already uses). Uses `FaFutbol` (`react-icons/fa`) for the divider icon, matching the goal-icon convention `BACKLOG-322`'s lineup redesign already established -- not a new icon choice.
 
-**Do not treat this entry as done** -- items 1, 2, 4, 5 above need live re-verification on a fresh Vercel preview before this closes.
+**Update, 2026-09-02 (same session, continued):** items 1, 2, 4, 5 above -- live re-verified on a fresh Vercel preview: positions correct within Group D (1/2/3/4), all 8 columns fit with no forced scroll, "View Full Standings" link confirmed working end-to-end (navigates to `/competitions/[id]`, lands on Standings by default), name-truncation fix confirmed. Item 3 confirmed not a bug (real event data, both subs genuinely away-team). Additionally live-verified: goal-scorer alignment change (home right-aligned, away left-aligned, both hugging the center ball icon), and a jersey-name-not-real-name display preference applied across the Timeline (`All` and `Key events`) and the header goal-scorer list.
+
+**Sequencing for what's left (Richard's direction, 2026-09-02):** `Overview` and `H2H` tabs stay explicitly last in this screen family's queue -- no Figma equivalent for either, kept as BrixSports-only value-adds, revisit only after everything else here and in `BACKLOG-330`/`331`/`332` lands. Those three new entries (Stats and Timeline's "All" view -- found via a full survey pass this same session) are the next real work in this screen family, ahead of Overview/H2H.
+
+**Do not treat this entry as fully closed** -- the tab-reconciliation + URL-addressability work this entry originally scoped is done and live-verified; `BACKLOG-330`/`331`/`332` (Stats and Timeline "All" reconciliation) and the Overview/H2H revisit are follow-on work in the same screen family, tracked separately rather than reopening this entry indefinitely.
 
 **Real bug found in passing (`brixsports-v2-ae`, 2026-09-02, while live-verifying `BACKLOG-323` step 4's own read-path work on the same Vercel preview):** clicking the `Lineups` tab button on a real match (`8Mek2CA7KPlnk1EQ647jx`) correctly updates the URL to `?tab=lineups` (the `router.replace` fires), but the visible tab content does **not** switch -- it stays on Overview. A full page navigation to the same `?tab=lineups` URL renders the Lineups content correctly, so the data/render path itself is fine; this looks like the client-side tab-switch isn't triggering a re-render of `activeTab`-derived content (`useSearchParams` value possibly not being read reactively, or a memoization gap). Not investigated further or fixed -- flagging for whoever verifies this entry live, since it'll block the exact "shareable/bookmarkable tab, real back-button" UX goal this entry exists for if it reaches every tab, not just Lineups.
 
@@ -10639,5 +10643,50 @@ The even-split rule wasn't invented in a vacuum — it independently reproduces 
 **Live-verified end to end:** re-ran the identical publish attempt on the same staging match after redeploy — both home and away `POST /api/admin/match-lineups/[id]` returned `200`. Response body confirmed a fully correct V2 payload: `formation: "dynamic-7"`, `placementVersion: 2`, all 7 starters carrying real server-derived `slotId`/`x`/`y` matching `generateDynamicFormation`'s own math exactly (e.g. the two DEF slots at `x: 33` and `x: 67`, per the `(i+1)/(count+1)*100` spacing formula), correct `isCaptain: true` on the one designated captain and `false` on the rest, and a correctly-shaped 4-player `substitutes` array (no `slotId`, as designed). UI's status banners updated to "✓ Home Lineup Published" / "✓ Away Lineup Published" with working Unlock buttons. (Separately noted, not fixed: `publishedByName` renders blank in this banner — this write route has never set that field, unlike the sibling `/api/matches/[id]/lineup/publish` route; pre-existing, unrelated to `BACKLOG-323`/`328`/`329`, not touched.)
 
 **Found:** session 65 continued (2026-09-02), same live-testing pass as `BACKLOG-328`.
+
+---
+
+### BACKLOG-330 — Football Stats Tab: Per-Stat Visual Treatment Doesn't Match Figma
+
+**Status:** OPEN — filed, not built.
+**Priority:** LOW-MEDIUM — visual reconciliation only, no missing data.
+**Files:** `src/components/LiveStats.tsx`.
+
+Read `LiveStats.tsx` directly (not just screenshots) to ground this: every football stat category uses the same `StatBar` sub-component -- a dual-color bar, home team's color from the left, away team's color from the right, with an icon (`Target`/`Shield`/`Zap`) next to the label. Figma (`stats.jpeg`) only uses that dual-bar treatment for **Ball Possession** -- which is already disabled live, and intentionally so (`BACKLOG-192`: possession is an attacking-event-count proxy, not real tracked possession; Richard's call was to hide it rather than ship a misleading number). For every other category Figma actually shows (Shots, Shots on Target, Corners, Fouls, Yellow Cards), the real treatment is a plain number on each side with a **filled blue circle around whichever side is leading** -- no bar, no icon. Also: Figma's Stats-tab team header row shows logos only (no team name/shortName text), live repeats the name/shortName text that's already in the page header above.
+
+**Fix, scoped:** add a second presentational mode to `LiveStats.tsx` (e.g. a `StatRow` component alongside the existing `StatBar`) used for Shots/Shots on Target/Corners/Fouls/Yellow Cards -- plain value each side, leading side gets a `bg-primary` filled circle (tie = no circle, matching Figma's Yellow Cards 2-2 example). Remove the per-category icons for football. Drop the repeated name/shortName text from the Stats-tab-local header, logos only. Leave `StatBar` (the dual-bar component) in place for Possession (still commented out) and reused as-is for basketball -- basketball's own Figma reference (`bbal-stats.jpeg`) already matches the dual-bar style for every one of its categories, so basketball needs no visual change here, only the separate gap below (`BACKLOG-331`).
+
+**Found:** session `brixsports-v2-7c`, 2026-09-02, survey pass across the match-detail screen family following `BACKLOG-294`'s tab-reconciliation work.
+
+---
+
+### BACKLOG-331 — Basketball Stats Tab: Different Category Set Entirely, Percentage-Based, Quarter-Scoped (Deep Rework, Not Visual Polish)
+
+**Status:** OPEN — filed, not built. Group with `BACKLOG-326` (same "basketball needs real, separate work, not a quick reconciliation" theme) when scheduling.
+**Priority:** MEDIUM.
+**Files:** `src/components/LiveStats.tsx` (`renderBasketballStats`), whatever currently populates `match.stats` for basketball (needs tracing -- not yet done).
+
+Figma's basketball Stats screen (`bbal-stats.jpeg`) is not a relabeling of live's basketball categories -- it's a different data shape entirely:
+1. **Different category set.** Figma: Free Throws, 3 Pointers, 2 Pointers, 1 Pointers, Fouls, Rebounds. Live (`renderBasketballStats`): Field Goals Made, 3-Pointers Made, Free Throws Made, Rebounds, Assists, Steals, Blocks, Turnovers. No overlap beyond Free Throws/3-Pointers/Rebounds by name, and even those differ in what they measure (see next point).
+2. **Percentages, not raw counts.** Every Figma row is a made/attempted-style split percentage (e.g. "35% Free Throws 65%" summing to 100 within a row), rendered as a share-of-total bar. Live shows raw counts ("Field Goals Made: 12"). Converting requires knowing what each percentage is actually a share of (makes vs. attempts? this team's share of the combined stat across both teams?) -- not yet confirmed from any real data source.
+3. **Quarter-scoped filter** (`All`/`1st`/`2nd`/`3rd`/`4th`), matching the Table/Box-Score tabs' own per-quarter framing. Live's `stats` blob is match-wide only, no per-quarter breakdown exists anywhere in the pipeline today.
+
+**Depends on:** the same basketball event-logging audit `BACKLOG-326` already calls for (what event types are actually captured, at what granularity) -- both entries need the same underlying answer before either can be scoped precisely, so investigate once, apply to both.
+
+**Found:** session `brixsports-v2-7c`, 2026-09-02, same survey pass as `BACKLOG-330`.
+
+---
+
+### BACKLOG-332 — Timeline "All" View: Live Mirrors Events by Team Side, Figma Doesn't
+
+**Status:** OPEN — filed, not built.
+**Priority:** LOW -- visual/structural reconciliation, not a functional gap (BACKLOG-294's Key-events view, which *is* correctly side-mirrored per Figma, already shipped and live-verified).
+**Files:** `src/components/LiveMatchTimeline.tsx` (the pre-existing `groupedEvents`-driven card renderer used when `filter === 'all'`).
+
+Re-examined `Timeline-full-event(commentary).jpeg` directly against the live "All" renderer. Live's "All" view applies the same `isHomeTeam ? 'flex-row' : 'flex-row-reverse'` mirroring the new Key-events view correctly uses -- but Figma's "All" view is **not** side-mirrored at all: every event, home or away, is the same uniform single-column left-aligned card (minute/icon on the left, description filling the rest), only the content differs by team. This was missed in the original scoping ("existing section already looked close, just needs polish") -- the actual gap is structural, not cosmetic. Separately, Figma's phrasing per event is flatter/simpler ("Yellow Card to Sofwan", "Shot Off Target by Blacko") than live's cycling flavor-text commentary templates ("Yellow card shown to X" / "The referee books X..." / etc, `getCommentaryTemplate`) -- noted as a style difference, not necessarily a defect; the flavor-text variety reads as a deliberate value-add over Figma's flatter baseline and Richard hasn't asked for it to be removed.
+
+**Fix, scoped:** drop the `isHomeTeam` mirroring for the `filter === 'all'` render path only (Key events keeps it, that one's confirmed correct against Figma) -- single-column layout, minute+icon always on the left. Leave the commentary-template phrasing as-is unless told otherwise.
+
+**Found:** session `brixsports-v2-7c`, 2026-09-02, same survey pass as `BACKLOG-330`/`331`.
 
 ---
