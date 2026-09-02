@@ -10,6 +10,7 @@ import {
     ArrowLeft, Clock, MapPin, Users, TrendingUp, Eye,
     Activity, BarChart3, Share2, Star, Bell, Trophy, Play, Table2
 } from 'lucide-react';
+import { FaFutbol } from 'react-icons/fa';
 import { useFavorites } from '@/hooks/useFavorites';
 import LiveMatchTimeline from '@/components/LiveMatchTimeline';
 import LiveStats from '@/components/LiveStats';
@@ -493,6 +494,34 @@ export default function MatchDetailClient() {
     const homeRedCardsCount = (events || []).filter(e => e.type === 'Red Card' && e.teamId === match.homeTeamId).length;
     const awayRedCardsCount = (events || []).filter(e => e.type === 'Red Card' && e.teamId === match.awayTeamId).length;
 
+    // BACKLOG-294: Figma's header always flanks the score with a per-team goal-scorer
+    // list ("Wareez 59'" / "Lazzy 33', 71'" / "Surefunmi 75'") -- missing live entirely.
+    // Own goals credit the OPPOSING team's list with an "(OG)" suffix, same own-goal
+    // detection LiveMatchTimeline's generateGoalCommentary already uses.
+    const buildScorerSummary = (teamId: string) => {
+        const byPlayer = new Map<string, number[]>();
+        for (const e of (events || [])) {
+            if ((e.type ?? '').toUpperCase().replace(/\s+/g, '_') !== 'GOAL') continue;
+            const isOwnGoal = e.detail?.toLowerCase().includes('own goal') ?? false;
+            const scoringTeamId = isOwnGoal
+                ? (e.teamId === match.homeTeamId ? match.awayTeamId : match.homeTeamId)
+                : e.teamId;
+            if (scoringTeamId !== teamId) continue;
+            const rawName = e.player?.name ?? e.playerSnapshot?.name ?? e.playerSnapshot?.jerseyName ?? 'Unknown';
+            const key = isOwnGoal ? `${rawName} (OG)` : rawName;
+            if (!byPlayer.has(key)) byPlayer.set(key, []);
+            byPlayer.get(key)!.push(e.minute);
+        }
+        return Array.from(byPlayer.entries())
+            .map(([name, minutes]) => {
+                const sorted = [...minutes].sort((a, b) => a - b);
+                return { name, minutes: sorted, firstMinute: sorted[0] };
+            })
+            .sort((a, b) => a.firstMinute - b.firstMinute);
+    };
+    const homeScorers = buildScorerSummary(match.homeTeamId);
+    const awayScorers = buildScorerSummary(match.awayTeamId);
+
     // BUG-197 root cause: shootoutHomeScore/shootoutAwayScore default to 0 (not
     // null) on every match, shootout or not (schema.ts), so the only thing that
     // ever hid "PEN 0-0" on a regular finished match was the `!==` inequality
@@ -717,6 +746,25 @@ export default function MatchDetailClient() {
                             />
                         </div>
                     </div>
+
+                    {/* Goal Scorers - Figma always shows this flanking the score; live had
+                        nothing here at all before BACKLOG-294. Omitted entirely on a scoreless
+                        match rather than rendering an empty row. */}
+                    {(homeScorers.length > 0 || awayScorers.length > 0) && (
+                        <div className="flex items-start justify-between gap-4 mt-3 text-xs text-white/70">
+                            <div className="flex-1 space-y-0.5">
+                                {homeScorers.map(s => (
+                                    <div key={s.name}>{s.name} {s.minutes.map(m => `${m}'`).join(', ')}</div>
+                                ))}
+                            </div>
+                            <FaFutbol className="w-3 h-3 text-white/30 flex-shrink-0 mt-1" />
+                            <div className="flex-1 space-y-0.5 text-right">
+                                {awayScorers.map(s => (
+                                    <div key={s.name}>{s.name} {s.minutes.map(m => `${m}'`).join(', ')}</div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
 
                     {/* Tabs */}
                     <div className="flex gap-1 border-t border-white/10 overflow-x-auto scrollbar-hide mt-4">

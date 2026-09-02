@@ -817,7 +817,7 @@ export default function Home() {
                     {competitions.map((comp) => (
                       <Link
                         key={comp.id}
-                        href={comp.sport === 'Football' ? `/football?competition=${encodeURIComponent(comp.name)}` : comp.sport === 'Basketball' ? `/basketball?competition=${encodeURIComponent(comp.name)}` : `/competitions?competition=${encodeURIComponent(comp.name)}`}
+                        href={`/competitions/${comp.id}`}
                         className="block text-sm text-white/40 hover:text-primary transition-colors truncate"
                         onClick={() => setIsMenuOpen(false)}
                       >
