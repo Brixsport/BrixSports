@@ -142,12 +142,33 @@ export async function GET(
         // Note: Player time tracking and eye points features not yet implemented in schema
 
         // Parse lineups if available
-        let lineups = null;
+        let lineups: any = null;
         if (match.match.lineups) {
             try {
                 lineups = JSON.parse(match.match.lineups);
             } catch (e) {
                 console.error('Error parsing lineups:', e);
+            }
+        }
+
+        // BACKLOG-323: this route had no auth check at all, unlike its sibling
+        // GET /api/matches/[id]/lineup (which already gates drafts correctly) --
+        // an unauthenticated viewer could read an unpublished draft lineup here,
+        // plus publishedByName (which can be an admin's email, per publish/
+        // route.ts's authUser.name || authUser.email fallback) on any published
+        // one. Mirror the sibling route's gate.
+        if (lineups && typeof lineups === 'object') {
+            const authUser = await getAuthUser(request).catch(() => null);
+            const canViewDraftsAndAuthorship = authUser?.role === 'admin' || authUser?.role === 'logger';
+            if (!canViewDraftsAndAuthorship) {
+                lineups = Object.fromEntries(
+                    Object.entries(lineups)
+                        .filter(([, teamLineup]) => (teamLineup as any)?.status === 'published')
+                        .map(([side, teamLineup]) => {
+                            const { publishedBy, publishedByName, publishedByRole, ...rest } = teamLineup as any;
+                            return [side, rest];
+                        })
+                );
             }
         }
 

@@ -70,6 +70,12 @@ export default function MatchLineups({ lineups, sport, homeTeam, awayTeam, event
                     isMotM: player.isMotM || false,
                     isStarter: player.isStarter,
                     stats: player.stats,
+                    // BACKLOG-323: explicit stored placement, when present -- previously
+                    // flattened away here, forcing every render back through read-time
+                    // role-bucket inference even for lineups that already have a real slot.
+                    slotId: player.slotId,
+                    x: player.x,
+                    y: player.y,
                 });
             });
     }
@@ -104,6 +110,11 @@ export default function MatchLineups({ lineups, sport, homeTeam, awayTeam, event
                     isMotM: player.isMotM || false,
                     isStarter: player.isStarter,
                     stats: player.stats,
+                    // BACKLOG-323: explicit stored placement, when present -- see the
+                    // matching comment in the home-team block above.
+                    slotId: player.slotId,
+                    x: player.x,
+                    y: player.y,
                 });
             });
     }
