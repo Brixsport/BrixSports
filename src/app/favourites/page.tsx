@@ -233,7 +233,7 @@ export default function FavouritesPage() {
                                     {competitions.map((competition) => (
                                         <Link
                                             key={competition.id}
-                                            href={`/competitions/${competition.id}/standings`}
+                                            href={`/competitions?competition=${encodeURIComponent(competition.name)}`}
                                             className="bg-white/5 hover:bg-white/10 border border-white/10 hover:border-primary/50 rounded-xl p-4 transition-all group flex items-center gap-4"
                                         >
                                             <div className="w-12 h-12 bg-primary/20 rounded-xl flex items-center justify-center shrink-0">

@@ -19,6 +19,10 @@ Pulled from OGO BRIXSPORTS Figma file `pFyvF0aBQff7wwTJorYiqs`, section `2164:99
 | `2470-824_stats-c.png` | `2470:824` | Competition Stats | Hub Stats tab variant. |
 | `2203-3071_stats-d.png` | `2203:3071` | Competition Stats | Hub Stats tab variant. |
 
+## Authoritative header/tab reference (session 2026-09-02, provided directly by Richard)
+
+`richard-ref_standings-tab.jpeg` and `richard-ref_stats-tab.jpeg` — confirms the hub has **4 tabs** (STANDINGS/MATCHES/BRACKETS/STATS), not the 3 seen in the older pulled frames above. Also resolves the header-alignment question raised this session: the pulled frames above are genuinely inconsistent with each other (an unreconciled Figma iteration, not a deliberate per-tab design) — decision made was to build ONE persistent header (back-arrow + favorite-star utility row, logo/title/sport-emoji, season selector, status, "N teams registered" badge) shown identically across all 4 tabs rather than replicate either frame's specific layout. See `src/app/competitions/page.tsx`.
+
 ## Not yet pulled
 Brackets tab (BACKLOG-292, gated on BACKLOG-280 landing first) — not captured this pass, pull when that phase starts.
 
