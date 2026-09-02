@@ -9,7 +9,7 @@ import { getClientErrorMessage } from '@/lib/client-error';
 import { useLineupPlacement, type PlacementEntry } from '@/components/lineup/useLineupPlacement';
 import { AdminTeamLineupBuilder } from '@/components/lineup/AdminTeamLineupBuilder';
 import { seedPlacementsFromLegacy, resolveSlot } from '@/lib/lineup/placement';
-import { getFormationsForAdmin } from '@/lib/lineup/formations';
+import { getFormationsForAdmin, generateDynamicFormation, DEFAULT_FORMATION_11, DEFAULT_FORMATION_5 } from '@/lib/lineup/formations';
 
 interface Match {
     id: string;
@@ -224,7 +224,11 @@ export default function AdminMatchLineupsPage() {
             console.error('Could not fetch match config:', e);
         }
         setPlayersPerSide(pps);
-        const defaultFormation = pps === 5 ? '1-2-1' : '4-3-3';
+        // BACKLOG-326: 5 and 11 keep their real hand-authored default formations;
+        // any other size (7-a-side, 9-a-side, etc.) gets a generated one instead
+        // of silently falling back to an 11-slot pitch that doesn't match the
+        // real roster size.
+        const defaultFormation = pps === 5 ? DEFAULT_FORMATION_5 : pps === 11 ? DEFAULT_FORMATION_11 : generateDynamicFormation(pps).id;
         loadRosters(match, { home: defaultFormation, away: defaultFormation });
     };
 
@@ -381,9 +385,11 @@ export default function AdminMatchLineupsPage() {
         );
     }
 
-    const homeFormationOptions = getFormationsForAdmin('Football').filter(
-        (f) => f.variant === (playersPerSide === 5 ? '5-a-side' : '11-a-side')
-    );
+    // BACKLOG-326: for playersPerSide values without a real hand-authored
+    // set (anything but 5 or 11), getFormationsForAdmin returns exactly one
+    // generated formation sized to match -- no more forcing a 7-a-side match
+    // onto an 11-slot pitch.
+    const homeFormationOptions = getFormationsForAdmin('Football', playersPerSide);
     const awayFormationOptions = homeFormationOptions;
 
     const homeDisabled = (user?.role !== 'admin' && selectedMatch?.status !== 'UPCOMING') || (user?.role !== 'admin' && homeLineupStatus?.publishedByRole === 'admin' && !homeLineupStatus?.unlocked);

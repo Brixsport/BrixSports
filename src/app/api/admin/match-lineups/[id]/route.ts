@@ -4,6 +4,7 @@ import { db } from '@/db';
 import { matches, competitions, squadPlayers } from '@/db/schema';
 import { eq, and, inArray } from 'drizzle-orm';
 import { resolveSlot } from '@/lib/lineup/placement';
+import { getMatchConfig } from '@/lib/matchConfig';
 
 // POST /api/admin/match-lineups/[id] - Publish official lineup
 export async function POST(
@@ -65,16 +66,18 @@ export async function POST(
             );
         }
 
-        // Determine required starters from competition's playersPerSide
-        let requiredStarters = 11; // default
-        if (match[0].competition) {
-            const comp = await db.select().from(competitions)
-                .where(eq(competitions.name, match[0].competition))
-                .limit(1);
-            if (comp.length > 0 && comp[0].playersPerSide) {
-                requiredStarters = comp[0].playersPerSide;
-            }
-        }
+        // BACKLOG-327 (found live-testing BACKLOG-323 step 6): this used to run
+        // its own independent `competitions.name === match.competition` lookup
+        // for playersPerSide -- a third, drifting copy of logic matchConfig.ts's
+        // own comment already documented replacing "two independent, drifting
+        // copies" of (the lineup-publish route and the admin UI), but this route
+        // was missed. That lookup fails for any match without an exact
+        // competition-name match (friendlies, or a real mismatch as found live:
+        // a real 7-a-side match's competition row didn't resolve here, silently
+        // falling back to the hardcoded 11 and rejecting every valid 7-starter
+        // publish attempt). Use the same canonical resolver everything else uses.
+        const matchConfig = await getMatchConfig(matchId);
+        const requiredStarters = matchConfig?.config.playersPerSide ?? 11;
 
         // Validate lineup has the correct number of starters
         if (!lineup.starters || lineup.starters.length !== requiredStarters) {

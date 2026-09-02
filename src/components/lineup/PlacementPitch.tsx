@@ -11,7 +11,7 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Star } from 'lucide-react';
-import { FORMATIONS } from '@/lib/lineup/formations';
+import { getFormation } from '@/lib/lineup/formations';
 import type { PlacementEntry } from './useLineupPlacement';
 
 export interface PlacementPlayerDetails {
@@ -48,7 +48,7 @@ export function PlacementPitch({
     teamLabel,
     className = '',
 }: PlacementPitchProps) {
-    const formation = FORMATIONS[formationId];
+    const formation = getFormation(formationId);
 
     if (!formation) {
         return (

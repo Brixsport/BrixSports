@@ -296,17 +296,86 @@ export const ADMIN_FOOTBALL_FORMATION_IDS: readonly string[] = [...FOOTBALL_11, 
 
 export const BASKETBALL_FORMATION_IDS: readonly string[] = BASKETBALL.map((f) => f.id);
 
+// ============================================================================
+// Dynamic formation generation -- for any playersPerSide that isn't 5 or 11
+// (7-a-side, 9-a-side, etc.). Real competitions configure playersPerSide
+// dynamically (src/lib/matchConfig.ts), so a fixed set of hand-authored
+// presets would silently fall back to an 11-slot pitch for every size nobody
+// happened to add a preset for -- a recurring gap, not a one-time cost.
+// GK is always one fixed slot; the remaining N-1 outfield slots split as
+// evenly as possible across DEF/MID/FW (remainder assigned DEF first, then
+// MID) -- deliberately generic rather than a "real" tactical shape, since no
+// single convention dominates for most non-5/11 sizes anyway. This
+// intentionally reproduces the existing hand-authored presets' own split for
+// the two sizes that already have one (11 -> 4-3-3's 4/3/3, 5 -> 2-1-1's
+// 2/1/1), which is a sign the split rule is sound, not a coincidence to
+// preserve deliberately -- 5 and 11 keep using their real hand-authored sets
+// regardless, this generator is never called for them.
+// ============================================================================
+
+function dynamicFormationId(playersPerSide: number): string {
+    return `dynamic-${playersPerSide}`;
+}
+
+export function generateDynamicFormation(playersPerSide: number): FormationDefinition {
+    const outfieldCount = Math.max(playersPerSide - 1, 0);
+    const base = Math.floor(outfieldCount / 3);
+    const remainder = outfieldCount % 3;
+    const defCount = base + (remainder > 0 ? 1 : 0);
+    const midCount = base + (remainder > 1 ? 1 : 0);
+    const fwCount = base;
+
+    const row = (count: number, y: number, role: FormationRole, prefix: string): FormationSlot[] => {
+        const slots: FormationSlot[] = [];
+        for (let i = 0; i < count; i++) {
+            slots.push({ id: `${prefix}${i + 1}`, x: Math.round(((i + 1) / (count + 1)) * 100), y, role });
+        }
+        return slots;
+    };
+
+    return {
+        id: dynamicFormationId(playersPerSide),
+        label: `${defCount}-${midCount}-${fwCount} (${playersPerSide}-a-side)`,
+        sport: 'Football',
+        variant: playersPerSide <= 7 ? '5-a-side' : '11-a-side', // closest aspect-ratio bucket for PlacementPitch's is5Aside sizing -- presentation only
+        slots: [
+            { id: 'gk', x: 50, y: 5, role: 'GK' },
+            ...row(defCount, 25, 'DEF', 'def'),
+            ...row(midCount, 55, 'MID', 'mid'),
+            ...row(fwCount, 85, 'FW', 'fw'),
+        ],
+    };
+}
+
+/** Resolves a formation id, including on-the-fly generation for "dynamic-N" ids that aren't in the static registry. Use this (not FORMATIONS[id] directly) everywhere a formation might be dynamic. */
 export function getFormation(id: string): FormationDefinition | undefined {
-    return FORMATIONS[id];
+    if (FORMATIONS[id]) return FORMATIONS[id];
+    const match = id.match(/^dynamic-(\d+)$/);
+    if (match) return generateDynamicFormation(parseInt(match[1], 10));
+    return undefined;
 }
 
 export function getFormationsForXi(): FormationDefinition[] {
     return XI_FORMATION_IDS.map((id) => FORMATIONS[id]).filter(Boolean);
 }
 
-export function getFormationsForAdmin(sport: FormationSport): FormationDefinition[] {
-    const ids = sport === 'Basketball' ? BASKETBALL_FORMATION_IDS : ADMIN_FOOTBALL_FORMATION_IDS;
-    return ids.map((id) => FORMATIONS[id]).filter(Boolean);
+/**
+ * Football: returns the real hand-authored set for exactly 11 or 5
+ * playersPerSide; any other value returns a single generated formation
+ * (see generateDynamicFormation above). Omit playersPerSide (or pass 11)
+ * for the default full 11-a-side set.
+ */
+export function getFormationsForAdmin(sport: FormationSport, playersPerSide?: number): FormationDefinition[] {
+    if (sport === 'Basketball') {
+        return BASKETBALL_FORMATION_IDS.map((id) => FORMATIONS[id]).filter(Boolean);
+    }
+    if (playersPerSide === 5) {
+        return FOOTBALL_5.slice();
+    }
+    if (playersPerSide == null || playersPerSide === 11) {
+        return FOOTBALL_11.slice();
+    }
+    return [generateDynamicFormation(playersPerSide)];
 }
 
 export const DEFAULT_FORMATION_11 = '4-4-2';

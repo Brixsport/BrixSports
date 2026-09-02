@@ -12,7 +12,7 @@ import { Star, Users } from 'lucide-react';
 import { PlacementPitch } from './PlacementPitch';
 import { PlayerSelectorPopup, type PlayerSelectorCandidate } from './PlayerSelectorPopup';
 import type { UseLineupPlacementResult } from './useLineupPlacement';
-import { FORMATIONS, type FormationDefinition } from '@/lib/lineup/formations';
+import type { FormationDefinition } from '@/lib/lineup/formations';
 
 interface Player {
     id: string;

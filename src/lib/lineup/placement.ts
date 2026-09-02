@@ -15,7 +15,7 @@
 import { Player } from '@/types';
 import type { PitchPlayer } from '@/components/lineup/ResponsivePitch';
 import type { PlacementEntry } from '@/components/lineup/useLineupPlacement';
-import { FORMATIONS, type FormationSlot as RegistrySlot } from './formations';
+import { getFormation, type FormationSlot as RegistrySlot } from './formations';
 
 // ============================================================================
 // V2 (explicit-coordinate) path
@@ -49,7 +49,7 @@ export function isV2Lineup(team: TeamLineupData | null | undefined): boolean {
 }
 
 export function resolveSlot(formationId: string, slotId: string): RegistrySlot | undefined {
-    return FORMATIONS[formationId]?.slots.find((s) => s.id === slotId);
+    return getFormation(formationId)?.slots.find((s) => s.id === slotId);
 }
 
 /**
@@ -413,7 +413,7 @@ export function seedPlacementsFromLegacy(
     starters: Array<{ playerId: string; position?: string; isCaptain?: boolean; isViceCaptain?: boolean }>,
     formationId: string,
 ): PlacementEntry[] {
-    const formation = FORMATIONS[formationId];
+    const formation = getFormation(formationId);
     if (!formation) return [];
 
     const availableSlots = [...formation.slots];

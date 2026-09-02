@@ -10533,3 +10533,39 @@ Three independent formation-template tables exist in the codebase, none sharing 
 **Found:** session 65 (2026-09-01), architect agent scoping pass for `BACKLOG-323`.
 
 ---
+
+### BACKLOG-326 — Formation Registry: No Support for playersPerSide Values Other Than 5 or 11
+
+**Status:** Fix written and `tsc`-clean. **Not yet re-verified live** -- the "Live-verified" note below describes the check still to run, not one already done; do not treat this as closed until that check is actually performed and this line is updated with the real result.
+**Priority:** MEDIUM-HIGH — real bug, hit live during `BACKLOG-323` step 6 verification on a real staging match (`GENTLEMEN FC LEAGUE`, `playersPerSide: 7`).
+**Files:** `src/lib/lineup/formations.ts`, `src/lib/lineup/placement.ts`, `src/app/admin/match-lineups/page.tsx`.
+
+`playersPerSide` is genuinely dynamic per competition (`src/lib/matchConfig.ts` resolves it from `competitionSportSettings` or a parsed "N-a-side" pattern, not a fixed enum), but the formation registry (and the old pre-`BACKLOG-323` admin page before it) only ever had real formations for exactly 5 or 11. Any other value (7-a-side, confirmed live; 9-a-side or others plausible for other competitions) silently rendered the full 11-slot pitch regardless — the same bug class as `BACKLOG-325`, just for a size nobody had hand-authored yet, not a one-time gap.
+
+**Fix (owner's direction, session 65 continued):** rather than hand-author presets per odd size (recurring maintenance cost — every new odd `playersPerSide` a competition configures would need its own manual addition), added `generateDynamicFormation(playersPerSide)` to the canonical registry: GK is always one fixed slot, the remaining `playersPerSide - 1` outfield slots split as evenly as possible across DEF/MID/FW (remainder assigned DEF then MID). `getFormation(id)` now resolves `dynamic-N` ids on the fly (not pre-registered in the static `FORMATIONS` map), and every consumer (`resolveSlot`, `seedPlacementsFromLegacy`, `PlacementPitch`) was switched from indexing `FORMATIONS[id]` directly to calling `getFormation(id)`, so dynamic ids resolve everywhere a formation is used, not just at the one call site that happened to need it first. `getFormationsForAdmin(sport, playersPerSide)` now takes the count and returns the real hand-authored set for 5 or 11 (unchanged, untouched), or exactly one generated formation for anything else.
+
+The even-split rule wasn't invented in a vacuum — it independently reproduces both existing hand-authored defaults' own splits (11 → 4-3-3's 4/3/3, 5 → 2-1-1's 2/1/1), which is a sign the rule is sound, not a coincidence being preserved on purpose (5 and 11 never call the generator; they keep their real sets).
+
+**To verify (not yet done):** re-test the same staging match after this deploys — expect the formation dropdown for the 7-a-side match to show exactly one option (`2-2-2 (7-a-side)`), pitch rendering exactly 7 slots (1 GK + 2 DEF + 2 MID + 2 FW), assign/captain/remove all still working.
+
+**Found:** session 65 continued (2026-09-02), live-testing `BACKLOG-323` step 6 on staging — not caught by `tsc` or code review, only surfaced by exercising a real match with a non-standard roster size.
+
+---
+
+### BACKLOG-327 — Admin Publish Route Has Its Own Third, Drifting playersPerSide Lookup
+
+**Status:** Fix written and `tsc`-clean. **Not yet re-verified live** -- the "Live-verified" note below describes the check still to run, not one already done; do not treat this as closed until that check is actually performed and this line is updated with the real result.
+**Priority:** HIGH — this one actively blocked publishing on any match where it disagreed with the client, with no workaround short of a code fix.
+**Files:** `src/app/api/admin/match-lineups/[id]/route.ts`.
+
+`src/lib/matchConfig.ts`'s own header comment claims it replaced "two independent, drifting copies" of `playersPerSide` resolution (the lineup-publish route and the admin lineup-builder UI, `BACKLOG-178`/`183`) with one canonical `getMatchConfig()`. `/api/admin/match-lineups/[id]/route.ts` — the actual route the admin builder's Publish button posts to — was missed: it still ran its own independent `db.select().from(competitions).where(eq(competitions.name, match.competition))` lookup, falling back to a hardcoded `11` whenever that name-based lookup didn't resolve.
+
+**Confirmed live, not theoretical:** filled a real 7-a-side staging match to the correct 7/7 starters (matching what `matchConfig.ts` resolved and what the client-side validation correctly required) and hit Publish — server responded `400: "Lineup must have exactly 11 starters"`. The client and this one server route disagreed on the same match's `playersPerSide`, meaning **any** match where this route's name-lookup didn't resolve identically to `matchConfig.ts` (not just 7-a-side — any competition-name edge case, e.g. friendlies) would have been unpublishable via this admin route regardless of which UI was used, old or new. Pre-existing, not a `BACKLOG-323` regression — confirmed by reading the block, which this session's step 6 changes never touched.
+
+**Fix:** replaced the route's inline lookup with `getMatchConfig(matchId)`, matching the pattern the lineup-publish route already uses per `matchConfig.ts`'s own comment.
+
+**To verify (not yet done):** re-run the identical publish attempt on the same staging match after this deploys — expect both home and away `POST`s to return `200` and the UI's status banners to update to "Lineup Published."
+
+**Found:** session 65 continued (2026-09-02), same live-testing pass as `BACKLOG-326`.
+
+---
