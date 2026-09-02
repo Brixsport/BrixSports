@@ -56,9 +56,8 @@ interface LiveMatchTimelineProps {
 
 const KEY_EVENT_TYPES = new Set(['GOAL', 'YELLOW_CARD', 'RED_CARD', 'SUBSTITUTION']);
 
-// BACKLOG-294: Richard's call -- show the jersey/known-as name everywhere a player
-// appears on this page, not the full real name (jerseyName is already the public
-// player-facing identity per CLAUDE.md's own field allowlist).
+// BACKLOG-294: show the jersey/known-as name everywhere a player
+// appears on this page, not the full real name.
 function displayName(person?: { name?: string; jerseyName?: string } | null): string | undefined {
     return person?.jerseyName || person?.name || undefined;
 }
