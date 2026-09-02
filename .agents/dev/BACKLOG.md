@@ -9826,6 +9826,7 @@ Fixed exactly per the "Fix (not built)" plan below: `MatchStatusBadge.tsx` now d
 **Status:** OPEN — mechanical consequence of `BACKLOG-285`.
 **Priority:** MEDIUM.
 **Problem:** see `BACKLOG-285` finding #2 — zero internal links to either route anywhere in `src/`. If they survive the consolidation decision they need a real entry point; if not, delete outright.
+**Correction found while shipping `BACKLOG-289`, session `brixsports-v2-cc`, 2026-09-02:** the "zero internal links" finding wasn't quite right — `src/app/page.tsx`'s hamburger-menu competitions submenu did link to `/football?competition=...`/`/basketball?competition=...` for football/basketball rows. Retargeted to `/competitions/[id]` (the real hub now) as part of `BACKLOG-289`, so this is fixed, not just noted — but flagging the correction in case another stale link surfaces before `/football`/`/basketball` are actually deleted.
 **Must include:** confirming neither route is a logger's or admin's actual entry point before deletion — verified this session that `/competitions/[id]/standings` is public-only, **not yet verified for `/football`/`/basketball`**.
 **Depends on:** `BACKLOG-285`. **Blocks:** `BACKLOG-290` (must land first so the consolidation isn't merging into a moving target).
 
@@ -9835,11 +9836,13 @@ Fixed exactly per the "Fix (not built)" plan below: `MatchStatusBadge.tsx` now d
 
 ### BACKLOG-289 — Competitions Directory Screen (Figma `2168:1495`)
 
-**Status:** OPEN — the actual net-new screen `BACKLOG-284`'s decision calls for.
+**Status:** SHIPPED — session `brixsports-v2-cc`, 2026-09-02. Code committed; live test pending (this session's local dev environment was unusable for verification, see `BUILD_JOURNAL.md`; batching one visual-QA pass on the `feature/ui-redesign` Vercel preview together with `BACKLOG-290`'s changes next, per Richard's explicit call).
 **Priority:** HIGH — this is the missing top-level screen the whole reconciliation effort is anchored on.
 **Scope:** flat list of every competition across sports, sport-tab filtered, each row star-favoritable (backend already exists, see `BACKLOG-284`), one row expandable inline showing its 2-3 nearest matches.
-**Data source:** existing `GET /api/competitions` `groups` array (already deduped per series via `buildCompetitionGroups()` — see `BACKLOG-291` for that function's own fragility). The inline match preview needs a bounded, batched per-competition match fetch — **must carry an explicit `.limit()` and must not N+1 across the whole directory list.**
-**Depends on:** `BACKLOG-284` (resolved), `BACKLOG-287` (consumes the sport-filter path it fixes).
+**Built:** `src/app/competitions/page.tsx` is now the directory screen (ALL/FOOTBALL/BASKETBALL/OTHER tabs, matching the Figma directory frame's own tab set — the existing hub's ALL/FOOTBALL/BASKETBALL/TRACK tabs are a separate, pre-existing set, left as-is). Row tap navigates to `/competitions/[id]` (the hub, moved there — see below); a separate chevron toggle expands/collapses an inline nearest-matches preview per row, fetched on demand only for the expanded row (`/api/{sport}/matches?competitionId=...`, sorted client-side by proximity to now, sliced to 3) — never eagerly for the whole list, satisfying the no-N+1 requirement. Star button reuses the existing `useFavorites` hook. Subtitle shows season/status (no host-organization display name available — `hostOrganization` is null on every real row today, `hostOrganizationId` has no resolved-name join; not built, out of scope for this pass).
+**Also done as part of shipping this (structurally required, not optional):** the pre-existing hub (`competitions/page.tsx`'s old content — sport/series switcher + Standings/Matches/Brackets tabs) moved to `src/app/competitions/[id]/page.tsx`, replacing the `BACKLOG-286` redirect stub with a real page keyed by the route's `id` instead of a `?competition=<name>` query param. Fixed the 3 remaining internal links that pointed at the old query-param shape or at `/football`/`/basketball` (`favourites/page.tsx`'s competition card, `src/app/page.tsx`'s hamburger-menu competitions submenu) to `/competitions/[id]` directly.
+**Data source:** existing `GET /api/competitions` `groups` array (already deduped per series via `buildCompetitionGroups()` — see `BACKLOG-291` for that function's own fragility).
+**Depends on:** `BACKLOG-284` (resolved), `BACKLOG-287` (resolved, consumed the sport-filter path it fixed).
 
 **Found:** session 61, 2026-08-27, by the `architect` agent.
 
