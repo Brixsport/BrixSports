@@ -22,6 +22,34 @@ export default function LiveStats({ stats, sport, homeTeam, awayTeam }: LiveStat
         );
     }
 
+    // BACKLOG-330: Figma only uses the dual-color bar for Possession (disabled,
+    // BACKLOG-192). Every other football category is a plain value each side with
+    // the leading side circled -- no bar, no icon.
+    const StatRow = ({ label, homeValue, awayValue, unit = '' }: any) => {
+        const homeLeads = homeValue > awayValue;
+        const awayLeads = awayValue > homeValue;
+
+        return (
+            <div className="flex items-center justify-between rounded-xl border border-white/10 bg-white/5 p-4">
+                {homeLeads ? (
+                    <span className="flex items-center justify-center w-9 h-9 rounded-full bg-primary text-white font-bold">
+                        {homeValue}{unit}
+                    </span>
+                ) : (
+                    <span className="font-semibold">{homeValue}{unit}</span>
+                )}
+                <span className="text-sm text-white/60">{label}</span>
+                {awayLeads ? (
+                    <span className="flex items-center justify-center w-9 h-9 rounded-full bg-primary text-white font-bold">
+                        {awayValue}{unit}
+                    </span>
+                ) : (
+                    <span className="font-semibold">{awayValue}{unit}</span>
+                )}
+            </div>
+        );
+    };
+
     const StatBar = ({ label, homeValue, awayValue, max, unit = '', icon }: any) => {
         const homePercentage = (homeValue / max) * 100;
         const awayPercentage = (awayValue / max) * 100;
@@ -95,47 +123,37 @@ export default function LiveStats({ stats, sport, homeTeam, awayTeam }: LiveStat
                 />
             )}
             {!isGoalsOnly && (
-                <StatBar
+                <StatRow
                     label="Shots"
                     homeValue={shots[0]}
                     awayValue={shots[1]}
-                    max={Math.max(shots[0], shots[1], 20)}
-                    icon={<Target className="w-4 h-4" />}
                 />
             )}
             {!isGoalsOnly && (
-                <StatBar
+                <StatRow
                     label="Shots on Target"
                     homeValue={shotsOnTarget[0]}
                     awayValue={shotsOnTarget[1]}
-                    max={Math.max(shotsOnTarget[0], shotsOnTarget[1], 10)}
-                    icon={<Target className="w-4 h-4" />}
                 />
             )}
             {!isGoalsOnly && (
-                <StatBar
+                <StatRow
                     label="Corners"
                     homeValue={corners[0]}
                     awayValue={corners[1]}
-                    max={Math.max(corners[0], corners[1], 10)}
-                    icon={<Zap className="w-4 h-4" />}
                 />
             )}
             {!isGoalsOnly && (
-                <StatBar
+                <StatRow
                     label="Fouls"
                     homeValue={fouls[0]}
                     awayValue={fouls[1]}
-                    max={Math.max(fouls[0], fouls[1], 20)}
-                    icon={<Shield className="w-4 h-4" />}
                 />
             )}
-            <StatBar
+            <StatRow
                 label="Yellow Cards"
                 homeValue={yellowCards[0]}
                 awayValue={yellowCards[1]}
-                max={Math.max(yellowCards[0], yellowCards[1], 5)}
-                icon={<div className="w-3 h-4 bg-yellow-500 rounded-sm" />}
             />
             {(redCards[0] > 0 || redCards[1] > 0) && (
                 <StatBar
@@ -231,10 +249,15 @@ export default function LiveStats({ stats, sport, homeTeam, awayTeam }: LiveStat
                     >
                         <TeamLogo logo={homeTeam.logo} name={homeTeam.name} size="sm" />
                     </div>
-                    <div>
-                        <div className="font-bold">{homeTeam.name}</div>
-                        <div className="text-sm text-white/60">{homeTeam.shortName}</div>
-                    </div>
+                    {/* BACKLOG-330: Figma's football Stats-tab header shows logos only --
+                        name/shortName already appear in the page header above. Basketball's
+                        own Stats reference keeps the text, so scope this to football only. */}
+                    {sport !== 'Football' && (
+                        <div>
+                            <div className="font-bold">{homeTeam.name}</div>
+                            <div className="text-sm text-white/60">{homeTeam.shortName}</div>
+                        </div>
+                    )}
                 </div>
 
                 <div className="text-white/60 font-semibold">VS</div>
@@ -246,10 +269,12 @@ export default function LiveStats({ stats, sport, homeTeam, awayTeam }: LiveStat
                     >
                         <TeamLogo logo={awayTeam.logo} name={awayTeam.name} size="sm" />
                     </div>
-                    <div className="text-right">
-                        <div className="font-bold">{awayTeam.name}</div>
-                        <div className="text-sm text-white/60">{awayTeam.shortName}</div>
-                    </div>
+                    {sport !== 'Football' && (
+                        <div className="text-right">
+                            <div className="font-bold">{awayTeam.name}</div>
+                            <div className="text-sm text-white/60">{awayTeam.shortName}</div>
+                        </div>
+                    )}
                 </div>
             </div>
 
