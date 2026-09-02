@@ -1,7 +1,7 @@
 'use client';
 
 import { motion, AnimatePresence } from 'framer-motion';
-import { LayoutGrid, ListOrdered, Activity, Loader2, AlertCircle, Calendar, Star, ArrowLeft, Users, BarChart3 } from 'lucide-react';
+import { LayoutGrid, ListOrdered, Loader2, AlertCircle, Calendar, Star, ArrowLeft, Users, BarChart3 } from 'lucide-react';
 import { useState, useEffect, useMemo, Suspense } from 'react';
 import { useRouter, useParams, useSearchParams } from 'next/navigation';
 import MatchCalendar from '@/components/MatchCalendar';
@@ -129,7 +129,6 @@ function CompetitionHubContent() {
     setViewState(tab);
     router.replace(`/competitions/${competitionId}?tab=${tab}`, { scroll: false });
   };
-  const [selectedSport, setSelectedSport] = useState<SportType>('All');
   const [competitions, setCompetitions] = useState<Competition[]>([]);
   const [groups, setGroups] = useState<CompetitionGroup[]>([]);
   const [selectedComp, setSelectedComp] = useState<Competition | null>(null);
@@ -156,7 +155,6 @@ function CompetitionHubContent() {
           const found = data.competitions.find((c: Competition) => c.id === competitionId);
           if (found) {
             setSelectedComp(found);
-            if (found.sport) setSelectedSport(found.sport as SportType);
           } else {
             setNotFound(true);
           }
@@ -239,19 +237,7 @@ function CompetitionHubContent() {
     };
 
     fetchDetails();
-  }, [selectedComp, selectedSport]);
-
-  // Filter competitions for the current sport tab
-  const filteredCompetitions = selectedSport === 'All'
-    ? competitions
-    : competitions.filter(c => c.isMultiSport || c.sport === selectedSport);
-
-  // BACKLOG-229: one pill per competition series (deduped across seasons),
-  // not one per raw row -- avoids showing e.g. 3 identical "BUSA League
-  // Football" pills for 3 season-instances with no way to tell them apart.
-  const filteredGroups = selectedSport === 'All'
-    ? groups
-    : groups.filter(g => g.latest.isMultiSport || g.sport === selectedSport);
+  }, [selectedComp]);
 
   const selectedGroup = selectedComp
     ? groups.find(g => g.seasons.some(s => s.id === selectedComp.id))
@@ -281,8 +267,8 @@ function CompetitionHubContent() {
             <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-white/40">Team</th>
             <th className="px-4 py-4 text-[10px] font-black uppercase tracking-widest text-white/40 text-center">P</th>
             <th className="px-4 py-4 text-[10px] font-black uppercase tracking-widest text-white/40 text-center">W</th>
-            <th className="px-4 py-4 text-[10px] font-black uppercase tracking-widest text-white/40 text-center">{selectedSport === 'Basketball' ? 'L' : 'D'}</th>
-            <th className="px-4 py-4 text-[10px] font-black uppercase tracking-widest text-white/40 text-center">{selectedSport === 'Basketball' ? 'PCT' : 'L'}</th>
+            <th className="px-4 py-4 text-[10px] font-black uppercase tracking-widest text-white/40 text-center">{selectedComp?.sport === 'Basketball' ? 'L' : 'D'}</th>
+            <th className="px-4 py-4 text-[10px] font-black uppercase tracking-widest text-white/40 text-center">{selectedComp?.sport === 'Basketball' ? 'PCT' : 'L'}</th>
             <th className="px-4 py-4 text-[10px] font-black uppercase tracking-widest text-white/40 text-center">GD/DIFF</th>
             <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-primary text-center">Pts</th>
           </tr>
@@ -311,8 +297,8 @@ function CompetitionHubContent() {
               </td>
               <td className="px-4 py-4 text-center font-bold text-white/80">{row.played}</td>
               <td className="px-4 py-4 text-center font-bold text-primary">{row.won}</td>
-              <td className="px-4 py-4 text-center font-bold text-white/60">{selectedSport === 'Basketball' ? row.lost : row.drawn}</td>
-              <td className="px-4 py-4 text-center font-bold text-white/40">{selectedSport === 'Basketball' ? ((row.won / (row.played || 1)) * 100).toFixed(0) + '%' : row.lost}</td>
+              <td className="px-4 py-4 text-center font-bold text-white/60">{selectedComp?.sport === 'Basketball' ? row.lost : row.drawn}</td>
+              <td className="px-4 py-4 text-center font-bold text-white/40">{selectedComp?.sport === 'Basketball' ? ((row.won / (row.played || 1)) * 100).toFixed(0) + '%' : row.lost}</td>
               <td className="px-4 py-4 text-center font-bold text-white/40">{row.goalDifference > 0 ? `+${row.goalDifference}` : row.goalDifference}</td>
               <td className="px-6 py-4 text-center">
                 <span className="bg-primary/10 text-primary px-3 py-1 rounded-lg font-display italic text-lg border border-primary/20">
@@ -459,49 +445,6 @@ function CompetitionHubContent() {
             </button>
           </div>
         </header>
-
-        {/* Sport & Competition Selector -- jump to a different competition without leaving the hub */}
-        <div className="space-y-4 md:space-y-6">
-          <div className="flex justify-center overflow-x-auto">
-            <div className="inline-flex bg-white/5 p-1 rounded-2xl border border-white/10 gap-1">
-              {(['All', 'Football', 'Basketball', 'Track'] as SportType[]).map((sport) => (
-                <button
-                  key={sport}
-                  onClick={() => {
-                    setSelectedSport(sport);
-                    const firstGroupForSport = sport === 'All'
-                      ? groups[0]
-                      : groups.find(g => g.sport === sport);
-                    if (firstGroupForSport) router.push(`/competitions/${firstGroupForSport.latest.id}`);
-                  }}
-                  className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${selectedSport === sport ? 'bg-primary text-black' : 'text-white/40 hover:text-white'}`}
-                >
-                  <Activity size={12} />
-                  {sport}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {filteredGroups.length > 0 && (
-            <div className="flex justify-center gap-2 overflow-x-auto pb-2 scrollbar-hide">
-              {filteredGroups.map((group) => (
-                <button
-                  key={group.groupKey}
-                  onClick={() => {
-                    router.push(`/competitions/${group.latest.id}`);
-                    if (group.sport && group.sport !== selectedSport) {
-                      setSelectedSport(group.sport as SportType);
-                    }
-                  }}
-                  className={`px-4 py-2 rounded-full text-[10px] font-bold uppercase tracking-widest whitespace-nowrap transition-all border ${selectedGroup?.groupKey === group.groupKey ? 'border-primary text-primary bg-primary/10' : 'border-white/10 text-white/40 hover:text-white'}`}
-                >
-                  {group.name}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
 
         {/* Content Area */}
         <AnimatePresence mode="wait">

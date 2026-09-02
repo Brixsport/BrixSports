@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Trophy, Star, ChevronDown, ChevronUp, Loader2, Activity } from 'lucide-react';
+import { Trophy, Star, ChevronDown, ChevronUp, Loader2, Activity, ArrowLeft } from 'lucide-react';
 import { TeamLogo } from '@/lib/utils/team-logo';
 import { useFavorites } from '@/hooks/useFavorites';
 
@@ -104,6 +104,13 @@ export default function CompetitionsDirectoryPage() {
     <div className="min-h-screen bg-[#050505] text-white pb-24">
       <div className="max-w-3xl mx-auto p-4 md:p-8 space-y-6">
         <div className="flex items-center gap-2">
+          <button
+            onClick={() => router.back()}
+            aria-label="Back"
+            className="shrink-0 p-2 -ml-2 rounded-full hover:bg-white/10 transition-colors text-white/60 hover:text-white"
+          >
+            <ArrowLeft size={20} />
+          </button>
           <Trophy size={18} className="text-primary" />
           <h1 className="font-display text-xl italic uppercase tracking-widest">Competitions</h1>
         </div>

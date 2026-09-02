@@ -9890,11 +9890,11 @@ Fixed exactly per the "Fix (not built)" plan below: `MatchStatusBadge.tsx` now d
 
 ### BACKLOG-293 — Sport-Variant Standings Columns (Football P/W/D/L/GF/GA/GD/PTS vs. Basketball P/W/L/PCT/GD/PTS)
 
-**Status:** OPEN.
+**Status:** RESOLVED — session `brixsports-v2-cc`, 2026-09-02. The column-swap itself was already live in `competitions/page.tsx` before this session touched it (`selectedSport === 'Basketball' ? 'PCT'/'L' : 'D'/'L'` in the standings table, PCT computed client-side from wins/played, not stored) — this entry just hadn't been marked closed. Carried forward unchanged into the `[id]/page.tsx` move (`BACKLOG-289`).
 **Priority:** LOW-MEDIUM — visual/DTO shaping only.
 **Scope:** one `StandingsTable` component, column set selected by sport. PCT is derived (wins/played), not stored — compute in the DTO, do not add a stored column.
-**Depends on:** `BACKLOG-291`, `BACKLOG-292` (written once against the settled hub, not twice).
-**Blocked on content:** the Figma `Comp-Stats` frame (the Stats tab of the competition hub) renders **completely blank** — no content, no placeholder. Confirmed by direct visual inspection, not assumed unfinished. Needs Richard to supply the actual stats-tab content/spec before this entry has anything real to build against.
+**Blocked-on-content note, resolved:** the "Comp-Stats frame renders blank, needs Richard to supply content" blocker below is now moot — Richard supplied two direct reference screenshots this session (`richard-ref_stats-tab.jpeg`, `.agents/dev/figma-refs/competitions/`) showing real Stats-tab content (Goals/Assists/Yellow Cards leaderboards), which the new Stats tab (`BACKLOG-290`) was built against.
+**Evidence:** live-verified on the `feature/ui-redesign` Vercel preview — Basketball shows P/W/L/PCT/GD/PTS, confirmed via a real competition (`BUSA LEAGUE BASKETBALL`, basketball). Pending items: none.
 
 **Found:** session 61, 2026-08-27, by the `architect` agent. **Blank-frame gap found:** session 61, 2026-08-27, UI/UX pass.
 
