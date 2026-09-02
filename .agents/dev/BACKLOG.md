@@ -9903,6 +9903,15 @@ Fixed exactly per the "Fix (not built)" plan below: `MatchStatusBadge.tsx` now d
 **Flag:** the Lineups tab intersects `BACKLOG-220`, still OPEN and 🔴 High Volatility per `CLAUDE.md` (Lineup Builder architecture cleanup — dead duplicate rendering code, non-atomic write race). Read-only rendering should be safe; any change beyond styling needs an explicit brief before touching it. Do not deep-link this tab without checking exposure against the Live Event Readiness Checklist's still-OPEN "hide all 🔴 features" item.
 **Depends on:** nothing structurally; sequence after the competitions-tab work (Phases 0-3 above) since it's a separate screen family.
 
+**Built this pass (code + `tsc --noEmit` clean, zero new errors vs. the pre-existing baseline; live/UI verification still pending -- see note below):**
+- `MatchDetailClient.tsx`: `activeTab` now derives from `?tab=` (`useSearchParams`), every tab switch is a `router.replace` (shallow, no scroll reset) instead of local `useState` -- back/forward now steps through tab history, a tab is now a shareable/bookmarkable link. `MatchLineups` keeps receiving the exact same 5 props unchanged (contract confirmed with `brixsports-v2-ae` before implementing). Added a 6th tab, `table`.
+- `LiveMatchTimeline.tsx`: added the Figma `All`/`Key events` segmented filter, defaulting to `Key events` (Richard's call, 2026-09-02) with `All` a click away. `All` is the pre-existing descriptive-commentary-card rendering, completely untouched. `Key events` is a new, fully separate `KeyEventsList` component -- two-column team-side layout, running score badge on goals (computed from a chronologically-sorted copy of events, own-goals credit the other team), compact one-line rows for cards/subs. Kept deliberately isolated from the `All` path's helpers so nothing here can regress it.
+- New `src/components/MatchStandingsTable.tsx` for the `table` tab -- reuses the existing `useLiveStandings` hook (no new API), group-vs-full-table logic (scopes to either match team's `groupName` if the competition uses groups, else shows the full table), sport-variant columns (football `PL/W/D/L/GD/PTS`, basketball `PL/W/L/PF/PA/PD/PTS`), both match teams' rows highlighted.
+- `Stats` (`LiveStats.tsx`): deliberately untouched this pass -- see Diff table below.
+- Basketball's own tab set (`Overview`/`Box Score`/`Stats`/`Table`, structurally different from football's) and its net-new `Box Score` tab: explicitly deferred, filed as `BACKLOG-326` (new data-modeling work, not tab reconciliation).
+
+**Verification status:** `tsc` clean. Live/UI verification blocked this session by the local dev server's cold-compile times (minutes per first-hit route -- almost certainly resource contention from multiple concurrent sessions' dev servers sharing this machine, not a bug in the code) -- moving to the `feature/ui-redesign` Vercel preview deployment to verify visually instead. **Do not treat this entry as done until that verification lands** -- code-complete and type-clean is not the same as live-verified per this project's own evidence standard.
+
 **Found:** session 61, 2026-08-27, by the `architect` agent.
 
 ---
@@ -10531,5 +10540,44 @@ Three independent formation-template tables exist in the codebase, none sharing 
 **Fix:** build one canonical `src/lib/lineup/formations.ts` registry in own-half space (per `BACKLOG-323` step 2), merging all key sets, converting `lib/formations.ts`'s coordinates into the canonical space as its own reviewable commit. `/xi` may keep its own curated 3-formation allowlist against the same registry rather than adopting the full set. Requires visual re-verification against a real match once landed — this alone changes rendering for the two builder-only formations.
 
 **Found:** session 65 (2026-09-01), architect agent scoping pass for `BACKLOG-323`.
+
+---
+
+### BACKLOG-326 — Basketball Match Detail: Sport-Conditional Tab Set + Net-New Box Score Tab
+
+**Status:** OPEN — filed, not built. Explicitly deferred out of `BACKLOG-294`'s pass per Richard's
+direction (2026-09-02) so it isn't lost, not because it's low value.
+**Priority:** MEDIUM.
+**Found:** session `brixsports-v2-dd`, 2026-09-02, while reconciling `BACKLOG-294`'s Timeline/
+Stats/Table tabs against Figma — reference screenshots (`.agents/dev/figma-refs/match-id page/
+bbal-box-score.jpeg`, `bbal-stats.jpeg`, `bbal-table.jpeg`) revealed Figma's basketball match
+screens use a genuinely different tab *set* than football's, which live doesn't reflect at all
+(every sport gets the same 6 tabs today: Overview/Timeline/Stats/Lineups/H2H/Table).
+
+**What Figma shows for basketball, vs. live:**
+1. **Tab set differs by sport.** Football: `Lineups / Stats / Timeline / Table`. Basketball:
+   `Overview / Box Score / Stats / Table` — no Lineups tab, no Timeline tab; `Box Score` and
+   `Stats` replace them. Live ships the identical 6-tab set (`overview/timeline/stats/lineups/
+   h2h/table`) regardless of `match.sport` — no sport-conditional branching exists anywhere in
+   `MatchDetailClient.tsx`.
+2. **`Box Score` is entirely net-new.** Figma's screen is a per-player stat table for *this
+   specific match* — columns `TEAM (jersey+name+position) / PTS / AST / REB`, with a team-filter
+   segmented control (`[home logo] / ALL / [away logo]`). No live equivalent exists, and no data
+   source currently backs it: `basketballPlayerStats` (`src/db/schema.ts`) is keyed on
+   `(playerId, season, competitionId)` — a **season-level aggregate**, not per-match. Building
+   this needs either (a) a new per-match aggregation query over `matchEvents` (deriving PTS from
+   `FIELD_GOAL`/`THREE_POINTER`/`FREE_THROW` event values, AST/REB from whatever event types
+   actually capture them today — needs an audit, not assumed present) or (b) a new per-match
+   basketball box-score table populated at logging time. Real data-modeling decision, not a UI
+   task.
+3. **Basketball's `Stats` tab also has a quarter filter** (`All`/`1ST`/`2ND`/`3RD`/`4TH`,
+   `bbal-stats.jpeg`) that live's `LiveStats.tsx` has no equivalent for — `stats` today is a
+   single whole-match snapshot per category, not quarter-scoped.
+
+**Depends on:** an audit of what basketball event types actually get logged today (needed before
+committing to the match_events-aggregation approach for Box Score) — not yet done.
+**Relates to:** `BACKLOG-294` (this entry is the explicitly-deferred remainder of that
+reconciliation, basketball-specific), `BACKLOG-293` (sport-variant standings columns — same
+"basketball needs its own shape" theme, different tab).
 
 ---

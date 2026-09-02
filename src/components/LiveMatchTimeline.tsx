@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import { motion } from 'framer-motion';
 import {
     Circle, Target, AlertCircle, ArrowRightLeft, Eye,
@@ -51,7 +52,13 @@ interface LiveMatchTimelineProps {
     sport?: string;
 }
 
+const KEY_EVENT_TYPES = new Set(['GOAL', 'YELLOW_CARD', 'RED_CARD', 'SUBSTITUTION']);
+
 export default function LiveMatchTimeline({ events, homeTeam, awayTeam, eyePoints, sport = 'football' }: LiveMatchTimelineProps) {
+    // BACKLOG-294: opens on "Key events" by default, with "All" a click away 
+    //(Key events is the pre-selected pill).
+    const [filter, setFilter] = useState<'all' | 'key'>('key');
+
     const getEventIcon = (type: string) => {
         switch (type.toUpperCase().replace(/\s+/g, '_')) {
             case 'GOAL':
@@ -325,8 +332,16 @@ export default function LiveMatchTimeline({ events, homeTeam, awayTeam, eyePoint
         }
     };
 
+    // BACKLOG-294:  Timeline tab has an All/Key events segmented filter --
+    // 'key' narrows to goals/cards/subs, matching the two-column team-side layout
+    // in the reference screenshots. Applied before grouping so period headers only
+    // show up for periods that still have a visible event under the current filter.
+    const filteredEvents = filter === 'key'
+        ? events.filter(e => KEY_EVENT_TYPES.has(e.type.toUpperCase().replace(/\s+/g, '_')))
+        : events;
+
     // Group events by period (first half, second half, etc.)
-    const groupedEvents = events.reduce((acc, event) => {
+    const groupedEvents = filteredEvents.reduce((acc, event) => {
         let period = 'First Half';
         if (event.period) {
             switch (event.period) {
@@ -385,7 +400,25 @@ export default function LiveMatchTimeline({ events, homeTeam, awayTeam, eyePoint
 
     return (
         <div className="space-y-8">
-            {Object.entries(groupedEvents).map(([period, periodEvents]) => (
+            {/* All / Key events segmented filter (Figma) */}
+            <div className="inline-flex bg-white/5 border border-white/10 rounded-full p-1">
+                {(['all', 'key'] as const).map(f => (
+                    <button
+                        key={f}
+                        onClick={() => setFilter(f)}
+                        className={`px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-wide transition-colors ${filter === f ? 'bg-primary text-black' : 'text-white/60 hover:text-white'
+                            }`}
+                    >
+                        {f === 'all' ? 'All' : 'Key events'}
+                    </button>
+                ))}
+            </div>
+
+            {filter === 'key' && (
+                <KeyEventsList events={filteredEvents} homeTeam={homeTeam} awayTeam={awayTeam} sport={sport} />
+            )}
+
+            {filter === 'all' && Object.entries(groupedEvents).map(([period, periodEvents]) => (
                 <div key={period}>
                     {/* Period Header */}
                     <div className="flex items-center gap-4 mb-6">
@@ -531,6 +564,98 @@ export default function LiveMatchTimeline({ events, homeTeam, awayTeam, eyePoint
                     </div>
                 </div>
             )}
+        </div>
+    );
+}
+
+// BACKLOG-294:  "Key events" view is a distinct, compact two-column layout
+// (home events left-aligned, away right-aligned, running score badge on goals) --
+// visually different enough from the "All" view's descriptive cards above that it's
+// its own renderer rather than a filtered pass through getEventDescription/getEventIcon.
+// Kept fully separate so nothing here can regress the existing "All" rendering.
+interface KeyEventsListProps {
+    events: Event[];
+    homeTeam: any;
+    awayTeam: any;
+    sport?: string;
+}
+
+function KeyEventsList({ events, homeTeam, awayTeam, sport }: KeyEventsListProps) {
+    if (events.length === 0) {
+        return (
+            <div className="text-center py-12">
+                <Activity className="w-12 h-12 text-white/20 mx-auto mb-3" />
+                <p className="text-white/40">No key events in this match yet</p>
+            </div>
+        );
+    }
+
+    // The events prop arrives newest-first (API order) -- wrong direction for a
+    // running score, which must accumulate oldest-to-newest. Sorted copy only;
+    // never mutates the prop.
+    const chronological = [...events].sort(
+        (a, b) => (a.minute - b.minute) || ((a.second ?? 0) - (b.second ?? 0))
+    );
+
+    let homeScore = 0;
+    let awayScore = 0;
+    const rows = chronological.map(event => {
+        const isHomeTeam = event.teamId === homeTeam.id;
+        const normType = event.type.toUpperCase().replace(/\s+/g, '_');
+
+        if (normType === 'GOAL') {
+            // An own goal credits the OTHER team's score -- same detection this
+            // file's generateGoalCommentary already uses for the "All" view.
+            const isOwnGoal = event.detail?.toLowerCase().includes('own goal') ?? false;
+            if (isHomeTeam !== isOwnGoal) homeScore += 1; else awayScore += 1;
+        }
+
+        return { event, isHomeTeam, normType, scoreAtEvent: { home: homeScore, away: awayScore } };
+    });
+
+    const minuteLabel = (event: Event) =>
+        sport?.toLowerCase() === 'basketball' ? `${event.period ?? ''} ${event.minute}`.trim() : `${event.minute}'`;
+
+    return (
+        <div className="space-y-3">
+            {rows.map(({ event, isHomeTeam, normType, scoreAtEvent }) => {
+                const playerName = event.player?.name ?? event.playerSnapshot?.name ?? event.playerSnapshot?.jerseyName ?? 'Unknown';
+
+                return (
+                    <div key={event.id} className={`flex items-center gap-3 ${isHomeTeam ? 'flex-row' : 'flex-row-reverse'}`}>
+                        <span className="text-xs font-bold text-primary w-12 flex-shrink-0 text-center">
+                            {minuteLabel(event)}
+                        </span>
+                        <div className={`flex-1 flex items-center gap-2 min-w-0 ${isHomeTeam ? '' : 'flex-row-reverse'}`}>
+                            {normType === 'GOAL' && (
+                                <>
+                                    {event.relatedPlayer && (
+                                        <span className="text-white/50 text-sm truncate">({event.relatedPlayer.name})</span>
+                                    )}
+                                    <span className="font-bold truncate">{playerName}</span>
+                                    <span className="flex-shrink-0">⚽</span>
+                                    <span className="flex-shrink-0 px-2 py-0.5 rounded-full border border-white/20 text-xs font-bold">
+                                        {scoreAtEvent.home}-{scoreAtEvent.away}
+                                    </span>
+                                </>
+                            )}
+                            {(normType === 'YELLOW_CARD' || normType === 'RED_CARD') && (
+                                <>
+                                    <div className={`flex-shrink-0 w-3 h-4 rounded-sm ${normType === 'YELLOW_CARD' ? 'bg-yellow-500' : 'bg-red-600'}`} />
+                                    <span className="font-bold truncate">{playerName}</span>
+                                </>
+                            )}
+                            {normType === 'SUBSTITUTION' && (
+                                <>
+                                    <span className="text-red-400 truncate">{event.relatedPlayer?.name ?? 'Unknown'}</span>
+                                    <ArrowRightLeft className="w-4 h-4 text-white/50 flex-shrink-0" />
+                                    <span className="text-green-400 truncate">{playerName}</span>
+                                </>
+                            )}
+                        </div>
+                    </div>
+                );
+            })}
         </div>
     );
 }
