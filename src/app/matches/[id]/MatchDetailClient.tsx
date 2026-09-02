@@ -1,19 +1,20 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { useParams, usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useWebSocket, useMatchEvents, useMatchTimer } from '@/hooks/useWebSocket';
 import { useToast } from '@/hooks/useToast';
 import { ToastContainer } from '@/components/admin/Toast';
 import {
     ArrowLeft, Clock, MapPin, Users, TrendingUp, Eye,
-    Activity, BarChart3, Share2, Star, Bell, Trophy, Play
+    Activity, BarChart3, Share2, Star, Bell, Trophy, Play, Table2
 } from 'lucide-react';
 import { useFavorites } from '@/hooks/useFavorites';
 import LiveMatchTimeline from '@/components/LiveMatchTimeline';
 import LiveStats from '@/components/LiveStats';
 import MatchLineups from '@/components/MatchLineups';
+import MatchStandingsTable from '@/components/MatchStandingsTable';
 import { HeadToHeadComparison } from '@/components/HeadToHead';
 // BACKSCOPED: 2026-06-08 — BACKLOG-028. Reinstate when: Polls + Predictions built (Phase 7)
 // import MatchPoll from '@/components/MatchPoll';
@@ -49,14 +50,31 @@ interface MatchData {
     eyePoints: any[];
 }
 
+type TabId = 'overview' | 'timeline' | 'stats' | 'lineups' | 'h2h' | 'table';
+const TAB_IDS: TabId[] = ['overview', 'timeline', 'stats', 'lineups', 'h2h', 'table'];
+
 export default function MatchDetailClient() {
     const params = useParams();
     const router = useRouter();
+    const pathname = usePathname();
+    const searchParams = useSearchParams();
     const matchId = params.id as string;
+
+    // BACKLOG-294: URL-addressable tabs -- ?tab= is the source of truth instead of
+    // local useState, so a tab is shareable/bookmarkable and the back button steps
+    // through tab history instead of exiting the whole page. router.replace (not
+    // push) so switching tabs doesn't spam history with one entry per click --
+    // only the initial page load is a real history entry.
+    const rawTab = searchParams.get('tab');
+    const activeTab: TabId = TAB_IDS.includes(rawTab as TabId) ? (rawTab as TabId) : 'overview';
+    const setActiveTab = useCallback((tab: TabId) => {
+        const next = new URLSearchParams(searchParams.toString());
+        next.set('tab', tab);
+        router.replace(`${pathname}?${next.toString()}`, { scroll: false });
+    }, [searchParams, pathname, router]);
 
     const [matchData, setMatchData] = useState<MatchData | null>(null);
     const [loading, setLoading] = useState(true);
-    const [activeTab, setActiveTab] = useState<'overview' | 'timeline' | 'stats' | 'lineups' | 'h2h'>('overview');
     // BACKLOG-207: replaces the dead single Heart (pure local useState, no API
     // call, reset on reload) with two real per-team follow stars -- toggleTeam()
     // already works and is already the exact thing sendMatchEventNotification()
@@ -701,15 +719,15 @@ export default function MatchDetailClient() {
                     </div>
 
                     {/* Tabs */}
-                    <div className="flex gap-2 border-t border-white/10 overflow-x-auto scrollbar-hide mt-4">
+                    <div className="flex gap-1 border-t border-white/10 overflow-x-auto scrollbar-hide mt-4">
                         <button
                             onClick={() => setActiveTab('overview')}
-                            className={`px-6 py-3 font-medium transition-all relative whitespace-nowrap ${activeTab === 'overview'
+                            className={`px-3 py-2 text-[10px] font-bold uppercase tracking-wider transition-all relative whitespace-nowrap ${activeTab === 'overview'
                                 ? 'text-primary'
                                 : 'text-white/60 hover:text-white'
                                 }`}
                         >
-                            <Eye className="w-4 h-4 inline mr-2" />
+                            <Eye className="w-2.5 h-2.5 inline mr-1" />
                             Overview
                             {activeTab === 'overview' && (
                                 <motion.div
@@ -723,12 +741,12 @@ export default function MatchDetailClient() {
                         {/* {isUpcoming && (
                             <button
                                 onClick={() => setActiveTab('predictions')}
-                                className={`px-6 py-3 font-medium transition-all relative whitespace-nowrap ${activeTab === 'predictions'
+                                className={`px-3 py-2 text-[10px] font-bold uppercase tracking-wider transition-all relative whitespace-nowrap ${activeTab === 'predictions'
                                     ? 'text-primary'
                                     : 'text-white/60 hover:text-white'
                                     }`}
                             >
-                                <TrendingUp className="w-4 h-4 inline mr-2" />
+                                <TrendingUp className="w-2.5 h-2.5 inline mr-1" />
                                 Predictions
                                 {activeTab === 'predictions' && (
                                     <motion.div
@@ -743,12 +761,12 @@ export default function MatchDetailClient() {
                         {!isUpcoming && (
                             <button
                                 onClick={() => setActiveTab('timeline')}
-                                className={`px-6 py-3 font-medium transition-all relative whitespace-nowrap ${activeTab === 'timeline'
+                                className={`px-3 py-2 text-[10px] font-bold uppercase tracking-wider transition-all relative whitespace-nowrap ${activeTab === 'timeline'
                                     ? 'text-primary'
                                     : 'text-white/60 hover:text-white'
                                     }`}
                             >
-                                <Activity className="w-4 h-4 inline mr-2" />
+                                <Activity className="w-2.5 h-2.5 inline mr-1" />
                                 Timeline
                                 {activeTab === 'timeline' && (
                                     <motion.div
@@ -763,12 +781,12 @@ export default function MatchDetailClient() {
                         {!isUpcoming && (
                             <button
                                 onClick={() => setActiveTab('stats')}
-                                className={`px-6 py-3 font-medium transition-all relative whitespace-nowrap ${activeTab === 'stats'
+                                className={`px-3 py-2 text-[10px] font-bold uppercase tracking-wider transition-all relative whitespace-nowrap ${activeTab === 'stats'
                                     ? 'text-primary'
                                     : 'text-white/60 hover:text-white'
                                     }`}
                             >
-                                <BarChart3 className="w-4 h-4 inline mr-2" />
+                                <BarChart3 className="w-2.5 h-2.5 inline mr-1" />
                                 Stats
                                 {activeTab === 'stats' && (
                                     <motion.div
@@ -780,12 +798,12 @@ export default function MatchDetailClient() {
                         )}
                         <button
                             onClick={() => setActiveTab('lineups')}
-                            className={`px-6 py-3 font-medium transition-all relative whitespace-nowrap ${activeTab === 'lineups'
+                            className={`px-3 py-2 text-[10px] font-bold uppercase tracking-wider transition-all relative whitespace-nowrap ${activeTab === 'lineups'
                                 ? 'text-primary'
                                 : 'text-white/60 hover:text-white'
                                 }`}
                         >
-                            <Users className="w-4 h-4 inline mr-2" />
+                            <Users className="w-2.5 h-2.5 inline mr-1" />
                             Lineups
                             {activeTab === 'lineups' && (
                                 <motion.div
@@ -796,14 +814,30 @@ export default function MatchDetailClient() {
                         </button>
                         <button
                             onClick={() => setActiveTab('h2h')}
-                            className={`px-6 py-3 font-medium transition-all relative whitespace-nowrap ${activeTab === 'h2h'
+                            className={`px-3 py-2 text-[10px] font-bold uppercase tracking-wider transition-all relative whitespace-nowrap ${activeTab === 'h2h'
                                 ? 'text-primary'
                                 : 'text-white/60 hover:text-white'
                                 }`}
                         >
-                            <Trophy className="w-4 h-4 inline mr-2" />
+                            <Trophy className="w-2.5 h-2.5 inline mr-1" />
                             H2H
                             {activeTab === 'h2h' && (
+                                <motion.div
+                                    layoutId="activeTab"
+                                    className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary"
+                                />
+                            )}
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('table')}
+                            className={`px-3 py-2 text-[10px] font-bold uppercase tracking-wider transition-all relative whitespace-nowrap ${activeTab === 'table'
+                                ? 'text-primary'
+                                : 'text-white/60 hover:text-white'
+                                }`}
+                        >
+                            <Table2 className="w-2.5 h-2.5 inline mr-1" />
+                            Table
+                            {activeTab === 'table' && (
                                 <motion.div
                                     layoutId="activeTab"
                                     className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary"
@@ -813,12 +847,12 @@ export default function MatchDetailClient() {
                         {/* BACKSCOPED: 2026-06-08 — BACKLOG-028. Reinstate when: Polls built (Phase 7) */}
                         {/* <button
                             onClick={() => setActiveTab('polls')}
-                            className={`px-6 py-3 font-medium transition-all relative whitespace-nowrap ${activeTab === 'polls'
+                            className={`px-3 py-2 text-[10px] font-bold uppercase tracking-wider transition-all relative whitespace-nowrap ${activeTab === 'polls'
                                 ? 'text-primary'
                                 : 'text-white/60 hover:text-white'
                                 }`}
                         >
-                            <BarChart3 className="w-4 h-4 inline mr-2" />
+                            <BarChart3 className="w-2.5 h-2.5 inline mr-1" />
                             Polls
                             {activeTab === 'polls' && (
                                 <motion.div
@@ -970,6 +1004,22 @@ export default function MatchDetailClient() {
                                     </p>
                                 </div>
                             )}
+                        </motion.div>
+                    )}
+
+                    {activeTab === 'table' && (
+                        <motion.div
+                            key="table"
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: -20 }}
+                        >
+                            <MatchStandingsTable
+                                competitionId={match.competitionId}
+                                sport={match.sport}
+                                homeTeamId={match.homeTeam.id}
+                                awayTeamId={match.awayTeam.id}
+                            />
                         </motion.div>
                     )}
 

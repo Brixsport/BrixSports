@@ -224,7 +224,7 @@ export default function AdminMatchLineupsPage() {
             console.error('Could not fetch match config:', e);
         }
         setPlayersPerSide(pps);
-        // BACKLOG-326: 5 and 11 keep their real hand-authored default formations;
+        // BACKLOG-328: 5 and 11 keep their real hand-authored default formations;
         // any other size (7-a-side, 9-a-side, etc.) gets a generated one instead
         // of silently falling back to an 11-slot pitch that doesn't match the
         // real roster size.
@@ -385,7 +385,7 @@ export default function AdminMatchLineupsPage() {
         );
     }
 
-    // BACKLOG-326: for playersPerSide values without a real hand-authored
+    // BACKLOG-328: for playersPerSide values without a real hand-authored
     // set (anything but 5 or 11), getFormationsForAdmin returns exactly one
     // generated formation sized to match -- no more forcing a 7-a-side match
     // onto an 11-slot pitch.

@@ -1,8 +1,8 @@
 'use client';
 
 import { motion, AnimatePresence } from 'framer-motion';
-import { Trophy, ChevronRight, LayoutGrid, ListOrdered, Activity, Loader2, AlertCircle, Calendar, Clock, MapPin, Star } from 'lucide-react';
-import { useState, useEffect, Suspense } from 'react';
+import { Trophy, ChevronRight, LayoutGrid, ListOrdered, Activity, Loader2, AlertCircle, Calendar, Clock, MapPin, Star, ArrowLeft, Users } from 'lucide-react';
+import { useState, useEffect, useMemo, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Image from 'next/image';
 import MatchCalendar from '@/components/MatchCalendar';
@@ -21,6 +21,7 @@ interface Competition {
   status?: string;
   description?: string;
   logo?: string | null;
+  numberOfTeams?: number | null;
 }
 
 // BACKLOG-229: mirrors api/competitions' own buildCompetitionGroups() shape --
@@ -54,6 +55,7 @@ interface Standing {
   goalsAgainst: number;
   goalDifference: number;
   points: number;
+  groupName?: string | null;
 }
 
 interface Match {
@@ -152,14 +154,28 @@ function CompetitionsContent() {
       try {
         setLoading(true);
 
+        // BACKLOG-287: the selected SPORT TAB (All/Football/Basketball/Track) is
+        // a filter, not necessarily a real sport with its own /api/<sport>/* route
+        // -- only Football and Basketball do. The selected COMPETITION always has
+        // a concrete sport (or none, if multi-sport), so resolve the fetch endpoint
+        // from that instead of the tab value to avoid ever hitting /api/all/* or
+        // /api/track/*, which don't exist.
+        const fetchSport = selectedComp.sport;
+        if (!fetchSport) {
+          setStandings([]);
+          setMatches([]);
+          setBrackets([]);
+          return;
+        }
+
         // Fetch Standings
-        const standingsRes = await fetch(`/api/${selectedSport.toLowerCase()}/standings?competitionId=${selectedComp.id}&competition=${encodeURIComponent(selectedComp.name)}`);
+        const standingsRes = await fetch(`/api/${fetchSport.toLowerCase()}/standings?competitionId=${selectedComp.id}&competition=${encodeURIComponent(selectedComp.name)}`);
         const sData = await standingsRes.json();
         if (sData.success) setStandings(sData.standings || []);
         else setStandings([]);
 
         // Fetch Matches
-        const matchesRes = await fetch(`/api/${selectedSport.toLowerCase()}/matches?competitionId=${selectedComp.id}&competition=${encodeURIComponent(selectedComp.name)}`);
+        const matchesRes = await fetch(`/api/${fetchSport.toLowerCase()}/matches?competitionId=${selectedComp.id}&competition=${encodeURIComponent(selectedComp.name)}`);
         const mData = await matchesRes.json();
         if (mData.success && mData.matches) {
           setMatches(mData.matches);
@@ -168,7 +184,7 @@ function CompetitionsContent() {
         }
 
         // Fetch Brackets
-        const bracketRes = await fetch(`/api/brackets?competitionId=${selectedComp.id}&competition=${encodeURIComponent(selectedComp.name)}&sport=${selectedSport}`);
+        const bracketRes = await fetch(`/api/brackets?competitionId=${selectedComp.id}&competition=${encodeURIComponent(selectedComp.name)}&sport=${fetchSport}`);
         const bData = await bracketRes.json();
         if (bData.rounds) setBrackets(bData.rounds);
         else setBrackets([]);
@@ -199,6 +215,75 @@ function CompetitionsContent() {
     ? groups.find(g => g.seasons.some(s => s.id === selectedComp.id))
     : undefined;
 
+  // Group-stage competitions carry a `groupName` on each standings row (e.g.
+  // "Group A") until the draw completes; everything else has it null. Only
+  // split into per-group tables when the data actually has >1 distinct group
+  // -- otherwise render the familiar single flat table.
+  const standingsGroups = useMemo(() => {
+    const distinctGroups = Array.from(new Set(standings.map(s => s.groupName).filter(Boolean))) as string[];
+    if (distinctGroups.length < 2) {
+      return [{ groupName: null as string | null, rows: standings }];
+    }
+    return distinctGroups.sort().map(groupName => ({
+      groupName,
+      rows: standings.filter(s => s.groupName === groupName),
+    }));
+  }, [standings]);
+
+  const renderStandingsTable = (rows: Standing[]) => (
+    <div className="overflow-x-auto">
+      <table className="w-full text-left border-collapse min-w-[600px]">
+        <thead>
+          <tr className="border-b border-white/10 bg-white/5">
+            <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-white/40">Pos</th>
+            <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-white/40">Team</th>
+            <th className="px-4 py-4 text-[10px] font-black uppercase tracking-widest text-white/40 text-center">P</th>
+            <th className="px-4 py-4 text-[10px] font-black uppercase tracking-widest text-white/40 text-center">W</th>
+            <th className="px-4 py-4 text-[10px] font-black uppercase tracking-widest text-white/40 text-center">{selectedSport === 'Basketball' ? 'L' : 'D'}</th>
+            <th className="px-4 py-4 text-[10px] font-black uppercase tracking-widest text-white/40 text-center">{selectedSport === 'Basketball' ? 'PCT' : 'L'}</th>
+            <th className="px-4 py-4 text-[10px] font-black uppercase tracking-widest text-white/40 text-center">GD/DIFF</th>
+            <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-primary text-center">Pts</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row, idx) => (
+            <tr
+              key={row.id}
+              className="border-b border-white/5 hover:bg-white/5 transition-colors group"
+            >
+              <td className="px-6 py-4">
+                <span className={`text-lg font-display italic ${idx < 3 ? 'text-primary' : 'text-white/20'}`}>
+                  {idx + 1}
+                </span>
+              </td>
+              <td className="px-6 py-4">
+                <div className="flex items-center gap-4">
+                  <div className="w-10 h-10 relative flex-shrink-0 bg-white/5 rounded-lg p-1 flex items-center justify-center">
+                    <TeamLogo logo={row.team.logo} name={row.team.name} size="sm" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-black uppercase tracking-tight truncate">{row.team.name}</p>
+                    <p className="text-[10px] text-white/40 font-bold uppercase tracking-widest">{row.team.university}</p>
+                  </div>
+                </div>
+              </td>
+              <td className="px-4 py-4 text-center font-bold text-white/80">{row.played}</td>
+              <td className="px-4 py-4 text-center font-bold text-primary">{row.won}</td>
+              <td className="px-4 py-4 text-center font-bold text-white/60">{selectedSport === 'Basketball' ? row.lost : row.drawn}</td>
+              <td className="px-4 py-4 text-center font-bold text-white/40">{selectedSport === 'Basketball' ? ((row.won / (row.played || 1)) * 100).toFixed(0) + '%' : row.lost}</td>
+              <td className="px-4 py-4 text-center font-bold text-white/40">{row.goalDifference > 0 ? `+${row.goalDifference}` : row.goalDifference}</td>
+              <td className="px-6 py-4 text-center">
+                <span className="bg-primary/10 text-primary px-3 py-1 rounded-lg font-display italic text-lg border border-primary/20">
+                  {row.points}
+                </span>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+
   if (loading && competitions.length === 0) {
     return (
       <div className="min-h-screen bg-[#050505] flex items-center justify-center">
@@ -210,59 +295,78 @@ function CompetitionsContent() {
   return (
     <div className="min-h-screen bg-[#050505] text-white p-4 md:p-12">
       <div className="max-w-5xl mx-auto space-y-6 md:space-y-12">
-        <header className="flex flex-col md:flex-row md:items-end justify-between gap-4 md:gap-6 border-b border-white/5 pb-8">
-          <div className="flex items-center gap-4">
-            {selectedComp?.logo && (
-              <div className="w-14 h-14 md:w-20 md:h-20 shrink-0 bg-white/5 rounded-2xl border border-white/10 p-2 flex items-center justify-center">
-                <TeamLogo logo={selectedComp.logo} name={selectedComp.name} size="lg" />
-              </div>
-            )}
-            <div>
-              <div className="flex items-center gap-2 mb-2">
-                <Trophy size={14} className="text-primary" />
-                {selectedGroup && selectedGroup.seasons.length > 1 ? (
-                  <select
-                    value={selectedComp?.id || ''}
-                    onChange={(e) => {
-                      const chosen = selectedGroup.seasons.find(s => s.id === e.target.value);
-                      if (chosen) setSelectedComp(chosen);
-                    }}
-                    className="text-[10px] font-black uppercase tracking-widest text-white/60 bg-white/5 border border-white/10 rounded-lg px-2 py-0.5 focus:outline-none focus:border-primary/50"
-                  >
-                    {selectedGroup.seasons.map((s) => (
-                      <option key={s.id} value={s.id}>{s.season || 'Unknown Season'}</option>
-                    ))}
-                  </select>
-                ) : (
+        <header className="space-y-6 md:space-y-8 border-b border-white/5 pb-8">
+          {/* Identity row: back + logo/name/filter block (left) -- star (end) */}
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex items-start gap-4">
+              <button
+                onClick={() => router.back()}
+                aria-label="Back"
+                className="shrink-0 p-2 -ml-2 -mt-2 rounded-full hover:bg-white/10 transition-colors text-white/60 hover:text-white"
+              >
+                <ArrowLeft size={20} />
+              </button>
+              {selectedComp && (
+                <div className="w-14 h-14 md:w-20 md:h-20 shrink-0 bg-white/5 rounded-2xl border border-white/10 p-2 flex items-center justify-center">
+                  <TeamLogo logo={selectedComp.logo} name={selectedComp.name} size="lg" />
+                </div>
+              )}
+              <div className="text-left">
+                <div className="flex items-center gap-2 mb-2">
+                  <Trophy size={14} className="text-primary" />
+                  {selectedGroup && selectedGroup.seasons.length > 1 ? (
+                    <select
+                      value={selectedComp?.id || ''}
+                      onChange={(e) => {
+                        const chosen = selectedGroup.seasons.find(s => s.id === e.target.value);
+                        if (chosen) setSelectedComp(chosen);
+                      }}
+                      className="text-[10px] font-black uppercase tracking-widest text-white/60 bg-white/5 border border-white/10 rounded-lg px-2 py-0.5 focus:outline-none focus:border-primary/50"
+                    >
+                      {selectedGroup.seasons.map((s) => (
+                        <option key={s.id} value={s.id}>{s.season || 'Unknown Season'}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <span className="text-[10px] font-black uppercase tracking-widest text-white/40">
+                      {selectedComp?.season || 'Current Season'}
+                    </span>
+                  )}
                   <span className="text-[10px] font-black uppercase tracking-widest text-white/40">
-                    {selectedComp?.season || 'Current Season'}
+                    • {selectedComp?.status || 'Active'}
                   </span>
+                </div>
+                <div className="flex items-center gap-3 mb-2">
+                  <h1 className="font-display text-2xl md:text-5xl tracking-tighter italic uppercase leading-none">
+                    {selectedComp?.name || 'Competition Viewer'}
+                  </h1>
+                </div>
+                {!!selectedComp?.numberOfTeams && (
+                  <div className="inline-flex items-center gap-1.5 px-3 py-1 mb-2 bg-primary/10 border border-primary/20 rounded-lg">
+                    <Users size={12} className="text-primary" />
+                    <span className="text-[10px] font-black uppercase tracking-widest text-primary">
+                      {selectedComp.numberOfTeams} Teams Registered
+                    </span>
+                  </div>
                 )}
-                <span className="text-[10px] font-black uppercase tracking-widest text-white/40">
-                  • {selectedComp?.status || 'Active'}
-                </span>
+                <p className="text-white/60 text-sm max-w-xl">
+                  {selectedComp?.description || `Managing standings, fixtures, and results for ${selectedComp?.name || 'this competition'}.`}
+                </p>
               </div>
-              <div className="flex items-center gap-3 mb-2">
-                <h1 className="font-display text-2xl md:text-5xl tracking-tighter italic uppercase leading-none">
-                  {selectedComp?.name || 'Competition Viewer'}
-                </h1>
-                {selectedComp && (
-                  <button
-                    onClick={() => toggleCompetition(selectedComp.id)}
-                    aria-label={isFavoriteCompetition(selectedComp.id) ? 'Remove from favourites' : 'Add to favourites'}
-                    className="shrink-0 p-2 rounded-full hover:bg-white/10 transition-colors"
-                  >
-                    <Star
-                      size={20}
-                      className={isFavoriteCompetition(selectedComp.id) ? 'text-primary fill-primary' : 'text-white/40'}
-                    />
-                  </button>
-                )}
-              </div>
-              <p className="text-white/60 text-sm max-w-xl">
-                {selectedComp?.description || `Managing standings, fixtures, and results for ${selectedComp?.name || 'this competition'}.`}
-              </p>
             </div>
+
+            {selectedComp && (
+              <button
+                onClick={() => toggleCompetition(selectedComp.id)}
+                aria-label={isFavoriteCompetition(selectedComp.id) ? 'Remove from favourites' : 'Add to favourites'}
+                className="shrink-0 p-2 -mr-2 rounded-full hover:bg-white/10 transition-colors"
+              >
+                <Star
+                  size={20}
+                  className={isFavoriteCompetition(selectedComp.id) ? 'text-primary fill-primary' : 'text-white/40'}
+                />
+              </button>
+            )}
           </div>
 
           {/* View Toggle */}
@@ -342,60 +446,21 @@ function CompetitionsContent() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -20 }}
-              className="bg-white/5 border border-white/10 rounded-[40px] overflow-hidden"
+              className={standingsGroups.length > 1 ? 'space-y-8' : 'bg-white/5 border border-white/10 rounded-[40px] overflow-hidden'}
             >
               {standings.length > 0 ? (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left border-collapse min-w-[600px]">
-                    <thead>
-                      <tr className="border-b border-white/10 bg-white/5">
-                        <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-white/40">Pos</th>
-                        <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-white/40">Team</th>
-                        <th className="px-4 py-4 text-[10px] font-black uppercase tracking-widest text-white/40 text-center">P</th>
-                        <th className="px-4 py-4 text-[10px] font-black uppercase tracking-widest text-white/40 text-center">W</th>
-                        <th className="px-4 py-4 text-[10px] font-black uppercase tracking-widest text-white/40 text-center">{selectedSport === 'Basketball' ? 'L' : 'D'}</th>
-                        <th className="px-4 py-4 text-[10px] font-black uppercase tracking-widest text-white/40 text-center">{selectedSport === 'Basketball' ? 'PCT' : 'L'}</th>
-                        <th className="px-4 py-4 text-[10px] font-black uppercase tracking-widest text-white/40 text-center">GD/DIFF</th>
-                        <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-primary text-center">Pts</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {standings.map((row, idx) => (
-                        <tr
-                          key={row.id}
-                          className="border-b border-white/5 hover:bg-white/5 transition-colors group"
-                        >
-                          <td className="px-6 py-4">
-                            <span className={`text-lg font-display italic ${idx < 3 ? 'text-primary' : 'text-white/20'}`}>
-                              {idx + 1}
-                            </span>
-                          </td>
-                          <td className="px-6 py-4">
-                            <div className="flex items-center gap-4">
-                              <div className="w-10 h-10 relative flex-shrink-0 bg-white/5 rounded-lg p-1 flex items-center justify-center">
-                                <TeamLogo logo={row.team.logo} name={row.team.name} size="sm" />
-                              </div>
-                              <div className="min-w-0">
-                                <p className="text-sm font-black uppercase tracking-tight truncate">{row.team.name}</p>
-                                <p className="text-[10px] text-white/40 font-bold uppercase tracking-widest">{row.team.university}</p>
-                              </div>
-                            </div>
-                          </td>
-                          <td className="px-4 py-4 text-center font-bold text-white/80">{row.played}</td>
-                          <td className="px-4 py-4 text-center font-bold text-primary">{row.won}</td>
-                          <td className="px-4 py-4 text-center font-bold text-white/60">{selectedSport === 'Basketball' ? row.lost : row.drawn}</td>
-                          <td className="px-4 py-4 text-center font-bold text-white/40">{selectedSport === 'Basketball' ? ((row.won / (row.played || 1)) * 100).toFixed(0) + '%' : row.lost}</td>
-                          <td className="px-4 py-4 text-center font-bold text-white/40">{row.goalDifference > 0 ? `+${row.goalDifference}` : row.goalDifference}</td>
-                          <td className="px-6 py-4 text-center">
-                            <span className="bg-primary/10 text-primary px-3 py-1 rounded-lg font-display italic text-lg border border-primary/20">
-                              {row.points}
-                            </span>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                standingsGroups.length > 1 ? (
+                  standingsGroups.map(({ groupName, rows }) => (
+                    <div key={groupName} className="space-y-3">
+                      <h3 className="px-2 font-display text-lg italic uppercase tracking-widest text-primary">{groupName}</h3>
+                      <div className="bg-white/5 border border-white/10 rounded-[32px] overflow-hidden">
+                        {renderStandingsTable(rows)}
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  renderStandingsTable(standingsGroups[0].rows)
+                )
               ) : (
                 <div className="p-24 text-center">
                   <AlertCircle className="w-12 h-12 text-white/10 mx-auto mb-4" />

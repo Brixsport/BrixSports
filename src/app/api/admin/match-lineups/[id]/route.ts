@@ -66,7 +66,7 @@ export async function POST(
             );
         }
 
-        // BACKLOG-327 (found live-testing BACKLOG-323 step 6): this used to run
+        // BACKLOG-329 (found live-testing BACKLOG-323 step 6): this used to run
         // its own independent `competitions.name === match.competition` lookup
         // for playersPerSide -- a third, drifting copy of logic matchConfig.ts's
         // own comment already documented replacing "two independent, drifting

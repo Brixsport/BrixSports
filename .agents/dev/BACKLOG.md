@@ -9770,7 +9770,7 @@ Fixed exactly per the "Fix (not built)" plan below: `MatchStatusBadge.tsx` now d
 
 ### BACKLOG-284 — Figma Redesign Reconciliation, Master Entry: Competitions-Tab Product Decision (Directory-First vs. Pinned-Default)
 
-**Claimed:** session `brixsports-v2-cc`, 2026-09-02, on branch `feature/ui-redesign` (own worktree `work/competitions-consolidation`, per `feature/ui-redesign`'s coordination note). Working the whole BACKLOG-286→293 sequence in order — starting with `BACKLOG-286`/`287` (independent/blocking), then `BACKLOG-289`/`290` (directory screen + consolidation), `291`/`292`/`293` last. Full Competitions* Figma reference set (14 screens: directory + hub Standings/Matches/Stats tab variants, node `2164:992`) pulled and saved to `.agents/dev/figma-refs/competitions/` for visual-QA comparison against each build.
+**Claimed:** session `brixsports-v2-cc`, 2026-09-02, on branch `feature/ui-redesign` (own worktree `work/competitions-consolidation`, per `feature/ui-redesign`'s coordination note). Working the whole BACKLOG-286→293 sequence in order — starting with `BACKLOG-286`/`287` (independent/blocking), then `BACKLOG-289`/`290` (directory screen + consolidation), `291`/`292`/`293` last. Full Competitions* Figma reference set (14 screens: directory + hub Standings/Matches/Stats tab variants, node `2164:992`) pulled and saved to `.agents/dev/figma-refs/competitions/` for visual-QA comparison against each build. **Also done ahead of `BACKLOG-290`/`293` proper** (design-review pass against the Figma refs, Richard's explicit call): unified the hub header into one persistent row (back-arrow + logo/name/season/status/teams-badge, left-aligned — favorite-star pinned to the row's end) shown identically across all tabs instead of the old separate/inconsistent utility row; `competitions/page.tsx`'s Standings tab now renders per-group tables when `standings[].groupName` has ≥2 distinct values (group-stage competitions), single flat table otherwise — driven by live data, not the `structure` field. Sport emoji icon explicitly rejected by Richard, removed.
 **Status:** RESOLVED — Richard's call, session 61, 2026-08-27: **directory-first (option a)**. Bottom-nav "Competitions" → competitions directory (Figma node `2168:1495`) → tap a competition → hub. Confirmed directly in response to the `architect` agent's own recommendation.
 **Priority:** HIGH — blocking gate; every other competitions-tab phase's route shape depends on this answer.
 **Context:** A full OGO BRIXSPORTS Figma file (`pFyvF0aBQff7wwTJorYiqs`, 42 top-level screens across onboarding/home/competitions/match/team/player) was audited screen-by-screen against real staging routes this session (extraction technique documented externally at `C:\Users\Wise\Desktop\Agent-Ops\techniques\figma-mcp-screen-inventory.md` — reusable, not project-specific, kept out of this repo). The design was built directly against real seeded data (team/player/competition names match staging verbatim), confirming it's the intended target, not a speculative concept.
@@ -9800,9 +9800,9 @@ Fixed exactly per the "Fix (not built)" plan below: `MatchStatusBadge.tsx` now d
 
 ### BACKLOG-286 — Delete the Mock-Data-Backed `/competitions/[id]/standings` Route
 
-**Status:** IN PROGRESS — session `brixsports-v2-cc`, 2026-09-02. Cheap, independently shippable, no design/decision dependency. Ships regardless of how `BACKLOG-285` resolves.
+**Status:** SHIPPED — session `brixsports-v2-cc`, 2026-09-02. Code committed; live test pending (this session's local dev environment hit sustained multi-minute cold-compile stalls under shared-machine load, see `BUILD_JOURNAL.md`; verifying via the `feature/ui-redesign` Vercel preview next).
 **Priority:** MEDIUM-HIGH — removes ~135 lines of fabricated data from a live public route (see `BACKLOG-285` finding #3) plus 3 permanently-dead tabs (`scorers`/`assists` hardcoded empty, `discipline` untested).
-**Fix:** delete `src/app/competitions/[id]/standings/page.tsx` and its `mockCompetitionData`; retarget `src/app/competitions/[id]/page.tsx`'s redirect to whatever route wins `BACKLOG-285`.
+**Fix:** deleted `src/app/competitions/[id]/standings/page.tsx` and its `mockCompetitionData`. Retargeted `src/app/competitions/[id]/page.tsx`: now an async server component that looks up the competition's name by id (Drizzle, `competitions` table) and redirects to `/competitions?competition=<name>` (the route `BACKLOG-285` resolved on) — falls back to bare `/competitions` if the id doesn't resolve. Also fixed `src/app/favourites/page.tsx`'s favorite-competitions card link, which pointed at the same now-deleted route.
 **Depends on:** nothing structurally (pure deletion, reversible by revert). Retarget target depends on `BACKLOG-285`.
 
 **Found:** session 61, 2026-08-27, by the `architect` agent.
@@ -9811,10 +9811,10 @@ Fixed exactly per the "Fix (not built)" plan below: `MatchStatusBadge.tsx` now d
 
 ### BACKLOG-287 — Live Bug: `/competitions`' ALL/TRACK Sport Tabs Fire Requests at Nonexistent `/api/all/*` and `/api/track/*` (Silent Empty State, No Error)
 
-**Status:** OPEN — live bug on the bottom-nav-reachable route, found by the `architect` agent while auditing, not previously known.
+**Status:** SHIPPED — session `brixsports-v2-cc`, 2026-09-02. Code committed; live test pending (see `BACKLOG-286`'s note on this session's dev-environment stalls; verifying via the `feature/ui-redesign` Vercel preview next). One partial live signal already gathered: a browser test against this worktree's own dev server (before it degraded further) confirmed the ALL tab no longer fires `/api/all/*` — not treated as full evidence since the full click-through wasn't completed.
 **Priority:** HIGH — silent data loss on a real, reachable, default-visible UI path. The "ALL" tab is the leftmost/default segmented-control option in Figma's own design.
 **Problem:** `src/app/competitions/page.tsx` (lines 154, 160, 169) builds fetch URLs as `` `/api/${selectedSport.toLowerCase()}/standings` `` and `` `/api/${selectedSport.toLowerCase()}/matches` ``. A glob of `src/app/api/{all,track,football,basketball}/**/route.ts` confirms only `football` and `basketball` route variants exist — `all` and `track` do not. Selecting the **ALL** or **TRACK** sport tab therefore hits `/api/all/standings` (404) and `/api/track/standings` (404); the page swallows this and renders an empty standings/matches/brackets view with no error surfaced to the user, violating `CLAUDE.md`'s "no silent failures" rule.
-**Fix (not built):** either resolve the fetch endpoint from the selected competition's own `sport` field instead of the raw tab value, or render an explicit "no data for this sport" state instead of a silently empty table (if `ALL`/`TRACK` genuinely has no backing API yet).
+**Fix:** the fetch endpoint now resolves from `selectedComp.sport` (the actual selected competition's real sport) instead of the raw sport-tab value, so it's never `all`/`track`. If the selected competition has no single sport (multi-sport, `sport` null), standings/matches/brackets are cleared without firing a request, and the existing "no data available" empty state covers it — no silent failure, no bogus fetch.
 **Depends on:** nothing. **Blocks:** should land before any visual reskin work on the hub (`BACKLOG-290`/`293`) so that work isn't built on top of a silently-broken data path.
 
 **Found:** session 61, 2026-08-27, by the `architect` agent.
@@ -9902,6 +9902,15 @@ Fixed exactly per the "Fix (not built)" plan below: `MatchStatusBadge.tsx` now d
 **UX requirement, not just cleanup (UI/UX pass, session 61):** URL-addressable tabs are a real user-facing requirement here, not a technical nicety — without them there's no shareable link to "this match's lineup," no bookmarking a specific tab, and the browser back button exits the whole page instead of stepping back through tab history. Treat `?tab=` (or a nested route) as in-scope for this entry, not a follow-up.
 **Flag:** the Lineups tab intersects `BACKLOG-220`, still OPEN and 🔴 High Volatility per `CLAUDE.md` (Lineup Builder architecture cleanup — dead duplicate rendering code, non-atomic write race). Read-only rendering should be safe; any change beyond styling needs an explicit brief before touching it. Do not deep-link this tab without checking exposure against the Live Event Readiness Checklist's still-OPEN "hide all 🔴 features" item.
 **Depends on:** nothing structurally; sequence after the competitions-tab work (Phases 0-3 above) since it's a separate screen family.
+
+**Built this pass (code + `tsc --noEmit` clean, zero new errors vs. the pre-existing baseline; live/UI verification still pending -- see note below):**
+- `MatchDetailClient.tsx`: `activeTab` now derives from `?tab=` (`useSearchParams`), every tab switch is a `router.replace` (shallow, no scroll reset) instead of local `useState` -- back/forward now steps through tab history, a tab is now a shareable/bookmarkable link. `MatchLineups` keeps receiving the exact same 5 props unchanged (contract confirmed with `brixsports-v2-ae` before implementing). Added a 6th tab, `table`.
+- `LiveMatchTimeline.tsx`: added the Figma `All`/`Key events` segmented filter, defaulting to `Key events` (Richard's call, 2026-09-02) with `All` a click away. `All` is the pre-existing descriptive-commentary-card rendering, completely untouched. `Key events` is a new, fully separate `KeyEventsList` component -- two-column team-side layout, running score badge on goals (computed from a chronologically-sorted copy of events, own-goals credit the other team), compact one-line rows for cards/subs. Kept deliberately isolated from the `All` path's helpers so nothing here can regress it.
+- New `src/components/MatchStandingsTable.tsx` for the `table` tab -- reuses the existing `useLiveStandings` hook (no new API), group-vs-full-table logic (scopes to either match team's `groupName` if the competition uses groups, else shows the full table), sport-variant columns (football `PL/W/D/L/GD/PTS`, basketball `PL/W/L/PF/PA/PD/PTS`), both match teams' rows highlighted.
+- `Stats` (`LiveStats.tsx`): deliberately untouched this pass -- see Diff table below.
+- Basketball's own tab set (`Overview`/`Box Score`/`Stats`/`Table`, structurally different from football's) and its net-new `Box Score` tab: explicitly deferred, filed as `BACKLOG-326` (new data-modeling work, not tab reconciliation).
+
+**Verification status:** `tsc` clean. Live/UI verification blocked this session by the local dev server's cold-compile times (minutes per first-hit route -- almost certainly resource contention from multiple concurrent sessions' dev servers sharing this machine, not a bug in the code) -- moving to the `feature/ui-redesign` Vercel preview deployment to verify visually instead. **Do not treat this entry as done until that verification lands** -- code-complete and type-clean is not the same as live-verified per this project's own evidence standard.
 
 **Found:** session 61, 2026-08-27, by the `architect` agent.
 
@@ -10534,7 +10543,46 @@ Three independent formation-template tables exist in the codebase, none sharing 
 
 ---
 
-### BACKLOG-326 — Formation Registry: No Support for playersPerSide Values Other Than 5 or 11
+### BACKLOG-326 — Basketball Match Detail: Sport-Conditional Tab Set + Net-New Box Score Tab
+
+**Status:** OPEN — filed, not built. Explicitly deferred out of `BACKLOG-294`'s pass per Richard's
+direction (2026-09-02) so it isn't lost, not because it's low value.
+**Priority:** MEDIUM.
+**Found:** session `brixsports-v2-dd`, 2026-09-02, while reconciling `BACKLOG-294`'s Timeline/
+Stats/Table tabs against Figma — reference screenshots (`.agents/dev/figma-refs/match-id page/
+bbal-box-score.jpeg`, `bbal-stats.jpeg`, `bbal-table.jpeg`) revealed Figma's basketball match
+screens use a genuinely different tab *set* than football's, which live doesn't reflect at all
+(every sport gets the same 6 tabs today: Overview/Timeline/Stats/Lineups/H2H/Table).
+
+**What Figma shows for basketball, vs. live:**
+1. **Tab set differs by sport.** Football: `Lineups / Stats / Timeline / Table`. Basketball:
+   `Overview / Box Score / Stats / Table` — no Lineups tab, no Timeline tab; `Box Score` and
+   `Stats` replace them. Live ships the identical 6-tab set (`overview/timeline/stats/lineups/
+   h2h/table`) regardless of `match.sport` — no sport-conditional branching exists anywhere in
+   `MatchDetailClient.tsx`.
+2. **`Box Score` is entirely net-new.** Figma's screen is a per-player stat table for *this
+   specific match* — columns `TEAM (jersey+name+position) / PTS / AST / REB`, with a team-filter
+   segmented control (`[home logo] / ALL / [away logo]`). No live equivalent exists, and no data
+   source currently backs it: `basketballPlayerStats` (`src/db/schema.ts`) is keyed on
+   `(playerId, season, competitionId)` — a **season-level aggregate**, not per-match. Building
+   this needs either (a) a new per-match aggregation query over `matchEvents` (deriving PTS from
+   `FIELD_GOAL`/`THREE_POINTER`/`FREE_THROW` event values, AST/REB from whatever event types
+   actually capture them today — needs an audit, not assumed present) or (b) a new per-match
+   basketball box-score table populated at logging time. Real data-modeling decision, not a UI
+   task.
+3. **Basketball's `Stats` tab also has a quarter filter** (`All`/`1ST`/`2ND`/`3RD`/`4TH`,
+   `bbal-stats.jpeg`) that live's `LiveStats.tsx` has no equivalent for — `stats` today is a
+   single whole-match snapshot per category, not quarter-scoped.
+
+**Depends on:** an audit of what basketball event types actually get logged today (needed before
+committing to the match_events-aggregation approach for Box Score) — not yet done.
+**Relates to:** `BACKLOG-294` (this entry is the explicitly-deferred remainder of that
+reconciliation, basketball-specific), `BACKLOG-293` (sport-variant standings columns — same
+"basketball needs its own shape" theme, different tab).
+
+---
+
+### BACKLOG-328 — Formation Registry: No Support for playersPerSide Values Other Than 5 or 11
 
 **Status:** Fix written and `tsc`-clean. **Not yet re-verified live** -- the "Live-verified" note below describes the check still to run, not one already done; do not treat this as closed until that check is actually performed and this line is updated with the real result.
 **Priority:** MEDIUM-HIGH — real bug, hit live during `BACKLOG-323` step 6 verification on a real staging match (`GENTLEMEN FC LEAGUE`, `playersPerSide: 7`).
@@ -10552,7 +10600,7 @@ The even-split rule wasn't invented in a vacuum — it independently reproduces 
 
 ---
 
-### BACKLOG-327 — Admin Publish Route Has Its Own Third, Drifting playersPerSide Lookup
+### BACKLOG-329 — Admin Publish Route Has Its Own Third, Drifting playersPerSide Lookup
 
 **Status:** Fix written and `tsc`-clean. **Not yet re-verified live** -- the "Live-verified" note below describes the check still to run, not one already done; do not treat this as closed until that check is actually performed and this line is updated with the real result.
 **Priority:** HIGH — this one actively blocked publishing on any match where it disagreed with the client, with no workaround short of a code fix.
@@ -10566,6 +10614,6 @@ The even-split rule wasn't invented in a vacuum — it independently reproduces 
 
 **To verify (not yet done):** re-run the identical publish attempt on the same staging match after this deploys — expect both home and away `POST`s to return `200` and the UI's status banners to update to "Lineup Published."
 
-**Found:** session 65 continued (2026-09-02), same live-testing pass as `BACKLOG-326`.
+**Found:** session 65 continued (2026-09-02), same live-testing pass as `BACKLOG-328`.
 
 ---
