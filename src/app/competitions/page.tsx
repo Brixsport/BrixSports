@@ -298,15 +298,15 @@ function CompetitionsContent() {
         <header className="space-y-6 md:space-y-8 border-b border-white/5 pb-8">
           {/* Identity row: back + logo/name/filter block (left) -- star (end) */}
           <div className="flex items-start justify-between gap-4">
-            <div className="flex items-center gap-4">
+            <div className="flex items-start gap-4">
               <button
                 onClick={() => router.back()}
                 aria-label="Back"
-                className="shrink-0 p-2 -ml-2 rounded-full hover:bg-white/10 transition-colors text-white/60 hover:text-white"
+                className="shrink-0 p-2 -ml-2 -mt-2 rounded-full hover:bg-white/10 transition-colors text-white/60 hover:text-white"
               >
                 <ArrowLeft size={20} />
               </button>
-              {selectedComp?.logo && (
+              {selectedComp && (
                 <div className="w-14 h-14 md:w-20 md:h-20 shrink-0 bg-white/5 rounded-2xl border border-white/10 p-2 flex items-center justify-center">
                   <TeamLogo logo={selectedComp.logo} name={selectedComp.name} size="lg" />
                 </div>
