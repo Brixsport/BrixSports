@@ -9,16 +9,13 @@ import {
     MessageCircle,
     Share2,
     ArrowLeft,
-    Filter,
-    TrendingUp,
     Clock,
-    Users,
 } from 'lucide-react';
 import Link from 'next/link';
 
 interface UserXI {
     id: string;
-    userId: string;
+    userId: string | null;
     name: string;
     formation: string;
     players: string;
@@ -28,7 +25,7 @@ interface UserXI {
     createdAt: string;
 }
 
-export default function XIGalleryPage() {
+export default function LineupBuilderGalleryPage() {
     const [teams, setTeams] = useState<UserXI[]>([]);
     const [loading, setLoading] = useState(true);
     const [sortBy, setSortBy] = useState('recent');
@@ -44,7 +41,6 @@ export default function XIGalleryPage() {
             const data = await response.json();
             let sortedTeams = data.teams || [];
 
-            // Sort teams
             if (sortBy === 'popular') {
                 sortedTeams.sort((a: UserXI, b: UserXI) => b.likes - a.likes);
             } else if (sortBy === 'views') {
@@ -67,7 +63,7 @@ export default function XIGalleryPage() {
                     <div className="flex items-center justify-between">
                         <div className="flex items-center gap-4">
                             <Link
-                                href="/xi"
+                                href="/lineup-builder"
                                 className="flex items-center gap-2 text-slate-400 hover:text-white transition-colors"
                             >
                                 <ArrowLeft className="w-5 h-5" />
@@ -75,7 +71,7 @@ export default function XIGalleryPage() {
                             </Link>
                             <div className="h-6 w-px bg-slate-700" />
                             <h1 className="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-400">
-                                XI Gallery
+                                Lineup Gallery
                             </h1>
                         </div>
 
@@ -108,7 +104,7 @@ export default function XIGalleryPage() {
                         <h3 className="text-2xl font-bold text-slate-400 mb-2">No teams yet</h3>
                         <p className="text-slate-500 mb-6">Be the first to create and share your dream team!</p>
                         <Link
-                            href="/xi"
+                            href="/lineup-builder"
                             className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-cyan-500 to-blue-500 text-white rounded-xl font-semibold hover:shadow-lg hover:shadow-cyan-500/50 transition-all"
                         >
                             <Trophy className="w-5 h-5" />
@@ -150,7 +146,7 @@ function TeamCard({ team, index }: { team: UserXI; index: number }) {
                             {team.formation}
                         </span>
                         <span className="px-3 py-1 rounded-full bg-cyan-500/20 text-cyan-400 text-xs font-bold backdrop-blur-sm border border-cyan-500/20">
-                            {filledSlots}/11
+                            {filledSlots} placed
                         </span>
                     </div>
                     <h3 className="text-white font-bold text-lg mb-1 line-clamp-2">{team.name}</h3>
@@ -186,4 +182,3 @@ function TeamCard({ team, index }: { team: UserXI; index: number }) {
         </motion.div>
     );
 }
-

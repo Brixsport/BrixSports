@@ -4,7 +4,14 @@ import { users } from './schema';
 // User XI (Team Builder) table
 export const userXI = sqliteTable('user_xi', {
     id: text('id').primaryKey(),
-    userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    // BACKLOG-324: nullable -- an anonymous save (see anonymousId below) has no
+    // real users row. Exactly one of userId/anonymousId is set; enforced in
+    // application code (src/app/api/user/xi/route.ts), not a DB constraint.
+    userId: text('user_id').references(() => users.id, { onDelete: 'cascade' }),
+    // Opaque id derived from a server-signed, httpOnly anonymous-identity cookie
+    // (src/lib/anonymousIdentity.ts) -- never client-passed. Null for saves owned
+    // by a real logged-in user.
+    anonymousId: text('anonymous_id'),
     name: text('name').notNull(), // Team name
     formation: text('formation').notNull(), // e.g., "4-3-3", "4-4-2"
     players: text('players').notNull(), // JSON array of player IDs with positions
