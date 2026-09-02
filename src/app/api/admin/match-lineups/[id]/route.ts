@@ -3,6 +3,7 @@ import { getAuthUser } from '@/lib/auth';
 import { db } from '@/db';
 import { matches, competitions, squadPlayers } from '@/db/schema';
 import { eq, and, inArray } from 'drizzle-orm';
+import { resolveSlot } from '@/lib/lineup/placement';
 
 // POST /api/admin/match-lineups/[id] - Publish official lineup
 export async function POST(
@@ -81,6 +82,43 @@ export async function POST(
                 { error: `Lineup must have exactly ${requiredStarters} starters` },
                 { status: 400 }
             );
+        }
+
+        // BACKLOG-323: the rebuilt admin builder sends explicit slotId/x/y per
+        // starter (placementVersion:2) instead of a free-text position label.
+        // Never trust the client's x/y directly -- re-derive both from the
+        // formation registry server-side, and reject unknown or duplicate
+        // slotIds outright rather than silently accepting a stale/tampered
+        // coordinate. Lineups without slotId (legacy callers, if any survive)
+        // pass through unchanged below.
+        if (lineup.placementVersion === 2) {
+            const seenSlotIds = new Set<string>();
+            for (const starter of lineup.starters) {
+                if (typeof starter.slotId !== 'string' || starter.slotId.length === 0) {
+                    return NextResponse.json(
+                        { error: 'Every starter must have a slotId for a placementVersion 2 lineup', code: 'MISSING_SLOT_ID' },
+                        { status: 422 }
+                    );
+                }
+                if (seenSlotIds.has(starter.slotId)) {
+                    return NextResponse.json(
+                        { error: `Duplicate slot assignment: ${starter.slotId}`, code: 'DUPLICATE_SLOT_ID' },
+                        { status: 422 }
+                    );
+                }
+                seenSlotIds.add(starter.slotId);
+
+                const slot = resolveSlot(lineup.formation, starter.slotId);
+                if (!slot) {
+                    return NextResponse.json(
+                        { error: `Unknown slot "${starter.slotId}" for formation "${lineup.formation}"`, code: 'UNKNOWN_SLOT_ID' },
+                        { status: 422 }
+                    );
+                }
+                // Re-derive from the registry -- ignore whatever x/y the client sent.
+                starter.x = slot.x;
+                starter.y = slot.y;
+            }
         }
 
         // Get existing lineups or create new object

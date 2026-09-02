@@ -6,6 +6,10 @@ import { useAuth } from '@/hooks/useAuth';
 import { useRouter } from 'next/navigation';
 import { Shield, Calendar, Users, CheckCircle, AlertCircle, Save, Lock as LockIcon } from 'lucide-react';
 import { getClientErrorMessage } from '@/lib/client-error';
+import { useLineupPlacement, type PlacementEntry } from '@/components/lineup/useLineupPlacement';
+import { AdminTeamLineupBuilder } from '@/components/lineup/AdminTeamLineupBuilder';
+import { seedPlacementsFromLegacy, resolveSlot } from '@/lib/lineup/placement';
+import { getFormationsForAdmin } from '@/lib/lineup/formations';
 
 interface Match {
     id: string;
@@ -21,9 +25,6 @@ interface Match {
     status: string;
     loggerId?: string;
 }
-
-const FORMATIONS_11 = ['4-3-3', '4-4-2', '4-2-3-1', '3-5-2', '3-4-3', '5-3-2', '4-1-4-1', '3-1-4-2', '4-5-1', '3-2-4-1'];
-const FORMATIONS_5 = ['1-2-1', '2-1-1'];
 
 // BUG-125: this entire page is a football/5-a-side formation-pitch builder --
 // positions, formations, everything below assumes a football-shaped roster.
@@ -48,6 +49,26 @@ interface Player {
     university?: string;
 }
 
+// BACKLOG-323 step 6: a team's existing lineup may already be a V2
+// (placementVersion:2, every starter has a real slotId) lineup saved by this
+// same rebuilt builder, or a legacy (position-string only) one -- every real
+// published lineup as of this step, since the backfill migration that would
+// give them real coordinates is step 9, a separate later migration. Detect
+// which and seed the edit state accordingly rather than assuming either.
+function deriveInitialPlacements(teamLineup: any): PlacementEntry[] {
+    if (!teamLineup?.starters || teamLineup.starters.length === 0) return [];
+    const isV2 = teamLineup.starters.every((s: any) => typeof s.slotId === 'string' && s.slotId.length > 0);
+    if (isV2) {
+        return teamLineup.starters.map((s: any) => ({
+            slotId: s.slotId,
+            playerId: s.playerId,
+            isCaptain: !!s.isCaptain,
+            isViceCaptain: !!s.isViceCaptain,
+        }));
+    }
+    return seedPlacementsFromLegacy(teamLineup.starters, teamLineup.formation);
+}
+
 export default function AdminMatchLineupsPage() {
     const { user, loading, isAuthenticated } = useAuth();
     const router = useRouter();
@@ -55,20 +76,19 @@ export default function AdminMatchLineupsPage() {
     const [selectedMatch, setSelectedMatch] = useState<Match | null>(null);
     const [homeRoster, setHomeRoster] = useState<Player[]>([]);
     const [awayRoster, setAwayRoster] = useState<Player[]>([]);
-    const [homeStarters, setHomeStarters] = useState<string[]>([]);
-    const [awayStarters, setAwayStarters] = useState<string[]>([]);
-    const [homeFormation, setHomeFormation] = useState('4-3-3');
-    const [awayFormation, setAwayFormation] = useState('4-3-3');
-    const [homeCaptain, setHomeCaptain] = useState('');
-    const [awayCaptain, setAwayCaptain] = useState('');
-    const [homePositionOverrides, setHomePositionOverrides] = useState<Record<string, string>>({});
-    const [awayPositionOverrides, setAwayPositionOverrides] = useState<Record<string, string>>({});
     const [saving, setSaving] = useState(false);
     const [loadingData, setLoadingData] = useState(false);
     const [homeLineupStatus, setHomeLineupStatus] = useState<any>(null);
     const [awayLineupStatus, setAwayLineupStatus] = useState<any>(null);
     const [unlocking, setUnlocking] = useState(false);
     const [playersPerSide, setPlayersPerSide] = useState(11);
+
+    // BACKLOG-323: replaces the old homeStarters/homeFormation/homeCaptain/
+    // homePositionOverrides state (and the away-side equivalents) with one
+    // slot-placement hook per team. Hooks can't be constructed conditionally,
+    // so these are always mounted -- reset() re-seeds them per selected match.
+    const homePlacement = useLineupPlacement({ formationId: '4-3-3' });
+    const awayPlacement = useLineupPlacement({ formationId: '4-3-3' });
 
     // Check authentication and role
     useEffect(() => {
@@ -102,14 +122,9 @@ export default function AdminMatchLineupsPage() {
         }
     };
 
-    const loadRosters = async (match: Match) => {
+    const loadRosters = async (match: Match, formationDefaults: { home: string; away: string }) => {
         setLoadingData(true);
         try {
-            console.log('Loading rosters for match:', match.id);
-            console.log('Home Team ID:', match.homeTeamId);
-            console.log('Away Team ID:', match.awayTeamId);
-            console.log('Competition Level:', match.competitionLevel);
-
             let homeUrl = `/api/players?teamId=${match.homeTeamId}`;
             let awayUrl = `/api/players?teamId=${match.awayTeamId}`;
 
@@ -132,14 +147,8 @@ export default function AdminMatchLineupsPage() {
                 fetch(awayUrl)
             ]);
 
-            console.log('Home response status:', homeResponse.status);
-            console.log('Away response status:', awayResponse.status);
-
             const homeData = await homeResponse.json();
             const awayData = await awayResponse.json();
-
-            console.log('Home data:', homeData);
-            console.log('Away data:', awayData);
 
             // Handle different response formats
             const homePlayers = Array.isArray(homeData)
@@ -149,9 +158,6 @@ export default function AdminMatchLineupsPage() {
             const awayPlayers = Array.isArray(awayData)
                 ? awayData
                 : (awayData.players || awayData.data || []);
-
-            console.log('Processed home players:', homePlayers);
-            console.log('Processed away players:', awayPlayers);
 
             setHomeRoster(homePlayers);
             setAwayRoster(awayPlayers);
@@ -168,42 +174,28 @@ export default function AdminMatchLineupsPage() {
             const lineupResponse = await fetch(`/api/matches/${match.id}/lineup`);
             const lineupData = await lineupResponse.json();
 
-            if (lineupData.success && lineupData.lineups) {
-                if (lineupData.lineups.home) {
-                    setHomeStarters(lineupData.lineups.home.starters.map((s: any) => s.playerId));
-                    setHomeFormation(lineupData.lineups.home.formation);
-                    const captain = lineupData.lineups.home.starters.find((s: any) => s.isCaptain);
-                    if (captain) setHomeCaptain(captain.playerId);
-                    setHomeLineupStatus(lineupData.lineups.home);
+            if (lineupData.success && lineupData.lineups?.home) {
+                const homeFormation = lineupData.lineups.home.formation || formationDefaults.home;
+                homePlacement.reset({
+                    formationId: homeFormation,
+                    placements: deriveInitialPlacements(lineupData.lineups.home),
+                });
+                setHomeLineupStatus(lineupData.lineups.home);
+            } else {
+                homePlacement.reset({ formationId: formationDefaults.home });
+                setHomeLineupStatus(null);
+            }
 
-                    // Restore overrides
-                    const overrides: Record<string, string> = {};
-                    lineupData.lineups.home.starters.forEach((s: any) => {
-                        const player = homePlayers.find((p: any) => p.id === s.playerId);
-                        if (player && s.position && s.position !== player.position) {
-                            overrides[s.playerId] = s.position;
-                        }
-                    });
-                    setHomePositionOverrides(overrides);
-                }
-
-                if (lineupData.lineups.away) {
-                    setAwayStarters(lineupData.lineups.away.starters.map((s: any) => s.playerId));
-                    setAwayFormation(lineupData.lineups.away.formation);
-                    const captain = lineupData.lineups.away.starters.find((s: any) => s.isCaptain);
-                    if (captain) setAwayCaptain(captain.playerId);
-                    setAwayLineupStatus(lineupData.lineups.away);
-
-                    // Restore overrides
-                    const overrides: Record<string, string> = {};
-                    lineupData.lineups.away.starters.forEach((s: any) => {
-                        const player = awayPlayers.find((p: any) => p.id === s.playerId);
-                        if (player && s.position && s.position !== player.position) {
-                            overrides[s.playerId] = s.position;
-                        }
-                    });
-                    setAwayPositionOverrides(overrides);
-                }
+            if (lineupData.success && lineupData.lineups?.away) {
+                const awayFormation = lineupData.lineups.away.formation || formationDefaults.away;
+                awayPlacement.reset({
+                    formationId: awayFormation,
+                    placements: deriveInitialPlacements(lineupData.lineups.away),
+                });
+                setAwayLineupStatus(lineupData.lineups.away);
+            } else {
+                awayPlacement.reset({ formationId: formationDefaults.away });
+                setAwayLineupStatus(null);
             }
         } catch (error) {
             console.error('Error loading rosters:', error);
@@ -220,112 +212,85 @@ export default function AdminMatchLineupsPage() {
         // instead of looking up `competitions.find(c => c.name === match.competition)` —
         // that lookup silently failed for friendlies (competition is just "Friendly", not
         // a real configured competitions row) and fell through to a hardcoded 11.
+        let pps = 11;
         try {
             const configRes = await fetch(`/api/matches/${match.id}/config`);
             const configData = await configRes.json();
-            const pps = configData?.config?.playersPerSide;
-            if (typeof pps === 'number' && pps > 0) {
-                setPlayersPerSide(pps);
-                // Set appropriate default formation
-                if (pps === 5) {
-                    setHomeFormation('1-2-1');
-                    setAwayFormation('1-2-1');
-                } else {
-                    setHomeFormation('4-3-3');
-                    setAwayFormation('4-3-3');
-                }
-            } else {
-                setPlayersPerSide(11);
+            const configPps = configData?.config?.playersPerSide;
+            if (typeof configPps === 'number' && configPps > 0) {
+                pps = configPps;
             }
         } catch (e) {
             console.error('Could not fetch match config:', e);
-            setPlayersPerSide(11);
         }
-        loadRosters(match);
+        setPlayersPerSide(pps);
+        const defaultFormation = pps === 5 ? '1-2-1' : '4-3-3';
+        loadRosters(match, { home: defaultFormation, away: defaultFormation });
     };
 
-    const toggleStarter = (playerId: string, team: 'home' | 'away') => {
-        if (team === 'home') {
-            setHomeStarters(prev =>
-                prev.includes(playerId)
-                    ? prev.filter(id => id !== playerId)
-                    : prev.length < playersPerSide
-                        ? [...prev, playerId]
-                        : prev
+    // BACKLOG-323: formation changes now go through a confirm step when slots
+    // are already filled -- changing formation necessarily invalidates the old
+    // slot ids, so this can no longer silently wipe starters the way the old
+    // <select onChange={setHomeFormation}> did (a risk flagged when this
+    // rebuild was scoped, BACKLOG-220's "no formation-change confirm" item).
+    const handleFormationChangeRequest = (side: 'home' | 'away', newFormationId: string) => {
+        const placement = side === 'home' ? homePlacement : awayPlacement;
+        if (placement.placements.length > 0) {
+            const confirmed = window.confirm(
+                'Changing formation will clear every player currently placed on the pitch for this team. Continue?'
             );
-        } else {
-            setAwayStarters(prev =>
-                prev.includes(playerId)
-                    ? prev.filter(id => id !== playerId)
-                    : prev.length < playersPerSide
-                        ? [...prev, playerId]
-                        : prev
-            );
+            if (!confirmed) return;
         }
+        placement.reset({ formationId: newFormationId });
     };
 
     const publishLineups = async () => {
         if (!selectedMatch) return;
 
-        if (homeStarters.length !== playersPerSide || awayStarters.length !== playersPerSide) {
+        if (homePlacement.placements.length !== playersPerSide || awayPlacement.placements.length !== playersPerSide) {
             alert(`Both teams must have exactly ${playersPerSide} starters`);
             return;
         }
 
-        if (!homeCaptain || !awayCaptain) {
+        const homeCaptainId = homePlacement.placements.find((p) => p.isCaptain)?.playerId;
+        const awayCaptainId = awayPlacement.placements.find((p) => p.isCaptain)?.playerId;
+        if (!homeCaptainId || !awayCaptainId) {
             alert('Please select captains for both teams');
             return;
         }
 
         setSaving(true);
         try {
-            // Prepare home lineup
-            const homeLineup = {
-                formation: homeFormation,
-                starters: homeStarters.map(playerId => {
-                    const player = homeRoster.find(p => p.id === playerId)!;
+            const buildTeamLineup = (roster: Player[], placement: ReturnType<typeof useLineupPlacement>) => ({
+                formation: placement.formationId,
+                placementVersion: 2,
+                starters: placement.placements.map((p) => {
+                    const player = roster.find((r) => r.id === p.playerId)!;
+                    const slot = resolveSlot(placement.formationId, p.slotId);
                     return {
-                        playerId,
-                        position: homePositionOverrides[playerId] || player.position, // Use override if set
+                        playerId: p.playerId,
+                        slotId: p.slotId,
+                        x: slot?.x,
+                        y: slot?.y,
+                        position: slot?.role || player.position,
                         jerseyNumber: player.number,
                         jerseyName: player.jerseyName,
-                        isCaptain: playerId === homeCaptain,
-                        isViceCaptain: false
+                        isCaptain: !!p.isCaptain,
+                        isViceCaptain: !!p.isViceCaptain,
                     };
                 }),
-                substitutes: homeRoster
-                    .filter(p => !homeStarters.includes(p.id))
-                    .map(player => ({
+                substitutes: roster
+                    .filter((player) => !placement.placements.some((p) => p.playerId === player.id))
+                    .map((player) => ({
                         playerId: player.id,
                         jerseyNumber: player.number,
-                        jerseyName: player.jerseyName
+                        jerseyName: player.jerseyName,
                     })),
-                status: 'published'
-            };
+                status: 'published',
+            });
 
-            // Prepare away lineup
-            const awayLineup = {
-                formation: awayFormation,
-                starters: awayStarters.map(playerId => {
-                    const player = awayRoster.find(p => p.id === playerId)!;
-                    return {
-                        playerId,
-                        position: awayPositionOverrides[playerId] || player.position, // Use override if set
-                        jerseyNumber: player.number,
-                        jerseyName: player.jerseyName,
-                        isCaptain: playerId === awayCaptain,
-                        isViceCaptain: false
-                    };
-                }),
-                substitutes: awayRoster
-                    .filter(p => !awayStarters.includes(p.id))
-                    .map(player => ({
-                        playerId: player.id,
-                        jerseyNumber: player.number,
-                        jerseyName: player.jerseyName
-                    })),
-                status: 'published'
-            };
+            const homeLineup = buildTeamLineup(homeRoster, homePlacement);
+            const awayLineup = buildTeamLineup(awayRoster, awayPlacement);
 
             // Save lineups sequentially to avoid race conditions in the database
             const homeRes = await fetch(`/api/admin/match-lineups/${selectedMatch.id}`, {
@@ -352,7 +317,7 @@ export default function AdminMatchLineupsPage() {
 
             alert('Lineups published successfully!');
             // Reload to update status headers
-            loadRosters(selectedMatch);
+            loadRosters(selectedMatch, { home: homePlacement.formationId, away: awayPlacement.formationId });
         } catch (error) {
             console.error('Error publishing lineups:', error);
             alert(getClientErrorMessage(error, 'Failed to publish lineups'));
@@ -375,7 +340,7 @@ export default function AdminMatchLineupsPage() {
             if (response.ok) {
                 alert(`${team === 'home' ? 'Home' : 'Away'} lineup unlocked successfully! You can now edit and republish.`);
                 // Reload lineups to get updated status
-                loadRosters(selectedMatch);
+                loadRosters(selectedMatch, { home: homePlacement.formationId, away: awayPlacement.formationId });
             } else {
                 const data = await response.json();
                 alert(data.error || 'Failed to unlock lineup');
@@ -415,6 +380,14 @@ export default function AdminMatchLineupsPage() {
             </div>
         );
     }
+
+    const homeFormationOptions = getFormationsForAdmin('Football').filter(
+        (f) => f.variant === (playersPerSide === 5 ? '5-a-side' : '11-a-side')
+    );
+    const awayFormationOptions = homeFormationOptions;
+
+    const homeDisabled = (user?.role !== 'admin' && selectedMatch?.status !== 'UPCOMING') || (user?.role !== 'admin' && homeLineupStatus?.publishedByRole === 'admin' && !homeLineupStatus?.unlocked);
+    const awayDisabled = (user?.role !== 'admin' && selectedMatch?.status !== 'UPCOMING') || (user?.role !== 'admin' && awayLineupStatus?.publishedByRole === 'admin' && !awayLineupStatus?.unlocked);
 
     return (
         <div className="min-h-screen bg-[#050505] text-white p-6">
@@ -511,324 +484,170 @@ export default function AdminMatchLineupsPage() {
                         </div>
 
                         {isBasketballMatch(selectedMatch) ? null : (
-                        <>
-                        <div className="bg-white/5 rounded-xl border border-white/10 p-6">
-                            {/* Validation Status */}
-                            <div className="flex items-center gap-4 text-sm">
-                                <div className={`flex items-center gap-2 ${homeStarters.length === playersPerSide ? 'text-green-400' : 'text-orange-400'}`}>
-                                    {homeStarters.length === playersPerSide ? <CheckCircle size={16} /> : <AlertCircle size={16} />}
-                                    Home: {homeStarters.length}/{playersPerSide} starters {playersPerSide === 5 && <span className="text-xs opacity-60">(5-aside)</span>}
-                                </div>
-                                <div className={`flex items-center gap-2 ${awayStarters.length === playersPerSide ? 'text-green-400' : 'text-orange-400'}`}>
-                                    {awayStarters.length === playersPerSide ? <CheckCircle size={16} /> : <AlertCircle size={16} />}
-                                    Away: {awayStarters.length}/{playersPerSide} starters {playersPerSide === 5 && <span className="text-xs opacity-60">(5-aside)</span>}
-                                </div>
-                            </div>
-
-                            {selectedMatch.status !== 'UPCOMING' && (
-                                <div className="mt-4 p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-xs flex items-center gap-2">
-                                    <LockIcon size={14} />
-                                    <span>Lineups are locked because the match has already started. Contact a system administrator if corrections are required.</span>
-                                </div>
-                            )}
-                        </div>
-
-                        {/* Lineup Status Banners */}
-                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                            {/* Home Lineup Status */}
-                            {homeLineupStatus?.status === 'published' && !homeLineupStatus?.unlocked && (
-                                <div className="bg-green-500/10 border border-green-500/20 rounded-xl p-4">
-                                    <div className="flex items-start justify-between">
-                                        <div>
-                                            <p className="text-green-400 font-bold text-sm mb-1">✓ Home Lineup Published</p>
-                                            <p className="text-xs text-white/60">
-                                                By {homeLineupStatus.publishedByName} on {new Date(homeLineupStatus.publishedAt).toLocaleString()}
-                                            </p>
-                                            <p className="text-xs text-white/40 mt-1">
-                                                {user?.role === 'admin'
-                                                    ? 'Published. You can update it below.'
-                                                    : homeLineupStatus.publishedByRole === 'admin'
-                                                        ? 'Locked by Admin. Cannot be edited.'
-                                                        : 'Published. You can correct it below.'}
-                                            </p>
+                            <>
+                                <div className="bg-white/5 rounded-xl border border-white/10 p-6">
+                                    {/* Validation Status */}
+                                    <div className="flex items-center gap-4 text-sm">
+                                        <div className={`flex items-center gap-2 ${homePlacement.placements.length === playersPerSide ? 'text-green-400' : 'text-orange-400'}`}>
+                                            {homePlacement.placements.length === playersPerSide ? <CheckCircle size={16} /> : <AlertCircle size={16} />}
+                                            Home: {homePlacement.placements.length}/{playersPerSide} starters {playersPerSide === 5 && <span className="text-xs opacity-60">(5-aside)</span>}
                                         </div>
-                                        {user?.role === 'admin' && (
-                                            <button
-                                                onClick={() => unlockLineup('home')}
-                                                disabled={unlocking}
-                                                className="px-3 py-1.5 bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-400 rounded-lg text-xs font-bold transition-colors disabled:opacity-50"
-                                            >
-                                                {unlocking ? 'Unlocking...' : '🔓 Unlock'}
-                                            </button>
-                                        )}
-                                    </div>
-                                </div>
-                            )}
-
-                            {homeLineupStatus?.unlocked && (
-                                <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-xl p-4">
-                                    <p className="text-yellow-400 font-bold text-sm mb-1">⚠️ Home Lineup Unlocked</p>
-                                    <p className="text-xs text-white/60">
-                                        Unlocked by {homeLineupStatus.unlockedByName} on {new Date(homeLineupStatus.unlockedAt).toLocaleString()}
-                                    </p>
-                                    <p className="text-xs text-white/40 mt-1">You can now edit and republish this lineup.</p>
-                                </div>
-                            )}
-
-                            {/* Away Lineup Status */}
-                            {awayLineupStatus?.status === 'published' && !awayLineupStatus?.unlocked && (
-                                <div className="bg-green-500/10 border border-green-500/20 rounded-xl p-4">
-                                    <div className="flex items-start justify-between">
-                                        <div>
-                                            <p className="text-green-400 font-bold text-sm mb-1">✓ Away Lineup Published</p>
-                                            <p className="text-xs text-white/60">
-                                                By {awayLineupStatus.publishedByName} on {new Date(awayLineupStatus.publishedAt).toLocaleString()}
-                                            </p>
-                                            <p className="text-xs text-white/40 mt-1">
-                                                {user?.role === 'admin'
-                                                    ? 'Published. You can update it below.'
-                                                    : awayLineupStatus.publishedByRole === 'admin'
-                                                        ? 'Locked by Admin. Cannot be edited.'
-                                                        : 'Published. You can correct it below.'}
-                                            </p>
+                                        <div className={`flex items-center gap-2 ${awayPlacement.placements.length === playersPerSide ? 'text-green-400' : 'text-orange-400'}`}>
+                                            {awayPlacement.placements.length === playersPerSide ? <CheckCircle size={16} /> : <AlertCircle size={16} />}
+                                            Away: {awayPlacement.placements.length}/{playersPerSide} starters {playersPerSide === 5 && <span className="text-xs opacity-60">(5-aside)</span>}
                                         </div>
-                                        {user?.role === 'admin' && (
-                                            <button
-                                                onClick={() => unlockLineup('away')}
-                                                disabled={unlocking}
-                                                className="px-3 py-1.5 bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-400 rounded-lg text-xs font-bold transition-colors disabled:opacity-50"
-                                            >
-                                                {unlocking ? 'Unlocking...' : '🔓 Unlock'}
-                                            </button>
-                                        )}
                                     </div>
+
+                                    {selectedMatch.status !== 'UPCOMING' && (
+                                        <div className="mt-4 p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-xs flex items-center gap-2">
+                                            <LockIcon size={14} />
+                                            <span>Lineups are locked because the match has already started. Contact a system administrator if corrections are required.</span>
+                                        </div>
+                                    )}
                                 </div>
-                            )}
 
-                            {awayLineupStatus?.unlocked && (
-                                <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-xl p-4">
-                                    <p className="text-yellow-400 font-bold text-sm mb-1">⚠️ Away Lineup Unlocked</p>
-                                    <p className="text-xs text-white/60">
-                                        Unlocked by {awayLineupStatus.unlockedByName} on {new Date(awayLineupStatus.unlockedAt).toLocaleString()}
-                                    </p>
-                                    <p className="text-xs text-white/40 mt-1">You can now edit and republish this lineup.</p>
+                                {/* Lineup Status Banners */}
+                                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                                    {/* Home Lineup Status */}
+                                    {homeLineupStatus?.status === 'published' && !homeLineupStatus?.unlocked && (
+                                        <div className="bg-green-500/10 border border-green-500/20 rounded-xl p-4">
+                                            <div className="flex items-start justify-between">
+                                                <div>
+                                                    <p className="text-green-400 font-bold text-sm mb-1">✓ Home Lineup Published</p>
+                                                    <p className="text-xs text-white/60">
+                                                        By {homeLineupStatus.publishedByName} on {new Date(homeLineupStatus.publishedAt).toLocaleString()}
+                                                    </p>
+                                                    <p className="text-xs text-white/40 mt-1">
+                                                        {user?.role === 'admin'
+                                                            ? 'Published. You can update it below.'
+                                                            : homeLineupStatus.publishedByRole === 'admin'
+                                                                ? 'Locked by Admin. Cannot be edited.'
+                                                                : 'Published. You can correct it below.'}
+                                                    </p>
+                                                </div>
+                                                {user?.role === 'admin' && (
+                                                    <button
+                                                        onClick={() => unlockLineup('home')}
+                                                        disabled={unlocking}
+                                                        className="px-3 py-1.5 bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-400 rounded-lg text-xs font-bold transition-colors disabled:opacity-50"
+                                                    >
+                                                        {unlocking ? 'Unlocking...' : '🔓 Unlock'}
+                                                    </button>
+                                                )}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {homeLineupStatus?.unlocked && (
+                                        <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-xl p-4">
+                                            <p className="text-yellow-400 font-bold text-sm mb-1">⚠️ Home Lineup Unlocked</p>
+                                            <p className="text-xs text-white/60">
+                                                Unlocked by {homeLineupStatus.unlockedByName} on {new Date(homeLineupStatus.unlockedAt).toLocaleString()}
+                                            </p>
+                                            <p className="text-xs text-white/40 mt-1">You can now edit and republish this lineup.</p>
+                                        </div>
+                                    )}
+
+                                    {/* Away Lineup Status */}
+                                    {awayLineupStatus?.status === 'published' && !awayLineupStatus?.unlocked && (
+                                        <div className="bg-green-500/10 border border-green-500/20 rounded-xl p-4">
+                                            <div className="flex items-start justify-between">
+                                                <div>
+                                                    <p className="text-green-400 font-bold text-sm mb-1">✓ Away Lineup Published</p>
+                                                    <p className="text-xs text-white/60">
+                                                        By {awayLineupStatus.publishedByName} on {new Date(awayLineupStatus.publishedAt).toLocaleString()}
+                                                    </p>
+                                                    <p className="text-xs text-white/40 mt-1">
+                                                        {user?.role === 'admin'
+                                                            ? 'Published. You can update it below.'
+                                                            : awayLineupStatus.publishedByRole === 'admin'
+                                                                ? 'Locked by Admin. Cannot be edited.'
+                                                                : 'Published. You can correct it below.'}
+                                                    </p>
+                                                </div>
+                                                {user?.role === 'admin' && (
+                                                    <button
+                                                        onClick={() => unlockLineup('away')}
+                                                        disabled={unlocking}
+                                                        className="px-3 py-1.5 bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-400 rounded-lg text-xs font-bold transition-colors disabled:opacity-50"
+                                                    >
+                                                        {unlocking ? 'Unlocking...' : '🔓 Unlock'}
+                                                    </button>
+                                                )}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {awayLineupStatus?.unlocked && (
+                                        <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-xl p-4">
+                                            <p className="text-yellow-400 font-bold text-sm mb-1">⚠️ Away Lineup Unlocked</p>
+                                            <p className="text-xs text-white/60">
+                                                Unlocked by {awayLineupStatus.unlockedByName} on {new Date(awayLineupStatus.unlockedAt).toLocaleString()}
+                                            </p>
+                                            <p className="text-xs text-white/40 mt-1">You can now edit and republish this lineup.</p>
+                                        </div>
+                                    )}
                                 </div>
-                            )}
-                        </div>
 
-                        {loadingData ? (
-                            <div className="py-20 text-center">
-                                <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-                                <p className="text-white/40">Loading rosters...</p>
-                            </div>
-                        ) : (
-                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                                {/* Home Team */}
-                                <TeamLineupBuilder
-                                    team={selectedMatch.homeTeam}
-                                    roster={homeRoster}
-                                    starters={homeStarters}
-                                    formation={homeFormation}
-                                    captain={homeCaptain}
-                                    positionOverrides={homePositionOverrides}
-                                    onToggleStarter={(id) => toggleStarter(id, 'home')}
-                                    onFormationChange={setHomeFormation}
-                                    onCaptainChange={setHomeCaptain}
-                                    onPositionOverride={(playerId, position) => {
-                                        setHomePositionOverrides(prev => ({ ...prev, [playerId]: position }));
-                                    }}
-                                    isDisabled={(user?.role !== 'admin' && selectedMatch.status !== 'UPCOMING') || (user?.role !== 'admin' && homeLineupStatus?.publishedByRole === 'admin' && !homeLineupStatus?.unlocked)}
-                                    maxStarters={playersPerSide}
-                                />
+                                {loadingData ? (
+                                    <div className="py-20 text-center">
+                                        <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+                                        <p className="text-white/40">Loading rosters...</p>
+                                    </div>
+                                ) : (
+                                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                                        <AdminTeamLineupBuilder
+                                            teamName={selectedMatch.homeTeam.name}
+                                            teamSide="home"
+                                            roster={homeRoster}
+                                            formationOptions={homeFormationOptions}
+                                            placement={homePlacement}
+                                            onRequestFormationChange={(id) => handleFormationChangeRequest('home', id)}
+                                            maxStarters={playersPerSide}
+                                            isDisabled={homeDisabled}
+                                        />
 
-                                {/* Away Team */}
-                                <TeamLineupBuilder
-                                    team={selectedMatch.awayTeam}
-                                    roster={awayRoster}
-                                    starters={awayStarters}
-                                    formation={awayFormation}
-                                    captain={awayCaptain}
-                                    positionOverrides={awayPositionOverrides}
-                                    onToggleStarter={(id) => toggleStarter(id, 'away')}
-                                    onFormationChange={setAwayFormation}
-                                    onCaptainChange={setAwayCaptain}
-                                    onPositionOverride={(playerId, position) => {
-                                        setAwayPositionOverrides(prev => ({ ...prev, [playerId]: position }));
-                                    }}
-                                    isDisabled={(user?.role !== 'admin' && selectedMatch.status !== 'UPCOMING') || (user?.role !== 'admin' && awayLineupStatus?.publishedByRole === 'admin' && !awayLineupStatus?.unlocked)}
-                                    maxStarters={playersPerSide}
-                                />
-                            </div>
-                        )}
+                                        <AdminTeamLineupBuilder
+                                            teamName={selectedMatch.awayTeam.name}
+                                            teamSide="away"
+                                            roster={awayRoster}
+                                            formationOptions={awayFormationOptions}
+                                            placement={awayPlacement}
+                                            onRequestFormationChange={(id) => handleFormationChangeRequest('away', id)}
+                                            maxStarters={playersPerSide}
+                                            isDisabled={awayDisabled}
+                                        />
+                                    </div>
+                                )}
 
-                        {/* Publish Button */}
-                        <div className="flex flex-col items-center gap-2">
-                            <button
-                                onClick={publishLineups}
-                                disabled={saving || homeStarters.length !== playersPerSide || awayStarters.length !== playersPerSide || !homeCaptain || !awayCaptain || (user?.role !== 'admin' && selectedMatch.status !== 'UPCOMING') || (user?.role !== 'admin' && ((homeLineupStatus?.publishedByRole === 'admin' && !homeLineupStatus?.unlocked) || (awayLineupStatus?.publishedByRole === 'admin' && !awayLineupStatus?.unlocked)))}
-                                className="px-8 py-4 bg-primary hover:bg-primary/90 disabled:bg-white/10 disabled:cursor-not-allowed text-black disabled:text-white/40 rounded-xl font-bold text-lg flex items-center gap-3 transition-colors"
-                            >
-                                <Save size={20} />
-                                {saving ? 'Publishing...' : (homeLineupStatus?.status === 'published' || awayLineupStatus?.status === 'published') ? 'Update Lineups' : 'Publish Official Lineups'}
-                            </button>
-                            {(!homeCaptain || !awayCaptain) && (
-                                <p className="text-xs text-amber-400 mt-1">
-                                    Set a captain for both teams before publishing.
-                                </p>
-                            )}
-                        </div>
-                        </>
+                                {/* Publish Button */}
+                                <div className="flex flex-col items-center gap-2">
+                                    <button
+                                        onClick={publishLineups}
+                                        disabled={
+                                            saving ||
+                                            homePlacement.placements.length !== playersPerSide ||
+                                            awayPlacement.placements.length !== playersPerSide ||
+                                            !homePlacement.placements.some((p) => p.isCaptain) ||
+                                            !awayPlacement.placements.some((p) => p.isCaptain) ||
+                                            homeDisabled ||
+                                            awayDisabled
+                                        }
+                                        className="px-8 py-4 bg-primary hover:bg-primary/90 disabled:bg-white/10 disabled:cursor-not-allowed text-black disabled:text-white/40 rounded-xl font-bold text-lg flex items-center gap-3 transition-colors"
+                                    >
+                                        <Save size={20} />
+                                        {saving ? 'Publishing...' : (homeLineupStatus?.status === 'published' || awayLineupStatus?.status === 'published') ? 'Update Lineups' : 'Publish Official Lineups'}
+                                    </button>
+                                    {(!homePlacement.placements.some((p) => p.isCaptain) || !awayPlacement.placements.some((p) => p.isCaptain)) && (
+                                        <p className="text-xs text-amber-400 mt-1">
+                                            Set a captain for both teams before publishing.
+                                        </p>
+                                    )}
+                                </div>
+                            </>
                         )}
                     </div>
                 )}
-            </div>
-        </div>
-    );
-}
-
-function TeamLineupBuilder({
-    team,
-    roster,
-    starters,
-    formation,
-    captain,
-    positionOverrides = {},
-    onToggleStarter,
-    onFormationChange,
-    onCaptainChange,
-    onPositionOverride,
-    isDisabled = false,
-    maxStarters = 11
-}: {
-    team: any;
-    roster: Player[];
-    starters: string[];
-    formation: string;
-    captain: string;
-    positionOverrides?: Record<string, string>;
-    onToggleStarter: (id: string) => void;
-    onFormationChange: (formation: string) => void;
-    onCaptainChange: (id: string) => void;
-    onPositionOverride?: (playerId: string, position: string) => void;
-    isDisabled?: boolean;
-    maxStarters?: number;
-}) {
-    const formations = maxStarters === 5 ? FORMATIONS_5 : FORMATIONS_11;
-    const positions = maxStarters === 5
-        ? ['GK', 'DEF', 'LB', 'RB', 'MID', 'FW', 'PIV']
-        : ['GK', 'DEF', 'LB', 'RB', 'CB', 'DM', 'MID', 'CM', 'LM', 'RM', 'AM', 'CAM', 'FW', 'ST', 'CF', 'LW', 'RW'];
-
-    return (
-        <div className={`bg-white/5 rounded-xl border border-white/10 p-6 ${isDisabled ? 'opacity-70' : ''}`}>
-            <h3 className="text-xl font-bold mb-4">{team.name}</h3>
-
-            {/* Formation Selector */}
-            <div className="mb-4">
-                <label className="text-sm text-white/60 mb-2 block">Formation</label>
-                <select
-                    value={formation}
-                    onChange={(e) => onFormationChange(e.target.value)}
-                    className="w-full bg-white/10 border border-white/20 rounded-lg px-4 py-2 text-white"
-                >
-                    {formations.map(f => (
-                        <option key={f} value={f}>{f}</option>
-                    ))}
-                </select>
-            </div>
-
-            {/* Player List */}
-            <div className="space-y-2 max-h-[500px] overflow-y-auto">
-                {roster.map(player => {
-                    const isStarter = starters.includes(player.id);
-                    const isCaptain = captain === player.id;
-                    const currentPosition = positionOverrides[player.id] || player.position;
-                    const hasOverride = !!positionOverrides[player.id];
-
-                    return (
-                        <div
-                            key={player.id}
-                            className={`flex items-center justify-between p-3 rounded-lg border transition-all ${isStarter
-                                ? 'bg-primary/20 border-primary/40'
-                                : 'bg-white/5 border-white/10 hover:bg-white/10'
-                                }`}
-                        >
-                            <div className="flex items-center gap-3 flex-1">
-                                <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold ${isStarter ? 'bg-primary text-black' : 'bg-white/10'
-                                    }`}>
-                                    {player.number}
-                                </div>
-                                <div className="flex-1">
-                                    <div className="font-semibold">{player.name}</div>
-                                    <div className="flex items-center gap-2">
-                                        <div className="text-xs text-white/60">
-                                            {player.position}
-                                            {hasOverride && (
-                                                <span className="ml-1 text-primary">→ {currentPosition}</span>
-                                            )}
-                                        </div>
-                                        {(player.department || player.college) && (
-                                            <div className="flex gap-1">
-                                                {player.department && (
-                                                    <span className="px-1.5 py-0.5 bg-white/5 border border-white/10 rounded text-[8px] uppercase font-bold text-white/40">
-                                                        {player.department}
-                                                    </span>
-                                                )}
-                                                {player.college && !player.department && (
-                                                    <span className="px-1.5 py-0.5 bg-white/5 border border-white/10 rounded text-[8px] uppercase font-bold text-white/40">
-                                                        {player.college}
-                                                    </span>
-                                                )}
-                                            </div>
-                                        )}
-                                    </div>
-                                </div>
-
-                                {/* Position Selector for Starters */}
-                                {isStarter && onPositionOverride && (
-                                    <select
-                                        value={currentPosition}
-                                        onChange={(e) => onPositionOverride(player.id, e.target.value)}
-                                        className="bg-white/10 border border-white/20 rounded px-2 py-1 text-xs text-white"
-                                        title="Tactical Position"
-                                    >
-                                        {positions.map(pos => (
-                                            <option key={pos} value={pos}>{pos}</option>
-                                        ))}
-                                    </select>
-                                )}
-                            </div>
-
-                            <div className="flex items-center gap-2">
-                                {isStarter && (
-                                    <button
-                                        onClick={() => onCaptainChange(player.id)}
-                                        className={`px-2 py-1 rounded text-xs font-bold ${isCaptain
-                                            ? 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/40'
-                                            : 'bg-white/10 text-white/60 hover:bg-white/20'
-                                            }`}
-                                    >
-                                        {isCaptain ? '★ Captain' : 'Set Captain'}
-                                    </button>
-                                )}
-                                <button
-                                    onClick={() => onToggleStarter(player.id)}
-                                    className={`px-3 py-1 rounded font-bold text-xs ${isStarter
-                                        ? 'bg-red-500/20 text-red-400 hover:bg-red-500/30'
-                                        : 'bg-green-500/20 text-green-400 hover:bg-green-500/30'
-                                        }`}
-                                >
-                                    {isStarter ? 'Remove' : 'Add'}
-                                </button>
-                            </div>
-                        </div>
-                    );
-                })}
-            </div>
-
-            {/* Summary */}
-            <div className="mt-4 pt-4 border-t border-white/10 text-sm text-white/60">
-                <div>Starters: {starters.length}/{maxStarters} {maxStarters === 5 && '(5-aside)'}</div>
-                <div>Substitutes: {roster.length - starters.length}</div>
             </div>
         </div>
     );

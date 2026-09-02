@@ -14,6 +14,7 @@
 
 import { Player } from '@/types';
 import type { PitchPlayer } from '@/components/lineup/ResponsivePitch';
+import type { PlacementEntry } from '@/components/lineup/useLineupPlacement';
 import { FORMATIONS, type FormationSlot as RegistrySlot } from './formations';
 
 // ============================================================================
@@ -392,4 +393,49 @@ export function inferPlacementLegacy(
     });
 
     return pitchPlayers;
+}
+
+// ============================================================================
+// Legacy-to-slot seeding -- for editing an EXISTING lineup that predates
+// stored coordinates (i.e. every real published lineup as of BACKLOG-323
+// step 6; the backfill migration that would give them real slotId/x/y is
+// step 9, a separate deliberate later migration). Without this, opening an
+// already-published match in the rebuilt admin builder would show an empty
+// pitch even though a real lineup exists -- a real risk of an admin
+// re-publishing what looks like a wiped lineup. This is intentionally a
+// simpler one-pass bucket match (no adjacent-role borrowing) since it only
+// seeds the initial edit state; the admin can freely correct any slot by
+// hand afterward, unlike inferPlacementLegacy which must render correctly
+// with zero human intervention on every page load.
+// ============================================================================
+
+export function seedPlacementsFromLegacy(
+    starters: Array<{ playerId: string; position?: string; isCaptain?: boolean; isViceCaptain?: boolean }>,
+    formationId: string,
+): PlacementEntry[] {
+    const formation = FORMATIONS[formationId];
+    if (!formation) return [];
+
+    const availableSlots = [...formation.slots];
+    const placements: PlacementEntry[] = [];
+
+    const takeSlot = (predicate: (slot: RegistrySlot) => boolean): RegistrySlot | undefined => {
+        const index = availableSlots.findIndex(predicate);
+        if (index === -1) return undefined;
+        return availableSlots.splice(index, 1)[0];
+    };
+
+    starters.forEach((starter) => {
+        const bucket = parsePositionToBucket(starter.position || '');
+        const slot = takeSlot((s) => s.role === bucket) || takeSlot(() => true);
+        if (!slot) return; // more starters than formation slots -- shouldn't happen for a valid lineup, drop rather than guess
+        placements.push({
+            slotId: slot.id,
+            playerId: starter.playerId,
+            isCaptain: starter.isCaptain,
+            isViceCaptain: starter.isViceCaptain,
+        });
+    });
+
+    return placements;
 }

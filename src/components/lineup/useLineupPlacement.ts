@@ -47,6 +47,8 @@ export interface UseLineupPlacementResult {
      * clearAll(), per BACKLOG-323's "formation-change confirm" risk note. */
     setFormationId: (formationId: string) => void;
     clearAll: () => void;
+    /** Wholesale replace formation/placements/bench -- for loading a different match's existing lineup into an already-mounted hook instance (hooks can't be re-initialized by prop changes alone). */
+    reset: (next: { formationId: string; placements?: PlacementEntry[]; bench?: string[] }) => void;
     /** The playerId currently in a slot, if any. */
     getPlayerAtSlot: (slotId: string) => string | undefined;
     /** The slotId a player currently occupies, if any (undefined if benched or unplaced). */
@@ -145,6 +147,12 @@ export function useLineupPlacement({
 
     const toPlacements = useCallback(() => placements, [placements]);
 
+    const reset = useCallback((next: { formationId: string; placements?: PlacementEntry[]; bench?: string[] }) => {
+        setFormationIdState(next.formationId);
+        setPlacements(next.placements ?? []);
+        setBench(next.bench ?? []);
+    }, []);
+
     return {
         formationId,
         placements,
@@ -158,6 +166,7 @@ export function useLineupPlacement({
         setViceCaptain,
         setFormationId,
         clearAll,
+        reset,
         getPlayerAtSlot,
         getSlotForPlayer,
         toPlacements,
