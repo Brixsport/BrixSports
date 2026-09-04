@@ -10758,3 +10758,20 @@ Re-examined `Timeline-full-event(commentary).jpeg` directly against the live "Al
 **Found:** session `brixsports-v2-7c`, 2026-09-02, same survey pass as `BACKLOG-330`/`331`.
 
 ---
+
+### BACKLOG-333 — Timeline "Key events" View: Internal Row Order Doesn't Match Figma Per Event Type
+
+**Status:** SHIPPED — 2026-09-05. Live verification on Vercel preview pending.
+**Priority:** LOW -- visual reconciliation only, functional data (score/minute/names) already correct.
+**Files:** `src/components/LiveMatchTimeline.tsx` (`KeyEventsList`).
+
+Richard asked to bring the Key events view (already confirmed structurally correct per `BACKLOG-332`'s note -- it *is* meant to be side-mirrored, unlike "All") in line with `Timeline-key-events.jpeg` exactly. Re-examining that reference against the live renderer found the mirroring axis itself was right (home left-aligned, away right-aligned) but the *internal element order within a row* didn't match Figma, and didn't match uniformly across event types:
+- **Goals**: Figma's home row reads left-to-right as `minute / score-badge / ball / scorer-name / (assist)`; the away row is the exact reverse (`(assist) / scorer-name / ball / score-badge / minute`) -- the whole group, minute included, flips. Live had `minute` as a separate fixed-position element outside the reversible group, and the reversible part itself was ordered `(assist) / scorer-name / ball / score-badge` for home -- backwards relative to Figma's home order.
+- **Cards**: Figma's row -- home or away -- always reads `minute / colored-square / name` left-to-right; only the row's alignment (which edge it sits against) changes between sides, never the internal order. Live's existing structure would have reversed card rows the same way as goals once the minute was folded into the same group, which is NOT what Figma shows.
+- **Substitutions**: Figma's mirroring already matched live's existing behavior (confirmed by re-deriving both from the reference image), no defect here.
+
+**Fix shipped:** restructured each row as one flex group (minute now lives inside it, not a separate outer fixed-width sibling): the outer wrapper only sets `justify-start`/`justify-end` per `isHomeTeam` (positions the group at the correct edge), and `flex-row-reverse` is applied to the inner group only for `GOAL`/`SUBSTITUTION` types when away (mirrors the whole group including minute) -- never for cards, which keep a fixed `minute, square, name` order regardless of side. Reordered the goal JSX itself to author the base (home) sequence as `score-badge, ball, scorer-name, assist` (was `assist, scorer-name, ball, score-badge`) so the reversed away output lands in Figma's exact order. Truncation caps on long names preserved (assist capped tighter than scorer name, same rationale as before) but switched from `flex-1 min-w-0` (which relied on the old fixed-width-minute-column layout) to fixed `max-w-[Npx]` caps, since rows are no longer forced to stretch full width.
+
+**Found:** session continuation, 2026-09-05, Richard's direct ask after `BACKLOG-330`/`332` shipped.
+
+---

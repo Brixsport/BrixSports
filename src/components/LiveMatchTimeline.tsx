@@ -627,15 +627,31 @@ function KeyEventsList({ events, homeTeam, awayTeam, sport }: KeyEventsListProps
         <div className="space-y-3">
             {rows.map(({ event, isHomeTeam, normType, scoreAtEvent }) => {
                 const playerName = displayName(event.player) ?? displayName(event.playerSnapshot) ?? 'Unknown';
+                // Figma's Key events row isn't a fixed minute-column + separately
+                // mirrored content pair: for goals and substitutions the ENTIRE
+                // group -- minute included -- reverses order on the away side
+                // (`Timeline-key-events.jpeg`: a home goal reads minute/score/
+                // ball/name/assist left-to-right, an away goal reads the exact
+                // reverse, assist/name/ball/score/minute). Cards don't reverse at
+                // all -- only the row's alignment (left vs right) flips; minute
+                // always comes first. One flex group per row: outer div picks the
+                // edge (justify-start/end), flex-row-reverse (goal/sub, away only)
+                // handles the internal mirror.
+                const mirrorsOrder = normType === 'GOAL' || normType === 'SUBSTITUTION';
 
                 return (
-                    <div key={event.id} className={`flex items-center gap-3 ${isHomeTeam ? 'flex-row' : 'flex-row-reverse'}`}>
-                        <span className="text-xs font-bold text-primary w-12 flex-shrink-0 text-center">
-                            {minuteLabel(event)}
-                        </span>
-                        <div className={`flex-1 flex items-center gap-2 min-w-0 ${isHomeTeam ? '' : 'flex-row-reverse'}`}>
+                    <div key={event.id} className={`flex ${isHomeTeam ? 'justify-start' : 'justify-end'}`}>
+                        <div className={`flex items-center gap-2 ${mirrorsOrder && !isHomeTeam ? 'flex-row-reverse' : ''}`}>
+                            <span className="text-xs font-bold text-primary flex-shrink-0">
+                                {minuteLabel(event)}
+                            </span>
                             {normType === 'GOAL' && (
                                 <>
+                                    <span className="flex-shrink-0 px-2 py-0.5 rounded-full border border-white/20 text-xs font-bold">
+                                        {scoreAtEvent.home}-{scoreAtEvent.away}
+                                    </span>
+                                    <span className="flex-shrink-0">⚽</span>
+                                    <span className="font-bold truncate max-w-[160px]">{playerName}</span>
                                     {/* Assist name is secondary info -- capped at a small fixed
                                         width so it can't eat into the scorer's own name space
                                         (both truncating equally made the scorer's name
@@ -643,24 +659,19 @@ function KeyEventsList({ events, homeTeam, awayTeam, sport }: KeyEventsListProps
                                     {event.relatedPlayer && (
                                         <span className="text-white/50 text-sm truncate max-w-[72px] flex-shrink-0">({displayName(event.relatedPlayer)})</span>
                                     )}
-                                    <span className="font-bold truncate flex-1 min-w-0">{playerName}</span>
-                                    <span className="flex-shrink-0">⚽</span>
-                                    <span className="flex-shrink-0 px-2 py-0.5 rounded-full border border-white/20 text-xs font-bold">
-                                        {scoreAtEvent.home}-{scoreAtEvent.away}
-                                    </span>
                                 </>
                             )}
                             {(normType === 'YELLOW_CARD' || normType === 'RED_CARD') && (
                                 <>
                                     <div className={`flex-shrink-0 w-3 h-4 rounded-sm ${normType === 'YELLOW_CARD' ? 'bg-yellow-500' : 'bg-red-600'}`} />
-                                    <span className="font-bold truncate flex-1 min-w-0">{playerName}</span>
+                                    <span className="font-bold truncate max-w-[200px]">{playerName}</span>
                                 </>
                             )}
                             {normType === 'SUBSTITUTION' && (
                                 <>
-                                    <span className="text-red-400 truncate flex-1 min-w-0">{displayName(event.relatedPlayer) ?? 'Unknown'}</span>
+                                    <span className="text-red-400 truncate max-w-[120px]">{displayName(event.relatedPlayer) ?? 'Unknown'}</span>
                                     <ArrowRightLeft className="w-4 h-4 text-white/50 flex-shrink-0" />
-                                    <span className="text-green-400 truncate flex-1 min-w-0">{playerName}</span>
+                                    <span className="text-green-400 truncate max-w-[120px]">{playerName}</span>
                                 </>
                             )}
                         </div>
