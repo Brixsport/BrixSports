@@ -10654,9 +10654,15 @@ The even-split rule wasn't invented in a vacuum — it independently reproduces 
 
 ### BACKLOG-330 — Football Stats Tab: Per-Stat Visual Treatment Doesn't Match Figma
 
-**Status:** SHIPPED — 2026-09-02, session `brixsports-v2-dd/7c` continuation. Live verification on Vercel preview pending.
+**Status:** RESOLVED — live-verified on Vercel preview (2026-09-02).
 **Priority:** LOW-MEDIUM — visual reconciliation only, no missing data.
 **Files:** `src/components/LiveStats.tsx`.
+
+**Evidence:**
+- Commit: `b44e6e8` (branch `work/match-detail-tabs`)
+- Verified by: Vercel preview smoke test, `brixsports-staging-3379cq50p-brixsports-projects.vercel.app`, match `8Mek2CA7KPlnk1EQ647jx` (Pirates FC vs Hammers) Stats tab
+- Observed result: header shows logos only (no name/shortName); Shots/Shots on Target/Corners/Fouls/Yellow Cards each render as plain number + label + plain number with the leading side circled solid blue with white bold text (Shots 15-4 home circled, Fouls 3-6 away circled) -- no bars, no icons
+- Pending items: none for this entry; basketball's Stats tab is untouched, tracked separately at `BACKLOG-331`
 
 **Fix shipped:** added `StatRow` (plain value each side, leading side gets a `bg-primary` filled circle with white bold text, tie = no circle) and switched Shots/Shots on Target/Corners/Fouls/Yellow Cards to it, dropping their per-category icons. `StatBar` (dual-color bar) is untouched and still used for the disabled Possession row, Red Cards, Saves (none of those three were named in this entry's scope, left as-is), and all of basketball's categories (`BACKLOG-331` territory, not touched). Team header logos-only change scoped to `sport === 'Football'` only via a conditional — basketball's own Stats reference (`bbal-stats.jpeg`) keeps a logo+shortName header, so that path renders unchanged.
 
@@ -10687,9 +10693,15 @@ Figma's basketball Stats screen (`bbal-stats.jpeg`) is not a relabeling of live'
 
 ### BACKLOG-332 — Timeline "All" View: Live Mirrors Events by Team Side, Figma Doesn't
 
-**Status:** SHIPPED — 2026-09-02, session `brixsports-v2-dd/7c` continuation. Live verification on Vercel preview pending.
+**Status:** RESOLVED — live-verified on Vercel preview (2026-09-02).
 **Priority:** LOW -- visual/structural reconciliation, not a functional gap (BACKLOG-294's Key-events view, which *is* correctly side-mirrored per Figma, already shipped and live-verified).
 **Files:** `src/components/LiveMatchTimeline.tsx` (the pre-existing `groupedEvents`-driven card renderer used when `filter === 'all'`).
+
+**Evidence:**
+- Commit: `b44e6e8` (branch `work/match-detail-tabs`)
+- Verified by: Vercel preview smoke test, `brixsports-staging-3379cq50p-brixsports-projects.vercel.app`, match `8Mek2CA7KPlnk1EQ647jx` (Pirates FC vs Hammers) Timeline tab, "All" filter
+- Observed result: home-team cards (Pirates FC) and away-team cards (Hammers, e.g. "Foul by Charles") render with identical left-aligned layout -- minute badge and icon both on the left, card box same position/width, no `flex-row-reverse` mirroring. Key events filter unaffected, still side-mirrored as before.
+- Pending items: none for the scoped fix; the badge-alternation nuance noted above is a possible follow-up, not a defect in what was asked
 
 **Note found while implementing this fix:** re-examining the reference image (`Timeline-full-event(commentary).jpeg`) at higher zoom shows the small icon+minute badge actually does alternate left/right by team (home events badge-left, away events badge-right) -- it's the card box itself that's uniform width/position across both sides, not a fully unmirrored single column as this entry originally characterized. Built exactly per Richard's explicit direction anyway (drop `isHomeTeam` flex-row-reverse, minute always left) since that's a two-source instruction (this entry's own scoped fix + this session's task brief both say the same thing); flagging the badge-alternation nuance here in case a follow-up pass to mirror just the badge (icon+minute together, box position unchanged) is wanted later.
 
