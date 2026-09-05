@@ -4,10 +4,13 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { LayoutGrid, ListOrdered, Loader2, AlertCircle, Calendar, Star, ArrowLeft, Users, BarChart3 } from 'lucide-react';
 import { useState, useEffect, useMemo, Suspense } from 'react';
 import { useRouter, useParams, useSearchParams } from 'next/navigation';
+import Link from 'next/link';
 import MatchCalendar from '@/components/MatchCalendar';
 import { isSameDay } from 'date-fns';
 import { TeamLogo } from '@/lib/utils/team-logo';
 import { useFavorites } from '@/hooks/useFavorites';
+import { PlayerProfileOverlay } from '@/components/PlayerProfileOverlay';
+import { TeamProfileOverlay } from '@/components/TeamProfileOverlay';
 
 type SportType = 'All' | 'Football' | 'Basketball' | 'Track';
 
@@ -92,6 +95,23 @@ interface StatLeader {
   highlightedStat: number;
 }
 
+interface CompTeam {
+  id: string;
+  name: string;
+  shortName: string;
+  logo: string | null;
+  playerCount?: number;
+}
+
+interface CompPlayer {
+  id: string;
+  name: string;
+  number: number | null;
+  position: string;
+  rating: number | null;
+  team?: { id: string; shortName: string; logo: string | null; sport?: string } | null;
+}
+
 // Sport-appropriate leaderboard categories -- football's Goals/Assists/Yellow
 // Cards match the Figma Stats-tab reference directly; basketball has no such
 // reference, so this uses its own real stat categories (Points/Rebounds/
@@ -136,6 +156,8 @@ function CompetitionHubContent() {
   const [matches, setMatches] = useState<Match[]>([]);
   const [brackets, setBrackets] = useState<BracketRound[]>([]);
   const [statsLeaders, setStatsLeaders] = useState<Record<string, StatLeader[]>>({});
+  const [selectedTeam, setSelectedTeam] = useState<CompTeam | null>(null);
+  const [selectedPlayer, setSelectedPlayer] = useState<CompPlayer | null>(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
@@ -281,7 +303,8 @@ function CompetitionHubContent() {
           {rows.map((row, idx) => (
             <tr
               key={row.id}
-              className="border-b border-white/5 hover:bg-white/5 transition-colors group"
+              onClick={() => setSelectedTeam({ id: row.teamId, name: row.team.name, shortName: row.team.shortName, logo: row.team.logo })}
+              className="border-b border-white/5 hover:bg-white/5 transition-colors group cursor-pointer"
             >
               <td className="sticky left-0 z-10 bg-[#0c0c0e] group-hover:bg-[#151517] px-3 py-2.5">
                 <div className="flex items-center gap-2">
@@ -544,14 +567,29 @@ function CompetitionHubContent() {
                           </div>
                           <div className="divide-y divide-white/5">
                             {byRound.get(round)!.map((match) => (
-                              <div key={match.id} className="flex items-center gap-3 px-4 py-3">
-                                <TeamLogo logo={match.homeTeam?.logo} name={match.homeTeam?.name ?? ''} size="sm" />
-                                <span className="flex-1 text-sm font-bold truncate">{match.homeTeam?.name || 'Home'}</span>
-                                <span className="text-xs font-display italic text-primary shrink-0 px-2">
-                                  {match.status === 'UPCOMING' ? new Date(match.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : `${match.homeScore}-${match.awayScore}`}
-                                </span>
-                                <span className="flex-1 text-sm font-bold truncate text-right">{match.awayTeam?.name || 'Away'}</span>
-                                <TeamLogo logo={match.awayTeam?.logo} name={match.awayTeam?.name ?? ''} size="sm" />
+                              <div
+                                key={match.id}
+                                onClick={() => router.push(`/matches/${match.id}`)}
+                                className="px-4 py-3 hover:bg-white/5 transition-colors cursor-pointer"
+                              >
+                                <div className="flex items-center gap-3">
+                                  <TeamLogo logo={match.homeTeam?.logo} name={match.homeTeam?.name ?? ''} size="sm" />
+                                  <span className="flex-1 text-sm font-bold truncate">{match.homeTeam?.name || 'Home'}</span>
+                                  <div className="flex flex-col items-center shrink-0 px-2">
+                                    <span className="text-xs font-display italic text-primary">
+                                      {match.status === 'UPCOMING' ? new Date(match.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : `${match.homeScore}-${match.awayScore}`}
+                                    </span>
+                                    {match.status === 'LIVE' && (
+                                      <span className="text-[8px] font-black uppercase tracking-widest text-red-500 animate-pulse">Live</span>
+                                    )}
+                                  </div>
+                                  <span className="flex-1 text-sm font-bold truncate text-right">{match.awayTeam?.name || 'Away'}</span>
+                                  <TeamLogo logo={match.awayTeam?.logo} name={match.awayTeam?.name ?? ''} size="sm" />
+                                </div>
+                                <div className="flex items-center justify-between text-[10px] text-white/30 mt-2 pl-11">
+                                  <span className="truncate">{match.venue}</span>
+                                  <span className="shrink-0 pl-2">{new Date(match.startTime).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>
+                                </div>
                               </div>
                             ))}
                           </div>
@@ -641,13 +679,25 @@ function CompetitionHubContent() {
                 const leaders = statsLeaders[cat.type] || [];
                 return (
                   <div key={cat.type} className="bg-white/5 border border-white/10 rounded-[32px] overflow-hidden">
-                    <div className="px-6 py-4 border-b border-white/10">
+                    <div className="flex items-center justify-between px-6 py-4 border-b border-white/10">
                       <h3 className="text-sm font-black uppercase tracking-widest">{cat.label}</h3>
+                      {leaders.length > 0 && (
+                        <Link
+                          href={`/competitions/${competitionId}/stats/${cat.type}`}
+                          className="text-[10px] font-black uppercase tracking-widest text-primary hover:underline"
+                        >
+                          See all
+                        </Link>
+                      )}
                     </div>
                     {leaders.length > 0 ? (
                       <div className="divide-y divide-white/5">
                         {leaders.map((leader) => (
-                          <div key={leader.player.id} className="flex items-center justify-between px-6 py-3">
+                          <div
+                            key={leader.player.id}
+                            onClick={() => setSelectedPlayer({ id: leader.player.id, name: leader.player.name, number: leader.player.number, position: '', rating: null })}
+                            className="flex items-center justify-between px-6 py-3 hover:bg-white/5 transition-colors cursor-pointer"
+                          >
                             <div className="flex items-center gap-3 min-w-0">
                               <div className="w-8 h-8 shrink-0 rounded-lg bg-primary/20 flex items-center justify-center text-[10px] font-black text-primary">
                                 {leader.player.number ?? '-'}
@@ -669,8 +719,25 @@ function CompetitionHubContent() {
               })}
             </motion.div>
           )}
+
         </AnimatePresence>
       </div>
+
+      {selectedPlayer && (
+        <PlayerProfileOverlay
+          player={selectedPlayer}
+          onClose={() => setSelectedPlayer(null)}
+          sport={selectedComp?.sport || undefined}
+        />
+      )}
+      {selectedTeam && (
+        <TeamProfileOverlay
+          team={selectedTeam as any}
+          sport={selectedComp?.sport || undefined}
+          onClose={() => setSelectedTeam(null)}
+          onSelectPlayer={(p) => { setSelectedPlayer(p as any); setSelectedTeam(null); }}
+        />
+      )}
     </div>
   );
 }
