@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/db';
 import { matches, teams } from '@/db/schema';
-import { eq, and, or, inArray } from 'drizzle-orm';
+import { eq, and, inArray } from 'drizzle-orm';
 
 // Public DTO -- must never include CLAUDE.md's banned fields (loggerId,
 // approvalStatus, managerNotes, approvedBy, approvedAt) or anything else not
@@ -37,7 +37,15 @@ export async function GET(request: Request) {
         const conditions = [eq(matches.sport, 'Basketball')];
         if (status) conditions.push(eq(matches.status, status));
         if (competitionId) {
-            conditions.push(or(eq(matches.competitionId, competitionId), eq(matches.competition, competition || ''))!);
+            // competitionId is authoritative when present -- do NOT OR it with a
+            // name fallback. Two different competitions can legitimately share
+            // an exact name (e.g. two seasons both literally named "BUSA LEAGUE
+            // BASKETBALL"), and OR'ing in a name match even when a real id is
+            // already known silently pulls in the other competition's matches
+            // too the moment that name collision exists (confirmed live via the
+            // sibling standings route, session 2026-09-05, once BACKLOG-291's
+            // grouping fix made two same-named seasons reachable side by side).
+            conditions.push(eq(matches.competitionId, competitionId));
         } else if (competition) {
             conditions.push(eq(matches.competition, competition));
         }

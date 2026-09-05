@@ -11,29 +11,30 @@ export async function GET(request: Request) {
         const competitionId = searchParams.get('competitionId');
 
         const conditions = [eq(standings.sport, 'Football')];
-        if (competitionId || competition) {
-            // We match using competitionId when available, otherwise by competition name.
-            // IMPORTANT: Seeded data isn't always consistent (case differences, and some competitions store group standings like
-            // "BUSA League Football - Group A"), so we do case-insensitive matching and a prefix match fallback.
-            const name = competition || '';
-            const nameLower = name.toLowerCase();
-
-            const matchByName = name
-                ? or(
-                    // exact (case-insensitive)
-                    sql`lower(${standings.competition}) = ${nameLower}`,
-                    // prefix (case-insensitive) e.g. "BUSA League Football - Group A"
-                    sql`lower(${standings.competition}) like ${nameLower + '%'}`
-                )
-                : undefined;
-
-            if (competitionId && matchByName) {
-                conditions.push(or(eq(standings.competitionId, competitionId), matchByName)!);
-            } else if (competitionId) {
-                conditions.push(eq(standings.competitionId, competitionId));
-            } else if (matchByName) {
-                conditions.push(matchByName);
-            }
+        if (competitionId) {
+            // competitionId is authoritative when present -- do NOT OR it with a
+            // name fallback. Two different competitions can legitimately share
+            // an exact or prefix-matching name (e.g. two seasons both literally
+            // named "BUSA LEAGUE FOOTBALL", or one season's group-standings rows
+            // stored as "BUSA League Football - Group A"), and the name-fallback
+            // used to be OR'd in even when a real id was already known, silently
+            // merging both competitions' standings into one response the moment
+            // that name collision existed (confirmed live, session 2026-09-05,
+            // once BACKLOG-291's grouping fix made two same-named seasons
+            // reachable side by side for the first time).
+            conditions.push(eq(standings.competitionId, competitionId));
+        } else if (competition) {
+            // No id available -- fall back to name matching for legacy/name-only
+            // callers. IMPORTANT: seeded data isn't always consistent (case
+            // differences, and some competitions store group standings like
+            // "BUSA League Football - Group A"), so this stays case-insensitive
+            // with a prefix fallback -- but only ever as a last resort, never
+            // alongside a real competitionId.
+            const nameLower = competition.toLowerCase();
+            conditions.push(or(
+                sql`lower(${standings.competition}) = ${nameLower}`,
+                sql`lower(${standings.competition}) like ${nameLower + '%'}`
+            )!);
         }
 
         const footballStandings = await db

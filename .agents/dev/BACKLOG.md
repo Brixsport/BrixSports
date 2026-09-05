@@ -9888,6 +9888,18 @@ Fixed exactly per the "Fix (not built)" plan below: `MatchStatusBadge.tsx` now d
 
 ---
 
+### BACKLOG-334 — Standings/Matches/Brackets Routes Leaked Data Across Same-Named Competitions
+
+**Status:** RESOLVED — session `brixsports-v2-cc`, 2026-09-05, live-verified.
+**Priority:** CRITICAL — real, public-facing data-correctness bug (not cosmetic): wrong standings/matches shown to viewers.
+**Found:** directly while live-verifying `BACKLOG-291`'s grouping fix. Switching the newly-working season dropdown from "BUSA LEAGUE FOOTBALL" 2025/2026 to 2026/2027 kept showing the 2025/2026 season's standings. Checked the actual network response rather than assuming a frontend staleness bug (per this project's own "verify before concluding" convention) — the API response for `competitionId=<2026/2027 id>` contained **both** seasons' rows, e.g. `busa-standing-5`/`competitionId: <2025/2026 id>` mixed in with the 2026/2027 season's own all-zero rows.
+**Root cause:** `/api/football/standings`, `/api/basketball/standings`, `/api/brackets`, `/api/football/matches`, `/api/basketball/matches` all built their competition filter as `or(eq(competitionId, X), <name match>)` — OR'ing in a name-based fallback (exact match, and a `LIKE 'name%'` prefix match on the two standings routes) **even when a real `competitionId` was already provided**. The fallback's own comment explained why it existed (seeded data inconsistency, group-standings rows stored as "BUSA League Football - Group A"), but nothing gated it to only apply when no id was available. The moment two real competitions shared an exact name (created by `BACKLOG-291`'s own fix, which correctly merges two same-named seasons into one browsable series for the first time), any request scoped to either one's id pulled in both.
+**Fix:** in all 5 routes, `competitionId` -- when present -- is now used exclusively; the name-fallback (kept, unchanged logic) only ever applies when no id is available at all. No behavior change for any single-named-competition case (the vast majority today); only changes what happens when two real competitions share a name, which is exactly the case that was broken.
+**Evidence:** re-tested the same season-switch live on the `feature/ui-redesign` Vercel preview after the fix -- 2026/2027's standings response contained only rows with `competitionId` matching the 2026/2027 id, no cross-contamination from 2025/2026.
+**Depends on:** none structurally, but only became *observable* after `BACKLOG-291`'s grouping fix -- would have silently affected any future same-named-competition pair regardless.
+
+---
+
 ### BACKLOG-292 — Public Brackets Tab: Coordinate With `BACKLOG-280`, Do Not Build a Parallel Bracket Representation
 
 **Status:** OPEN — explicit sequencing note, not a build.
