@@ -8025,12 +8025,18 @@ Everything below is explicitly **not** being built now — captured from `NOTIFI
 
 ---
 
-### BACKLOG-220 — Lineup Builder Architecture Cleanup (Bundled, Not Fixed)
+### ~~BACKLOG-220~~ — Lineup Builder Architecture Cleanup (Bundled, Not Fixed)
 
-**Status:** PARTIALLY RESOLVED (session 67 continued, 2026-09-05) — items 2 and 3 fixed and now both live-verified, item 1 still open.
+**Status:** RESOLVED (session continued, 2026-09-05) — all 3 items fixed and verified.
 **Priority:** MEDIUM — none of these are live-exploitable bugs on their own, but they compound the confusion `BUG-219`/`BUG-220` already found
 
-1. **Dead code — still OPEN, not this pass:** `src/lib/lineup-processing.ts`'s `processLineup` and `src/components/lineup/MatchLineup.tsx` are never imported anywhere. The lineup actually rendered on the public match page (`src/components/MatchLineups.tsx` → `FullPitchLineups.tsx:256`) uses a separate, duplicate positioning function (`processLineupForPitch`) — two parallel implementations of the same concept, one of them fully unused. Not touched this pass — a different dead-code pair (`MatchSelector`/`TeamSelector`/`InteractivePitch`/`FormationSelector`/`PlayerPool`, the old `/lineup-builder` wizard's components, orphaned by `BACKLOG-323` step 7) was found and deleted instead; this one is unrelated and remains.
+1. **~~Dead code~~ — RESOLVED.** `src/lib/lineup-processing.ts`'s `processLineup` and `src/components/lineup/MatchLineup.tsx` were never imported anywhere. The lineup actually rendered on the public match page (`src/components/MatchLineups.tsx` → `FullPitchLineups.tsx:256`) uses a separate, duplicate positioning function (`processLineupForPitch`) — two parallel implementations of the same concept, one of them fully unused. Tracing `MatchLineup.tsx`'s own imports surfaced two more files in the same dead cluster, orphaned only by it: `src/components/lineup/PitchPlayer.tsx` and `src/components/lineup/PitchMarkings.tsx` (unrelated to the real, live `PitchPlayer` *type* exported from `ResponsivePitch.tsx` and consumed by `placement.ts`/`FullPitchLineups.tsx` — same name, different thing, confirmed by import path not just string match). All 4 files deleted.
+
+   **Evidence:**
+   - Commit: (this commit)
+   - Verified by: repo-wide grep for every import path into each of the 4 files (`lineup-processing`, `processLineup`, `lineup/MatchLineup`, `./PitchPlayer` from within `components/lineup`, `PitchMarkings`) before deleting — zero importers outside the dead cluster itself; `tsc --noEmit` run before (18 errors, matches known baseline) and after (18 errors, byte-identical diff) the deletion.
+   - Observed result: zero new `tsc` errors (output identical before/after), confirming nothing outside the cluster referenced any of the 4 files.
+   - Pending items: none.
 2. **~~Non-atomic race condition~~ — RESOLVED, now live-race-tested.** Added `src/lib/lineup/atomicLineupWrite.ts`: a compare-and-swap guard (`writeMatchLineupsAtomic`) that conditions the final `UPDATE matches SET lineups=...` on the exact raw column value read at the top of the request, so a concurrent write to the same row (e.g. publishing home and away at once — the actual normal case now, post-`BACKLOG-323` step 6) makes the second writer's UPDATE affect 0 rows instead of silently overwriting the first writer's change. Wired into all four write routes: `/api/matches/[id]/lineup` (POST + DELETE), `/api/matches/[id]/lineup/publish`, `/api/matches/[id]/lineup/unlock`, `/api/admin/match-lineups/[id]`. On conflict, returns `409 CONCURRENT_MODIFICATION` — no auto-merge, client is expected to reload and retry.
 
    **Evidence:**
@@ -8040,7 +8046,7 @@ Everything below is explicitly **not** being built now — captured from `NOTIFI
    - Pending items: none for this guard. Throwaway matches (`test-backlog220-race-*`) deleted after each run.
 3. **~~No confirmation on formation change~~ — RESOLVED, differently than originally proposed.** Rather than adding a confirm dialog before a destructive wipe, the public `/lineup-builder`'s formation change now **rearranges** currently-placed players into the new formation's slots (bucket-matched by real position, reusing `seedPlacementsFromLegacy` — the same function step 6 already uses for admin's legacy-lineup seeding) instead of clearing the pitch. Nothing is destroyed, so there's nothing to confirm; a player whose bucket has no free slot in the smaller formation just returns to the pool. The admin builder's confirm-before-wipe (`AdminTeamLineupBuilder.tsx`) is intentionally left as-is — a real match's official lineup is a case where destructive-but-confirmed is still the safer choice, unlike the casual public builder.
 
-**Found:** session 51, same background audit as `BUG-219`/`BUG-220`/`BUG-221`. Items 2/3 fixed session continued 2026-09-04/05, same pass as `BACKLOG-323` step 7's live verification. Item 2's race live-tested session 67 continued (2026-09-05).
+**Found:** session 51, same background audit as `BUG-219`/`BUG-220`/`BUG-221`. Items 2/3 fixed session continued 2026-09-04/05, same pass as `BACKLOG-323` step 7's live verification. Item 2's race live-tested and item 1's dead-code cluster deleted, both session continued 2026-09-05.
 
 ---
 
