@@ -10624,10 +10624,28 @@ Three independent formation-template tables exist in the codebase, none sharing 
 
 ### BACKLOG-326 — Basketball Match Detail: Sport-Conditional Tab Set + Net-New Box Score Tab
 
-**Status:** OPEN — event-logging audit done (2026-09-05), implementation not started. Explicitly
-deferred out of `BACKLOG-294`'s pass per Richard's direction (2026-09-02) so it isn't lost, not
-because it's low value.
+**Status:** SHIPPED, not yet live-verified (2026-09-05) — `tsc --noEmit` clean (zero new errors
+vs. the 35-error pre-existing baseline), no browser walkthrough yet (local dev server did not
+come up in time this session; see this session's journal entry for detail). Needs a real
+staging/Vercel-preview pass before this flips to RESOLVED.
 **Priority:** MEDIUM.
+**Fix:** `MatchDetailClient.tsx` now branches the tab set on `match.sport` — basketball drops
+Timeline and Lineups (Box Score replaces Timeline in the tab order; the Lineups tab and its
+`match.lineups`-driven fallback-generation code in `route.ts` are untouched, just no longer
+reachable via a tab for basketball), football keeps its existing 6-tab set unchanged. A stale/
+shared `?tab=timeline` or `?tab=lineups` URL on a basketball match self-corrects to Overview
+(`useEffect`, mirrors the existing `isUpcoming`+`timeline` redirect pattern already in the file)
+and never renders content for those tabs either way (`effectiveTab` render-time guard). New
+`BasketballBoxScore.tsx` component + shared `src/lib/basketball/matchStats.ts` (`computeBasketballBoxScore`)
+implement the net-new Box Score tab: per-player PTS/AST/REB for this match only, derived from
+`events` (no new endpoint, no schema change — matches the audit's own recommendation to mirror
+`GET /api/matches/[id]/route.ts`'s existing on-the-fly `matchEvents`-reduce pattern), grouped by
+team with a home-logo/All/away-logo filter control. PTS/REB/standalone-Assist counting exactly
+mirrors `BasketballLogger.tsx`'s own `calculateAdvancedStats`; the assist-via-`relatedPlayerId`-
+on-a-scoring-event path (the embedded-on-shot half of `BACKLOG-143`'s fix) is additionally
+credited to the assisting player, which `calculateAdvancedStats` itself already does via its own
+`assistPlayerId` field name (the same DB column, renamed client-side in `BasketballLogger.tsx`
+only — the raw API event object keeps `relatedPlayerId`/`relatedPlayer`).
 **Found:** session `brixsports-v2-dd`, 2026-09-02, while reconciling `BACKLOG-294`'s Timeline/
 Stats/Table tabs against Figma — reference screenshots (`.agents/dev/figma-refs/match-id page/
 bbal-box-score.jpeg`, `bbal-stats.jpeg`, `bbal-table.jpeg`) revealed Figma's basketball match
@@ -10696,7 +10714,16 @@ continuation. Answer: option (a), match_events-aggregation, is fully viable — 
 
 **Relates to:** `BACKLOG-294` (this entry is the explicitly-deferred remainder of that
 reconciliation, basketball-specific), `BACKLOG-293` (sport-variant standings columns — same
-"basketball needs its own shape" theme, different tab), `BACKLOG-331` (shares this audit).
+"basketball needs its own shape" theme, different tab), `BACKLOG-331` (shares this audit and,
+now, its implementation session).
+
+**Files:** `src/app/matches/[id]/MatchDetailClient.tsx`, `src/components/BasketballBoxScore.tsx`
+(new), `src/lib/basketball/matchStats.ts` (new, shared with `BACKLOG-331`).
+
+**Still open before this can flip to RESOLVED:** a real browser walkthrough on a basketball match
+with live events (verify the tab actually disappears/appears correctly per sport, the team filter
+switches correctly, PTS/AST/REB match a hand-computed expectation from the same match's raw
+events) — not done this session, local dev server didn't come up in time.
 
 ---
 
@@ -10760,9 +10787,28 @@ Read `LiveStats.tsx` directly (not just screenshots) to ground this: every footb
 
 ### BACKLOG-331 — Basketball Stats Tab: Different Category Set Entirely, Percentage-Based, Quarter-Scoped (Deep Rework, Not Visual Polish)
 
-**Status:** OPEN — event-logging audit done (2026-09-05, shared with `BACKLOG-326`), implementation not started. One open question needs Richard's confirmation before building (see "1 Pointers" flag below). Group with `BACKLOG-326` (same "basketball needs real, separate work, not a quick reconciliation" theme) when scheduling.
+**Status:** SHIPPED, not yet live-verified (2026-09-05) — `tsc --noEmit` clean (zero new errors),
+no browser walkthrough yet (see `BACKLOG-326`'s status for why). Built ahead of Richard's
+confirmation on the "1 Pointers" open question below rather than blocking on it — dropped the
+row per this entry's own audit reasoning (a free throw already IS a 1-pointer, and the Figma mock
+reuses Free Throws' exact 35%/65% split for it, reading as a mock-data artifact, not a distinct
+stat); revisit if Richard says it should mean something else.
 **Priority:** MEDIUM.
-**Files:** `src/components/LiveStats.tsx` (`renderBasketballStats`), whatever currently populates `match.stats` for basketball (needs tracing -- not yet done).
+**Files:** `src/components/LiveStats.tsx` (`renderBasketballStats`, now takes an `events` prop and
+computes basketball's percentages/quarter-filter from raw `matchEvents` instead of the `stats`
+blob), `src/lib/basketball/matchStats.ts` (new, `computeBasketballQuarterStats`, shared with
+`BACKLOG-326`'s `computeBasketballBoxScore`).
+
+**Fix, per the audit answers below:** added a quarter-filter button row (`All`/`1st`/`2nd`/`3rd`/
+`4th`) above basketball's stats, backed by local `useState` (not a server round-trip -- the same
+already-fetched `events` array is just re-filtered by `event.period` on click, mirroring
+`BasketballLogger.tsx`'s own client-side computation pattern). Free Throws/3 Pointers/2 Pointers
+render as make/attempt percentage splits; Fouls/Rebounds as share-of-combined-total splits —
+all five reuse the existing `StatBar` dual-color component (already the right shape for a
+percentage split, just fed `max={100}`/`unit="%"` instead of raw counts), so no new visual
+component was needed. The pre-existing raw-count categories (Field Goals Made, Assists, Steals,
+Blocks, Turnovers) are fully replaced, not kept alongside — Figma's screen has no room for both
+and the audit found no product reason to keep the old shape.
 
 Figma's basketball Stats screen (`bbal-stats.jpeg`) is not a relabeling of live's basketball categories -- it's a different data shape entirely:
 1. **Different category set.** Figma: Free Throws, 3 Pointers, 2 Pointers, 1 Pointers, Fouls, Rebounds. Live (`renderBasketballStats`): Field Goals Made, 3-Pointers Made, Free Throws Made, Rebounds, Assists, Steals, Blocks, Turnovers. No overlap beyond Free Throws/3-Pointers/Rebounds by name, and even those differ in what they measure (see next point).
@@ -10777,6 +10823,13 @@ Figma's basketball Stats screen (`bbal-stats.jpeg`) is not a relabeling of live'
 3. Quarter-scoping: not a schema gap -- see `BACKLOG-326`'s audit note, `event.period` already carries `Q1`-`Q4`/`OTn` on every event.
 
 **Found:** session `brixsports-v2-7c`, 2026-09-02, same survey pass as `BACKLOG-330`.
+
+**Still open before this can flip to RESOLVED:** a real browser walkthrough on a basketball match
+with events spread across multiple quarters — verify each quarter filter actually narrows the
+percentages (not just "All" happening to look right), and that the 2-pointer percentage is
+genuinely distinct from the combined field-goal percentage it's derived from (`Field Goal`-type
+events only, not `Field Goal` + `Three Pointer` combined). Not done this session, same local-dev
+blocker as `BACKLOG-326`.
 
 ---
 

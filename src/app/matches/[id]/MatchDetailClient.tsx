@@ -14,6 +14,7 @@ import { FaFutbol } from 'react-icons/fa';
 import { useFavorites } from '@/hooks/useFavorites';
 import LiveMatchTimeline from '@/components/LiveMatchTimeline';
 import LiveStats from '@/components/LiveStats';
+import BasketballBoxScore from '@/components/BasketballBoxScore';
 import MatchLineups from '@/components/MatchLineups';
 import MatchStandingsTable from '@/components/MatchStandingsTable';
 import { HeadToHeadComparison } from '@/components/HeadToHead';
@@ -51,8 +52,8 @@ interface MatchData {
     eyePoints: any[];
 }
 
-type TabId = 'overview' | 'timeline' | 'stats' | 'lineups' | 'h2h' | 'table';
-const TAB_IDS: TabId[] = ['overview', 'timeline', 'stats', 'lineups', 'h2h', 'table'];
+type TabId = 'overview' | 'timeline' | 'boxscore' | 'stats' | 'lineups' | 'h2h' | 'table';
+const TAB_IDS: TabId[] = ['overview', 'timeline', 'boxscore', 'stats', 'lineups', 'h2h', 'table'];
 
 export default function MatchDetailClient() {
     const params = useParams();
@@ -104,6 +105,17 @@ export default function MatchDetailClient() {
             setActiveTab('overview');
         }
     }, [isUpcoming]);
+
+    // BACKLOG-326: basketball drops Timeline/Lineups entirely (Box Score/Stats
+    // replace them) -- same pattern as the isUpcoming redirect above, so a
+    // stale/shared URL pointing at either corrects itself instead of staying
+    // stuck on an unreachable tab.
+    const matchSport = matchData?.match?.sport;
+    useEffect(() => {
+        if (matchSport === 'Basketball' && (activeTab === 'timeline' || activeTab === 'lineups')) {
+            setActiveTab('overview');
+        }
+    }, [matchSport, activeTab]);
 
     const handleShare = async () => {
         const shareData = {
@@ -489,6 +501,15 @@ export default function MatchDetailClient() {
     const { match, events, timeTracking, eyePoints } = matchData;
     const isLive = LIVE_STATES.has(match.status);
 
+    // BACKLOG-326: basketball has no Timeline/Lineups tabs -- fall back to
+    // Overview for a stale/shared URL pointing at either (e.g. bookmarked
+    // before a match's sport metadata changed, or the ?tab= param edited by
+    // hand). Every other tab is valid for every sport.
+    const isBasketball = match.sport === 'Basketball';
+    const effectiveTab: TabId = isBasketball && (activeTab === 'timeline' || activeTab === 'lineups')
+        ? 'overview'
+        : activeTab;
+
     // Red card indicators next to team names — same pattern as MatchOverlay.tsx,
     // never ported to this full detail page header.
     const homeRedCardsCount = (events || []).filter(e => e.type === 'Red Card' && e.teamId === match.homeTeamId).length;
@@ -807,8 +828,10 @@ export default function MatchDetailClient() {
                             </button>
                         )} */}
 
-                        {/* Timeline - Only for live/finished matches */}
-                        {!isUpcoming && (
+                        {/* Timeline - Only for live/finished matches. BACKLOG-326: Figma's
+                            basketball tab set drops Timeline entirely (Box Score/Stats
+                            replace it) -- football keeps it. */}
+                        {!isUpcoming && match.sport !== 'Basketball' && (
                             <button
                                 onClick={() => setActiveTab('timeline')}
                                 className={`px-3 py-2 text-[10px] font-bold uppercase tracking-wider transition-all relative whitespace-nowrap ${activeTab === 'timeline'
@@ -819,6 +842,27 @@ export default function MatchDetailClient() {
                                 <Activity className="w-2.5 h-2.5 inline mr-1" />
                                 Timeline
                                 {activeTab === 'timeline' && (
+                                    <motion.div
+                                        layoutId="activeTab"
+                                        className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary"
+                                    />
+                                )}
+                            </button>
+                        )}
+
+                        {/* Box Score - BACKLOG-326: basketball-only, net-new. Per-player
+                            PTS/AST/REB for this match, derived from match_events. */}
+                        {!isUpcoming && match.sport === 'Basketball' && (
+                            <button
+                                onClick={() => setActiveTab('boxscore')}
+                                className={`px-3 py-2 text-[10px] font-bold uppercase tracking-wider transition-all relative whitespace-nowrap ${activeTab === 'boxscore'
+                                    ? 'text-primary'
+                                    : 'text-white/60 hover:text-white'
+                                    }`}
+                            >
+                                <Users className="w-2.5 h-2.5 inline mr-1" />
+                                Box Score
+                                {activeTab === 'boxscore' && (
                                     <motion.div
                                         layoutId="activeTab"
                                         className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary"
@@ -846,22 +890,25 @@ export default function MatchDetailClient() {
                                 )}
                             </button>
                         )}
-                        <button
-                            onClick={() => setActiveTab('lineups')}
-                            className={`px-3 py-2 text-[10px] font-bold uppercase tracking-wider transition-all relative whitespace-nowrap ${activeTab === 'lineups'
-                                ? 'text-primary'
-                                : 'text-white/60 hover:text-white'
-                                }`}
-                        >
-                            <Users className="w-2.5 h-2.5 inline mr-1" />
-                            Lineups
-                            {activeTab === 'lineups' && (
-                                <motion.div
-                                    layoutId="activeTab"
-                                    className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary"
-                                />
-                            )}
-                        </button>
+                        {/* BACKLOG-326: no Lineups tab for basketball -- Box Score replaces it. */}
+                        {match.sport !== 'Basketball' && (
+                            <button
+                                onClick={() => setActiveTab('lineups')}
+                                className={`px-3 py-2 text-[10px] font-bold uppercase tracking-wider transition-all relative whitespace-nowrap ${activeTab === 'lineups'
+                                    ? 'text-primary'
+                                    : 'text-white/60 hover:text-white'
+                                    }`}
+                            >
+                                <Users className="w-2.5 h-2.5 inline mr-1" />
+                                Lineups
+                                {activeTab === 'lineups' && (
+                                    <motion.div
+                                        layoutId="activeTab"
+                                        className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary"
+                                    />
+                                )}
+                            </button>
+                        )}
                         <button
                             onClick={() => setActiveTab('h2h')}
                             className={`px-3 py-2 text-[10px] font-bold uppercase tracking-wider transition-all relative whitespace-nowrap ${activeTab === 'h2h'
@@ -918,7 +965,7 @@ export default function MatchDetailClient() {
             {/* Content - Now naturally scrollable with the page */}
             <div className="max-w-7xl mx-auto px-4 py-8">
                 <AnimatePresence mode="wait">
-                    {activeTab === 'overview' && (
+                    {effectiveTab === 'overview' && (
                         <motion.div
                             key="overview"
                             initial={{ opacity: 0, y: 20 }}
@@ -968,7 +1015,7 @@ export default function MatchDetailClient() {
                         </motion.div>
                     )}
 
-                    {activeTab === 'timeline' && (
+                    {effectiveTab === 'timeline' && (
                         <motion.div
                             key="timeline"
                             initial={{ opacity: 0, y: 20 }}
@@ -985,7 +1032,22 @@ export default function MatchDetailClient() {
                         </motion.div>
                     )}
 
-                    {activeTab === 'stats' && (
+                    {effectiveTab === 'boxscore' && (
+                        <motion.div
+                            key="boxscore"
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: -20 }}
+                        >
+                            <BasketballBoxScore
+                                events={events}
+                                homeTeam={match.homeTeam}
+                                awayTeam={match.awayTeam}
+                            />
+                        </motion.div>
+                    )}
+
+                    {effectiveTab === 'stats' && (
                         <motion.div
                             key="stats"
                             initial={{ opacity: 0, y: 20 }}
@@ -998,6 +1060,7 @@ export default function MatchDetailClient() {
                                     sport={match.sport}
                                     homeTeam={match.homeTeam}
                                     awayTeam={match.awayTeam}
+                                    events={events}
                                 />
                             ) : (
                                 <div className="bg-white/5 border border-white/10 rounded-[24px] p-12 text-center">
@@ -1011,7 +1074,7 @@ export default function MatchDetailClient() {
                         </motion.div>
                     )}
 
-                    {activeTab === 'lineups' && (
+                    {effectiveTab === 'lineups' && (
                         <motion.div
                             key="lineups"
                             initial={{ opacity: 0, y: 20 }}
@@ -1028,7 +1091,7 @@ export default function MatchDetailClient() {
                         </motion.div>
                     )}
 
-                    {activeTab === 'h2h' && (
+                    {effectiveTab === 'h2h' && (
                         <motion.div
                             key="h2h"
                             initial={{ opacity: 0, y: 20 }}
@@ -1057,7 +1120,7 @@ export default function MatchDetailClient() {
                         </motion.div>
                     )}
 
-                    {activeTab === 'table' && (
+                    {effectiveTab === 'table' && (
                         <motion.div
                             key="table"
                             initial={{ opacity: 0, y: 20 }}
