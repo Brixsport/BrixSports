@@ -624,7 +624,7 @@ function KeyEventsList({ events, homeTeam, awayTeam, sport }: KeyEventsListProps
         sport?.toLowerCase() === 'basketball' ? `${event.period ?? ''} ${event.minute}`.trim() : `${event.minute}'`;
 
     return (
-        <div className="space-y-3">
+        <div className="space-y-4">
             {rows.map(({ event, isHomeTeam, normType, scoreAtEvent }) => {
                 const playerName = displayName(event.player) ?? displayName(event.playerSnapshot) ?? 'Unknown';
                 // Figma's Key events row isn't a fixed minute-column + separately
@@ -640,7 +640,11 @@ function KeyEventsList({ events, homeTeam, awayTeam, sport }: KeyEventsListProps
                 const mirrorsOrder = normType === 'GOAL' || normType === 'SUBSTITUTION';
 
                 return (
-                    <div key={event.id} className={`flex ${isHomeTeam ? 'justify-start' : 'justify-end'}`}>
+                    <div
+                        key={event.id}
+                        className={`flex items-center bg-white/5 border border-white/10 rounded-2xl px-6 py-4 ${isHomeTeam ? 'justify-start' : 'justify-end'
+                            }`}
+                    >
                         <div className={`flex items-center gap-2 ${mirrorsOrder && !isHomeTeam ? 'flex-row-reverse' : ''}`}>
                             <span className="text-xs font-bold text-primary flex-shrink-0">
                                 {minuteLabel(event)}
@@ -650,7 +654,7 @@ function KeyEventsList({ events, homeTeam, awayTeam, sport }: KeyEventsListProps
                                     <span className="flex-shrink-0 px-2 py-0.5 rounded-full border border-white/20 text-xs font-bold">
                                         {scoreAtEvent.home}-{scoreAtEvent.away}
                                     </span>
-                                    <span className="flex-shrink-0">⚽</span>
+                                    <Target className="w-4 h-4 flex-shrink-0 text-primary" />
                                     <span className="font-bold truncate max-w-[160px]">{playerName}</span>
                                     {/* Assist name is secondary info -- capped at a small fixed
                                         width so it can't eat into the scorer's own name space
