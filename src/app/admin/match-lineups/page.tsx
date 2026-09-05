@@ -232,20 +232,26 @@ export default function AdminMatchLineupsPage() {
         loadRosters(match, { home: defaultFormation, away: defaultFormation });
     };
 
-    // BACKLOG-323: formation changes now go through a confirm step when slots
-    // are already filled -- changing formation necessarily invalidates the old
-    // slot ids, so this can no longer silently wipe starters the way the old
-    // <select onChange={setHomeFormation}> did (a risk flagged when this
-    // rebuild was scoped, BACKLOG-220's "no formation-change confirm" item).
+    // BACKLOG-220/323: was confirm-then-wipe on every formation change -- now
+    // rearranges currently-placed starters into the new formation's slots
+    // (bucket-matched by real position, same seedPlacementsFromLegacy already
+    // used for legacy-lineup seeding) instead of clearing them, matching the
+    // public builder's identical fix. No data is destroyed, so no confirm
+    // dialog is needed; a player whose bucket has no free slot in a smaller
+    // formation just returns to the bench.
     const handleFormationChangeRequest = (side: 'home' | 'away', newFormationId: string) => {
         const placement = side === 'home' ? homePlacement : awayPlacement;
-        if (placement.placements.length > 0) {
-            const confirmed = window.confirm(
-                'Changing formation will clear every player currently placed on the pitch for this team. Continue?'
-            );
-            if (!confirmed) return;
-        }
-        placement.reset({ formationId: newFormationId });
+        const roster = side === 'home' ? homeRoster : awayRoster;
+        const rosterById = Object.fromEntries(roster.map((p) => [p.id, p]));
+
+        const starters = placement.placements.map((p) => ({
+            playerId: p.playerId,
+            position: rosterById[p.playerId]?.position,
+            isCaptain: p.isCaptain,
+            isViceCaptain: p.isViceCaptain,
+        }));
+        const rearranged = seedPlacementsFromLegacy(starters, newFormationId);
+        placement.reset({ formationId: newFormationId, placements: rearranged });
     };
 
     const publishLineups = async () => {

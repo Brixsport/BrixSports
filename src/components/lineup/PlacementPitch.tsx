@@ -114,6 +114,13 @@ export function PlacementPitch({
                     </div>
                 )}
             </div>
+
+            {/* Watermark -- shows up in the exported/downloaded image for free
+                since html-to-image just captures this DOM node.  */}
+            <div className="absolute bottom-3 right-3 z-0 pointer-events-none select-none opacity-10 w-12 h-12">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src="/icons/role-colorways/viewer-512-transparent.png" alt="" className="w-full h-full object-contain" />
+            </div>
         </div>
     );
 }

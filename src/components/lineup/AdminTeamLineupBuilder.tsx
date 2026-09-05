@@ -89,20 +89,6 @@ export function AdminTeamLineupBuilder({
                 </div>
             </div>
 
-            <div className="mb-4">
-                <label className="text-sm text-white/60 mb-2 block">Formation</label>
-                <select
-                    value={placement.formationId}
-                    onChange={(e) => onRequestFormationChange(e.target.value)}
-                    disabled={isDisabled}
-                    className="w-full bg-white/10 border border-white/20 rounded-lg px-4 py-2 text-white"
-                >
-                    {formationOptions.map((f) => (
-                        <option key={f.id} value={f.id}>{f.label}</option>
-                    ))}
-                </select>
-            </div>
-
             <PlacementPitch
                 formationId={placement.formationId}
                 placements={placement.placements}
@@ -110,6 +96,18 @@ export function AdminTeamLineupBuilder({
                 mode="edit"
                 teamLabel={teamSide === 'home' ? 'Home' : 'Away'}
                 onSlotClick={(slotId) => setPopupSlotId(slotId)}
+                formationControl={
+                    <select
+                        value={placement.formationId}
+                        onChange={(e) => onRequestFormationChange(e.target.value)}
+                        disabled={isDisabled}
+                        className="px-3 py-1 bg-black/50 rounded-lg backdrop-blur-md border border-white/10 text-xs font-display italic font-bold text-white uppercase tracking-wider focus:outline-none cursor-pointer disabled:cursor-not-allowed"
+                    >
+                        {formationOptions.map((f) => (
+                            <option key={f.id} value={f.id} className="bg-neutral-900 normal-case">{f.label}</option>
+                        ))}
+                    </select>
+                }
             />
 
             {/* Captain selection -- only currently-placed starters are eligible */}

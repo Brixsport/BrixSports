@@ -7,19 +7,22 @@
 // /api/user/xi (server-derived owner identity, never a client-passed userId).
 
 import { useEffect, useRef, useState } from 'react';
-import { Save, Send, Trash2, Star, Grid3x3 } from 'lucide-react';
+import { Save, Send, Trash2, Star, Grid3x3, ChevronRight } from 'lucide-react';
 import * as htmlToImage from 'html-to-image';
 import download from 'downloadjs';
 import Link from 'next/link';
 import { PlacementPitch } from '@/components/lineup/PlacementPitch';
 import { PlayerSelectorPopup, type PlayerSelectorCandidate } from '@/components/lineup/PlayerSelectorPopup';
 import { useLineupPlacement, type PlacementEntry } from '@/components/lineup/useLineupPlacement';
-import { getFormationsForXi, getFormation } from '@/lib/lineup/formations';
+import { getFormationsForAdmin, getFormation } from '@/lib/lineup/formations';
 import { seedPlacementsFromLegacy } from '@/lib/lineup/placement';
 
 declare module 'downloadjs';
 
-const FORMATION_OPTIONS = getFormationsForXi();
+// Full 11-a-side set (not the old 3-formation curated list) -- a dream-team
+// builder that can prefill from any real team's real formation shouldn't cap
+// the manual picker below what prefill itself can produce.
+const FORMATION_OPTIONS = getFormationsForAdmin('Football', 11);
 const DEFAULT_FORMATION = '4-3-3';
 
 interface Player {
@@ -59,6 +62,7 @@ export default function LineupBuilderPage() {
     const [realTeams, setRealTeams] = useState<Team[]>([]);
     const [teamSearch, setTeamSearch] = useState('');
     const [prefilling, setPrefilling] = useState<string | null>(null);
+    const [prefillOpen, setPrefillOpen] = useState(true);
     const pitchRef = useRef<HTMLDivElement>(null);
 
     const placement = useLineupPlacement({ formationId: DEFAULT_FORMATION });
@@ -167,11 +171,20 @@ export default function LineupBuilderPage() {
     const currentPlayerIdAtPopupSlot = popupSlotId ? placement.getPlayerAtSlot(popupSlotId) : undefined;
     const captainId = placement.placements.find((p) => p.isCaptain)?.playerId;
 
+    // Rearranges currently-placed players into the new formation's slots
+    // (bucket-matched by real position) instead of wiping the pitch -- a
+    // formation switch should feel like a rearrange, not a destructive reset.
+    // Any player whose bucket has no free slot left in the smaller formation
+    // just drops back to the pool, nothing is lost or needs a confirm dialog.
     const handleFormationChange = (newFormationId: string) => {
-        if (placement.placements.length > 0 && !confirm('Change formation? This will clear your current placements.')) {
-            return;
-        }
-        placement.reset({ formationId: newFormationId });
+        const starters = placement.placements.map((p) => ({
+            playerId: p.playerId,
+            position: playersById[p.playerId]?.position,
+            isCaptain: p.isCaptain,
+            isViceCaptain: p.isViceCaptain,
+        }));
+        const rearranged = seedPlacementsFromLegacy(starters, newFormationId);
+        placement.reset({ formationId: newFormationId, placements: rearranged });
     };
 
     const handleLoadTeam = (team: SavedXI) => {
@@ -283,43 +296,53 @@ export default function LineupBuilderPage() {
                         </div>
 
                         <div className="bg-white/5 border border-white/10 rounded-xl p-4">
-                            <label className="text-sm text-white/60 mb-2 block">Pre-fill lineup</label>
-                            <input
-                                type="text"
-                                value={teamSearch}
-                                onChange={(e) => setTeamSearch(e.target.value)}
-                                placeholder="Search a team..."
-                                className="w-full bg-white/10 border border-white/20 rounded-lg px-4 py-2 text-white text-sm focus:outline-none focus:border-primary mb-2"
-                            />
-                            <div className="space-y-1 max-h-56 overflow-y-auto">
-                                {realTeams
-                                    .filter((t) =>
-                                        !teamSearch ||
-                                        t.name.toLowerCase().includes(teamSearch.toLowerCase()) ||
-                                        t.shortName.toLowerCase().includes(teamSearch.toLowerCase())
-                                    )
-                                    .slice(0, 30)
-                                    .map((t) => (
-                                        <button
-                                            key={t.id}
-                                            onClick={() => handlePrefillTeam(t)}
-                                            disabled={prefilling !== null}
-                                            className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs text-left hover:bg-white/10 transition-colors disabled:opacity-50"
-                                        >
-                                            {t.logo ? (
-                                                // eslint-disable-next-line @next/next/no-img-element
-                                                <img src={t.logo} alt="" className="w-5 h-5 rounded-full object-cover" />
-                                            ) : (
-                                                <span className="w-5 h-5 rounded-full bg-white/10" />
-                                            )}
-                                            <span className="text-white/80 truncate">{t.name}</span>
-                                            {prefilling === t.id && <span className="ml-auto text-white/40">…</span>}
-                                        </button>
-                                    ))}
-                            </div>
-                            <p className="text-[10px] text-white/40 mt-2">
-                                {loadingPlayers ? 'Loading players…' : `${availablePlayers.length} players available`}
-                            </p>
+                            <button
+                                onClick={() => setPrefillOpen((open) => !open)}
+                                className="w-full flex items-center justify-between text-sm text-white/60"
+                            >
+                                <span>Pre-fill lineup</span>
+                                <ChevronRight size={14} className={`transition-transform ${prefillOpen ? 'rotate-90' : ''}`} />
+                            </button>
+                            {prefillOpen && (
+                                <>
+                                    <input
+                                        type="text"
+                                        value={teamSearch}
+                                        onChange={(e) => setTeamSearch(e.target.value)}
+                                        placeholder="Search a team..."
+                                        className="w-full bg-white/10 border border-white/20 rounded-lg px-4 py-2 text-white text-sm focus:outline-none focus:border-primary mt-2 mb-2"
+                                    />
+                                    <div className="space-y-1 max-h-56 overflow-y-auto">
+                                        {realTeams
+                                            .filter((t) =>
+                                                !teamSearch ||
+                                                t.name.toLowerCase().includes(teamSearch.toLowerCase()) ||
+                                                t.shortName.toLowerCase().includes(teamSearch.toLowerCase())
+                                            )
+                                            .slice(0, 30)
+                                            .map((t) => (
+                                                <button
+                                                    key={t.id}
+                                                    onClick={() => handlePrefillTeam(t)}
+                                                    disabled={prefilling !== null}
+                                                    className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs text-left hover:bg-white/10 transition-colors disabled:opacity-50"
+                                                >
+                                                    {t.logo ? (
+                                                        // eslint-disable-next-line @next/next/no-img-element
+                                                        <img src={t.logo} alt="" className="w-5 h-5 rounded-full object-cover" />
+                                                    ) : (
+                                                        <span className="w-5 h-5 rounded-full bg-white/10" />
+                                                    )}
+                                                    <span className="text-white/80 truncate">{t.name}</span>
+                                                    {prefilling === t.id && <span className="ml-auto text-white/40">…</span>}
+                                                </button>
+                                            ))}
+                                    </div>
+                                    <p className="text-[10px] text-white/40 mt-2">
+                                        {loadingPlayers ? 'Loading players…' : `${availablePlayers.length} players available`}
+                                    </p>
+                                </>
+                            )}
                         </div>
 
                         <div className="bg-white/5 border border-white/10 rounded-xl p-4 space-y-2">
