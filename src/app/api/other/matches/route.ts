@@ -2,7 +2,7 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/db';
 import { matches, teams } from '@/db/schema';
-import { or, notInArray, eq, and, inArray } from 'drizzle-orm';
+import { notInArray, eq, and, inArray } from 'drizzle-orm';
 
 // Public DTO -- must never include CLAUDE.md's banned fields (loggerId,
 // approvalStatus, managerNotes, approvedBy, approvedAt) or anything else not
@@ -39,8 +39,9 @@ export async function GET(request: Request) {
 
         const conditions = [notInArray(matches.sport, sportsToExclude)];
         if (status) conditions.push(eq(matches.status, status));
+        // competitionId is authoritative when present -- see BACKLOG-335.
         if (competitionId) {
-            conditions.push(or(eq(matches.competitionId, competitionId), eq(matches.competition, competition || ''))!);
+            conditions.push(eq(matches.competitionId, competitionId));
         } else if (competition) {
             conditions.push(eq(matches.competition, competition));
         }

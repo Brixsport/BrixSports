@@ -7,7 +7,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
 import { competitions, matches, standings } from '@/db/schema';
-import { sql, eq, or } from 'drizzle-orm';
+import { sql, eq } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { getAuthUser } from '@/lib/auth';
 import { checkRateLimit } from '@/lib/rate-limit';
@@ -125,14 +125,17 @@ export async function GET(request: NextRequest) {
         if (includeStats) {
             const competitionsWithStats = await Promise.all(
                 filteredCompetitions.map(async (comp) => {
-                    // Get match count - prioritize ID, fallback to name for safety during transition
+                    // competitionId is authoritative when present -- do NOT OR it
+                    // with a name fallback (BACKLOG-335: two real competitions
+                    // can share an exact name, e.g. two seasons both literally
+                    // named "BUSA LEAGUE FOOTBALL", and OR'ing in a name match
+                    // even when a real id is known silently pulls in the other
+                    // competition's counts too). `comp.id` is always present for
+                    // a real DB row, so the name-only branch never actually ran.
                     const matchCount = await db
                         .select({ count: sql<number>`count(*)` })
                         .from(matches)
-                        .where(
-                            comp.id ? or(eq(matches.competitionId, comp.id), eq(matches.competition, comp.name))
-                                : eq(matches.competition, comp.name)
-                        );
+                        .where(eq(matches.competitionId, comp.id));
 
                     // Get unique teams count
                     const allMatches = await db
@@ -141,10 +144,7 @@ export async function GET(request: NextRequest) {
                             awayTeamId: matches.awayTeamId,
                         })
                         .from(matches)
-                        .where(
-                            comp.id ? or(eq(matches.competitionId, comp.id), eq(matches.competition, comp.name))
-                                : eq(matches.competition, comp.name)
-                        );
+                        .where(eq(matches.competitionId, comp.id));
 
                     const teamIds = new Set<string>();
                     allMatches.forEach(m => {
@@ -152,14 +152,11 @@ export async function GET(request: NextRequest) {
                         teamIds.add(m.awayTeamId);
                     });
 
-                    // Get standings count
+                    // Get standings count -- competitionId-only, see BACKLOG-335.
                     const standingsCount = await db
                         .select({ count: sql<number>`count(*)` })
                         .from(standings)
-                        .where(
-                            comp.id ? or(eq(standings.competitionId, comp.id), eq(standings.competition, comp.name))
-                                : eq(standings.competition, comp.name)
-                        );
+                        .where(eq(standings.competitionId, comp.id));
 
                     return {
                         ...comp,

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
 import { matches, teams } from '@/db/schema';
-import { eq, and, inArray, or, desc, sql } from 'drizzle-orm'; // inArray kept for teams fetch
+import { eq, and, inArray, desc, sql } from 'drizzle-orm'; // inArray kept for teams fetch
 import { getAuthUser } from '@/lib/auth';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { playerRatings } from '@/db/schema-ratings';
@@ -98,8 +98,9 @@ export async function GET(request: NextRequest) {
         if (matchday) conditions.push(eq(matches.matchday, parseInt(matchday, 10)));
         if (round) conditions.push(eq(matches.round, round));
 
+        // competitionId is authoritative when present -- see BACKLOG-335.
         if (competitionId) {
-            conditions.push(or(eq(matches.competitionId, competitionId), eq(matches.competition, competition || '')));
+            conditions.push(eq(matches.competitionId, competitionId));
         } else if (competition) {
             conditions.push(eq(matches.competition, competition));
         }

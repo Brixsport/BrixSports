@@ -258,19 +258,23 @@ function CompetitionHubContent() {
     }));
   }, [standings]);
 
+  // Pos+Team are merged into one sticky first column so they stay visible
+  // while P/W/D/L/GD/PTS scroll underneath on narrow viewports -- otherwise
+  // the whole table scrolls together and you lose track of which row is
+  // which team. Sticky cells need a solid (non-transparent) background so
+  // scrolled content doesn't show through underneath them.
   const renderStandingsTable = (rows: Standing[]) => (
     <div className="overflow-x-auto">
-      <table className="w-full text-left border-collapse min-w-[600px]">
+      <table className="w-full text-left border-collapse min-w-[420px]">
         <thead>
           <tr className="border-b border-white/10 bg-white/5">
-            <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-white/40">Pos</th>
-            <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-white/40">Team</th>
-            <th className="px-4 py-4 text-[10px] font-black uppercase tracking-widest text-white/40 text-center">P</th>
-            <th className="px-4 py-4 text-[10px] font-black uppercase tracking-widest text-white/40 text-center">W</th>
-            <th className="px-4 py-4 text-[10px] font-black uppercase tracking-widest text-white/40 text-center">{selectedComp?.sport === 'Basketball' ? 'L' : 'D'}</th>
-            <th className="px-4 py-4 text-[10px] font-black uppercase tracking-widest text-white/40 text-center">{selectedComp?.sport === 'Basketball' ? 'PCT' : 'L'}</th>
-            <th className="px-4 py-4 text-[10px] font-black uppercase tracking-widest text-white/40 text-center">GD/DIFF</th>
-            <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-primary text-center">Pts</th>
+            <th className="sticky left-0 z-10 bg-[#0c0c0e] px-3 py-3 text-[9px] font-black uppercase tracking-widest text-white/40">Team</th>
+            <th className="px-2 py-3 text-[9px] font-black uppercase tracking-widest text-white/40 text-center">P</th>
+            <th className="px-2 py-3 text-[9px] font-black uppercase tracking-widest text-white/40 text-center">W</th>
+            <th className="px-2 py-3 text-[9px] font-black uppercase tracking-widest text-white/40 text-center">{selectedComp?.sport === 'Basketball' ? 'L' : 'D'}</th>
+            <th className="px-2 py-3 text-[9px] font-black uppercase tracking-widest text-white/40 text-center">{selectedComp?.sport === 'Basketball' ? 'PCT' : 'L'}</th>
+            <th className="px-2 py-3 text-[9px] font-black uppercase tracking-widest text-white/40 text-center">GD</th>
+            <th className="px-3 py-3 text-[9px] font-black uppercase tracking-widest text-primary text-center">Pts</th>
           </tr>
         </thead>
         <tbody>
@@ -279,29 +283,26 @@ function CompetitionHubContent() {
               key={row.id}
               className="border-b border-white/5 hover:bg-white/5 transition-colors group"
             >
-              <td className="px-6 py-4">
-                <span className={`text-lg font-display italic ${idx < 3 ? 'text-primary' : 'text-white/20'}`}>
-                  {idx + 1}
-                </span>
-              </td>
-              <td className="px-6 py-4">
-                <div className="flex items-center gap-4">
-                  <div className="w-10 h-10 relative flex-shrink-0 bg-white/5 rounded-lg p-1 flex items-center justify-center">
+              <td className="sticky left-0 z-10 bg-[#0c0c0e] group-hover:bg-[#151517] px-3 py-2.5">
+                <div className="flex items-center gap-2">
+                  <span className={`text-sm font-display italic w-4 shrink-0 text-right ${idx < 3 ? 'text-primary' : 'text-white/20'}`}>
+                    {idx + 1}
+                  </span>
+                  <div className="w-8 h-8 relative flex-shrink-0 bg-white/5 rounded-lg p-1 flex items-center justify-center">
                     <TeamLogo logo={row.team.logo} name={row.team.name} size="sm" />
                   </div>
                   <div className="min-w-0">
-                    <p className="text-sm font-black uppercase tracking-tight truncate">{row.team.name}</p>
-                    <p className="text-[10px] text-white/40 font-bold uppercase tracking-widest">{row.team.university}</p>
+                    <p className="text-xs font-black uppercase tracking-tight truncate max-w-[130px]">{row.team.name}</p>
                   </div>
                 </div>
               </td>
-              <td className="px-4 py-4 text-center font-bold text-white/80">{row.played}</td>
-              <td className="px-4 py-4 text-center font-bold text-primary">{row.won}</td>
-              <td className="px-4 py-4 text-center font-bold text-white/60">{selectedComp?.sport === 'Basketball' ? row.lost : row.drawn}</td>
-              <td className="px-4 py-4 text-center font-bold text-white/40">{selectedComp?.sport === 'Basketball' ? ((row.won / (row.played || 1)) * 100).toFixed(0) + '%' : row.lost}</td>
-              <td className="px-4 py-4 text-center font-bold text-white/40">{row.goalDifference > 0 ? `+${row.goalDifference}` : row.goalDifference}</td>
-              <td className="px-6 py-4 text-center">
-                <span className="bg-primary/10 text-primary px-3 py-1 rounded-lg font-display italic text-lg border border-primary/20">
+              <td className="px-2 py-2.5 text-center text-xs font-bold text-white/80">{row.played}</td>
+              <td className="px-2 py-2.5 text-center text-xs font-bold text-primary">{row.won}</td>
+              <td className="px-2 py-2.5 text-center text-xs font-bold text-white/60">{selectedComp?.sport === 'Basketball' ? row.lost : row.drawn}</td>
+              <td className="px-2 py-2.5 text-center text-xs font-bold text-white/40">{selectedComp?.sport === 'Basketball' ? ((row.won / (row.played || 1)) * 100).toFixed(0) + '%' : row.lost}</td>
+              <td className="px-2 py-2.5 text-center text-xs font-bold text-white/40">{row.goalDifference > 0 ? `+${row.goalDifference}` : row.goalDifference}</td>
+              <td className="px-3 py-2.5 text-center">
+                <span className="bg-primary/10 text-primary px-2 py-1 rounded-lg font-display italic text-sm border border-primary/20">
                   {row.points}
                 </span>
               </td>

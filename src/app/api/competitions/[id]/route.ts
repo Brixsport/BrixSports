@@ -9,7 +9,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
 import { teams, matches, standings, bracketNodes, competitions } from '@/db/schema';
-import { eq, sql, or } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { getAuthUser } from '@/lib/auth';
 
 interface RouteParams {
@@ -50,13 +50,16 @@ export async function GET(
             return NextResponse.json(competitionByName); // Simple return if found by name
         }
 
-        const competitionName = competition.name;
+        // competitionId is authoritative -- do NOT OR it with a name fallback
+        // (BACKLOG-335: two real competitions can share an exact name, and
+        // OR'ing in a name match even when a real id is known silently pulls
+        // in the other competition's matches/standings/brackets too).
 
         // Get matches for this competition
         const competitionMatches = await db
             .select()
             .from(matches)
-            .where(or(eq(matches.competitionId, competition.id), eq(matches.competition, competitionName)));
+            .where(eq(matches.competitionId, competition.id));
 
         // Get standings for this competition
         const competitionStandings = await db
@@ -66,13 +69,13 @@ export async function GET(
             })
             .from(standings)
             .leftJoin(teams, eq(standings.teamId, teams.id))
-            .where(or(eq(standings.competitionId, competition.id), eq(standings.competition, competitionName)));
+            .where(eq(standings.competitionId, competition.id));
 
         // Get brackets (if tournament)
         const brackets = await db
             .select()
             .from(bracketNodes)
-            .where(or(eq(bracketNodes.competitionId, competition.id), eq(bracketNodes.competition, competitionName)));
+            .where(eq(bracketNodes.competitionId, competition.id));
 
         // Get unique teams from matches
         const teamIds = new Set<string>();

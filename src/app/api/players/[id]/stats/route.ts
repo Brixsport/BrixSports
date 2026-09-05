@@ -157,8 +157,6 @@ export async function POST(
             );
         }
 
-        const { or } = await import('drizzle-orm');
-
         // Verify player exists
         const player = await db
             .select()
@@ -173,7 +171,11 @@ export async function POST(
             );
         }
 
-        // Check if stats already exist for this player/competition
+        // Check if stats already exist for this player/competition.
+        // competitionId is authoritative when present -- do NOT OR it with a
+        // name fallback (BACKLOG-335: two real competitions can share an exact
+        // name, and this is a write path -- matching the wrong same-named
+        // competition's existing row here would overwrite the wrong data).
         const existingStats = await db
             .select()
             .from(playerStats)
@@ -181,7 +183,7 @@ export async function POST(
                 and(
                     eq(playerStats.playerId, playerId),
                     competitionId
-                        ? or(eq(playerStats.competitionId, competitionId), eq(playerStats.competition, competition || ''))
+                        ? eq(playerStats.competitionId, competitionId)
                         : eq(playerStats.competition, competition || '')
                 )
             )
@@ -286,8 +288,6 @@ export async function PATCH(
             );
         }
 
-        const { or } = await import('drizzle-orm');
-
         // Verify player exists
         const player = await db
             .select()
@@ -302,7 +302,11 @@ export async function PATCH(
             );
         }
 
-        // Check if stats already exist for this player/competition
+        // Check if stats already exist for this player/competition.
+        // competitionId is authoritative when present -- do NOT OR it with a
+        // name fallback (BACKLOG-335: two real competitions can share an exact
+        // name, and this is a write path -- matching the wrong same-named
+        // competition's existing row here would overwrite the wrong data).
         const existingStats = await db
             .select()
             .from(playerStats)
@@ -310,7 +314,7 @@ export async function PATCH(
                 and(
                     eq(playerStats.playerId, playerId),
                     competitionId
-                        ? or(eq(playerStats.competitionId, competitionId), eq(playerStats.competition, competition || ''))
+                        ? eq(playerStats.competitionId, competitionId)
                         : eq(playerStats.competition, competition || '')
                 )
             )

@@ -9886,7 +9886,9 @@ Fixed exactly per the "Fix (not built)" plan below: `MatchStatusBadge.tsx` now d
 
 ---
 
-### BACKLOG-334 — Standings/Matches/Brackets Routes Leaked Data Across Same-Named Competitions
+### BACKLOG-335 — Standings/Matches/Brackets Routes Leaked Data Across Same-Named Competitions
+
+**Renumbered from `BACKLOG-334`** — that number collided with a concurrent session's push (`match-detail-tabs` worktree's "Timeline Key events" entry, filed independently around the same time). No functional change, just this entry's own number and the matching code comments across the routes this session touched.
 
 **Status:** RESOLVED — session `brixsports-v2-cc`, 2026-09-05, live-verified.
 **Priority:** CRITICAL — real, public-facing data-correctness bug (not cosmetic): wrong standings/matches shown to viewers.
