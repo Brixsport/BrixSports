@@ -3,6 +3,7 @@ import { Player } from '@/types';
 import { cn } from '@/lib/utils';
 import { motion } from 'framer-motion';
 import Image from 'next/image';
+import { FaFutbol } from 'react-icons/fa';
 
 interface PitchPlayerProps {
     player: Player;
@@ -93,7 +94,7 @@ export function PitchPlayer({
                     {/* Goal Indicator */}
                     {goals && goals > 0 && (
                         <div className="absolute -bottom-1 -left-2 bg-white text-black text-[8px] font-bold px-1 py-0 rounded-full border border-gray-200 shadow-sm z-20 flex items-center gap-0.5">
-                            ⚽ {goals > 1 ? `x${goals}` : ''}
+                            <FaFutbol size={7} /> {goals > 1 ? `x${goals}` : ''}
                         </div>
                     )}
 
