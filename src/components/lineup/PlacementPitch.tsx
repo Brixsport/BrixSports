@@ -71,6 +71,15 @@ export function PlacementPitch({
         >
             <PitchMarkings is5Aside={is5Aside} />
 
+            {/* Watermark -- rendered before the slots so it always paints
+                behind them regardless of z-index quirks. Shows up in the
+                exported/downloaded image for free since html-to-image just
+                captures this DOM node. */}
+            <div className="absolute inset-0 flex items-center justify-center z-0 pointer-events-none select-none opacity-[0.08]">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src="/icons/role-colorways/viewer-512-transparent.png" alt="" className="w-3/4 h-3/4 object-contain" />
+            </div>
+
             {formation.slots.map((slot) => {
                 const playerId = getPlayerIdAtSlot(slot.id);
                 const placement = playerId ? placements.find((p) => p.slotId === slot.id) : undefined;
@@ -115,12 +124,6 @@ export function PlacementPitch({
                 )}
             </div>
 
-            {/* Watermark -- shows up in the exported/downloaded image for free
-                since html-to-image just captures this DOM node.  */}
-            <div className="absolute bottom-3 right-3 z-0 pointer-events-none select-none opacity-10 w-12 h-12">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src="/icons/role-colorways/viewer-512-transparent.png" alt="" className="w-full h-full object-contain" />
-            </div>
         </div>
     );
 }

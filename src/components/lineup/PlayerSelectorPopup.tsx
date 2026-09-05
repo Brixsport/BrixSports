@@ -135,15 +135,17 @@ export function PlayerSelectorPopup({
                             <div className="text-center py-8 text-white/40 text-sm">No players found</div>
                         ) : (
                             filtered.map((candidate) => {
-                                const isExcluded = excludePlayerIds.includes(candidate.id) && candidate.id !== currentPlayerId;
+                                const isPlacedElsewhere = excludePlayerIds.includes(candidate.id) && candidate.id !== currentPlayerId;
                                 return (
                                     <CandidateRow
                                         key={candidate.id}
                                         candidate={candidate}
-                                        disabled={isExcluded}
+                                        placedElsewhere={isPlacedElsewhere}
                                         isCurrent={candidate.id === currentPlayerId}
                                         onClick={() => {
-                                            if (isExcluded) return;
+                                            // Picking a player already placed in another slot
+                                            // swaps the two occupants (handled by the consumer's
+                                            // onSelect) rather than being blocked.
                                             onSelect(candidate.id);
                                             onClose();
                                         }}
@@ -160,23 +162,22 @@ export function PlayerSelectorPopup({
 
 function CandidateRow({
     candidate,
-    disabled,
+    placedElsewhere,
     isCurrent,
     onClick,
 }: {
     candidate: PlayerSelectorCandidate;
-    disabled: boolean;
+    placedElsewhere: boolean;
     isCurrent: boolean;
     onClick: () => void;
 }) {
     return (
         <button
             onClick={onClick}
-            disabled={disabled}
-            className={`w-full flex items-center gap-3 p-3 rounded-xl border transition-all ${disabled
-                ? 'bg-white/5 border-white/5 opacity-40 cursor-not-allowed'
-                : isCurrent
-                    ? 'bg-primary/10 border-primary'
+            className={`w-full flex items-center gap-3 p-3 rounded-xl border transition-all ${isCurrent
+                ? 'bg-primary/10 border-primary'
+                : placedElsewhere
+                    ? 'bg-white/5 border-white/10 hover:border-yellow-500/50 hover:bg-white/10'
                     : 'bg-white/5 border-white/10 hover:border-primary/50 hover:bg-white/10'
                 }`}
         >
@@ -195,7 +196,7 @@ function CandidateRow({
                 </p>
                 <p className="text-[10px] text-white/60 font-bold uppercase tracking-wider">
                     {candidate.position}
-                    {disabled && ' · already placed'}
+                    {placedElsewhere && ' · tap to swap'}
                 </p>
             </div>
 

@@ -166,7 +166,15 @@ export function AdminTeamLineupBuilder({
                 excludePlayerIds={placedPlayerIds}
                 currentPlayerId={currentPlayerIdAtPopupSlot}
                 onSelect={(playerId) => {
-                    if (popupSlotId) placement.assign(popupSlotId, playerId);
+                    if (!popupSlotId) return;
+                    // Picking a player who's already placed in another slot swaps
+                    // the two occupants instead of leaving that other slot empty.
+                    const sourceSlot = placement.getSlotForPlayer(playerId);
+                    if (sourceSlot && sourceSlot !== popupSlotId) {
+                        placement.swap(popupSlotId, sourceSlot);
+                    } else {
+                        placement.assign(popupSlotId, playerId);
+                    }
                 }}
                 onRemove={
                     currentPlayerIdAtPopupSlot

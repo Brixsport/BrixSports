@@ -458,7 +458,16 @@ export default function LineupBuilderPage() {
                     excludePlayerIds={placedPlayerIds}
                     currentPlayerId={currentPlayerIdAtPopupSlot}
                     onSelect={(playerId) => {
-                        if (popupSlotId) placement.assign(popupSlotId, playerId);
+                        if (!popupSlotId) return;
+                        // If the picked player is already in another slot, swap the
+                        // two occupants instead of just moving the picked player and
+                        // leaving their old slot empty.
+                        const sourceSlot = placement.getSlotForPlayer(playerId);
+                        if (sourceSlot && sourceSlot !== popupSlotId) {
+                            placement.swap(popupSlotId, sourceSlot);
+                        } else {
+                            placement.assign(popupSlotId, playerId);
+                        }
                     }}
                     onRemove={
                         currentPlayerIdAtPopupSlot
