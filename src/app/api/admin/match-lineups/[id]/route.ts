@@ -5,6 +5,7 @@ import { matches, competitions, squadPlayers } from '@/db/schema';
 import { eq, and, inArray } from 'drizzle-orm';
 import { resolveSlot } from '@/lib/lineup/placement';
 import { getMatchConfig } from '@/lib/matchConfig';
+import { writeMatchLineupsAtomic, CONCURRENT_MODIFICATION_RESPONSE } from '@/lib/lineup/atomicLineupWrite';
 
 // POST /api/admin/match-lineups/[id] - Publish official lineup
 export async function POST(
@@ -151,9 +152,13 @@ export async function POST(
                 .all();
 
             if (competition.length > 0 && competition[0].requireSquad) {
-                // Get all player IDs from the lineup
+                // Get all player IDs from the lineup. Was reading
+                // `lineup.startingXI`, a field this route's payload has never
+                // actually had (the real field is `starters`, used everywhere
+                // else in this same handler) -- squad validation was silently
+                // only ever checking substitutes, never starters.
                 const lineupPlayerIds = [
-                    ...(lineup.startingXI || []),
+                    ...(lineup.starters || []),
                     ...(lineup.substitutes || []),
                 ].map((p: any) => p.playerId).filter(Boolean);
 
@@ -211,13 +216,14 @@ export async function POST(
             updatedAt: new Date().toISOString()
         };
 
-        // Save back to database
-        await db.update(matches)
-            .set({
-                lineups: JSON.stringify(existingLineups),
-                updatedAt: new Date()
-            })
-            .where(eq(matches.id, matchId));
+        // Save back to database -- BACKLOG-220: compare-and-swap against the
+        // exact raw value read above. This route is the one that made
+        // concurrent home+away publish the normal case (BACKLOG-323 step 6),
+        // so this guard matters most here.
+        const writeResult = await writeMatchLineupsAtomic(matchId, match[0].lineups as string | null, existingLineups);
+        if (!writeResult.ok) {
+            return NextResponse.json(CONCURRENT_MODIFICATION_RESPONSE, { status: 409 });
+        }
 
         // Send push notification for lineup availability
         try {
