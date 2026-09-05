@@ -10772,9 +10772,11 @@ Re-examined `Timeline-full-event(commentary).jpeg` directly against the live "Al
 
 ---
 
-### BACKLOG-333 — Timeline "Key events" View: Internal Row Order Doesn't Match Figma Per Event Type
+### BACKLOG-334 — Timeline "Key events" View: Internal Row Order Doesn't Match Figma Per Event Type
 
-**Status:** SHIPPED — 2026-09-05. Live verification on Vercel preview pending.
+**Status:** RESOLVED — live-verified on Vercel preview (2026-09-05). Renumbered from `BACKLOG-333` to
+`BACKLOG-334` -- that number collided with a same-session concurrent push (`competitions-consolidation`
+worktree's "Admin Create-Competition Flow..." entry, filed independently around the same time).
 **Priority:** LOW -- visual reconciliation only, functional data (score/minute/names) already correct.
 **Files:** `src/components/LiveMatchTimeline.tsx` (`KeyEventsList`).
 

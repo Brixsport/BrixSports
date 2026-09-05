@@ -3,9 +3,10 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import {
-    Circle, Target, AlertCircle, ArrowRightLeft, Eye,
+    Circle, Target, AlertCircle, ArrowRightLeft, ArrowRight, ArrowLeft, Eye,
     TrendingUp, Award, Clock, Zap, Shield, Activity
 } from 'lucide-react';
+import { FaFutbol } from 'react-icons/fa';
 import { format } from 'date-fns';
 
 interface Event {
@@ -620,12 +621,18 @@ function KeyEventsList({ events, homeTeam, awayTeam, sport }: KeyEventsListProps
         return { event, isHomeTeam, normType, scoreAtEvent: { home: homeScore, away: awayScore } };
     });
 
+    // `rows` itself must stay oldest-to-newest -- the running score above only
+    // accumulates correctly in that direction. Display order is newest-first
+    // (latest event at the top); reverse a copy only after the score at each
+    // event is already computed.
+    const displayRows = [...rows].reverse();
+
     const minuteLabel = (event: Event) =>
         sport?.toLowerCase() === 'basketball' ? `${event.period ?? ''} ${event.minute}`.trim() : `${event.minute}'`;
 
     return (
         <div className="space-y-4">
-            {rows.map(({ event, isHomeTeam, normType, scoreAtEvent }) => {
+            {displayRows.map(({ event, isHomeTeam, normType, scoreAtEvent }) => {
                 const playerName = displayName(event.player) ?? displayName(event.playerSnapshot) ?? 'Unknown';
                 // Figma's Key events row isn't a fixed minute-column + separately
                 // mirrored content pair: for goals and substitutions the ENTIRE
@@ -651,10 +658,10 @@ function KeyEventsList({ events, homeTeam, awayTeam, sport }: KeyEventsListProps
                             </span>
                             {normType === 'GOAL' && (
                                 <>
-                                    <span className="flex-shrink-0 px-2 py-0.5 rounded-full border border-white/20 text-xs font-bold">
+                                    <span className="flex-shrink-0 px-2 py-0.5 rounded-full border border-white text-xs font-bold">
                                         {scoreAtEvent.home}-{scoreAtEvent.away}
                                     </span>
-                                    <Target className="w-4 h-4 flex-shrink-0 text-primary" />
+                                    <FaFutbol className="w-3.5 h-3.5 flex-shrink-0 text-white/80" />
                                     <span className="font-bold truncate max-w-[160px]">{playerName}</span>
                                     {/* Assist name is secondary info -- capped at a small fixed
                                         width so it can't eat into the scorer's own name space
@@ -673,9 +680,18 @@ function KeyEventsList({ events, homeTeam, awayTeam, sport }: KeyEventsListProps
                             )}
                             {normType === 'SUBSTITUTION' && (
                                 <>
-                                    <span className="text-red-400 truncate max-w-[120px]">{displayName(event.relatedPlayer) ?? 'Unknown'}</span>
-                                    <ArrowRightLeft className="w-4 h-4 text-white/50 flex-shrink-0" />
-                                    <span className="text-green-400 truncate max-w-[120px]">{playerName}</span>
+                                    <span className="truncate max-w-[120px]">{displayName(event.relatedPlayer) ?? 'Unknown'}</span>
+                                    {/* Red/green codes the direction, not the player name --
+                                        left-pointing (red) toward the outgoing name, right-
+                                        pointing (green) toward the incoming name -- same
+                                        horizontal exchange shape as the old single-tone
+                                        ArrowRightLeft icon, just split so each arrow can carry
+                                        its own color. */}
+                                    <span className="flex flex-col items-center flex-shrink-0 -space-y-1">
+                                        <ArrowRight className="w-3 h-3 text-green-400" />
+                                        <ArrowLeft className="w-3 h-3 text-red-400" />
+                                    </span>
+                                    <span className="truncate max-w-[120px]">{playerName}</span>
                                 </>
                             )}
                         </div>
