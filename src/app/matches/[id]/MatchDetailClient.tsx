@@ -534,7 +534,7 @@ export default function MatchDetailClient() {
     const homeRedCardsCount = (events || []).filter(e => e.type === 'Red Card' && e.teamId === match.homeTeamId).length;
     const awayRedCardsCount = (events || []).filter(e => e.type === 'Red Card' && e.teamId === match.awayTeamId).length;
 
-    // BACKLOG-294: Figma's header always flanks the score with a per-team goal-scorer
+    // BACKLOG-294: header always flanks the score with a per-team goal-scorer
     // list ("Wareez 59'" / "Lazzy 33', 71'" / "Surefunmi 75'") -- missing live entirely.
     // Own goals credit the OPPOSING team's list with an "(OG)" suffix, same own-goal
     // detection LiveMatchTimeline's generateGoalCommentary already uses.
@@ -789,7 +789,7 @@ export default function MatchDetailClient() {
                         </div>
                     </div>
 
-                    {/* Goal Scorers - Figma always shows this flanking the score; live had
+                    {/* Goal Scorers - always shows this flanking the score; had
                         nothing here at all before BACKLOG-294. Omitted entirely on a scoreless
                         match rather than rendering an empty row. */}
                     {(homeScorers.length > 0 || awayScorers.length > 0) && (
