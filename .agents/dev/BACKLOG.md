@@ -10624,10 +10624,24 @@ Three independent formation-template tables exist in the codebase, none sharing 
 
 ### BACKLOG-326 — Basketball Match Detail: Sport-Conditional Tab Set + Net-New Box Score Tab
 
-**Status:** SHIPPED, not yet live-verified (2026-09-05) — `tsc --noEmit` clean (zero new errors
-vs. the 35-error pre-existing baseline), no browser walkthrough yet (local dev server did not
-come up in time this session; see this session's journal entry for detail). Needs a real
-staging/Vercel-preview pass before this flips to RESOLVED.
+**Status:** SHIPPED, partially live-verified (2026-09-05). Local dev server never came up this
+session (huge-project first-compile taking multiple minutes, gave up); pushed
+`work/match-detail-tabs-boxscore` and verified against its real Vercel preview instead
+(`https://brixsports-staging-kjuousqzs-brixsports-projects.vercel.app`, protection-bypass token
+supplied by Richard). Confirmed live on a real basketball match (`busalympics-bball-m-3`): tab
+bar is exactly `Overview / Box Score / Stats / H2H / Table` — no Timeline, no Lineups. **Real gap
+found, not a bug in this fix:** every basketball match on staging (sampled 20 of 51, all
+`FINISHED`) has zero `match_events` rows — session 45's historical backfill wrote straight to
+`basketballPlayerStats` (season aggregate) and deliberately skipped `match_events` (no
+per-match play-by-play exists for those matches at all). Box Score correctly shows its honest
+"No box score available" empty state for these — not a crash, not fabricated zeros — but there is
+currently no basketball match anywhere on staging with real events to click-test the populated
+table against. Compensated with a logic-level check instead: `dev/verify-basketball-matchstats-326-331.ts`
+runs `computeBasketballBoxScore` against a hand-built fixture covering both made/miss value
+shapes (live numeric + backfill string), both assist-crediting paths, rebounds, and sort order —
+all 17 assertions pass. Still needs a real click-test against an actual live-logged basketball
+match before this flips to RESOLVED (next live basketball match day, or a throwaway
+admin-created + logger-logged test match).
 **Priority:** MEDIUM.
 **Fix:** `MatchDetailClient.tsx` now branches the tab set on `match.sport` — basketball drops
 Timeline and Lineups (Box Score replaces Timeline in the tab order; the Lineups tab and its
@@ -10720,10 +10734,18 @@ now, its implementation session).
 **Files:** `src/app/matches/[id]/MatchDetailClient.tsx`, `src/components/BasketballBoxScore.tsx`
 (new), `src/lib/basketball/matchStats.ts` (new, shared with `BACKLOG-331`).
 
-**Still open before this can flip to RESOLVED:** a real browser walkthrough on a basketball match
-with live events (verify the tab actually disappears/appears correctly per sport, the team filter
-switches correctly, PTS/AST/REB match a hand-computed expectation from the same match's raw
-events) — not done this session, local dev server didn't come up in time.
+**Still open before this can flip to RESOLVED:** a real click-test against a basketball match with
+actual `match_events` rows (verify the team-filter segmented control switches correctly and
+PTS/AST/REB render exactly as computed) — none exists on staging today, all 51 basketball matches
+sampled are zero-event historical backfills. The tab-set/sport-branching itself IS live-verified
+(see Status above); only the populated-table rendering remains unverified against real DOM output.
+
+**Pushed for staging verification (2026-09-05):** local `work/match-detail-tabs` had diverged
+from `origin/work/match-detail-tabs` by one remote-only commit touching lineup-builder/xi files
+(not a duplicate, real different content) -- rather than merge/rebase across that unilaterally,
+pushed to a fresh branch `work/match-detail-tabs-boxscore` instead, zero history rewritten.
+**Follow-up, per Richard's direction:** rebase this work onto `feature/ui-redesign` next session
+rather than leaving it on its own branch -- not done this session.
 
 ---
 
@@ -10787,12 +10809,16 @@ Read `LiveStats.tsx` directly (not just screenshots) to ground this: every footb
 
 ### BACKLOG-331 — Basketball Stats Tab: Different Category Set Entirely, Percentage-Based, Quarter-Scoped (Deep Rework, Not Visual Polish)
 
-**Status:** SHIPPED, not yet live-verified (2026-09-05) — `tsc --noEmit` clean (zero new errors),
-no browser walkthrough yet (see `BACKLOG-326`'s status for why). Built ahead of Richard's
-confirmation on the "1 Pointers" open question below rather than blocking on it — dropped the
-row per this entry's own audit reasoning (a free throw already IS a 1-pointer, and the Figma mock
-reuses Free Throws' exact 35%/65% split for it, reading as a mock-data artifact, not a distinct
-stat); revisit if Richard says it should mean something else.
+**Status:** SHIPPED, partially live-verified (2026-09-05) — `tsc --noEmit` clean. Tab/empty-state
+behavior confirmed on the real Vercel preview (see `BACKLOG-326`'s status for the URL/method);
+the percentage math itself is verified at the logic level only (`dev/verify-basketball-matchstats-326-331.ts`,
+all 17 assertions pass, covers make/attempt splits and quarter-filtering including the 2-pointer-
+vs-combined-field-goal distinction), since no basketball match on staging has real `match_events`
+to click-test against (same gap `BACKLOG-326` found). Built ahead of Richard's confirmation on
+the "1 Pointers" open question below rather than blocking on it — dropped the row per this
+entry's own audit reasoning (a free throw already IS a 1-pointer, and the Figma mock reuses Free
+Throws' exact 35%/65% split for it, reading as a mock-data artifact, not a distinct stat); revisit
+if Richard says it should mean something else.
 **Priority:** MEDIUM.
 **Files:** `src/components/LiveStats.tsx` (`renderBasketballStats`, now takes an `events` prop and
 computes basketball's percentages/quarter-filter from raw `matchEvents` instead of the `stats`
@@ -10824,12 +10850,12 @@ Figma's basketball Stats screen (`bbal-stats.jpeg`) is not a relabeling of live'
 
 **Found:** session `brixsports-v2-7c`, 2026-09-02, same survey pass as `BACKLOG-330`.
 
-**Still open before this can flip to RESOLVED:** a real browser walkthrough on a basketball match
-with events spread across multiple quarters — verify each quarter filter actually narrows the
-percentages (not just "All" happening to look right), and that the 2-pointer percentage is
-genuinely distinct from the combined field-goal percentage it's derived from (`Field Goal`-type
-events only, not `Field Goal` + `Three Pointer` combined). Not done this session, same local-dev
-blocker as `BACKLOG-326`.
+**Still open before this can flip to RESOLVED:** a real click-test against a basketball match with
+events spread across multiple quarters, confirming the DOM actually updates when a quarter button
+is clicked (the arithmetic itself is logic-verified, see Status above — this is specifically
+about the click → re-render wiring, which a pure function test can't cover). Same "no basketball
+match on staging has events" gap as `BACKLOG-326`; same `work/match-detail-tabs-boxscore` push
+and pending rebase-onto-`feature/ui-redesign` follow-up.
 
 ---
 
