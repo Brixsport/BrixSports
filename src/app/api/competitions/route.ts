@@ -19,20 +19,44 @@ import { checkRateLimit } from '@/lib/rate-limit';
 // leagues that happen to share a display name (or differ only in casing) never
 // merge -- see BACKLOG.md's standings/comp-stats audit for the full context this
 // came out of.
-function getCompetitionGroupKey(comp: { sport: string | null; name: string; hostOrganizationId: string | null }): string {
-    return `${comp.sport ?? 'multi'}::${comp.name.trim().toLowerCase()}::${comp.hostOrganizationId ?? 'none'}`;
-}
-
-// "Most recent season" is ordered by startDate/createdAt (real timestamps) rather
-// than the free-text `season` string ("2024" vs "2025/2026" vs "2026/2027" don't
-// all sort correctly the same way) -- same reasoning as the player-stats season
-// fallback fix elsewhere this session.
+//
+// Real-world gap found live (session 2026-09-05): the admin create-competition
+// API has never accepted/set hostOrganizationId at all, so every competition
+// created through the normal admin flow gets a null one -- a null-org season
+// of an otherwise-identical league silently failed to merge with its real-org
+// sibling, showing as a duplicate row in the public directory. Fixed with a
+// two-pass grouping: bucket by sport+name first, then only split further by
+// hostOrganizationId when the bucket actually contains 2+ *distinct real*
+// org ids (a genuine same-name-different-university collision) -- with 0 or 1
+// distinct real org id in the bucket, null-org rows merge into it rather than
+// forming their own phantom group. This does not paper over a real ambiguity:
+// if 2+ different real orgs already share the name, null-org rows still don't
+// get guessed into any of them, matching today's conservative behavior.
 function buildCompetitionGroups(comps: any[]) {
-    const groups = new Map<string, any[]>();
+    const bySportName = new Map<string, any[]>();
     for (const c of comps) {
-        const key = getCompetitionGroupKey(c);
-        if (!groups.has(key)) groups.set(key, []);
-        groups.get(key)!.push(c);
+        const coarseKey = `${c.sport ?? 'multi'}::${c.name.trim().toLowerCase()}`;
+        if (!bySportName.has(coarseKey)) bySportName.set(coarseKey, []);
+        bySportName.get(coarseKey)!.push(c);
+    }
+
+    const groups = new Map<string, any[]>();
+    for (const [coarseKey, bucket] of bySportName) {
+        const distinctRealOrgIds = Array.from(new Set(bucket.map(c => c.hostOrganizationId).filter(Boolean)));
+        if (distinctRealOrgIds.length <= 1) {
+            // 0 or 1 real org id in this sport+name bucket -- unambiguous, one group.
+            const key = `${coarseKey}::${distinctRealOrgIds[0] ?? 'none'}`;
+            groups.set(key, bucket);
+        } else {
+            // 2+ distinct real orgs share this sport+name -- genuine collision.
+            // Keep them separated by their own org id; null-org rows get their
+            // own bucket rather than being guessed into one of several orgs.
+            for (const c of bucket) {
+                const key = `${coarseKey}::${c.hostOrganizationId ?? 'none'}`;
+                if (!groups.has(key)) groups.set(key, []);
+                groups.get(key)!.push(c);
+            }
+        }
     }
 
     return Array.from(groups.entries()).map(([groupKey, seasons]) => {
