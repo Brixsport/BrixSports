@@ -9912,6 +9912,49 @@ Fixed exactly per the "Fix (not built)" plan below: `MatchStatusBadge.tsx` now d
 
 ---
 
+### BACKLOG-337 — Match Detail Tabs: Clicking a Tab Rendered the PREVIOUS Tab's Content, One Click Behind
+
+**Status:** RESOLVED, live-verified (2026-09-05).
+**Priority:** HIGH — silently undermines `BACKLOG-294`'s entire point (URL-addressable, clickable
+tabs) across every tab, every sport, not just the one place it was first noticed.
+**Files:** `src/app/matches/[id]/MatchDetailClient.tsx`.
+
+**Origin:** first noticed and noted in passing inside `BACKLOG-294` (2026-09-02, `brixsports-v2-ae`,
+live-verifying `BACKLOG-323` step 4 on the same Vercel preview) — clicking `Lineups` updated the
+URL to `?tab=lineups` but the visible content stayed on Overview. Flagged as a note, never given
+its own number, never investigated further, never fixed.
+
+**Re-found and reproduced 2026-09-05** while live-verifying `BACKLOG-326`/`331`'s new Box Score/
+Stats tabs on `busalympics-bball-m-3` (`brixsports-staging-kjuousqzs-brixsports-projects.vercel.app`).
+Confirmed it's not Lineups-specific — reproduced 3/3 consecutive clicks across Table→Overview→
+Stats→Box Score, every single time: `window.location.href` always showed the tab **just clicked**,
+but `get_page_text` always showed the content of whichever tab was active **before** that click.
+Exactly one click behind, every time, no exceptions found.
+
+**Root cause:** `activeTab` was computed fresh every render straight from `searchParams.get('tab')`
+(`useSearchParams()`), with no local state of its own. `setActiveTab` only called
+`router.replace()`, which updates `history.replaceState` (and the address bar) synchronously, but
+nothing forced *this* component to re-render on that same tick — `useSearchParams()` is reactive
+to navigations, but with no state depending on it directly, React had no trigger to re-run the
+component until some *other* state update happened to fire (the next click), by which point the
+searchParams read during that next render had only just caught up to the *previous* click.
+
+**Fix:** standard optimistic-local-state pattern — `activeTab` is now real `useState`, set
+synchronously inside `setActiveTab` (instant, in the same event handler as the click, no
+navigation round-trip needed for the visible tab to update) alongside the existing
+`router.replace()` call. A `useEffect` keyed on the URL-derived tab syncs local state back from
+`?tab=` on mount and on browser back/forward (where the URL changes without a click here).
+Back/forward and shareable links both still work — only the click-to-instant-render path changed.
+
+**Live-verified:** re-tested the identical click sequence (Table→Overview→Stats→Box Score) on the
+same match after redeploy — content matched the tab just clicked every single time, no lag, no
+stale render, 4/4.
+
+**Found:** originally session `brixsports-v2-ae`, 2026-09-02 (unfiled). Re-found, filed, and fixed
+session `brixsports-v2-dd` continued, 2026-09-05, while verifying `BACKLOG-326`/`331`.
+
+---
+
 ### BACKLOG-292 — Public Brackets Tab: Coordinate With `BACKLOG-280`, Do Not Build a Parallel Bracket Representation
 
 **Status:** OPEN — explicit sequencing note, not a build.

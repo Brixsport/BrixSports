@@ -62,14 +62,33 @@ export default function MatchDetailClient() {
     const searchParams = useSearchParams();
     const matchId = params.id as string;
 
-    // BACKLOG-294: URL-addressable tabs -- ?tab= is the source of truth instead of
-    // local useState, so a tab is shareable/bookmarkable and the back button steps
-    // through tab history instead of exiting the whole page. router.replace (not
-    // push) so switching tabs doesn't spam history with one entry per click --
-    // only the initial page load is a real history entry.
+    // BACKLOG-294: URL-addressable tabs -- ?tab= is the source of truth (shareable/
+    // bookmarkable, back button steps through tab history), but the RENDERED tab is
+    // buffered through local state rather than reading useSearchParams() directly.
+    // BACKLOG-337 (found live-verifying BACKLOG-326/331, 2026-09-05): reading
+    // searchParams.get('tab') straight into render was consistently ONE CLICK
+    // BEHIND -- router.replace() updates the address bar synchronously (a plain
+    // history.replaceState under the hood) but the content this component actually
+    // rendered kept showing the PREVIOUS tab until another click forced a further
+    // re-render, live-reproduced 3/3 times on a real basketball match (URL read back
+    // via window.location.href always matched the tab just clicked; the visible
+    // content always matched the tab clicked before that). Root cause: nothing forced
+    // a re-render between the URL changing and the next user action -- useSearchParams()
+    // is reactive to same-render navigations but this component had no state of its own
+    // depending on it, so React had no reason to re-run this component on that update
+    // alone. Fixed with the standard optimistic-local-state pattern: clicking a tab
+    // updates local state immediately (instant, synchronous with the click) and
+    // separately calls router.replace to keep the URL in sync; an effect syncs local
+    // state to the URL on mount and on browser back/forward (?tab= changing without a
+    // click here).
     const rawTab = searchParams.get('tab');
-    const activeTab: TabId = TAB_IDS.includes(rawTab as TabId) ? (rawTab as TabId) : 'overview';
+    const urlTab: TabId = TAB_IDS.includes(rawTab as TabId) ? (rawTab as TabId) : 'overview';
+    const [activeTab, setActiveTabState] = useState<TabId>(urlTab);
+    useEffect(() => {
+        setActiveTabState(urlTab);
+    }, [urlTab]);
     const setActiveTab = useCallback((tab: TabId) => {
+        setActiveTabState(tab);
         const next = new URLSearchParams(searchParams.toString());
         next.set('tab', tab);
         router.replace(`${pathname}?${next.toString()}`, { scroll: false });
