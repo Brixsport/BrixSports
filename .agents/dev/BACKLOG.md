@@ -9900,6 +9900,18 @@ Fixed exactly per the "Fix (not built)" plan below: `MatchStatusBadge.tsx` now d
 
 ---
 
+### BACKLOG-336 — Responsive/Overflow Audit: `/admin/loggers` Still Unverified (Auth-Blocked)
+
+**Status:** OPEN — audit ran, but its one specifically-requested target came back unverified, not cleared.
+**Priority:** MEDIUM -- this is the exact page Richard named as a known instance of the sticky-table overflow pattern just fixed on `/competitions/[id]`'s Standings tab; still unconfirmed either way.
+**What happened:** a background agent was spawned to audit table/responsive UI across `/admin/*` and public pages on the `feature/ui-redesign` Vercel preview (mobile viewport, ~375px), specifically to check `/admin/loggers`'s action-button table. Every `/admin/*` route (`/admin`, `/admin/loggers`, `/admin/matches`) redirected uniformly to sign-in -- the agent had no admin credentials and could not get past the login wall. **This was not audited, it was blocked.**
+**What WAS confirmed clean** (mobile, JS-verified via `document.documentElement.scrollWidth` vs `window.innerWidth`, no lost content): `/competitions/[id]` Standings (both football 7-col and basketball 8-col) -- the sticky-first-column fix is live and working, confirmed directly in the rendered DOM; `/competitions/[id]` Stats tab, `/competitions` list, `/teams/[id]` Overview/Players, `/players/[id]` Overview/Compare -- all card/flex layouts, no `overflow-x-auto` table anti-pattern found on any of them. One cosmetic-only item found: `/competitions/[id]` Matches tab's empty state looks a little bare -- no data loss, low priority.
+**Next step:** re-run the same audit (or just check `/admin/loggers` directly) with real admin credentials -- either give the next session a signed admin JWT/login to inject, or check it manually. Until then, treat `/admin/loggers` (and every other `/admin/*` list page) as **unverified for this pattern, not clean**.
+
+**Found:** session `brixsports-v2-cc`, 2026-09-05, via a spawned background Agent.
+
+---
+
 ### BACKLOG-292 — Public Brackets Tab: Coordinate With `BACKLOG-280`, Do Not Build a Parallel Bracket Representation
 
 **Status:** OPEN — explicit sequencing note, not a build.
