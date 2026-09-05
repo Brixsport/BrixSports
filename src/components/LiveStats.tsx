@@ -1,17 +1,26 @@
 'use client';
 
+import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { TrendingUp, Target, Shield, Activity, Zap } from 'lucide-react';
+import { TrendingUp, Target, Shield, Activity } from 'lucide-react';
 import { TeamLogo } from '@/lib/utils/team-logo';
+import { computeBasketballQuarterStats, type BasketballQuarter } from '@/lib/basketball/matchStats';
 
 interface LiveStatsProps {
     stats: any;
     sport: string;
     homeTeam: any;
     awayTeam: any;
+    // BACKLOG-331: only needed for basketball's quarter-scoped percentage rework --
+    // the football path is untouched and keeps reading `stats` alone.
+    events?: any[];
 }
 
-export default function LiveStats({ stats, sport, homeTeam, awayTeam }: LiveStatsProps) {
+const QUARTER_LABELS: Record<BasketballQuarter, string> = { ALL: 'All', Q1: '1st', Q2: '2nd', Q3: '3rd', Q4: '4th' };
+
+export default function LiveStats({ stats, sport, homeTeam, awayTeam, events }: LiveStatsProps) {
+    const [quarter, setQuarter] = useState<BasketballQuarter>('ALL');
+
     if (!stats) {
         return (
             <div className="text-center py-20">
@@ -177,66 +186,79 @@ export default function LiveStats({ stats, sport, homeTeam, awayTeam }: LiveStat
         );
     };
 
-    const renderBasketballStats = () => (
-        <div className="space-y-6">
-            <StatBar
-                label="Field Goals Made"
-                homeValue={stats.homeFieldGoalsMade || 0}
-                awayValue={stats.awayFieldGoalsMade || 0}
-                max={Math.max(stats.homeFieldGoalsMade || 0, stats.awayFieldGoalsMade || 0, 40)}
-                icon={<Target className="w-4 h-4" />}
-            />
-            <StatBar
-                label="3-Pointers Made"
-                homeValue={stats.homeThreePointersMade || 0}
-                awayValue={stats.awayThreePointersMade || 0}
-                max={Math.max(stats.homeThreePointersMade || 0, stats.awayThreePointersMade || 0, 15)}
-                icon={<Target className="w-4 h-4" />}
-            />
-            <StatBar
-                label="Free Throws Made"
-                homeValue={stats.homeFreeThrowsMade || 0}
-                awayValue={stats.awayFreeThrowsMade || 0}
-                max={Math.max(stats.homeFreeThrowsMade || 0, stats.awayFreeThrowsMade || 0, 20)}
-                icon={<Target className="w-4 h-4" />}
-            />
-            <StatBar
-                label="Rebounds"
-                homeValue={stats.homeRebounds || 0}
-                awayValue={stats.awayRebounds || 0}
-                max={Math.max(stats.homeRebounds || 0, stats.awayRebounds || 0, 50)}
-                icon={<TrendingUp className="w-4 h-4" />}
-            />
-            <StatBar
-                label="Assists"
-                homeValue={stats.homeAssists || 0}
-                awayValue={stats.awayAssists || 0}
-                max={Math.max(stats.homeAssists || 0, stats.awayAssists || 0, 30)}
-                icon={<Zap className="w-4 h-4" />}
-            />
-            <StatBar
-                label="Steals"
-                homeValue={stats.homeSteals || 0}
-                awayValue={stats.awaySteals || 0}
-                max={Math.max(stats.homeSteals || 0, stats.awaySteals || 0, 15)}
-                icon={<Shield className="w-4 h-4" />}
-            />
-            <StatBar
-                label="Blocks"
-                homeValue={stats.homeBlocks || 0}
-                awayValue={stats.awayBlocks || 0}
-                max={Math.max(stats.homeBlocks || 0, stats.awayBlocks || 0, 10)}
-                icon={<Shield className="w-4 h-4" />}
-            />
-            <StatBar
-                label="Turnovers"
-                homeValue={stats.homeTurnovers || 0}
-                awayValue={stats.awayTurnovers || 0}
-                max={Math.max(stats.homeTurnovers || 0, stats.awayTurnovers || 0, 20)}
-                icon={<Activity className="w-4 h-4" />}
-            />
-        </div>
-    );
+    // BACKLOG-331: Figma's basketball Stats screen is a different data shape
+    // entirely from the raw counts above -- make/attempt percentage splits for
+    // Free Throws/3 Pointers/2 Pointers, share-of-combined-total splits for
+    // Fouls/Rebounds, all quarter-scoped. Derived straight from `events` (same
+    // `event.period` values BasketballLogger.tsx already writes), not from the
+    // `stats` blob, since `stats` has no per-quarter breakdown.
+    //
+    // Assumption made (flagged in BACKLOG-331's audit, unresolved as of this
+    // implementation): Figma's mock also shows a "1 Pointers" row with a split
+    // identical to "Free Throws" -- a free throw already IS a 1-pointer, and the
+    // duplicate split reads as reused placeholder data, not a distinct stat.
+    // Dropped rather than shipped as a literal duplicate; revisit if Richard
+    // confirms it should mean something else.
+    const renderBasketballStats = () => {
+        const bball = computeBasketballQuarterStats(events || [], homeTeam.id, quarter);
+
+        return (
+            <div className="space-y-6">
+                <div className="flex items-center justify-center gap-2 flex-wrap">
+                    {(Object.keys(QUARTER_LABELS) as BasketballQuarter[]).map(q => (
+                        <button
+                            key={q}
+                            onClick={() => setQuarter(q)}
+                            className={`px-3 py-1.5 rounded-full text-xs font-bold uppercase tracking-wide transition-all ${quarter === q ? 'bg-primary text-white' : 'bg-white/5 text-white/60 hover:text-white'
+                                }`}
+                        >
+                            {QUARTER_LABELS[q]}
+                        </button>
+                    ))}
+                </div>
+                <StatBar
+                    label="Free Throws"
+                    homeValue={bball.freeThrows[0]}
+                    awayValue={bball.freeThrows[1]}
+                    max={100}
+                    unit="%"
+                    icon={<Target className="w-4 h-4" />}
+                />
+                <StatBar
+                    label="3 Pointers"
+                    homeValue={bball.threePointers[0]}
+                    awayValue={bball.threePointers[1]}
+                    max={100}
+                    unit="%"
+                    icon={<Target className="w-4 h-4" />}
+                />
+                <StatBar
+                    label="2 Pointers"
+                    homeValue={bball.twoPointers[0]}
+                    awayValue={bball.twoPointers[1]}
+                    max={100}
+                    unit="%"
+                    icon={<Target className="w-4 h-4" />}
+                />
+                <StatBar
+                    label="Fouls"
+                    homeValue={bball.fouls[0]}
+                    awayValue={bball.fouls[1]}
+                    max={100}
+                    unit="%"
+                    icon={<Shield className="w-4 h-4" />}
+                />
+                <StatBar
+                    label="Rebounds"
+                    homeValue={bball.rebounds[0]}
+                    awayValue={bball.rebounds[1]}
+                    max={100}
+                    unit="%"
+                    icon={<TrendingUp className="w-4 h-4" />}
+                />
+            </div>
+        );
+    };
 
     return (
         <div className="max-w-4xl mx-auto">
