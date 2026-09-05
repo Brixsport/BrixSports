@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import {
-    Circle, Target, AlertCircle, ArrowRightLeft, ArrowRight, ArrowLeft, Eye,
+    Circle, Target, AlertCircle, ArrowRightLeft, Eye,
     TrendingUp, Award, Clock, Zap, Shield, Activity
 } from 'lucide-react';
 import { FaFutbol } from 'react-icons/fa';
@@ -61,6 +61,35 @@ const KEY_EVENT_TYPES = new Set(['GOAL', 'YELLOW_CARD', 'RED_CARD', 'SUBSTITUTIO
 // appears on this page, not the full real name.
 function displayName(person?: { name?: string; jerseyName?: string } | null): string | undefined {
     return person?.jerseyName || person?.name || undefined;
+}
+
+// Same exact path data as lucide-react's `ArrowRightLeft` icon (pinned
+// v0.552.0, node_modules/lucide-react/dist/esm/icons/arrow-right-left.js) --
+// reproduced as a custom SVG only so the top (right-pointing) and bottom
+// (left-pointing) arrow can each carry their own color; lucide's own
+// component renders every path with a single `currentColor`, so a two-tone
+// version isn't reachable through its normal props.
+function SubstitutionIcon({ className }: { className?: string }) {
+    return (
+        <svg
+            className={className}
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+        >
+            <g className="text-green-400">
+                <path d="m16 3 4 4-4 4" />
+                <path d="M20 7H4" />
+            </g>
+            <g className="text-red-400">
+                <path d="m8 21-4-4 4-4" />
+                <path d="M4 17h16" />
+            </g>
+        </svg>
+    );
 }
 
 export default function LiveMatchTimeline({ events, homeTeam, awayTeam, eyePoints, sport = 'football' }: LiveMatchTimelineProps) {
@@ -681,16 +710,7 @@ function KeyEventsList({ events, homeTeam, awayTeam, sport }: KeyEventsListProps
                             {normType === 'SUBSTITUTION' && (
                                 <>
                                     <span className="truncate max-w-[120px]">{displayName(event.relatedPlayer) ?? 'Unknown'}</span>
-                                    {/* Red/green codes the direction, not the player name --
-                                        left-pointing (red) toward the outgoing name, right-
-                                        pointing (green) toward the incoming name -- same
-                                        horizontal exchange shape as the old single-tone
-                                        ArrowRightLeft icon, just split so each arrow can carry
-                                        its own color. */}
-                                    <span className="flex flex-col items-center flex-shrink-0 -space-y-1">
-                                        <ArrowRight className="w-3 h-3 text-green-400" />
-                                        <ArrowLeft className="w-3 h-3 text-red-400" />
-                                    </span>
+                                    <SubstitutionIcon className="w-4 h-4 flex-shrink-0" />
                                     <span className="truncate max-w-[120px]">{playerName}</span>
                                 </>
                             )}
