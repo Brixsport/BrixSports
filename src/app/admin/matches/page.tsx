@@ -456,14 +456,20 @@ function AdminMatchesPageContent() {
                     <StatCard label="Finished" value={(statusCounts.FINISHED ?? 0).toString()} icon={<Trophy className="text-yellow-500" size={24} />} />
                 </div>
 
+                {/* BACKLOG-343: the 5-pill status filter row (px-4 py-2, no wrap) had a
+                    natural width wider than a 375px viewport, pushing the page-level
+                    horizontal scrollbar out -- same class of bug as /admin/loggers'
+                    nav tab bar (BACKLOG-336). Same treatment: tight padding/text by
+                    default, full sizing from sm:, overflow-x-auto + scrollbar-hide as
+                    the safety net rather than truncating the status labels. */}
                 <div className="flex items-center gap-3 mb-8">
-                    <Filter size={18} className="text-white/60" />
-                    <div className="flex gap-2">
+                    <Filter size={18} className="text-white/60 shrink-0" />
+                    <div className="flex gap-1 sm:gap-2 overflow-x-auto scrollbar-hide">
                         {['all', 'LIVE', 'UPCOMING', 'HALF_TIME', 'FINISHED'].map((status) => (
                             <button
                                 key={status}
                                 onClick={() => setFilterStatus(status)}
-                                className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${filterStatus === status
+                                className={`shrink-0 whitespace-nowrap px-3 sm:px-4 py-2 rounded-xl text-[9px] sm:text-[10px] font-black uppercase tracking-widest transition-all ${filterStatus === status
                                     ? 'bg-primary text-black'
                                     : 'bg-white/5 text-white/40 hover:text-white hover:bg-white/10'
                                     }`}
@@ -500,8 +506,16 @@ function AdminMatchesPageContent() {
                                                 <span className="text-white/40 text-[10px] font-black uppercase tracking-widest">{match.round ? `${match.competition} · ${match.round}` : match.competition}</span>
                                             </div>
 
+                                            {/* BACKLOG-343: these two flex-1 columns had no min-w-0, so
+                                                Tailwind's `truncate` (which needs a constrained/shrinkable
+                                                width to do anything) never actually engaged -- a long team
+                                                name rendered at its full intrinsic width and pushed the
+                                                whole card, and the page, past the viewport. min-w-0 lets the
+                                                flex item shrink below its content size so truncate can clip
+                                                it with an ellipsis instead, matching the same fix already
+                                                applied correctly on /admin/match-ratings. */}
                                             <div className="flex items-center gap-12 mb-6">
-                                                <div className="flex-1 text-right">
+                                                <div className="flex-1 min-w-0 text-right">
                                                     <p className="text-2xl font-display italic uppercase truncate">{getTeamDisplay(match, 'home')}</p>
                                                 </div>
                                                 <div className="px-6 py-2 bg-white/5 rounded-2xl border border-white/10 min-w-[120px] flex items-center justify-center">
@@ -515,7 +529,7 @@ function AdminMatchesPageContent() {
                                                         </div>
                                                     )}
                                                 </div>
-                                                <div className="flex-1">
+                                                <div className="flex-1 min-w-0">
                                                     <p className="text-2xl font-display italic uppercase truncate">{getTeamDisplay(match, 'away')}</p>
                                                 </div>
                                             </div>
