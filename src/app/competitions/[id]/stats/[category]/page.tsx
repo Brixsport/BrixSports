@@ -4,7 +4,6 @@ import { ArrowLeft, AlertCircle, Loader2, Star } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { TeamLogo } from '@/lib/utils/team-logo';
-import { PlayerProfileOverlay } from '@/components/PlayerProfileOverlay';
 
 interface Competition {
   id: string;
@@ -43,7 +42,6 @@ export default function StatCategoryPage() {
   const [leaders, setLeaders] = useState<Leader[]>([]);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
-  const [selectedPlayer, setSelectedPlayer] = useState<{ id: string; name: string; number: number | null; position: string; rating: number | null } | null>(null);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -150,7 +148,7 @@ export default function StatCategoryPage() {
               {leaders.map((leader) => (
                 <div
                   key={leader.player.id}
-                  onClick={() => setSelectedPlayer({ id: leader.player.id, name: leader.player.name, number: leader.player.number, position: '', rating: leader.player.rating })}
+                  onClick={() => router.push(`/players/${leader.player.id}`)}
                   className="flex items-center justify-between px-6 py-3 hover:bg-white/5 transition-colors cursor-pointer"
                 >
                   <div className="flex items-center gap-3 min-w-0">
@@ -185,14 +183,6 @@ export default function StatCategoryPage() {
           </div>
         )}
       </div>
-
-      {selectedPlayer && (
-        <PlayerProfileOverlay
-          player={selectedPlayer}
-          onClose={() => setSelectedPlayer(null)}
-          sport={competition?.sport || undefined}
-        />
-      )}
     </div>
   );
 }

@@ -9,8 +9,6 @@ import MatchCalendar from '@/components/MatchCalendar';
 import { isSameDay } from 'date-fns';
 import { TeamLogo } from '@/lib/utils/team-logo';
 import { useFavorites } from '@/hooks/useFavorites';
-import { PlayerProfileOverlay } from '@/components/PlayerProfileOverlay';
-import { TeamProfileOverlay } from '@/components/TeamProfileOverlay';
 
 type SportType = 'All' | 'Football' | 'Basketball' | 'Track';
 
@@ -95,23 +93,6 @@ interface StatLeader {
   highlightedStat: number;
 }
 
-interface CompTeam {
-  id: string;
-  name: string;
-  shortName: string;
-  logo: string | null;
-  playerCount?: number;
-}
-
-interface CompPlayer {
-  id: string;
-  name: string;
-  number: number | null;
-  position: string;
-  rating: number | null;
-  team?: { id: string; shortName: string; logo: string | null; sport?: string } | null;
-}
-
 // Sport-appropriate leaderboard categories -- football's Goals/Assists/Yellow
 // Cards match the Figma Stats-tab reference directly; basketball has no such
 // reference, so this uses its own real stat categories (Points/Rebounds/
@@ -156,8 +137,6 @@ function CompetitionHubContent() {
   const [matches, setMatches] = useState<Match[]>([]);
   const [brackets, setBrackets] = useState<BracketRound[]>([]);
   const [statsLeaders, setStatsLeaders] = useState<Record<string, StatLeader[]>>({});
-  const [selectedTeam, setSelectedTeam] = useState<CompTeam | null>(null);
-  const [selectedPlayer, setSelectedPlayer] = useState<CompPlayer | null>(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
@@ -303,7 +282,7 @@ function CompetitionHubContent() {
           {rows.map((row, idx) => (
             <tr
               key={row.id}
-              onClick={() => setSelectedTeam({ id: row.teamId, name: row.team.name, shortName: row.team.shortName, logo: row.team.logo })}
+              onClick={() => router.push(`/teams/${row.teamId}`)}
               className="border-b border-white/5 hover:bg-white/5 transition-colors group cursor-pointer"
             >
               <td className="sticky left-0 z-10 bg-[#0c0c0e] group-hover:bg-[#151517] px-3 py-2.5">
@@ -695,7 +674,7 @@ function CompetitionHubContent() {
                         {leaders.map((leader) => (
                           <div
                             key={leader.player.id}
-                            onClick={() => setSelectedPlayer({ id: leader.player.id, name: leader.player.name, number: leader.player.number, position: '', rating: null })}
+                            onClick={() => router.push(`/players/${leader.player.id}`)}
                             className="flex items-center justify-between px-6 py-3 hover:bg-white/5 transition-colors cursor-pointer"
                           >
                             <div className="flex items-center gap-3 min-w-0">
@@ -722,22 +701,6 @@ function CompetitionHubContent() {
 
         </AnimatePresence>
       </div>
-
-      {selectedPlayer && (
-        <PlayerProfileOverlay
-          player={selectedPlayer}
-          onClose={() => setSelectedPlayer(null)}
-          sport={selectedComp?.sport || undefined}
-        />
-      )}
-      {selectedTeam && (
-        <TeamProfileOverlay
-          team={selectedTeam as any}
-          sport={selectedComp?.sport || undefined}
-          onClose={() => setSelectedTeam(null)}
-          onSelectPlayer={(p) => { setSelectedPlayer(p as any); setSelectedTeam(null); }}
-        />
-      )}
     </div>
   );
 }
