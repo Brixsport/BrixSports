@@ -10033,9 +10033,9 @@ Also, per Richard's request: goal-scorer list alignment changed so both sides hu
 
 **Do not treat this entry as fully closed** -- the tab-reconciliation + URL-addressability work this entry originally scoped is done and live-verified; `BACKLOG-330`/`331`/`332` (Stats and Timeline "All" reconciliation) and the Overview/H2H revisit are follow-on work in the same screen family, tracked separately rather than reopening this entry indefinitely.
 
-**Real bug found in passing (`brixsports-v2-ae`, 2026-09-02, while live-verifying `BACKLOG-323` step 4's own read-path work on the same Vercel preview):** clicking the `Lineups` tab button on a real match (`8Mek2CA7KPlnk1EQ647jx`) correctly updates the URL to `?tab=lineups` (the `router.replace` fires), but the visible tab content does **not** switch -- it stays on Overview. **Filed and fixed as `BACKLOG-337`, 2026-09-05** -- confirmed it wasn't Lineups-specific (every tab, every sport), root-caused and fixed with an optimistic-local-state pattern, live-verified.
+**Real bug found in passing (`brixsports-v2-ae`, 2026-09-02, while live-verifying `BACKLOG-323` step 4's own read-path work on the same Vercel preview):** clicking the `Lineups` tab button on a real match (`8Mek2CA7KPlnk1EQ647jx`) correctly updates the URL to `?tab=lineups` (the `router.replace` fires), but the visible tab content does **not** switch -- it stays on Overview. **Filed and fixed as `BACKLOG-337`, 2026-09-08** -- confirmed it wasn't Lineups-specific (every tab, every sport), root-caused and fixed with an optimistic-local-state pattern, live-verified.
 
-**Minute-display fix, 2026-09-05 (same session as `BACKLOG-337`):** the header's per-team goal-scorer list (`MatchDetailClient.tsx`, built by this entry) rendered a raw `-1'` for goals-only-backfilled matches -- `-1` is the established "minute unknown" sentinel those backfill scripts write (`LiveMatchTimeline.tsx` already hides its own Timeline tab entirely for it, see that file's `hasUnknownMinuteEvents` check). This compact header list stays visible either way, so instead of hiding it, clamp the display value up to `1'`. New shared `src/lib/eventMinute.ts` (`displayMinute()`), applied here and audited across the rest of the codebase for the same raw-`event.minute` pattern: `LivestreamView.tsx`'s livestream chapter-marker label was the one other real, live-reachable instance (fixed, label-only -- the underlying video-seek-position calculation deliberately still uses the raw, unclamped minute, since faking a seek target for a match with genuinely unknown timing would be worse than the display bug). Five more matches for the same string pattern (`MatchComponents.tsx`, standalone `MatchTimeline.tsx`, `LiveMatchSummary.tsx`, `LiveUpdates.tsx`) turned out to be dead code, confirmed via import-graph grep, not fixed (nothing to fix). `MatchOverlay.tsx`'s hit was a different `minute` variable entirely (the live match clock from `useMatchTimer`, not `event.minute` -- always non-negative for a LIVE match, not exposed to the backfill sentinel). Logger-facing tools (`MatchLoggerUI.tsx`, `MultiLoggerStatus.tsx`) and lineup/substitution minute displays were not touched -- loggers only ever see live matches they're actively logging (never a historical backfill), and goals-only backfills never write `Substitution` events in the first place (confirmed against `BACKLOG-122`'s own note on what that backfill mode writes).
+**Minute-display fix, 2026-09-08 (same session as `BACKLOG-337`):** the header's per-team goal-scorer list (`MatchDetailClient.tsx`, built by this entry) rendered a raw `-1'` for goals-only-backfilled matches -- `-1` is the established "minute unknown" sentinel those backfill scripts write (`LiveMatchTimeline.tsx` already hides its own Timeline tab entirely for it, see that file's `hasUnknownMinuteEvents` check). This compact header list stays visible either way, so instead of hiding it, clamp the display value up to `1'`. New shared `src/lib/eventMinute.ts` (`displayMinute()`), applied here and audited across the rest of the codebase for the same raw-`event.minute` pattern: `LivestreamView.tsx`'s livestream chapter-marker label was the one other real, live-reachable instance (fixed, label-only -- the underlying video-seek-position calculation deliberately still uses the raw, unclamped minute, since faking a seek target for a match with genuinely unknown timing would be worse than the display bug). Five more matches for the same string pattern (`MatchComponents.tsx`, standalone `MatchTimeline.tsx`, `LiveMatchSummary.tsx`, `LiveUpdates.tsx`) turned out to be dead code, confirmed via import-graph grep, not fixed (nothing to fix). `MatchOverlay.tsx`'s hit was a different `minute` variable entirely (the live match clock from `useMatchTimer`, not `event.minute` -- always non-negative for a LIVE match, not exposed to the backfill sentinel). Logger-facing tools (`MatchLoggerUI.tsx`, `MultiLoggerStatus.tsx`) and lineup/substitution minute displays were not touched -- loggers only ever see live matches they're actively logging (never a historical backfill), and goals-only backfills never write `Substitution` events in the first place (confirmed against `BACKLOG-122`'s own note on what that backfill mode writes).
 
 **Found:** session 61, 2026-08-27, by the `architect` agent.
 
@@ -10692,7 +10692,7 @@ Three independent formation-template tables exist in the codebase, none sharing 
 
 ### BACKLOG-326 — Basketball Match Detail: Sport-Conditional Tab Set + Net-New Box Score Tab
 
-**Status:** RESOLVED, fully live-verified (2026-09-05) -- see the verification block below for
+**Status:** RESOLVED, fully live-verified (2026-09-08) -- see the verification block below for
 the real-event throwaway-match test that closed this out. Local dev server never came up this
 session (huge-project first-compile taking multiple minutes) -- all verification done against
 real Vercel preview deployments instead. Confirmed live on a real basketball match
@@ -10795,7 +10795,7 @@ now, its implementation session).
 **Files:** `src/app/matches/[id]/MatchDetailClient.tsx`, `src/components/BasketballBoxScore.tsx`
 (new), `src/lib/basketball/matchStats.ts` (new, shared with `BACKLOG-331`).
 
-**RESOLVED, fully live-verified end to end (2026-09-05, continued).** Since staging had zero
+**RESOLVED, fully live-verified end to end (2026-09-08, continued).** Since staging had zero
 basketball matches with real `match_events` (all 51 are zero-event historical backfills), built a
 real throwaway match instead (`test-boxscore-337-1`, real teams `TBK`/`Titans`, real players,
 `competitionId: null` to keep it out of any real competition's data), logged 10 real events
@@ -10811,7 +10811,7 @@ Quarter filter on the Stats tab (`BACKLOG-331`) independently confirmed against 
 data: `2ND` correctly isolated to only the Q2-scoped events (0% for every category with no Q2
 activity, not a crash on the zero-total case), `2 Pointers` percentage confirmed genuinely
 distinct from the combined field-goal percentage it's derived from. Full detail and exact
-before/after numbers: `.agents/dev/RUNLOG.md`, 2026-09-05 entry. All throwaway data (1 match, 10
+before/after numbers: `.agents/dev/RUNLOG.md`, 2026-09-08 entry. All throwaway data (1 match, 10
 events, 5 `basketball_player_stats` rows) deleted after, confirmed via post-delete queries.
 
 **One real content gap found during this verification, not fixed:** Figma's `bbal-box-score.jpeg`
@@ -10825,7 +10825,7 @@ flat interleaved player list (team distinguished by a colored jersey icon) rathe
 build's two team-labeled sections -- a lower-priority layout difference, not a missing-data gap,
 left as shipped.
 
-**Pushed to `feature/ui-redesign` directly (2026-09-05, corrected):** first pushed to a scratch
+**Pushed to `feature/ui-redesign` directly (2026-09-08, corrected):** first pushed to a scratch
 branch `work/match-detail-tabs-boxscore` out of excess caution about a since-resolved divergence
 concern -- corrected per Richard's direction to follow the documented umbrella-branch workflow
 (`.agents/rules/git-workflow.md`: rebase onto `origin/feature/ui-redesign`, push straight onto it,
@@ -10889,13 +10889,13 @@ Read `LiveStats.tsx` directly (not just screenshots) to ground this: every footb
 
 **Found:** session `brixsports-v2-7c`, 2026-09-02, survey pass across the match-detail screen family following `BACKLOG-294`'s tab-reconciliation work.
 
-**Re-confirmed, 2026-09-05:** spot-checked again against `stats.jpeg` directly (side by side, not from memory) as part of this session's full Figma-refs sweep, on a different real match (`busa-sf-kings-pirates`, 130 events) -- still matches exactly (leader-circled plain numbers, logos-only header). No regression from this session's other changes.
+**Re-confirmed, 2026-09-08:** spot-checked again against `stats.jpeg` directly (side by side, not from memory) as part of this session's full Figma-refs sweep, on a different real match (`busa-sf-kings-pirates`, 130 events) -- still matches exactly (leader-circled plain numbers, logos-only header). No regression from this session's other changes.
 
 ---
 
 ### BACKLOG-331 — Basketball Stats Tab: Different Category Set Entirely, Percentage-Based, Quarter-Scoped (Deep Rework, Not Visual Polish)
 
-**Status:** RESOLVED, fully live-verified (2026-09-05) — see `BACKLOG-326`'s verification block
+**Status:** RESOLVED, fully live-verified (2026-09-08) — see `BACKLOG-326`'s verification block
 for the shared real-event throwaway-match test that closed both entries out together: quarter
 filter confirmed switching real DOM content on click (not just computed correctly), `2ND`
 isolated to only Q2 events with the right zero-total handling on categories with no Q2 activity,
@@ -10960,7 +10960,7 @@ Re-examined `Timeline-full-event(commentary).jpeg` directly against the live "Al
 
 **Found:** session `brixsports-v2-7c`, 2026-09-02, same survey pass as `BACKLOG-330`/`331`.
 
-**Re-confirmed, 2026-09-05:** spot-checked again against `Timeline-full-event(commentary).jpeg`
+**Re-confirmed, 2026-09-08:** spot-checked again against `Timeline-full-event(commentary).jpeg`
 directly as part of this session's full Figma-refs sweep, same match (`8Mek2CA7KPlnk1EQ647jx`) --
 still single-column, minute+icon left on every row regardless of team, no regression. Incidentally
 surfaced live evidence for `BACKLOG-294`'s minute-display fix (this same session): this match's
