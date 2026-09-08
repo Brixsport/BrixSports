@@ -9943,6 +9943,42 @@ Fixed exactly per the "Fix (not built)" plan below: `MatchStatusBadge.tsx` now d
 
 ---
 
+### BACKLOG-341 — Timeline "All" Tab: Further Figma Reconciliation (Team Chip, Icon Accuracy, Emoji)
+
+**Status:** SHIPPED — pending live verification.
+**Priority:** LOW — cosmetic, one screen.
+**Files:** `src/components/LiveMatchTimeline.tsx`.
+
+**Reported:** Richard, 2026-09-08, same session as `BACKLOG-340` -- "the screen is far off from the
+ref" after that first pass, plus two follow-up directives (use `FaFutbol`, not a generic target
+icon, for goals; don't use emoji as icons).
+
+**Three concrete gaps fixed:**
+1. **Team-name chip removed.** Every card had a colored-dot + team-name pill (`eventTeam.color`/
+   `eventTeam.name`) below the description -- present on all 154 rows of a real match, and not in
+   the Figma reference anywhere. Deleted; the outer icon badge already carries the type/color cue
+   BACKLOG-340 set up.
+2. **Icon accuracy.** `GOAL` used lucide's `Target` (a crosshair) -- switched to `FaFutbol` (already
+   imported and used correctly in this same file's `KeyEventsList`), matching Figma's literal
+   soccer ball. `YELLOW_CARD`/`RED_CARD` used a generic `AlertCircle` glyph -- switched to an actual
+   small solid rectangle (`w-3.5 h-5 rounded-[2px] bg-yellow-400`/`bg-red-600`), matching Figma's
+   literal card shape instead of an abstracted icon; the outer badge's background for these two
+   types is now neutral (`bg-white/5`) since the rectangle itself already carries the color.
+   `AlertCircle` import removed (now dead).
+3. **Emoji stripped.** 10 emoji characters (⚽ 🎯 🟨 🟥 🔄 🧤 🚫 🏀 ✨ 🛡️) were prefixed onto
+   commentary text across every event-type branch in `getEventDescription` -- redundant now that
+   the outer badge carries a real icon, and not how the Figma reference renders any of its text
+   (plain bold headlines, no emoji). Removed from all branches; the prose/commentary text itself
+   is untouched.
+
+**Explicitly left alone (not called out, not touched):** the per-type card border accent
+(`getEventColor`), the period/half divider, `BACKLOG-332`'s uniform single-column layout, and the
+jersey-number/assist secondary line.
+
+**Pending items:** live-verify against the Figma ref on the branch's Vercel preview.
+
+---
+
 ### BACKLOG-340 — Timeline "All" Tab: Event Icon Duplicated Inside the Card Instead of the Outer Minute Badge
 
 **Status:** RESOLVED — 2026-09-08, live-verified on staging.

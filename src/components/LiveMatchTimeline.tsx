@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import {
-    Circle, Target, AlertCircle, ArrowRightLeft, Eye,
+    Circle, Target, ArrowRightLeft, Eye,
     TrendingUp, Award, Clock, Zap, Shield, Activity
 } from 'lucide-react';
 import { FaFutbol } from 'react-icons/fa';
@@ -100,13 +100,15 @@ export default function LiveMatchTimeline({ events, homeTeam, awayTeam, eyePoint
     const getEventIcon = (type: string) => {
         switch (type.toUpperCase().replace(/\s+/g, '_')) {
             case 'GOAL':
-                return <Target className="w-5 h-5" />;
+                // Figma uses a literal soccer ball, not a generic target/crosshair.
+                return <FaFutbol className="w-4 h-4" />;
             case 'ASSIST':
                 return <TrendingUp className="w-5 h-5" />;
             case 'YELLOW_CARD':
-                return <AlertCircle className="w-5 h-5 text-yellow-500" />;
+                // Figma's card badge is a literal solid card rectangle, not an icon glyph.
+                return <div className="w-3.5 h-5 rounded-[2px] bg-yellow-400" />;
             case 'RED_CARD':
-                return <AlertCircle className="w-5 h-5 text-red-500" />;
+                return <div className="w-3.5 h-5 rounded-[2px] bg-red-600" />;
             case 'SUBSTITUTION':
                 return <ArrowRightLeft className="w-5 h-5" />;
             case 'SAVE':
@@ -141,9 +143,10 @@ export default function LiveMatchTimeline({ events, homeTeam, awayTeam, eyePoint
             case 'THREE_POINTER':
                 return 'bg-primary/15 text-primary';
             case 'YELLOW_CARD':
-                return 'bg-yellow-500/15 text-yellow-400';
             case 'RED_CARD':
-                return 'bg-red-500/15 text-red-500';
+                // Neutral container -- the card rectangle itself (see getEventIcon)
+                // already carries the color, matching Figma's flat card badge.
+                return 'bg-white/5';
             case 'SUBSTITUTION':
                 return 'bg-green-500/15 text-green-400';
             case 'EYE_POINT':
@@ -287,7 +290,7 @@ export default function LiveMatchTimeline({ events, homeTeam, awayTeam, eyePoint
                 const goalText = generateGoalCommentary(event, seed);
                 return (
                     <div>
-                        <span className="font-bold text-lg block mb-1">⚽ {goalText}</span>
+                        <span className="font-bold text-lg block mb-1">{goalText}</span>
                         <div className="text-sm opacity-90">
                             {playerNumber && <span className="font-mono bg-white/10 px-1 rounded mr-2">#{playerNumber}</span>}
                             {event.relatedPlayer && (
@@ -299,7 +302,7 @@ export default function LiveMatchTimeline({ events, homeTeam, awayTeam, eyePoint
             case 'ASSIST':
                 return (
                     <div>
-                        <span className="font-bold">🎯 Great vision!</span> Assist by {playerName}
+                        <span className="font-bold">Great vision!</span> Assist by {playerName}
                         {playerNumber && <span className="text-white/60 ml-1">#{playerNumber}</span>}
                     </div>
                 );
@@ -313,7 +316,7 @@ export default function LiveMatchTimeline({ events, homeTeam, awayTeam, eyePoint
                 const yellowText = getCommentaryTemplate(yellowTemplates, seed).replace('{player}', playerName);
                 return (
                     <div>
-                        <span className="font-bold text-yellow-500 text-base block mb-0.5">🟨 Caution</span>
+                        <span className="font-bold text-yellow-500 text-base block mb-0.5">Caution</span>
                         <span>{yellowText}</span>
                         {event.detail && <div className="text-sm text-white/60 mt-1 italic">Reason: {event.detail}</div>}
                     </div>
@@ -327,7 +330,7 @@ export default function LiveMatchTimeline({ events, homeTeam, awayTeam, eyePoint
                 const redText = getCommentaryTemplate(redTemplates, seed).replace('{player}', playerName);
                 return (
                     <div>
-                        <span className="font-bold text-red-500 text-lg block mb-1">🟥 SENT OFF!</span>
+                        <span className="font-bold text-red-500 text-lg block mb-1">SENT OFF!</span>
                         {redText}
                         {event.detail && <div className="text-sm text-white/60 mt-1">Reason: {event.detail}</div>}
                     </div>
@@ -335,7 +338,7 @@ export default function LiveMatchTimeline({ events, homeTeam, awayTeam, eyePoint
             case 'SUBSTITUTION':
                 return (
                     <div>
-                        <span className="font-bold block mb-1">🔄 Substitution</span>
+                        <span className="font-bold block mb-1">Substitution</span>
                         <div className="text-sm grid gap-1">
                             <div className="text-green-400 flex items-center gap-2">
                                 <span className="text-[10px] font-bold bg-green-500/20 px-1 rounded">IN</span> {displayName(event.player) ?? displayName(event.playerSnapshot)}
@@ -356,34 +359,34 @@ export default function LiveMatchTimeline({ events, homeTeam, awayTeam, eyePoint
                 const saveText = getCommentaryTemplate(saveTemplates, seed).replace('{player}', playerName);
                 return (
                     <div>
-                        <span className="font-bold">{sport === 'basketball' ? '🚫' : '🧤'} {saveText}</span>
+                        <span className="font-bold">{saveText}</span>
                     </div>
                 );
             case 'FIELD_GOAL':
                 const fgText = generateBasketballScoreCommentary(event, seed, '2pt');
                 return (
                     <div>
-                        <span className="font-bold text-lg block text-green-400">🏀 {fgText}</span>
+                        <span className="font-bold text-lg block text-green-400">{fgText}</span>
                     </div>
                 );
             case 'THREE_POINTER':
                 const threeText = generateBasketballScoreCommentary(event, seed, '3pt');
                 return (
                     <div>
-                        <span className="font-bold text-lg block text-yellow-400">🎯 {threeText}</span>
+                        <span className="font-bold text-lg block text-yellow-400">{threeText}</span>
                     </div>
                 );
             case 'FREE_THROW':
                 const ftText = generateBasketballScoreCommentary(event, seed, 'ft');
                 return (
                     <div>
-                        <span className="font-bold">✨ {ftText}</span>
+                        <span className="font-bold">{ftText}</span>
                     </div>
                 );
             case 'STEAL':
                 return (
                     <div>
-                        <span className="font-bold">🛡️ STOLEN!</span> {playerName} takes the ball away.
+                        <span className="font-bold">STOLEN!</span> {playerName} takes the ball away.
                     </div>
                 );
             default:
@@ -576,17 +579,6 @@ export default function LiveMatchTimeline({ events, homeTeam, awayTeam, eyePoint
                                             {/* Content */}
                                             <div className="flex-1">
                                                 {getEventDescription(event)}
-
-                                                {/* Team Badge */}
-                                                {eventTeam && (
-                                                    <div className="mt-2 inline-flex items-center gap-2 px-2 py-1 rounded-lg bg-white/5">
-                                                        <div
-                                                            className="w-3 h-3 rounded-full"
-                                                            style={{ backgroundColor: eventTeam.color }}
-                                                        />
-                                                        <span className="text-xs font-medium">{eventTeam.name}</span>
-                                                    </div>
-                                                )}
 
                                                 {/* Eye Point Badge */}
                                                 {event.isEyePoint && (
