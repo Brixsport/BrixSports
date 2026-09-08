@@ -9945,7 +9945,7 @@ Fixed exactly per the "Fix (not built)" plan below: `MatchStatusBadge.tsx` now d
 
 ### BACKLOG-340 — Timeline "All" Tab: Event Icon Duplicated Inside the Card Instead of the Outer Minute Badge
 
-**Status:** SHIPPED — pending live verification.
+**Status:** RESOLVED — 2026-09-08, live-verified on staging.
 **Priority:** LOW — cosmetic, one screen.
 **Files:** `src/components/LiveMatchTimeline.tsx`.
 
@@ -9960,9 +9960,23 @@ shows.
 
 **Fix:** new `getIconBadgeStyle()` (per-type background/foreground, same type switch as the
 existing `getEventColor()`) applied to the outer column; icon moved there, stacked above the
-minute; the in-card icon removed. `getEventColor()`, the card's own per-type border accent, and
-BACKLOG-332's uniform (non-mirrored) single-column decision are all untouched — this only moves
-where the icon renders, not the surrounding structure.
+minute; the in-card icon removed. `getEventColor()`, the card's own per-type border accent,
+the period/half divider between event groups, and BACKLOG-332's uniform (non-mirrored)
+single-column decision are all untouched — this only moves where the icon renders, not the
+surrounding structure (explicitly confirmed with Richard mid-session, kept as-is).
+
+**Evidence:**
+- Commit: `e5a929f` (`feature/ui-redesign`).
+- Verified by: DOM inspection against the resulting Vercel preview
+  (`brixsports-staging-gsupdw0ci-brixsports-projects.vercel.app`), the same real
+  `8Mek2CA7KPlnk1EQ647jx` match (154 real events) used for `BACKLOG-339`.
+- Observed result: every outer badge across all 154 rendered cards shows the correct per-type
+  color (`GOAL` → primary, `SAVE` → amber, generic types → neutral gray), confirmed by pairing
+  each badge element to its actual sibling card via the DOM (not text-order guessing). Zero of
+  154 cards retained the old duplicate inner icon (`cardsWithDuplicateIcon: 0`). Screenshot
+  confirms the icon+minute badge renders stacked in the outer column exactly as the Figma ref
+  shows, and the period/half divider between groups is unchanged.
+- Pending items: none.
 
 **Pending items:** live-verify against the Figma ref on the branch's Vercel preview.
 
