@@ -11922,3 +11922,20 @@ Richard asked to bring the Key events view (already confirmed structurally corre
 - Pending items: none -- all rounds of live feedback addressed and confirmed on the same match
 
 ---
+
+### BACKLOG-339 — Favoriting a Player Does Not Feed the Push-Notification Pipeline
+
+**Status:** OPEN.
+**Priority:** LOW -- explicitly deferred, Richard's call ("file it, tackle at the end of the sequence or after the current task"). Not blocking `BACKLOG-120` or anything else in flight.
+
+**Problem:** `src/lib/notifications/match-notification-service.ts` decides who gets a push for a match event (goal/card/status change) by querying `userFavorites` filtered to `favoriteType === 'team'`, plus `users.favoriteTeamId` -- confirmed by direct read (lines ~116-142). It never queries `favoriteType === 'player'`. The favorite-star toggle on the player profile page (wired this session, `BACKLOG-296`, via the existing `useFavorites` hook) is a fully real, working feature -- it persists to `userFavorites` with `favoriteType: 'player'`, shows correctly on `/favourites`, toggles correctly -- but a viewer who stars a player gets no notification when that specific player scores, is carded, etc. Starring a player today means "bookmark," not "subscribe."
+
+**Not a regression or a bug in `BACKLOG-296`'s scope** -- this matches `CLAUDE.md`'s own declared scope for push notifications verbatim ("Match/team push notifications... event-triggered", no mention of player-level) and predates this session entirely. Surfaced because Richard asked directly whether the favorite→notification pipeline was wired end to end; it isn't, and the gap is worth having on record rather than assumed away.
+
+**Fix (not scoped, not built):** if player-level notification subscriptions are wanted, `match-notification-service.ts`'s recipient query needs a third branch alongside the existing team-favorite and `favoriteTeamId` ones -- join `userFavorites` where `favoriteType === 'player'` against the event's `playerId` (goal/card/sub events already carry this). Filtering/dedup against the existing `userIds` set (the function already unions team-favorite + primary-team-favorite recipients, so a player-favorite branch would slot into the same union) should be straightforward; the actual scoping question (does every event type notify player-favoriters, or only ones the player was directly involved in?) needs Richard's call before building.
+
+**Related:** `src/lib/notifications/match-notification-service.ts`, `src/hooks/useFavorites.ts`, `src/app/players/[id]/PlayerDetailClient.tsx` (favorite star, `BACKLOG-296`)
+
+**Found:** session `competitions-consolidation`, 2026-09-08, while confirming `BACKLOG-296`'s favorite-star wiring at Richard's direct ask.
+
+---
