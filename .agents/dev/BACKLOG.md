@@ -9935,6 +9935,41 @@ Fixed exactly per the "Fix (not built)" plan below: `MatchStatusBadge.tsx` now d
 
 ---
 
+### BACKLOG-338 — Match Detail: Scroll-Hide Header Leaves a Gap Above the Tab Content
+
+**Status:** SHIPPED — commit pending, live verification not yet run.
+**Priority:** MEDIUM — cosmetic, but hits the very first scroll gesture on the platform's
+highest-traffic page (match detail), every match, every viewer.
+**Files:** `src/app/matches/[id]/MatchDetailClient.tsx`.
+
+**Reported:** Richard, 2026-09-08, on the match-detail Timeline (All tab) screen — "scrolling down
+the whole scoreboard section and tabs bar goes off and feels like there's space between that
+section and the ones downward."
+
+**Root cause, confirmed via DOM measurement (not guessed):** the sticky score/tabs header hides
+on scroll-down via `transform: translateY(-100%)` once `currentScrollY > 100` (a fixed constant).
+`position: sticky` never reserves extra flow space for a translated element, so the timeline
+content below sits at a fixed document offset equal to the header's real height (~297px on a
+typical match), independent of the transform. Between `scrollY` 100 and ~297, the header retracts
+before the content has scrolled up far enough to reach the top — producing a real, measured gap of
+plain background (confirmed live: `stickyRect` translated to `top: -220px`, content div's
+`top: -603px` at `scrollY: 900` region, but at the moment of the very first hide near `scrollY:
+101` the content top was still ~195px below the viewport top). The gap shrinks and disappears once
+`scrollY` exceeds the header's own height, so it's a transient artifact of the very first
+scroll-down, not a permanent misalignment — but that's exactly the first thing every viewer does.
+
+**Fix:** measure the header's real height via a ref (`headerRef.current.offsetHeight`) instead of
+the fixed `100` constant, and gate the hide on `currentScrollY > headerHeight`. By the time the
+header is allowed to retract, the content has always already scrolled flush to the top, so no gap
+can appear. Adapts automatically to header height changes (upcoming vs. live/finished matches show
+a different tab set, changing header height) since it's read fresh on every scroll event, not
+cached.
+
+**Pending items:** live-verify on the branch's Vercel preview (measure `scrollY` at the hide
+transition and confirm zero gap) before moving this to RESOLVED.
+
+---
+
 ### BACKLOG-337 — Match Detail Tabs: Clicking a Tab Rendered the PREVIOUS Tab's Content, One Click Behind
 
 **Status:** RESOLVED, live-verified (2026-09-05).

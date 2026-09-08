@@ -107,6 +107,15 @@ export default function MatchDetailClient() {
     const [h2hData, setH2hData] = useState<any>(null);
     const [scrollY, setScrollY] = useState(0);
     const [lastScrollY, setLastScrollY] = useState(0);
+    // BACKLOG-338: the sticky header used to hide at a fixed 100px scroll threshold
+    // regardless of its own (much taller, ~300px) height. Since `position: sticky`
+    // doesn't reserve extra space when translated away, hiding it before the page
+    // had scrolled past its own height left a real gap of empty background between
+    // the (now off-screen) header and the timeline content below, which hadn't
+    // scrolled up far enough yet to fill it. Measuring the header's real height and
+    // gating the hide on that (not a guessed constant) means content has always
+    // already scrolled flush to the top by the time the header retracts.
+    const headerRef = useRef<HTMLDivElement>(null);
     const [headerVisible, setHeaderVisible] = useState(true);
 
     const { isConnected, on, off } = useWebSocket({ matchId, autoConnect: true });
@@ -242,10 +251,13 @@ export default function MatchDetailClient() {
             if (!ticking) {
                 window.requestAnimationFrame(() => {
                     const currentScrollY = window.scrollY;
+                    const headerHeight = headerRef.current?.offsetHeight ?? 100;
 
                     // Determine scroll direction
-                    if (currentScrollY > lastScrollY && currentScrollY > 100) {
-                        // Scrolling down & past threshold - hide header
+                    if (currentScrollY > lastScrollY && currentScrollY > headerHeight) {
+                        // Scrolling down & past the header's own height - hide header
+                        // (gated on real height, not a guessed constant, so content is
+                        // already flush with the top before the header retracts).
                         setHeaderVisible(false);
                     } else if (currentScrollY < lastScrollY) {
                         // Scrolling up - show header
@@ -640,6 +652,7 @@ export default function MatchDetailClient() {
             <ToastContainer toasts={toasts} onClose={removeToast} />
             {/* Sticky Header - Slides up/down based on scroll direction */}
             <div
+                ref={headerRef}
                 className="sticky top-0 z-40 bg-gradient-to-b from-[#050505] via-[#050505]/95 to-[#050505]/90 backdrop-blur-xl border-b border-white/10 transition-transform duration-300 ease-out"
                 style={{
                     transform: headerVisible ? 'translateY(0)' : 'translateY(-100%)',
