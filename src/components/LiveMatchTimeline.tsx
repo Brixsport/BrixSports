@@ -131,6 +131,34 @@ export default function LiveMatchTimeline({ events, homeTeam, awayTeam, eyePoint
         }
     };
 
+    // Icon badge background/foreground per event type -- sits in the outer
+    // minute column (icon above, minute below), matching the Figma commentary
+    // reference exactly, instead of duplicating the icon inside the card too.
+    const getIconBadgeStyle = (type: string) => {
+        switch (type.toUpperCase().replace(/\s+/g, '_')) {
+            case 'GOAL':
+            case 'FIELD_GOAL':
+            case 'THREE_POINTER':
+                return 'bg-primary/15 text-primary';
+            case 'YELLOW_CARD':
+                return 'bg-yellow-500/15 text-yellow-400';
+            case 'RED_CARD':
+                return 'bg-red-500/15 text-red-500';
+            case 'SUBSTITUTION':
+                return 'bg-green-500/15 text-green-400';
+            case 'EYE_POINT':
+                return 'bg-purple-500/15 text-purple-400';
+            case 'SAVE':
+            case 'BLOCK':
+            case 'PENALTY_SAVED':
+                return 'bg-amber-500/15 text-amber-400';
+            case 'PENALTY_MISSED':
+                return 'bg-red-500/15 text-red-400';
+            default:
+                return 'bg-white/10 text-white/60';
+        }
+    };
+
     const getEventColor = (type: string) => {
         const baseStyle = "bg-white/5 border border-white/10 backdrop-blur-sm transition-all hover:bg-white/10";
         switch (type.toUpperCase().replace(/\s+/g, '_')) {
@@ -488,9 +516,12 @@ export default function LiveMatchTimeline({ events, homeTeam, awayTeam, eyePoint
                                     // is -- dropped the isHomeTeam flex-row-reverse for this path.
                                     className="flex items-start gap-4"
                                 >
-                                    {/* Time */}
-                                    <div className="flex-shrink-0 w-16 text-center">
-                                        <div className="text-sm font-bold text-primary">
+                                    {/* Icon + Time badge */}
+                                    <div className="flex-shrink-0 w-14 flex flex-col items-center gap-1.5">
+                                        <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${getIconBadgeStyle(event.type)}`}>
+                                            {getEventIcon(event.type)}
+                                        </div>
+                                        <div className="text-xs font-bold text-primary text-center leading-tight">
                                             {(() => {
                                                 const min = event.minute;
                                                 // -1 is the established "minute unknown" sentinel written by
@@ -542,11 +573,6 @@ export default function LiveMatchTimeline({ events, homeTeam, awayTeam, eyePoint
                                         className={`flex-1 max-w-2xl p-4 rounded-xl border ${getEventColor(event.type)} backdrop-blur-sm`}
                                     >
                                         <div className="flex items-start gap-3">
-                                            {/* Icon */}
-                                            <div className="flex-shrink-0 mt-0.5">
-                                                {getEventIcon(event.type)}
-                                            </div>
-
                                             {/* Content */}
                                             <div className="flex-1">
                                                 {getEventDescription(event)}

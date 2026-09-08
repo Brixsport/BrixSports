@@ -9937,6 +9937,31 @@ Fixed exactly per the "Fix (not built)" plan below: `MatchStatusBadge.tsx` now d
 
 ---
 
+### BACKLOG-340 — Timeline "All" Tab: Event Icon Duplicated Inside the Card Instead of the Outer Minute Badge
+
+**Status:** SHIPPED — pending live verification.
+**Priority:** LOW — cosmetic, one screen.
+**Files:** `src/components/LiveMatchTimeline.tsx`.
+
+**Reported:** Richard, 2026-09-08, asked to "refine the timeline (all tab) screen" against
+`Timeline-full-event(commentary).jpeg`.
+
+**Gap found comparing against the Figma ref:** the reference shows a single icon badge (icon on
+top, minute below) sitting outside each card, in the same column. The live build put a bare minute
+number in that outer column and duplicated the event-type icon a second time inside the card
+itself (top-left of the description text) — visually busier than the reference and not what it
+shows.
+
+**Fix:** new `getIconBadgeStyle()` (per-type background/foreground, same type switch as the
+existing `getEventColor()`) applied to the outer column; icon moved there, stacked above the
+minute; the in-card icon removed. `getEventColor()`, the card's own per-type border accent, and
+BACKLOG-332's uniform (non-mirrored) single-column decision are all untouched — this only moves
+where the icon renders, not the surrounding structure.
+
+**Pending items:** live-verify against the Figma ref on the branch's Vercel preview.
+
+---
+
 ### BACKLOG-339 — Match Detail: Scroll-Hide Header Leaves a Gap Above the Tab Content
 
 **Status:** RESOLVED — 2026-09-08, live-verified on staging.
