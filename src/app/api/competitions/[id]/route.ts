@@ -168,6 +168,8 @@ export async function PATCH(
             status,
             isMultiSport,
             logo,
+            hostOrganizationId,
+            governingOrganizationId,
         } = body;
 
         // Check if competition exists
@@ -205,6 +207,11 @@ export async function PATCH(
         if (status !== undefined) updateData.status = status;
         if (isMultiSport !== undefined) updateData.isMultiSport = isMultiSport;
         if (logo !== undefined) updateData.logo = logo;
+        // BACKLOG-333: no UI sets these yet (no selector exists -- see route.ts's
+        // POST handler for the full TODO), but accepting them here means a future
+        // selector needs no further route changes, just a form field wired to it.
+        if (hostOrganizationId !== undefined) updateData.hostOrganizationId = hostOrganizationId;
+        if (governingOrganizationId !== undefined) updateData.governingOrganizationId = governingOrganizationId;
 
         // Update competition
         await db

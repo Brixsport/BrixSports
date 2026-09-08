@@ -12,6 +12,26 @@ import { nanoid } from 'nanoid';
 import { getAuthUser } from '@/lib/auth';
 import { checkRateLimit } from '@/lib/rate-limit';
 
+// BACKLOG-333: the admin create-competition flow never set an org at all, so every
+// competition created through the real admin UI silently dropped out of
+// buildCompetitionGroups()'s org-scoped grouping below (BACKLOG-291) -- if a
+// same-named competition already existed under a real org, the new null-org one
+// showed up as an orphaned duplicate in the public directory.
+// BrixSports is single-tenant today: a live DB read (2026-09-08) confirmed every
+// real org-linked competition (3/3, 100%) is hosted by Bells University of
+// Technology and governed by its BUSA student association -- so default new
+// competitions to that org instead of leaving the field null. This is a deliberate,
+// narrow default, not the real fix -- see TODO below.
+// TODO(BACKLOG-333 follow-up): once a second university is actually onboarded,
+// this default becomes wrong for that university's admins. The real fix is an org
+// selector in admin/competitions/page.tsx (populated from the existing
+// GET /api/admin/organizations), with these two fields wired through the form the
+// same way `sport`/`format` already are. Don't build that selector speculatively
+// before there's a second real tenant to choose between -- it has no way to be
+// tested meaningfully until then.
+const DEFAULT_HOST_ORGANIZATION_ID = 'org_bells-university-of-technology';
+const DEFAULT_GOVERNING_ORGANIZATION_ID = 'org_org_bells-university-busa';
+
 // Groups season-instances of the same recurring league together (e.g. "BUSA LEAGUE
 // FOOTBALL" 2025/2026 and 2026/2027 as one entity with a season history), rather
 // than every season being a fully disconnected competition row. Case-insensitive
@@ -219,7 +239,8 @@ export async function POST(request: NextRequest) {
         const {
             name, sport, format, structure, season, status,
             numberOfTeams, numberOfGroups, teamsPerGroup,
-            level, scope, rules, description, isMultiSport, logo
+            level, scope, rules, description, isMultiSport, logo,
+            hostOrganizationId, governingOrganizationId,
         } = body;
 
         if (!name || (!sport && !isMultiSport) || !format || !season) {
@@ -246,6 +267,10 @@ export async function POST(request: NextRequest) {
             rules: rules ? JSON.stringify(rules) : null,
             description: description || null,
             logo: logo || null,
+            // BACKLOG-333: accept an explicit org from the caller (forward-compatible
+            // with a future selector UI) but default to the single real tenant today.
+            hostOrganizationId: hostOrganizationId || DEFAULT_HOST_ORGANIZATION_ID,
+            governingOrganizationId: governingOrganizationId || DEFAULT_GOVERNING_ORGANIZATION_ID,
             createdAt: new Date(),
             updatedAt: new Date(),
         };
