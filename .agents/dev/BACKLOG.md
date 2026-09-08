@@ -4165,7 +4165,7 @@ The `nicknames` JSON array on `playerTeamAffiliations` is the right home for thi
 
 ### BACKLOG-068 — Multi-Sport Player Profile Audit and Merge
 
-**Status:** OPEN
+**Status:** RESOLVED — audit run 2026-09-08, all 12 candidate pairs reviewed with Richard same session, **none confirmed as the same person**. No links made, no writes to any player row. Items 2/3 (see below) reconsidered in light of `BACKLOG-120` shipping in the same session — read the "Approach update" note if this audit is ever re-run.
 **Priority:** Medium — data integrity, not blocking live matches
 **Filed:** 2026-06-17
 
@@ -4174,19 +4174,40 @@ Players who compete in multiple sports (e.g. Jabbar in football + basketball) ha
 
 Separate profiles cause stat fragmentation, duplicate search results, and broken cross-sport leaderboards.
 
+**Approach update, 2026-09-08:** this entry's original "Required Changes" #2/#3 (below) describe a *destructive* merge — re-point every stat/event row to one canonical `player_id`, delete the other row. `BACKLOG-120` (built and closed same session) ships a *non-destructive* alternative for exactly this cross-sport case: both rows stay, sharing one `profile_id`, cross-referenced via the existing "Multi-Sport Athlete" card and the new admin "Link Profile" action. Every candidate this audit found is a **different-sport** pair (same-sport was deliberately excluded from the scan, see below) — for that shape of problem, linking via `BACKLOG-120` is the correct, safer action, not merging/deleting. The destructive merge path (`BACKLOG-042`) stays reserved for genuine same-sport duplicates (a player accidentally registered twice for the same team) — a different, still-unaudited question this run did not look at.
+
 #### Required Changes
-1. **Audit** — query for players with name similarity > 80% across different sport contexts. Output a report: name, sport, team, player_id, match_events count per profile.
-2. **Merge script** — for confirmed duplicates:
-   - Identify canonical profile (higher match_events count, or earliest created_at)
-   - Re-point all `match_events`, `playerStats`, `playerRatings`, `squadPlayers`, `playerTeamAffiliations` rows from the duplicate to the canonical `player_id`
-   - Delete the duplicate `players` row
-3. **Add second-sport affiliation** to the canonical profile via `playerTeamAffiliations` (college team or BUSA team for that sport)
+1. ~~**Audit**~~ — DONE, see below.
+2. **Merge script** — superseded for the cross-sport case by `BACKLOG-120`'s link action (see "Approach update" above). Still the right tool for genuine same-sport duplicates, if any are ever found — not attempted here.
+3. ~~**Add second-sport affiliation**~~ — already exists structurally (`playerTeamAffiliations` already supports multiple teams per player); what was missing was the *linking* action, now built (`BACKLOG-120`).
+
+#### Audit results, 2026-09-08 (`dev/audit-multisport-duplicates-068.mjs`, read-only)
+
+Scanned 422 players with an active team affiliation. Compared every cross-sport pair (same-sport pairs excluded — that's a different problem, see above) by Levenshtein name similarity, threshold 80%. **0 already-linked pairs found** (the Abdul-jabbaar Bello ↔ Storm "Jabbar" link from `BACKLOG-120` doesn't show here because their names don't textually match — "Bello" vs "JABBAR" — a real caveat of a name-only audit, noted explicitly in the script's own output).
+
+**12 unlinked candidate pairs found, split by confidence — none linked, all need Richard's judgment call:**
+
+*Higher confidence (distinctive names, worth a real look):*
+- `[88%]` "dekunle" (Basketball, Storm, `F7DwPfnXUnHbeGRCYkQel`, 39 events) ↔ "ADEKUNLE" (Football, Deadline FC, `player-1783726262888-df95ffba-`, 18 events) — same name, casing/truncation only
+- `[80%]` "AZZEZ" (Football, La Fabrica, `player-1783726262888-c1d50e63-`, 11 events) ↔ "AZEEZ" (Basketball, TBK, `player-1784638063321-hpeojaJB`, 61 events) — one-letter spelling variant
+
+*Lower confidence — single common first names, no surname to disambiguate, real risk of being different people. A 100% match here just means the (short, common) strings are identical, not that the people are:*
+- "ALEX" (Basketball, Storm, `zdc4c5lij1ou0L5zZN54c`) ↔ "Alex" (Football, Agenda FC, `player-1781698817968-h5y5e0pdr`)
+- "DANIEL" (Basketball, Storm, `SVuGZdrBP6BlC3j4WrOEv`) ↔ "Daniel" (Football, TEAM A, `AgtEm5rXbGdvxfMsUPjmI`) — **flag:** football side already has `profile_id=9l5LcBmNuBtGVnY4HPUxB` (linked to a *different* third player already) — linking these two via the admin action would silently pull the basketball row into that existing group. Do not link without checking who else is already in that profile.
+- "PAUL" (Basketball, Rim Reapers, `FYoN6GSLsCi82sRnyporw`, 0 events) ↔ "PAUL" (Football, Santos, `player-1783726262888-aa76e556-`)
+- "DARA" (Basketball, TBK, `d1mGQmmC8LVAQSJbi7BGO`) ↔ "Dara" (Football, Legacy FC, `HEelygWccCf3bSejoKQVi`)
+- "SAMMY" (Basketball, Siberia, `047rkkX26mOe6efUHhAMS`, 0 events) ↔ "SAMMY" (Football, Legacy FC, `player-1783726262888-8b1467dc-`, 0 events)
+- "Ebuka" (Basketball, Titans, `tX0zxQTavQwD3zZDc7wvb`) ↔ "Ebuka" (Football, Legacy FC, `busa-legacy-ebuka-b1wigK`)
+- "OLA" (Basketball, Storm, `4rm-fJoPc6ea7kwzVfR1b`, 157 events) ↔ "Ola" (Football, TEAM B, `rmxtrZDTIicvEa3msgjt5`) — **same flag:** football side already has `profile_id=5bgLcT9mSjEKCR_ATQCTC` (a different existing group)
+- "MUJEEB" (Basketball, Titans, `player-1784637117340-zUgTFGz1`) ↔ "Mujeeb" (Football, TEAM D, `enTE59R0cZvRGvnGRAJ4x`) — **same flag:** `profile_id=5g7J6apQgQc9deL47rEBJ` already on the football side
+- "AZEEZ" (Basketball, TBK, `player-1784638063321-hpeojaJB`) ↔ "Azeez" (Football, TEAM B, `D2x5OGI-9-QLgiFHlSYbH`) — **same flag:** `profile_id=WC8qjybMHg6AgmN8LgUeC` already on the football side
+- `[80%]` "SAMMY" (Basketball, Siberia, `047rkkX26mOe6efUHhAMS`) ↔ "DAMMY" (Football, Deadline FC, `player-1783726262888-6a9ce326-`) — likely a **false positive**: "Sammy" and "Dammy" are different real Nigerian first names, one Levenshtein edit apart by coincidence, not a truncation/casing variant like the two "higher confidence" entries above
+
+**Reviewed with Richard, same session — none confirmed.** Per this entry's own long-standing note ("do not touch without a written merge plan per player, confirm with Richard"), all 12 pairs were presented; Richard's call: not the same person, across the board. No links made, no player rows touched. The four flagged rows (Daniel/Ola/Mujeeb/Azeez's football sides) were a genuine footgun this audit surfaced in time — the admin action would have succeeded (reuse the existing `profile_id`) but silently attached the basketball row to whatever *other* real person that profile already represents.
 
 #### Notes
-- Do not touch this without a written merge plan per player — it is a destructive data operation
-- Run audit script first, confirm with Richard, then build merge script
-- Merge tool (BACKLOG-042) would be the right permanent solution — this is a one-off manual fix until that exists
-- Related: BACKLOG-042 (player merge tool)
+- Merge tool (`BACKLOG-042`) is the right tool for genuine same-sport duplicates — not what this audit scanned for, and not attempted here
+- Related: `BACKLOG-042` (player merge tool), `BACKLOG-120` (the link action this audit's real findings feed into)
 
 ---
 
