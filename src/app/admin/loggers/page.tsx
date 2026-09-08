@@ -358,11 +358,17 @@ function AdminLoggersPageContent() {
                         <StatCard label="Avg Quality" value={analytics?.loggers ? `${Math.round(analytics.loggers.reduce((acc: number, l: any) => acc + l.metrics.qualityScore, 0) / (analytics.loggers.length || 1))}%` : '0%'} subValue="Metric score" icon={<Award className="text-yellow-500" size={24} />} />
                     </div>
 
-                    {/* Navigation Tabs */}
-                    <div className="flex items-center gap-2 p-1 bg-white/5 border border-white/10 rounded-2xl w-fit">
-                        <TabButton active={activeTab === 'management'} onClick={() => setActiveTab('management')} label="Management" icon={<Users size={14} />} />
-                        <TabButton active={activeTab === 'coverage'} onClick={() => setActiveTab('coverage')} label="Match Coverage" icon={<Calendar size={14} />} />
-                        <TabButton active={activeTab === 'analytics'} onClick={() => setActiveTab('analytics')} label="Analytics" icon={<BarChart3 size={14} />} />
+                    {/* Navigation Tabs. BACKLOG-336: was a fixed-width px-6/py-3 pill row
+                        (447px natural width) inside a w-fit container -- didn't wrap or
+                        shrink, so it pushed the whole page's horizontal scroll out on
+                        mobile. Same treatment as the match-detail page's tab bar: tight
+                        padding by default, full desktop sizing from sm:, and
+                        overflow-x-auto + scrollbar-hide as the safety net if labels still
+                        don't fit (rather than truncating/abbreviating real nav labels). */}
+                    <div className="flex items-center gap-1 sm:gap-2 p-1 bg-white/5 border border-white/10 rounded-2xl w-full sm:w-fit overflow-x-auto scrollbar-hide">
+                        <TabButton active={activeTab === 'management'} onClick={() => setActiveTab('management')} label="Management" icon={<Users size={12} className="sm:w-3.5 sm:h-3.5" />} />
+                        <TabButton active={activeTab === 'coverage'} onClick={() => setActiveTab('coverage')} label="Match Coverage" icon={<Calendar size={12} className="sm:w-3.5 sm:h-3.5" />} />
+                        <TabButton active={activeTab === 'analytics'} onClick={() => setActiveTab('analytics')} label="Analytics" icon={<BarChart3 size={12} className="sm:w-3.5 sm:h-3.5" />} />
                     </div>
 
                     {/* Tab Content */}
@@ -972,7 +978,7 @@ function TabButton({ active, onClick, label, icon }: { active: boolean, onClick:
     return (
         <button
             onClick={onClick}
-            className={`flex items-center gap-2 px-6 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${active
+            className={`flex items-center gap-1 sm:gap-2 px-3 sm:px-6 py-2 sm:py-3 rounded-xl text-[9px] sm:text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap shrink-0 ${active
                 ? 'bg-white/10 text-white shadow-lg'
                 : 'text-white/40 hover:text-white hover:bg-white/5'
                 }`}
