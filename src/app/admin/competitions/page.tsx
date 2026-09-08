@@ -772,7 +772,13 @@ function AdminCompetitionsPageContent() {
                                 animate={{ opacity: 1, y: 0 }}
                                 className="bg-white/5 rounded-2xl p-6 border border-white/10 hover:border-primary/50 transition-all"
                             >
-                                <div className="flex items-start justify-between">
+                                {/* BACKLOG-342: was `flex items-start justify-between` with no wrap --
+                                    on mobile the info block and the Manage Teams/Edit/Delete action
+                                    column competed for the same row and pushed scrollWidth to ~496px
+                                    against a 375px viewport. Stack on mobile, restore the side-by-side
+                                    row from sm: up (matches this codebase's existing flex-col sm:flex-row
+                                    card-header convention, e.g. admin/teams/[id], admin/roster-transfers). */}
+                                <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
                                     <div className="flex-1">
                                         <div className="flex items-center gap-3 mb-2">
                                             <h3 className="text-xl font-bold">{competition.name}</h3>
