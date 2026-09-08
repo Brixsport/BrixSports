@@ -10044,6 +10044,107 @@ matching what the reference actually shows. Team-less events (no `teamId`) fall 
 
 ---
 
+### BACKLOG-343 — Admin Responsive Audit: `/admin/matches` Mobile + Tablet Overflow
+
+**Status:** RESOLVED — 2026-09-08, live-verified on staging alias.
+**Priority:** MEDIUM — part of the same admin-wide responsive audit that fixed `/admin/loggers`
+(`BACKLOG-336`); real content clipping/overflow, not cosmetic.
+**Files:** `src/app/admin/matches/page.tsx`.
+
+**Found:** session `brixsports-v2-cc`, 2026-09-08, auditing the rest of `/admin/*` for the same
+mobile/tablet overflow pattern already fixed on `/admin/loggers`, using a real admin JWT injected
+as the `authToken` cookie on the branch's stable Vercel alias (same technique as `BACKLOG-336`).
+
+**Three real bugs found, same page:**
+
+1. **Mobile (375px), status filter row overflow:** the 5-pill filter row (`all`/`LIVE`/`UPCOMING`/
+   `HALF_TIME`/`FINISHED`, `px-4 py-2`, no wrap) had a natural width wider than the viewport --
+   same class of bug as `/admin/loggers`' nav tab bar (`BACKLOG-336`). Fixed with the identical
+   established treatment: tight padding/text by default, full sizing from `sm:`, `overflow-x-auto`
+   + `scrollbar-hide` as the safety net instead of truncating the status labels.
+2. **Mobile (375px), team-name truncate not engaging:** the home/away team-name columns were
+   `flex-1` with no `min-w-0`, so Tailwind's `truncate` (which needs a shrinkable width to do
+   anything) never actually engaged -- a long team name rendered at its full intrinsic width and
+   pushed the card, and the page, to `scrollWidth` 484px against a 375px viewport. Added `min-w-0`,
+   matching the same fix already applied correctly on the sibling `/admin/match-ratings` page.
+3. **Tablet (768px), action-icon row overflow on some cards:** the per-match action-icon row
+   (Lineups/Ratings/Livestream/Eye/Edit/Delete, up to 6 `p-3` buttons) is always `flex-row`
+   regardless of breakpoint -- the outer `md:flex-col` wrapper around it is a no-op, since it has
+   only this one child, so direction visibly never changes. On cards with a longer venue/date line
+   pushing the info column's own min-content width up, the fixed ~260px button row plus that column
+   no longer both fit in the ~753-777px available at tablet width, overflowing the page by up to
+   ~25px on a handful of cards (not all -- venue/date text length varies per match). Added
+   `flex-wrap` + `justify-end` to the button row so it reflows onto a second line only when it
+   doesn't fit; at full desktop width everything already fits on one line, so no visual change
+   there (per Richard's "don't touch desktop" instruction for this audit).
+
+**Evidence:**
+- Commits: `78cc64e` (mobile: filter row + truncate min-w-0), `1f0a835` (tablet: action-row
+  flex-wrap) -- both `feature/ui-redesign`.
+- Verified by: real admin session (JWT cookie injection) on the branch's stable Vercel alias,
+  mobile (375x812) and tablet (768x1024) viewports, direct DOM measurement
+  (`document.documentElement.scrollWidth`/`clientWidth`, plus a full-page offending-element scan
+  excluding `position:fixed` decoys) before and after each fix, plus an actual functional click
+  test on a real Edit action button (React `onClick` invoked directly via the fiber props, since
+  the emulated Browser pane's native click/computer-tool actions were unreliable in this session --
+  DOM-level invocation is the established fallback per this project's own convention).
+- Observed result: mobile `scrollWidth` went from 484px to 375px (matches `clientWidth`) after the
+  first two fixes; tablet `scrollWidth` went from 777px to 753px (matches `clientWidth`) after the
+  third. Edit button on a match with a valid `startTime` (COLNAS-B vs COLENG-B) opened the real
+  "EDIT FIXTURE" modal (Status/Venue/Score fields, Cancel/Update Fixture buttons) after the fix,
+  confirming the action row is still reachable and functional, not just visually non-overflowing.
+- Pending items: none for the responsive bugs. **Separate, unrelated bug found during the click
+  test** (not part of this audit's scope, flagged as its own follow-up task rather than fixed here):
+  clicking Edit on a match whose `startTime` is corrupted (renders as "INVALID DATE" on the card --
+  e.g. COLMANS-B vs COLENVS-B, BUSALYMPICS basketball) throws an uncaught `RangeError: Invalid time
+  value` inside `openEditModal`'s date formatting, silently failing to open the modal with no
+  visible error to the admin.
+
+---
+
+### BACKLOG-344 — Admin Responsive Audit: `/admin/competitions` Mobile Card-Header Overflow
+
+**Renumbered from `BACKLOG-342`** — that number collided with a concurrent session's push
+(`BACKLOG-342`, "Timeline All Tab: Restore Team-Side Mirroring", above). No functional change,
+just this entry's own number and the matching code comment in `src/app/admin/competitions/page.tsx`.
+
+**Status:** RESOLVED — 2026-09-08, live-verified on staging alias.
+**Priority:** MEDIUM — same admin-wide responsive audit as `BACKLOG-343`/`BACKLOG-336`.
+**Files:** `src/app/admin/competitions/page.tsx`.
+
+**Found:** session `brixsports-v2-cc`, 2026-09-08, same audit pass as `BACKLOG-343`.
+
+**Two real bugs found, same page, mobile (375px) only** (768px tablet was clean both before and
+after):
+
+1. **Card header didn't wrap:** each competition card's header (`flex items-start justify-between`,
+   no wrap) held the title/badges info block on one side and the Manage Teams/Edit/Delete action
+   column on the other. Neither side could shrink enough to both fit a 375px viewport, pushing the
+   action column off the right edge and the whole page to `scrollWidth` ~496px. Fixed by stacking
+   the header vertically on mobile (`flex-col`) and restoring the side-by-side row from `sm:` up --
+   matches this codebase's existing `flex-col sm:flex-row` card-header convention used elsewhere
+   (e.g. `admin/teams/[id]`, `admin/roster-transfers`).
+2. **Title/badge row didn't wrap:** even after the header stacked, `scrollWidth` was still 388px
+   (down from 496px, but not clean) -- traced to the title row itself (competition name + status
+   badge + scope badge in one non-wrapping flex row). Added `flex-wrap` so the badges drop to a
+   second line under a long competition name instead of forcing the row wider than the viewport.
+
+**Evidence:**
+- Commits: `226c009` (header stacking), `438e652` (title/badge row wrap) -- both `feature/ui-redesign`.
+- Verified by: real admin session (JWT cookie injection) on the branch's stable Vercel alias,
+  mobile (375x812) and tablet (768x1024) viewports, direct DOM measurement
+  (`document.documentElement.scrollWidth`/`clientWidth` plus a full-page offending-element scan
+  excluding `position:fixed` decoys) before and after each fix, plus navigating directly to a real
+  Manage Teams link target (`/admin/competitions/m-4qhMBvnUP2a-GcU-Rsv`) to confirm the action is
+  still reachable and functional (loaded the real "Team Management" page for BUSA LEAGUE
+  BASKETBALL, Assigned Teams (6) list, Add Team button -- not just a visibility check).
+- Observed result: `scrollWidth` went 496px → 388px → 375px (matches `clientWidth`) across the two
+  fixes; clean at both 375px and 768px afterward, no offending elements outside the intentional
+  `overflow-x-auto` safety-net strips used elsewhere on the page.
+- Pending items: none.
+
+---
+
 ### BACKLOG-340 — Timeline "All" Tab: Event Icon Duplicated Inside the Card Instead of the Outer Minute Badge
 
 **Status:** RESOLVED — 2026-09-08, live-verified on staging.
