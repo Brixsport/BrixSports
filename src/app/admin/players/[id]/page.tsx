@@ -5,9 +5,13 @@ import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 import { TeamLogo } from '@/lib/utils/team-logo';
+import { PlayerAvatar } from '@/lib/utils/player-avatar';
+import { useDebounce } from '@/hooks/useDebounce';
+import ConfirmDialog from '@/components/admin/ConfirmDialog';
 import {
     ArrowLeft, Edit, Save, X, Star, User,
-    Building2, Shield, Activity, AlertCircle, Loader2, ArrowRightLeft
+    Building2, Shield, Activity, AlertCircle, Loader2, ArrowRightLeft,
+    Link2, Search,
 } from 'lucide-react';
 
 interface Player {
@@ -33,6 +37,25 @@ interface Player {
     team?: { id: string; name: string; shortName: string; sport: string; logo?: string | null } | null;
     memberships?: Membership[];
     organizationAffiliations?: OrgAffiliation[];
+    relatedProfiles?: RelatedProfile[];
+}
+
+interface RelatedProfile {
+    id: string;
+    name: string;
+    position: string | null;
+    teamName: string | null;
+    teamId: string | null;
+    sport: string | null;
+}
+
+interface PlayerSearchResult {
+    id: string;
+    name: string;
+    position: string | null;
+    number: number | null;
+    image: string | null;
+    team?: { name: string } | null;
 }
 
 interface Membership {
@@ -97,6 +120,16 @@ export default function PlayerDetailPage() {
     const [editMode, setEditMode] = useState(false);
     const [form, setForm] = useState<Partial<Player>>({});
     const [errorMsg, setErrorMsg] = useState('');
+
+    // BACKLOG-120: link-profile modal state
+    const [linkModalOpen, setLinkModalOpen] = useState(false);
+    const [linkQuery, setLinkQuery] = useState('');
+    const debouncedLinkQuery = useDebounce(linkQuery, 400);
+    const [linkResults, setLinkResults] = useState<PlayerSearchResult[]>([]);
+    const [linkSearching, setLinkSearching] = useState(false);
+    const [linkSelected, setLinkSelected] = useState<PlayerSearchResult | null>(null);
+    const [linking, setLinking] = useState(false);
+    const [linkError, setLinkError] = useState('');
 
     useEffect(() => {
         if (!authLoading) {
@@ -177,6 +210,65 @@ export default function PlayerDetailPage() {
         setForm(player ?? {});
         setEditMode(false);
         setErrorMsg('');
+    };
+
+    useEffect(() => {
+        if (!linkModalOpen) return;
+        const q = debouncedLinkQuery.trim();
+        if (!q) {
+            setLinkResults([]);
+            return;
+        }
+        const run = async () => {
+            setLinkSearching(true);
+            try {
+                const res = await fetch(`/api/search?q=${encodeURIComponent(q)}&category=players&limit=10&excludeId=${playerId}`);
+                const data = await res.json();
+                setLinkResults(data.results?.players || []);
+            } catch {
+                setLinkResults([]);
+            } finally {
+                setLinkSearching(false);
+            }
+        };
+        run();
+    }, [debouncedLinkQuery, linkModalOpen, playerId]);
+
+    const openLinkModal = () => {
+        setLinkQuery('');
+        setLinkResults([]);
+        setLinkSelected(null);
+        setLinkError('');
+        setLinkModalOpen(true);
+    };
+
+    const closeLinkModal = () => {
+        setLinkModalOpen(false);
+        setLinkSelected(null);
+    };
+
+    const confirmLink = async () => {
+        if (!linkSelected) return;
+        setLinking(true);
+        setLinkError('');
+        try {
+            const res = await fetch('/api/admin/players/link-profiles', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ playerId1: playerId, playerId2: linkSelected.id }),
+            });
+            const data = await res.json();
+            if (!res.ok) {
+                setLinkError(data.error || 'Failed to link profiles');
+                return;
+            }
+            await fetchPlayer();
+            closeLinkModal();
+        } catch {
+            setLinkError('Network error');
+        } finally {
+            setLinking(false);
+        }
     };
 
     const toggleEventGroup = (key: string) => {
@@ -307,6 +399,13 @@ export default function PlayerDetailPage() {
                                     <span className="hidden lg:inline">Transfer</span>
                                 </Link>
                                 <button
+                                    onClick={openLinkModal}
+                                    className="flex items-center gap-2 px-4 py-2 border border-white/10 rounded-xl font-black uppercase italic text-[10px] tracking-widest hover:bg-white/5 transition-all"
+                                >
+                                    <Link2 size={14} strokeWidth={3} />
+                                    Link Profile
+                                </button>
+                                <button
                                     onClick={() => setEditMode(true)}
                                     className="flex items-center gap-2 p-2 lg:px-4 lg:py-2 bg-primary text-black rounded-xl font-black uppercase italic text-[10px] tracking-widest hover:scale-[1.02] active:scale-[0.98] transition-all"
                                     title="Edit Profile"
@@ -374,6 +473,37 @@ export default function PlayerDetailPage() {
                             {field('Market Value', 'marketValue', 'number')}
                         </div>
                     </div>
+                </div>
+
+                {/* Section C.5 — Linked Profiles (multi-sport identity, BACKLOG-120) */}
+                <div className="bg-white/5 border border-white/10 rounded-2xl p-6">
+                    <h2 className="text-[10px] font-black uppercase tracking-[0.3em] text-white/30 mb-6 flex items-center gap-2">
+                        <Link2 size={14} /> Linked Profiles
+                    </h2>
+                    {!player.relatedProfiles || player.relatedProfiles.length === 0 ? (
+                        <p className="text-white/30 text-sm font-bold">No linked profiles. Use "Link Profile" above to connect this player to their profile in another sport.</p>
+                    ) : (
+                        <div className="space-y-3">
+                            {player.relatedProfiles.map((rp) => (
+                                <Link
+                                    key={rp.id}
+                                    href={`/admin/players/${rp.id}`}
+                                    className="flex items-center gap-3 p-3 bg-white/[0.03] hover:bg-white/[0.06] border border-white/5 rounded-xl transition-colors"
+                                >
+                                    <PlayerAvatar image={null} name={rp.name} size="sm" />
+                                    <div className="flex-1 min-w-0">
+                                        <span className="font-bold text-sm">{rp.name}</span>
+                                        <div className="flex items-center gap-2 mt-0.5">
+                                            {rp.sport && (
+                                                <span className="px-1.5 py-0.5 bg-white/10 text-white/50 text-[9px] font-bold rounded uppercase">{rp.sport}</span>
+                                            )}
+                                            {rp.teamName && <span className="text-white/40 text-xs">{rp.teamName}</span>}
+                                        </div>
+                                    </div>
+                                </Link>
+                            ))}
+                        </div>
+                    )}
                 </div>
 
                 {/* Section D — Team Memberships */}
@@ -513,6 +643,79 @@ export default function PlayerDetailPage() {
                     )}
                 </div>
             </div>
+
+            {/* Link Profile search modal (BACKLOG-120) */}
+            {linkModalOpen && !linkSelected && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+                    <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={closeLinkModal} />
+                    <div className="relative bg-[#0a0a0a] rounded-2xl border border-white/10 max-w-md w-full max-h-[80vh] flex flex-col overflow-hidden">
+                        <div className="p-6 border-b border-white/10 flex items-center justify-between">
+                            <div>
+                                <h3 className="text-lg font-bold">Link Player Profile</h3>
+                                <p className="text-xs text-white/50 mt-1">Search for {player.name}'s profile in another sport.</p>
+                            </div>
+                            <button onClick={closeLinkModal} className="p-2 hover:bg-white/10 rounded-lg transition-colors">
+                                <X size={18} />
+                            </button>
+                        </div>
+                        <div className="p-6 pb-3">
+                            <div className="relative">
+                                <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40" />
+                                <input
+                                    type="text"
+                                    autoFocus
+                                    placeholder="Search players by name..."
+                                    value={linkQuery}
+                                    onChange={(e) => setLinkQuery(e.target.value)}
+                                    className="w-full pl-11 pr-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-white/40 focus:outline-none focus:border-primary transition-all text-sm"
+                                />
+                            </div>
+                        </div>
+                        <div className="px-6 pb-6 overflow-y-auto flex-1">
+                            {linkSearching && (
+                                <p className="text-center text-white/40 text-sm py-6">Searching…</p>
+                            )}
+                            {!linkSearching && linkQuery.trim() && linkResults.length === 0 && (
+                                <p className="text-center text-white/40 text-sm py-6">No players found.</p>
+                            )}
+                            <div className="space-y-2">
+                                {linkResults.map((r) => (
+                                    <button
+                                        key={r.id}
+                                        onClick={() => setLinkSelected(r)}
+                                        className="w-full flex items-center gap-3 p-3 bg-white/5 hover:bg-white/10 rounded-xl transition-all text-left"
+                                    >
+                                        <PlayerAvatar image={r.image} name={r.name} size="sm" />
+                                        <div className="flex-1 min-w-0">
+                                            <div className="font-bold text-sm truncate">{r.name}</div>
+                                            <div className="text-xs text-white/50 truncate">
+                                                {r.position}{r.team?.name ? ` • ${r.team.name}` : ''}
+                                            </div>
+                                        </div>
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Link Profile confirm step */}
+            <ConfirmDialog
+                isOpen={linkModalOpen && !!linkSelected}
+                onClose={() => setLinkSelected(null)}
+                onConfirm={confirmLink}
+                title="Link Player Profile"
+                message={linkSelected ? `Link ${player.name} and ${linkSelected.name} as the same multi-sport athlete? Their profiles will be cross-referenced on both pages.` : ''}
+                confirmText="Link Profiles"
+                variant="info"
+                isLoading={linking}
+            />
+            {linkError && linkModalOpen && (
+                <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[60] px-4 py-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-sm font-bold">
+                    {linkError}
+                </div>
+            )}
         </div>
     );
 }

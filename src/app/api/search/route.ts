@@ -4,7 +4,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { and, desc, eq, inArray, like, or, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, like, ne, or, sql } from 'drizzle-orm';
 import { db } from '@/db';
 import { competitions, matches, players, teams } from '@/db/schema';
 import { enrichPlayersWithAffiliations, toPublicPlayer } from '@/lib/player-data';
@@ -65,6 +65,11 @@ export async function GET(request: NextRequest) {
         const query = searchParams.get('q') || '';
         const category = searchParams.get('category');
         const sport = searchParams.get('sport');
+        // Admin-only usage today (e.g. BACKLOG-120's link-profiles picker) --
+        // lets a caller drop one specific player (typically "the one they're
+        // already acting on") out of its own search results. Additive, no
+        // existing caller passes it.
+        const excludeId = searchParams.get('excludeId');
         // BACKLOG-169: was unclamped -- ?limit=999999999 bypassed the intent
         // entirely across all 4 .limit(limit) call sites below.
         const limit = Math.min(Math.max(1, parseInt(searchParams.get('limit') || '20', 10) || 20), 50);
@@ -109,19 +114,19 @@ export async function GET(request: NextRequest) {
         }
 
         if (!category || category === 'all' || category === 'players') {
+            const nameFilters = or(
+                like(players.name, searchPattern),
+                like(players.jerseyName, searchPattern),
+                like(players.university, searchPattern),
+                like(players.college, searchPattern),
+                like(players.department, searchPattern),
+                like(players.email, searchPattern),
+            );
+
             const candidatePlayers = await db
                 .select()
                 .from(players)
-                .where(
-                    or(
-                        like(players.name, searchPattern),
-                        like(players.jerseyName, searchPattern),
-                        like(players.university, searchPattern),
-                        like(players.college, searchPattern),
-                        like(players.department, searchPattern),
-                        like(players.email, searchPattern),
-                    )
-                )
+                .where(excludeId ? and(nameFilters, ne(players.id, excludeId)) : nameFilters)
                 .orderBy(desc(players.rating))
                 .limit(limit * 4);
 
