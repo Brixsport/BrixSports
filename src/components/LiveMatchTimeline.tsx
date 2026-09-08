@@ -508,18 +508,22 @@ export default function LiveMatchTimeline({ events, homeTeam, awayTeam, eyePoint
                             // via teamId against the homeTeam/awayTeam props instead, which
                             // this component already receives independently.
                             const isHomeTeam = event.teamId === homeTeam.id;
-                            const eventTeam = event.teamId ? (isHomeTeam ? homeTeam : awayTeam) : null;
 
                             return (
                                 <motion.div
                                     key={event.id}
-                                    initial={{ opacity: 0, x: -20 }}
+                                    initial={{ opacity: 0, x: isHomeTeam ? -20 : 20 }}
                                     animate={{ opacity: 1, x: 0 }}
                                     transition={{ delay: index * 0.05 }}
-                                    // BACKLOG-332: Figma's "All" view is a uniform single-column
-                                    // layout, not side-mirrored by team like Key events correctly
-                                    // is -- dropped the isHomeTeam flex-row-reverse for this path.
-                                    className="flex items-start gap-4"
+                                    // BACKLOG-342: re-examined against the Figma ref directly --
+                                    // it IS side-mirrored by team (home team's badge sits on the
+                                    // left, away team's on the right; e.g. the home scorer's badge
+                                    // is left-aligned while the away scorers' badges sit right),
+                                    // contradicting BACKLOG-332's "uniform, not mirrored" reading
+                                    // of the same file. Restoring the mirror; team-less events
+                                    // (no `teamId`) fall back to the left, matching the badge's
+                                    // own `isHomeTeam` default when `event.teamId` is undefined.
+                                    className={`flex items-start gap-4 ${isHomeTeam ? 'flex-row' : 'flex-row-reverse'}`}
                                 >
                                     {/* Icon + Time badge */}
                                     <div className="flex-shrink-0 w-14 flex flex-col items-center gap-1.5">

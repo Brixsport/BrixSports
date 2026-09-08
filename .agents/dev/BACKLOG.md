@@ -9945,7 +9945,8 @@ Fixed exactly per the "Fix (not built)" plan below: `MatchStatusBadge.tsx` now d
 
 ### BACKLOG-341 — Timeline "All" Tab: Further Figma Reconciliation (Team Chip, Icon Accuracy, Emoji)
 
-**Status:** SHIPPED — pending live verification.
+**Status:** RESOLVED — 2026-09-08, live-verified on staging (3 of 4 fixes; see evidence for the
+one gap).
 **Priority:** LOW — cosmetic, one screen.
 **Files:** `src/components/LiveMatchTimeline.tsx`.
 
@@ -9977,8 +9978,55 @@ icon, for goals; don't use emoji as icons).
    (now dead, same as `AlertCircle` above).
 
 **Explicitly left alone (not called out, not touched):** the per-type card border accent
-(`getEventColor`), the period/half divider, `BACKLOG-332`'s uniform single-column layout, and the
-jersey-number/assist secondary line.
+(`getEventColor`), the period/half divider, and the jersey-number/assist secondary line.
+`BACKLOG-332`'s uniform single-column layout was left alone in this entry but reversed the same
+session in `BACKLOG-342` -- see that entry.
+
+**Evidence:**
+- Commit: `112a7d3` (`feature/ui-redesign`).
+- Verified by: DOM inspection against the resulting Vercel preview
+  (`brixsports-staging-l3yljei6v-brixsports-projects.vercel.app`), the same real
+  `8Mek2CA7KPlnk1EQ647jx` match (154 real events).
+- Observed result: `teamChipSurvivors: 0` (zero of 154 cards retain a team-name chip). Goal badge
+  confirmed `bg-primary/15 text-primary` with an actual `<svg>` (FaFutbol) child, not `Target`.
+  Substitution badge confirmed 4 SVG paths across two `<g>` groups (`text-green-400`/
+  `text-red-400`), matching `KeyEventsList`'s own icon exactly -- not the old single-color
+  `ArrowRightLeft`. Emoji regex swept across every rendered card's `textContent`: zero matches.
+- Gap, disclosed not hidden: this real match has no `Yellow Card`/`Red Card` events (confirmed via
+  its own event-type list), and the two real matches that do have card events are goals-only
+  backfills with the `-1` minute sentinel (render "Timeline not available", per this file's own
+  `hasUnknownMinuteEvents` guard) -- so the new solid-rectangle card badge was verified by source
+  read + successful `tsc` compile, not by seeing it rendered live. Low risk (a simple two-branch
+  conditional `<div>`, same pattern already confirmed working for every other type), but flagging
+  the gap rather than claiming a screenshot that doesn't exist.
+- Pending items: live-verify the card-rectangle badge specifically, next time a real match with
+  both valid minutes and a real card event is available.
+
+---
+
+### BACKLOG-342 — Timeline "All" Tab: Restore Team-Side Mirroring (Reverses `BACKLOG-332`)
+
+**Status:** SHIPPED — pending live verification.
+**Priority:** LOW — cosmetic, one screen.
+**Files:** `src/components/LiveMatchTimeline.tsx`.
+
+**Reported:** Richard, 2026-09-08, same session, after `BACKLOG-341` -- "What of the away team
+alignment?? check the figma ref!!!"
+
+**Re-examined the reference directly, corrected reading:** `BACKLOG-332` (2026-09-02) concluded
+the "All" view is "a uniform single-column layout, not side-mirrored by team like Key events
+correctly is" and dropped the `isHomeTeam` row-reversal on that basis. Looking at the same
+reference again against this specific ask: it IS side-mirrored -- the home team's scorer badge
+(e.g. a `Wareez` goal, Agenda FC) sits on the left, while away-team badges (`Lazzy`/`Surefunmi`,
+Hammers) sit on the right, matching the header's own home-left/away-right team layout. `BACKLOG-332`'s
+reading of the same file was wrong on this specific point.
+
+**Fix:** restored `isHomeTeam ? 'flex-row' : 'flex-row-reverse'` on the event row (this is exactly
+what `BACKLOG-332` had deliberately removed). The icon+minute badge column and the card swap sides
+by team; the card's own internal text stays left-aligned either way (not mirrored character-by-
+character like `KeyEventsList`'s compact rows do) -- only the row's left/right position changes,
+matching what the reference actually shows. Team-less events (no `teamId`) fall back to the home
+(left) side, matching the badge logic's own `isHomeTeam` default.
 
 **Pending items:** live-verify against the Figma ref on the branch's Vercel preview.
 
