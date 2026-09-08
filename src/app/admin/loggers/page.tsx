@@ -388,16 +388,23 @@ function AdminLoggersPageContent() {
                                     </div>
                                 </div>
 
+                                {/* BACKLOG-336: was overflow-hidden, which on mobile silently
+                                    clipped Availability/Performance/Matches/Actions with no way
+                                    to reach them -- unreachable, not just off-screen. Fixed by
+                                    shrinking to fit instead of scrolling: smaller padding/text at
+                                    the default (mobile) breakpoint, full desktop sizing from sm:
+                                    up, and the Matches column hidden below sm: (least essential
+                                    column, avatars-only, redundant with the Actions "manage" flow). */}
                                 <div className="bg-white/5 border border-white/10 rounded-[32px] overflow-hidden">
                                     <table className="w-full text-left border-collapse">
                                         <thead>
                                             <tr className="bg-white/5 text-[10px] font-black uppercase tracking-widest text-white/30">
-                                                <th className="p-6">Logger</th>
-                                                <th className="p-6">Status</th>
-                                                <th className="p-6">Availability</th>
-                                                <th className="p-6">Performance</th>
-                                                <th className="p-6">Matches</th>
-                                                <th className="p-6 text-right">Actions</th>
+                                                <th className="p-2 sm:p-6">Logger</th>
+                                                <th className="p-2 sm:p-6">Status</th>
+                                                <th className="p-2 sm:p-6">Avail.<span className="hidden sm:inline">ability</span></th>
+                                                <th className="p-2 sm:p-6">Perf.<span className="hidden sm:inline">ormance</span></th>
+                                                <th className="hidden sm:table-cell p-2 sm:p-6">Matches</th>
+                                                <th className="p-2 sm:p-6 text-right">Actions</th>
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-white/5">
@@ -405,46 +412,50 @@ function AdminLoggersPageContent() {
                                                 const loggerAnalytics = analytics?.loggers?.find((a: any) => a.logger.id === logger.id);
                                                 return (
                                                     <tr key={logger.id} className="group hover:bg-white/5 transition-colors">
-                                                        <td className="p-6">
-                                                            <div className="flex items-center gap-3">
-                                                                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary/20 to-blue-500/20 flex items-center justify-center border border-white/10">
-                                                                    <span className="text-xs font-black italic">{logger.name.split(' ').map(n => n[0]).join('')}</span>
+                                                        <td className="p-2 sm:p-6">
+                                                            <div className="flex items-center gap-2 sm:gap-3">
+                                                                <div className="w-7 h-7 sm:w-10 sm:h-10 rounded-full bg-gradient-to-br from-primary/20 to-blue-500/20 flex items-center justify-center border border-white/10 shrink-0">
+                                                                    <span className="text-[10px] sm:text-xs font-black italic">{logger.name.split(' ').map(n => n[0]).join('')}</span>
                                                                 </div>
-                                                                <div>
-                                                                    <p className="text-sm font-bold italic">{logger.name}</p>
-                                                                    <p className="text-[10px] text-white/30 font-bold uppercase tracking-tighter">{logger.email}</p>
+                                                                <div className="min-w-0">
+                                                                    <p className="text-xs sm:text-sm font-bold italic truncate max-w-[90px] sm:max-w-none">{logger.name}</p>
+                                                                    <p className="hidden sm:block text-[10px] text-white/30 font-bold uppercase tracking-tighter">{logger.email}</p>
                                                                 </div>
                                                             </div>
                                                         </td>
-                                                        <td className="p-6">
+                                                        <td className="p-2 sm:p-6">
                                                             <StatusBadge status={logger.status} />
                                                         </td>
-                                                        <td className="p-6">
+                                                        <td className="p-2 sm:p-6">
                                                             <button
                                                                 onClick={() => toggleAvailability(logger.id, logger.isAvailable)}
-                                                                className={`flex items-center gap-2 px-3 py-1.5 rounded-full border transition-all ${logger.isAvailable
+                                                                className={`flex items-center gap-1 sm:gap-2 px-1.5 sm:px-3 py-1 sm:py-1.5 rounded-full border transition-all ${logger.isAvailable
                                                                     ? 'bg-primary/10 border-primary/20 text-primary'
                                                                     : 'bg-white/5 border-white/10 text-white/40'
                                                                     }`}
                                                             >
-                                                                <div className={`w-1.5 h-1.5 rounded-full ${logger.isAvailable ? 'bg-primary' : 'bg-white/20'}`}></div>
-                                                                <span className="text-[10px] font-black uppercase tracking-widest">
-                                                                    {logger.isAvailable ? 'Available' : 'Busy'}
+                                                                <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${logger.isAvailable ? 'bg-primary' : 'bg-white/20'}`}></div>
+                                                                {/* BACKLOG-336: full word on desktop, single-letter on mobile -- the
+                                                                    pill + dot already carries the state, the label is a label not
+                                                                    the only signal, so abbreviating it costs nothing real. */}
+                                                                <span className="text-[9px] sm:text-[10px] font-black uppercase tracking-widest">
+                                                                    <span className="sm:hidden">{logger.isAvailable ? 'A' : 'B'}</span>
+                                                                    <span className="hidden sm:inline">{logger.isAvailable ? 'Available' : 'Busy'}</span>
                                                                 </span>
                                                             </button>
                                                         </td>
-                                                        <td className="p-6">
-                                                            <div className="flex items-center gap-4">
-                                                                <div className="flex-1 max-w-[100px] h-1 bg-white/10 rounded-full overflow-hidden">
+                                                        <td className="p-2 sm:p-6">
+                                                            <div className="flex items-center gap-1 sm:gap-4">
+                                                                <div className="hidden sm:block flex-1 max-w-[100px] h-1 bg-white/10 rounded-full overflow-hidden">
                                                                     <div
                                                                         className="h-full bg-primary"
                                                                         style={{ width: `${loggerAnalytics?.metrics?.qualityScore || 0}%` }}
                                                                     ></div>
                                                                 </div>
-                                                                <span className="text-xs font-bold italic">{loggerAnalytics?.metrics?.qualityScore || 0}%</span>
+                                                                <span className="text-[10px] sm:text-xs font-bold italic">{loggerAnalytics?.metrics?.qualityScore || 0}%</span>
                                                             </div>
                                                         </td>
-                                                        <td className="p-6">
+                                                        <td className="hidden sm:table-cell p-2 sm:p-6">
                                                             <div className="flex -space-x-2">
                                                                 {logger.assignedMatches?.filter(m => m.status !== 'FINISHED').slice(0, 3).map((m, i) => (
                                                                     <div key={i} className="w-6 h-6 rounded-full bg-black border border-white/20 flex items-center justify-center text-[10px] font-bold" title={m.competition}>
@@ -458,16 +469,18 @@ function AdminLoggersPageContent() {
                                                                 )}
                                                             </div>
                                                         </td>
-                                                        <td className="p-6 text-right">
-                                                            <div className="flex items-center justify-end gap-2">
+                                                        <td className="p-2 sm:p-6 text-right">
+                                                            <div className="flex items-center justify-end gap-0.5 sm:gap-2">
                                                                 <button
                                                                     onClick={() => handleEditClick(logger)}
-                                                                    className="p-2 hover:bg-white/10 rounded-lg transition-colors text-white/40 hover:text-white"
+                                                                    className="p-1 sm:p-2 hover:bg-white/10 rounded-lg transition-colors text-white/40 hover:text-white"
                                                                 >
-                                                                    <Settings size={16} />
+                                                                    <Settings size={14} className="sm:hidden" />
+                                                                    <Settings size={16} className="hidden sm:block" />
                                                                 </button>
-                                                                <button className="p-2 hover:bg-white/10 rounded-lg transition-colors text-white/40 hover:text-white">
-                                                                    <MoreVertical size={16} />
+                                                                <button className="p-1 sm:p-2 hover:bg-white/10 rounded-lg transition-colors text-white/40 hover:text-white">
+                                                                    <MoreVertical size={14} className="sm:hidden" />
+                                                                    <MoreVertical size={16} className="hidden sm:block" />
                                                                 </button>
                                                             </div>
                                                         </td>
@@ -980,7 +993,7 @@ function StatusBadge({ status }: { status: string }) {
     const config = configs[status as keyof typeof configs] || configs.inactive;
 
     return (
-        <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border ${config.bg} ${config.color} ${config.border}`}>
+        <span className={`px-1.5 sm:px-3 py-0.5 sm:py-1 rounded-full text-[9px] sm:text-[10px] font-black uppercase tracking-widest border whitespace-nowrap ${config.bg} ${config.color} ${config.border}`}>
             {config.label}
         </span>
     );
