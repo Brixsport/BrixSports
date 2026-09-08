@@ -9937,35 +9937,57 @@ Fixed exactly per the "Fix (not built)" plan below: `MatchStatusBadge.tsx` now d
 
 ---
 
-### BACKLOG-338 — Match Detail: Scroll-Hide Header Leaves a Gap Above the Tab Content
+### BACKLOG-339 — Match Detail: Scroll-Hide Header Leaves a Gap Above the Tab Content
 
-**Status:** SHIPPED — commit pending, live verification not yet run.
+**Status:** SHIPPED — commit pending, live verification (of the final compact-navbar design,
+below) not yet run.
 **Priority:** MEDIUM — cosmetic, but hits the very first scroll gesture on the platform's
 highest-traffic page (match detail), every match, every viewer.
 **Files:** `src/app/matches/[id]/MatchDetailClient.tsx`.
+**Renumbered from `BACKLOG-338`** — that number collided with a concurrent session's push (the
+`MatchLineup`/`formations` dead-code cleanup entry). No functional change, just this entry's own
+number.
 
 **Reported:** Richard, 2026-09-08, on the match-detail Timeline (All tab) screen — "scrolling down
 the whole scoreboard section and tabs bar goes off and feels like there's space between that
 section and the ones downward."
 
-**Root cause, confirmed via DOM measurement (not guessed):** the sticky score/tabs header hides
+**Root cause, confirmed via DOM measurement (not guessed):** the sticky score/tabs header hid
 on scroll-down via `transform: translateY(-100%)` once `currentScrollY > 100` (a fixed constant).
 `position: sticky` never reserves extra flow space for a translated element, so the timeline
-content below sits at a fixed document offset equal to the header's real height (~297px on a
-typical match), independent of the transform. Between `scrollY` 100 and ~297, the header retracts
-before the content has scrolled up far enough to reach the top — producing a real, measured gap of
+content below sat at a fixed document offset equal to the header's real height (~297px on a
+typical match), independent of the transform. Between `scrollY` 100 and ~297, the header retracted
+before the content had scrolled up far enough to reach the top — producing a real, measured gap of
 plain background (confirmed live: `stickyRect` translated to `top: -220px`, content div's
-`top: -603px` at `scrollY: 900` region, but at the moment of the very first hide near `scrollY:
-101` the content top was still ~195px below the viewport top). The gap shrinks and disappears once
-`scrollY` exceeds the header's own height, so it's a transient artifact of the very first
-scroll-down, not a permanent misalignment — but that's exactly the first thing every viewer does.
+`top: -603px` at `scrollY: 900`, but at the moment of the very first hide near `scrollY: 101` the
+content top was still ~195px below the viewport top). The gap shrunk and disappeared once `scrollY`
+exceeded the header's own height, so it was a transient artifact of the very first scroll-down —
+but that's exactly the first thing every viewer does.
 
-**Fix:** measure the header's real height via a ref (`headerRef.current.offsetHeight`) instead of
-the fixed `100` constant, and gate the hide on `currentScrollY > headerHeight`. By the time the
-header is allowed to retract, the content has always already scrolled flush to the top, so no gap
-can appear. Adapts automatically to header height changes (upcoming vs. live/finished matches show
-a different tab set, changing header height) since it's read fresh on every scroll event, not
-cached.
+**First fix attempt (superseded):** measured the header's real height via a ref and gated the hide
+on `currentScrollY > headerHeight` instead of the fixed constant, so content would always already
+be flush with the top before the header retracted. DOM-measurement-verified on the resulting
+preview (`gap: 0` at the exact hide transition, vs. the old build's measured ~195px at the same
+scroll position — see this entry's git history for the full before/after table) — but this only
+fixed the timing of the disappearing act, not the act itself, and a second sticky element nested
+inside the Lineups tab (`Share LineUp`'s own `sticky top-0 z-30` bar) meant the underlying
+hide/show pattern was fragile per-tab, not just per this one header.
+
+**Direction changed, same session (Richard's call):** rather than patch the hide/show timing
+further, replace the pattern entirely — the header never disappears now. On scroll past a small
+threshold (40px) it collapses into a compact permanent navbar (team logos shrink 12→7 (Tailwind
+units), score digits 4xl→2xl, the goal-scorer list is dropped) and stays `position: sticky`
+pinned at the top indefinitely, same as SofaScore/ESPN's collapsing match header. Tabs never move.
+Since nothing ever translates off-screen, the class of bug this entry describes (content position
+independent of a translated element's visibility) can't recur structurally, not just for this one
+scroll threshold value. Implementation: `isCompact` boolean off a single `scrollY > 40` check (no
+scroll-direction tracking needed, since collapsing doesn't need to reverse except near the top);
+Tailwind `transition-all duration-300` on the shrinking elements, `AnimatePresence`/`motion.div`
+height animation on the goal-scorer list's mount/unmount.
+
+**Pending items:** live-verify the compact-navbar behavior on the branch's Vercel preview (confirm
+the collapse triggers smoothly, the Lineups tab's own nested sticky bar no longer conflicts with
+it, and the tab bar never separates from the score row) before moving this to RESOLVED.
 
 **Pending items:** live-verify on the branch's Vercel preview (measure `scrollY` at the hide
 transition and confirm zero gap) before moving this to RESOLVED.

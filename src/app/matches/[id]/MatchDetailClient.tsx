@@ -106,17 +106,18 @@ export default function MatchDetailClient() {
     const [notifyLoading, setNotifyLoading] = useState(false);
     const [h2hData, setH2hData] = useState<any>(null);
     const [scrollY, setScrollY] = useState(0);
-    const [lastScrollY, setLastScrollY] = useState(0);
-    // BACKLOG-338: the sticky header used to hide at a fixed 100px scroll threshold
-    // regardless of its own (much taller, ~300px) height. Since `position: sticky`
-    // doesn't reserve extra space when translated away, hiding it before the page
-    // had scrolled past its own height left a real gap of empty background between
-    // the (now off-screen) header and the timeline content below, which hadn't
-    // scrolled up far enough yet to fill it. Measuring the header's real height and
-    // gating the hide on that (not a guessed constant) means content has always
-    // already scrolled flush to the top by the time the header retracts.
-    const headerRef = useRef<HTMLDivElement>(null);
-    const [headerVisible, setHeaderVisible] = useState(true);
+    // BACKLOG-338: the header used to fully retract off-screen on scroll-down
+    // (translateY(-100%)) and reappear on scroll-up. Since `position: sticky`
+    // never reserves flow space for a translated element, the timeline content
+    // below sat at a fixed document offset regardless of the header's visual
+    // state -- so there was a real, measured window (scrollY 100 to ~header's
+    // own height) where the header had already retracted but content hadn't
+    // scrolled up far enough to fill the space, producing a visible gap of bare
+    // background. Richard's direction: don't hide the header at all -- collapse
+    // it into a compact permanent navbar instead (team/score/tabs only, goal
+    // scorer list dropped), same pattern as SofaScore/ESPN match pages. Nothing
+    // ever translates off-screen now, which also structurally removes the gap.
+    const [isCompact, setIsCompact] = useState(false);
 
     const { isConnected, on, off } = useWebSocket({ matchId, autoConnect: true });
     const { events: liveEvents, latestEvent } = useMatchEvents(matchId);
@@ -243,7 +244,12 @@ export default function MatchDetailClient() {
         }
     }, [matchTime]);
 
-    // Handle scroll for hide/show header behavior
+    // Collapse the header into a compact navbar (team/score/tabs only) past a
+    // small scroll threshold, and expand it again near the top. No direction
+    // tracking needed -- unlike the old hide/show behavior, the header never
+    // leaves the DOM's visual flow, so there's no "which way are we scrolling"
+    // state to get wrong, and no gap can ever open up beneath it.
+    const COMPACT_THRESHOLD = 40;
     useEffect(() => {
         let ticking = false;
 
@@ -251,26 +257,8 @@ export default function MatchDetailClient() {
             if (!ticking) {
                 window.requestAnimationFrame(() => {
                     const currentScrollY = window.scrollY;
-                    const headerHeight = headerRef.current?.offsetHeight ?? 100;
-
-                    // Determine scroll direction
-                    if (currentScrollY > lastScrollY && currentScrollY > headerHeight) {
-                        // Scrolling down & past the header's own height - hide header
-                        // (gated on real height, not a guessed constant, so content is
-                        // already flush with the top before the header retracts).
-                        setHeaderVisible(false);
-                    } else if (currentScrollY < lastScrollY) {
-                        // Scrolling up - show header
-                        setHeaderVisible(true);
-                    }
-
-                    // Always show header at top of page
-                    if (currentScrollY < 50) {
-                        setHeaderVisible(true);
-                    }
-
+                    setIsCompact(currentScrollY > COMPACT_THRESHOLD);
                     setScrollY(currentScrollY);
-                    setLastScrollY(currentScrollY);
                     ticking = false;
                 });
                 ticking = true;
@@ -279,7 +267,7 @@ export default function MatchDetailClient() {
 
         window.addEventListener('scroll', handleScroll, { passive: true });
         return () => window.removeEventListener('scroll', handleScroll);
-    }, [lastScrollY]);
+    }, []);
 
     // Fetch match data
     useEffect(() => {
@@ -650,17 +638,12 @@ export default function MatchDetailClient() {
     return (
         <div className="min-h-screen bg-[#050505] text-white">
             <ToastContainer toasts={toasts} onClose={removeToast} />
-            {/* Sticky Header - Slides up/down based on scroll direction */}
-            <div
-                ref={headerRef}
-                className="sticky top-0 z-40 bg-gradient-to-b from-[#050505] via-[#050505]/95 to-[#050505]/90 backdrop-blur-xl border-b border-white/10 transition-transform duration-300 ease-out"
-                style={{
-                    transform: headerVisible ? 'translateY(0)' : 'translateY(-100%)',
-                }}
-            >
-                <div className="max-w-7xl mx-auto px-4 py-4">
+            {/* Sticky Header - permanently pinned like a navbar; collapses to a
+                compact team/score bar on scroll instead of hiding (BACKLOG-338) */}
+            <div className="sticky top-0 z-40 bg-gradient-to-b from-[#050505] via-[#050505]/95 to-[#050505]/90 backdrop-blur-xl border-b border-white/10">
+                <div className={`max-w-7xl mx-auto px-4 transition-[padding] duration-300 ease-out ${isCompact ? 'pt-2 pb-1' : 'py-4'}`}>
                     {/* Top bar */}
-                    <div className="flex items-center justify-between mb-4">
+                    <div className={`flex items-center justify-between transition-all duration-300 ease-out ${isCompact ? 'mb-1' : 'mb-4'}`}>
                         <button
                             onClick={() => router.back()}
                             className="flex items-center gap-2 text-white/60 hover:text-white transition-colors"
@@ -690,14 +673,14 @@ export default function MatchDetailClient() {
                         </div>
                     </div>
 
-                    {/* Match Info - Always visible */}
+                    {/* Match Info - Always visible, shrinks when compact */}
                     <div className="flex items-center justify-between gap-4">
                         {/* Home Team */}
                         <div className="flex items-center gap-3 flex-1">
                             <img
                                 src={match.homeTeam.logo}
                                 alt={match.homeTeam.name}
-                                className="w-12 h-12 object-contain"
+                                className={`object-contain transition-all duration-300 ease-out ${isCompact ? 'w-7 h-7' : 'w-12 h-12'}`}
                             />
                             {/* Star sits outside the sm:block name wrapper below -- it's an
                                 interactive control, not space-saving decorative text, and must
@@ -731,10 +714,10 @@ export default function MatchDetailClient() {
                             {/* BACKLOG-105/Richard's call: this is a single-match detail view, not a
                                 scanned list -- the PEN X-Y line already makes the result unambiguous,
                                 so no winner-color treatment here (that's a homepage/list-view thing). */}
-                            <div className="flex items-center gap-4">
-                                <div className="text-4xl font-black">{match.homeScore}</div>
-                                <div className="text-2xl text-white/40">-</div>
-                                <div className="text-4xl font-black">{match.awayScore}</div>
+                            <div className={`flex items-center transition-all duration-300 ease-out ${isCompact ? 'gap-2' : 'gap-4'}`}>
+                                <div className={`font-black transition-all duration-300 ease-out ${isCompact ? 'text-2xl' : 'text-4xl'}`}>{match.homeScore}</div>
+                                <div className={`text-white/40 transition-all duration-300 ease-out ${isCompact ? 'text-lg' : 'text-2xl'}`}>-</div>
+                                <div className={`font-black transition-all duration-300 ease-out ${isCompact ? 'text-2xl' : 'text-4xl'}`}>{match.awayScore}</div>
                             </div>
                             {hasShootoutResult && (
                                 <div className="text-xs text-white/50 font-bold uppercase tracking-wider mt-0.5">
@@ -798,32 +781,42 @@ export default function MatchDetailClient() {
                             <img
                                 src={match.awayTeam.logo}
                                 alt={match.awayTeam.name}
-                                className="w-12 h-12 object-contain"
+                                className={`object-contain transition-all duration-300 ease-out ${isCompact ? 'w-7 h-7' : 'w-12 h-12'}`}
                             />
                         </div>
                     </div>
 
-                    {/* Goal Scorers - always shows this flanking the score; had
-                        nothing here at all before BACKLOG-294. Omitted entirely on a scoreless
-                        match rather than rendering an empty row. */}
-                    {(homeScorers.length > 0 || awayScorers.length > 0) && (
-                        <div className="flex items-start justify-between gap-4 mt-3 text-xs text-white/70">
-                            <div className="flex-1 space-y-0.5 text-right">
-                                {homeScorers.map(s => (
-                                    <div key={s.name}>{s.name} {s.minutes.map(m => `${m}'`).join(', ')}</div>
-                                ))}
-                            </div>
-                            <FaFutbol className="w-3 h-3 text-white/30 flex-shrink-0 mt-1" />
-                            <div className="flex-1 space-y-0.5">
-                                {awayScorers.map(s => (
-                                    <div key={s.name}>{s.name} {s.minutes.map(m => `${m}'`).join(', ')}</div>
-                                ))}
-                            </div>
-                        </div>
-                    )}
+                    {/* Goal Scorers - flanks the score; dropped when the header is
+                        compact (Richard's direction: shrink to team/score/tabs only on
+                        scroll, same pattern as SofaScore/ESPN's collapsing match header).
+                        Omitted entirely on a scoreless match rather than an empty row. */}
+                    <AnimatePresence initial={false}>
+                        {!isCompact && (homeScorers.length > 0 || awayScorers.length > 0) && (
+                            <motion.div
+                                key="goal-scorers"
+                                initial={{ opacity: 0, height: 0 }}
+                                animate={{ opacity: 1, height: 'auto' }}
+                                exit={{ opacity: 0, height: 0 }}
+                                transition={{ duration: 0.2 }}
+                                className="flex items-start justify-between gap-4 mt-3 text-xs text-white/70 overflow-hidden"
+                            >
+                                <div className="flex-1 space-y-0.5 text-right">
+                                    {homeScorers.map(s => (
+                                        <div key={s.name}>{s.name} {s.minutes.map(m => `${m}'`).join(', ')}</div>
+                                    ))}
+                                </div>
+                                <FaFutbol className="w-3 h-3 text-white/30 flex-shrink-0 mt-1" />
+                                <div className="flex-1 space-y-0.5">
+                                    {awayScorers.map(s => (
+                                        <div key={s.name}>{s.name} {s.minutes.map(m => `${m}'`).join(', ')}</div>
+                                    ))}
+                                </div>
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
 
                     {/* Tabs */}
-                    <div className="flex gap-1 border-t border-white/10 overflow-x-auto scrollbar-hide mt-4">
+                    <div className={`flex gap-1 border-t border-white/10 overflow-x-auto scrollbar-hide transition-all duration-300 ease-out ${isCompact ? 'mt-1' : 'mt-4'}`}>
                         <button
                             onClick={() => setActiveTab('overview')}
                             className={`px-3 py-2 text-[10px] font-bold uppercase tracking-wider transition-all relative whitespace-nowrap ${activeTab === 'overview'
