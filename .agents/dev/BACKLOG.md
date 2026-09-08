@@ -761,7 +761,7 @@ BUG-001 through BUG-029, AUDIT-001/002 (partial), BACKLOG-065 — all resolved S
 
   **BACKLOG-113 absorbed into this item** — simplified modal is part of the build, not a future UX improvement.
 
-- **BACKLOG-120** _(LOW — Public UX)_: Penalty shootout result not displayed on match card or match detail page. When a match ends 0-0 (or any score) and goes to a shootout, the UI shows only the regulation score — no "(X-Y pens)" line anywhere. The shootout result currently lives in `matches.stats` as a JSON blob (`stats.penaltyShootout.homeScore` / `stats.penaltyShootout.awayScore`) with a human-readable `notes` string, but nothing in the frontend reads it for display. Confirmed affected surfaces: match card (`src/components/ui/MatchCard.tsx`), match detail score header (`src/app/matches/[id]/page.tsx`), homepage match cards (`src/app/page.tsx`). The fix is UI-only — read `stats?.penaltyShootout` where it exists and render `({homeScore}-{awayScore} pens)` below the regulation score on FINISHED matches. **This is independent of BACKLOG-105** (which covers logging shootout events during a live match via PEN_SCORED/PEN_MISSED/PEN_SAVED types and dedicated DB columns). This item requires no schema change — only reading the existing JSON blob that's already present. Known live case: `busa-match-final-2026` (Kings vs Joga, 0-0, Kings won 4-3 on penalties) — currently shows 0-0 with no shootout context visible to any viewer. Filed: 2026-07-01. **Status:** OPEN
+- **BACKLOG-340** _(LOW — Public UX, renumbered from a duplicate BACKLOG-120 ID -- collision with the unrelated "Link Player Profiles" item found session `competitions-consolidation`, 2026-09-08)_: Penalty shootout result not displayed on match card or match detail page. When a match ends 0-0 (or any score) and goes to a shootout, the UI shows only the regulation score — no "(X-Y pens)" line anywhere. The shootout result currently lives in `matches.stats` as a JSON blob (`stats.penaltyShootout.homeScore` / `stats.penaltyShootout.awayScore`) with a human-readable `notes` string, but nothing in the frontend reads it for display. Confirmed affected surfaces: match card (`src/components/ui/MatchCard.tsx`), match detail score header (`src/app/matches/[id]/page.tsx`), homepage match cards (`src/app/page.tsx`). The fix is UI-only — read `stats?.penaltyShootout` where it exists and render `({homeScore}-{awayScore} pens)` below the regulation score on FINISHED matches. **This is independent of BACKLOG-105** (which covers logging shootout events during a live match via PEN_SCORED/PEN_MISSED/PEN_SAVED types and dedicated DB columns). This item requires no schema change — only reading the existing JSON blob that's already present. Known live case: `busa-match-final-2026` (Kings vs Joga, 0-0, Kings won 4-3 on penalties) — currently shows 0-0 with no shootout context visible to any viewer. Filed: 2026-07-01. **Status:** OPEN
 
   **Relationship to BACKLOG-105:** BACKLOG-105 builds the proper structured shootout logging pipeline (event types, dedicated columns, ShootoutModal). Once BACKLOG-105 ships, this item should be updated to read from `shootout_home_score`/`shootout_away_score` columns instead of the JSON blob. Until then, reading the blob is the correct interim approach. Do not block this fix on BACKLOG-105.
 
@@ -985,9 +985,9 @@ Rolling substitutions (unlimited, no cap gate) cannot be tested on the same matc
 
 ---
 
-### BACKLOG-120 — Admin-Facing "Link Player Profiles" Action (Multi-Sport Identity)
+### ~~BACKLOG-120~~ — Admin-Facing "Link Player Profiles" Action (Multi-Sport Identity)
 
-**Status:** OPEN
+**Status:** RESOLVED — 2026-09-08, live-verified on staging.
 **Priority:** Medium
 **Filed:** 2026-07-11
 
@@ -995,11 +995,22 @@ Rolling substitutions (unlimited, no cap gate) cannot be tested on the same matc
 
 Confirmed via a real case this session: Abdul-jabbaar Bello (football, `busa-pirates-player-9`) and Storm's "Jabbar" (basketball, `DRSlwyUmV-Bgff6JMnt0r`) are the same real person, per Richard — handled as a one-off manual `profile_id` write rather than blocked on this backlog item. Given multi-sport athletes are confirmed common (not rare) for college-age athletes on this platform, this won't be the last case.
 
-**Fix:** A real admin-facing "link these two player profiles" action, independent of email matching — e.g. an admin picks player A and player B from search, confirms, and the system either reuses an existing `profile_id` (if either row already has one) or generates a fresh one via `nanoid()` and writes it to both rows.
-
 **Not urgent** — no other pending case is blocked on this; it exists to make the next multi-sport link a UI action instead of a manual directive.
 
-**Related:** `src/db/utils/player-profile.ts`, `src/app/api/players/[id]/route.ts` (relatedProfiles read), `src/app/players/[id]/page.tsx` (Multi-Sport Athlete card)
+**Built:**
+- `linkPlayerProfiles()` + `LinkProfileError` class added to `src/db/utils/player-profile.ts` (colocated with the existing `getPlayerProfileId`, same domain — not a new service file, mirrors `transferPlayerToTeam()`'s extraction pattern in `rosterService.ts` without adding a whole new lib file for one function). Reuses either row's existing `profileId` if exactly one has one, generates a fresh one via `nanoid()` if neither does, is idempotent if both already share the same one, and 409s if both already have *different* profileIds (that's a real duplicate-identity merge — re-pointing `matchEvents`/`playerStats`/etc to one canonical row and deleting the loser — explicitly `BACKLOG-042`'s job, not this one's). Two-row update wrapped in `db.transaction()`.
+- New `POST /api/admin/players/link-profiles` route — thin handler (admin-only via `getAuthUser`), delegates to the service function, same shape as the existing `/api/admin/players/[playerId]/transfer` route.
+- `GET /api/search` gained an optional `excludeId` param (additive, no existing caller affected) so the admin's player-B search doesn't show player A (the one they're already linking from) in its own results.
+- `/admin/players/[id]/page.tsx`: new "Link Profile" button next to the existing "Transfer" button (same style/placement), opens a debounced search modal (reuses `PlayerAvatar` from `BACKLOG-296`, `useDebounce`) → select → `ConfirmDialog` (existing shared component, not a new one) → POST → refetch. New read-only "Linked Profiles" section renders `player.relatedProfiles` (already returned by `GET /api/players/[id]`, never previously surfaced anywhere in admin).
+- Fixed a real backlog-hygiene bug found while closing this out: two unrelated entries both used the id `BACKLOG-120` (this one, and an older penalty-shootout-display item filed 2026-07-01) — the shootout one renumbered to `BACKLOG-340`.
+
+**Evidence:**
+- Commit: `c802f01` (`feat(admin): BACKLOG-120 -- admin action to link two players as one multi-sport profile`), branch `work/competitions-consolidation`, pushed.
+- `tsc --noEmit`: identical to the 35-line pre-existing baseline, zero new errors in any touched file.
+- Live-verified on the branch's own Vercel preview, real admin JWT (`dev/gen-admin-token-backlog120-verify.mjs`, staging DB), full detail in `RUNLOG.md`'s matching entry. Summary: full UI click-through confirmed on the idempotent case (Abdul-jabbaar Bello ↔ Storm "Jabbar", already linked — 200, same `profileId` returned, `relatedProfiles` stayed at exactly 1, no duplicate created); fresh-link, conflict (409), and self-link (422) branches verified via direct authenticated `fetch()` in the same browser tab. The fresh-link test used two real, currently-unlinked players and was reverted to `profileId: null` on both immediately after (confirmed via a cache-busted re-read) — no fabricated data left in the shared staging DB. Abdul-jabbaar Bello's real link was read back unchanged at the end.
+- Pending: none. `BACKLOG-068`/`069` (duplicate-profile audit, missing-field audit) remain separately open and unrelated — this item only covers the *linking action* itself, not a platform-wide audit.
+
+**Related:** `src/db/utils/player-profile.ts`, `src/app/api/admin/players/link-profiles/route.ts`, `src/app/api/players/[id]/route.ts` (relatedProfiles read), `src/app/players/[id]/page.tsx` (public Multi-Sport Athlete card), `src/app/admin/players/[id]/page.tsx` (admin Link Profile action + Linked Profiles section)
 
 ---
 
