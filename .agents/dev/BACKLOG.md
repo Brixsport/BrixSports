@@ -9939,8 +9939,7 @@ Fixed exactly per the "Fix (not built)" plan below: `MatchStatusBadge.tsx` now d
 
 ### BACKLOG-339 — Match Detail: Scroll-Hide Header Leaves a Gap Above the Tab Content
 
-**Status:** SHIPPED — commit pending, live verification (of the final compact-navbar design,
-below) not yet run.
+**Status:** RESOLVED — 2026-09-08, live-verified on staging.
 **Priority:** MEDIUM — cosmetic, but hits the very first scroll gesture on the platform's
 highest-traffic page (match detail), every match, every viewer.
 **Files:** `src/app/matches/[id]/MatchDetailClient.tsx`.
@@ -9985,12 +9984,23 @@ scroll-direction tracking needed, since collapsing doesn't need to reverse excep
 Tailwind `transition-all duration-300` on the shrinking elements, `AnimatePresence`/`motion.div`
 height animation on the goal-scorer list's mount/unmount.
 
-**Pending items:** live-verify the compact-navbar behavior on the branch's Vercel preview (confirm
-the collapse triggers smoothly, the Lineups tab's own nested sticky bar no longer conflicts with
-it, and the tab bar never separates from the score row) before moving this to RESOLVED.
-
-**Pending items:** live-verify on the branch's Vercel preview (measure `scrollY` at the hide
-transition and confirm zero gap) before moving this to RESOLVED.
+**Evidence:**
+- Commit: `67dde8a` (`feature/ui-redesign`).
+- Verified by: DOM measurement against the resulting Vercel preview
+  (`brixsports-staging-6o5bg5z8r-brixsports-projects.vercel.app`), a real match
+  (`busa-sf-kings-pirates` / `8Mek2CA7KPlnk1EQ647jx`) with 130 real events.
+- Observed result: at `scrollY 0` — header 297px tall, 48px team logos, goal-scorer list present.
+  At `scrollY 200`/`500` — header settled at a compact 145px, 28px logos, goal-scorer list removed
+  from the DOM, `position: sticky` held at `top: 0` throughout (never translated off-screen), and
+  the gap between the header's bottom edge and the content div's top was `0` or negative (normal
+  pinned-header overlap) at every scroll depth tested, vs. the original bug's measured ~195px real
+  gap at the equivalent point. Scrolled back to `scrollY 10` and confirmed the header re-expands to
+  the full 297px/48px state. Bidirectional collapse/expand confirmed working, no gap at any point.
+- Pending items: none for this entry. `MatchLineups.tsx`'s own nested `sticky top-0 z-30` "Share
+  LineUp" bar (found while investigating the Lineups-tab screenshot Richard sent) was not touched —
+  it never actually conflicted with this fix once the outer header stopped disappearing, so it's a
+  separate, unconfirmed report (a visible gap between "Share LineUp" and the pitch content on a
+  real device) that needs its own investigation, not folded into this entry.
 
 ---
 
