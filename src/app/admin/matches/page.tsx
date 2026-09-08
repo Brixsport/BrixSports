@@ -546,8 +546,18 @@ function AdminMatchesPageContent() {
                                             </div>
                                         </div>
 
+                                        {/* BACKLOG-343: this action-icon row is always flex-row (the
+                                            outer md:flex-col wrapper is a no-op -- it has only this one
+                                            child, so direction never visibly changes). Up to 6 fixed p-3
+                                            icon buttons in one line has enough natural width that on some
+                                            cards -- ones with a longer venue/date row pushing the info
+                                            column's own min-content width up -- the tablet-width card
+                                            (~753-777px available) couldn't fit both columns, overflowing
+                                            the page by up to ~25px. flex-wrap lets the row reflow onto a
+                                            second line only when it doesn't fit; at full desktop width
+                                            everything already fits on one line, so this is a no-op there. */}
                                         <div className="flex flex-row md:flex-col gap-2">
-                                            <div className="flex gap-2">
+                                            <div className="flex flex-wrap justify-end gap-2">
                                                 <Link
                                                     href={`/admin/match-lineups`}
                                                     className="p-3 bg-white/5 border border-white/10 rounded-xl hover:bg-blue-500/20 text-blue-400 transition-colors"
