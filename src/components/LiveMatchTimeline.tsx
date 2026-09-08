@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import {
-    Circle, Target, ArrowRightLeft, Eye,
+    Circle, Target, Eye,
     TrendingUp, Award, Clock, Zap, Shield, Activity
 } from 'lucide-react';
 import { FaFutbol } from 'react-icons/fa';
@@ -110,7 +110,9 @@ export default function LiveMatchTimeline({ events, homeTeam, awayTeam, eyePoint
             case 'RED_CARD':
                 return <div className="w-3.5 h-5 rounded-[2px] bg-red-600" />;
             case 'SUBSTITUTION':
-                return <ArrowRightLeft className="w-5 h-5" />;
+                // Same two-tone in/out icon as the Key events view (SubstitutionIcon),
+                // not a plain single-color ArrowRightLeft -- Richard's explicit ask.
+                return <SubstitutionIcon className="w-5 h-5" />;
             case 'SAVE':
                 return <Shield className="w-5 h-5" />;
             case 'PENALTY_SAVED':

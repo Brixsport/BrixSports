@@ -9970,6 +9970,11 @@ icon, for goals; don't use emoji as icons).
    the outer badge carries a real icon, and not how the Figma reference renders any of its text
    (plain bold headlines, no emoji). Removed from all branches; the prose/commentary text itself
    is untouched.
+4. **Substitution icon, same follow-up.** `SUBSTITUTION`'s outer badge used a plain single-color
+   lucide `ArrowRightLeft`, inconsistent with the two-tone (green in / red out) `SubstitutionIcon`
+   this same file already built and uses correctly in `KeyEventsList` -- switched the "All" tab to
+   the same component instead of duplicating a lesser version. `ArrowRightLeft` import removed
+   (now dead, same as `AlertCircle` above).
 
 **Explicitly left alone (not called out, not touched):** the per-type card border accent
 (`getEventColor`), the period/half divider, `BACKLOG-332`'s uniform single-column layout, and the
