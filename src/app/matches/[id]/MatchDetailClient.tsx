@@ -25,6 +25,7 @@ import { LivestreamView } from '@/components/livestream/LivestreamView';
 import { useNotifications } from '@/components/Notifications';
 import { getPushService } from '@/lib/notifications/push-service';
 import { getDeviceId } from '@/lib/notifications/device-id';
+import { displayMinute } from '@/lib/eventMinute';
 
 // BACKLOG-150: which matchIds this device has an active anonymous "notify me"
 // subscription for. localStorage is the right store here -- device-scoped by
@@ -552,7 +553,7 @@ export default function MatchDetailClient() {
             const rawName = e.player?.jerseyName ?? e.player?.name ?? e.playerSnapshot?.jerseyName ?? e.playerSnapshot?.name ?? 'Unknown';
             const key = isOwnGoal ? `${rawName} (OG)` : rawName;
             if (!byPlayer.has(key)) byPlayer.set(key, []);
-            byPlayer.get(key)!.push(e.minute);
+            byPlayer.get(key)!.push(displayMinute(e.minute));
         }
         return Array.from(byPlayer.entries())
             .map(([name, minutes]) => {

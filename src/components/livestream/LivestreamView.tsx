@@ -7,6 +7,7 @@ import { ArrowLeft, Share2, MessageSquare, X, TrendingUp, Users, Clock, Play } f
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
+import { displayMinute } from '@/lib/eventMinute';
 
 interface Match {
     id: string;
@@ -287,7 +288,10 @@ export function LivestreamView({ match, livestream, onExit }: LivestreamViewProp
                                                     className="w-full flex items-center gap-3 p-3 bg-gray-800/50 rounded-lg hover:bg-gray-700 transition-colors group text-left"
                                                 >
                                                     <div className="flex flex-col items-center w-12 text-gray-400 group-hover:text-red-500 transition-colors">
-                                                        <span className="text-sm font-semibold">{event.minute}'</span>
+                                                        {/* Label only -- the seek-to-timestamp calculation above still uses the raw
+                                                            minute, unclamped, since a video seek position shouldn't be faked for a
+                                                            match with unknown timing (BACKLOG-337's -1 "unknown minute" sentinel). */}
+                                                        <span className="text-sm font-semibold">{displayMinute(event.minute)}'</span>
                                                         <Play size={10} className="opacity-0 group-hover:opacity-100 transition-opacity" />
                                                     </div>
                                                     <span className="text-2xl">{getEventIcon(event.type)}</span>
