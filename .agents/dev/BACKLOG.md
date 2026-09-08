@@ -4213,42 +4213,19 @@ Scanned 422 players with an active team affiliation. Compared every cross-sport 
 
 ### BACKLOG-069 — Partial Player Profile Audit
 
-**Status:** Item 1 (audit) DONE, 2026-09-08 — full findings below. Item 2 (fix flow) NOT started — the gaps are large enough (287 players missing college alone) that fixing needs Richard's call on approach/priority before any write, same as this entry's own original plan.
+**Status:** OPEN
 **Priority:** Medium — data quality, not blocking
 **Filed:** 2026-06-17
 
 #### Problem
 Many player profiles have missing fields — some non-critical (nicknames, age), some critical for live logging and competition eligibility (college, position, jersey number). No systematic report exists of which fields are missing and for how many players.
 
-#### Audit results, 2026-09-08 (`dev/audit-player-profiles-069.mjs`, read-only, `isExternal=0` scope per the backlog's own "Bells BUSA-league players" wording)
-
-422 players scanned.
-
-**Critical missing (blocks live logging / competition eligibility):**
-| Field | Missing | % |
-|---|---|---|
-| `college` | 287 | 68% |
-| `position` | 102 | 24% |
-| `jerseyNumber`/`number` | 73 | 17% |
-
-**Flag:** this entry's own note expected `college` NULL to be "~97 (post session 23 backfill of 110→97)". Actual count is **287, not ~97** — either the player base has grown substantially since that backfill (very plausible: 422 total players now, `PAUL` etc. are recent additions per the `BACKLOG-068` audit run same session) or the backfill's coverage was narrower than assumed. Not investigated further this session — flagging the discrepancy rather than guessing at the cause.
-
-**Non-critical missing (defer per this entry's own original plan unless a feature needs them):**
-| Field | Missing | % |
-|---|---|---|
-| `email` | 422 | 100% |
-| `age` | 364 | 86% |
-| `university` | 132 | 31% |
-| `jerseyName` | 115 | 27% |
-
-**Data-integrity check (this entry's own ask: "should be 0 after the affiliation backfill, but verify") — NOT zero.** 12 players have `college` set on the `players` row but no matching `college`-type row in `playerTeamAffiliations`:
-Boluwatife Fabusiwa (Quantum FC), Oladipupo Martins (Wolves FC), Aaron Osuji (Wolves FC), Hayatulai Olajumoke (Allianz FC), Olajuwon Oke (Allianz FC), Ridwanulai Oyatoye (Allianz FC), Joseph Ikechukwu Njoku-ugochukwu (Agenda FC), Taiwo Muhammed (Wolves FC), Oluwadarasimi Afeni (Wolves FC), Alamin Okunlola (Wolves FC), Funmilola Oke (Westbridge), Sofwan Arowojobe (Agenda FC).
-This one is a **concrete, low-risk fix** unlike the bulk field gaps above — additive `playerTeamAffiliations` INSERTs from each player's own already-set `college` value, no ambiguity about what the correct value should be. Worth doing as a small standalone follow-up if Richard wants it; not done this session (audit only, per the ask).
-
-**By team** (teams with zero gaps across all three critical fields omitted — full list of ~29 teams with real gaps is in `dev/audit-player-profiles-069.mjs`'s own run output, not duplicated here to keep this entry readable): worst offenders are `Deadline FC` (18/18 college, 16/18 position, 18/18 jersey), `Hammers` (30 total players, 15 missing college), `Legacy FC` (21/22 missing college). Two "College of ..." teams show 0 college gaps (expected — those players' own team *is* their college, `getResolvedInstitutionalData`-style data likely resolves differently there, not investigated further).
-
 #### Required Changes
-1. ~~**Audit script**~~ (`dev/audit-player-profiles-069.mjs`, filename differs slightly from the original `-profiles.mjs` spec — kept the `-069` suffix for consistency with this session's other audit scripts) — DONE, see above.
+1. **Audit script** (`dev/audit-player-profiles.mjs`) — query all Bells BUSA-league players and output a structured report:
+   - Critical missing: `college` (NULL), `position` (NULL or empty), `jerseyNumber` / `number` (NULL)
+   - Non-critical missing: `jerseyName` (NULL), `university` (NULL), `age` (NULL), `email` (NULL)
+   - Flag players with `college` set but no matching `playerTeamAffiliations` college row (should be 0 after BACKLOG affiliation backfill, but verify)
+   - Output: CSV or table grouped by team, with counts per field
 
 2. **Fix flow** — after report:
    - Critical fields: fix via admin player modal (individual) or a targeted update script (bulk)
