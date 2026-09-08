@@ -772,7 +772,10 @@ function AdminCompetitionsPageContent() {
                                 animate={{ opacity: 1, y: 0 }}
                                 className="bg-white/5 rounded-2xl p-6 border border-white/10 hover:border-primary/50 transition-all"
                             >
-                                {/* BACKLOG-342: was `flex items-start justify-between` with no wrap --
+                                {/* BACKLOG-344 (renumbered from BACKLOG-342 in the commit history --
+                                    that number collided with a concurrent session's match-detail
+                                    entry, BACKLOG-342 "Timeline All Tab: Restore Team-Side Mirroring"):
+                                    was `flex items-start justify-between` with no wrap --
                                     on mobile the info block and the Manage Teams/Edit/Delete action
                                     column competed for the same row and pushed scrollWidth to ~496px
                                     against a 375px viewport. Stack on mobile, restore the side-by-side
