@@ -10006,7 +10006,7 @@ session in `BACKLOG-342` -- see that entry.
 
 ### BACKLOG-342 — Timeline "All" Tab: Restore Team-Side Mirroring (Reverses `BACKLOG-332`)
 
-**Status:** SHIPPED — pending live verification.
+**Status:** RESOLVED — 2026-09-08, live-verified on staging.
 **Priority:** LOW — cosmetic, one screen.
 **Files:** `src/components/LiveMatchTimeline.tsx`.
 
@@ -10028,7 +10028,19 @@ character like `KeyEventsList`'s compact rows do) -- only the row's left/right p
 matching what the reference actually shows. Team-less events (no `teamId`) fall back to the home
 (left) side, matching the badge logic's own `isHomeTeam` default.
 
-**Pending items:** live-verify against the Figma ref on the branch's Vercel preview.
+**Evidence:**
+- Commit: `afb9579` (`feature/ui-redesign`), verified against the branch's own stable alias
+  (`brixsports-staging-git-feature-ui-redesign-brixsports-projects.vercel.app`, Richard's
+  suggestion this session over hunting a fresh per-commit preview URL each time).
+- Verified by: DOM inspection, same real `8Mek2CA7KPlnk1EQ647jx` match (156 rows incl. the period
+  header).
+- Observed result: 101 rows normal (home/Pirates), 53 rows carry `flex-row-reverse` (away/Hammers)
+  -- confirmed by real player names (`Charles`, `OBA`, `Spectrum` are Hammers players) not just
+  class-name presence. Bounding-rect check on one row of each: home row's icon badge left edge at
+  `x:6` (far left, card starts at `x:68`, to its right); away row's icon badge left edge at
+  `x:333` (far right, card starts at `x:36`, to its left) -- confirmed geometrically mirrored, not
+  just class-toggled with no visual effect.
+- Pending items: none.
 
 ---
 
