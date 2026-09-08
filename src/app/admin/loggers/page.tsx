@@ -399,12 +399,12 @@ function AdminLoggersPageContent() {
                                     <table className="w-full text-left border-collapse">
                                         <thead>
                                             <tr className="bg-white/5 text-[10px] font-black uppercase tracking-widest text-white/30">
-                                                <th className="p-2 sm:p-6">Logger</th>
-                                                <th className="p-2 sm:p-6">Status</th>
-                                                <th className="p-2 sm:p-6">Avail.<span className="hidden sm:inline">ability</span></th>
-                                                <th className="p-2 sm:p-6">Perf.<span className="hidden sm:inline">ormance</span></th>
-                                                <th className="hidden sm:table-cell p-2 sm:p-6">Matches</th>
-                                                <th className="p-2 sm:p-6 text-right">Actions</th>
+                                                <th className="p-1 sm:p-6">Logger</th>
+                                                <th className="p-1 sm:p-6">Status</th>
+                                                <th className="p-1 sm:p-6">Avail.<span className="hidden sm:inline">ability</span></th>
+                                                <th className="p-1 sm:p-6">Perf.<span className="hidden sm:inline">ormance</span></th>
+                                                <th className="hidden sm:table-cell p-1 sm:p-6">Matches</th>
+                                                <th className="p-1 sm:p-6 text-right">Actions</th>
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-white/5">
@@ -412,7 +412,7 @@ function AdminLoggersPageContent() {
                                                 const loggerAnalytics = analytics?.loggers?.find((a: any) => a.logger.id === logger.id);
                                                 return (
                                                     <tr key={logger.id} className="group hover:bg-white/5 transition-colors">
-                                                        <td className="p-2 sm:p-6">
+                                                        <td className="p-1 sm:p-6">
                                                             <div className="flex items-center gap-2 sm:gap-3">
                                                                 <div className="w-7 h-7 sm:w-10 sm:h-10 rounded-full bg-gradient-to-br from-primary/20 to-blue-500/20 flex items-center justify-center border border-white/10 shrink-0">
                                                                     <span className="text-[10px] sm:text-xs font-black italic">{logger.name.split(' ').map(n => n[0]).join('')}</span>
@@ -423,10 +423,10 @@ function AdminLoggersPageContent() {
                                                                 </div>
                                                             </div>
                                                         </td>
-                                                        <td className="p-2 sm:p-6">
+                                                        <td className="p-1 sm:p-6">
                                                             <StatusBadge status={logger.status} />
                                                         </td>
-                                                        <td className="p-2 sm:p-6">
+                                                        <td className="p-1 sm:p-6">
                                                             <button
                                                                 onClick={() => toggleAvailability(logger.id, logger.isAvailable)}
                                                                 className={`flex items-center gap-1 sm:gap-2 px-1.5 sm:px-3 py-1 sm:py-1.5 rounded-full border transition-all ${logger.isAvailable
@@ -444,7 +444,7 @@ function AdminLoggersPageContent() {
                                                                 </span>
                                                             </button>
                                                         </td>
-                                                        <td className="p-2 sm:p-6">
+                                                        <td className="p-1 sm:p-6">
                                                             <div className="flex items-center gap-1 sm:gap-4">
                                                                 <div className="hidden sm:block flex-1 max-w-[100px] h-1 bg-white/10 rounded-full overflow-hidden">
                                                                     <div
@@ -469,7 +469,7 @@ function AdminLoggersPageContent() {
                                                                 )}
                                                             </div>
                                                         </td>
-                                                        <td className="p-2 sm:p-6 text-right">
+                                                        <td className="p-1 sm:p-6 text-right">
                                                             <div className="flex items-center justify-end gap-0.5 sm:gap-2">
                                                                 <button
                                                                     onClick={() => handleEditClick(logger)}
