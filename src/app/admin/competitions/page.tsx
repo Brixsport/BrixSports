@@ -779,8 +779,8 @@ function AdminCompetitionsPageContent() {
                                     row from sm: up (matches this codebase's existing flex-col sm:flex-row
                                     card-header convention, e.g. admin/teams/[id], admin/roster-transfers). */}
                                 <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
-                                    <div className="flex-1">
-                                        <div className="flex items-center gap-3 mb-2">
+                                    <div className="flex-1 min-w-0">
+                                        <div className="flex flex-wrap items-center gap-3 mb-2">
                                             <h3 className="text-xl font-bold">{competition.name}</h3>
                                             <span className={`px-3 py-1 rounded-full text-xs font-bold ${competition.status === 'ongoing' ? 'bg-blue-500/20 text-blue-500' :
                                                 competition.status === 'upcoming' ? 'bg-blue-500/20 text-blue-500' :
