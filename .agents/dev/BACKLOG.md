@@ -10673,20 +10673,38 @@ Separately, `src/app/xi/page.tsx:152-161` never actually sent `userId` in its sa
 
 ---
 
-### BACKLOG-325 — Formation Template Duplication: Divergent Key Sets + Incompatible Coordinate Spaces
+### ~~BACKLOG-325~~ — Formation Template Duplication: Divergent Key Sets + Incompatible Coordinate Spaces
 
-**Status:** OPEN — filed, not fixed. Live bug, currently shipping. Root-cause fix is scoped as step 2 of `BACKLOG-323`'s implementation plan.
-**Priority:** MEDIUM — silently wrong rendering for real formations, same bug class as `BACKLOG-322` #2 (formation ignored), not yet hit by a known live match but confirmed reachable from the admin builder today.
-**Files:** `src/lib/formations.ts`, `src/components/FullPitchLineups.tsx` (inline `FORMATION_TEMPLATES`, lines 51-183), `src/app/xi/page.tsx` (inline `FORMATIONS` — a third, separate table).
+**Status:** RESOLVED (session continued 2026-09-08) — was already fixed as a side effect of `BACKLOG-323` step 2, this entry itself just never got updated to reflect it.
+**Priority:** MEDIUM — silently wrong rendering for real formations, same bug class as `BACKLOG-322` #2 (formation ignored).
+**Files (historical, two of the three now deleted — see below):** ~~`src/lib/formations.ts`~~ (deleted), `src/components/FullPitchLineups.tsx` (now reads `src/lib/lineup/formations.ts`, the canonical registry, for its V2 path), ~~`src/app/xi/page.tsx`~~ (deleted entirely, `BACKLOG-323` step 3).
 
-Three independent formation-template tables exist in the codebase, none sharing a source of truth:
+Three independent formation-template tables existed, none sharing a source of truth:
 
-1. **Divergent key sets.** `lib/formations.ts` (the admin builder's source) includes `4-5-1` and `3-1-4-2`, which `FORMATION_TEMPLATES` (the public renderer's source) does not — a match built in either of those two formations silently renders as the hardcoded `4-4-2` fallback on the public Lineups tab, the exact bug class `BACKLOG-322` #2 already fixed for the flat-path bug, still live for this case. Conversely `FORMATION_TEMPLATES` has 8 formations (`5-4-1`, `3-4-2-1`, `4-4-1-1`, `4-1-2-1-2`, `2-2`, `1-1-2`, `3-1`, `1-3`) unreachable from the builder at all.
-2. **Incompatible coordinate conventions.** `lib/formations.ts` uses full-pitch single-team space (GK `y:92`, ST `y:15`). `FORMATION_TEMPLATES` uses own-half space (GK `y:5`, FW `y:85`), mirrored per side in `assignPlayerToSlot` (`FullPitchLineups.tsx:420-431`). `/xi/page.tsx`'s own inline `FORMATIONS` uses a third convention (GK `y:90`, full-pitch single-team, close to but not identical to `lib/formations.ts`'s). Any future stored-coordinate design must pick and name one canonical space or this recurs.
+1. **Divergent key sets.** `lib/formations.ts` (the admin builder's source) included `4-5-1` and `3-1-4-2`, which `FORMATION_TEMPLATES` (the public renderer's source) did not — a match built in either formation silently rendered as the hardcoded `4-4-2` fallback. Conversely `FORMATION_TEMPLATES` had 8 formations (`5-4-1`, `3-4-2-1`, `4-4-1-1`, `4-1-2-1-2`, `2-2`, `1-1-2`, `3-1`, `1-3`) unreachable from the builder at all.
+2. **Incompatible coordinate conventions.** Three different spaces across the three tables (full-pitch vs. own-half, two slightly different full-pitch variants).
 
-**Fix:** build one canonical `src/lib/lineup/formations.ts` registry in own-half space (per `BACKLOG-323` step 2), merging all key sets, converting `lib/formations.ts`'s coordinates into the canonical space as its own reviewable commit. `/xi` may keep its own curated 3-formation allowlist against the same registry rather than adopting the full set. Requires visual re-verification against a real match once landed — this alone changes rendering for the two builder-only formations.
+**Fix, confirmed already landed:** `src/lib/lineup/formations.ts` (the canonical registry `BACKLOG-323` step 2 built, own-half space) contains all 10 previously-divergent formations, verified directly — `grep`-confirmed `4-5-1`/`3-1-4-2` (item 1's gap) and all 8 of `FORMATION_TEMPLATES`'s formations (item 1's reverse gap) all present with real `id`s. `/xi/page.tsx`'s third table is moot — the whole file was deleted in step 3. The only remaining loose end was that the two files under this entry's own **Files** list — `src/lib/formations.ts` and a second, previously-unnoticed dead file `src/components/MatchLineup.tsx` (its only importer, confirmed via grep) — were never actually deleted once the canonical registry replaced them; both had zero real importers left. Deleted both this session; see `BACKLOG-338` for that cleanup's own evidence. `tsc --noEmit`: 18 (baseline), zero new.
 
-**Found:** session 65 (2026-09-01), architect agent scoping pass for `BACKLOG-323`.
+**Found:** session 65 (2026-09-01), architect agent scoping pass for `BACKLOG-323`. Confirmed already-fixed and closed session continued 2026-09-08, while checking for the next open item after the lineup builder initiative's main close.
+
+---
+
+### ~~BACKLOG-338~~ — Second Orphaned `MatchLineup`/`formations` Dead-Code Pair (Distinct From `BACKLOG-220` Item 1's Pair)
+
+**Status:** RESOLVED (session continued 2026-09-08).
+**Priority:** LOW — dead code, zero functional impact, found while closing `BACKLOG-325`.
+**Files:** `src/components/MatchLineup.tsx` (deleted), `src/lib/formations.ts` (deleted).
+
+A second, differently-pathed dead component was found while verifying `BACKLOG-325` was actually fixed: `src/components/MatchLineup.tsx` (no `/lineup/` subdirectory — distinct from `src/components/lineup/MatchLineup.tsx`, the file `BACKLOG-220` item 1 already deleted earlier this session) had zero importers anywhere, confirmed via repo-wide grep. It was the sole remaining importer of `src/lib/formations.ts` (the old, pre-canonical-registry formation table `BACKLOG-325` was filed against), which became orphaned the moment `MatchLineup.tsx` was deleted too. Both deleted together.
+
+**Evidence:**
+- Commit: (this commit)
+- Verified by: repo-wide grep for every import path into both files before deleting (zero hits besides each other), `tsc --noEmit` run before (18, baseline) and after (18, identical) the deletion.
+- Observed result: zero new `tsc` errors, confirming nothing else in the codebase referenced either file.
+- Pending items: none.
+
+**Found:** session continued 2026-09-08, incidentally while confirming `BACKLOG-325`'s fix actually landed.
 
 ---
 
