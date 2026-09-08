@@ -1,15 +1,17 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useEffect, useState, type ReactNode } from 'react';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { motion } from 'framer-motion';
 import {
     ArrowLeft, Star, Trophy, Target, Shield,
-    TrendingUp, Activity, Calendar, Award, UserPlus, Search, History
+    TrendingUp, Activity, Calendar, History,
+    Clock, BarChart3, Table2, ChevronRight,
 } from 'lucide-react';
 import Link from 'next/link';
 import { format } from 'date-fns';
-import { PlayerComparison, PlayerComparisonEmpty } from '@/components/PlayerComparison';
+import { PlayerAvatar } from '@/lib/utils/player-avatar';
+import { useFavorites } from '@/hooks/useFavorites';
 
 interface PlayerData {
     player: any;
@@ -19,66 +21,85 @@ interface PlayerData {
     allEvents: any[];
 }
 
+const TABS = ['overview', 'stats', 'history'] as const;
+type Tab = typeof TABS[number];
+
+const TAB_ICON: Record<Tab, ReactNode> = {
+    overview: <Clock className="w-4 h-4" />,
+    stats: <BarChart3 className="w-4 h-4" />,
+    history: <Table2 className="w-4 h-4" />,
+};
+
+function InfoRow({ label, value }: { label: string; value: ReactNode }) {
+    return (
+        <div className="flex items-center justify-between py-3 border-b border-white/5 last:border-0">
+            <span className="text-white/60 text-sm">{label}</span>
+            <span className="font-semibold text-sm">{value}</span>
+        </div>
+    );
+}
+
+function StatTile({ value, label }: { value: ReactNode; label: string }) {
+    return (
+        <div className="text-center p-4 bg-white/5 rounded-xl border border-white/10">
+            <div className="text-2xl font-bold">{value}</div>
+            <div className="text-xs text-white/60">{label}</div>
+        </div>
+    );
+}
+
 export default function PlayerDetailClient() {
     const params = useParams();
     const router = useRouter();
+    const searchParams = useSearchParams();
     const playerId = params.id as string;
 
     const [data, setData] = useState<PlayerData | null>(null);
     const [loading, setLoading] = useState(true);
-    const [activeTab, setActiveTab] = useState<'overview' | 'stats' | 'history' | 'compare'>('overview');
-    const [comparePlayer, setComparePlayer] = useState<any>(null);
-    const [searchQuery, setSearchQuery] = useState('');
-    const [searchResults, setSearchResults] = useState<any[]>([]);
-    const [searching, setSearching] = useState(false);
+    // Distinguishes "player really doesn't exist" (404) from "the request
+    // itself failed" (network/server error) -- BACKLOG-296 item 5, these
+    // used to render the same generic message regardless of cause.
+    const [errorState, setErrorState] = useState<'not-found' | 'failed' | null>(null);
+
+    const { togglePlayer, isFavoritePlayer } = useFavorites();
+
+    const tabParam = searchParams.get('tab');
+    const activeTab: Tab = (TABS as readonly string[]).includes(tabParam || '') ? (tabParam as Tab) : 'overview';
+
+    const setActiveTab = (tab: Tab) => {
+        const next = new URLSearchParams(searchParams.toString());
+        next.set('tab', tab);
+        router.replace(`/players/${playerId}?${next.toString()}`, { scroll: false });
+    };
 
     useEffect(() => {
         fetchPlayerData();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [playerId]);
 
     const fetchPlayerData = async () => {
         try {
             setLoading(true);
+            setErrorState(null);
             const response = await fetch(`/api/players/${playerId}`);
+            if (response.status === 404) {
+                setErrorState('not-found');
+                setData(null);
+                return;
+            }
+            if (!response.ok) {
+                setErrorState('failed');
+                setData(null);
+                return;
+            }
             const playerData = await response.json();
             setData(playerData);
         } catch (error) {
             console.error('Error fetching player:', error);
+            setErrorState('failed');
+            setData(null);
         } finally {
             setLoading(false);
-        }
-    };
-
-    const searchPlayers = async (query: string) => {
-        if (!query.trim()) {
-            setSearchResults([]);
-            return;
-        }
-
-        setSearching(true);
-        try {
-            const res = await fetch(`/api/search?q=${encodeURIComponent(query)}&category=players&limit=10`);
-            const data = await res.json();
-            // BACKLOG-254: was reading data.players (always undefined -- the route
-            // nests results under `results.players`), so this search silently
-            // returned zero results every time regardless of query.
-            setSearchResults(data.results?.players || []);
-        } catch (error) {
-            console.error('Error searching players:', error);
-        } finally {
-            setSearching(false);
-        }
-    };
-
-    const selectComparePlayer = async (selectedPlayerId: string) => {
-        try {
-            const res = await fetch(`/api/players/compare?player1=${playerId}&player2=${selectedPlayerId}`);
-            const data = await res.json();
-            setComparePlayer(data.player2);
-            setSearchQuery('');
-            setSearchResults([]);
-        } catch (error) {
-            console.error('Error fetching comparison:', error);
         }
     };
 
@@ -120,7 +141,7 @@ export default function PlayerDetailClient() {
         );
     }
 
-    if (!data) {
+    if (errorState === 'not-found') {
         return (
             <div className="min-h-screen bg-[#050505] flex items-center justify-center text-white">
                 <div className="text-center">
@@ -133,34 +154,63 @@ export default function PlayerDetailClient() {
         );
     }
 
-    const { player, stats, recentMatches, events, allEvents } = data;
+    if (errorState === 'failed' || !data) {
+        return (
+            <div className="min-h-screen bg-[#050505] flex items-center justify-center text-white">
+                <div className="text-center">
+                    <h2 className="text-2xl font-bold mb-2">Couldn't load this player</h2>
+                    <p className="text-white/60 mb-4">Something went wrong. Please try again.</p>
+                    <div className="flex items-center justify-center gap-4">
+                        <button onClick={fetchPlayerData} className="text-primary hover:underline">
+                            Retry
+                        </button>
+                        <button onClick={() => router.back()} className="text-white/60 hover:underline">
+                            Go back
+                        </button>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+    const { player, stats, recentMatches, allEvents } = data;
     const playerSport = player.team?.sport || 'Football'; // Detect sport from team
+    const favorited = isFavoritePlayer(playerId);
 
     return (
         <div className="min-h-screen bg-[#050505] text-white pb-20">
             {/* Header */}
             <div className="relative overflow-hidden bg-gradient-to-br from-primary/20 via-purple-500/10 to-transparent">
                 <div className="max-w-7xl mx-auto px-4 py-8">
-                    {/* Back Button */}
-                    <button
-                        onClick={() => router.back()}
-                        className="mb-6 flex items-center gap-2 text-white/60 hover:text-white transition-colors"
-                    >
-                        <ArrowLeft className="w-5 h-5" />
-                        <span>Back</span>
-                    </button>
+                    <div className="flex items-center justify-between mb-6">
+                        <button
+                            onClick={() => router.back()}
+                            className="flex items-center gap-2 text-white/60 hover:text-white transition-colors"
+                        >
+                            <ArrowLeft className="w-5 h-5" />
+                            <span>Back</span>
+                        </button>
+                        <button
+                            onClick={() => togglePlayer(playerId)}
+                            aria-label={favorited ? 'Remove from favorites' : 'Add to favorites'}
+                            className="p-2 rounded-full hover:bg-white/10 transition-colors"
+                        >
+                            <Star className={`w-6 h-6 ${favorited ? 'text-yellow-500 fill-yellow-500' : 'text-white/60'}`} />
+                        </button>
+                    </div>
 
                     {/* Player Info */}
-                    <div className="flex flex-col md:flex-row items-start gap-6 mb-8">
-                        {/* Player Avatar */}
-                        <div className="w-32 h-32 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0 border-4 border-primary/30">
-                            <span className="text-5xl font-bold">#{player.number}</span>
-                        </div>
+                    <div className="flex flex-col md:flex-row items-start gap-6 mb-6">
+                        <PlayerAvatar
+                            image={player.image}
+                            name={player.name}
+                            size="xl"
+                            className="border-4 border-primary/30"
+                        />
 
-                        {/* Player Details */}
                         <div className="flex-1">
                             <h1 className="text-4xl font-bold mb-2">{player.name}</h1>
-                            <div className="flex flex-wrap gap-4 text-white/60 mb-4">
+                            <div className="flex flex-wrap gap-4 text-white/60">
                                 <div className="flex items-center gap-2">
                                     <Trophy className="w-4 h-4" />
                                     <span>{player.position}</span>
@@ -184,93 +234,54 @@ export default function PlayerDetailClient() {
                                     </div>
                                 )}
                             </div>
-
-                        </div>
-                        {/* Related Profiles (Multi-sport) */}
-                        {player.relatedProfiles && player.relatedProfiles.length > 0 && (
-                            <div className="mt-4 p-4 bg-white/5 rounded-xl border border-white/10 w-full max-w-sm">
-                                <span className="text-xs text-white/50 uppercase font-bold tracking-wider mb-2 block">
-                                    Multi-Sport Athlete
-                                </span>
-                                <div className="flex gap-2">
-                                    {player.relatedProfiles.map((related: any) => (
-                                        <Link
-                                            key={related.id}
-                                            href={`/players/${related.id}`}
-                                            className="flex-1 flex items-center gap-3 px-3 py-2 bg-white/10 hover:bg-white/20 hover:border-primary/50 rounded-lg transition-all border border-white/5 group"
-                                        >
-                                            <span className="text-2xl group-hover:scale-110 transition-transform">
-                                                {related.sport === 'Basketball' ? '🏀' : '⚽'}
-                                            </span>
-                                            <div className="flex flex-col">
-                                                <span className="text-sm font-bold text-white group-hover:text-primary transition-colors">
-                                                    {related.sport}
-                                                </span>
-                                                <span className="text-xs text-white/60">
-                                                    {related.teamName}
-                                                </span>
-                                            </div>
-                                            <div className="ml-auto">
-                                                <ArrowLeft className="w-4 h-4 text-white/40 group-hover:text-primary rotate-180 transition-colors" />
-                                            </div>
-                                        </Link>
-                                    ))}
-                                </div>
-                            </div>
-                        )}
-
-                        {/* Quick Stats */}
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                            <div className="text-center p-4 bg-white/5 rounded-xl border border-white/10">
-                                <div className="text-2xl font-bold text-primary">{stats.appearances || '-'}</div>
-                                <div className="text-xs text-white/60">Apps</div>
-                            </div>
-                            {playerSport === 'Basketball' ? (
-                                <>
-                                    <div className="text-center p-4 bg-white/5 rounded-xl border border-white/10">
-                                        <div className="text-2xl font-bold text-green-500">{stats.totalPoints || 0}</div>
-                                        <div className="text-xs text-white/60">Points</div>
-                                    </div>
-                                    <div className="text-center p-4 bg-white/5 rounded-xl border border-white/10">
-                                        <div className="text-2xl font-bold text-blue-500">{stats.rebounds || 0}</div>
-                                        <div className="text-xs text-white/60">Rebounds</div>
-                                    </div>
-                                    <div className="text-center p-4 bg-white/5 rounded-xl border border-white/10">
-                                        <div className="text-2xl font-bold text-purple-500">{stats.totalAssists || 0}</div>
-                                        <div className="text-xs text-white/60">Assists</div>
-                                    </div>
-                                </>
-                            ) : (
-                                <>
-                                    <div className="text-center p-4 bg-white/5 rounded-xl border border-white/10">
-                                        <div className="text-2xl font-bold text-green-500">{stats.goals}</div>
-                                        <div className="text-xs text-white/60">Goals</div>
-                                    </div>
-                                    <div className="text-center p-4 bg-white/5 rounded-xl border border-white/10">
-                                        <div className="text-2xl font-bold text-blue-500">{stats.assists}</div>
-                                        <div className="text-xs text-white/60">Assists</div>
-                                    </div>
-                                    <div className="text-center p-4 bg-white/5 rounded-xl border border-white/10">
-                                        <div className="text-2xl font-bold text-yellow-500">{stats.yellowCards}</div>
-                                        <div className="text-xs text-white/60">Cards</div>
-                                    </div>
-                                </>
-                            )}
                         </div>
                     </div>
 
+                    {/* Related Profiles (Multi-sport) */}
+                    {player.relatedProfiles && player.relatedProfiles.length > 0 && (
+                        <div className="mb-6 p-4 bg-white/5 rounded-xl border border-white/10">
+                            <span className="text-xs text-white/50 uppercase font-bold tracking-wider mb-2 block">
+                                Multi-Sport Athlete
+                            </span>
+                            <div className="flex gap-2 flex-wrap">
+                                {player.relatedProfiles.map((related: any) => (
+                                    <Link
+                                        key={related.id}
+                                        href={`/players/${related.id}`}
+                                        className="flex-1 min-w-[180px] flex items-center gap-3 px-3 py-2 bg-white/10 hover:bg-white/20 hover:border-primary/50 rounded-lg transition-all border border-white/5 group"
+                                    >
+                                        <span className="text-2xl group-hover:scale-110 transition-transform">
+                                            {related.sport === 'Basketball' ? '🏀' : '⚽'}
+                                        </span>
+                                        <div className="flex flex-col">
+                                            <span className="text-sm font-bold text-white group-hover:text-primary transition-colors">
+                                                {related.sport}
+                                            </span>
+                                            <span className="text-xs text-white/60">
+                                                {related.teamName}
+                                            </span>
+                                        </div>
+                                        <div className="ml-auto">
+                                            <ArrowLeft className="w-4 h-4 text-white/40 group-hover:text-primary rotate-180 transition-colors" />
+                                        </div>
+                                    </Link>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
                     {/* Tabs */}
                     <div className="flex gap-2 border-b border-white/10 overflow-x-auto">
-                        {['overview', 'stats', 'history', 'compare'].map((tab) => (
+                        {TABS.map((tab) => (
                             <button
                                 key={tab}
-                                onClick={() => setActiveTab(tab as any)}
+                                onClick={() => setActiveTab(tab)}
                                 className={`px-6 py-3 font-medium transition-all whitespace-nowrap flex items-center gap-2 ${activeTab === tab
                                     ? 'text-primary border-b-2 border-primary'
                                     : 'text-white/60 hover:text-white'
                                     }`}
                             >
-                                {tab === 'compare' && <UserPlus className="w-4 h-4" />}
+                                {TAB_ICON[tab]}
                                 {tab.charAt(0).toUpperCase() + tab.slice(1)}
                             </button>
                         ))}
@@ -282,129 +293,121 @@ export default function PlayerDetailClient() {
             <div className="max-w-7xl mx-auto px-4 py-8">
                 {activeTab === 'overview' && (
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                        {/* Recent Matches */}
-                        <div className="lg:col-span-2">
-                            <h2 className="text-2xl font-bold mb-4 flex items-center gap-2">
-                                <Activity className="w-6 h-6" />
-                                Recent Performances
-                            </h2>
-                            <div className="space-y-3">
-                                {recentMatches.map((matchData, index) => (
-                                    <Link key={index} href={`/matches/${matchData.match?.id}`}>
-                                        <motion.div
-                                            whileHover={{ scale: 1.02 }}
-                                            className="p-4 bg-white/5 hover:bg-white/10 rounded-xl border border-white/10 transition-all cursor-pointer"
-                                        >
-                                            <div className="flex items-center justify-between mb-2">
-                                                <div className="text-sm text-white/60">
-                                                    {matchData.match && format(new Date(matchData.match.startTime), 'MMM d, yyyy')}
+                        <div className="lg:col-span-2 space-y-6">
+                            {/* Basic Info */}
+                            <div className="p-6 bg-white/5 rounded-2xl border border-white/10">
+                                <h3 className="font-bold text-lg mb-2 flex items-center gap-2">
+                                    <Target className="w-5 h-5 text-primary" />
+                                    Basic Info
+                                </h3>
+                                <div>
+                                    <InfoRow label="Position" value={player.position} />
+                                    {player.team && <InfoRow label="Team" value={player.team.name} />}
+                                    {player.height && <InfoRow label="Height" value={`${player.height} cm`} />}
+                                    {player.weight && <InfoRow label="Weight" value={`${player.weight} kg`} />}
+                                    {player.dateOfBirth && (
+                                        <InfoRow
+                                            label="Age"
+                                            value={new Date().getFullYear() - new Date(player.dateOfBirth).getFullYear()}
+                                        />
+                                    )}
+                                    {player.jerseyName && <InfoRow label="Jersey Name" value={player.jerseyName} />}
+                                    <InfoRow label="Jersey Number" value={`#${player.number}`} />
+                                    <InfoRow
+                                        label="Rating"
+                                        value={
+                                            <span className="flex items-center gap-1">
+                                                <Star className={`w-4 h-4 ${stats.rating != null ? 'text-yellow-500 fill-yellow-500' : 'text-white/30'}`} />
+                                                {stats.rating != null && stats.rating.toFixed(1)}
+                                            </span>
+                                        }
+                                    />
+                                </div>
+                            </div>
+
+                            {/* Individual Stats */}
+                            <div className="p-6 bg-white/5 rounded-2xl border border-white/10">
+                                <h3 className="font-bold text-lg mb-4 flex items-center gap-2">
+                                    <Activity className="w-5 h-5 text-primary" />
+                                    Individual Stats
+                                </h3>
+                                <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                                    {playerSport === 'Basketball' ? (
+                                        <>
+                                            <StatTile value={stats.pointsPerGame || '0.0'} label="Pts/Game" />
+                                            <StatTile value={((stats.rebounds || 0) / (stats.appearances || 1)).toFixed(1)} label="Rebounds/Game" />
+                                            <StatTile value={stats.assistsPerGame || '0.0'} label="Assists/Game" />
+                                            <StatTile value={stats.steals || 0} label="Steals" />
+                                            <StatTile value={stats.blocks || 0} label="Blocks" />
+                                        </>
+                                    ) : (
+                                        <>
+                                            <StatTile value={stats.appearances || 0} label="Apps" />
+                                            <StatTile value={stats.goals} label="Goals" />
+                                            <StatTile value={stats.assists} label="Assists" />
+                                            <StatTile value={(stats.yellowCards || 0) + (stats.redCards || 0)} label="Cards" />
+                                        </>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* Compare entry card -- replaces the old inline Compare tab;
+                                links out to the existing dedicated compare page instead */}
+                            <Link
+                                href={`/players/compare?player1=${playerId}`}
+                                className="flex items-center gap-4 p-4 bg-white/5 hover:bg-white/10 rounded-2xl border border-white/10 transition-all group"
+                            >
+                                <PlayerAvatar image={player.image} name={player.name} size="sm" />
+                                <div className="flex-1 font-semibold">{player.name}</div>
+                                <span className="flex items-center gap-1 text-primary font-medium whitespace-nowrap">
+                                    Compare players
+                                    <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                                </span>
+                            </Link>
+
+                            {/* Recent Matches */}
+                            <div>
+                                <h2 className="text-2xl font-bold mb-4 flex items-center gap-2">
+                                    <Activity className="w-6 h-6" />
+                                    Recent Performances
+                                </h2>
+                                <div className="space-y-3">
+                                    {recentMatches.map((matchData, index) => (
+                                        <Link key={index} href={`/matches/${matchData.match?.id}`}>
+                                            <motion.div
+                                                whileHover={{ scale: 1.02 }}
+                                                className="p-4 bg-white/5 hover:bg-white/10 rounded-xl border border-white/10 transition-all cursor-pointer"
+                                            >
+                                                <div className="flex items-center justify-between mb-2">
+                                                    <div className="text-sm text-white/60">
+                                                        {matchData.match && format(new Date(matchData.match.startTime), 'MMM d, yyyy')}
+                                                    </div>
+                                                    <div className="text-sm font-semibold">
+                                                        {matchData.match?.homeScore} - {matchData.match?.awayScore}
+                                                    </div>
                                                 </div>
-                                                <div className="text-sm font-semibold">
-                                                    {matchData.match?.homeScore} - {matchData.match?.awayScore}
-                                                </div>
-                                            </div>
-                                            <div className="text-xs text-white/40 mb-2">{matchData.match?.competition}</div>
-                                            {matchData.events.length > 0 && (
-                                                <div className="flex gap-2 flex-wrap">
-                                                    {matchData.events.map((event: any, idx: number) => (
-                                                        <span
-                                                            key={idx}
-                                                            className="px-2 py-1 bg-primary/20 text-primary rounded text-xs"
-                                                        >
-                                                            {getEventIcon(event.type, playerSport)} {event.minute}'
-                                                        </span>
-                                                    ))}
-                                                </div>
-                                            )}
-                                        </motion.div>
-                                    </Link>
-                                ))}
+                                                <div className="text-xs text-white/40 mb-2">{matchData.match?.competition}</div>
+                                                {matchData.events.length > 0 && (
+                                                    <div className="flex gap-2 flex-wrap">
+                                                        {matchData.events.map((event: any, idx: number) => (
+                                                            <span
+                                                                key={idx}
+                                                                className="px-2 py-1 bg-primary/20 text-primary rounded text-xs"
+                                                            >
+                                                                {getEventIcon(event.type, playerSport)} {event.minute}'
+                                                            </span>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </motion.div>
+                                        </Link>
+                                    ))}
+                                </div>
                             </div>
                         </div>
 
                         {/* Sidebar */}
                         <div className="space-y-6">
-                            {/* Season Stats */}
-                            <div className="p-6 bg-white/5 rounded-2xl border border-white/10">
-                                <h3 className="font-bold text-lg mb-4">Season Stats</h3>
-                                <div className="space-y-3">
-                                    {playerSport === 'Basketball' ? (
-                                        <>
-                                            <div className="flex justify-between">
-                                                <span className="text-white/60">Points/Game</span>
-                                                <span className="font-bold">{stats.pointsPerGame || '0.0'}</span>
-                                            </div>
-                                            <div className="flex justify-between">
-                                                <span className="text-white/60">Rebounds/Game</span>
-                                                <span className="font-bold">{((stats.rebounds || 0) / (stats.appearances || 1)).toFixed(1)}</span>
-                                            </div>
-                                            <div className="flex justify-between">
-                                                <span className="text-white/60">Assists/Game</span>
-                                                <span className="font-bold">{stats.assistsPerGame || '0.0'}</span>
-                                            </div>
-                                            <div className="flex justify-between">
-                                                <span className="text-white/60">Steals</span>
-                                                <span className="font-bold text-yellow-500">{stats.steals || 0}</span>
-                                            </div>
-                                            <div className="flex justify-between">
-                                                <span className="text-white/60">Blocks</span>
-                                                <span className="font-bold text-blue-500">{stats.blocks || 0}</span>
-                                            </div>
-                                        </>
-                                    ) : (
-                                        <>
-                                            <div className="flex justify-between">
-                                                <span className="text-white/60">Goals/Game</span>
-                                                <span className="font-bold">{stats.goalsPerGame}</span>
-                                            </div>
-                                            <div className="flex justify-between">
-                                                <span className="text-white/60">Assists/Game</span>
-                                                <span className="font-bold">{stats.assistsPerGame}</span>
-                                            </div>
-                                            <div className="flex justify-between">
-                                                <span className="text-white/60">Yellow Cards</span>
-                                                <span className="font-bold text-yellow-500">{stats.yellowCards}</span>
-                                            </div>
-                                            <div className="flex justify-between">
-                                                <span className="text-white/60">Red Cards</span>
-                                                <span className="font-bold text-red-500">{stats.redCards}</span>
-                                            </div>
-                                        </>
-                                    )}
-                                </div>
-                            </div>
-
-                            {/* Player Info */}
-                            <div className="p-6 bg-white/5 rounded-2xl border border-white/10">
-                                <h3 className="font-bold text-lg mb-4">Player Info</h3>
-                                <div className="space-y-3 text-sm">
-                                    {player.height && (
-                                        <div className="flex justify-between">
-                                            <span className="text-white/60">Height</span>
-                                            <span>{player.height} cm</span>
-                                        </div>
-                                    )}
-                                    {player.weight && (
-                                        <div className="flex justify-between">
-                                            <span className="text-white/60">Weight</span>
-                                            <span>{player.weight} kg</span>
-                                        </div>
-                                    )}
-                                    {player.dateOfBirth && (
-                                        <div className="flex justify-between">
-                                            <span className="text-white/60">Age</span>
-                                            <span>
-                                                {new Date().getFullYear() - new Date(player.dateOfBirth).getFullYear()}
-                                            </span>
-                                        </div>
-                                    )}
-                                    <div className="flex justify-between">
-                                        <span className="text-white/60">Jersey Number</span>
-                                        <span className="font-bold">#{player.number}</span>
-                                    </div>
-                                </div>
-                            </div>
-
                             {/* Career History */}
                             {player.careerHistory?.length > 0 && (
                                 <div className="p-6 bg-white/5 rounded-2xl border border-white/10">
@@ -637,94 +640,7 @@ export default function PlayerDetailClient() {
                         </div>
                     </div>
                 )}
-
-                {activeTab === 'compare' && (
-                    <div>
-                        <h2 className="text-2xl font-bold mb-6 flex items-center gap-2">
-                            <UserPlus className="w-6 h-6" />
-                            Compare Players
-                        </h2>
-
-                        {!comparePlayer ? (
-                            <div className="max-w-2xl mx-auto">
-                                {/* Search Box */}
-                                <div className="mb-6">
-                                    <div className="relative">
-                                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-white/40" />
-                                        <input
-                                            type="text"
-                                            placeholder="Search for a player to compare..."
-                                            value={searchQuery}
-                                            onChange={(e) => {
-                                                setSearchQuery(e.target.value);
-                                                searchPlayers(e.target.value);
-                                            }}
-                                            className="w-full pl-12 pr-4 py-4 bg-white/5 border border-white/10 rounded-xl text-white placeholder-white/40 focus:outline-none focus:border-primary transition-all"
-                                        />
-                                    </div>
-
-                                    {/* Search Results */}
-                                    {searchResults.length > 0 && (
-                                        <div className="mt-2 bg-white/5 border border-white/10 rounded-xl overflow-hidden">
-                                            {searchResults.map((result) => (
-                                                <button
-                                                    key={result.id}
-                                                    onClick={() => selectComparePlayer(result.id)}
-                                                    className="w-full p-4 hover:bg-white/10 transition-all flex items-center gap-4 text-left"
-                                                >
-                                                    <div className="w-12 h-12 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0">
-                                                        <span className="font-bold">#{result.number}</span>
-                                                    </div>
-                                                    <div className="flex-1">
-                                                        <div className="font-semibold">{result.name}</div>
-                                                        <div className="text-sm text-white/60">
-                                                            {result.position} • {result.team?.name}
-                                                        </div>
-                                                    </div>
-                                                    {result.averageRating != null && (
-                                                        <div className="flex items-center gap-1">
-                                                            <Star className="w-4 h-4 text-yellow-500 fill-current" />
-                                                            <span className="font-bold">{result.averageRating.toFixed(1)}</span>
-                                                        </div>
-                                                    )}
-                                                </button>
-                                            ))}
-                                        </div>
-                                    )}
-
-                                    {searching && (
-                                        <div className="mt-4 text-center text-white/60">
-                                            Searching...
-                                        </div>
-                                    )}
-                                </div>
-
-                                {/* Empty State */}
-                                <PlayerComparisonEmpty />
-                            </div>
-                        ) : (
-                            <div>
-                                {/* Clear Button */}
-                                <div className="mb-6 flex justify-end">
-                                    <button
-                                        onClick={() => setComparePlayer(null)}
-                                        className="px-4 py-2 bg-white/5 hover:bg-white/10 rounded-xl text-sm font-bold transition-all"
-                                    >
-                                        Clear Comparison
-                                    </button>
-                                </div>
-
-                                {/* Comparison */}
-                                <PlayerComparison
-                                    player1={{ ...player, rating: stats.rating, stats }}
-                                    player2={comparePlayer}
-                                    sport={player.team?.sport || 'Football'}
-                                />
-                            </div>
-                        )}
-                    </div>
-                )}
             </div>
-        </div >
+        </div>
     );
 }

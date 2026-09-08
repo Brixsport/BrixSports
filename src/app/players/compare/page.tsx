@@ -15,6 +15,8 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { PlayerComparison, PlayerComparisonEmpty } from '@/components/PlayerComparison';
+import { PlayerAvatar } from '@/lib/utils/player-avatar';
+import { useDebounce } from '@/hooks/useDebounce';
 
 export default function PlayerComparePage() {
     return (
@@ -45,6 +47,8 @@ function PlayerCompareContent() {
 
     const [searchQuery1, setSearchQuery1] = useState('');
     const [searchQuery2, setSearchQuery2] = useState('');
+    const debouncedQuery1 = useDebounce(searchQuery1, 400);
+    const debouncedQuery2 = useDebounce(searchQuery2, 400);
     const [searchResults1, setSearchResults1] = useState<any[]>([]);
     const [searchResults2, setSearchResults2] = useState<any[]>([]);
     const [searching1, setSearching1] = useState(false);
@@ -163,6 +167,18 @@ function PlayerCompareContent() {
             else setSearching2(false);
         }
     };
+
+    // BACKLOG-296 item 2: search used to fire on every keystroke. Both boxes
+    // now fetch off the debounced value instead of the raw input.
+    useEffect(() => {
+        searchPlayers(debouncedQuery1, 1);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [debouncedQuery1]);
+
+    useEffect(() => {
+        searchPlayers(debouncedQuery2, 2);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [debouncedQuery2]);
 
     const selectPlayer = (playerId: string, playerSlot: 1 | 2) => {
         const params = new URLSearchParams(searchParams.toString());
@@ -308,7 +324,6 @@ function PlayerCompareContent() {
                         setSearchQuery={setSearchQuery1}
                         searchResults={searchResults1}
                         searching={searching1}
-                        onSearch={(query) => searchPlayers(query, 1)}
                         onSelect={(id) => selectPlayer(id, 1)}
                         onClear={() => clearPlayer(1)}
                     />
@@ -321,7 +336,6 @@ function PlayerCompareContent() {
                         setSearchQuery={setSearchQuery2}
                         searchResults={searchResults2}
                         searching={searching2}
-                        onSearch={(query) => searchPlayers(query, 2)}
                         onSelect={(id) => selectPlayer(id, 2)}
                         onClear={() => clearPlayer(2)}
                     />
@@ -445,7 +459,6 @@ function PlayerSelector({
     setSearchQuery,
     searchResults,
     searching,
-    onSearch,
     onSelect,
     onClear,
 }: {
@@ -455,7 +468,6 @@ function PlayerSelector({
     setSearchQuery: (query: string) => void;
     searchResults: any[];
     searching: boolean;
-    onSearch: (query: string) => void;
     onSelect: (id: string) => void;
     onClear: () => void;
 }) {
@@ -485,19 +497,14 @@ function PlayerSelector({
                     {/* Selected Player Card */}
                     <Link href={`/players/${selectedPlayer.id}`}>
                         <div className="p-6 bg-white/5 rounded-2xl hover:bg-white/10 transition-all cursor-pointer border border-white/10">
-                            {selectedPlayer.image ? (
-                                <img
-                                    src={selectedPlayer.image}
-                                    alt={selectedPlayer.name}
-                                    className="w-24 h-24 rounded-full object-cover mx-auto mb-4 border-4 border-primary"
+                            <div className="mx-auto mb-4 w-fit">
+                                <PlayerAvatar
+                                    image={selectedPlayer.image}
+                                    name={selectedPlayer.name}
+                                    size="lg"
+                                    className="border-4 border-primary"
                                 />
-                            ) : (
-                                <div className="w-24 h-24 rounded-full bg-primary/20 flex items-center justify-center mx-auto mb-4 border-4 border-primary">
-                                    <span className="text-4xl font-display italic">
-                                        {selectedPlayer.number}
-                                    </span>
-                                </div>
-                            )}
+                            </div>
                             <h4 className="text-xl font-black uppercase tracking-tight mb-1">
                                 {selectedPlayer.name}
                             </h4>
@@ -524,10 +531,7 @@ function PlayerSelector({
                             type="text"
                             placeholder="Search for a player..."
                             value={searchQuery}
-                            onChange={(e) => {
-                                setSearchQuery(e.target.value);
-                                onSearch(e.target.value);
-                            }}
+                            onChange={(e) => setSearchQuery(e.target.value)}
                             className="w-full pl-12 pr-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-white/40 focus:outline-none focus:border-primary transition-all"
                         />
                     </div>
@@ -541,9 +545,7 @@ function PlayerSelector({
                                     onClick={() => onSelect(result.id)}
                                     className="w-full p-3 bg-white/5 hover:bg-white/10 rounded-xl transition-all flex items-center gap-3 text-left"
                                 >
-                                    <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0">
-                                        <span className="font-bold text-sm">#{result.number}</span>
-                                    </div>
+                                    <PlayerAvatar image={result.image} name={result.name} size="sm" />
                                     <div className="flex-1 min-w-0">
                                         <div className="font-semibold truncate">{result.name}</div>
                                         <div className="text-xs text-white/60 truncate">

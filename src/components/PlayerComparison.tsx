@@ -2,6 +2,7 @@
 
 import { motion } from 'framer-motion';
 import { Trophy, Target, TrendingUp, Shield, Star, Award, Activity, Zap } from 'lucide-react';
+import { PlayerAvatar } from '@/lib/utils/player-avatar';
 
 interface PlayerWithDetails {
     id: string;
@@ -92,17 +93,14 @@ export function PlayerComparison({ player1, player2, sport }: PlayerComparisonPr
 function PlayerHeader({ player, align }: { player: PlayerWithDetails; align: 'left' | 'right' }) {
     return (
         <div className={`text-${align}`}>
-            {player.image ? (
-                <img
-                    src={player.image}
-                    alt={player.name}
-                    className="w-16 h-16 md:w-20 md:h-20 rounded-full object-cover mx-auto mb-2 border-2 border-primary"
+            <div className="mx-auto mb-2 w-fit">
+                <PlayerAvatar
+                    image={player.image}
+                    name={player.name}
+                    size="lg"
+                    className="border-2 border-primary"
                 />
-            ) : (
-                <div className="w-16 h-16 md:w-20 md:h-20 rounded-full bg-primary/20 flex items-center justify-center mx-auto mb-2 border-2 border-primary">
-                    <span className="text-2xl md:text-3xl font-display italic">{player.number}</span>
-                </div>
-            )}
+            </div>
             <p className="text-xs md:text-sm font-black uppercase tracking-tight truncate max-w-[100px] md:max-w-none mx-auto">{player.name}</p>
             <p className="text-[10px] md:text-xs text-white/60 font-bold">{player.position}</p>
         </div>
