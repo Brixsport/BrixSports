@@ -389,9 +389,9 @@ export async function POST(
                         minute,
                         homeScore: newHomeScore ?? match.homeScore ?? undefined,
                         awayScore: newAwayScore ?? match.awayScore ?? undefined,
-                        // Not used for targeting yet -- see MatchEventNotification's own
-                        // comment (roadmap item 4). Carried through now so a future
-                        // followed-player audience query doesn't need this call site again.
+                        // BACKLOG-342: now used for targeting -- match-notification-service.ts's
+                        // playerFavorites query joins on these to notify anyone who has
+                        // starred this specific player (userFavorites, favoriteType: 'player').
                         playerId: notifyPlayerId || undefined,
                         relatedPlayerId: relatedPlayerId || undefined,
                         competitionId: match.competitionId,
