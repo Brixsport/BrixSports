@@ -25,9 +25,9 @@ const TABS = ['overview', 'stats', 'history'] as const;
 type Tab = typeof TABS[number];
 
 const TAB_ICON: Record<Tab, ReactNode> = {
-    overview: <Clock className="w-4 h-4" />,
-    stats: <BarChart3 className="w-4 h-4" />,
-    history: <Table2 className="w-4 h-4" />,
+    overview: <Clock className="w-2.5 h-2.5" />,
+    stats: <BarChart3 className="w-2.5 h-2.5" />,
+    history: <Table2 className="w-2.5 h-2.5" />,
 };
 
 function InfoRow({ label, value }: { label: string; value: ReactNode }) {
@@ -270,19 +270,27 @@ export default function PlayerDetailClient() {
                         </div>
                     )}
 
-                    {/* Tabs */}
-                    <div className="flex gap-2 border-b border-white/10 overflow-x-auto">
+                    {/* Tabs -- sized to match the match-detail page's tab bar
+                        (MatchDetailClient.tsx) so 3 tabs never need horizontal
+                        scroll on a mobile viewport */}
+                    <div className="flex gap-1 border-b border-white/10 overflow-x-auto scrollbar-hide">
                         {TABS.map((tab) => (
                             <button
                                 key={tab}
                                 onClick={() => setActiveTab(tab)}
-                                className={`px-6 py-3 font-medium transition-all whitespace-nowrap flex items-center gap-2 ${activeTab === tab
-                                    ? 'text-primary border-b-2 border-primary'
+                                className={`px-3 py-2 text-[10px] font-bold uppercase tracking-wider transition-all relative whitespace-nowrap flex items-center gap-1 ${activeTab === tab
+                                    ? 'text-primary'
                                     : 'text-white/60 hover:text-white'
                                     }`}
                             >
                                 {TAB_ICON[tab]}
-                                {tab.charAt(0).toUpperCase() + tab.slice(1)}
+                                {tab}
+                                {activeTab === tab && (
+                                    <motion.div
+                                        layoutId="playerDetailActiveTab"
+                                        className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary"
+                                    />
+                                )}
                             </button>
                         ))}
                     </div>
@@ -296,7 +304,7 @@ export default function PlayerDetailClient() {
                         <div className="lg:col-span-2 space-y-6">
                             {/* Basic Info */}
                             <div className="p-6 bg-white/5 rounded-2xl border border-white/10">
-                                <h3 className="font-bold text-lg mb-2 flex items-center gap-2">
+                                <h3 className="font-bold text-lg mb-4 flex items-center gap-2">
                                     <Target className="w-5 h-5 text-primary" />
                                     Basic Info
                                 </h3>
