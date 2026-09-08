@@ -11934,9 +11934,9 @@ Richard asked to bring the Key events view (already confirmed structurally corre
 
 ---
 
-### BACKLOG-339 — Favoriting a Player Does Not Feed the Push-Notification Pipeline
+### BACKLOG-342 — Favoriting a Player Does Not Feed the Push-Notification Pipeline
 
-**Status:** OPEN.
+**Status:** OPEN. Renumbered from a duplicate `BACKLOG-339` ID -- collision with an unrelated match-detail scroll-header item that landed on `origin/feature/ui-redesign` from a peer session while this entry sat unpushed, found on rebase, session `competitions-consolidation`, 2026-09-08.
 **Priority:** LOW -- explicitly deferred, Richard's call ("file it, tackle at the end of the sequence or after the current task"). Not blocking `BACKLOG-120` or anything else in flight.
 
 **Problem:** `src/lib/notifications/match-notification-service.ts` decides who gets a push for a match event (goal/card/status change) by querying `userFavorites` filtered to `favoriteType === 'team'`, plus `users.favoriteTeamId` -- confirmed by direct read (lines ~116-142). It never queries `favoriteType === 'player'`. The favorite-star toggle on the player profile page (wired this session, `BACKLOG-296`, via the existing `useFavorites` hook) is a fully real, working feature -- it persists to `userFavorites` with `favoriteType: 'player'`, shows correctly on `/favourites`, toggles correctly -- but a viewer who stars a player gets no notification when that specific player scores, is carded, etc. Starring a player today means "bookmark," not "subscribe."
