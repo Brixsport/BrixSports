@@ -10401,3 +10401,31 @@ Net effect: `MatchLineups.tsx` (the component the public `/matches/[id]` Lineups
 **Found:** session continued, 2026-09-01, spawned `code-reviewer` review of football's ratings pipeline. **Resolved:** same session, 2026-09-01.
 
 ---
+
+### BACKLOG-322 — Onboarding Avatar + Google OAuth: Two P0 Fixes, Cherry-Picked Directly to `dev`
+
+**Status:** SHIPPED — 2026-09-09, `tsc --noEmit` clean, pending live deploy verification against `brixsports-staging.vercel.app` (the domain actually registered with Google).
+**Priority:** High — both closed real, reachable gaps in the fan sign-up path.
+
+**Origin:** built and iterated on `feature/ui-redesign` (worktree `competitions-consolidation`, commits `86a7f9c`/`5ba2bc4`/`f6f92f6`) as part of the Fan Account Blueprint spec's two P0 items, then cherry-picked directly onto `dev` per Richard's explicit instruction — Google's registered OAuth redirect URIs only cover `dev`'s actual deployed domains (`brixsports.com`, `brixs2.vercel.app`, `brixsports-staging.vercel.app`, `localhost:3000`), not the `feature/ui-redesign` branch-preview URL, and that preview's Vercel Preview environment doesn't carry `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` at all (confirmed live: the route correctly redirected to `?error=google_config_missing`, its own designed failure path, not a bug) -- so this pair could never be verified end-to-end without reaching `dev`.
+
+**Fix 1 — Onboarding avatar upload (`OnboardingModal.tsx`):** was `PATCH`ing a raw base64 `FileReader` data URL straight into `users.avatar` -- no upload ever happened. Now uploads the real file to Cloudinary via the same unsigned-preset pattern `mobile-image-upload.tsx` already uses, and saves the resulting `secure_url`. 5MB client-side size guard added. A failed upload keeps the fan on the photo step with a clear error rather than silently advancing.
+
+**Fix 2 — Google OAuth (`/api/auth/google`, new `/api/auth/callback/google`):** the callback route did not exist anywhere in the codebase -- "Continue with Google" (a real, prominent button on both `/login` and `/signup`) sent a fan through Google's real consent screen and then 404'd on the way back. Built the callback: exchanges the code, fetches the profile, finds-or-creates a `users` row by lowercased email (same matching rule `register/route.ts` already uses, no new `googleId` column needed since `users.password` is already nullable), issues a real session via the existing `generateToken()`, sets the same `authToken` cookie `register`/`login` already use. Two further real bugs surfaced and fixed during live verification against the real Google Cloud OAuth client (Brixsport V2 project, console.cloud.google.com), not assumed:
+1. The callback was first built at `/api/auth/google/callback` -- Google's actual registered redirect URIs all use `/api/auth/callback/google` instead. Google requires an exact match; the original path would have failed every real attempt with `redirect_uri_mismatch`. Moved the route.
+2. A live click-through still errored after that fix. Decoded Google's own `redirect_uri_mismatch` payload precisely (`atob()` on the `authError` param in-browser) rather than guessing from the screen: the actual `redirect_uri` sent was `.../vercel.app//api/auth/google/callback` -- a genuine double slash from `env.appUrl` (`NEXT_PUBLIC_APP_URL`) carrying a trailing slash on this environment. Extracted both routes' URI construction into one shared `src/lib/google-oauth.ts` (`getGoogleRedirectUri()`) that strips the trailing slash, so there's one place building this string instead of two that can silently drift apart.
+
+Also moved `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` off raw `process.env` into `env.ts` (`CLAUDE.md`'s process.env rule), and wired the two new failure states (`google_auth_denied`, `google_auth_failed`) into `/login`'s existing toast handler alongside the pre-existing `google_config_missing` case, so none of the three fail silently.
+
+**Deliberately not done:** wiring a first-time Google signup into the onboarding modal -- that modal only mounts from `/signup`'s own client-side state, and a server-redirect OAuth flow can't trigger it the same way. Real product decision (does Google signup get onboarding too?) for its own follow-up.
+
+**Evidence:**
+- `tsc --noEmit`: clean on `dev` after the cherry-pick (checked against this repo's own baseline, not `feature/ui-redesign`'s).
+- Redirect-URI path confirmed directly against the real Google Cloud Console client configuration (screenshot).
+- Trailing-slash bug confirmed via a real click-through against the `feature/ui-redesign` branch preview and a precise in-browser decode of Google's own error payload.
+- Missing-credentials behavior on the branch-preview environment confirmed via a direct `curl` against the route with the Vercel deployment-protection bypass token, not guessed from the UI.
+- Pending: once this reaches the real `brixsports-staging.vercel.app` deploy, confirm a full click-through (consent → callback → session) for both a brand-new Google email and an existing password-based account signing in via Google for the first time.
+
+**Found:** session `competitions-consolidation`, 2026-09-09, as `Fan Account Blueprint` spec requirements P0-1/P0-2.
+
+---
