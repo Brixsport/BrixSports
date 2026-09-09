@@ -169,7 +169,7 @@ function AdminPageContent() {
                                 <TeamLogo logo={awayTeam?.logo} name={awayTeam?.name ?? ''} color={awayTeam?.color} size="sm" />
                               </div>
                               <div className="min-w-0">
-                                <p className="text-[11px] lg:text-sm font-bold truncate max-w-[60px] md:max-w-[120px] lg:max-w-none">{homeTeam?.shortName || 'TBD'} vs {awayTeam?.shortName || 'TBD'}</p>
+                                <p className="text-[11px] lg:text-sm font-bold truncate max-w-[110px] md:max-w-[140px] lg:max-w-none">{homeTeam?.shortName || 'TBD'} vs {awayTeam?.shortName || 'TBD'}</p>
                                 <p className="text-[8px] lg:text-[10px] text-white/20 uppercase tracking-widest truncate">{match.competition || 'N/A'}</p>
                               </div>
                             </div>
@@ -185,7 +185,7 @@ function AdminPageContent() {
                               <div className="w-6 h-6 lg:w-8 lg:h-8 rounded-full bg-white/10 flex items-center justify-center text-[8px] lg:text-[10px] font-black uppercase tracking-widest shrink-0">
                                 {logger?.name?.charAt(0) || '?'}
                               </div>
-                              <p className="text-[10px] lg:text-xs font-bold italic truncate max-w-[40px] md:max-w-[80px] lg:max-w-none">{logger?.name || 'Unassigned'}</p>
+                              <p className="text-[10px] lg:text-xs font-bold italic truncate max-w-[70px] md:max-w-[90px] lg:max-w-none">{logger?.name || 'Unassigned'}</p>
                             </div>
                           </td>
                           <td className="hidden lg:table-cell p-1 md:p-4 lg:p-6">

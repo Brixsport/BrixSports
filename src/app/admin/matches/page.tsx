@@ -403,7 +403,13 @@ function AdminMatchesPageContent() {
                             competitionLevel: formData.competitionLevel as any,
                             friendlyType: formData.friendlyType as any,
                             friendlyDescription: formData.friendlyDescription,
-                            startTime: new Date(formData.startTime).toISOString(),
+                            // Same guard as openEditModal (BACKLOG-343 follow-up) -- currently only
+                            // held together by the datetime-local input's `required` HTML attribute,
+                            // not by code, so it's silent-by-luck rather than silent-by-design.
+                            startTime: (() => {
+                                const parsed = new Date(formData.startTime);
+                                return isNaN(parsed.getTime()) ? editingMatch.startTime : parsed.toISOString();
+                            })(),
                             homeScore: formData.homeScore,
                             awayScore: formData.awayScore,
                         }

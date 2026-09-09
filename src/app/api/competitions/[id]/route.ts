@@ -8,7 +8,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
-import { teams, matches, standings, bracketNodes, competitions } from '@/db/schema';
+import { teams, matches, standings, bracketNodes, competitions, organizations } from '@/db/schema';
 import { eq, sql } from 'drizzle-orm';
 import { getAuthUser } from '@/lib/auth';
 
@@ -195,8 +195,24 @@ export async function PATCH(
         if (format !== undefined) updateData.format = format;
         if (structure !== undefined) updateData.structure = structure || null;
         if (season !== undefined) updateData.season = season;
-        if (startDate !== undefined) updateData.startDate = new Date(startDate);
-        if (endDate !== undefined) updateData.endDate = new Date(endDate);
+        // Bundled review finding (2026-09-09): an unparseable startDate/endDate
+        // previously became an Invalid Date object written straight through (or
+        // threw at insert, surfacing as an unhelpful generic 500) -- same class as
+        // BACKLOG-343's openEditModal/handleUpdate crash on the client side.
+        if (startDate !== undefined) {
+            const parsedStart = new Date(startDate);
+            if (isNaN(parsedStart.getTime())) {
+                return NextResponse.json({ error: 'Invalid startDate' }, { status: 422 });
+            }
+            updateData.startDate = parsedStart;
+        }
+        if (endDate !== undefined) {
+            const parsedEnd = new Date(endDate);
+            if (isNaN(parsedEnd.getTime())) {
+                return NextResponse.json({ error: 'Invalid endDate' }, { status: 422 });
+            }
+            updateData.endDate = parsedEnd;
+        }
         if (description !== undefined) updateData.description = description;
         if (level !== undefined) updateData.level = level;
         if (scope !== undefined) updateData.scope = scope;
@@ -210,8 +226,18 @@ export async function PATCH(
         // BACKLOG-333: no UI sets these yet (no selector exists -- see route.ts's
         // POST handler for the full TODO), but accepting them here means a future
         // selector needs no further route changes, just a form field wired to it.
-        if (hostOrganizationId !== undefined) updateData.hostOrganizationId = hostOrganizationId;
-        if (governingOrganizationId !== undefined) updateData.governingOrganizationId = governingOrganizationId;
+        // Bundled review finding (2026-09-09): no existence check on either id --
+        // same gap as the POST handler, closed the same way here.
+        if (hostOrganizationId !== undefined) {
+            const [org] = await db.select({ id: organizations.id }).from(organizations).where(eq(organizations.id, hostOrganizationId)).limit(1);
+            if (!org) return NextResponse.json({ error: 'Invalid hostOrganizationId: organization not found' }, { status: 422 });
+            updateData.hostOrganizationId = hostOrganizationId;
+        }
+        if (governingOrganizationId !== undefined) {
+            const [org] = await db.select({ id: organizations.id }).from(organizations).where(eq(organizations.id, governingOrganizationId)).limit(1);
+            if (!org) return NextResponse.json({ error: 'Invalid governingOrganizationId: organization not found' }, { status: 422 });
+            updateData.governingOrganizationId = governingOrganizationId;
+        }
 
         // Update competition
         await db

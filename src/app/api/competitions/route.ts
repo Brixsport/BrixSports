@@ -6,7 +6,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
-import { competitions, matches, standings } from '@/db/schema';
+import { competitions, matches, standings, organizations } from '@/db/schema';
 import { sql, eq } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { getAuthUser } from '@/lib/auth';
@@ -29,8 +29,21 @@ import { checkRateLimit } from '@/lib/rate-limit';
 // same way `sport`/`format` already are. Don't build that selector speculatively
 // before there's a second real tenant to choose between -- it has no way to be
 // tested meaningfully until then.
+// Double `org_` prefix on this one is intentional, not a typo -- confirmed against a
+// live DB read (2026-09-08 BACKLOG.md evidence block) that this is the real row id.
 const DEFAULT_HOST_ORGANIZATION_ID = 'org_bells-university-of-technology';
 const DEFAULT_GOVERNING_ORGANIZATION_ID = 'org_org_bells-university-busa';
+
+// Bundled review finding (2026-09-09): the defaults above are known-good, but an
+// explicit override from the caller was accepted with no existence check -- a bad
+// admin input (or a future selector-UI bug) could silently write a nonexistent org
+// id with no error. Only runs when the caller actually supplies a value; the
+// defaults themselves never hit this path.
+async function validateOrgId(id: string | undefined, label: string): Promise<string | null> {
+    if (!id) return null;
+    const org = await db.select({ id: organizations.id }).from(organizations).where(eq(organizations.id, id)).limit(1);
+    return org.length ? null : `Invalid ${label}: organization not found`;
+}
 
 // Groups season-instances of the same recurring league together (e.g. "BUSA LEAGUE
 // FOOTBALL" 2025/2026 and 2026/2027 as one entity with a season history), rather
@@ -249,6 +262,11 @@ export async function POST(request: NextRequest) {
                 { status: 400 }
             );
         }
+
+        const hostOrgError = await validateOrgId(hostOrganizationId, 'hostOrganizationId');
+        if (hostOrgError) return NextResponse.json({ error: hostOrgError }, { status: 422 });
+        const governingOrgError = await validateOrgId(governingOrganizationId, 'governingOrganizationId');
+        if (governingOrgError) return NextResponse.json({ error: governingOrgError }, { status: 422 });
 
         const newCompetition = {
             id: nanoid(),
