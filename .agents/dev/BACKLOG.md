@@ -10287,7 +10287,7 @@ surrounding structure (explicitly confirmed with Richard mid-session, kept as-is
 
 ### BACKLOG-347 — Lineups Tab: "Share LineUp" Button Occluded/Unclickable, Regression From `BACKLOG-339`
 
-**Status:** SHIPPED — pending live verification.
+**Status:** RESOLVED — 2026-09-09, live-verified on staging.
 **Priority:** MEDIUM — a real, reachable feature (share) silently stops working past a normal
 scroll gesture, on every match's Lineups tab.
 **Files:** `src/components/MatchLineups.tsx`.
@@ -10313,8 +10313,17 @@ opaquely back a sticky bar) -- it's a plain flow element now, exactly like every
 this tab. Its previous justification (take over the top spot once the header vacates it) no
 longer applies since the header never vacates that spot anymore.
 
-**Pending items:** live-verify the button is clickable at every scroll depth on the branch's
-Vercel preview.
+**Evidence:**
+- Commit: `0bee0bb` (`feature/ui-redesign`), verified against the branch's stable alias.
+- Verified by: `document.elementFromPoint()` at the Share button's own screen coordinates, before
+  and after the fix, real match `8Mek2CA7KPlnk1EQ647jx`, mobile viewport (375px).
+- Observed result: before the fix, at `scrollY: 300`, the element at the button's coordinates was
+  the header's icon SVG (`isShareBtnOnTop: false`) -- confirmed unclickable, not just visually
+  covered. After the fix: at rest (`scrollY: 0`) the button is present and clickable
+  (`isShareBtnClickable: true`, rect `top:153, bottom:182`); scrolled past its natural position
+  (`scrollY: 236`) it correctly scrolls off-screen with the rest of the content (`top:-83,
+  bottom:-54`) instead of staying stuck and hidden.
+- Pending items: none.
 
 ---
 
