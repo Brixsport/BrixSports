@@ -12167,7 +12167,7 @@ this project's convention of correcting the label going forward rather than rewr
 
 ---
 
-### BACKLOG-356 — Onboarding Avatar Step Wrote Raw Base64 Into `users.avatar` Instead of a Real Upload
+### BACKLOG-361 — Onboarding Avatar Step Wrote Raw Base64 Into `users.avatar` Instead of a Real Upload
 
 **Status:** SHIPPED — 2026-09-09, `tsc --noEmit` clean, not yet live-verified against a running deploy.
 **Priority:** High (P0, Fan Account Blueprint) — every fan who set a photo during onboarding got a broken/bloated field, not a real image.
@@ -12186,7 +12186,7 @@ this project's convention of correcting the label going forward rather than rewr
 
 ---
 
-### BACKLOG-357 — `/api/auth/google/callback` Did Not Exist; "Continue with Google" Sent Fans Through Consent Then 404'd
+### BACKLOG-362 — `/api/auth/google/callback` Did Not Exist; "Continue with Google" Sent Fans Through Consent Then 404'd
 
 **Status:** SHIPPED — 2026-09-09, `tsc --noEmit` clean, not yet live-verified against a running deploy.
 **Priority:** High (P0, Fan Account Blueprint) — a real, visible, prominent button on both `/login` and `/signup` that actively sent a fan to Google's real consent screen and then failed on the way back, worse than a simple dead button.
