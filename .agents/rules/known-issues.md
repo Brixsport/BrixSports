@@ -150,6 +150,10 @@ activation: always_on
 
 2026-06-16 — users.favorite_team_id silently blocks team deletion — FK constraint failed when deleting stub teams because two user accounts had them set as favourite_team_id. This column was not in the initial FK scan because the table was named `users` not `user_profiles`. Prevention: before any team delete, always query users.favorite_team_id in the pre-flight check alongside affiliations and matches. The PRAGMA foreign_key_list scan is the reliable fallback when you don't know all child tables.
 
+2026-09-09 — Setting error-shaped API response as page state crashes on the next render (PlayerDetailClient.tsx, BACKLOG-296) — a fetch that returned `{error: 'Player not found'}` on a real 404 got passed straight into `setData()` without checking `response.status`/`response.ok` first; the object is truthy so a `!data` guard never catches it, and the page crashes on the subsequent destructure (`data.player.team`) instead of showing "not found." Prevention: after any `fetch()`, branch on the actual HTTP status (404 vs. other failure) before trusting the parsed body's shape — never assume a JSON response is the success shape just because parsing succeeded.
+
+2026-09-09 — Tab bar sized ad hoc overflows on a real mobile viewport (PlayerDetailClient.tsx, BACKLOG-296) — a fresh 3-tab bar built at `px-6 py-3`/default text size clipped the last tab and forced a horizontal scrollbar at 375px width. This project already has an established compact tab-bar convention (`MatchDetailClient.tsx`: `px-3 py-2`, `text-[10px] uppercase`, `w-2.5` icons, animated underline) — prevention: match that existing pattern for any new tab bar instead of estimating a size and testing after; confirm with `scrollWidth === clientWidth` at a real 375px viewport, not just a visual screenshot glance.
+
 ## Standing Rules
 
 Standing anti-patterns and constraints: see `CLAUDE.md`.
