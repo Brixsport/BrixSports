@@ -174,9 +174,13 @@ function PlayerDot({
                 </div>
             )}
 
-            {/* Jersey Icon - scaled up for clear visibility of shape + number */}
+            {/* Jersey Icon - scaled up for clear visibility of shape + number.
+                w-8 h-8 is a static fallback floor: if a browser doesn't support cqw
+                container-query units, the whole inline `width` declaration below is
+                invalid and gets discarded, leaving these classes as the real size
+                instead of the marker collapsing to 0. */}
             <div
-                className="relative flex items-center justify-center transition-transform duration-200 group-hover:scale-110"
+                className="relative flex items-center justify-center transition-transform duration-200 group-hover:scale-110 w-8 h-8"
                 style={{
                     width: jerseySize,
                     aspectRatio: '1/1',

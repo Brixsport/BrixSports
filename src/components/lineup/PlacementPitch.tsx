@@ -204,7 +204,9 @@ function PlacementSlot({
                     onMouseLeave={() => setIsHovering(false)}
                     disabled={!clickable}
                     style={{ width: cardWidth, aspectRatio: '4 / 5' }}
-                    className={`relative rounded-xl border-2 transition-all ${details!.teamLabel === 'away'
+                    // w-14 is a static fallback floor for the cqw-based width above --
+                    // same reasoning as ResponsivePitch.tsx's jersey icon.
+                    className={`relative rounded-xl border-2 transition-all w-14 ${details!.teamLabel === 'away'
                         ? 'bg-red-500/90 border-red-400'
                         : 'bg-blue-500/90 border-blue-400'
                         } ${clickable ? 'hover:scale-110 cursor-pointer' : ''} shadow-lg`}

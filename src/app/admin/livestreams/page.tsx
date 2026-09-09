@@ -82,7 +82,6 @@ function LivestreamsAdminPageContent() {
             const response = await fetch('/api/matches?limit=100');
             if (response.ok) {
                 const data = await response.json();
-                console.log('Fetched matches:', data);
 
                 // Handle different API response formats
                 let allMatches = [];
@@ -99,7 +98,6 @@ function LivestreamsAdminPageContent() {
                     (match: any) => match.status === 'UPCOMING' || match.status === 'LIVE'
                 );
 
-                console.log('Filtered matches (UPCOMING/LIVE):', filteredMatches);
                 setMatches(filteredMatches);
 
                 if (filteredMatches.length === 0) {

@@ -716,7 +716,7 @@ function AdminLoggersPageContent() {
                                             </div>
                                             <div className="text-left">
                                                 <p className="text-sm font-bold italic group-hover:text-primary transition-colors">{logger.name}</p>
-                                                <p className="text-[10px] text-white/30 font-bold uppercase">{logger.assignedMatches.filter(m => m.status !== 'FINISHED').length} Active Matches</p>
+                                                <p className="text-[10px] text-white/30 font-bold uppercase">{(logger.assignedMatches ?? []).filter(m => m.status !== 'FINISHED').length} Active Matches</p>
                                             </div>
                                         </div>
                                         <ChevronRight size={16} className="text-white/20 group-hover:text-primary transition-colors" />
