@@ -324,11 +324,19 @@ function AdminMatchesPageContent() {
 
     const openEditModal = (match: Match) => {
         setEditingMatch(match);
+        // Some matches (real ones, confirmed live -- see BACKLOG entry) carry an
+        // unparseable startTime, e.g. from an old import. `new Date(...)` on that
+        // is a real Date object (not null), so this silently threw a RangeError
+        // inside .toISOString() with no error shown to the admin -- the Edit
+        // button just did nothing. Guard it: an invalid date falls back to an
+        // empty string, which the datetime-local input already renders as blank.
+        const parsedStart = new Date(match.startTime);
+        const startTimeValue = isNaN(parsedStart.getTime()) ? '' : parsedStart.toISOString().slice(0, 16);
         setFormData({
             sport: match.sport,
             homeTeamId: match.homeTeamId,
             awayTeamId: match.awayTeamId,
-            startTime: new Date(match.startTime).toISOString().slice(0, 16),
+            startTime: startTimeValue,
             venue: match.venue,
             matchType: match.matchType,
             competition: match.competition,
@@ -513,24 +521,33 @@ function AdminMatchesPageContent() {
                                                 whole card, and the page, past the viewport. min-w-0 lets the
                                                 flex item shrink below its content size so truncate can clip
                                                 it with an ellipsis instead, matching the same fix already
-                                                applied correctly on /admin/match-ratings. */}
-                                            <div className="flex items-center gap-12 mb-6">
+                                                applied correctly on /admin/match-ratings.
+                                                BACKLOG-343 follow-up, live feedback: min-w-0 stopped
+                                                the overflow but at text-2xl + gap-12 + a 120px-min score box,
+                                                the column left for each name on mobile was so narrow that
+                                                truncate clipped real names down to one or two characters
+                                                ("C.") -- technically not overflowing, but unreadable. Same
+                                                "shrink to fit" direction as BACKLOG-336/343's other fixes:
+                                                smaller text/gaps/score-box padding at the default breakpoint
+                                                give the truncated text actual room instead of an ellipsis
+                                                doing all the work; full desktop sizing restored from sm:. */}
+                                            <div className="flex items-center gap-2 sm:gap-12 mb-6">
                                                 <div className="flex-1 min-w-0 text-right">
-                                                    <p className="text-2xl font-display italic uppercase truncate">{getTeamDisplay(match, 'home')}</p>
+                                                    <p className="text-sm sm:text-2xl font-display italic uppercase truncate">{getTeamDisplay(match, 'home')}</p>
                                                 </div>
-                                                <div className="px-6 py-2 bg-white/5 rounded-2xl border border-white/10 min-w-[120px] flex items-center justify-center">
+                                                <div className="px-2 sm:px-6 py-1 sm:py-2 bg-white/5 rounded-2xl border border-white/10 min-w-[64px] sm:min-w-[120px] flex items-center justify-center shrink-0">
                                                     {match.status === 'UPCOMING' ? (
-                                                        <span className="text-white/20 text-sm font-black italic">VS</span>
+                                                        <span className="text-white/20 text-xs sm:text-sm font-black italic">VS</span>
                                                     ) : (
-                                                        <div className="flex items-center gap-4">
-                                                            <span className="text-3xl font-display italic">{match.homeScore}</span>
-                                                            <span className="text-white/20 text-xl font-display">-</span>
-                                                            <span className="text-3xl font-display italic">{match.awayScore}</span>
+                                                        <div className="flex items-center gap-1 sm:gap-4">
+                                                            <span className="text-lg sm:text-3xl font-display italic">{match.homeScore}</span>
+                                                            <span className="text-white/20 text-sm sm:text-xl font-display">-</span>
+                                                            <span className="text-lg sm:text-3xl font-display italic">{match.awayScore}</span>
                                                         </div>
                                                     )}
                                                 </div>
                                                 <div className="flex-1 min-w-0">
-                                                    <p className="text-2xl font-display italic uppercase truncate">{getTeamDisplay(match, 'away')}</p>
+                                                    <p className="text-sm sm:text-2xl font-display italic uppercase truncate">{getTeamDisplay(match, 'away')}</p>
                                                 </div>
                                             </div>
 
