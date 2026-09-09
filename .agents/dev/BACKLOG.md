@@ -11988,7 +11988,7 @@ Richard asked to bring the Key events view (already confirmed structurally corre
 
 ---
 
-### BACKLOG-351 — `useFavorites` Duplicated Its Fetch/State Across All 12 Call Sites (No Shared Store)
+### BACKLOG-353 — `useFavorites` Duplicated Its Fetch/State Across All 12 Call Sites (No Shared Store)
 
 **Status:** SHIPPED — 2026-09-09, `tsc --noEmit` clean, not yet live-verified against a running deploy.
 **Priority:** Medium — no data-correctness bug, but real duplicate load on every single page view, and a real drift risk (two components could each hold a stale, disagreeing copy of "is this favorited").
@@ -12006,14 +12006,14 @@ Richard asked to bring the Key events view (already confirmed structurally corre
 
 ---
 
-### BACKLOG-352 — `/profile/settings` (and 8 Other Pages) Used a Second, Weaker `useAuth` With No Bearer-Token Fallback
+### BACKLOG-354 — `/profile/settings` (and 8 Other Pages) Used a Second, Weaker `useAuth` With No Bearer-Token Fallback
 
 **Status:** SHIPPED — 2026-09-09, `tsc --noEmit` clean, not yet live-verified against a running deploy.
 **Priority:** Medium-High — directly blocks the page that holds the `matchAlerts`/`notifications` preference toggles (the master mute the whole push pipeline respects) for exactly the auth edge case this project has hit repeatedly before.
 
 **Problem:** `src/hooks/useAuth.ts` was a second, independent auth hook -- not the one `AuthProvider`/`src/contexts/AuthContext.tsx` exposes. It called `GET /api/auth/me` with no `credentials: 'include'` and no `localStorage` Bearer-token fallback if the cookie check failed, unlike `AuthContext.checkAuth()`, which explicitly tries the cookie then falls back to the stored token -- the exact fallback path this project's own auth history depends on (`BUG-044`, `BUG-057`, `BUG-217`, all in `known-issues.md`). Nine files imported this weaker hook instead of the real one: `src/app/profile/settings/page.tsx` (the page with the `matchAlerts`/`notifications` toggles this session was reviewing), `src/components/FootballLogger.tsx`, `src/components/admin/AdminSidebar.tsx`, and five more admin pages (`admin/manager`, `admin/transfers`, `admin/teams`, `admin/teams/[id]`, `admin/players/[id]`, `admin/match-lineups`). On `/profile/settings` specifically: a real, logged-in user whose session cookie hadn't been set (or had dropped) would silently read as logged out to this hook -- `loadSettings()`'s `if (!user?.id) return` would never fire, so the page would silently sit on hardcoded defaults instead of the user's real saved preferences, and `handleSave()` would refuse with "You must be logged in" while the rest of the app correctly saw them as authenticated.
 
-**Fix:** `src/hooks/useAuth.ts` is now a one-line re-export of `AuthContext`'s `useAuth`, same shim pattern as `BACKLOG-351`'s `useFavorites` fix. `AuthContext`'s return shape (`user`, `loading`, `isAuthenticated`, plus `login`/`logout`/`register`/etc.) is a strict superset of the old hook's (`user`, `loading`, `isAuthenticated`), so none of the 9 call sites needed changing. `FootballLogger.tsx`'s own usage of `user` was already effectively dead (one unused destructure, one commented-out reference) -- confirmed before touching it, not assumed.
+**Fix:** `src/hooks/useAuth.ts` is now a one-line re-export of `AuthContext`'s `useAuth`, same shim pattern as `BACKLOG-353`'s `useFavorites` fix. `AuthContext`'s return shape (`user`, `loading`, `isAuthenticated`, plus `login`/`logout`/`register`/etc.) is a strict superset of the old hook's (`user`, `loading`, `isAuthenticated`), so none of the 9 call sites needed changing. `FootballLogger.tsx`'s own usage of `user` was already effectively dead (one unused destructure, one commented-out reference) -- confirmed before touching it, not assumed.
 
 **Evidence:**
 - `tsc --noEmit`: identical error count to baseline, zero new errors across all 9 consumer files plus `src/hooks/useAuth.ts` and `src/contexts/AuthContext.tsx`.
