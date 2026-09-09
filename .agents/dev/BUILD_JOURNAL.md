@@ -4698,4 +4698,130 @@ live-verify `BACKLOG-341`'s card-rectangle badge once a suitable real match exis
 -> `dev` promotion remains the largest standing item across the whole project, untouched this
 session.
 
+---
+
+### Session 71 — 2026-09-09
+
+**Focus:** picked up exactly where session 70 flagged -- root-caused and closed the Lineups-tab
+"Share LineUp" gap (`BACKLOG-347`) -- then continued the admin-wide responsive audit `BACKLOG-336`
+started, plus a real pitch-marker sizing fix (`BACKLOG-348`) Richard reported live, then a full
+bundled code-review/feature/ship/done/audit-toolkit pass over everything from tonight and this
+session's own fix-up of what that review found. Ran across three separate agent dispatches
+(`admin-responsive-audit-2`/`-3` worktrees), two of which died to the session rate limit mid-task
+and were resumed fresh rather than literally continued (no live-agent-resume mechanism exists in
+this environment).
+
+**Resolved, admin responsive audit continuation (`BACKLOG-345`/`346`/`349`/`350`):**
+- `/admin/infrastructure` (header didn't wrap, 412px vs 375px), `/admin/match-ratings` (team-name
+  wrapper had `flex-1` but no `min-w-0` on the *outer* container -- clipped inside the card's own
+  `overflow-hidden`, not a page-level scrollbar, so it didn't show up in the full-page overflow
+  scan used elsewhere this audit).
+- `/admin/players` table: Actions column off-screen by default even with its own
+  `overflow-x-auto` (same "must be visible without scrolling" rule as `BACKLOG-336`). **A real
+  near-miss caught before commit:** the agent that built this fix died to the rate limit right
+  after updating the `<thead><th>` cells to hide a `Stats` column below `sm:`, before updating the
+  matching `<tbody><td>` cells -- would have shipped a column-misalignment bug (Stats hidden in
+  the header, still rendered in the body, shifting every column after it). Caught by manually
+  diffing header against body before committing, completed the matching `<td>` changes.
+- Dashboard (`/admin`), `/admin/track-events`, `/admin/livestreams`, competition/player detail
+  pages -- various overflow fixes, live-verified.
+- `/admin/access` (User Management, 🔴-flagged): Richard gave explicit authorization for this one
+  page specifically (not a blanket lift of the flag) after `BACKLOG-350`'s findings-only pass
+  showed the same `overflow-hidden`-not-`overflow-x-auto` clipping as `BACKLOG-336`'s original
+  finding, except this one didn't even clear at tablet width. Fixed with the same shrink-to-fit
+  pattern. `/admin/advertisements` and `/admin/transfers` (also 🔴, also flagged by `BACKLOG-350`)
+  remain untouched -- Richard authorized only `/admin/access`.
+- `BACKLOG-348`: pitch player-marker sizing (`ResponsivePitch.tsx`/`PlacementPitch.tsx`) switched
+  from fixed px to `clamp()` + CSS container queries so markers scale with their container instead
+  of overlapping/colliding at narrow widths. Confirmed via live screenshot from Richard mid-session
+  that names were still truncating to 1-2 characters even after this landed -- root-caused with a
+  read-only DB check *before* touching any CSS again, per Richard's explicit "jersey name isn't
+  supposed to be reduced" direction: the specific players in the screenshot (`OBASCO`, `ADETONA`,
+  `ADEGBOLA`, `Big shalli`, `Ola-praise` -- 6 to 10 real characters) already had proper, populated
+  `jersey_name` values, ruling out the fallback-to-full-name explanation. Confirmed as a genuine
+  layout-capacity problem, not a data problem. A separate, real data-completeness finding surfaced
+  by that same check -- 115 of 422 players (27%) have no `jersey_name` set at all and silently
+  fall back to the (usually longer) full name -- was filed, not fixed; a backfill decision is
+  Richard's to make, not assumed here.
+- `BACKLOG-347`: `MatchDetailClient.tsx`'s "Share LineUp" button, occluded/unclickable, a
+  regression from session 70's own `BACKLOG-339` header-collapse work -- root-caused and fixed,
+  closing the exact item session 70 flagged as the most likely next task.
+
+**Real process failure this session, twice: rate-limit deaths losing the ability to literally
+"resume" an agent.** No `SendMessage`-to-a-running-or-dead-subagent tool exists in this
+environment despite tool docs referencing one -- confirmed by direct search, not assumed. The
+actual recovery pattern each time: inspect the dead agent's worktree directly via `git log`/`git
+status` (real, git-confirmed state, not the agent's own possibly-incomplete final message), review
+every uncommitted diff by hand before trusting it, then dispatch a fresh agent with a
+self-contained brief listing exactly what's done/pending/scoped-out. This worked cleanly both
+times -- once found a genuinely half-finished edit (the players table header/body mismatch above),
+once chased a false lead (a commit hash that looked "lost" after a rebase turned out to be its
+rebased equivalent under a new hash, content identical, nothing actually lost).
+
+**Bundled quality-gate pass, Richard's explicit ask (`code-review` + `feature` + `ship` + `done` +
+`audit-toolkit`, one agent, one consolidated report):** run against all 19 files touched across
+tonight's ~39-46 commits. Verdict: zero CRITICAL, security clear, 4 real MEDIUM findings, several
+LOW. `ship`/`done` were run as informational checklists only (explicitly not a real ship or close
+tonight) -- the agent correctly declined to write to the global knowledge base for exactly that
+reason rather than misrepresent the branch as finished.
+
+**MEDIUM findings, all fixed same session:**
+1. `admin/matches/page.tsx`'s `handleUpdate` had the *exact same* unguarded `.toISOString()` crash
+   already fixed once in `openEditModal` 70 lines away (`BACKLOG-343` follow-up) -- silent-by-luck
+   (an HTML `required` attribute happened to block the empty-string case), not silent-by-design.
+   Same class of "patched the reported instance, not the pattern" gap the review itself called out
+   under the Project Close Check section. Guarded the same way.
+2. `api/competitions/route.ts` POST and `api/competitions/[id]/route.ts` PATCH accepted an explicit
+   `hostOrganizationId`/`governingOrganizationId` override with zero existence check (the
+   `BACKLOG-333` defaults themselves were already known-good, only the override path was open).
+   Added a real FK-existence query before either write, `422` on a nonexistent org id.
+3. Same PATCH handler's `startDate`/`endDate` had the identical unguarded-date-parse pattern --
+   guarded the same way, `422` on an unparseable value instead of writing an Invalid Date or
+   throwing.
+4. **The exact truncation-to-unreadable failure class this whole session kept re-discovering
+   landed anyway, in `BACKLOG-349`'s own file** (`admin/page.tsx`'s dashboard Live Match Monitor
+   table): the mobile-breakpoint `max-w` for team names and logger names was *halved* (120px->60px,
+   80px->40px) while inserting a new `md:` tier above it, clipping real names to a handful of
+   characters. Widened back past the original floor (60px->110px, 40px->70px) rather than just
+   restoring the old values, since the old values were also part of what `BACKLOG-349` was fixing.
+
+**LOW findings, all applied:** static Tailwind width-class fallback alongside the `clamp(...cqw...)`
+inline styles in both pitch components (defends against a browser with no container-query support
+collapsing the marker to 0 width instead of just losing the scaling); a defensive optional-chain on
+`logger.assignedMatches` in `admin/loggers/page.tsx` (pre-existing, adjacent to tonight's edits, a
+logger record missing that field would otherwise throw on render); widened `admin/access/page.tsx`'s
+email truncate from 75px to 95px (was legible but tight); a one-line comment on
+`DEFAULT_GOVERNING_ORGANIZATION_ID`'s double `org_` prefix confirming it's a verified-correct real
+row id, not a typo, so a future reviewer doesn't "fix" it into something broken; removed two debug
+`console.log`s from `admin/livestreams/page.tsx` (pre-existing, no secrets/PII logged, just noise).
+
+**Real live bug found and fixed outside the review's own scope, from a direct Richard report:**
+`/admin/access`'s Stats cards (Total Users/Administrators/Loggers/Regular Users) showed all zeros
+-- confirmed via a read-only DB check this was NOT an empty-table state (17 real rows: 1 admin, 1
+logger, 14 users, 1 anonymous) and NOT an API or auth bug (both read correctly on inspection).
+Root cause: `fetchRoleCounts()` was fire-and-forget inside `fetchData()`, so `loading` could clear
+(revealing real table rows) before the separate role-count fetch resolved, leaving the Stats cards
+briefly showing genuinely-still-`{}` `roleCounts` rather than a loading state -- not cosmetic, a
+real race. Fixed by awaiting it. Also fixed a real, unguarded `overflow-x-auto` (no
+`scrollbar-hide`) on `/admin/teams`'s sport-filter chip row, the same pattern already fixed
+elsewhere this audit but missed on this specific page -- found from a direct Richard report, not
+part of the original file list.
+
+**Also dispatched, still running at time of writing, not covered by this entry:** a full-system
+product-thinking audit (Admin -> Logger -> Viewer, sequential, multiple expert lenses -- product,
+UX/IA, functionality, access-logic, system architecture) per Richard's explicit request. Read-only,
+no code changes -- will produce a separate report, not summarized here since it hadn't reported
+back when this entry was written.
+
+**Scope explicitly declined, not silently skipped:** `/admin/advertisements` and `/admin/transfers`
+(still 🔴, no authorization given for either); the `npm audit` finding (48 pre-existing
+vulnerabilities, `xlsx` with no fix available) -- real, but dependency surgery is its own separate,
+riskier task, not folded into tonight's fix pass; the ~11 admin pages still never audited for this
+responsive pattern (listed in `BACKLOG-350`'s own text).
+
+**Next session -- exact first task:** collect the product-thinking audit's report once it lands.
+Otherwise: live-verify tonight's final fix-up commit (the 4 MEDIUM + LOW items above, plus the
+`/admin/access`/`/admin/teams` fixes) on a fresh Vercel preview before marking any of it RESOLVED
+in `BACKLOG.md` -- written but not yet pushed/deployed/re-verified as of this entry.
+
 **Next session — exact first task:** genuinely open. `BACKLOG-326`/`331`/`337` are fully closed. The two flagged-not-fixed items above (rating badge semantics, "1 Pointers" meaning) need Richard's direction before any further Box Score/Stats polish. Otherwise: check `BACKLOG.md` for the next open CRITICAL/blocking item, same standing rule every session close notes.

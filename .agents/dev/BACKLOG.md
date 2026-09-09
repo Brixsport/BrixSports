@@ -10484,6 +10484,98 @@ alone (not `sm:`/`md:`) governs both 375px and 768px here, verified clean at bot
 
 ---
 
+### BACKLOG-351 — Bundled Review Fixes: 4 MEDIUM + 5 LOW Findings Across Tonight's Diff
+
+**Status:** SHIPPED — code committed, live verification pending (see Evidence once it lands).
+**Priority:** MEDIUM (the 4 findings below) / LOW (the rest) — see the bundled review report for full
+reasoning per item; summarized here, not repeated in full.
+**Found:** a bundled `code-review` + `feature` + `ship` + `done` + `audit-toolkit` pass, one agent,
+one consolidated report, run against every file touched across tonight's ~46 commits (`b270d03`..
+`62a6407`), per Richard's explicit request. Verdict: zero CRITICAL, security clear.
+
+**MEDIUM, all fixed:**
+1. `src/app/admin/matches/page.tsx`'s `handleUpdate` had the exact same unguarded
+   `.toISOString()` crash already fixed once in `openEditModal` (`BACKLOG-343` follow-up), 70 lines
+   away — silent-by-luck (an HTML `required` attribute happened to block the empty-string case),
+   not silent-by-design. Same `isNaN(...)` guard applied, falling back to the match's existing
+   `startTime` rather than corrupting it further.
+2. `src/app/api/competitions/route.ts` (`POST`) and `src/app/api/competitions/[id]/route.ts`
+   (`PATCH`) accepted an explicit `hostOrganizationId`/`governingOrganizationId` override with zero
+   existence check (`BACKLOG-333`'s own defaults were already known-good; only the override path
+   was open). Added a real `organizations` table existence query before either write, `422` on a
+   nonexistent org id.
+3. Same PATCH handler's `startDate`/`endDate` had the identical unguarded-date-parse pattern —
+   guarded the same way, `422` on an unparseable value instead of writing an `Invalid Date` or
+   throwing.
+4. `src/app/admin/page.tsx`'s dashboard Live Match Monitor table (`BACKLOG-349`'s own file) had the
+   exact truncation-to-unreadable failure class this whole session kept re-discovering: the
+   mobile-breakpoint `max-w` for team names and logger names was halved (120px→60px, 80px→40px)
+   while inserting a new `md:` tier above it, clipping real names to a handful of characters.
+   Widened past the *original* floor (60px→110px, 40px→70px), not just back to it — since the
+   original values were also part of what `BACKLOG-349` was fixing.
+
+**LOW, all applied:**
+- Static Tailwind width-class fallback (`w-8 h-8` on `ResponsivePitch.tsx`'s jersey icon, `w-14` on
+  `PlacementPitch.tsx`'s player card) alongside the `clamp(...cqw...)` inline styles from
+  `BACKLOG-348` — defends against a browser with no container-query support collapsing the marker
+  to 0 width instead of just losing the scaling.
+- `src/app/admin/loggers/page.tsx`: defensive optional-chain on `logger.assignedMatches` (was
+  unguarded — a logger record missing that field would throw on render). Pre-existing, adjacent to
+  tonight's edits, not part of the original diff.
+- `src/app/admin/access/page.tsx`: widened the email truncate 75px→95px (was legible but tight).
+- `src/app/api/competitions/route.ts`: one-line comment confirming
+  `DEFAULT_GOVERNING_ORGANIZATION_ID`'s double `org_` prefix is a verified-correct real row id, not
+  a typo — so a future reviewer doesn't "fix" it into something broken.
+- `src/app/admin/livestreams/page.tsx`: removed two debug `console.log`s (pre-existing, no
+  secrets/PII logged, just noise flagged by the review's log-sanitization step).
+
+**Explicitly declined, not folded into this fix pass:** the review's `npm audit` finding (48
+pre-existing vulnerabilities, `xlsx` with no fix available) — real, but dependency surgery is its
+own separate, riskier task. `/admin/advertisements`/`/admin/transfers` (still 🔴, see `BACKLOG-350`)
+— the review didn't newly find these, just reflected `BACKLOG-350`'s own already-logged findings.
+
+**Evidence:**
+- Commit: `<pending>` (`feature/ui-redesign`)
+- Verified by: `tsc --noEmit` clean (35 pre-existing baseline, all `src/db/*`/`squads/*`, zero new)
+  across all 11 touched files. Live verification pending.
+- Pending items: live DOM/functional re-verification of all 4 MEDIUM + 5 LOW items on a fresh
+  Vercel preview.
+
+---
+
+### BACKLOG-352 — Two Real Live Bugs Found From Direct Richard Reports, Outside the Bundled Review's Scope
+
+**Status:** SHIPPED — code committed, live verification pending (see Evidence once it lands).
+**Priority:** MEDIUM (item 1, a real data-correctness race) / LOW (item 2, cosmetic).
+**Found:** session continued, 2026-09-09, from Richard directly reporting each live, not from any
+automated scan.
+
+1. **`/admin/access`'s Stats cards (Total Users/Administrators/Loggers/Regular Users) showed all
+   zeros.** Confirmed via a read-only DB check this was NOT an empty-table state (17 real rows: 1
+   admin, 1 logger, 14 users, 1 anonymous) and NOT an API/auth bug (both correct on inspection).
+   Root cause: `fetchRoleCounts()` was fire-and-forget inside `fetchData()` (`src/app/admin/access/
+   page.tsx`), so `loading` could clear — revealing real table rows — before the separate
+   role-count fetch resolved, leaving the Stats cards briefly showing genuinely-still-`{}`
+   `roleCounts` rather than an actual loading state. Not cosmetic — a real race, not merely a fast
+   flash, since the table itself already has its own correct spinner guard and the two were never
+   synchronized. Fixed by `await`-ing `fetchRoleCounts()` before `setLoading(false)` runs.
+2. **`/admin/teams`'s sport-filter chip row (Football/Basketball/etc.) showed a raw, unhidden
+   native scrollbar** — `overflow-x-auto` with no `scrollbar-hide`, the same pattern already fixed
+   on `/admin/matches`'s status-filter row and `/admin/loggers`'s nav tabs this same audit, just
+   missed on this specific page (not part of the original scoped file list). Added `scrollbar-hide`
+   to match. (Checked `/admin/teams/[id]` too, per Richard's ambiguous "the /teams tab bar" report
+   — that page's `overflow-x-auto` instances are legitimate data-table scroll wrappers, not a nav
+   tab bar, correctly left alone.)
+
+**Evidence:**
+- Commit: `<pending>` (`feature/ui-redesign`)
+- Verified by: `tsc --noEmit` clean. Live verification pending.
+- Pending items: live re-check of both — item 1 by watching the Stats cards populate correctly
+  without a zero-flash on a fresh load, item 2 by confirming no native scrollbar renders under the
+  chip row at any width.
+
+---
+
 ### BACKLOG-340 — Timeline "All" Tab: Event Icon Duplicated Inside the Card Instead of the Outer Minute Badge
 
 **Status:** RESOLVED — 2026-09-08, live-verified on staging.
