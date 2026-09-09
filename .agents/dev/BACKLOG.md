@@ -10548,11 +10548,19 @@ per-slot available width drops below it, and still grow to a sensible ceiling on
   click/resize caught elements mid framer-motion animation or mid-reflow, producing apparent
   38px "overlaps" that weren't real — resolved by re-measuring after a longer settle wait, not by
   changing the fix).
-- Pending items: `PlacementPitch.tsx`'s edit-mode surfaces (`/admin/match-lineups`,
-  `/lineup-builder`) were fixed with the same technique but not independently live-measured this
-  session (both require admin/session auth to reach real data) — same root cause and same class
-  of fix as the verified `ResponsivePitch.tsx` change, but flagging the asymmetry rather than
-  claiming evidence that wasn't gathered.
+- **`PlacementPitch.tsx` (`/admin/match-lineups`, `/lineup-builder`) independently live-verified,
+  same session, follow-up pass:** real admin JWT signed via `dev/gen-admin-token-backlog348.mjs`
+  (not hardcoded -- reads `TURSO_CONNECTION_URL`/`JWT_SECRET` from `.env.local`), injected via
+  cookie + localStorage. `/admin/match-lineups`: opened a real published match (`C vs D`,
+  11/11 starters both sides) -- initial read caught it mid-load showing a stale `0/11 placed`
+  empty-slot state (same class of false-positive as the animation/reflow timing traps below; a
+  second read after the real data settled showed the true `11/11` state). Measured all 22 cards
+  (both teams) at 375px/753px/1425px: zero overlaps at every width, widths correctly clamped
+  (~41px mobile floor, 64px ceiling from tablet width up). `/lineup-builder`: used its own
+  "Pre-fill lineup" feature (Hammers XI, 11 real players) rather than manually placing each of 11
+  slots by hand; same measurement at the same three widths: zero overlaps, same width scaling.
+  No writes made on either page (draft/publish/update never clicked) -- nothing to clean up.
+- Pending items: none.
 
 ---
 
