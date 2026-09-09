@@ -5,6 +5,7 @@ import { sql } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { generateToken, normalizeUserRole } from '@/lib/auth';
 import { env } from '@/lib/env';
+import { getGoogleRedirectUri } from '@/lib/google-oauth';
 
 // GET /api/auth/callback/google
 //
@@ -43,10 +44,10 @@ export async function GET(request: NextRequest) {
             return NextResponse.redirect(loginUrl);
         }
 
-        // Must exactly match the redirect_uri sent in the initiate step
-        // (/api/auth/google/route.ts) and registered in Google Cloud Console
-        // -- Google rejects the token exchange otherwise.
-        const redirectUri = `${env.appUrl || request.nextUrl.origin}/api/auth/callback/google`;
+        // Must exactly match the redirect_uri sent in the initiate step and
+        // registered in Google Cloud Console -- Google rejects the token
+        // exchange otherwise. Shared builder, not a second inline copy.
+        const redirectUri = getGoogleRedirectUri(request.nextUrl.origin);
 
         const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
             method: 'POST',

@@ -1,14 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { env } from '@/lib/env';
+import { getGoogleRedirectUri } from '@/lib/google-oauth';
 
 // GET /api/auth/google - Initiate Google OAuth flow
 export async function GET(request: NextRequest) {
     const clientId = env.googleClientId;
     const clientSecret = env.googleClientSecret;
-    // Must match one of the Authorised redirect URIs registered on the real
-    // Google Cloud OAuth client (Brixsport V2 project) -- confirmed exactly:
-    // /api/auth/callback/google, not /api/auth/google/callback.
-    const redirectUri = `${env.appUrl || request.nextUrl.origin}/api/auth/callback/google`;
+    const redirectUri = getGoogleRedirectUri(request.nextUrl.origin);
 
     if (!clientId || !clientSecret) {
         console.error("Missing Google OAuth credentials");
