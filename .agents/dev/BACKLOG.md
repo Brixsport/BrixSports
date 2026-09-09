@@ -10229,7 +10229,8 @@ after):
 
 ### BACKLOG-346 — Admin Responsive Audit: `/admin/players` Table, Actions Column Off-Screen by Default
 
-**Status:** SHIPPED — code committed, live verification pending (see Evidence once it lands).
+**Status:** RESOLVED — 2026-09-09, live-verified on staging alias (session `brixsports-v2-cc`,
+fresh continuation worktree `admin-responsive-audit-3`).
 **Priority:** MEDIUM — same admin-wide responsive audit as `BACKLOG-336`/`343`/`344`/`345`; same
 "data table actions must be visible without scrolling" rule `BACKLOG-336` established.
 **Files:** `src/app/admin/players/page.tsx`.
@@ -10264,12 +10265,23 @@ capped the player-name truncate width, and tightened the Actions column's own pa
 size below `sm:`. Full desktop sizing (`md:` and up) untouched.
 
 **Evidence:**
-- Commit: `072770b` (first pass), `<pending>` (this session's second shrink pass, `feature/ui-redesign`)
-- Verified by: live DOM measurement (`table.getBoundingClientRect().width` vs the `overflow-x-auto`
-  wrapper's `clientWidth`) on the branch's stable Vercel alias at 375px, before and after the second
-  fix, plus a real functional click on the View/Edit/Delete icons once the fix lands.
-- Pending items: live re-verification of the second shrink pass (this entry stays SHIPPED, not
-  RESOLVED, until that lands).
+- Commit: `072770b` (first pass), `c2e0175` (second shrink pass), both `feature/ui-redesign`.
+- Verified by: real admin session (JWT cookie injection) on the branch's stable Vercel alias
+  (`brixsports-staging-git-feature-ui-redesign-brixsports-projects.vercel.app`), mobile (375x812)
+  and tablet (768x1024) viewports, direct DOM measurement (`table.getBoundingClientRect().width`
+  vs the `overflow-x-auto` wrapper's `clientWidth`, `thead th`/`tbody td` per-cell `visible`/
+  `getBoundingClientRect()` checks for the Stats and jerseyName/ID hide-below-`sm:` cells), plus a
+  real functional click on the Edit icon (2nd button in the Actions cell, via direct DOM `.click()`
+  invocation -- the established fallback in this project since the emulated Browser pane's native
+  click is unreliable).
+- Observed result: table width matches its wrapper exactly at both 375px (342/341, ~1px subpixel
+  rounding only) and 768px (687/687); Actions column fully inside the viewport at both breakpoints
+  (right edge x:359 at 375px, x:720 at 768px against a 753-768px doc width); Stats column correctly
+  hidden (`display:none`) below `lg:` at both breakpoints. Clicking Edit on the first table row
+  opened the real "Refine Athlete Profile" modal (System ID, Profile Visualization/upload, Core
+  Identity, Technical Matrix/team-assignment fields all populated) -- confirms the action is
+  reachable and functional, not just visually non-overflowing.
+- Pending items: none.
 
 ---
 
@@ -10280,7 +10292,8 @@ Player Detail Mobile Overflow
 (`BACKLOG-347`, "Lineups Tab: Share LineUp Button Occluded/Unclickable"). No functional change,
 just this entry's (and `BACKLOG-350`'s) own number.
 
-**Status:** SHIPPED — code committed, live verification pending (see Evidence once it lands).
+**Status:** RESOLVED — 2026-09-09, live-verified on staging alias (session `brixsports-v2-cc`,
+fresh continuation worktree `admin-responsive-audit-3`).
 **Priority:** MEDIUM — same admin-wide responsive audit as `BACKLOG-336`/`343`/`344`/`345`/`346`.
 **Files:** `src/app/admin/page.tsx`, `src/app/admin/track-events/page.tsx`,
 `src/app/admin/livestreams/page.tsx`, `src/app/admin/competitions/[id]/page.tsx`,
@@ -10366,28 +10379,37 @@ holds tables to). Trimmed base padding `p-2`→`p-1` across all cells and tighte
 Assigned-Logger truncate caps (`80px`→`60px`, `50px`→`40px`) to buy back the needed margin.
 
 **Evidence:**
-- Commit: `<pending>` (`feature/ui-redesign`)
+- Commits: `90e5bb9` (initial five-page fix), `f6e55fa` (tablet `sm:`/`md:` tier-shift correction),
+  `a9d8033` (dashboard second padding-trim pass) -- all `feature/ui-redesign`.
 - Verified by: live DOM measurement (`document.documentElement.scrollWidth`/`clientWidth`, plus
   `table.getBoundingClientRect().width` vs its `overflow-x-auto` wrapper's `clientWidth`, plus each
   row's own `<td>` boundingClientRect for the Actions column specifically) on the branch's stable
   Vercel alias, both 375px and 768px, for every one of the five pages in this entry, plus real
-  functional clicks: players-list Edit action (opened "Refine Athlete Profile"), competition
-  detail's Advanced Settings dropdown (opened the real menu), player detail's icon-only Edit
-  Profile button (entered edit mode, Save/Cancel appeared).
-- Observed result: `/admin/players` (list) table width matches its wrapper exactly at both 375px
-  (342/342) and 768px (687/687), Actions column fully inside the viewport both times.
-  `/admin/competitions/[id]` and `/admin/players/[id]` both clean (`scrollWidth` = `clientWidth`,
-  zero offending elements) at both breakpoints. The AdminSidebar mobile-toggle button, previously
-  measured off-screen (right edge at x:492 on a 375px viewport) as a symptom of the header overflow,
-  now sits correctly at right edge x:359 (16px from the 375px edge, matching its `right-4` CSS) --
-  confirms it was a symptom, not an independent bug, and it self-resolved. `/admin/track-events`
-  and `/admin/livestreams` were already confirmed clean before the tier-shift, unaffected by it.
-  `/admin/page.tsx` (dashboard) fix not yet re-verified live -- pushed after this evidence block was
-  written; see Pending items.
-- Pending items: live re-verification of the dashboard's second padding-trim pass specifically
-  (this entry stays SHIPPED, not RESOLVED, until that lands); the PWA update-prompt toast position
-  was not re-checked this round (lower priority than the sidebar toggle, same root cause already
-  confirmed resolved for the sidebar toggle).
+  functional clicks/navigations: players-list Edit action (opened "Refine Athlete Profile"),
+  dashboard's "Loggers →" link (navigated to the real `/admin/loggers` page).
+- Observed result: `/admin/page.tsx` (dashboard) "Assignment Monitor" table (this entry's "Live
+  Match Monitor") now clean at both breakpoints -- table width matches its wrapper exactly at 375px
+  (341.6/342) and 768px (703.2/703), Health column correctly hidden (`display:none`) below `lg:` at
+  both, Actions column fully inside the viewport (right edge x:358 at 375px, x:728 at 768px against
+  a 753-775px doc width), zero page-level offending elements at either breakpoint. The Actions
+  column's kebab (`MoreVertical`) button itself has no `onClick` handler in source (`src/app/admin/
+  page.tsx` line ~198) -- pre-existing, decorative/unwired, not introduced or regressed by this
+  responsive fix and out of scope for a responsive-only pass; used the dashboard's "Loggers →" link
+  as the real functional-click proxy instead, which correctly navigated to `/admin/loggers`.
+  `/admin/players` (list) table width matches its wrapper exactly at both 375px (342/341, ~1px
+  subpixel) and 768px (687/687), Actions column fully inside the viewport both times, and a real
+  click on its Edit action opened the "Refine Athlete Profile" modal. `/admin/competitions/[id]` and
+  `/admin/players/[id]` both previously confirmed clean (`scrollWidth` = `clientWidth`, zero
+  offending elements) at both breakpoints with real functional clicks (Advanced Settings dropdown,
+  icon-only Edit Profile button). The AdminSidebar mobile-toggle button, previously measured
+  off-screen (right edge at x:492 on a 375px viewport) as a symptom of the header overflow, sits
+  correctly at right edge x:359 (16px from the 375px edge, matching its `right-4` CSS) -- confirms
+  it was a symptom, not an independent bug, and it self-resolved. `/admin/track-events` and
+  `/admin/livestreams` were already confirmed clean before the tier-shift, unaffected by it.
+- Pending items: the PWA update-prompt toast position was not re-checked this round (lower priority
+  than the sidebar toggle, same root cause already confirmed resolved for the sidebar toggle); the
+  dashboard kebab button's missing `onClick` wiring is a separate, pre-existing, not-yet-filed issue
+  (not a responsive bug, noted here for awareness only).
 
 ---
 
