@@ -67,7 +67,7 @@ export function PlacementPitch({
 
     return (
         <div
-            className={`relative w-full ${is5Aside ? 'aspect-[4/5] sm:aspect-[1/1]' : 'aspect-[2/3] md:aspect-[3/4]'} bg-gradient-to-b from-green-900/40 to-green-800/20 rounded-3xl overflow-hidden border border-white/10 shadow-2xl ${className}`}
+            className={`@container relative w-full ${is5Aside ? 'aspect-[4/5] sm:aspect-[1/1]' : 'aspect-[2/3] md:aspect-[3/4]'} bg-gradient-to-b from-green-900/40 to-green-800/20 rounded-3xl overflow-hidden border border-white/10 shadow-2xl ${className}`}
         >
             <PitchMarkings is5Aside={is5Aside} />
 
@@ -185,6 +185,12 @@ function PlacementSlot({
     const hasPlayer = !!(playerId && details);
     const displayName = details && (details.jerseyName || details.name.split(' ').pop());
     const clickable = mode === 'edit' || (mode === 'readonly' && hasPlayer);
+    // Sized off the pitch's own rendered width (cqw, via the @container ancestor on
+    // PlacementPitch's outer div) instead of a fixed px card -- a fixed card doesn't
+    // shrink on a narrow pitch, so adjacent slots in a tightly-spaced formation row
+    // (e.g. a back four/five) visually collided on mobile. clamp() keeps a readable
+    // floor while still shrinking with the container on any viewport or embed width.
+    const cardWidth = is5Aside ? 'clamp(44px, 20cqw, 80px)' : 'clamp(38px, 15cqw, 64px)';
 
     return (
         <div
@@ -197,7 +203,8 @@ function PlacementSlot({
                     onMouseEnter={() => setIsHovering(true)}
                     onMouseLeave={() => setIsHovering(false)}
                     disabled={!clickable}
-                    className={`relative ${is5Aside ? 'w-20 h-24' : 'w-16 h-20'} rounded-xl border-2 transition-all ${details!.teamLabel === 'away'
+                    style={{ width: cardWidth, aspectRatio: '4 / 5' }}
+                    className={`relative rounded-xl border-2 transition-all ${details!.teamLabel === 'away'
                         ? 'bg-red-500/90 border-red-400'
                         : 'bg-blue-500/90 border-blue-400'
                         } ${clickable ? 'hover:scale-110 cursor-pointer' : ''} shadow-lg`}

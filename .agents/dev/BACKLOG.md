@@ -10424,6 +10424,54 @@ surrounding structure (explicitly confirmed with Richard mid-session, kept as-is
 
 ---
 
+### BACKLOG-348 — Lineup Pitch: Fixed-px Player Card Sizing Causes Clutter/Overlap Across Viewports
+
+**Status:** SHIPPED — 2026-09-09, code committed on `feature/ui-redesign`. Live test NOT yet run.
+**Priority:** MEDIUM — a real, reachable visual defect on the highest-traffic public surface
+(match-detail Lineups tab) plus both lineup-editing tools, worse on narrower viewports.
+**Files:** `src/components/lineup/ResponsivePitch.tsx`, `src/components/lineup/PlacementPitch.tsx`.
+
+**Reported:** Richard, 2026-09-09, "the lineup field looks cluttered across VPs [viewports]".
+
+**Root cause:** the pitch *container* itself already scales correctly with viewport (fixed at
+`aspect-[3/4] max-w-[720px]`, per the earlier fix recorded in `feedback_pitch_sizing_viewport_growth`
+memory) — but the player markers inside it did not scale with it:
+- `ResponsivePitch.tsx`'s `PlayerDot` (the read-only pitch used by the public match-detail Lineups
+  tab, via `FullPitchLineups.tsx`) had a jersey icon `minWidth`/`minHeight` hard floor of `34px`,
+  and its name/badges row below the jersey was a fixed `max-w-[100px]` — neither shrank as the
+  pitch container narrowed or as formation-slot spacing tightened (adjacent slot x-gaps as low as
+  ~20-23% of pitch width in several formations, per `src/lib/lineup/formations.ts`). At mobile
+  widths, the 100px name row is wider than the ~70-90px gap between neighbouring slot centers, so
+  one player's name/card/goal/assist icons visually run into the next player's.
+- `PlacementPitch.tsx`'s player card (the admin `/admin/match-lineups` builder and public
+  `/lineup-builder`) had the same class of bug: a fixed `w-16 h-20` / `w-20 h-24` (5-a-side) card
+  that didn't shrink for the same tightly-spaced formation rows on narrow screens.
+- A secondary, previously-undetected issue: the jersey number's `fontSize: clamp(12px, 1.5cqw,
+  17px)` in `ResponsivePitch.tsx` already used a container-query unit (`cqw`), but no ancestor
+  element had `container-type` set — without a query container, `cqw` falls back to resolving
+  against the viewport, not the pitch's actual rendered width, so that value was already sized
+  correctly only by coincidence (pitch width happens to be close to viewport width on mobile),
+  not by design, and would size wrong in any narrower embed context.
+
+**Fix:** added `@container` (Tailwind v4's native `container-type: inline-size` utility) to each
+component's outer pitch wrapper, establishing a real query container so `cqw` genuinely reflects
+the pitch's own rendered width in every context (mobile, desktop, sidebar/narrower embeds — not
+just the viewport). Replaced the fixed-px jersey/card sizes and the fixed `max-w-[100px]` name row
+with `clamp(<floor>, <N>cqw, <ceiling>)` values, so markers shrink continuously with the container
+down to a still-legible floor instead of holding a fixed size that guarantees overlap once the
+per-slot available width drops below it, and still grow to a sensible ceiling on wide screens
+(unchanged behavior at the ceiling from before this fix).
+
+**Evidence:**
+- Commit: (pending — recorded once pushed)
+- Verified by: not yet — `tsc --noEmit` clean (18 pre-existing errors, none in either touched
+  file). Next step: push to `feature/ui-redesign`, live-verify visually on the branch's Vercel
+  preview across mobile/tablet/desktop widths on the match-detail Lineups tab (real match
+  `8Mek2CA7KPlnk1EQ647jx`) and both lineup-editing tools, before moving this to RESOLVED.
+- Pending items: live visual verification across viewports (see above).
+
+---
+
 ### BACKLOG-347 — Lineups Tab: "Share LineUp" Button Occluded/Unclickable, Regression From `BACKLOG-339`
 
 **Status:** RESOLVED — 2026-09-09, live-verified on staging.

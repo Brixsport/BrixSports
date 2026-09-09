@@ -54,7 +54,7 @@ export function ResponsivePitch({
     // Vertical: Inverse
 
     return (
-        <div className={cn("w-full h-full relative select-none", className)}>
+        <div className={cn("@container w-full h-full relative select-none", className)}>
             {/* Aspect Ratio Container */}
             {/* Horizontal: pb-[64%] (approx 105/68) or pb-[56.25%] (16:9) */}
             {/* Vertical: pb-[150%] */}
@@ -138,7 +138,14 @@ function PlayerDot({
     // For 5-a-side/Basketball, we might want less compression or different logic
     const VISUAL_Y_SCALE = (variant === '5-a-side' || variant === 'basketball' || variant === '3x3') ? 0.85 : 0.92;
     const visualY = 50 + (position.y - 50) * VISUAL_Y_SCALE;
-    const jerseySize = (variant === '5-a-side' || variant === 'basketball' || variant === '3x3') ? '9.5%' : '6.5%';
+    const isCompactVariant = variant === '5-a-side' || variant === 'basketball' || variant === '3x3';
+    // Sized off the pitch's own rendered width (cqw, via the @container ancestor in
+    // ResponsivePitch) rather than a fixed px floor -- a fixed floor doesn't shrink for
+    // tightly-spaced formation rows on a narrow pitch, so neighbouring players' name/badge
+    // rows below the jersey ran into each other. clamp() keeps a readable minimum while
+    // still shrinking with the container on any viewport or embed width.
+    const jerseySize = isCompactVariant ? 'clamp(20px, 9.5cqw, 44px)' : 'clamp(18px, 6.5cqw, 40px)';
+    const nameRowMaxWidth = isCompactVariant ? 'clamp(2.75rem, 24cqw, 6.875rem)' : 'clamp(2.5rem, 18cqw, 6.25rem)';
 
     return (
         <motion.div
@@ -173,8 +180,6 @@ function PlayerDot({
                 style={{
                     width: jerseySize,
                     aspectRatio: '1/1',
-                    minWidth: '34px',
-                    minHeight: '34px',
                     filter: isMotM ? 'drop-shadow(0 0 6px rgba(255, 215, 0, 0.7))' : 'drop-shadow(0 4px 4px rgba(0,0,0,0.3))'
                 }}
             >
@@ -193,7 +198,7 @@ function PlayerDot({
             </div>
 
             {/* Name + inline status row plain text on the pitch, no chip background) */}
-            <div className="mt-1 flex items-center gap-0.5 max-w-[100px]" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.9)' }}>
+            <div className="mt-1 flex items-center gap-0.5" style={{ maxWidth: nameRowMaxWidth, textShadow: '0 1px 3px rgba(0,0,0,0.9)' }}>
                 {isCaptain && (
                     <span className="text-yellow-400 text-[8px] font-black shrink-0">(C)</span>
                 )}
