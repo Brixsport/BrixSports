@@ -10332,16 +10332,45 @@ through the remaining un-audited `/admin/*` pages listed in this session's brief
    Expected to self-resolve once the header fix above lands; flagged here rather than silently
    assumed -- re-verify both elements' positions after deploy, not just the header itself.
 
+**Follow-up, found during this session's own tablet re-verification (2026-09-09):** re-testing
+`/admin/players` (list) at 768px after the fix above deployed showed the table still overflowing
+its `overflow-x-auto` wrapper (873px table vs 687px wrapper) -- the Actions column was visible and
+functional at 375px but went back off-screen at 768px. Root cause, found to apply to every fix in
+this entry plus `BACKLOG-346`'s original pass: **`md:` is exactly 768px, Richard's own tablet test
+width**, so any class pair written as `X sm:Y md:Z` (shrink at base, medium at `sm:`, "full
+desktop" at `md:`) restores full desktop sizing (or un-hides a column) at the exact width meant to
+still be shrunk -- the shrink only ever actually held at 375px, never at 768px, for every fix in
+this entry. Re-audited and corrected all five: `/admin/players` (list) and `/admin/page.tsx`
+(dashboard) tables' `sm:`/`md:` tiers shifted up one level (`sm:`→`md:`, `md:`→`lg:`) so the medium
+tablet-visible tier now sits at 768px and "full desktop" waits for `lg:` (1024px+); their binary
+hide toggles (`hidden sm:table-cell` for Stats/Health, `hidden sm:flex` for the jerseyName/ID line)
+specifically corrected to `hidden lg:table-cell`/`hidden lg:flex` (a shift to `md:` alone would
+still have un-hidden them exactly at 768px). `/admin/competitions/[id]`'s header stacking
+(`flex-col md:flex-row`) and icon/heading/button sizing shifted the same way to `lg:`, plus the
+previously-unshrunk "Advanced Settings" button (missed by the first pass' top-offender scan, only
+becomes the limiting factor once everything else shrinks) now shrinks below `sm:` too, with
+`flex-wrap` added to the action-button row as a safety net. `/admin/players/[id]`'s sticky header
+(icon-only buttons, truncated name, hidden university badge) shifted from `sm:` straight to `lg:`
+(no legitimate medium tier for a binary icon-only/labeled toggle). `/admin/track-events` and
+`/admin/livestreams` were re-checked and did not have this collision (their `sm:` tier was already
+tablet-safe -- see Evidence).
+
 **Evidence:**
 - Commit: `<pending>` (`feature/ui-redesign`)
-- Verified by: (pending -- live DOM measurement (`document.documentElement.scrollWidth` vs
-  `clientWidth`, plus a full-page offending-element scan excluding elements inside their own
-  `overflow-x-auto` container) on the branch's stable Vercel alias at 375px and 768px, before and
-  after each fix, plus a real functional check per page -- Refresh/Adjust-style click already
-  covered by `BACKLOG-345` doesn't apply here, so: a real click through the dashboard's kebab menu
-  or the players/[id] Edit Profile icon-only button, same standard as `BACKLOG-343`/`344`.)
-- Pending items: live re-verification of all five fixes, plus a re-check of the AdminSidebar
-  toggle button and PWA update-prompt positions on `/admin/players/[id]` specifically.
+- Verified by: live DOM measurement (`document.documentElement.scrollWidth`/`clientWidth`, plus
+  `table.getBoundingClientRect().width` vs its `overflow-x-auto` wrapper's `clientWidth` for the
+  two data tables) on the branch's stable Vercel alias, both 375px and 768px, plus a real
+  functional click through the players-list Edit action (opened the real "Refine Athlete Profile"
+  modal) confirming the fix didn't just look right.
+- Observed result (`/admin/players` list, 375px): table width 342px vs a 342px wrapper (exact
+  fit, Actions column right edge at x:358 inside a 375px viewport) -- clean, and unchanged from the
+  earlier confirmation. `/admin/track-events` and `/admin/livestreams` confirmed clean at 768px on
+  the deployed fix before the tier-shift correction was even needed, so left as `sm:`.
+- Pending items: live re-verification of the tier-shift correction at 768px specifically for
+  `/admin/players` (list), `/admin/page.tsx` (dashboard), `/admin/competitions/[id]`, and
+  `/admin/players/[id]` -- this entry stays SHIPPED, not RESOLVED, until that lands. Also still
+  pending: the AdminSidebar toggle button / PWA update-prompt re-check on `/admin/players/[id]`
+  noted above.
 
 ---
 

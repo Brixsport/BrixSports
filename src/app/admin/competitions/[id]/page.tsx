@@ -289,27 +289,31 @@ export default function CompetitionTeamsPage() {
 
             <div className="max-w-7xl mx-auto space-y-12">
                 {/* Header */}
-                <header className="flex flex-col md:flex-row md:items-end justify-between gap-8">
+                {/* BACKLOG (admin responsive audit): a first pass only shrunk the icon+title row
+                    using sm:/md: tiers -- but md: is exactly 768px, the tablet test width, so
+                    "full desktop" sizing (text-5xl heading, md:flex-row single-line header, full
+                    Save/Advanced-Settings button padding) all kicked back in AT 768px, right where
+                    the fix needed to still be holding. Every breakpoint in this header (both the
+                    flex-col/flex-row stacking and the sm:/md: sizing tiers) shifted up one level --
+                    sm: -> md:, md: -> lg: -- so the shrunk layout now holds through the whole
+                    375-1023px mobile+tablet range and only resolves to full desktop sizing at
+                    lg: (1024px+), which real desktop widths comfortably clear. Also shrunk the
+                    "Advanced Settings" button (previously unshrunk, not caught by the first pass'
+                    top-offender scan) and added flex-wrap to the action-button row as a safety net. */}
+                <header className="flex flex-col lg:flex-row lg:items-end justify-between gap-8">
                     <div className="space-y-4">
                         <Link href="/admin/competitions" className="inline-flex items-center gap-2 text-white/40 hover:text-white transition-colors text-xs font-black uppercase tracking-widest">
                             <ArrowLeft size={14} /> Back to Competitions
                         </Link>
-                        {/* BACKLOG (admin responsive audit): the icon+title row had no min-w-0 on
-                            the text block, so the text-5xl heading never actually got to shrink or
-                            wrap within the flex row, pushing scrollWidth 31px past a 375px viewport
-                            -- same root cause as BACKLOG-343's team-name truncate finding. Shrunk the
-                            icon box and heading size below sm:, added min-w-0 + flex-wrap so both the
-                            title and the sport/season/label row can wrap instead of forcing width.
-                            Full desktop sizing restored from sm:/md: up. */}
-                        <div className="flex items-center gap-3 sm:gap-4">
-                            <div className="w-12 h-12 sm:w-16 sm:h-16 bg-primary/10 border border-primary/20 rounded-2xl flex items-center justify-center shrink-0">
-                                <TrophyIcon size={24} className="text-primary sm:w-8 sm:h-8" />
+                        <div className="flex items-center gap-3 md:gap-4">
+                            <div className="w-12 h-12 md:w-16 md:h-16 bg-primary/10 border border-primary/20 rounded-2xl flex items-center justify-center shrink-0">
+                                <TrophyIcon size={24} className="text-primary md:w-8 md:h-8" />
                             </div>
                             <div className="min-w-0">
-                                <h1 className="font-display text-2xl sm:text-3xl md:text-5xl tracking-tighter italic uppercase leading-tight sm:leading-none">
+                                <h1 className="font-display text-2xl md:text-3xl lg:text-5xl tracking-tighter italic uppercase leading-tight md:leading-none">
                                     {competition.name}
                                 </h1>
-                                <div className="flex flex-wrap items-center gap-2 sm:gap-4 mt-2">
+                                <div className="flex flex-wrap items-center gap-2 md:gap-4 mt-2">
                                     <span className="text-xs font-bold uppercase tracking-widest text-white/40">{competition.sport}</span>
                                     <span className="w-1 h-1 bg-white/20 rounded-full"></span>
                                     <span className="text-xs font-bold uppercase tracking-widest text-white/40">{competition.season}</span>
@@ -320,14 +324,15 @@ export default function CompetitionTeamsPage() {
                         </div>
                     </div>
 
-                    <div className="flex items-center gap-3">
+                    <div className="flex flex-wrap items-center gap-3">
                         <div className="relative">
                             <button
                                 onClick={() => setShowAdvancedMenu(v => !v)}
-                                className="flex items-center gap-2 bg-white/5 border border-white/10 text-white px-6 py-4 rounded-2xl font-black uppercase italic tracking-widest text-sm hover:bg-white/10 transition-colors"
+                                className="flex items-center gap-2 bg-white/5 border border-white/10 text-white px-3 py-2.5 md:px-6 md:py-4 rounded-2xl font-black uppercase italic tracking-widest text-xs md:text-sm hover:bg-white/10 transition-colors"
                             >
                                 <Settings size={18} />
-                                Advanced Settings
+                                <span className="hidden sm:inline">Advanced Settings</span>
+                                <span className="sm:hidden">Settings</span>
                                 <ChevronDown size={14} className={`transition-transform ${showAdvancedMenu ? 'rotate-180' : ''}`} />
                             </button>
                             <AnimatePresence>
@@ -367,7 +372,7 @@ export default function CompetitionTeamsPage() {
                         <button
                             onClick={handleSave}
                             disabled={isSaving}
-                            className="flex items-center gap-2 bg-primary text-black px-4 py-3 sm:px-8 sm:py-4 rounded-2xl font-black uppercase italic tracking-widest hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-50"
+                            className="flex items-center gap-2 bg-primary text-black px-4 py-3 md:px-8 md:py-4 rounded-2xl font-black uppercase italic tracking-widest hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-50"
                         >
                             {isSaving ? 'Saving...' : (
                                 <>
