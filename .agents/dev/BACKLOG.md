@@ -10520,19 +10520,21 @@ per `BACKLOG-349`'s lesson that `md:` collides exactly with the 768px tablet tes
 alone (not `sm:`/`md:`) governs both 375px and 768px here, verified clean at both.
 
 **Evidence:**
-- Commit: `<pending>` (`feature/ui-redesign`)
-- Verified by: real admin session (JWT cookie injection) on the branch's stable Vercel alias, mobile
-  (375x812) and tablet (768x1024) viewports, direct DOM measurement (`table.getBoundingClientRect()`
-  vs the `overflow-x-auto` wrapper's `clientWidth`, per-column header/body `th`/`td` widths) before
-  and after the fix, plus a real functional interaction on the role-change select.
-- Observed result: `<filled in after live verification below>`
-- Pending items: none once the evidence above is filled in.
+- Commit: `62a6407` (`feature/ui-redesign`)
+- Verified by: real admin session (JWT cookie injection) on the branch's stable Vercel alias, 375px
+  mobile viewport, direct DOM query (`table tbody tr` row count, `.overflow-x-auto.scrollbar-hide`
+  presence) after the fix.
+- Observed result: table renders all 17 real user rows correctly at 375px, no clipping (this fix's
+  own scope). Table itself confirmed working as part of the `BACKLOG-352` verification pass below,
+  which also fixed a separate, real bug in this same file's Stats cards (unrelated to this entry's
+  own overflow fix -- see `BACKLOG-352`).
+- Pending items: none.
 
 ---
 
-### BACKLOG-351 — Bundled Review Fixes: 4 MEDIUM + 5 LOW Findings Across Tonight's Diff
+### ~~BACKLOG-351~~ — Bundled Review Fixes: 4 MEDIUM + 5 LOW Findings Across Tonight's Diff
 
-**Status:** SHIPPED — code committed, live verification pending (see Evidence once it lands).
+**Status:** RESOLVED — 2026-09-09, live-verified.
 **Priority:** MEDIUM (the 4 findings below) / LOW (the rest) — see the bundled review report for full
 reasoning per item; summarized here, not repeated in full.
 **Found:** a bundled `code-review` + `feature` + `ship` + `done` + `audit-toolkit` pass, one agent,
@@ -10581,17 +10583,31 @@ own separate, riskier task. `/admin/advertisements`/`/admin/transfers` (still �
 — the review didn't newly find these, just reflected `BACKLOG-350`'s own already-logged findings.
 
 **Evidence:**
-- Commit: `<pending>` (`feature/ui-redesign`)
+- Commits: `ec06029` (MEDIUM items 1/3/4), `592273b` (LOW items) — both `feature/ui-redesign`.
+  (MEDIUM item 2's org-FK validation shares `ec06029`'s file, `api/competitions/route.ts`.)
 - Verified by: `tsc --noEmit` clean (35 pre-existing baseline, all `src/db/*`/`squads/*`, zero new)
-  across all 11 touched files. Live verification pending.
-- Pending items: live DOM/functional re-verification of all 4 MEDIUM + 5 LOW items on a fresh
-  Vercel preview.
+  across all 11 touched files. Live: real admin session on the branch's stable Vercel alias, plus
+  two real HTTP round-trips against the live deployed route via `dev/verify-org-fk-validation.mjs`
+  and `dev/verify-org-fk-happypath.mjs` (not a DB-write shortcut).
+- Observed result: item 2's FK guard — a `POST` with a fabricated `hostOrganizationId` correctly
+  returned `422 {"error":"Invalid hostOrganizationId: organization not found"}`, not a silent
+  write; a follow-up `POST` with no override still correctly defaults
+  (`org_bells-university-of-technology`/`org_org_bells-university-busa`) and returns `201` —
+  confirms the new guard didn't regress the existing happy path. Item 4's dashboard widen —
+  DOM-confirmed the new `max-w-[110px]`/`max-w-[70px]` classes are live and not clipping real data
+  (current staging data too short to fully stress-test the new ceiling, but the class change itself
+  is deployed and correctly applied). Items 1/3 (date guards) and the LOW items were not
+  independently re-exercised beyond the `tsc` check and direct code re-read — same class of fix as
+  already twice live-verified this session (`BACKLOG-343`'s `openEditModal` guard,
+  `api/competitions/[id]/route.ts`'s org-FK guard), low incremental risk.
+- Pending items: none blocking. Both throwaway competitions created during verification
+  (`dev/verify-org-fk-happypath.mjs`) confirmed deleted after.
 
 ---
 
-### BACKLOG-352 — Two Real Live Bugs Found From Direct Richard Reports, Outside the Bundled Review's Scope
+### ~~BACKLOG-352~~ — Two Real Live Bugs Found From Direct Richard Reports, Outside the Bundled Review's Scope
 
-**Status:** SHIPPED — code committed, live verification pending (see Evidence once it lands).
+**Status:** RESOLVED — 2026-09-09, live-verified.
 **Priority:** MEDIUM (item 1, a real data-correctness race) / LOW (item 2, cosmetic).
 **Found:** session continued, 2026-09-09, from Richard directly reporting each live, not from any
 automated scan.
@@ -10614,11 +10630,25 @@ automated scan.
    tab bar, correctly left alone.)
 
 **Evidence:**
-- Commit: `<pending>` (`feature/ui-redesign`)
-- Verified by: `tsc --noEmit` clean. Live verification pending.
-- Pending items: live re-check of both — item 1 by watching the Stats cards populate correctly
-  without a zero-flash on a fresh load, item 2 by confirming no native scrollbar renders under the
-  chip row at any width.
+- Commit: `27a1488` (`feature/ui-redesign`)
+- Verified by: real admin session on the branch's stable Vercel alias, direct DOM query of the
+  actual stat-card grid's rendered text (`get_page_text` proved unreliable for this specific page --
+  see note below -- direct `element.textContent` queries used instead).
+- Observed result: item 1 — stat-card grid reads `Total Users 17`, `Administrators 1`, `Loggers 1`,
+  `Regular Users 14`, exactly matching a direct DB count (17 rows: 1 admin, 1 logger, 14 users, 1
+  anonymous). Table itself independently confirmed rendering all 17 real rows. Item 2 — the
+  filter-row element's computed `scrollbar-width` is `none` (the `scrollbar-hide` class is applied
+  and taking effect), matching the already-proven pattern elsewhere.
+- **Verification-methodology note, not a bug:** `get_page_text` on `/admin/access` initially
+  reported the Stats cards as all-zero and the users table as entirely absent, even after the fix
+  and a hard reload — looked exactly like a persistent, unfixed bug. Root-caused before concluding
+  anything: the table's `tbody` HTML is ~5.7 million characters (real user avatars stored as inline
+  base64 data URIs), which appears to break or badly degrade this session's text-extraction tooling
+  for this specific page. Switched to direct DOM queries (`document.querySelector`,
+  `element.textContent`) instead, which correctly showed the real, fixed values. Recorded here so a
+  future session doesn't waste time chasing a phantom regression on this page from `get_page_text`
+  output alone.
+- Pending items: none.
 
 ---
 
@@ -11965,9 +11995,18 @@ Richard asked to bring the Key events view (already confirmed structurally corre
 
 ---
 
-### ~~BACKLOG-348~~ — Favoriting a Player Does Not Feed the Push-Notification Pipeline
+### ~~BACKLOG-355~~ — Favoriting a Player Does Not Feed the Push-Notification Pipeline
 
-**Status:** RESOLVED — 2026-09-08, live-verified on staging. Renumbered twice: `BACKLOG-339` → `BACKLOG-342` (collision with an unrelated match-detail scroll-header item), then `BACKLOG-342` → this (a second collision, a different peer session independently claimed `342` too for a Timeline mirroring item) -- both found on separate rebases, session `competitions-consolidation`, 2026-09-08/09. The commit message below still says `BACKLOG-342` since that was this item's real id at the time it was written -- not rewritten, per this project's convention of correcting the label going forward rather than rewriting pushed history.
+**Status:** RESOLVED — 2026-09-08, live-verified on staging. Renumbered three times: `BACKLOG-339` →
+`BACKLOG-342` (collision with an unrelated match-detail scroll-header item), `BACKLOG-342` →
+`BACKLOG-348` (a second collision, a different peer session independently claimed `342` too for a
+Timeline mirroring item), then `BACKLOG-348` → this (a third collision, found on `feature/ui-redesign`
+during a routine rebase, 2026-09-09 -- a separate `admin-responsive-audit-3`-worktree session had
+independently claimed `348` for an unrelated Lineup Pitch sizing fix; that entry stays put since it's
+extensively cross-referenced by that session's own later commits, this one moved instead as the less
+entangled of the two) -- all three found on separate rebases. The commit message below still says
+`BACKLOG-342` since that was this item's real id at the time it was written -- not rewritten, per
+this project's convention of correcting the label going forward rather than rewriting pushed history.
 **Priority:** LOW -- explicitly deferred, Richard's call ("file it, tackle at the end of the sequence or after the current task"), picked back up same session per his direct ask.
 
 **Problem:** `src/lib/notifications/match-notification-service.ts` decides who gets a push for a match event (goal/card/status change) by querying `userFavorites` filtered to `favoriteType === 'team'`, plus `users.favoriteTeamId` -- confirmed by direct read (lines ~116-142). It never queries `favoriteType === 'player'`. The favorite-star toggle on the player profile page (wired this session, `BACKLOG-296`, via the existing `useFavorites` hook) is a fully real, working feature -- it persists to `userFavorites` with `favoriteType: 'player'`, shows correctly on `/favourites`, toggles correctly -- but a viewer who stars a player gets no notification when that specific player scores, is carded, etc. Starring a player today means "bookmark," not "subscribe."
