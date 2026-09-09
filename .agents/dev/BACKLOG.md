@@ -11995,6 +11995,110 @@ Richard asked to bring the Key events view (already confirmed structurally corre
 
 ---
 
+### BACKLOG-356 — Admin Matches List Still Displays Raw "INVALID DATE" Text
+
+**Status:** OPEN — filed, not fixed.
+**Priority:** LOW-MEDIUM — display-only now; the crash this text used to trigger is already fixed
+(`BACKLOG-351`'s `openEditModal`/`handleUpdate` guards). A match with a corrupted `startTime` no
+longer breaks the Edit flow, but the list row itself still renders the raw invalid value as literal
+text instead of a clean fallback ("—" or similar).
+**Found:** full-system product-thinking audit, 2026-09-09 (Admin phase), full report:
+https://claude.ai/code/artifact/d43b4763-3d1d-4e60-af9c-813ca2eea9d7
+**Files (likely):** `src/app/admin/matches/page.tsx` (wherever the list row formats `match.startTime`
+for display, separate from the two spots the crash guard already covers).
+**Fix (not built):** same `isNaN(new Date(...).getTime())` pattern, but on the display path --
+render a clear fallback string instead of `new Date(...).toString()`'s literal "Invalid Date"
+output. Low effort, not yet scoped to an exact line.
+
+---
+
+### BACKLOG-357 — Logger Dashboard Shows the Same Assigned Match Twice
+
+**Status:** OPEN — filed, not fixed. Live-observed, not yet root-caused.
+**Priority:** MEDIUM — a real logger's own assignment list showing a duplicate is confusing during
+live match operation, though not itself data-corrupting (no evidence of a duplicate DB row, only a
+duplicate list entry, until re-investigated).
+**Found:** full-system product-thinking audit, 2026-09-09 (Logger phase), full report:
+https://claude.ai/code/artifact/d43b4763-3d1d-4e60-af9c-813ca2eea9d7 -- confirmed live against a
+real logger session, not source-only.
+**Possibly related to, but NOT confirmed the same root cause as, `~~BUG-008~~`** (duplicate logger
+*assignment* race condition, RESOLVED session 3 via a transaction wrapping the check-then-insert in
+`assign-logger/route.ts`). The audit's own framing called this "live proof of BUG-008," but that
+conclusion wasn't independently re-verified against the current code -- worth treating as an open
+question, not a given, before assuming it's a regression of the old fix rather than a distinct
+client-side rendering/list-dedup bug (e.g. two assignment rows for the same match id, or a render
+key issue). **Next session's first step here: confirm via a direct DB query whether the underlying
+`match_logger_assignments` (or equivalent) table actually has a duplicate row for this
+logger+match, before touching any code** -- that answer determines whether this is a server-side
+regression or a client-only display bug, per this project's own "verify before concluding"
+convention.
+**Files (likely):** the logger dashboard's assigned-matches list component -- not yet located.
+
+---
+
+### BACKLOG-358 — `/admin/push-diagnose` Is a Real, Working, Auth-Gated Page With Zero Inbound Links
+
+**Status:** OPEN — filed, not fixed.
+**Priority:** LOW -- confirmed NOT a security gap (checked before filing, not assumed): the page is
+covered by `src/middleware.ts`'s general `/admin/:path*` matcher, which gates on `role === 'admin'`
+with no carve-out for this specific path -- same protection level as any other unlisted `/admin/*`
+page. The issue is purely that no admin nav/sidebar link points to it, so it's effectively dead UI
+reachable only by typing the URL directly.
+**Found:** full-system product-thinking audit, 2026-09-09 (Admin phase), full report:
+https://claude.ai/code/artifact/d43b4763-3d1d-4e60-af9c-813ca2eea9d7
+**Fix (not built, needs a product decision first):** either add a real nav link (if push-notification
+diagnostics is a capability admins should be able to reach) or delete the page (if it was a one-off
+debugging tool that outlived its purpose) -- Richard's call, not assumed here either way.
+
+---
+
+### BACKLOG-359 — PWA "Update Available" Modal Re-Interrupts on Nearly Every Navigation
+
+**Status:** OPEN — filed, not fixed.
+**Priority:** MEDIUM -- a real UX papercut affecting both admin and public pages alike, not scoped
+to one surface. Interrupting navigation repeatedly (not once per session/once per actual update) is
+the kind of friction that erodes trust in the app across every user type, including loggers
+mid-match.
+**Found:** full-system product-thinking audit, 2026-09-09 (cross-cutting finding, all three
+phases), full report: https://claude.ai/code/artifact/d43b4763-3d1d-4e60-af9c-813ca2eea9d7
+**Fix (not built):** locate the PWA update-check/prompt logic (service-worker registration +
+whatever component renders the modal) and gate it to fire once per actual new deployment/version,
+not once per navigation -- likely a `localStorage`/session-scoped dismissal flag, or fixing a
+check that's currently re-running on every route change instead of once per app load. Not yet
+root-caused to an exact file.
+
+---
+
+### BACKLOG-360 — Product-Thinking Audit: Minor Findings, Doc Corrections, Not Independently Filed
+
+**Status:** OPEN (doc corrections applied where trivial; the rest genuinely low-priority, bundled
+here rather than given individual numbers).
+**Priority:** LOW.
+**Found:** full-system product-thinking audit, 2026-09-09, full report:
+https://claude.ai/code/artifact/d43b4763-3d1d-4e60-af9c-813ca2eea9d7
+
+1. **Manager Center's "stub" status in an architecture doc is stale** -- the audit confirmed it's
+   live and real, not a stub. Whichever doc says otherwise (not yet identified/corrected) should be
+   updated in a future doc-hygiene pass.
+2. **Settings page is labeled "Algorithm Setup" in the admin sidebar** -- a naming mismatch between
+   the nav label and the page's actual (broader) scope. Cosmetic, one-line fix whenever someone's
+   already touching that sidebar component.
+3. **The documented Super Admin → Competition Admin → Team Manager hierarchy doesn't exist in
+   code** -- not a new finding, already known and tracked in `PLATFORM_MODEL.md`; the audit just
+   independently re-confirmed it live rather than surfacing anything new.
+4. **Mock/test fixtures visible on the staging public homepage ("MOCK SHOWCASE (delete me)", 19 of
+   113 matches with dev/QA team names)** -- the audit's own top CRITICAL finding, explicitly
+   dismissed by Richard: staging is where dev/QA creates stub matches by design, a separate prod
+   environment serves real public traffic, and this is expected staging behavior, not a leak. See
+   `~/.claude/knowledge` memory `project_staging_prod_env_separation` for the durable record of
+   this correction so a future session doesn't re-flag it. **No action needed.**
+
+**Confirmed working well, not a gap, noted for completeness:** offline/network-drop handling on the
+Logger PWA (JWT-TTL-aware queueing, correctly distinguishes server rejection from network failure);
+Viewer empty states (e.g. `/live` with no live matches); Viewer never assumes a session, correctly.
+
+---
+
 ### ~~BACKLOG-355~~ — Favoriting a Player Does Not Feed the Push-Notification Pipeline
 
 **Status:** RESOLVED — 2026-09-08, live-verified on staging. Renumbered three times: `BACKLOG-339` →
