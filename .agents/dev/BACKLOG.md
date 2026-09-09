@@ -10472,7 +10472,7 @@ surrounding structure (explicitly confirmed with Richard mid-session, kept as-is
 
 ### BACKLOG-348 — Lineup Pitch: Fixed-px Player Card Sizing Causes Clutter/Overlap Across Viewports
 
-**Status:** SHIPPED — 2026-09-09, code committed on `feature/ui-redesign`. Live test NOT yet run.
+**Status:** RESOLVED — 2026-09-09, live-verified on the `feature/ui-redesign` Vercel preview.
 **Priority:** MEDIUM — a real, reachable visual defect on the highest-traffic public surface
 (match-detail Lineups tab) plus both lineup-editing tools, worse on narrower viewports.
 **Files:** `src/components/lineup/ResponsivePitch.tsx`, `src/components/lineup/PlacementPitch.tsx`.
@@ -10509,12 +10509,28 @@ per-slot available width drops below it, and still grow to a sensible ceiling on
 (unchanged behavior at the ceiling from before this fix).
 
 **Evidence:**
-- Commit: (pending — recorded once pushed)
-- Verified by: not yet — `tsc --noEmit` clean (18 pre-existing errors, none in either touched
-  file). Next step: push to `feature/ui-redesign`, live-verify visually on the branch's Vercel
-  preview across mobile/tablet/desktop widths on the match-detail Lineups tab (real match
-  `8Mek2CA7KPlnk1EQ647jx`) and both lineup-editing tools, before moving this to RESOLVED.
-- Pending items: live visual verification across viewports (see above).
+- Commit: `ff85016` (`feature/ui-redesign`), verified against the branch's Vercel preview
+  (`brixsports-staging-git-feature-ui-redesign-*.vercel.app`, deployment-protection bypassed via
+  `VERCEL_AUTOMATION_BYPASS_SECRET`).
+- Verified by: `tsc --noEmit` clean (18 pre-existing errors, none in either touched file) +
+  live DOM measurement (not screenshots — this pane renders solid black/hidden) on the real match
+  `8Mek2CA7KPlnk1EQ647jx`'s Lineups tab, all 22 rendered player markers, across three widths:
+  mobile (375px), tablet (753px), desktop (1425px, pitch capped at its intended 720px). At each
+  width: computed every marker's `getBoundingClientRect()` and pairwise-intersected them (not a
+  single-element overflow scan — the bug is sibling-vs-sibling collision, not page overflow).
+- Observed result: **zero overlapping marker pairs at all three widths**, marker width scaling
+  correctly off the pitch's own rendered width (e.g. widths identical between the 753px and
+  1425px reads once the pitch itself hit its 720px cap, proving `cqw` is resolving against the
+  real container, not the viewport). One false-positive detour during this same verification is
+  recorded in `feedback_dom_measurement_lineup_pitch_verification` (measuring immediately after a
+  click/resize caught elements mid framer-motion animation or mid-reflow, producing apparent
+  38px "overlaps" that weren't real — resolved by re-measuring after a longer settle wait, not by
+  changing the fix).
+- Pending items: `PlacementPitch.tsx`'s edit-mode surfaces (`/admin/match-lineups`,
+  `/lineup-builder`) were fixed with the same technique but not independently live-measured this
+  session (both require admin/session auth to reach real data) — same root cause and same class
+  of fix as the verified `ResponsivePitch.tsx` change, but flagging the asymmetry rather than
+  claiming evidence that wasn't gathered.
 
 ---
 
