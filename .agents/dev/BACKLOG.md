@@ -10285,6 +10285,39 @@ surrounding structure (explicitly confirmed with Richard mid-session, kept as-is
 
 ---
 
+### BACKLOG-347 — Lineups Tab: "Share LineUp" Button Occluded/Unclickable, Regression From `BACKLOG-339`
+
+**Status:** SHIPPED — pending live verification.
+**Priority:** MEDIUM — a real, reachable feature (share) silently stops working past a normal
+scroll gesture, on every match's Lineups tab.
+**Files:** `src/components/MatchLineups.tsx`.
+
+**Reported:** Richard, 2026-09-08/09, sent a real-device screenshot showing a visible gap between
+"Share LineUp" and the pitch content on the Lineups tab, flagged in `BACKLOG-339`'s evidence as an
+unconfirmed, not-yet-root-caused separate item. Investigated properly this session.
+
+**Root cause, confirmed live via DOM/`elementFromPoint` (not guessed):** the "Share LineUp" bar
+was built `sticky top-0 z-30` specifically so it would "take over the top spot" once the (also
+sticky) match header fully disappeared on scroll -- see its own prior comment. `BACKLOG-339`
+replaced that disappearing header with a permanently-pinned compact navbar (never disappears,
+`z-40`), so the premise this bar was built for no longer holds: once scrolled far enough that both
+are in their "stuck" state, they both target the same `top: 0` anchor, and the taller/higher
+z-index header (145px compact) fully covers the shorter bar (46px) underneath it. Confirmed with
+`document.elementFromPoint()` at the Share button's exact screen coordinates while scrolled: the
+element actually there was the header's own icon SVG, not the Share button -- the button isn't
+just visually hidden, it's genuinely unclickable. This is a regression `BACKLOG-339` introduced
+in an unrelated file, not the gap `BACKLOG-339`'s own scoreboard-header fix was about.
+
+**Fix:** removed the bar's own `sticky top-0 z-30` (and the `bg-[#050505]` it only needed to
+opaquely back a sticky bar) -- it's a plain flow element now, exactly like every other section on
+this tab. Its previous justification (take over the top spot once the header vacates it) no
+longer applies since the header never vacates that spot anymore.
+
+**Pending items:** live-verify the button is clickable at every scroll depth on the branch's
+Vercel preview.
+
+---
+
 ### BACKLOG-339 — Match Detail: Scroll-Hide Header Leaves a Gap Above the Tab Content
 
 **Status:** RESOLVED — 2026-09-08, live-verified on staging.

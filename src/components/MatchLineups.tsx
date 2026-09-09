@@ -158,9 +158,16 @@ export default function MatchLineups({ lineups, sport, homeTeam, awayTeam, event
 
     return (
         <div className="-mt-8">
-            {/* Share LineUp - sticky just under the (also sticky) match header, so once that
-                header slides away on scroll this takes over the top spot instead of leaving a gap */}
-            <div className="sticky top-0 z-30 flex justify-end px-4 py-2 bg-[#050505]">
+            {/* Share LineUp -- BACKLOG-347: this used to be `sticky top-0 z-30` so it could
+                take over the top spot once the (also sticky) match header fully disappeared on
+                scroll. BACKLOG-339 replaced that disappearing header with a permanently-pinned
+                compact navbar, so the header never leaves the top of the screen anymore -- both
+                elements being independently `sticky top-0` meant this bar now permanently sits
+                UNDERNEATH the header's own z-40 (confirmed live via `elementFromPoint`: the
+                button became fully occluded and unclickable once scrolled), instead of "taking
+                over" a spot the header no longer vacates. This bar's own justification for being
+                sticky no longer exists -- back to a plain flow element. */}
+            <div className="flex justify-end px-4 py-2">
                 <button
                     onClick={handleShareLineup}
                     className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 text-xs font-semibold transition-colors"
