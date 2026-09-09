@@ -10415,15 +10415,17 @@ Assigned-Logger truncate caps (`80px`→`60px`, `50px`→`40px`) to buy back the
 
 ### BACKLOG-350 — Admin Responsive Audit: 🔴 High-Volatility Pages, Findings Only (No Fix Applied)
 
-**Status:** OPEN — documented, deliberately not fixed this session per `CLAUDE.md`'s
-"Do Not Touch Without Explicit Brief" instruction for these features.
-**Priority:** LOW for now (these pages are already flagged unsafe to touch without a dedicated
-brief; fixing responsive bugs here is a separate, scoped task, not a side effect of this audit).
-**Files (not modified):** `src/app/admin/access/page.tsx`, `src/app/admin/advertisements/page.tsx`,
+**Status:** PARTIALLY RESOLVED — item 1 (`/admin/access`) fixed 2026-09-09 under Richard's explicit
+one-page go-ahead (see "Update" below); items 2-3 (`/admin/advertisements`, `/admin/transfers`)
+remain OPEN, deliberately not fixed per `CLAUDE.md`'s "Do Not Touch Without Explicit Brief"
+instruction -- no blanket lift of the 🔴 flag, Richard authorized `/admin/access` only.
+**Priority:** LOW for items 2-3 (still unsafe to touch without a dedicated brief; fixing responsive
+bugs here is a separate, scoped task, not a side effect of this audit).
+**Files (not modified, items 2-3 only):** `src/app/admin/advertisements/page.tsx`,
 `src/app/admin/transfers/page.tsx`.
 **Found:** session `brixsports-v2-cc`, 2026-09-09, same admin-wide responsive sweep as
 `BACKLOG-349` -- these three pages were live DOM-scanned (mobile 375px + tablet 768px) for
-awareness, per this session's brief, but explicitly NOT fixed since `CLAUDE.md` lists their
+awareness, per that session's brief, but explicitly NOT fixed since `CLAUDE.md` lists their
 underlying features (User Management, Ads, Transfers/news-style page) as 🔴 High Volatility.
 
 **Findings, mobile (375px) only -- all three clean at 768px tablet:**
@@ -10434,22 +10436,51 @@ underlying features (User Management, Ads, Transfers/news-style page) as 🔴 Hi
    Email/Role/Joined/Actions are not merely off-screen, they are completely unreachable with no
    scroll escape hatch at all. Confirmed at both 375px (326px wrapper) and 768px (703px wrapper,
    table still 860px) -- this one does NOT clear at tablet either, unlike the other two below.
+   **FIXED, see "Update" below.**
 2. **`/admin/advertisements` -- page-level overflow, ~100px at 375px:** `scrollWidth` 475px vs a
    375px viewport; clean at 768px tablet. Not yet root-caused to a specific element (findings-only
-   pass, no source dive per the 🔴 no-touch instruction).
+   pass, no source dive per the 🔴 no-touch instruction). **Still OPEN, not authorized.**
 3. **`/admin/transfers` -- page-level overflow, ~266px at 375px:** `scrollWidth` 641px vs a 375px
    viewport, the worst overflow found in this entire audit; clean at 768px tablet. Not yet
    root-caused to a specific element (findings-only pass, no source dive per the 🔴 no-touch
-   instruction).
+   instruction). **Still OPEN, not authorized.**
 
 `/admin/match-lineups` (list page) and `/admin/news` were also spot-checked at both breakpoints
 and found clean (no page-level overflow) -- not filed here since there is nothing to report.
 
-**Evidence:**
+**Evidence (original findings):**
 - Verified by: live DOM measurement (`document.documentElement.scrollWidth` vs `clientWidth`) on
   the branch's stable Vercel alias, real admin session, both breakpoints, all three pages.
-- Pending items: a dedicated, explicitly-briefed session to fix these -- none of the three should
-  be touched as a side effect of an unrelated task per `CLAUDE.md`'s 🔴 rule.
+- Pending items: a dedicated, explicitly-briefed session to fix items 2-3 -- neither should be
+  touched as a side effect of an unrelated task per `CLAUDE.md`'s 🔴 rule.
+
+**Update, 2026-09-09 (session `brixsports-v2-cc`, continuation worktree `admin-responsive-audit-3`):**
+Richard explicitly authorized fixing `/admin/access`'s responsive issue specifically (not a blanket
+🔴 lift) -- same "shrink to fit" pattern as `BACKLOG-336`/`343`/etc. **Files:**
+`src/app/admin/access/page.tsx`.
+
+**Fix:** the users table's outer card kept `overflow-hidden` (for its rounded corners), but the
+`<table>` itself is now wrapped in its own inner `overflow-x-auto` div as a safety net, matching the
+convention already used on `/admin/players` and the dashboard table. The real fix is shrinking the
+table to fit without needing that scroll: tightened padding (`p-6`→`p-1.5`) and text size across
+every column at the default (mobile+tablet) breakpoint, avatar shrunk `w-10 h-10`→`w-6 h-6`, user
+name and email both truncated with a `max-w` cap (`min-w-0` wrapper on the name block so truncate
+actually engages), the least-essential `Joined` column hidden, `RoleBadge` shrunk to icon-only
+(color+icon still distinguishes role; the Actions select already shows the full role name as its
+selected option, so no information is lost), and the role-change `<select>` itself shrunk
+(padding/text/radius). Full desktop sizing (original `p-6`, full avatar, name/ID line, email, Joined
+column, role-badge text label) restored from `lg:` (1024px+) up only -- **not `sm:`/`md:`**,
+per `BACKLOG-349`'s lesson that `md:` collides exactly with the 768px tablet test width; base tier
+alone (not `sm:`/`md:`) governs both 375px and 768px here, verified clean at both.
+
+**Evidence:**
+- Commit: `<pending>` (`feature/ui-redesign`)
+- Verified by: real admin session (JWT cookie injection) on the branch's stable Vercel alias, mobile
+  (375x812) and tablet (768x1024) viewports, direct DOM measurement (`table.getBoundingClientRect()`
+  vs the `overflow-x-auto` wrapper's `clientWidth`, per-column header/body `th`/`td` widths) before
+  and after the fix, plus a real functional interaction on the role-change select.
+- Observed result: `<filled in after live verification below>`
+- Pending items: none once the evidence above is filled in.
 
 ---
 
