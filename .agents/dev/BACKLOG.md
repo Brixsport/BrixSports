@@ -10355,22 +10355,39 @@ becomes the limiting factor once everything else shrinks) now shrinks below `sm:
 `/admin/livestreams` were re-checked and did not have this collision (their `sm:` tier was already
 tablet-safe -- see Evidence).
 
+**Second follow-up, found re-testing the deployed tier-shift correction (2026-09-09):** at 768px
+`/admin/page.tsx` (dashboard) table was 875px against a 687px wrapper -- the tier-shift alone
+wasn't quite enough for this specific table since its base-tier `p-2` padding, applied across 4
+still-visible columns (Health correctly hidden by then), still left the Actions column 12px past
+the edge at *375px* once verified precisely (373px table content vs 375px viewport, Actions right
+edge at x:387 -- passed the coarse page-level `scrollWidth` check since the table's own
+`overflow-x-auto` absorbed it, but failed the "visible without scrolling" bar this whole audit
+holds tables to). Trimmed base padding `p-2`→`p-1` across all cells and tightened the Match/
+Assigned-Logger truncate caps (`80px`→`60px`, `50px`→`40px`) to buy back the needed margin.
+
 **Evidence:**
 - Commit: `<pending>` (`feature/ui-redesign`)
 - Verified by: live DOM measurement (`document.documentElement.scrollWidth`/`clientWidth`, plus
-  `table.getBoundingClientRect().width` vs its `overflow-x-auto` wrapper's `clientWidth` for the
-  two data tables) on the branch's stable Vercel alias, both 375px and 768px, plus a real
-  functional click through the players-list Edit action (opened the real "Refine Athlete Profile"
-  modal) confirming the fix didn't just look right.
-- Observed result (`/admin/players` list, 375px): table width 342px vs a 342px wrapper (exact
-  fit, Actions column right edge at x:358 inside a 375px viewport) -- clean, and unchanged from the
-  earlier confirmation. `/admin/track-events` and `/admin/livestreams` confirmed clean at 768px on
-  the deployed fix before the tier-shift correction was even needed, so left as `sm:`.
-- Pending items: live re-verification of the tier-shift correction at 768px specifically for
-  `/admin/players` (list), `/admin/page.tsx` (dashboard), `/admin/competitions/[id]`, and
-  `/admin/players/[id]` -- this entry stays SHIPPED, not RESOLVED, until that lands. Also still
-  pending: the AdminSidebar toggle button / PWA update-prompt re-check on `/admin/players/[id]`
-  noted above.
+  `table.getBoundingClientRect().width` vs its `overflow-x-auto` wrapper's `clientWidth`, plus each
+  row's own `<td>` boundingClientRect for the Actions column specifically) on the branch's stable
+  Vercel alias, both 375px and 768px, for every one of the five pages in this entry, plus real
+  functional clicks: players-list Edit action (opened "Refine Athlete Profile"), competition
+  detail's Advanced Settings dropdown (opened the real menu), player detail's icon-only Edit
+  Profile button (entered edit mode, Save/Cancel appeared).
+- Observed result: `/admin/players` (list) table width matches its wrapper exactly at both 375px
+  (342/342) and 768px (687/687), Actions column fully inside the viewport both times.
+  `/admin/competitions/[id]` and `/admin/players/[id]` both clean (`scrollWidth` = `clientWidth`,
+  zero offending elements) at both breakpoints. The AdminSidebar mobile-toggle button, previously
+  measured off-screen (right edge at x:492 on a 375px viewport) as a symptom of the header overflow,
+  now sits correctly at right edge x:359 (16px from the 375px edge, matching its `right-4` CSS) --
+  confirms it was a symptom, not an independent bug, and it self-resolved. `/admin/track-events`
+  and `/admin/livestreams` were already confirmed clean before the tier-shift, unaffected by it.
+  `/admin/page.tsx` (dashboard) fix not yet re-verified live -- pushed after this evidence block was
+  written; see Pending items.
+- Pending items: live re-verification of the dashboard's second padding-trim pass specifically
+  (this entry stays SHIPPED, not RESOLVED, until that lands); the PWA update-prompt toast position
+  was not re-checked this round (lower priority than the sidebar toggle, same root cause already
+  confirmed resolved for the sidebar toggle).
 
 ---
 

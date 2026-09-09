@@ -146,11 +146,11 @@ function AdminPageContent() {
                 <table className="w-full text-left border-collapse">
                   <thead>
                     <tr className="bg-white/5 text-[8px] lg:text-[10px] font-black uppercase tracking-widest text-white/30 text-nowrap">
-                      <th className="p-2 md:p-4 lg:p-6 whitespace-nowrap">Match</th>
-                      <th className="p-2 md:p-4 lg:p-6">Status</th>
-                      <th className="p-2 md:p-4 lg:p-6">Assigned Logger</th>
-                      <th className="hidden lg:table-cell p-2 md:p-4 lg:p-6">Health</th>
-                      <th className="p-2 md:p-4 lg:p-6 text-right">Actions</th>
+                      <th className="p-1 md:p-4 lg:p-6 whitespace-nowrap">Match</th>
+                      <th className="p-1 md:p-4 lg:p-6">Status</th>
+                      <th className="p-1 md:p-4 lg:p-6">Assigned Logger</th>
+                      <th className="hidden lg:table-cell p-1 md:p-4 lg:p-6">Health</th>
+                      <th className="p-1 md:p-4 lg:p-6 text-right">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-white/5">
@@ -161,7 +161,7 @@ function AdminPageContent() {
 
                       return (
                         <tr key={match.id} className="group hover:bg-white/5 transition-colors">
-                          <td className="p-2 md:p-4 lg:p-6">
+                          <td className="p-1 md:p-4 lg:p-6">
                             <div className="flex items-center gap-1.5 md:gap-2 lg:gap-3">
                               <div className="flex items-center gap-1 shrink-0">
                                 <TeamLogo logo={homeTeam?.logo} name={homeTeam?.name ?? ''} color={homeTeam?.color} size="sm" />
@@ -169,32 +169,32 @@ function AdminPageContent() {
                                 <TeamLogo logo={awayTeam?.logo} name={awayTeam?.name ?? ''} color={awayTeam?.color} size="sm" />
                               </div>
                               <div className="min-w-0">
-                                <p className="text-[11px] lg:text-sm font-bold truncate max-w-[80px] md:max-w-[120px] lg:max-w-none">{homeTeam?.shortName || 'TBD'} vs {awayTeam?.shortName || 'TBD'}</p>
+                                <p className="text-[11px] lg:text-sm font-bold truncate max-w-[60px] md:max-w-[120px] lg:max-w-none">{homeTeam?.shortName || 'TBD'} vs {awayTeam?.shortName || 'TBD'}</p>
                                 <p className="text-[8px] lg:text-[10px] text-white/20 uppercase tracking-widest truncate">{match.competition || 'N/A'}</p>
                               </div>
                             </div>
                           </td>
-                          <td className="p-2 md:p-4 lg:p-6">
+                          <td className="p-1 md:p-4 lg:p-6">
                             <div className="flex items-center gap-1.5 lg:gap-2">
                               <span className={`w-1 w-1 lg:w-1.5 lg:h-1.5 rounded-full ${match.status === 'LIVE' ? 'bg-primary' : 'bg-white/20'}`}></span>
                               <span className="text-[8px] lg:text-[10px] font-black uppercase tracking-widest">{match.status}</span>
                             </div>
                           </td>
-                          <td className="p-2 md:p-4 lg:p-6">
+                          <td className="p-1 md:p-4 lg:p-6">
                             <div className="flex items-center gap-1.5 md:gap-2 lg:gap-3">
                               <div className="w-6 h-6 lg:w-8 lg:h-8 rounded-full bg-white/10 flex items-center justify-center text-[8px] lg:text-[10px] font-black uppercase tracking-widest shrink-0">
                                 {logger?.name?.charAt(0) || '?'}
                               </div>
-                              <p className="text-[10px] lg:text-xs font-bold italic truncate max-w-[50px] md:max-w-[80px] lg:max-w-none">{logger?.name || 'Unassigned'}</p>
+                              <p className="text-[10px] lg:text-xs font-bold italic truncate max-w-[40px] md:max-w-[80px] lg:max-w-none">{logger?.name || 'Unassigned'}</p>
                             </div>
                           </td>
-                          <td className="hidden lg:table-cell p-2 md:p-4 lg:p-6">
+                          <td className="hidden lg:table-cell p-1 md:p-4 lg:p-6">
                             <div className="flex items-center gap-1.5 lg:gap-2 text-blue-500">
                               <CheckCircle2 size={14} />
                               <span className="text-[8px] lg:text-[10px] font-black uppercase tracking-widest">Optimal</span>
                             </div>
                           </td>
-                          <td className="p-2 md:p-4 lg:p-6 text-right">
+                          <td className="p-1 md:p-4 lg:p-6 text-right">
                             <button className="p-1 md:p-1.5 lg:p-2 hover:bg-white/10 rounded-lg transition-colors">
                               <MoreVertical size={16} className="text-white/40" />
                             </button>
