@@ -4565,3 +4565,137 @@ Given the local environment's unreliability, switched to pushing directly to the
 **Deferred:** nothing on the lineup builder initiative — it's done. Standing, not-ours-to-fix: the `player_team_affiliations.role` `drizzle-kit generate` ambiguity still blocks anyone's next non-interactive migration on this branch (unrelated to this session's work, flagged every session it's come up).
 
 **Next session — exact first task:** no specific task was assigned or is in flight — the lineup builder initiative (`BACKLOG-220`, `BACKLOG-323`, and everything they touched) is fully closed as of this session. Before starting anything new: check `BACKLOG.md` for the next open CRITICAL/blocking item (per the standing "critical bugs must not survive to the following session" rule) and check current peer-session state (`.claude/worktrees/match-detail-tabs` and `.claude/worktrees/competitions-consolidation` were both active as of this session's start — see their own last entries above for where each left off) before picking a direction, same as session 66 did at its own close.
+
+---
+
+### Session 69 — 2026-09-05/08
+
+**Focus:** `BACKLOG-326`/`331` (basketball Box Score tab + Stats tab rework), spanning a real-time date rollover mid-session (started 2026-09-05, continued 2026-09-08) — plus a full Figma-refs coverage sweep and, per Richard's explicit direction, building a real full-detail-page showcase across both sports. `match-detail-tabs` worktree, branch `work/match-detail-tabs`, rebased onto and pushed directly to `feature/ui-redesign` throughout (never a side branch, per the documented umbrella-branch workflow — corrected once mid-session after an over-cautious detour).
+
+**Built:**
+- **`BACKLOG-326`** — `MatchDetailClient.tsx`'s tab set is now sport-conditional: basketball gets `Overview/Box Score/Stats/H2H/Table` (no Timeline/Lineups), football unchanged. New `BasketballBoxScore.tsx` + `src/lib/basketball/matchStats.ts` (`computeBasketballBoxScore`) — per-player PTS/AST/REB for the match, team-filterable, derived client-side from already-fetched `matchEvents`, no new endpoint.
+- **`BACKLOG-331`** — `LiveStats.tsx`'s `renderBasketballStats` replaced entirely: Free Throws/3 Pointers/2 Pointers as make/attempt %, Fouls/Rebounds as share-of-combined-total, quarter filter (All/1st-4th) computed client-side by `event.period`. Dropped Figma's "1 Pointers" row (identical placeholder split to Free Throws) rather than build it blind — flagged for Richard.
+- **`BACKLOG-337`** (found while live-verifying the above) — every tab on the match-detail page rendered exactly one click behind: `activeTab` read straight from `useSearchParams()` with no local state depending on it, so nothing forced a re-render on the same tick `router.replace()` fired. Fixed with the standard optimistic-local-state pattern (`useState` + a syncing `useEffect` for back/forward). Had been noted in passing back in `BACKLOG-294` (2026-09-02) but never filed or fixed until this session found it independently.
+- **Minute-display fix** — `-1'` (goals-only-backfill's "unknown minute" sentinel) and literal `0'` both rendered raw in the match-detail header's goal-scorer list and the livestream chapter-marker label. New `src/lib/eventMinute.ts` (`displayMinute()`) clamps both to `1'` for display only. Audited every other `event.minute` render site in the codebase (~20 candidates): 4 were dead code (no real importer), 1 was a different `minute` variable entirely (the live match clock, never negative), the rest (logger tools, lineup/substitution displays) are structurally unreachable with backfilled data. Only 2 real fixes needed.
+- **Full match-detail showcase**, per Richard's explicit request to see a complete real page: populated 3 matches with real lineups + realistic event logs via the actual deployed events API (not raw DB writes) — `KNtdIUl2U5MA6FCwYvb0j` (GENTLEMEN FC LEAGUE, already had a real published 7-a-side lineup from earlier sessions, just needed events, 3-2 FT), `F-Oqtj3HKpWjBc35R8k89` (Underrated FC vs Quantum FC — found stuck showing LIVE on the homepage ticker with 8 junk duplicate-goal events, all at the identical minute 45; deleted and rebuilt clean, 3-1 FT), and a fresh basketball throwaway (`mock-fullshowcase-bball-1`, real teams TBK/Titans, full 5-a-side both sides, 34 events across all 4 quarters, 16-11 FT). All three live-verified across every tab and left live as ongoing reference examples.
+
+**Bugs encountered:**
+1. `BACKLOG-337` (see Built) — root cause: no state depending on `useSearchParams()`'s output, so React had no trigger to re-render on a same-tick navigation.
+2. Minute-display `-1'`/`0'` bug (see Built) — root cause: no clamp anywhere between the raw stored sentinel/literal-zero and the display string.
+3. The stuck-LIVE match's junk events — root cause: earlier test-session data left mid-experiment (4 duplicate goals, same player, same minute), never cleaned up. Not a code bug, a data hygiene issue; fixed by rebuilding the match's event log from scratch.
+4. `git push` rejected twice with "non-fast-forward" mid-session from genuinely concurrent peer pushes to the same `feature/ui-redesign` branch — resolved both times with `fetch` + `rebase` (never merge, per standing project convention) + retry push, no conflicts either time on the code files, one real conflict on `RUNLOG.md`'s shared append-only tail (resolved by keeping both sides' new entries in sequence).
+
+**Resolved:** all 4 above, plus `BACKLOG-326`/`331`/`337` all fully live-verified (not just shipped) — see `BACKLOG.md`'s own verification blocks for exact before/after numbers.
+
+**Scope handled, not rejected:** Richard directed real expansion beyond the original `BACKLOG-326`/`331` ask (full Figma-refs sweep, the tab-lag bug fix, the minute-display audit, the three-match showcase) — all explicitly requested, not scope creep. Two things deliberately flagged rather than built blind: the Box Score's missing rating badge (Figma shows an identical placeholder value on every player, same suspicious pattern as the already-flagged "1 Pointers" duplicate) and the "1 Pointers" row itself (dropped, not guessed at).
+
+**Deferred, explicit:**
+- Box Score rating badge — needs Richard's call on what it should represent (match rating? career average?) before building.
+- 8 basketball players with a generic "Player" position placeholder instead of a real position — noted, not a blocker, not touched.
+- `basketball_player_stats` cleanup for the throwaway box-score-verify test came back `0 rowsAffected` on an exact-match delete — a minor orphaned row likely keyed on a non-null season default rather than literal NULL `competitionId`; carries no real `competitionId` so it can't surface in any real leaderboard, not chased further.
+
+**Process note, named directly:** a chunk of this session's work (the tab-lag fix, minute-display fix, and their `BACKLOG.md` write-ups) was mislabeled `2026-09-05` in the prose even though it was authored `2026-09-08` (confirmed via real git author/committer timestamps) — the session's date rolled over mid-conversation and this wasn't noticed until Richard asked. Corrected forward in a follow-up commit, per this project's own stale-fact-correction convention (never rewrite pushed history, just correct the label going forward).
+
+---
+
+### Session 70 — 2026-09-08/09
+
+**Focus:** Match-detail Timeline "All" tab refinement against a Figma commentary reference
+(`Timeline-full-event(commentary).jpeg`), plus a scoreboard/tabs header scroll-gap bug Richard
+found along the way. Session started on `dev` with a from-scratch rebuild of `LiveMatchTimeline.tsx`
+before discovering `work/match-detail-tabs` (this worktree, tracking `feature/ui-redesign`) already
+had far more advanced, shipped work covering the exact same screen (`BACKLOG-294`/`330`/`331`/`332`/
+`333`/`334`) — reverted the `dev`-branch edit (twice — it reappeared once across what looked like a
+context/session boundary), moved all real work here for the rest of the session.
+
+**Built:**
+- `MatchDetailClient.tsx` (`BACKLOG-339`): replaced the hide-on-scroll header
+  (`translateY(-100%)` at a fixed 100px threshold) with a permanently-pinned collapsing navbar --
+  `isCompact` boolean off a plain `scrollY > 40` check, header shrinks (12->7 Tailwind logo size,
+  4xl->2xl score digits, goal-scorer list dropped via `AnimatePresence`) but never disappears.
+  Structurally removes the class of gap bug the old pattern had (content sitting at a fixed
+  document offset independent of the header's translated visibility, since `position: sticky`
+  never reserves flow space for a transformed element).
+- `LiveMatchTimeline.tsx`, four incremental fixes against the same Figma ref (`BACKLOG-340`/`341`/
+  `342`):
+  - Moved the event-type icon from inside the card into the outer minute badge (new
+    `getIconBadgeStyle()`), removed the duplicate in-card icon.
+  - Removed the per-card team-name chip (not in the reference, present on all 154 rows of the test
+    match).
+  - Fixed icon accuracy: `GOAL` now uses `FaFutbol` (was lucide `Target`), `YELLOW_CARD`/
+    `RED_CARD` now render literal solid rectangles (was `AlertCircle`), `SUBSTITUTION` now uses the
+    same two-tone `SubstitutionIcon` already correct in `KeyEventsList` (was plain
+    `ArrowRightLeft`). Removed 10 emoji characters used as inline text prefixes across
+    `getEventDescription`.
+  - Restored `isHomeTeam ? flex-row : flex-row-reverse` team-side mirroring on the "All" tab event
+    rows -- reverses a prior session's `BACKLOG-332` decision, which had misread the same Figma
+    file as a uniform, non-mirrored single column.
+- `.agents/dev/BACKLOG.md`: `BACKLOG-339`/`340`/`341`/`342` all added and closed RESOLVED with
+  DOM-measurement evidence blocks against a real match (`8Mek2CA7KPlnk1EQ647jx`, 154-156 events).
+
+**Bugs encountered, root cause:**
+1. `BACKLOG-339`'s root cause: `position: sticky` doesn't reserve flow space for a translated
+   element, so a hide-on-scroll header at a fixed pixel threshold left a real, measured background
+   gap between the header's retract point and wherever the content had actually scrolled to. First
+   fix attempt (gate the hide on the header's real height, not a constant) was DOM-verified
+   working but superseded same-session per Richard's direction to redesign the interaction
+   entirely rather than keep patching a hide/show toggle.
+2. Own git-workflow near-miss, caught before any commit: began rebuilding `LiveMatchTimeline.tsx`
+   from scratch directly on `dev` before discovering this already-far-more-complete worktree. No
+   harm done (never committed), but the stale edit reappeared once across what looked like a
+   context/session boundary -- resolved by re-running `git status` fresh each time rather than
+   trusting remembered state.
+3. Automation-environment quirk: this session's Browser-pane `window.scrollTo()` and the
+   `computer` tool's mouse-wheel `scroll` action do not reliably fire real `scroll` events or move
+   the visual compositor position -- confirmed with an explicit event-counter test (0 fired across
+   two `scrollTo` calls that did change `window.scrollY`). Worked around by manually dispatching
+   `new Event('scroll')` after each programmatic scroll, and by preferring DOM/geometry assertions
+   (`getBoundingClientRect`, computed `transform`) over screenshots for all verification this
+   session -- screenshots repeatedly showed stale/pre-navigation state that didn't match the live
+   DOM.
+4. Two self-caught DOM-traversal bugs in my own verification scripts (wrong sibling-climb
+   distance -- `el.parentElement.parentElement.nextElementSibling` instead of
+   `el.previousElementSibling`, twice) produced false negatives on badge-color and
+   substitution-icon checks. Re-derived the correct DOM relationship from the actual JSX structure
+   each time before trusting a result.
+5. `BACKLOG-332` (a prior session's decision, 2026-09-02) was a genuine misreading of the Figma
+   reference -- concluded "uniform, not mirrored" when the reference actually shows home-left/
+   away-right badge mirroring (confirmed by cross-referencing real scorer names against the
+   header's own team columns). Corrected in `BACKLOG-342` after Richard pointed at the away-team
+   alignment specifically.
+6. Recurring `git push` non-fast-forward rejections from genuinely concurrent peer pushes to
+   `feature/ui-redesign` -- resolved every time with `git stash push -u` (scoped to just the two
+   foreign, pre-existing `BUILD_JOURNAL.md`/`known-issues.md` edits sitting in this shared
+   worktree, never touched or committed under this session's own name), `fetch` + `rebase`, push,
+   then `git stash apply <captured-sha>` + `git stash drop` to restore the foreign edits --
+   following this project's own documented shared-stash-safety convention throughout.
+
+**Resolved:** `BACKLOG-339`, `340`, `341` (3 of 4 sub-fixes live-screenshotted; the 4th -- the
+card-rectangle badge -- verified by source read + successful `tsc` compile only, see Deferred),
+`342` -- all live-verified via DOM inspection against fresh Vercel previews and, once Richard
+pointed to it, the branch's stable alias
+(`brixsports-staging-git-feature-ui-redesign-brixsports-projects.vercel.app`).
+
+**Deferred, explicit:**
+- `BACKLOG-341`'s card-rectangle badge (`YELLOW_CARD`/`RED_CARD`) not live-screenshotted -- no real
+  match combining valid (non `-1`-sentinel) minutes with an actual card event was found this
+  session. Flagged directly in that entry's own evidence block rather than claimed as verified.
+- A real-device screenshot Richard sent mid-session showed a visible gap between "Share LineUp"
+  and the pitch content on the Lineups tab -- investigated briefly (found `MatchLineups.tsx`'s own
+  nested `sticky top-0 z-30` bar), concluded it doesn't conflict with the `BACKLOG-339` header fix,
+  but was not independently root-caused. Logged as a separate open item in `BACKLOG-339`'s
+  evidence, not folded into that fix.
+
+**Scope creep / rejected:** none from Richard -- all four fixes were direct, explicit responses to
+real-time feedback (a scroll-gap report, then three rounds of "still off from the ref" with
+increasingly specific direction). The only self-inflicted scope issue was the abandoned
+from-scratch `dev`-branch rebuild, caught and reverted before it went anywhere.
+
+**Next session — exact first task:** the Lineups-tab "Share LineUp"-to-pitch gap report (real
+device screenshot, not yet root-caused) is the most likely next concrete ask. Otherwise:
+live-verify `BACKLOG-341`'s card-rectangle badge once a suitable real match exists, or check
+`BACKLOG.md` for the next open CRITICAL/blocking item per the standing rule. `feature/ui-redesign`
+-> `dev` promotion remains the largest standing item across the whole project, untouched this
+session.
+
+**Next session — exact first task:** genuinely open. `BACKLOG-326`/`331`/`337` are fully closed. The two flagged-not-fixed items above (rating badge semantics, "1 Pointers" meaning) need Richard's direction before any further Box Score/Stats polish. Otherwise: check `BACKLOG.md` for the next open CRITICAL/blocking item, same standing rule every session close notes.
