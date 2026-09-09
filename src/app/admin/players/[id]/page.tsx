@@ -259,15 +259,22 @@ export default function PlayerDetailPage() {
         <div className="min-h-screen bg-black text-white">
             {/* Header */}
             <div className="sticky top-0 z-30 bg-black/80 backdrop-blur-xl border-b border-white/5 py-4 px-4 md:px-8">
-                <div className="max-w-5xl mx-auto flex items-center justify-between gap-4">
-                    <div className="flex items-center gap-4">
-                        <Link href="/admin/players" className="p-2 hover:bg-white/5 rounded-xl transition-colors border border-transparent hover:border-white/10 group">
+                {/* BACKLOG (admin responsive audit): this sticky header's title block (back button
+                    + crest + name/badges) and action-button block never shrank, pushing scrollWidth
+                    133px past a 375px viewport. Since it's sticky, stacking it (the usual card-header
+                    fix elsewhere in this audit) would permanently eat vertical space while scrolling
+                    the profile -- shrunk in place instead: icon-only buttons + tighter gaps/padding
+                    below sm:, name/badges capped and least-essential university badge hidden below
+                    sm:, full desktop layout (icon+label buttons, untruncated name) restored from sm:. */}
+                <div className="max-w-5xl mx-auto flex items-center justify-between gap-2 sm:gap-4">
+                    <div className="flex items-center gap-2 sm:gap-4 min-w-0">
+                        <Link href="/admin/players" className="p-2 hover:bg-white/5 rounded-xl transition-colors border border-transparent hover:border-white/10 group shrink-0">
                             <ArrowLeft size={18} className="group-hover:-translate-x-1 transition-transform" />
                         </Link>
-                        <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-2 sm:gap-3 min-w-0">
                             <TeamLogo logo={player.image} name={player.name} size="lg" />
-                            <div>
-                                <h1 className="text-xl font-display font-black uppercase italic tracking-tighter leading-none">{player.name}</h1>
+                            <div className="min-w-0">
+                                <h1 className="text-base sm:text-xl font-display font-black uppercase italic tracking-tighter leading-none truncate max-w-[110px] sm:max-w-none">{player.name}</h1>
                                 {player.jerseyName && (
                                     <p className="text-[10px] font-bold text-white/40 uppercase tracking-widest mt-0.5">{player.jerseyName}</p>
                                 )}
@@ -278,7 +285,7 @@ export default function PlayerDetailPage() {
                                         </span>
                                     )}
                                     {player.university && (
-                                        <span className="px-1.5 py-0.5 bg-white/10 text-white/60 text-[9px] font-bold rounded uppercase">
+                                        <span className="hidden sm:inline-flex px-1.5 py-0.5 bg-white/10 text-white/60 text-[9px] font-bold rounded uppercase">
                                             {player.university}
                                         </span>
                                     )}
@@ -286,40 +293,44 @@ export default function PlayerDetailPage() {
                             </div>
                         </div>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
                         {!editMode ? (
                             <>
                                 <Link
                                     href={`/admin/roster-transfers?playerId=${playerId}`}
-                                    className="flex items-center gap-2 px-4 py-2 border border-white/10 rounded-xl font-black uppercase italic text-[10px] tracking-widest hover:bg-white/5 transition-all"
+                                    className="flex items-center gap-2 p-2 sm:px-4 sm:py-2 border border-white/10 rounded-xl font-black uppercase italic text-[10px] tracking-widest hover:bg-white/5 transition-all"
+                                    title="Transfer"
                                 >
                                     <ArrowRightLeft size={14} strokeWidth={3} />
-                                    Transfer
+                                    <span className="hidden sm:inline">Transfer</span>
                                 </Link>
                                 <button
                                     onClick={() => setEditMode(true)}
-                                    className="flex items-center gap-2 px-4 py-2 bg-primary text-black rounded-xl font-black uppercase italic text-[10px] tracking-widest hover:scale-[1.02] active:scale-[0.98] transition-all"
+                                    className="flex items-center gap-2 p-2 sm:px-4 sm:py-2 bg-primary text-black rounded-xl font-black uppercase italic text-[10px] tracking-widest hover:scale-[1.02] active:scale-[0.98] transition-all"
+                                    title="Edit Profile"
                                 >
                                     <Edit size={14} strokeWidth={3} />
-                                    Edit Profile
+                                    <span className="hidden sm:inline">Edit Profile</span>
                                 </button>
                             </>
                         ) : (
                             <>
                                 <button
                                     onClick={handleCancel}
-                                    className="flex items-center gap-2 px-4 py-2 border border-white/10 rounded-xl font-black uppercase italic text-[10px] tracking-widest hover:bg-white/5 transition-all"
+                                    className="flex items-center gap-2 p-2 sm:px-4 sm:py-2 border border-white/10 rounded-xl font-black uppercase italic text-[10px] tracking-widest hover:bg-white/5 transition-all"
+                                    title="Cancel"
                                 >
                                     <X size={14} />
-                                    Cancel
+                                    <span className="hidden sm:inline">Cancel</span>
                                 </button>
                                 <button
                                     onClick={handleSave}
                                     disabled={saving}
-                                    className="flex items-center gap-2 px-4 py-2 bg-primary text-black rounded-xl font-black uppercase italic text-[10px] tracking-widest hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-50 disabled:scale-100"
+                                    className="flex items-center gap-2 p-2 sm:px-4 sm:py-2 bg-primary text-black rounded-xl font-black uppercase italic text-[10px] tracking-widest hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-50 disabled:scale-100"
+                                    title={saving ? 'Saving…' : 'Save'}
                                 >
                                     {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
-                                    {saving ? 'Saving…' : 'Save'}
+                                    <span className="hidden sm:inline">{saving ? 'Saving…' : 'Save'}</span>
                                 </button>
                             </>
                         )}

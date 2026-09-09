@@ -294,15 +294,22 @@ export default function CompetitionTeamsPage() {
                         <Link href="/admin/competitions" className="inline-flex items-center gap-2 text-white/40 hover:text-white transition-colors text-xs font-black uppercase tracking-widest">
                             <ArrowLeft size={14} /> Back to Competitions
                         </Link>
-                        <div className="flex items-center gap-4">
-                            <div className="w-16 h-16 bg-primary/10 border border-primary/20 rounded-2xl flex items-center justify-center">
-                                <TrophyIcon size={32} className="text-primary" />
+                        {/* BACKLOG (admin responsive audit): the icon+title row had no min-w-0 on
+                            the text block, so the text-5xl heading never actually got to shrink or
+                            wrap within the flex row, pushing scrollWidth 31px past a 375px viewport
+                            -- same root cause as BACKLOG-343's team-name truncate finding. Shrunk the
+                            icon box and heading size below sm:, added min-w-0 + flex-wrap so both the
+                            title and the sport/season/label row can wrap instead of forcing width.
+                            Full desktop sizing restored from sm:/md: up. */}
+                        <div className="flex items-center gap-3 sm:gap-4">
+                            <div className="w-12 h-12 sm:w-16 sm:h-16 bg-primary/10 border border-primary/20 rounded-2xl flex items-center justify-center shrink-0">
+                                <TrophyIcon size={24} className="text-primary sm:w-8 sm:h-8" />
                             </div>
-                            <div>
-                                <h1 className="font-display text-5xl tracking-tighter italic uppercase leading-none">
+                            <div className="min-w-0">
+                                <h1 className="font-display text-2xl sm:text-3xl md:text-5xl tracking-tighter italic uppercase leading-tight sm:leading-none">
                                     {competition.name}
                                 </h1>
-                                <div className="flex items-center gap-4 mt-2">
+                                <div className="flex flex-wrap items-center gap-2 sm:gap-4 mt-2">
                                     <span className="text-xs font-bold uppercase tracking-widest text-white/40">{competition.sport}</span>
                                     <span className="w-1 h-1 bg-white/20 rounded-full"></span>
                                     <span className="text-xs font-bold uppercase tracking-widest text-white/40">{competition.season}</span>
@@ -360,7 +367,7 @@ export default function CompetitionTeamsPage() {
                         <button
                             onClick={handleSave}
                             disabled={isSaving}
-                            className="flex items-center gap-2 bg-primary text-black px-8 py-4 rounded-2xl font-black uppercase italic tracking-widest hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-50"
+                            className="flex items-center gap-2 bg-primary text-black px-4 py-3 sm:px-8 sm:py-4 rounded-2xl font-black uppercase italic tracking-widest hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-50"
                         >
                             {isSaving ? 'Saving...' : (
                                 <>

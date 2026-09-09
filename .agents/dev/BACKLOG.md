@@ -10246,6 +10246,78 @@ size below `sm:`. Full desktop sizing (`md:` and up) untouched.
 
 ---
 
+### BACKLOG-349 — Admin Responsive Audit: Dashboard, Track Events, Livestreams, Competition Detail,
+Player Detail Mobile Overflow
+
+**Renumbered from `BACKLOG-347`** — that number collided with a concurrent session's push
+(`BACKLOG-347`, "Lineups Tab: Share LineUp Button Occluded/Unclickable"). No functional change,
+just this entry's (and `BACKLOG-350`'s) own number.
+
+**Status:** SHIPPED — code committed, live verification pending (see Evidence once it lands).
+**Priority:** MEDIUM — same admin-wide responsive audit as `BACKLOG-336`/`343`/`344`/`345`/`346`.
+**Files:** `src/app/admin/page.tsx`, `src/app/admin/track-events/page.tsx`,
+`src/app/admin/livestreams/page.tsx`, `src/app/admin/competitions/[id]/page.tsx`,
+`src/app/admin/players/[id]/page.tsx`.
+**Found:** session `brixsports-v2-cc`, 2026-09-09, continuing the admin-wide responsive sweep
+through the remaining un-audited `/admin/*` pages listed in this session's brief.
+
+**Five real bugs found, five different pages, all mobile (375px) unless noted:**
+
+1. **`/admin/page.tsx` (dashboard) -- "Live Match Monitor" table Actions off-screen by default:**
+   same class of bug as `BACKLOG-346` -- Match/Status/Assigned Logger/Health/Actions columns at
+   uniform `p-4 md:p-6` never shrank, table stayed 533px wide against a 341px `overflow-x-auto`
+   wrapper. Tightened padding to `p-2 sm:p-4 md:p-6` across all columns, hid the least-essential
+   `Health` column below `sm:` (its badge is hardcoded to always render "Optimal" regardless of
+   real match data -- a separate, not-fixed-here data-quality issue, noted but out of scope for a
+   responsive-only pass), capped Match/Assigned-Logger truncate widths, tightened the Actions
+   button padding. Full desktop sizing untouched from `md:` up.
+2. **`/admin/track-events/page.tsx` -- status filter row overflow:** the 4-pill `all`/`LIVE`/
+   `UPCOMING`/`FINISHED` row had no wrap and no responsive sizing, pushing `scrollWidth` 6px past
+   375px -- same class of bug as `BACKLOG-343`'s `/admin/matches` filter row. Same established fix:
+   tight padding/text by default, full sizing from `sm:`, `overflow-x-auto` + `scrollbar-hide` as
+   the safety net.
+3. **`/admin/livestreams/page.tsx` -- header didn't wrap:** title block + "N Active Streams" pill
+   on one non-wrapping row pushed `scrollWidth` 10px past 375px. Fixed with the same card-header
+   convention as `BACKLOG-344`/`345`: stack on mobile (`flex-col sm:flex-row`), restore the
+   side-by-side row from `sm:` up.
+4. **`/admin/competitions/[id]/page.tsx` -- icon+title row missing `min-w-0`:** the icon-box +
+   heading wrapper had no `min-w-0`, so the `text-5xl` competition-name heading never got to shrink
+   or wrap within its flex row, pushing `scrollWidth` 31px past 375px -- same root cause as
+   `BACKLOG-343`'s team-name truncate finding (flex children need `min-w-0` before `truncate`/wrap
+   can do anything). Added `min-w-0`, shrunk the icon box and heading size below `sm:`, made the
+   sport/season/label row wrap, and shrunk the "Save Changes" button padding below `sm:`. Full
+   desktop sizing restored from `sm:`/`md:` up.
+5. **`/admin/players/[id]/page.tsx` -- sticky header overflow, 133px:** the title block (back
+   button + crest + name/badges) and the action-button block (Transfer/Edit Profile, or Cancel/
+   Save in edit mode) never shrank, both rendering full icon+label buttons regardless of viewport.
+   Because this header is `sticky`, stacking it (the usual card-header fix used elsewhere in this
+   audit) would permanently eat vertical space while scrolling the player profile -- shrunk in
+   place instead: icon-only buttons below `sm:` (label restored via `sm:inline`), tighter gaps/
+   padding, player name capped + truncated, least-essential university badge hidden below `sm:`.
+   Full desktop layout (icon+label buttons, untruncated name, visible university badge) restored
+   from `sm:` up.
+   **Note:** this same page's live scan also flagged the global mobile-sidebar-toggle button
+   (`AdminSidebar.tsx`, `fixed top-4 right-4`) and the PWA update-prompt toast at implausible
+   x-coordinates (e.g. right edge at x:492 on a 375px viewport). Root-caused to the *symptom* of
+   this same header overflow, not an independent bug: both are `position: fixed` on an element
+   whose `right-4` offset is computed against the actual (overflowed) document width rather than
+   the viewport, and the observed offset (documentWidth − 16px) matched exactly in both cases.
+   Expected to self-resolve once the header fix above lands; flagged here rather than silently
+   assumed -- re-verify both elements' positions after deploy, not just the header itself.
+
+**Evidence:**
+- Commit: `<pending>` (`feature/ui-redesign`)
+- Verified by: (pending -- live DOM measurement (`document.documentElement.scrollWidth` vs
+  `clientWidth`, plus a full-page offending-element scan excluding elements inside their own
+  `overflow-x-auto` container) on the branch's stable Vercel alias at 375px and 768px, before and
+  after each fix, plus a real functional check per page -- Refresh/Adjust-style click already
+  covered by `BACKLOG-345` doesn't apply here, so: a real click through the dashboard's kebab menu
+  or the players/[id] Edit Profile icon-only button, same standard as `BACKLOG-343`/`344`.)
+- Pending items: live re-verification of all five fixes, plus a re-check of the AdminSidebar
+  toggle button and PWA update-prompt positions on `/admin/players/[id]` specifically.
+
+---
+
 ### BACKLOG-340 — Timeline "All" Tab: Event Icon Duplicated Inside the Card Instead of the Outer Minute Badge
 
 **Status:** RESOLVED — 2026-09-08, live-verified on staging.
