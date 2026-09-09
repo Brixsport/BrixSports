@@ -5,7 +5,10 @@ import { env } from '@/lib/env';
 export async function GET(request: NextRequest) {
     const clientId = env.googleClientId;
     const clientSecret = env.googleClientSecret;
-    const redirectUri = `${env.appUrl || request.nextUrl.origin}/api/auth/google/callback`;
+    // Must match one of the Authorised redirect URIs registered on the real
+    // Google Cloud OAuth client (Brixsport V2 project) -- confirmed exactly:
+    // /api/auth/callback/google, not /api/auth/google/callback.
+    const redirectUri = `${env.appUrl || request.nextUrl.origin}/api/auth/callback/google`;
 
     if (!clientId || !clientSecret) {
         console.error("Missing Google OAuth credentials");

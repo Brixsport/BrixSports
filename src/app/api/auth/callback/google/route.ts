@@ -6,10 +6,15 @@ import { nanoid } from 'nanoid';
 import { generateToken, normalizeUserRole } from '@/lib/auth';
 import { env } from '@/lib/env';
 
-// GET /api/auth/google/callback
+// GET /api/auth/callback/google
 //
-// The redirect target /api/auth/google's own initiate step already sends
-// Google to -- this route did not exist at all until this fix. "Continue
+// Path convention confirmed against the real Google Cloud OAuth client
+// (console.cloud.google.com, Brixsport V2 project) -- its 4 registered
+// Authorised redirect URIs (localhost, brixsports.com, brixs2.vercel.app,
+// brixsports-staging.vercel.app) all use /api/auth/callback/google, not
+// /api/auth/google/callback. Google enforces an exact match on redirect_uri,
+// so the route has to live at the path already registered there, not the
+// other way around. This route did not exist at all until this fix. "Continue
 // with Google" was a real, reachable button (login and signup screens both)
 // that sent a fan through the actual Google consent screen and then 404'd
 // on the way back, instead of just being a dead no-op button.
@@ -39,8 +44,9 @@ export async function GET(request: NextRequest) {
         }
 
         // Must exactly match the redirect_uri sent in the initiate step
-        // (/api/auth/google/route.ts) -- Google rejects the exchange otherwise.
-        const redirectUri = `${env.appUrl || request.nextUrl.origin}/api/auth/google/callback`;
+        // (/api/auth/google/route.ts) and registered in Google Cloud Console
+        // -- Google rejects the token exchange otherwise.
+        const redirectUri = `${env.appUrl || request.nextUrl.origin}/api/auth/callback/google`;
 
         const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
             method: 'POST',
