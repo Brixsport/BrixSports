@@ -10223,11 +10223,26 @@ body, shifting every column after it out of place). Caught before committing by 
 against its own header change; completed the matching `<td>` updates (padding + `hidden
 sm:table-cell` on the Stats cell) before this commit.
 
+**Follow-up, found during this session's live-verification pass (2026-09-09):** the first shrink
+pass above was insufficient -- live DOM measurement on the Vercel preview at 375px showed the
+table's own `overflow-x-auto` wrapper was 341px wide but the table itself was still 522px wide,
+so the Actions column (right edge at x:539) remained entirely off-screen by default, same bug
+`BACKLOG-346` was meant to close. Root cause: the Athlete Info cell's jerseyName+ID line (no
+width cap) and the Position & Team cell's `min-w-[120px]` floor were still forcing extra width
+past what the padding/text shrink alone could recover. Applied a second shrink pass, same
+direction: hid the jerseyName/ID line below `sm:` (least-essential info, one tap away via the
+Actions column's View link -- same rationale already used for the Stats column), removed the
+`min-w-[120px]` floor on Position & Team below `sm:` and capped the team-name truncate width,
+capped the player-name truncate width, and tightened the Actions column's own padding/gap/icon
+size below `sm:`. Full desktop sizing (`md:` and up) untouched.
+
 **Evidence:**
-- Commit: `072770b` (`feature/ui-redesign`)
-- Verified by: (pending -- live DOM measurement + a real click on the Actions column's View/Edit
-  buttons, same standard as `BACKLOG-343`/`344`)
-- Pending items: live verification on the Vercel preview.
+- Commit: `072770b` (first pass), `<pending>` (this session's second shrink pass, `feature/ui-redesign`)
+- Verified by: live DOM measurement (`table.getBoundingClientRect().width` vs the `overflow-x-auto`
+  wrapper's `clientWidth`) on the branch's stable Vercel alias at 375px, before and after the second
+  fix, plus a real functional click on the View/Edit/Delete icons once the fix lands.
+- Pending items: live re-verification of the second shrink pass (this entry stays SHIPPED, not
+  RESOLVED, until that lands).
 
 ---
 
