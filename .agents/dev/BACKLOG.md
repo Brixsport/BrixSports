@@ -12200,10 +12200,13 @@ this project's convention of correcting the label going forward rather than rewr
 
 **Deliberately not done:** wiring a first-time Google signup into the `OnboardingModal` flow -- that modal is only mounted from `/signup`'s own client-side state today, and a server-redirect OAuth flow can't trigger it the same way. Out of this P0's stated acceptance criteria (a working session, not a 404); a real product decision (does Google signup get onboarding too?) for its own follow-up, not assumed here.
 
+**Correction, same day:** the callback was first built at `/api/auth/google/callback`, matching the path the pre-existing initiate route already constructed. Richard checked the real Google Cloud OAuth client (console.cloud.google.com, Brixsport V2 project) and its 4 registered Authorised redirect URIs (`localhost:3000`, `brixsports.com`, `brixs2.vercel.app`, `brixsports-staging.vercel.app`) all use `/api/auth/callback/google` instead -- Google enforces an exact match, so the mismatched path would have failed every real attempt with `redirect_uri_mismatch` before ever reaching this route. Moved the route to `src/app/api/auth/callback/google/route.ts` and updated the initiate route's own `redirectUri` to match. The registered URIs were the source of truth here, not the code that was written without checking them first.
+
 **Evidence:**
-- `tsc --noEmit`: identical error count to baseline (18), zero new errors across the new callback route, the updated initiate route, `env.ts`, and `login/page.tsx`.
-- Not yet live-verified against a running deploy -- needs real `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` values on the target environment, which this session did not set or inspect (per this project's own security rules, never inline or read secret values into a script/command).
-- Pending: confirm on the branch's preview, with real staging OAuth credentials configured, that a full click-through (consent → callback → session) lands a real cookie and redirects home, for both a brand-new Google email and an existing password-based account signing in via Google for the first time.
+- `tsc --noEmit`: identical error count to baseline (18), zero new errors across the callback route (now at its corrected path), the updated initiate route, `env.ts`, and `login/page.tsx`.
+- Redirect-URI path confirmed directly against the real Google Cloud Console client configuration (screenshot), not assumed or guessed.
+- Still not live-verified against a running deploy -- this project did not set or inspect the real `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` values (per this project's own security rules, never inline or read secret values into a script/command); those are already configured on Vercel per Richard's confirmation.
+- Pending: confirm on the branch's preview that a full click-through (consent → callback → session) lands a real cookie and redirects home, for both a brand-new Google email and an existing password-based account signing in via Google for the first time.
 
 **Found:** session `competitions-consolidation`, 2026-09-09, as `Fan Account Blueprint` spec requirement P0-2.
 
