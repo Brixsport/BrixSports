@@ -12166,3 +12166,45 @@ this project's convention of correcting the label going forward rather than rewr
 **Found:** session `competitions-consolidation`, 2026-09-09, following up on Richard's direct ask that the preferences tied to Favourites/notifications be confirmed genuinely functional and wired, not just the API route in isolation.
 
 ---
+
+### BACKLOG-356 — Onboarding Avatar Step Wrote Raw Base64 Into `users.avatar` Instead of a Real Upload
+
+**Status:** SHIPPED — 2026-09-09, `tsc --noEmit` clean, not yet live-verified against a running deploy.
+**Priority:** High (P0, Fan Account Blueprint) — every fan who set a photo during onboarding got a broken/bloated field, not a real image.
+
+**Problem:** `OnboardingModal.tsx`'s step 3 (`handleAvatarChange`) only ever produced a `FileReader`-generated base64 data URL for the local preview -- `handleSaveProfile()` then `PATCH`ed that raw string straight into `users.avatar`, with no upload step at all. Every other image feature in this codebase (team logos, player photos via `mobile-image-upload.tsx`) uploads to Cloudinary first and stores a real URL. This diverged silently -- no error, just a working-looking preview that saved the wrong kind of value.
+
+**Fix:** `OnboardingModal.tsx` now keeps the real `File` (`avatarFile` state, separate from the `avatar` preview string) and uploads it to Cloudinary via the same unsigned-preset pattern `mobile-image-upload.tsx` already uses (`NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET`, read via `env.ts` per the project's `process.env` rule -- `mobile-image-upload.tsx` itself still reads it directly, pre-existing, out of scope here) before the `PATCH`, which now sends the resulting `secure_url`. 5MB client-side size guard added (matches `mobile-image-upload.tsx`'s own default). Upload failure keeps the fan on step 3 with a clear error, same as the existing pattern for a failed save -- never silently advances on a failed upload.
+
+**Evidence:**
+- `tsc --noEmit`: identical error count to baseline (18), zero new errors, `OnboardingModal.tsx` clean.
+- Confirmed `PATCH /api/users/[id]` already persists `avatar` correctly (pre-existing, unchanged) -- the bug was entirely on the client side, what value got sent.
+- Not yet live-verified against a running deploy (this project's convention is the Vercel preview, not local dev).
+- Pending: confirm on the branch's preview that a real signup + photo upload lands a `res.cloudinary.com` URL in the DB, not a `data:image/...` string.
+
+**Found:** session `competitions-consolidation`, 2026-09-09, as `Fan Account Blueprint` spec requirement P0-1.
+
+---
+
+### BACKLOG-357 — `/api/auth/google/callback` Did Not Exist; "Continue with Google" Sent Fans Through Consent Then 404'd
+
+**Status:** SHIPPED — 2026-09-09, `tsc --noEmit` clean, not yet live-verified against a running deploy.
+**Priority:** High (P0, Fan Account Blueprint) — a real, visible, prominent button on both `/login` and `/signup` that actively sent a fan to Google's real consent screen and then failed on the way back, worse than a simple dead button.
+
+**Problem:** `src/app/api/auth/google/route.ts` (the initiate step) has always correctly built a real Google OAuth URL with `redirect_uri` pointing at `/api/auth/google/callback` -- but that route never existed anywhere in the codebase. A fan who clicked "Continue with Google," saw the real Google account picker, and granted consent would land on a 404 instead of a session. Separately, the initiate route read `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` via raw `process.env`, a `CLAUDE.md` "never read `process.env` directly" violation -- both env vars were already documented in `.env.example` but had no `env.ts` entry.
+
+**Fix:**
+- Added `googleClientId`/`googleClientSecret` to `src/lib/env.ts`; updated the initiate route to use them instead of raw `process.env`.
+- Built `src/app/api/auth/google/callback/route.ts`: exchanges the auth code for a Google access token, fetches the profile (`email`, `name`, `picture`), finds-or-creates a `users` row by lowercased email (same matching rule `register/route.ts` already uses -- no new `googleId` column needed, `users.password` is already nullable for an OAuth-only account), issues a real JWT via the existing `generateToken()`, and sets the `authToken` cookie with the exact same options `register`/`login` already use. Redirects home on success; redirects to `/login?error=...` on any failure (missing code, denied consent, failed token exchange, missing profile email), never a raw crash or a silent no-op.
+- `src/app/login/page.tsx` already handled `?error=google_config_missing` with a toast; extended the same handler for the two new error codes this callback can now produce (`google_auth_denied`, `google_auth_failed`) so neither fails silently in the UI, per `CLAUDE.md`'s error-handling rule.
+
+**Deliberately not done:** wiring a first-time Google signup into the `OnboardingModal` flow -- that modal is only mounted from `/signup`'s own client-side state today, and a server-redirect OAuth flow can't trigger it the same way. Out of this P0's stated acceptance criteria (a working session, not a 404); a real product decision (does Google signup get onboarding too?) for its own follow-up, not assumed here.
+
+**Evidence:**
+- `tsc --noEmit`: identical error count to baseline (18), zero new errors across the new callback route, the updated initiate route, `env.ts`, and `login/page.tsx`.
+- Not yet live-verified against a running deploy -- needs real `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` values on the target environment, which this session did not set or inspect (per this project's own security rules, never inline or read secret values into a script/command).
+- Pending: confirm on the branch's preview, with real staging OAuth credentials configured, that a full click-through (consent → callback → session) lands a real cookie and redirects home, for both a brand-new Google email and an existing password-based account signing in via Google for the first time.
+
+**Found:** session `competitions-consolidation`, 2026-09-09, as `Fan Account Blueprint` spec requirement P0-2.
+
+---

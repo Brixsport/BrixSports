@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { env } from '@/lib/env';
 
 // GET /api/auth/google - Initiate Google OAuth flow
 export async function GET(request: NextRequest) {
-    const clientId = process.env.GOOGLE_CLIENT_ID;
-    const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
-    const redirectUri = `${process.env.NEXT_PUBLIC_APP_URL || request.nextUrl.origin}/api/auth/google/callback`;
+    const clientId = env.googleClientId;
+    const clientSecret = env.googleClientSecret;
+    const redirectUri = `${env.appUrl || request.nextUrl.origin}/api/auth/google/callback`;
 
     if (!clientId || !clientSecret) {
         console.error("Missing Google OAuth credentials");

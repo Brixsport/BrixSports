@@ -33,7 +33,15 @@ function LoginPageContent() {
             toast.error("Google Login Not Configured", {
                 description: "Missing GOOGLE_CLIENT_ID or GOOGLE_CLIENT_SECRET in environment variables.",
             });
-            // Clear the param
+            router.replace("/login");
+        } else if (error === "google_auth_denied") {
+            // Not a bug -- the fan declined the Google consent screen.
+            toast.info("Google sign-in cancelled");
+            router.replace("/login");
+        } else if (error === "google_auth_failed") {
+            toast.error("Google sign-in failed", {
+                description: "Please try again, or sign in with your email and password.",
+            });
             router.replace("/login");
         }
     }, [searchParams, router]);
