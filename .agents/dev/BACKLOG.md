@@ -10079,8 +10079,10 @@ as the `authToken` cookie on the branch's stable Vercel alias (same technique as
    there (per Richard's "don't touch desktop" instruction for this audit).
 
 **Evidence:**
-- Commits: `78cc64e` (mobile: filter row + truncate min-w-0), `1f0a835` (tablet: action-row
-  flex-wrap) -- both `feature/ui-redesign`.
+- Commits: `78cc64e` (mobile: filter row + truncate min-w-0), `8559150` (tablet: action-row
+  flex-wrap) -- both `feature/ui-redesign`. (`8559150` is `1f0a835`'s rebased equivalent --
+  same diff, new hash after a later `pull --rebase`; noted here since the original hash is no
+  longer reachable from this branch.)
 - Verified by: real admin session (JWT cookie injection) on the branch's stable Vercel alias,
   mobile (375x812) and tablet (768x1024) viewports, direct DOM measurement
   (`document.documentElement.scrollWidth`/`clientWidth`, plus a full-page offending-element scan
@@ -10093,12 +10095,35 @@ as the `authToken` cookie on the branch's stable Vercel alias (same technique as
   third. Edit button on a match with a valid `startTime` (COLNAS-B vs COLENG-B) opened the real
   "EDIT FIXTURE" modal (Status/Venue/Score fields, Cancel/Update Fixture buttons) after the fix,
   confirming the action row is still reachable and functional, not just visually non-overflowing.
-- Pending items: none for the responsive bugs. **Separate, unrelated bug found during the click
-  test** (not part of this audit's scope, flagged as its own follow-up task rather than fixed here):
-  clicking Edit on a match whose `startTime` is corrupted (renders as "INVALID DATE" on the card --
-  e.g. COLMANS-B vs COLENVS-B, BUSALYMPICS basketball) throws an uncaught `RangeError: Invalid time
-  value` inside `openEditModal`'s date formatting, silently failing to open the modal with no
-  visible error to the admin.
+- Pending items: none for the original three responsive bugs (see two follow-ups below, same page,
+  same session).
+
+**Follow-up 1, live feedback: team names truncated to unreadable ("C.") rather than just fitting.**
+The `min-w-0` fix above (finding 2) correctly stopped the page-level overflow, but at `text-2xl` +
+`gap-12` + a 120px-min score box, the actual column width left for each name on a 375px viewport
+was so narrow that `truncate` clipped real names down to one or two characters -- technically not
+overflowing anymore, but unreadable. Same "shrink to fit" direction as the rest of this audit:
+smaller text/gaps/score-box padding at the default breakpoint give the truncated text real room
+instead of an ellipsis doing all the work; full desktop sizing restored from `sm:`.
+
+**Follow-up 2, real bug found during the click test above, now fixed (was filed as "pending,
+unrelated" in this entry's first pass):** clicking Edit on a match whose `startTime` is corrupted
+(rendered as "INVALID DATE" on the card -- e.g. COLMANS-B vs COLENVS-B, BUSALYMPICS basketball)
+threw an uncaught `RangeError: Invalid time value` inside `openEditModal`'s date formatting
+(`.toISOString()` on an unparseable `Date`) -- silently failing to open the modal with no error
+shown to the admin, a direct violation of `CLAUDE.md`'s "no silent failures" rule. Fixed with an
+`isNaN(parsedStart.getTime())` guard that falls back to an empty string (the datetime-local input
+already renders that as blank) instead of calling `.toISOString()` on an Invalid Date. The
+underlying data-quality question -- why that match's `startTime` is corrupted in the DB, and how
+many other matches share it -- is a separate, not-yet-investigated follow-up (needs a read-only
+DB survey before deciding if a backfill is warranted); this fix only stops the crash.
+
+**Evidence (both follow-ups):**
+- Commit: `ada2080` (`feature/ui-redesign`)
+- Verified by: (pending -- live DOM measurement of the truncated text at 375px, plus a real click
+  on the previously-crashing Edit button for the COLMANS-B/COLENVS-B match)
+- Pending items: live verification (this entry stays SHIPPED, not RESOLVED, until that lands), and
+  the DB survey for how widespread the invalid-`startTime` data issue is.
 
 ---
 
@@ -10142,6 +10167,67 @@ after):
   fixes; clean at both 375px and 768px afterward, no offending elements outside the intentional
   `overflow-x-auto` safety-net strips used elsewhere on the page.
 - Pending items: none.
+
+---
+
+### BACKLOG-345 — Admin Responsive Audit: `/admin/infrastructure` + `/admin/match-ratings` Mobile Overflow
+
+**Status:** SHIPPED — code committed, live verification pending (see Evidence once it lands).
+**Priority:** MEDIUM — same admin-wide responsive audit as `BACKLOG-336`/`343`/`344`.
+**Files:** `src/app/admin/infrastructure/page.tsx`, `src/app/admin/match-ratings/page.tsx`.
+**Found:** session `brixsports-v2-cc`, 2026-09-08, same audit pass as `BACKLOG-343`/`344`.
+
+**Two real bugs, two different pages, both mobile (375px) only:**
+
+1. **`/admin/infrastructure` header didn't wrap:** `flex items-center justify-between` (no wrap)
+   put the page title block and the WebSocket-status pill + Refresh button on one row, pushing
+   `scrollWidth` to 412px against a 375px viewport. Fixed by stacking on mobile (`flex-col`),
+   restoring the side-by-side row from `sm:` up -- same card-header convention as `BACKLOG-344`.
+2. **`/admin/match-ratings` team-name wrappers had `flex-1` but no `min-w-0` on the *outer* flex
+   container** (only the inner truncate `<div>` had it). The flex algorithm still gave the outer
+   wrapper more width than the 327px card could show; the card's own `overflow-hidden` silently
+   clipped the team crest + name off the visible edge -- not a page-level scrollbar, so the
+   full-page offending-element scan used elsewhere in this audit missed it (this is a
+   clipped-inside-a-card bug, same class as `BACKLOG-336`'s original finding, not an
+   overflow-past-the-viewport one). Added `min-w-0` to both the home- and away-team outer
+   wrappers.
+
+**Evidence:**
+- Commit: `dd16830` (`feature/ui-redesign`)
+- Verified by: (pending -- live DOM measurement + a real functional check, same standard as
+  `BACKLOG-343`/`344`)
+- Pending items: live verification on the Vercel preview, both fixes.
+
+---
+
+### BACKLOG-346 — Admin Responsive Audit: `/admin/players` Table, Actions Column Off-Screen by Default
+
+**Status:** SHIPPED — code committed, live verification pending (see Evidence once it lands).
+**Priority:** MEDIUM — same admin-wide responsive audit as `BACKLOG-336`/`343`/`344`/`345`; same
+"data table actions must be visible without scrolling" rule `BACKLOG-336` established.
+**Files:** `src/app/admin/players/page.tsx`.
+**Found:** session `brixsports-v2-cc`, 2026-09-08/09 (session continued after a rate-limit gap).
+
+**Problem:** this table already had its own `overflow-x-auto` wrapper, so its real ~670px width
+was technically reachable by scrolling on a 375px viewport -- but the Actions column (View/Edit/
+Delete) sat off the right edge *by default*, requiring a horizontal scroll before an admin could
+even see it exists. Same direction as `BACKLOG-336`: a data table's actions need to be visible
+without scrolling, not just reachable by it.
+**Fix:** tightened padding/text across every column at the default (mobile) breakpoint, hid the
+least-essential `Stats` column (Rating/Age) below `sm:` -- both are one tap away via the Actions
+column's own View-profile link -- full desktop sizing untouched from `md:` up.
+**Correction during this same session:** the first pass (interrupted mid-task by a rate-limit gap)
+only updated the `<th>` header cells to match this plan, not the `<td>` body cells -- would have
+shipped a real column-misalignment bug (`Stats` hidden in the header but still rendered in the
+body, shifting every column after it out of place). Caught before committing by diffing the file
+against its own header change; completed the matching `<td>` updates (padding + `hidden
+sm:table-cell` on the Stats cell) before this commit.
+
+**Evidence:**
+- Commit: `072770b` (`feature/ui-redesign`)
+- Verified by: (pending -- live DOM measurement + a real click on the Actions column's View/Edit
+  buttons, same standard as `BACKLOG-343`/`344`)
+- Pending items: live verification on the Vercel preview.
 
 ---
 
