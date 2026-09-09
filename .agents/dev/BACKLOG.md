@@ -10118,12 +10118,25 @@ underlying data-quality question -- why that match's `startTime` is corrupted in
 many other matches share it -- is a separate, not-yet-investigated follow-up (needs a read-only
 DB survey before deciding if a backfill is warranted); this fix only stops the crash.
 
+**Status (both follow-ups):** RESOLVED — 2026-09-09, live-verified on staging alias.
+
 **Evidence (both follow-ups):**
 - Commit: `ada2080` (`feature/ui-redesign`)
-- Verified by: (pending -- live DOM measurement of the truncated text at 375px, plus a real click
-  on the previously-crashing Edit button for the COLMANS-B/COLENVS-B match)
-- Pending items: live verification (this entry stays SHIPPED, not RESOLVED, until that lands), and
-  the DB survey for how widespread the invalid-`startTime` data issue is.
+- Verified by: real admin session (JWT cookie injection) on the branch's stable Vercel alias,
+  mobile (375x812) and tablet (768x1024) viewports, direct DOM measurement
+  (`document.documentElement.scrollWidth`/`clientWidth`) plus reading the rendered team-name text
+  directly off the page, plus a real click on the previously-crashing Edit button for the
+  COLMANS-B vs COLENVS-B match (the one with the corrupted/`Invalid Date` `startTime`).
+- Observed result: team names render fully readable at 375px (e.g. "COLMANS-B", "COLENVS-B",
+  "CHRISTOPHER M", "ADELEKE M" -- no single/double-character truncation); `scrollWidth` clean
+  (375px mobile, 753px tablet) at both breakpoints. Clicking Edit on the COLMANS-B vs COLENVS-B
+  card opened the real "EDIT FIXTURE" modal (Status/Venue/Score fields populated correctly:
+  FINISHED, Bells University Sports Complex, 52/41) with no crash and no console `RangeError` --
+  confirms the `isNaN` guard works; the modal has no date field to begin with, so the guard's
+  fallback path wasn't even exercised by this specific match, but the crash it was guarding
+  against is gone.
+- Pending items: the DB survey for how widespread the invalid-`startTime` data issue is (separate,
+  not-yet-investigated follow-up, not a responsive-audit item).
 
 ---
 
@@ -10172,7 +10185,7 @@ after):
 
 ### BACKLOG-345 — Admin Responsive Audit: `/admin/infrastructure` + `/admin/match-ratings` Mobile Overflow
 
-**Status:** SHIPPED — code committed, live verification pending (see Evidence once it lands).
+**Status:** RESOLVED — 2026-09-09, live-verified on staging alias.
 **Priority:** MEDIUM — same admin-wide responsive audit as `BACKLOG-336`/`343`/`344`.
 **Files:** `src/app/admin/infrastructure/page.tsx`, `src/app/admin/match-ratings/page.tsx`.
 **Found:** session `brixsports-v2-cc`, 2026-09-08, same audit pass as `BACKLOG-343`/`344`.
@@ -10194,9 +10207,23 @@ after):
 
 **Evidence:**
 - Commit: `dd16830` (`feature/ui-redesign`)
-- Verified by: (pending -- live DOM measurement + a real functional check, same standard as
-  `BACKLOG-343`/`344`)
-- Pending items: live verification on the Vercel preview, both fixes.
+- Verified by: real admin session (JWT cookie injection) on the branch's stable Vercel alias,
+  mobile (375x812) and tablet (768x1024) viewports, direct DOM measurement
+  (`document.documentElement.scrollWidth`/`clientWidth`, full-page offending-element scan) before
+  re-testing each fix, plus a real functional click on `/admin/infrastructure`'s Refresh button and
+  on a `/admin/match-ratings` card's "Adjust" action.
+- Observed result: `/admin/infrastructure` `scrollWidth` clean (375px) at mobile with the header
+  title/status-pill/Refresh row visibly stacked; clicking Refresh changed the displayed DB/API
+  latency values (e.g. 77ms → 76ms, 99ms → 87ms), confirming a real re-fetch, not just a UI
+  no-op. `/admin/match-ratings` showed no clipped elements inside any card (checked directly via
+  `card.getBoundingClientRect()` vs each descendant's `right` edge, not just the page-level scan,
+  since this was originally a clipped-inside-a-card bug); team names/crests render fully within
+  their card at 375px. Clicking "Adjust" on the COLMANS-B vs COLENVS-B card navigated to
+  `/admin/match-ratings/busalympics-bball-m-3` and rendered the real "Unable to Load Ratings /
+  Generate Ratings / Go Back" empty state (correct, since this match has no calculated ratings
+  yet) -- confirms the action is functional, not just visually present. Both pages also clean at
+  768px tablet.
+- Pending items: none.
 
 ---
 
