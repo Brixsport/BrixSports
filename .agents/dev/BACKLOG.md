@@ -10318,6 +10318,46 @@ through the remaining un-audited `/admin/*` pages listed in this session's brief
 
 ---
 
+### BACKLOG-350 — Admin Responsive Audit: 🔴 High-Volatility Pages, Findings Only (No Fix Applied)
+
+**Status:** OPEN — documented, deliberately not fixed this session per `CLAUDE.md`'s
+"Do Not Touch Without Explicit Brief" instruction for these features.
+**Priority:** LOW for now (these pages are already flagged unsafe to touch without a dedicated
+brief; fixing responsive bugs here is a separate, scoped task, not a side effect of this audit).
+**Files (not modified):** `src/app/admin/access/page.tsx`, `src/app/admin/advertisements/page.tsx`,
+`src/app/admin/transfers/page.tsx`.
+**Found:** session `brixsports-v2-cc`, 2026-09-09, same admin-wide responsive sweep as
+`BACKLOG-349` -- these three pages were live DOM-scanned (mobile 375px + tablet 768px) for
+awareness, per this session's brief, but explicitly NOT fixed since `CLAUDE.md` lists their
+underlying features (User Management, Ads, Transfers/news-style page) as 🔴 High Volatility.
+
+**Findings, mobile (375px) only -- all three clean at 768px tablet:**
+
+1. **`/admin/access` (User Management admin panel) -- severe inside-card clipping, not just
+   overflow:** the users table sits inside a `bg-white/5 ... overflow-hidden` wrapper (326px client
+   width) while the table itself is 860px wide -- `overflow-hidden`, not `overflow-x-auto`, so
+   Email/Role/Joined/Actions are not merely off-screen, they are completely unreachable with no
+   scroll escape hatch at all. Confirmed at both 375px (326px wrapper) and 768px (703px wrapper,
+   table still 860px) -- this one does NOT clear at tablet either, unlike the other two below.
+2. **`/admin/advertisements` -- page-level overflow, ~100px at 375px:** `scrollWidth` 475px vs a
+   375px viewport; clean at 768px tablet. Not yet root-caused to a specific element (findings-only
+   pass, no source dive per the 🔴 no-touch instruction).
+3. **`/admin/transfers` -- page-level overflow, ~266px at 375px:** `scrollWidth` 641px vs a 375px
+   viewport, the worst overflow found in this entire audit; clean at 768px tablet. Not yet
+   root-caused to a specific element (findings-only pass, no source dive per the 🔴 no-touch
+   instruction).
+
+`/admin/match-lineups` (list page) and `/admin/news` were also spot-checked at both breakpoints
+and found clean (no page-level overflow) -- not filed here since there is nothing to report.
+
+**Evidence:**
+- Verified by: live DOM measurement (`document.documentElement.scrollWidth` vs `clientWidth`) on
+  the branch's stable Vercel alias, real admin session, both breakpoints, all three pages.
+- Pending items: a dedicated, explicitly-briefed session to fix these -- none of the three should
+  be touched as a side effect of an unrelated task per `CLAUDE.md`'s 🔴 rule.
+
+---
+
 ### BACKLOG-340 — Timeline "All" Tab: Event Icon Duplicated Inside the Card Instead of the Outer Minute Badge
 
 **Status:** RESOLVED — 2026-09-08, live-verified on staging.
