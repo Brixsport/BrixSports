@@ -58,7 +58,11 @@ function AccessControlPageContent() {
             const response = await fetch(`/api/admin/users?limit=${USERS_PAGE_SIZE}&offset=0`);
             const result = await response.json();
             setData(result);
-            fetchRoleCounts();
+            // Awaited (was fire-and-forget) -- previously `loading` could clear once the
+            // users list resolved while this was still in flight, letting the Stats cards
+            // above the table flash real "0"s (not a loading state, roleCounts was
+            // genuinely still {}) even though the table itself already had real rows.
+            await fetchRoleCounts();
         } catch (error) {
             console.error('Failed to fetch users:', error);
         } finally {
@@ -249,7 +253,7 @@ function AccessControlPageContent() {
                                                 </div>
                                             </td>
                                             <td className="p-1.5 lg:p-6">
-                                                <p className="text-[9px] lg:text-sm text-white/60 truncate max-w-[75px] lg:max-w-none">{user.email}</p>
+                                                <p className="text-[9px] lg:text-sm text-white/60 truncate max-w-[95px] lg:max-w-none">{user.email}</p>
                                             </td>
                                             <td className="p-1.5 lg:p-6">
                                                 <RoleBadge role={user.role} />

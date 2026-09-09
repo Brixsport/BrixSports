@@ -131,7 +131,10 @@ function TeamsPageContent() {
                         />
                     </div>
 
-                    <div className="flex gap-2 overflow-x-auto pb-1 md:pb-0 shrink-0">
+                    {/* Same overflow-x-auto safety-net pattern as the status-filter rows already
+                        fixed on /admin/matches and /admin/loggers -- missing scrollbar-hide here
+                        left the raw native scrollbar visible under this chip row. */}
+                    <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-1 md:pb-0 shrink-0">
                         {SPORT_FILTERS.map((s) => (
                             <button
                                 key={s}
