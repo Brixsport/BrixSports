@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { getPushService } from "@/lib/notifications/push-service";
+import { env } from "@/lib/env";
 
 interface Team {
     id: string;
@@ -37,8 +38,12 @@ export function OnboardingModal({ isOpen, userId, userName, onComplete, token }:
     // Step 2: Follow Teams (Multi Select)
     const [followedTeamIds, setFollowedTeamIds] = useState<string[]>([]);
 
-    // Step 3: Profile Picture
+    // Step 3: Profile Picture. `avatar` is the local preview (data URL, for
+    // instant UI feedback only -- never sent to the server); `avatarFile` is
+    // the real File that gets uploaded to Cloudinary on save.
     const [avatar, setAvatar] = useState<string | null>(null);
+    const [avatarFile, setAvatarFile] = useState<File | null>(null);
+    const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     // Step 4: Push Notifications
@@ -172,6 +177,11 @@ export function OnboardingModal({ isOpen, userId, userName, onComplete, token }:
     const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (file) {
+            if (file.size > 5 * 1024 * 1024) {
+                toast.error("Image must be under 5MB");
+                return;
+            }
+            setAvatarFile(file);
             const reader = new FileReader();
             reader.onloadend = () => {
                 setAvatar(reader.result as string);
@@ -180,23 +190,58 @@ export function OnboardingModal({ isOpen, userId, userName, onComplete, token }:
         }
     };
 
+    // Uploads the real file to Cloudinary (the same unsigned-preset pattern
+    // already used elsewhere in this codebase, e.g. mobile-image-upload.tsx)
+    // and returns the resulting secure_url. Previously this step didn't
+    // exist at all -- handleSaveProfile PATCHed the raw base64 data URL from
+    // handleAvatarChange's FileReader preview straight into users.avatar.
+    const uploadAvatarToCloudinary = async (file: File): Promise<string> => {
+        if (!env.cloudinaryCloud || !env.cloudinaryPreset) {
+            throw new Error("Image uploads are not configured");
+        }
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('upload_preset', env.cloudinaryPreset);
+        formData.append('folder', 'brixsports/avatars');
+
+        const res = await fetch(`https://api.cloudinary.com/v1_1/${env.cloudinaryCloud}/image/upload`, {
+            method: 'POST',
+            body: formData,
+        });
+
+        if (!res.ok) {
+            throw new Error("Upload failed");
+        }
+        const data = await res.json();
+        if (!data.secure_url) {
+            throw new Error("Upload did not return an image URL");
+        }
+        return data.secure_url as string;
+    };
+
     const handleSaveProfile = async () => {
         setIsSubmitting(true);
         try {
-            if (avatar) {
+            if (avatarFile) {
+                setIsUploadingAvatar(true);
+                const secureUrl = await uploadAvatarToCloudinary(avatarFile);
+                setIsUploadingAvatar(false);
+
                 await fetch(`/api/users/${userId}`, {
                     method: 'PATCH',
                     headers: {
                         'Content-Type': 'application/json',
                         'Authorization': `Bearer ${token}`
                     },
-                    body: JSON.stringify({ avatar })
+                    body: JSON.stringify({ avatar: secureUrl })
                 });
             }
             setStep(4);
         } catch (error) {
-            toast.error("Failed to save profile picture");
+            console.error('Avatar upload failed:', error);
+            toast.error(error instanceof Error ? error.message : "Failed to save profile picture");
         } finally {
+            setIsUploadingAvatar(false);
             setIsSubmitting(false);
         }
     };
@@ -467,7 +512,7 @@ export function OnboardingModal({ isOpen, userId, userName, onComplete, token }:
 
                                 {avatar && (
                                     <button
-                                        onClick={() => setAvatar(null)}
+                                        onClick={() => { setAvatar(null); setAvatarFile(null); }}
                                         className="absolute -top-4 -right-4 w-10 h-10 bg-red-500 text-white rounded-full flex items-center justify-center shadow-xl hover:scale-110 transition-transform"
                                     >
                                         <X size={20} />
@@ -522,6 +567,8 @@ export function OnboardingModal({ isOpen, userId, userName, onComplete, token }:
                                 ) : null}
                                 {step < 3 ? (
                                     <>Next Step <ArrowRight className="ml-2 w-4 h-4" /></>
+                                ) : isUploadingAvatar ? (
+                                    "Uploading..."
                                 ) : (
                                     <>{avatar ? "Save & Continue" : "Continue"} <ArrowRight className="ml-2 w-4 h-4" /></>
                                 )}
