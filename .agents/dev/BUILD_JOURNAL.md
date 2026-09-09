@@ -4903,3 +4903,101 @@ in `BACKLOG.md` -- written but not yet pushed/deployed/re-verified as of this en
 **Deferred:** the `feature/ui-redesign` → `dev` merge/rebase decision (see above) — explicitly not this session's call to make unilaterally.
 
 **Next session — exact first task:** none queued from this session specifically. `BACKLOG-348` is fully closed with no pending items. The standing `feature/ui-redesign` → `dev` promotion decision keeps recurring across concurrent sessions without being picked up — worth raising with Richard directly rather than deferring again by default.
+
+---
+
+### Session 72 — 2026-09-09 (continuation, `admin-responsive-audit-3` worktree)
+
+**Focus:** closed out the admin-wide responsive audit's remaining tail -- ran Richard's requested
+bundled `code-review`/`feature`/`ship`/`done`/`audit-toolkit` pass over the whole night's diff, fixed
+every finding, live-verified all of it, then ran a full-system product-thinking audit
+(Admin→Logger→Viewer) and filed its real findings.
+
+**Built and resolved:**
+- `BACKLOG-351` -- 4 MEDIUM + 5 LOW findings from the bundled review, all fixed same session:
+  `admin/matches/page.tsx`'s `handleUpdate` had the identical unguarded `.toISOString()` crash
+  already fixed once in `openEditModal` 70 lines away (silent-by-luck, not silent-by-design -- a
+  real lesson in itself: a crash guard applied to the *reported instance* doesn't cover the
+  *pattern class* unless you grep for siblings); `api/competitions` POST/PATCH accepted an org-id
+  override with zero existence check, now `422`s on a nonexistent one; same PATCH's `startDate`/
+  `endDate` had the same unguarded-parse pattern; `admin/page.tsx`'s dashboard (`BACKLOG-349`'s own
+  file) had the exact truncation-to-unreadable class this whole audit kept re-discovering, landed
+  anyway -- widened past the original floor, not just back to it. Plus 5 LOW items (pitch-marker
+  width-class fallbacks, a defensive optional-chain, an email-truncate widen, a clarifying comment,
+  two debug `console.log` removals).
+- `BACKLOG-352` -- two more real bugs found from Richard's own live reports, outside the review's
+  scope: `/admin/access`'s Stats cards read all-zero (root cause: `fetchRoleCounts()` was
+  fire-and-forget inside `fetchData()`, so `loading` cleared before the separate role-count fetch
+  resolved -- fixed by awaiting it, confirmed live reading `17/1/1/14` matching the real DB exactly);
+  `/admin/teams`'s sport-filter chip row had a raw native scrollbar (missing `scrollbar-hide`, same
+  pattern already fixed elsewhere, just missed on this page).
+- Filed `BACKLOG-356` through `360` from the product-thinking audit's real findings (see below).
+
+**Full-system product-thinking audit, dispatched and completed this session (read-only, no code
+changes):** full report at https://claude.ai/code/artifact/d43b4763-3d1d-4e60-af9c-813ca2eea9d7 --
+sequential Admin→Logger→Viewer pass against live admin/logger sessions plus source, cross-referenced
+against `CLAUDE.md`/`PLATFORM_MODEL.md`/`BACKSCOPE.md`/`SYSTEM_ARCHITECTURE.md`. Top finding (mock/
+QA fixtures visible on the staging public homepage, incl. a "MOCK SHOWCASE (delete me)" match) was
+explicitly dismissed by Richard as expected staging behavior, not a leak -- a separate prod
+environment serves real traffic; saved as a durable memory (`project_staging_prod_env_separation`)
+so a future session doesn't re-flag it. Real, actionable findings filed as `BACKLOG-356`
+("INVALID DATE" still displayed, crash already fixed) / `357` (logger dashboard shows a duplicate
+match -- flagged as *possibly* related to the already-resolved `BUG-008` but explicitly not
+confirmed the same root cause, needs a DB-level check before assuming a regression) / `358`
+(`/admin/push-diagnose` orphaned but correctly auth-gated, confirmed via `middleware.ts` before
+filing -- not a security gap) / `359` (PWA update modal re-interrupting on nearly every navigation)
+/ `360` (minor/doc-only bundle).
+
+**Bugs encountered, root cause:**
+1. **`get_page_text` proved unreliable specifically on `/admin/access`** -- the users table's real
+   avatar images are inline base64 data URIs, producing a ~5.7 million character `tbody`. This made
+   the Stats-card fix look like it hadn't worked at all (repeated reads showed all-zero, no table
+   content) even after confirming the fix live via direct DOM query showed the correct real values
+   (`17/1/1/14`). Root-caused before concluding a regression existed -- switched to
+   `document.querySelector`/`element.textContent` queries, which worked correctly. Recorded directly
+   in `BACKLOG-352`'s own evidence block so a future session doesn't waste time chasing a phantom
+   bug on this specific page from `get_page_text` output alone.
+2. **Two more agent rate-limit deaths, same pattern as session 71's own entry warned about.** Both
+   recovered the same way: inspect the dead agent's worktree via `git log`/`git status` directly
+   (real, git-confirmed state, not the agent's own possibly-incomplete final message), review every
+   uncommitted diff by hand, dispatch a fresh agent with a self-contained brief. One death (round-3
+   admin audit continuation) was actually killed *accidentally* by Richard mid-task -- recovered
+   cleanly anyway since the worktree was left in a clean, fully-committed state with real completed
+   work (`/admin/access` fixed under explicit authorization, `BACKLOG-346`/`348`/`349` closed).
+   Confirmed again, directly: no `SendMessage`-to-a-dead-or-running-subagent mechanism exists in this
+   environment despite tool docs referencing one -- this is now confirmed across two separate
+   sessions' worth of searching, not a one-off.
+3. **A real three-way `BACKLOG-348` numbering collision**, found during a routine rebase (25 commits
+   behind at the time): this session's own `BACKLOG-348` (Lineup Pitch sizing, extensively
+   cross-referenced by this session's later `BACKLOG-351`/`352` entries and commits) collided with a
+   separate peer session's independently-filed `BACKLOG-348` ("Favoriting a Player Does Not Feed the
+   Push-Notification Pipeline," itself already renumbered twice before this). Resolved by renumbering
+   the peer's entry (the less entangled of the two, given this session's own extensive
+   cross-references to the Lineup Pitch one) to `BACKLOG-355` -- the established convention this
+   branch has used all night for the same recurring collision class under heavy concurrent traffic.
+
+**Explicitly declined mid-session, not silently skipped:**
+- A dedicated agent to properly fix the pitch-marker jersey-name truncation (the "OB...", "ADE...",
+  "Big shalli"→"BIG..." case Richard screenshotted) -- root-caused as a genuine layout-capacity
+  problem (confirmed via a live DB check that the specific truncated players already had real,
+  reasonably-short `jersey_name` values, ruling out a data-fallback explanation) and a dedicated
+  agent was dispatched with that diagnosis pre-loaded, but Richard killed it before it produced a
+  fix, opting to consolidate via the bundled review pass instead. Not resumed this session --
+  genuinely still open, not filed as its own `BACKLOG` entry since the diagnosis (real, useful) was
+  captured here and in the killed agent's dispatch prompt rather than duplicated into a new entry.
+- Touching `/admin/advertisements`/`/admin/transfers` (`BACKLOG-350` items 2-3, still 🔴, no
+  authorization given) or the `npm audit` dependency vulnerabilities the bundled review surfaced (48
+  pre-existing, real, but dependency surgery is its own separate, riskier task) -- both explicitly
+  named as out of scope for this session's fix pass, not overlooked.
+
+**Deferred:** `BACKLOG-356` through `360` (the product-thinking audit's filed findings) -- all OPEN,
+none fixed this session, by design (filed for a future session to pick up, per Richard's explicit
+"map/plan then wrap and resume" direction this session closed on). The pitch-name-truncation fix
+(see above). The standing `feature/ui-redesign` → `dev` promotion decision, still not made, still
+recurring across sessions without being picked up (same note as session 71's own entry).
+
+**Next session -- exact first task:** `BACKLOG-357` (logger dashboard duplicate-match display) --
+its own entry already specifies the exact first step: confirm via a direct DB query whether the
+logger's real assignment data has an actual duplicate row before assuming this is a `BUG-008`
+regression versus a distinct client-side rendering bug. `BACKLOG-356`/`358`/`359`/`360` are queued
+right behind it, all independently scoped and none blocking each other.
