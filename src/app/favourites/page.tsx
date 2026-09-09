@@ -34,16 +34,18 @@ export default function FavouritesPage() {
                 setTeams(teamsData.filter(Boolean));
             }
 
-            // Fetch favorite players
+            // Fetch favorite players -- one batched request via the existing
+            // ?ids= support on /api/players, instead of one GET per player.
             if (favoritePlayers.length > 0) {
-                const playersData = await Promise.all(
-                    favoritePlayers.map(async (playerId) => {
-                        const res = await fetch(`/api/players/${playerId}`);
-                        if (res.ok) return await res.json();
-                        return null;
-                    })
-                );
-                setPlayers(playersData.filter(Boolean));
+                const res = await fetch(`/api/players?ids=${favoritePlayers.join(',')}`);
+                if (res.ok) {
+                    const data = await res.json();
+                    setPlayers(data.players || []);
+                } else {
+                    setPlayers([]);
+                }
+            } else {
+                setPlayers([]);
             }
 
             // Fetch favorite competitions

@@ -9,6 +9,7 @@ import SessionProvider from "@/components/providers/SessionProvider";
 import { NotificationProvider } from "@/components/Notifications";
 import { GlobalNotificationListener } from "@/components/GlobalNotificationListener";
 import { AuthProvider } from "@/contexts/AuthContext";
+import { FavoritesProvider } from "@/contexts/FavoritesContext";
 import { AuthModal } from "@/components/auth/AuthModal";
 import { SocketProvider } from "@/hooks/useWebSocket";
 import AdBanner from "@/components/ads/AdBanner";
@@ -257,16 +258,18 @@ export default function RootLayout({
           <PWAProvider swPath="/sw-user.js">
             <SessionProvider>
               <AuthProvider>
-                <NotificationProvider>
-                  <SocketProvider>
-                    <GlobalNotificationListener />
-                    <AdBanner position="top" />
-                    {children}
-                    <AdBanner position="bottom" />
-                    <BottomNav />
-                    <AuthModal />
-                  </SocketProvider>
-                </NotificationProvider>
+                <FavoritesProvider>
+                  <NotificationProvider>
+                    <SocketProvider>
+                      <GlobalNotificationListener />
+                      <AdBanner position="top" />
+                      {children}
+                      <AdBanner position="bottom" />
+                      <BottomNav />
+                      <AuthModal />
+                    </SocketProvider>
+                  </NotificationProvider>
+                </FavoritesProvider>
               </AuthProvider>
             </SessionProvider>
           </PWAProvider>
