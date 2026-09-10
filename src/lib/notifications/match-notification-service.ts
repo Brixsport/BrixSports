@@ -152,9 +152,18 @@ export async function sendMatchEventNotification(event: MatchEventNotification):
                 )
             );
 
-        // Item 2: users who follow this match's competition -- following a competition
-        // means every match in it, not just ones involving a team you already follow.
-        const competitionFollowers = event.competitionId
+        // Item 2 (session 53) / BACKLOG-365 item 3: users who follow this match's
+        // competition -- following a competition means every match in it, not just
+        // ones involving a team you already follow. Deliberately scoped to
+        // high-signal event types only, not every one: a competition can have
+        // several matches live at once, so lower-signal events (cards, subs,
+        // fouls, penalty saves/misses) would multiply per concurrent match in a
+        // way a single team's alerts never do. Goals kept in -- Richard's explicit
+        // call, 2026-09-10 -- alongside start/HT/FT. Team/player followers above
+        // still get every event type for their own team/player; this restriction
+        // is specific to the competition-wide audience only.
+        const COMPETITION_FOLLOW_EVENT_TYPES: NotificationKey[] = ['MATCH_START', 'HALF_TIME', 'MATCH_END', 'GOAL'];
+        const competitionFollowers = event.competitionId && COMPETITION_FOLLOW_EVENT_TYPES.includes(event.eventType)
             ? await db
                 .select({ userId: userFollows.userId })
                 .from(userFollows)
