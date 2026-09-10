@@ -56,3 +56,7 @@ local.db
 local.db-*
 data/*
 # BUILD_JOURNAL.md
+
+graphify-out/
+.claude/settings.json
+.claude/skills/
