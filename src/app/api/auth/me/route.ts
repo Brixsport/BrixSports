@@ -9,14 +9,22 @@ import { env } from '@/lib/env';
 // GET /api/auth/me - Get current authenticated user
 export async function GET(request: NextRequest) {
     try {
-        // Use cookies() from next/headers for server-side cookie access
+        // BACKLOG-371: this route used to read the cookie only, ignoring any
+        // Authorization header entirely -- which silently broke AuthContext's
+        // own documented cookie-fails-try-localStorage fallback (checkAuth()
+        // retries this exact endpoint with `Authorization: Bearer <token>`
+        // when the cookie attempt 401s). That fallback existed in the client
+        // but could never actually succeed against this route. Same
+        // header-first, cookie-fallback order as verifyAuth() in auth.ts.
+        const authHeader = request.headers.get('authorization');
         const cookieStore = await cookies();
-        const authToken = cookieStore.get('authToken')?.value;
-        
-        console.log(`[Auth/Me] Request received, cookie present: ${!!authToken}`);
-        
+        const cookieToken = cookieStore.get('authToken')?.value;
+        const authToken = authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : cookieToken;
+
+        console.log(`[Auth/Me] Request received, header present: ${!!authHeader}, cookie present: ${!!cookieToken}`);
+
         if (!authToken) {
-            console.log(`[Auth/Me] No authToken cookie found`);
+            console.log(`[Auth/Me] No authToken found in header or cookie`);
             return NextResponse.json(
                 { error: 'Unauthorized' },
                 { status: 401 }
