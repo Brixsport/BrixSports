@@ -12428,9 +12428,21 @@ this project's convention of correcting the label going forward rather than rewr
 
 ### BACKLOG-365 — Remaining Fan Account Blueprint / Notification Work (Bundled, Not Built)
 
-**Status:** IN PROGRESS — filed 2026-09-10, per this project's own bundled-low-priority-items convention (see `BACKLOG-212` for precedent). Item 2 RESOLVED same day, commit `0d4b697`, live-verified. Items 1, 3-6 still not built.
+**Status:** IN PROGRESS — filed 2026-09-10, per this project's own bundled-low-priority-items convention (see `BACKLOG-212` for precedent). Items 1 and 2 RESOLVED same day (commits `358584f`, `0d4b697`), live-verified. Items 3-6 still not built.
 
-1. **Favoriting-consequence note.** The inline "you'll get alerts for every {team} match" note at the actual moment of favoriting (match page / team page / search overlay follow stars) — deferred from `BACKLOG-363` since that moment lives in several files away from `/favourites` itself.
+1. ~~**Favoriting-consequence note.**~~ — **RESOLVED 2026-09-10, commit `358584f`.** The original filing assumed 3 working follow-star surfaces (match page / team page / search overlay); investigation while building this found that was only half right:
+   - **Match page** (`src/app/matches/[id]/MatchDetailClient.tsx`) — real, live. Both per-team stars now fire the consequence toast.
+   - **`MatchOverlay.tsx`** (the match modal, not explicitly named in the original filing but a second real live surface) — already fired a toast on follow; message enriched to include the consequence.
+   - **Team page** (`src/app/teams/[id]/TeamDetailClient.tsx`) — has **no follow star at all**. Favoriting a team isn't built there yet, so there was nothing to wire a note into. This is a real gap, but it's "build the feature" not "add a note" — out of scope for this item, needs its own filing if wanted.
+   - **Search overlay** (`src/components/SearchOverlay.tsx`) — has a follow star in code and it's now wired, but the component is **dead code, never rendered anywhere** (`<SearchOverlay` doesn't appear in any JSX in the repo). The live header search on `/` is a different component, `GlobalSearch.tsx`, which has no favoriting UI at all. The edit is harmless but unreachable until/unless something actually mounts `SearchOverlay`.
+
+   One shared `getFollowTeamNotification()` helper in `FavoritesContext.tsx` feeds the existing toast (`useNotifications`/`addNotification`) from both real call sites, so they can't drift apart the way `BACKLOG-353`'s 12 call sites did.
+
+**Evidence (item 1):**
+- Commit: `358584f`
+- Verified by: `tsc --noEmit` clean against all 4 touched files; live click-through on the `feature/ui-redesign` Vercel preview, on the real `/matches/[id]` page for a real match (TEAM B vs TEAM A)
+- Observed result: clicking "Follow TEAM B" produced the toast "TEAM FOLLOWED — You'll get alerts for every TEAM B match. Turn this off anytime in Favourites." and the button's `aria-label` correctly flipped to "Unfollow TEAM B"; clicking it again produced "TEAM UNFOLLOWED — You won't get match alerts for TEAM B anymore." Both toasts confirmed via a real page read-back, not just visual inspection.
+- Pending items: `MatchOverlay.tsx`'s copy was not independently re-clicked live (same shared helper, same `addNotification` call already verified working from the match page) — low risk, not done this pass. Team page follow star and reviving/removing dead `SearchOverlay.tsx` are real, separate gaps, not filed as their own items yet.
 2. ~~**Design-system pass on tooltips/badges/announcements**~~ — **RESOLVED 2026-09-10, commit `0d4b697`.** There was no single existing "NEW" pill component — three inline copies had drifted into slightly different colors/shapes (desktop nav `src/app/page.tsx`, mobile menu, bottom nav `src/components/BottomNav.tsx`). Consolidated all three onto one canonical `NewFeatureBadge` (`src/components/ui/NewFeatureBadge.tsx`, `bg-primary text-primary-foreground rounded-full`). Added `UpdateTooltip` (`src/components/ui/UpdateTooltip.tsx`) as the lighter-weight `Coachmark` sibling — built on the existing Radix `Tooltip` primitive, recurring on every hover/focus, no dismissal state, no `fan_tour_dismissals` gating — wired onto the desktop Lineup Builder nav link as the first real usage. Mobile menu and bottom-nav badges deliberately left without a tooltip (touch surfaces, no hover).
 
 **Evidence:**
