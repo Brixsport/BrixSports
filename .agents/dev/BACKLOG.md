@@ -12850,8 +12850,8 @@ have the same shape of gap.
 
 ### BACKLOG-378 — Tab-Bar Redesign: `/favourites` (Stacked Sections → Tabs) + `/teams` (Pill Chips → Underline Tabs)
 
-**Status:** SHIPPED — committed, not yet live-verified (per this project's standing rule, local dev
-is never started for this project; verification happens against the branch's Vercel preview).
+**Status:** RESOLVED — 2026-09-10, live-verified against the deployed `feature/ui-redesign` Vercel
+preview with real DB-backed fan accounts (not just code/type-check confidence).
 **Priority:** MEDIUM — UI-consistency work Richard explicitly asked for, not a bug.
 
 **Context:** a findings-only audit this session (Richard's original ask: redesign `/favourites`'
@@ -12905,24 +12905,48 @@ overflowing the page. Not yet stress-tested against a real large competition cou
 - Added: `src/components/ui/UnderlineTabs.tsx`
 - Modified: `src/app/favourites/page.tsx`, `src/app/teams/page.tsx`
 
-**Test Scenarios (manual, to run against the Vercel preview once deployed):**
+**Test Scenarios (manual, run against the Vercel preview):**
 1. `/favourites` with 2+ favorite categories populated -- tab bar appears, switching tabs shows only
-   that category's content, counts on each tab match the category's real item count.
+   that category's content, counts on each tab match the category's real item count. **PASS.**
 2. `/favourites` with exactly 1 favorite category populated -- no tab bar renders, that category's
-   content shows directly (no single-option tab selector).
-3. `/favourites` with zero favorites -- unchanged empty state, no tab bar.
-4. A fresh fan account with team favorites and the tour not yet dismissed -- Teams tab auto-selects,
-   coachmark anchors correctly on the first team's alert-bell.
+   content shows directly (no single-option tab selector). **PASS.**
+3. `/favourites` with zero favorites -- unchanged empty state, no tab bar. **PASS.**
+4. A fan account with team favorites and the tour not yet dismissed -- Teams tab auto-selects,
+   coachmark anchors correctly on the first team's alert-bell. **PASS.**
 5. `/teams` -- clicking a competition in any of the 3 grouped rows highlights it and switches the
    grid; the animated underline glides correctly when jumping between rows, not just within one row.
+   **PASS.**
 6. `/teams` at a narrow (375px) viewport -- each group row scrolls horizontally within itself rather
-   than causing page-level overflow.
-7. `tsc --noEmit` -- confirmed zero new errors vs. baseline (identical output).
+   than causing page-level overflow. **PASS** (`document.documentElement.scrollWidth` === `clientWidth`
+   === 375, confirmed via direct JS check, not a visual guess).
+7. `tsc --noEmit` -- confirmed zero new errors vs. baseline (identical output, both pre- and
+   post-rebase onto the peer session's `BACKLOG-375`/`376`/`377` commits). **PASS.**
 
 **Evidence:**
-- Verified by: `tsc --noEmit` only so far (diff against pre-change baseline: identical, zero new
-  errors)
-- Observed result: not yet live-tested on the Vercel preview
-- Pending items: live verification of all 7 test scenarios above against the deployed preview
+- Commit: `87be0ce`, pushed to `origin/feature/ui-redesign` (rebased onto `a236ae7`; deployment
+  confirmed `success` via the GitHub commit-status API, `brixsports-staging` Vercel project).
+- Verified by: live test against the deployed preview
+  (`brixsports-staging-git-feature-ui-redesign-brixsports-projects.vercel.app`,
+  `x-vercel-protection-bypass` query param), using 3 real DB-backed fan accounts identified via a
+  read-only query (`dev/find-fan-with-favorites.mjs`) rather than freshly seeded fixtures, session
+  injected via `localStorage.authToken` + `document.cookie` (logging out first to clear any existing
+  httpOnly cookie, per this project's known injection gotcha).
+- Observed result: real fan `adiamoibrahim05@gmail.com` (1 team/2 players/1 competition) -- tab bar
+  showed `TEAMS 1 / COMPETITIONS 1 / PLAYERS 2`, Teams auto-selected with the alert-toggle coachmark
+  correctly anchored, switching to Competitions rendered "BUSA LEAGUE FOOTBALL," switching to Players
+  rendered both real players (KOSI, Animashun Oluwanifemi) with correct ratings -- all via network
+  inspection confirming `/api/users/favorites` returned the real rows, not just a UI glance. Real fan
+  `ime85380@gmail.com` (6 teams, 0 players, 0 competitions) -- no tab bar rendered, all 6 team cards
+  shown directly, confirmed via `read_page` DOM inspection, not just a screenshot. `/teams`: clicked
+  across all 3 category groups (Internal Leagues → University Competitions), grid data changed to the
+  correct competition's real teams/stats each time, single shared underline indicator glided between
+  rows with no dual-highlight after settling (a momentary two-tab-highlighted frame during the
+  cross-group transition was confirmed to be a normal mid-animation frame, not a bug, by re-checking
+  after the transition settled).
+- Pending items: none for this entry. Unrelated pre-existing issue noticed during testing, not caused
+  by this change and not fixed here: `ime85380@gmail.com`'s favorited teams render with `/teams/undefined`
+  links and blank names/logos -- the underlying favorite-team data for that account has malformed/
+  missing `team.id`/`shortName`/`logo` fields; worth a follow-up data-quality check, filed separately
+  if it recurs on other accounts.
 
 ---
