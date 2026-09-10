@@ -41,10 +41,10 @@ Super Admin
   └── Competition Admin
         └── Team Manager
               └── Logger (match operator — authenticated, mobile)
-                    └── Viewer (public — always unauthenticated)
+                    └── Viewer (public — anonymous by default, optionally a Fan)
 ```
 
-- Viewers NEVER have a session. Never assume otherwise.
+- **Viewer is not always unauthenticated — it can hold a Fan session.** (Fan Account Blueprint, fold Fan into Viewer's authenticated state.) A Viewer is anonymous by default; once they sign up (`/signup`) or sign in (`/login`, including Google OAuth), they become a **Fan** — the same Viewer, now with a real session, favourites/follows, notification preferences, and onboarding state (`users`, `userFavorites`, `userFollows`, `userPreferences`, `fan_tour_dismissals`). A Fan is still not a privileged role: it grants zero admin/competition/team/logger capability, only personalization. Never assume a Viewer-facing route has no session just because it's public — check `getAuthUser(request)` and branch on whether it returned a user, not on which route it is.
 - A valid JWT does NOT equal valid permissions. Always verify role explicitly.
 - Admin API routes must call getAuthUser(request) AND check user.role === 'admin' — never trust middleware alone.
 

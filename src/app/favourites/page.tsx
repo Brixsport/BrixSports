@@ -1,11 +1,15 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { Heart, Users, Calendar, TrendingUp, Star, Trophy, Bell, BellOff } from 'lucide-react';
 import { useFavorites } from '@/hooks/useFavorites';
+import { useAuth } from '@/contexts/AuthContext';
+import { Coachmark } from '@/components/onboarding/Coachmark';
 import Link from 'next/link';
 import Image from 'next/image';
+
+const TOUR_ID = 'favourites-alert-toggle';
 
 export default function FavouritesPage() {
     const {
@@ -15,9 +19,40 @@ export default function FavouritesPage() {
         isTeamNotificationsEnabled,
         setTeamNotifications,
     } = useFavorites();
+    const { user, isAuthenticated } = useAuth();
     const [teams, setTeams] = useState<any[]>([]);
     const [players, setPlayers] = useState<any[]>([]);
     const [competitions, setCompetitions] = useState<any[]>([]);
+    // Fan Account Blueprint Phase 3: shown once, on the first team card's
+    // alert toggle -- the one genuinely non-obvious control this page has.
+    // Gated on both the kill-switch flag and this fan's own dismissal record;
+    // scoped to authenticated fans only (dismissal has nowhere to persist
+    // for an anonymous, account-less viewer).
+    const [showTour, setShowTour] = useState(false);
+    const firstToggleRef = useRef<HTMLButtonElement>(null);
+
+    useEffect(() => {
+        if (!isAuthenticated || !user?.id) return;
+        (async () => {
+            try {
+                const token = localStorage.getItem('authToken');
+                const [flagRes, toursRes] = await Promise.all([
+                    fetch('/api/feature-flags'),
+                    fetch(`/api/users/${user.id}/tours`, {
+                        headers: token ? { Authorization: `Bearer ${token}` } : {},
+                    }),
+                ]);
+                const flagData = flagRes.ok ? await flagRes.json() : { flags: {} };
+                const toursData = toursRes.ok ? await toursRes.json() : { dismissedTourIds: [] };
+
+                const flagEnabled = flagData.flags?.['features.onboarding.tour.enabled'] !== false;
+                const alreadyDismissed = (toursData.dismissedTourIds || []).includes(TOUR_ID);
+                setShowTour(flagEnabled && !alreadyDismissed);
+            } catch (error) {
+                console.error('Failed to check tour state:', error);
+            }
+        })();
+    }, [isAuthenticated, user?.id]);
     const [upcomingMatches, setUpcomingMatches] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
 
@@ -197,7 +232,7 @@ export default function FavouritesPage() {
                                     </h2>
                                 </div>
                                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                                    {teams.map((team) => {
+                                    {teams.map((team, index) => {
                                         const alertsOn = isTeamNotificationsEnabled(team.id);
                                         return (
                                         <Link
@@ -206,6 +241,7 @@ export default function FavouritesPage() {
                                             className="relative bg-white/5 hover:bg-white/10 border border-white/10 hover:border-primary/50 rounded-xl p-6 transition-all group"
                                         >
                                             <button
+                                                ref={index === 0 ? firstToggleRef : undefined}
                                                 type="button"
                                                 onClick={(e) => {
                                                     e.preventDefault();
@@ -244,6 +280,15 @@ export default function FavouritesPage() {
                                         );
                                     })}
                                 </div>
+                                {showTour && (
+                                    <Coachmark
+                                        tourId={TOUR_ID}
+                                        anchorRef={firstToggleRef}
+                                        title="Control alerts per team"
+                                        body="This bell is separate from the star — mute or unmute goal/match alerts for just this one team, without unfavoriting it."
+                                        onDismissed={() => setShowTour(false)}
+                                    />
+                                )}
                             </section>
                         )}
 

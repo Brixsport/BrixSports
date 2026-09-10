@@ -923,6 +923,21 @@ export const notificationSendLog = sqliteTable('notification_send_log', {
     createdAt: integer('created_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
 });
 
+// Fan Account Blueprint Phase 3, ADR-001 Decision 2: one row per dismissal,
+// not a shared JSON-array column -- a JSON blob is a read-modify-write on one
+// row, and two dismiss events firing close together would race exactly the
+// way BACKLOG-316's bracket-node claim did before its atomic fix. Follows the
+// same "many small events, not a denormalized blob" convention as
+// notificationSendLog above. Unique on (userId, tourId) so a double-fire
+// can't create duplicates -- enforced at the DB layer via a unique index
+// (dev/add-fan-tour-dismissals-table.mjs), not just app-level dedup.
+export const fanTourDismissals = sqliteTable('fan_tour_dismissals', {
+    id: text('id').primaryKey(),
+    userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    tourId: text('tour_id').notNull(), // e.g. 'favourites-intro'
+    dismissedAt: integer('dismissed_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
+});
+
 // Password Reset Tokens table
 export const passwordResetTokens = sqliteTable('password_reset_tokens', {
     id: text('id').primaryKey(),

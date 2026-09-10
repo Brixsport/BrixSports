@@ -12294,3 +12294,42 @@ this project's convention of correcting the label going forward rather than rewr
 **Found:** session `competitions-consolidation`, 2026-09-10, as `Fan Account Blueprint` spec requirement, Phase 2, item 3–6 of the agreed sequence.
 
 ---
+
+### BACKLOG-364 — Fan Account Blueprint Phase 3: First-Run Tour + Actor-Model Doc Update
+
+**Status:** SHIPPED — 2026-09-10, `tsc --noEmit` clean, migration applied to staging, not yet live-verified against a running deploy.
+**Priority:** Medium (P1/P2, Fan Account Blueprint) — closes items 7–10 of the agreed Phase 3 sequence.
+
+**Built:**
+- `features.onboarding.tour.enabled` added to `/api/feature-flags/route.ts`'s `GATED_KEYS` — same fail-open kill-switch pattern the 5 admin flags already use.
+- `fan_tour_dismissals` table (`dev/add-fan-tour-dismissals-table.mjs`, applied to staging, `RUNLOG.md` 2026-09-10) — one row per dismissal, unique `(user_id, tour_id)` index, per `ADR-001` Decision 2 (a shared JSON-array column would race the way `BACKLOG-316`'s bracket-node claim did before its atomic fix). `GET`/`POST /api/users/[id]/tours`.
+- `src/components/onboarding/Coachmark.tsx` — a single Radix Popover-anchored callout (`virtualRef`, no new dependency), dismiss persists via the tours API, optimistic UI.
+- Wired to `/favourites`' per-team alert bell (`BACKLOG-363`) — **scoped to one real callout, not the spec's hypothetical three**: that bell is the only genuinely non-obvious control this page actually has; the search bar and star action the original spec imagined don't exist on this page as built, and inventing callouts for them would be explaining UI that isn't there.
+- `CLAUDE.md`'s actor model: Fan folded into Viewer's authenticated state (Richard's call, not a new fifth tier) — Viewer is anonymous by default, becomes a Fan on sign-up/sign-in, gains zero privileged capability, only personalization.
+
+**Deliberately not done:** an anonymous/localStorage fallback for the tour (dismissal has nowhere to persist without an account) — scoped to authenticated fans only, noted as a real limitation rather than silently assumed away.
+
+**Evidence:**
+- `tsc --noEmit`: 18 baseline, zero new (one real type error caught and fixed mid-pass: `RefObject<HTMLElement | null>` vs Radix's `Measurable`-typed `virtualRef`, cast at the call site, guarded at runtime by the existing `if (!anchorRef.current) return null`).
+- Migration + unique index confirmed via `sqlite_master` existence checks and a final `PRAGMA table_info` dump.
+- Not yet live-verified against a running deploy.
+- Pending: confirm on a preview that the callout appears once for a fan with a real favourite team, and never again after "Got it."
+
+**Found:** session `competitions-consolidation`, 2026-09-10, as `Fan Account Blueprint` spec requirement, Phase 3, items 7–10.
+
+---
+
+### BACKLOG-365 — Remaining Fan Account Blueprint / Notification Work (Bundled, Not Built)
+
+**Status:** OPEN — filed 2026-09-10, per this project's own bundled-low-priority-items convention (see `BACKLOG-212` for precedent). Nothing below is built.
+
+1. **Favoriting-consequence note.** The inline "you'll get alerts for every {team} match" note at the actual moment of favoriting (match page / team page / search overlay follow stars) — deferred from `BACKLOG-363` since that moment lives in several files away from `/favourites` itself.
+2. **Design-system pass on tooltips/badges/announcements** (Richard's `/frontend-design` ask this session, MVP tier per `CLAUDE.md`): a real "NEW" pill badge already exists live in the nav (screenshot-confirmed next to "Lineup Builder") — find and document its actual component before building a second one. Extend the same visual language to (a) update/announcement tooltips (a lighter-weight cousin of `Coachmark`, not gated by the tour-dismissal table — these are recurring, not one-time) and (b) a reusable `NewFeatureBadge` other nav items/pages can apply the same way. Not started -- needs its own design pass, not assumed into this session's `Coachmark` work.
+3. **Competition-level following → notification targeting** (`NOTIFICATION_SYSTEM_ROADMAP_PROPOSAL.md` thread 6) — was explicitly blocked on thread 7's sport-keyed rules table; that table shipped (`BACKLOG-206`), so this is now genuinely unblocked, just not built. Needs: a `followType: 'competition'` audience query joined via `matches.competitionId`, a dedicated `userPreferences` opt-out, and a reduced event set (start/HT/FT only, not goals — that's where the volume multiplies across every concurrent match in the competition).
+4. **Home-university default-view scoping** — not new multi-tenancy work; this project's own locked decision (`SYSTEM_CRITICALITY_MAP.md`: "Google Drive not Shopify — one DB, all universities, scoped by affiliation") already covers the model. The onboarding team-picker's university grouping is the natural seed of a fan's "home university" field; just not wired to anything yet.
+5. **Full human OAuth click-through** (`BACKLOG-362`) — Google-side acceptance is confirmed (no more `redirect_uri_mismatch`), but no session has completed a real consent grant end-to-end with a live account, new-email and existing-email-linking both untested.
+6. **Prod migrations** — `userFavorites.notifications_enabled` and `fan_tour_dismissals` are staging-only; prod needs the same two `dev/*.mjs` scripts run against it once this branch is verified and ready to promote.
+
+**Found:** session `competitions-consolidation`, 2026-09-10, filed as a checkpoint before a session wrap.
+
+---
