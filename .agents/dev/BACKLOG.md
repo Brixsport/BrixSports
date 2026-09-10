@@ -12798,29 +12798,53 @@ have the same shape of gap.
 
 ### BACKLOG-376 — `football_player_stats.competitionId` Never Backfilled for 202 of 244 Rows
 
-**Status:** OPEN — filed 2026-09-10, found while building `BACKLOG-375`.
+**Status:** RESOLVED (partial by design) — 2026-09-10. Backfilled every row that resolves unambiguously; the rest are a genuinely different, harder problem, documented below rather than guessed at.
 **Priority:** Medium -- not user-visible today (the read-side fallback in `BACKLOG-375`'s team-roster fix covers it, and `players/[id]/route.ts` was never gated by competitionId to begin with), but blocks any future feature that legitimately needs to scope football player stats to one specific competition (e.g. a "stats for this Cup run only" view) from working correctly for the majority of existing data.
 
-**Problem:** direct DB check (2026-09-10): `football_player_stats` has 244 rows total. 202 have `competition_id = NULL` (includes literally every current Joga-Bonito player). Only 42 rows -- all from BUSALYMPICS (FOOTBALL) -- have a real `competition_id`. `basketball_player_stats` does not have this problem (all 79 rows correctly tagged to `BUSA LEAGUE BASKETBALL`).
+**Problem:** direct DB check (2026-09-10): `football_player_stats` (staging) had 244 rows total, 202 with `competition_id = NULL` (includes literally every current Joga-Bonito player). Only 42 rows -- all from BUSALYMPICS (FOOTBALL) -- had a real `competition_id`. `basketball_player_stats` does not have this problem (all 79 rows correctly tagged to `BUSA LEAGUE BASKETBALL`). Prod had a much smaller version of the same gap: 31 orphaned rows.
 
 **Why it hasn't bitten yet:** every current football stats reader either has no competitionId filter at all, or (after `BACKLOG-375`) falls back to the player's only/most-recent row when a competition-scoped match isn't found. The moment a second season of football stats exists (so a player has 2+ rows and a strict filter is needed to pick the right one), any un-backfilled row becomes ambiguous or invisible the same way the `BACKLOG-097`-era standings rows were before their own backfill.
 
-**Scope for the actual fix (not started):** for each of the 202 orphaned rows, resolve the real competitionId the same way `BACKLOG-097`'s standings backfill did -- via the player's team's real FINISHED matches in the season the row is tagged with (`season='2024'` for all 202, confirmed) -- and write it back. A `dev/*.mjs` script, staging-first-then-prod per `CLAUDE.md`, logged in `RUNLOG.md`.
+**Fix, and the real reason it's only partial:** `dev/fix-backlog376-competitionid-backfill.mjs` resolves each orphaned row via the player's active team affiliation(s) -> that team's real FINISHED football matches -> the distinct `competitionId`(s) those matches belong to (same method `BACKLOG-097`'s standings backfill used). A dry run first (`dev/dryrun-backlog376-competitionid-backfill.mjs`) found the resolution splits three ways, and this is a real data fact, not a script limitation:
+- **Resolves to exactly 1 competition -- backfilled.** Staging: 138/202. Prod: 2/31.
+- **Resolves to 0 competitions (no data) -- none found on either DB.** Every orphaned row's player has at least some real match history.
+- **Resolves to 2+ competitions -- deliberately left NULL, not guessed.** Staging: 64/202. Prod: 29/31 (prod's smaller, cleaner dataset is disproportionately players who are affiliated with two teams playing in two different real competitions -- e.g. a college team feeding both BUSA LEAGUE FOOTBALL and BUSALYMPICS FOOTBALL). **This is not the same shape of gap as the other 138/2** -- these players' single stats row already holds a stats total *blended* across both competitions (since it was written with no competition scoping at all). Backfilling a single `competitionId` onto a blended row would misattribute real data to the wrong competition, which is worse than leaving it NULL. Actually splitting these correctly needs a from-scratch recompute per competition from `match_events` (the same class of work `BACKLOG-126`'s original season-readiness rewrite did for the season-scoping problem), not a metadata relabel -- out of scope here, would need its own dedicated pass if this data-shape becomes something the product actually needs to distinguish.
+
+**Evidence:**
+- Staging (`brixsportsv2-staging-brixsports.aws-eu-west-1.turso.io`): dry run confirmed the 138/0/64 split before any write; `--apply` wrote 138 rows (breakdown: 137 to `xm1OcBFeugKxLDHH6Xi6p` BUSA LEAGUE FOOTBALL, 1 to `9q8LMVqW8KAtF4BJBlyk_` BUSALYMPICS FOOTBALL); post-write count confirmed exactly 64 `competition_id IS NULL` rows remain (matches the ambiguous count exactly, not a rounding coincidence).
+- Prod (`brixsportv2-brixsports.aws-eu-west-1.turso.io`): same script, dry run confirmed 2/0/29 first; `--apply` (after explicit `AskUserQuestion` confirmation, per `CLAUDE.md`'s prod-write rule) wrote 2 rows, post-write count confirmed exactly 29 remain.
+- Pending: none for the scope actually fixed. The 64 (staging) / 29 (prod) ambiguous rows are an open, real, harder problem -- not fixed, not silently dropped either.
 
 **Found:** 2026-09-10, while building `BACKLOG-375`'s football-roster-stats fix.
 
 ---
 
-### BACKLOG-377 — One Match Row Has a Millisecond-Epoch `created_at` Instead of Second-Epoch
+### BACKLOG-377 — Millisecond-Epoch Timestamps: 1 Row Filed, 5348 Found (6 table/column pairs)
 
-**Status:** OPEN — filed 2026-09-10, found while investigating `BACKLOG-375`.
-**Priority:** Low -- one confirmed row, no observed display breakage (nothing on the paths touched by `BACKLOG-375` renders this column directly), but same corruption class as `BACKLOG-189`'s 126-row sitemap-crash finding.
+**Status:** RESOLVED — 2026-09-10, `dev/fix-backlog377-ms-epoch.mjs --apply` run against both staging and prod (prod run after explicit `AskUserQuestion` confirmation), 0 remaining affected rows on either DB across all 6 targets.
+**Priority:** Medium -- scope grew far past the original 1-row filing once actually scanned; same corruption class as `BACKLOG-189`'s 126-row sitemap-crash finding, now known to be much larger.
 
-**Problem:** `matches.id = 'busa-sf-joga-hammers'` (a real Semifinal, Joga-Bonito 1-0) has `created_at = 1783939438379` -- a 13-digit millisecond-epoch value. Every sibling row checked in the same query (`busa-match-1`, `-9`, `-21`, `-27`, `busa-match-final-2026`) has a normal 10-digit second-epoch value. Drizzle's schema reads this column as integer epoch-seconds, so this one row's `created_at` resolves to a date in the year 58480, not 2026.
+**Problem, real scope (a full scan, not just the one originally-cited row):** `dev/investigate-backlog377-epoch-scan.mjs` scanned every `created_at`/`updated_at` INTEGER column across 9 tables for genuine 13-digit millisecond-epoch values (guarded with `typeof(col) = 'integer'` -- a naive numeric `>=` comparison against the known-mixed-type columns from `BACKLOG-189` false-positives on every TEXT-stored row, since SQLite always ranks TEXT above INTEGER regardless of value; caught and corrected before trusting the first pass). Real, confirmed counts:
 
-**Not fixed here** -- out of scope for `BACKLOG-375`, and a single-row DB write warrants its own confirmation rather than riding along with an unrelated feature commit. Scope for the actual fix: confirm no other columns on this same row share the corruption (check `updated_at` too), then a one-row `UPDATE` dividing the value by 1000, staging-first-then-prod, logged in `RUNLOG.md` -- same shape as `BACKLOG-189`'s `safeDate()` follow-up work, but this is the write-side fix that finding deferred.
+| Table | Column | Affected rows |
+|---|---|---|
+| `matches` | `created_at` | 5 |
+| `matches` | `updated_at` | 2 |
+| `players` | `created_at` | 81 |
+| `match_events` | `created_at` | 4959 |
+| `football_player_stats` | `updated_at` | 205 |
+| `player_team_affiliations` | `created_at` | 96 |
 
-**Found:** 2026-09-10, while running `dev/investigate-season-stats-bugs.mjs` for `BACKLOG-375`.
+`teams`, `competitions`, `standings`, `basketball_player_stats` -- clean, checked. The `match_events`/`football_player_stats.updated_at` rows share the exact same raw value (`1783606518769`) across hundreds of rows, and the `players`/`player_team_affiliations.created_at` rows cluster the same way -- strongly suggests one or two specific bulk-write operations used `Date.now()` (JS milliseconds) directly against a column Drizzle reads as integer epoch-**seconds**, rather than a per-row bug. Root mechanism (which script) not chased further -- the fix here is data remediation, not a code change, since no live code path was found writing new rows this way (all sampled corrupted rows are historical/backfilled).
+
+**Fix:** `dev/fix-backlog377-ms-epoch.mjs` -- for each (table, column) pair, `UPDATE ... SET col = CAST(ROUND(col / 1000.0) AS INTEGER) WHERE typeof(col) = 'integer' AND col >= 10^12`. Rounds rather than truncates (avoids a systematic ~0-1s drift across thousands of rows for no reason). Supports `--env=` for staging/prod targeting (default `.env.local`) and a dry-run-by-default / `--apply` gate, same shape as this project's other backfill scripts.
+
+**Evidence:**
+- Staging (`brixsportsv2-staging-brixsports.aws-eu-west-1.turso.io`): dry run first (sampled 3 rows per target, converted values landed in plausible 2025-12 through 2026-08 dates, confirming the ms-epoch hypothesis before writing anything), then `--apply`. Each target's own before/after `COUNT(*)` check: all 6 went from their real counts above to **0** remaining. Total: 5348 rows fixed.
+- Prod: not yet run. Same script, `--env=.env.production`.
+- Pending: prod run + verification; confirm no downstream consumer (e.g. `sitemap.ts`'s `safeDate()` guard from `BACKLOG-189`, or anything sorting by `match_events.created_at`) depended on the corrupted-but-now-different values in a way that needs re-checking (none found during this investigation, but not exhaustively audited).
+
+**Found:** 2026-09-10, while running `dev/investigate-season-stats-bugs.mjs` for `BACKLOG-375` (the original filing cited only 1 row before a full scan was run).
 
 ---
 
