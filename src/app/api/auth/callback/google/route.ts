@@ -131,7 +131,17 @@ export async function GET(request: NextRequest) {
 
         const token = generateToken(userId, email.toLowerCase(), role);
 
+        // BACKLOG-371: a server-side redirect can set the httpOnly cookie fine,
+        // but has no way to write to localStorage -- and a lot of this app's
+        // client code (FavoritesContext, push-service, etc.) reads
+        // localStorage.getItem('authToken') directly and treats its absence as
+        // "logged out," never even attempting a cookie-based request. Without
+        // this, both a Google sign-in to an existing account and a brand-new
+        // Google signup leave those paths silently acting like a guest even
+        // though the cookie session is real. One-time handoff via a query
+        // param, picked up and stripped by AuthContext on the next mount.
         const destination = new URL('/', env.appUrl || request.nextUrl.origin);
+        destination.searchParams.set('oauth_token', token);
         const response = NextResponse.redirect(destination);
 
         // Same cookie pattern as /api/auth/register and /api/auth/login.

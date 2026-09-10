@@ -12630,3 +12630,25 @@ render at full size regardless of the minimize state.
 **Files:** `src/app/teams/[id]/TeamDetailClient.tsx`, `src/app/competitions/[id]/page.tsx`.
 
 ---
+
+### BACKLOG-371 — Google OAuth Sign-In Left the Session Half-Working: Cookie Auth Fine, localStorage Never Populated
+
+**Status:** SHIPPED — 2026-09-10, `tsc --noEmit` clean, root cause confirmed via a live click-through by Richard against `brixsports-staging.vercel.app`, fix not yet re-tested against a real Google consent flow (needs a real account, same constraint `BACKLOG-322`'s original click-through evidence noted).
+**Priority:** HIGH — this is `BACKLOG-365` item 5 (the human OAuth click-through), and it found a real bug: Richard signed in via Google to an account that already existed (password-based), and the session didn't fully take even though the redirect completed with no visible error.
+
+**Investigated, ruled out first:** a direct DB read on both staging and prod found no new Google-sourced row (no `password: NULL` account) — but that's expected, not a bug, once Richard clarified this was a sign-in to an **existing** email, not a new signup (the `existing[0]` branch in the callback correctly reuses the row, no insert needed). Also ruled out: the two-Vercel-project setup (`brixsports-staging` and a second `brixs2` project) as a red herring — confirmed Richard tested on `brixsports-staging.vercel.app` specifically.
+
+**Root cause:** `src/app/api/auth/callback/google/route.ts` is a pure server-side redirect (`NextResponse.redirect`) — it can set the httpOnly `authToken` cookie fine (confirmed: `verifyAuth()` in `src/lib/auth.ts` checks the cookie as a real fallback when no `Authorization` header is present, so `AuthContext`'s cookie-based `checkAuth()` — `GET /api/auth/me` — would have succeeded), but a server redirect has **no way to write to `localStorage`**, a browser-only API. The regular `/api/auth/login` and `/api/auth/register` routes don't have this problem because they return JSON to a client-side `fetch()` call, which explicitly does `localStorage.setItem('authToken', data.token)` (`AuthContext.tsx`). Several client paths read `localStorage.getItem('authToken')` **directly**, not through `AuthContext`, and treat its absence as "definitely logged out" — most notably `FavoritesContext.tsx`'s `fetchFavorites()`, which returns early into guest/local-only behavior on `!token`, never even attempting a cookie-based request. Net effect: after a Google sign-in, top-level "am I logged in" state (nav, profile) could look correct while favorites, per-team notification prefs, and anything else keyed off raw `localStorage` silently behaved as a logged-out guest. This applies identically whether the email matched an existing account or created a new one — both paths converge on the same `generateToken()` → redirect step.
+
+**Fix:** the callback route now appends the token as a one-time `?oauth_token=` query param on its redirect destination. `AuthContext.tsx`'s initial mount effect checks for it, writes it to `localStorage`, and immediately strips it from the URL via `history.replaceState` (before `checkAuth()` runs) so it doesn't linger in browser history. This fixes the gap at its root for every current and future `localStorage.getItem('authToken')` consumer at once, rather than patching each call site individually (`FavoritesContext` today, whatever reads it next tomorrow).
+
+**Deliberately not done:** auditing/rewriting every individual `localStorage.getItem('authToken')` call site to also accept cookie-only auth (e.g., `FavoritesContext` attempting a `credentials: 'include'` fetch even with no local token) — the one-time handoff fixes the actual reported symptom for the OAuth path specifically, with less surface area changed; a broader "don't require localStorage at all, cookie is enough" refactor is a separate, larger architectural question not asked for here.
+
+**Evidence:**
+- Commit: (pending, see commit below)
+- Verified by: `tsc --noEmit` clean against both touched files; DB read-back on both staging and prod confirmed no new Google row was needed (existing-account case) before concluding the real gap was elsewhere, not guessed
+- Observed result: n/a for the fix itself yet — needs either a real Google consent click-through (same constraint as `BACKLOG-322`, no test Google account in this environment) or a scripted simulation of the redirect's query param to confirm the client-side pickup works
+- Pending items: live re-verification, either via Richard repeating the real click-through, or a scripted check that navigating to `?oauth_token=<token>` populates `localStorage` and strips the URL
+**Files:** `src/app/api/auth/callback/google/route.ts`, `src/contexts/AuthContext.tsx`.
+
+---
