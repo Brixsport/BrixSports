@@ -18,6 +18,8 @@ import LiveMatchStatus from '@/components/LiveMatchStatus';
 import AdBanner from '@/components/ads/AdBanner';
 import { PageSEO, StructuredData, FAQSection } from '@/components/seo';
 import { generateHomepageEntityGraph, aiOptimizedFAQs } from '@/lib/utils/aeo';
+import { NewFeatureBadge } from '@/components/ui/NewFeatureBadge';
+import { UpdateTooltip } from '@/components/ui/UpdateTooltip';
 
 // Lazy load heavy overlay components
 const MatchOverlay = dynamic(() => import('@/components/MatchOverlay').then(mod => mod.MatchOverlay), { ssr: false });
@@ -391,10 +393,12 @@ export default function Home() {
                 <Link href="/teams" className="px-3 py-1.5 text-xs font-bold uppercase tracking-wider text-white/60 hover:text-primary hover:bg-white/5 rounded transition-colors">
                   Teams
                 </Link>
-                <Link href="/lineups" className="px-3 py-1.5 text-xs font-bold uppercase tracking-wider text-white/60 hover:text-primary hover:bg-white/5 rounded transition-colors relative">
-                  Lineup Builder
-                  <span className="absolute -top-1 -right-1 bg-primary text-black text-[8px] font-black px-1 rounded">NEW</span>
-                </Link>
+                <UpdateTooltip message="New: build and share your matchday starting XI">
+                  <Link href="/lineups" className="px-3 py-1.5 text-xs font-bold uppercase tracking-wider text-white/60 hover:text-primary hover:bg-white/5 rounded transition-colors relative">
+                    Lineup Builder
+                    <NewFeatureBadge className="absolute -top-1 -right-1" />
+                  </Link>
+                </UpdateTooltip>
                 <Link href="/news" className="px-3 py-1.5 text-xs font-bold uppercase tracking-wider text-white/60 hover:text-primary hover:bg-white/5 rounded transition-colors">
                   News
                 </Link>
@@ -830,7 +834,7 @@ export default function Home() {
 
               <Link href="/lineups" className="text-white/60 hover:text-white transition-colors flex items-center gap-2" onClick={() => setIsMenuOpen(false)}>
                 Lineup Builder
-                <span className="bg-primary text-black text-[10px] font-black px-2 py-0.5 rounded">NEW</span>
+                <NewFeatureBadge />
               </Link>
               <Link href="/news" className="text-white/60 hover:text-white transition-colors" onClick={() => setIsMenuOpen(false)}>News</Link>
             </div>

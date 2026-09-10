@@ -4,6 +4,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { Calendar, Trophy, User, type LucideIcon } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
+import { NewFeatureBadge } from '@/components/ui/NewFeatureBadge';
 
 interface NavItem {
     id: string;
@@ -126,9 +127,9 @@ export function BottomNav() {
                                             <motion.div
                                                 initial={{ scale: 0 }}
                                                 animate={{ scale: 1 }}
-                                                className="absolute -top-2 -right-2 bg-primary text-primary-foreground text-[8px] font-black px-1.5 py-0.5 rounded-full"
+                                                className="absolute -top-2 -right-2"
                                             >
-                                                NEW
+                                                <NewFeatureBadge />
                                             </motion.div>
                                         )}
                                     </div>
