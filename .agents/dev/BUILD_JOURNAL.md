@@ -5001,3 +5001,102 @@ its own entry already specifies the exact first step: confirm via a direct DB qu
 logger's real assignment data has an actual duplicate row before assuming this is a `BUG-008`
 regression versus a distinct client-side rendering bug. `BACKLOG-356`/`358`/`359`/`360` are queued
 right behind it, all independently scoped and none blocking each other.
+
+---
+
+### Session 73 — 2026-09-10 (`competitions-consolidation` worktree, checkpoint -- session continuing after this wrap)
+
+**Focus:** started as stakeholder-walkthrough prep (platform ops runsheet, notification-pipeline
+confirmation), pivoted at Richard's direct ask into a full product-thinking pass on Favourites/
+Follows/Onboarding/Account -- spec'd as the "Fan Account Blueprint" (`/product-management:write-spec`
++ `engineering:architecture` ADR), then built and shipped all three of its phases in sequence.
+
+**Built and shipped:**
+- **Notification pipeline, confirmed not just described:** traced `match-notification-service.ts`,
+  `/api/notifications/send`, `/api/notifications/diagnose`, and the server-side `after()` triggers in
+  `events/route.ts`/`matches/[id]/route.ts` directly -- real Drizzle queries, real `webpush.sendNotification()`
+  calls, no stub anywhere in the path. No code changed, this was verification only.
+- **`BACKLOG-353`/`354`** -- `useFavorites` and `useAuth` were each a plain hook duplicated across 12
+  call sites (incl. `GlobalNotificationListener`, mounted on every route) -- live-confirmed `/favourites`
+  firing 6 requests instead of 3. Consolidated into `FavoritesContext`/reused `AuthContext`, both hooks
+  now one-line re-exports so no call site needed touching. `useAuth`'s duplicate had a real functional
+  gap too -- no Bearer-token fallback, meaning `/profile/settings` (holding the `matchAlerts` master
+  mute) would misread a token-only session as logged out.
+- **Fan Account Blueprint spec** (artifact, published) -- unifies onboarding/favourites/follows/prefs
+  into one IA, benchmarked against SofaScore/FotMob/LiveScore (real web research, cited). Surfaced that
+  onboarding was ~80% already built (`OnboardingModal.tsx`, matches the Figma refs closely) with two
+  real P0 bugs, not a from-scratch feature. `ADR-001` (2 decisions, both built as specified): per-team
+  alerts get their own `userFavorites.notificationsEnabled` column, not a `userFollows` dual-write
+  (drift risk, same class as `BACKLOG-255`'s write-race and `BACKLOG-316`'s bracket race); tour
+  dismissals get a real table (`fan_tour_dismissals`, unique per user+tour), not a JSON-array column
+  (same race-class reasoning).
+- **`BACKLOG-361`/`362` (P0, cherry-picked directly to `dev` per Richard's explicit "no PR/fix-branch"
+  call, commit `5cad59b`):** `OnboardingModal.tsx`'s avatar step now uploads to Cloudinary (unsigned
+  preset, matching `mobile-image-upload.tsx`'s existing pattern) instead of PATCHing a raw base64
+  string into `users.avatar`. Built `/api/auth/callback/google` -- the initiate route has always
+  pointed there but the route never existed, so "Continue with Google" 404'd after a real consent
+  grant. **Live-caught via a real click-through, not just code review:** first build used the wrong
+  path (`/api/auth/google/callback`) until Richard checked the real Google Cloud OAuth client and its
+  4 registered redirect URIs; then a `curl` against the live corrected build still showed
+  `redirect_uri_mismatch` -- decoded Google's own `authError` payload precisely and found a genuine
+  double-slash from `env.appUrl` carrying a trailing slash on this environment. Both fixed, extracted
+  into one shared `src/lib/google-oauth.ts` builder so the two routes can't drift apart again.
+  Confirmed live: `curl https://brixsports-staging.vercel.app/api/auth/google` now redirects to
+  Google's real `v3/signin/identifier` picker, zero mismatch error.
+- **`BACKLOG-363` (Phase 2):** `userFavorites.notificationsEnabled` migrated to staging
+  (`dev/add-userfavorites-notifications-column.mjs`, default `true`, zero behavior change on 32
+  existing rows), the `teamFavorites` audience query respects it (`ne(...,false) OR isNull(...)` so
+  legacy rows still match), new `PATCH /api/users/favorites`, a Bell/BellOff toggle on each
+  `/favourites` team card.
+- **`BACKLOG-364` (Phase 3):** `features.onboarding.tour.enabled` kill-switch, `fan_tour_dismissals`
+  table (migrated to staging), a single `Coachmark` component (Radix Popover `virtualRef`, no new
+  dependency) wired to the alert toggle -- **deliberately scoped to one real callout**, not the spec's
+  hypothetical three, since the search bar and star action imagined in the original spec don't exist
+  on this page as actually built. `CLAUDE.md`'s actor model updated: Fan folded into Viewer's
+  authenticated state (Richard's call, not a new fifth tier).
+
+**Bugs encountered, root cause:**
+1. **The `feature/ui-redesign` umbrella branch was far more active than assumed** -- a "let's go into
+   the calm worktree" framing turned out wrong; every single push this session hit at least one
+   `BACKLOG-3xx` numbering collision from concurrent sessions (350/351 twice, 356/357 with a
+   product-thinking-audit batch, 362... eventually landing at 363/364/365). Resolved each time via
+   this branch's own established pattern: rebase, renumber the intruding entry, repush -- never force,
+   never assume a number is free without checking `origin/feature/ui-redesign` directly first.
+2. **`GOAL redirect_uri` mismatch, twice** -- see Built, above. The lesson generalizes: an OAuth
+   redirect URI must be verified against the *actual registered* value on the provider's console, not
+   derived from reading the initiating code alone; and once verified, build it in exactly one shared
+   place (`google-oauth.ts`), since two independent constructions of "the same" string is exactly the
+   kind of drift this session's own `useFavorites`/`useAuth` finding proved this codebase is prone to.
+3. **Vercel's own deployment-protection SSO** blocked a direct unauthenticated `curl` against the
+   branch-preview domain (`-git-feature-ui-redesign-...vercel.app`) with a confusing `302` to
+   `vercel.com/sso-api` -- unrelated to the app's own auth. Worked around by `curl`-ing the canonical
+   `brixsports-staging.vercel.app` domain directly (the one Google's OAuth client actually has
+   registered, and the one that mattered for verification anyway) and, separately, using a Vercel
+   protection-bypass query param Richard supplied for the Browser-pane checks.
+4. **`RefObject<HTMLElement | null>` vs Radix's `Measurable`-typed `virtualRef`** -- a real, caught
+   type error (`Coachmark.tsx`), fixed with a narrow cast at the call site (runtime already guarded by
+   `if (!anchorRef.current) return null`).
+
+**Scope creep, all disclosed, none silent:** none of the P0/Phase 2/Phase 3 work was originally asked
+for as "build this" -- it emerged from a walkthrough-prep conversation that Richard explicitly steered
+into a full spec-then-build sequence, confirmed at each phase boundary (P0 go-ahead, Phase 2 hold-on-
+branch decision, Phase 3 build-now). Nothing built beyond what was explicitly sequenced and confirmed.
+
+**Deferred, filed as `BACKLOG-365` (bundled, per this branch's established low-priority-bundle
+convention):** the favoriting-consequence note (deferred from `BACKLOG-363`, lives on match/team pages
+not `/favourites` itself); a design-system pass on tooltips/badges/announcements (Richard's
+`/frontend-design` ask this session -- a real "NEW" pill badge already exists live in the nav,
+screenshot-confirmed next to "Lineup Builder"; find and document it before building a second one);
+competition-level following → notification targeting (now genuinely unblocked -- its sport-keyed-rules-
+table prerequisite, `BACKLOG-206`, already shipped -- just not built); home-university default-view
+scoping (not new multi-tenancy work, this project's own locked "Google Drive not Shopify" model
+already covers it); the full human OAuth consent click-through (Google-side acceptance confirmed, no
+session has completed a real grant end-to-end); prod migrations for both new columns/tables
+(staging-only so far).
+
+**Next session/turn -- exact first task:** `BACKLOG-365` item 2, the tooltip/badge design-system pass
+Richard asked for via `/frontend-design` right as this checkpoint was being written -- start by finding
+the existing live "NEW" badge component (nav, next to Lineup Builder) before designing anything new,
+then extend the same visual language to update/announcement tooltips and a reusable feature-badge
+component. If picked up fresh instead: `BACKLOG-365`'s other 5 items are all independently scoped, none
+blocking each other.
