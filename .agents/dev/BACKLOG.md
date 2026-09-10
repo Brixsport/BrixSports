@@ -12953,8 +12953,11 @@ overflowing the page. Not yet stress-tested against a real large competition cou
 
 ### BACKLOG-379 — PWA Back Button: Near-Universal Addition Across Missing Screens
 
-**Status:** SHIPPED — committed, not yet live-verified (per this project's standing rule, local dev
-is never started for this project; verification happens against the branch's Vercel preview).
+**Status:** UNVERIFIED — 2026-09-10, partially live-verified against the deployed
+`feature/ui-redesign` Vercel preview; the core gating/fallback logic is proven live, but true
+installed/standalone-mode rendering could not be reliably simulated through browser automation (see
+Evidence) — not RESOLVED until that specific gap is closed by an actual installed-PWA or DevTools
+device-emulation check.
 **Priority:** LOW — UI-consistency/navigation-affordance work Richard explicitly asked for, not a bug.
 
 **Context:** Richard's scope (given across two messages this session): a back button should be
@@ -13036,27 +13039,62 @@ findings-only audit). Flagging as deferred, not silently dropped.
   `src/app/lineup-builder/page.tsx`, `src/app/competitions/[id]/register/page.tsx`,
   `src/app/competitions/[id]/registration-success/page.tsx`
 
-**Test Scenarios (manual, run against the Vercel preview once deployed):**
+**Test Scenarios (manual, run against the Vercel preview):**
 1. Visit any edited page in a normal desktop/mobile browser tab (not installed) -- no back button
-   renders on the no-fallback and fallback-only pages (`useAppInstalled()` is false).
+   renders on the no-fallback and fallback-only pages (`useAppInstalled()` is false). **PASS** --
+   `/about` in a plain browser tab renders no back button (confirmed via `find` returning zero button
+   matches for "Back").
 2. Same, but for `login`/`signup`/`reset-password`/`forgot-password` -- back button DOES render even
-   in plain browser mode (`forceShow`).
+   in plain browser mode (`forceShow`). **PASS** -- `/login` in the same plain browser tab renders the
+   back arrow (confirmed visually and via `find` returning `button "Back"`).
 3. Install the app as a PWA (or emulate `display-mode: standalone`) -- back button renders on every
-   edited page.
+   edited page. **NOT VERIFIED LIVE.** Attempted via `window.matchMedia` monkey-patch in the browser
+   console, but `useAppInstalled()`'s check runs once in a `useEffect` on mount with no listener for
+   later `matchMedia` changes, and a full page navigation (needed to load a fresh page component)
+   resets the JS context, wiping the patch before the new page's effect runs -- browser automation
+   cannot fake an installed-PWA `display-mode` reliably this way. This scenario needs a real installed
+   PWA (Android/iOS "Add to Home Screen") or a manual DevTools "Emulate CSS media feature
+   `display-mode`" toggle in an interactive session -- neither available here. The gating logic itself
+   (`if (!isStandalone && !forceShow) return null`) is trivial and `tsc`-checked, and
+   `useAppInstalled()` is pre-existing, unmodified code (not new logic written this session) -- but
+   "the logic is simple and the dependency is old" is not the same as observing it actually render
+   true, so this stays an open verification gap, not assumed to pass.
 4. On an installed/standalone session, navigate in-app to e.g. `/stats` then tap its back button --
-   returns to the actual previous page (`router.back()`), not a hardcoded fallback.
-5. Open `/login` directly as a fresh tab (simulating a cold/deep-link open, `history.length` small) in
-   standalone mode, tap back -- goes to `/`, not a broken `router.back()` with no history.
+   returns to the actual previous page (`router.back()`), not a hardcoded fallback. **NOT VERIFIED
+   LIVE** (blocked by #3 -- couldn't get a real standalone session to test the in-app case against).
+   The `router.back()` code path itself is unchanged, standard Next.js navigation, exercised
+   incidentally elsewhere this session (e.g. the `/teams` tab-bar work) without issue.
+5. Open `/login` directly as a fresh tab (simulating a cold/deep-link open, `history.length` small),
+   tap back -- goes to `/`, not a broken `router.back()` with no history. **PASS** -- opened a genuinely
+   fresh tab, confirmed `history.length === 2` via direct JS check before clicking, clicked the real
+   back button (not simulated), confirmed `window.location.pathname` became `/` afterward. This is the
+   scenario that matters most for correctness (the fallback logic itself) and it's live-proven; #3/#4
+   are about the outer visibility gate, which is unmodified pre-existing code.
 6. `/competitions/[id]/register` and `.../registration-success` -- back button's fallback resolves to
-   the real competition's detail page, not a literal `${id}` string.
-7. `tsc --noEmit` -- zero new errors vs. baseline (independently re-run and diffed here, not just
-   taken from the subagents' self-reports).
+   the real competition's detail page, not a literal `${id}` string. **NOT LIVE-TESTED** -- verified
+   only by reading the diff (`fallbackHref={`/competitions/${params.id}`}`  /
+   `fallbackHref={`/competitions/${competitionId}`}`, both using each file's real param variable, not
+   a hardcoded string) and by the general pattern already proven correct in scenario 5. Worth an actual
+   click-through next session since this is a dynamic-route case #5 doesn't cover.
+7. `tsc --noEmit` -- zero new errors vs. baseline. **PASS**, independently re-run and diffed here, not
+   just taken from the subagents' self-reports.
 
 **Evidence:**
-- Verified by: `tsc --noEmit` (zero new errors, independently confirmed) + full manual diff review of
-  all 20 files + spot-checks of every "skipped" claim against the actual file content.
-- Observed result: not yet live-tested on the Vercel preview.
-- Pending items: live verification of test scenarios 1-6 above; admin/logger coverage (see Risks);
-  the 3 root screens remain untouched (deliberate, low priority).
+- Commit: `ef58ca3` (component + no-fallback pages), `0912a46` (fallback/forceShow pages), pushed to
+  `origin/feature/ui-redesign`; deployment confirmed `success` via the GitHub commit-status API,
+  `brixsports-staging` Vercel project.
+- Verified by: `tsc --noEmit` (zero new errors, independently confirmed, not just the subagents'
+  self-reports) + full manual diff review of all 20 files + spot-checks of every "skipped" claim
+  against the actual file content (all confirmed correct: 6 genuine `notFound()` stubs, `news/[slug]`'s
+  existing "Back to News" link, `livestream/[id]`'s existing back button living in the child
+  `LivestreamView.tsx` it renders) + live browser test against the deployed preview for scenarios 1, 2,
+  5, 7 above.
+- Observed result: browser-mode gating and the cold-history fallback are both proven correct with real
+  clicks and real state checks, not just a code read. Standalone-mode rendering itself (scenarios 3-4)
+  and one dynamic-route fallback (scenario 6) remain genuinely unverified live -- flagged honestly
+  rather than assumed to pass because the underlying pieces are individually low-risk.
+- Pending items: scenarios 3, 4, 6 above (real device/DevTools standalone test, dynamic-route
+  click-through); admin/logger coverage (see Risks, not started); the 3 root screens remain untouched
+  (deliberate, low priority).
 
 ---
