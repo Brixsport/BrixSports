@@ -12075,18 +12075,43 @@ debugging tool that outlived its purpose) -- Richard's call, not assumed here ei
 
 ### BACKLOG-359 — PWA "Update Available" Modal Re-Interrupts on Nearly Every Navigation
 
-**Status:** OPEN — filed, not fixed.
+**Status:** SHIPPED — 2026-09-10, `tsc --noEmit` clean, not yet live-verified against a running
+deploy.
 **Priority:** MEDIUM -- a real UX papercut affecting both admin and public pages alike, not scoped
-to one surface. Interrupting navigation repeatedly (not once per session/once per actual update) is
-the kind of friction that erodes trust in the app across every user type, including loggers
-mid-match.
+to one surface.
 **Found:** full-system product-thinking audit, 2026-09-09 (cross-cutting finding, all three
 phases), full report: https://claude.ai/code/artifact/d43b4763-3d1d-4e60-af9c-813ca2eea9d7
-**Fix (not built):** locate the PWA update-check/prompt logic (service-worker registration +
-whatever component renders the modal) and gate it to fire once per actual new deployment/version,
-not once per navigation -- likely a `localStorage`/session-scoped dismissal flag, or fixing a
-check that's currently re-running on every route change instead of once per app load. Not yet
-root-caused to an exact file.
+
+**Root cause, reasoned from code (not live-reproduced):** `src/components/pwa/UpdatePrompt.tsx`'s
+"Later" snooze lived entirely in component-local React state (a `useState` flag + an in-memory
+`window.setTimeout`). Both reset the instant the component remounts. A waiting service worker
+persists across any such remount (it's real browser state, not app state) -- `checkRegistration()`
+re-derives `showPrompt=true` from `reg.waiting` on every fresh mount regardless of whether the user
+already dismissed it seconds earlier in a previous mount. **Not fully confirmed which navigations
+actually trigger the remount** (root layout.tsx's `PWAProvider` should persist across normal
+client-side nav under App Router) -- a plausible secondary contributor is `PWAProvider.tsx`'s
+`shouldSuppress` toggle, which structurally changes what it renders (bare `{children}` vs. the full
+prompt-bearing fragment) every time `window.location.pathname` crosses the `/admin`|`/logger`
+boundary, which React treats as a genuine unmount/remount of the extra children including
+`UpdatePrompt`. Worth a live console-log check (the component's own `[UpdatePrompt]` logs) on a
+next pass if this recurs after the fix below.
+
+**Fix:** `UpdatePrompt.tsx`'s snooze now also writes/reads a `localStorage` timestamp
+(`brixsport-update-prompt-snoozed-until`) so a dismissal survives a remount, not just a re-render of
+the same instance -- "Later" now means "not for 15 minutes" regardless of navigation, matching the
+audit's own suggested fix. Same 15-minute window as the existing in-memory timer (kept as-is for a
+long-lived tab that never navigates). No version/build fingerprinting -- a genuinely new deploy
+landing within the same 15-minute snooze window would still be suppressed until the window expires,
+same limitation the pre-existing single-instance snooze already had, not a new regression.
+
+**Evidence:**
+- Commit: (pending, see commit below)
+- Verified by: `tsc --noEmit` only so far (18, identical to baseline, zero new errors)
+- Observed result: n/a -- not yet live-tested
+- Pending items: live-verify on the branch's Vercel preview -- confirm a dismiss survives an actual
+  client-side route change AND (if reproducible) an admin/logger `shouldSuppress` boundary crossing,
+  using the component's existing `[UpdatePrompt]` console logs as the check.
+**Files:** `src/components/pwa/UpdatePrompt.tsx`.
 
 ---
 

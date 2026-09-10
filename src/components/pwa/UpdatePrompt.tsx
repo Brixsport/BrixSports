@@ -4,6 +4,36 @@ import { useEffect, useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { RefreshCw, X, Loader2 } from 'lucide-react';
 
+// BACKLOG-359: the modal re-interrupted on nearly every navigation because
+// its "Later" snooze only ever lived in this component's own React state
+// (and an in-memory setTimeout) -- both reset the instant this component
+// remounts, which App Router does for any hard navigation / route-segment
+// boundary crossing, not just a full page reload. A waiting service worker
+// stays waiting across all of that (it's real browser state, not app
+// state), so every remount re-derived showPrompt=true from scratch,
+// regardless of whether the user had already dismissed it seconds earlier.
+// Fix: back the snooze with localStorage so a dismissal survives a remount,
+// not just a re-render of the same mounted instance.
+const SNOOZE_STORAGE_KEY = 'brixsport-update-prompt-snoozed-until';
+
+function readSnoozedUntil(): number {
+    try {
+        const raw = window.localStorage.getItem(SNOOZE_STORAGE_KEY);
+        return raw ? parseInt(raw, 10) || 0 : 0;
+    } catch {
+        return 0;
+    }
+}
+
+function writeSnoozedUntil(untilMs: number) {
+    try {
+        window.localStorage.setItem(SNOOZE_STORAGE_KEY, String(untilMs));
+    } catch {
+        // localStorage unavailable (private mode, quota, etc.) -- the prompt
+        // just won't survive a remount this time, same as before this fix.
+    }
+}
+
 export function UpdatePrompt() {
     const [showPrompt, setShowPrompt] = useState(false);
     const [isUpdating, setIsUpdating] = useState(false);
@@ -11,9 +41,14 @@ export function UpdatePrompt() {
 
     const checkRegistration = useCallback((reg: ServiceWorkerRegistration) => {
         setRegistration(reg);
+        const stillSnoozed = Date.now() < readSnoozedUntil();
 
         // 1. Check if there's already a waiting worker
         if (reg.waiting) {
+            if (stillSnoozed) {
+                console.log('[UpdatePrompt] Waiting worker found on mount, but still within snooze window -- not showing');
+                return;
+            }
             console.log('[UpdatePrompt] Waiting worker found on mount');
             setShowPrompt(true);
             return;
@@ -27,6 +62,10 @@ export function UpdatePrompt() {
             console.log('[UpdatePrompt] New worker installing');
             newWorker.addEventListener('statechange', () => {
                 if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                    if (Date.now() < readSnoozedUntil()) {
+                        console.log('[UpdatePrompt] New worker installed, but still within snooze window -- not showing');
+                        return;
+                    }
                     console.log('[UpdatePrompt] New worker installed and waiting');
                     setShowPrompt(true);
                 }
@@ -134,9 +173,18 @@ export function UpdatePrompt() {
     // in-flight event logging (CLAUDE.md: "No page refresh required to
     // continue logging mid-match"). Snoozing and re-surfacing instead keeps
     // the nudge alive without ever reloading anything the user didn't ask for.
+    //
+    // BACKLOG-359: the in-memory setTimeout below still re-surfaces the
+    // prompt after 15min *for this mounted instance* -- kept as-is since a
+    // long-lived tab that never navigates should still get re-nudged. The
+    // localStorage write is the actual fix: it's what a FUTURE remount
+    // (a different navigation) checks via readSnoozedUntil() in
+    // checkRegistration, so "Later" now means "not for 15 minutes," not
+    // "not until this exact component instance happens to still be alive."
     const UPDATE_SNOOZE_MS = 15 * 60 * 1000;
     const handleDismiss = () => {
         setShowPrompt(false);
+        writeSnoozedUntil(Date.now() + UPDATE_SNOOZE_MS);
         window.setTimeout(() => {
             if (registration?.waiting) setShowPrompt(true);
         }, UPDATE_SNOOZE_MS);
