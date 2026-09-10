@@ -12338,3 +12338,80 @@ this project's convention of correcting the label going forward rather than rewr
 **Found:** session `competitions-consolidation`, 2026-09-10, filed as a checkpoint before a session wrap.
 
 ---
+
+### BACKLOG-366 — Pitch-Marker Jersey-Name Truncation (Layout-Capacity Fix)
+
+**Status:** SHIPPED — 2026-09-10, `tsc --noEmit` clean, live-verified on this branch's Vercel preview
+(real match `F-Oqtj3HKpWjBc35R8k89`).
+**Priority:** MEDIUM -- cosmetic but visible on every public match Lineups tab with a long jersey name.
+
+**Problem:** `src/components/lineup/ResponsivePitch.tsx`'s `PlayerDot` marker rendered `player.jerseyName`
+in a single-line `truncate` span, cut with an ellipsis for any name that didn't fit the clamped
+`nameRowMaxWidth`. Layout-capacity problem, not a data problem -- the full name was always in the DOM.
+
+**Fix:** name span now wraps up to 2 lines (`line-clamp-2 break-words`, parent `items-start`) instead
+of hard single-line truncating. All other row badges (captain `(C)`, cards, goals, assists, sub
+indicator) stay `shrink-0`, unchanged.
+
+**Evidence:**
+- Commit: `ec66f9f` (rebased/pushed as part of `b9cb558`)
+- Verified by: live DOM inspection on the branch's Vercel preview against a real FINISHED match with
+  3 real long-jersey-name players (`Abdulkabir`, `Boluwatife`, `Jireh Bisong`)
+- Observed result: `Abdulkabir` now wraps to 2 full lines ("Abdulkab" / "ir"), no ellipsis. `Jireh
+  Bisong` renders in full. Confirmed the deployed span's className matches the new
+  `line-clamp-2 break-words` classes (not the old `truncate`), not just visual inspection.
+- Pending items: **residual edge case, not fixed here** -- a name sharing the row with BOTH a
+  captain badge `(C)` AND a goal/card icon (e.g., a captain who also scored) still truncates with
+  an ellipsis even across 2 lines (observed live: "Al ameen" -> "Al" / "ame..." with `(C)` + a goal
+  icon both present). The fixed-width badges leave too little room even with wrapping. Out of scope
+  for this pass (narrowly scoped to the diagnosed truncation fix, not a full badge-layout redesign)
+  -- worth its own look if it recurs as a complaint.
+**Files:** `src/components/lineup/ResponsivePitch.tsx`.
+
+---
+
+### BACKLOG-367 — Push Subscribe Failures Were Silently Swallowed (No Real Error Surfaced)
+
+**Status:** SHIPPED — 2026-09-10, `tsc --noEmit` clean, not yet live-verified against a real
+"permission granted" browser (see below).
+**Priority:** MEDIUM -- directly blocks diagnosing a live user report (Richard, real device, feature
+branch preview): Browser Push shows "Permitted but Not Subscribed", tapping Enable does nothing
+visible.
+
+**Problem:** `src/lib/notifications/push-service.ts`'s `subscribe()` already caught every failure
+(missing SW registration, `pushManager.subscribe()` throwing, or the server POST failing) but only
+ever `console.error`'d it and returned a bare `null`. `SettingsOverlay.tsx`'s `handleEnablePush`
+then showed a single generic toast ("Failed to subscribe to push service") regardless of which of
+those three genuinely different failure modes actually happened -- so neither the user nor whoever
+debugs it next could tell WHY.
+
+**Investigated, not fully root-caused (needs the real device to finish):** Confirmed on the branch's
+Vercel preview, as the real reported user: the `NEXT_PUBLIC_VAPID_PUBLIC_KEY` inlined into this
+environment's client bundle is present and correctly formatted (87 base64url chars, valid P-256
+uncompressed-point prefix). Forced a real `registration.pushManager.subscribe()` call in-browser
+with that exact key -- it correctly threw `AbortError: Registration failed - permission denied`,
+proving the subscribe mechanics and key are NOT the bug; that specific error is just this automated
+browser's own `Notification.permission: 'denied'` state, not reproducible evidence of the real
+device's failure (which reports `permission: 'granted'`, a state automation here cannot force).
+Server-side `/api/notifications/subscribe` POST handler read cleanly, no auth/validation bug found
+on inspection.
+
+**Fix (diagnostic, not a guessed root-cause fix):** `push-service.ts` now tracks a `lastError`
+(the real `DOMException.name`/`message`, or the server's own error body) instead of discarding it,
+exposed via `getLastError()`. `SettingsOverlay.tsx`'s failure toast now shows that real reason
+instead of the generic string. Next real attempt on the actual device will surface the actual cause
+(browser-level subscribe throwing vs. the server rejecting the save vs. no SW registration) instead
+of a dead end.
+
+**Evidence:**
+- Commit: (pending, see commit below)
+- Verified by: `tsc --noEmit` only; the diagnostic value itself is unverified against the real
+  failure since it requires a browser with genuinely granted permission, which this session's
+  automated browser cannot provide
+- Observed result: n/a
+- Pending items: Richard to retry Enable on the real device and report the new, specific toast
+  message -- that determines the actual next fix (browser-level vs. server-level vs. SW-registration
+  timing).
+**Files:** `src/lib/notifications/push-service.ts`, `src/components/SettingsOverlay.tsx`.
+
+---

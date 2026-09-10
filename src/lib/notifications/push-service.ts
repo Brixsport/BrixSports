@@ -18,6 +18,18 @@ interface PushSubscriptionData {
 class PushNotificationService {
     private registration: ServiceWorkerRegistration | null = null;
     private vapidPublicKey: string = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || '';
+    // Live bug report: "Permitted but Not Subscribed" with a silent Enable click.
+    // subscribe() below has always swallowed the real browser/server error and
+    // returned a bare null, so neither the UI toast nor RUNLOG-style debugging
+    // ever saw *why* -- just that it failed. lastError exposes the real reason
+    // (a DOMException name/message from pushManager.subscribe(), or the server's
+    // response body) without changing subscribe()'s existing null-on-failure
+    // contract for its other call sites.
+    private lastError: string | null = null;
+
+    getLastError(): string | null {
+        return this.lastError;
+    }
 
     /**
      * Initialize service worker and check notification support
@@ -98,12 +110,21 @@ class PushNotificationService {
      * optional and only changes what saveSubscription() sends to the server.
      */
     async subscribe(userId: string | null, anon?: { deviceId: string; matchId: string }): Promise<PushSubscriptionData | null> {
+        this.lastError = null;
+
         if (!this.registration) {
             await this.init();
         }
 
         if (!this.registration) {
+            this.lastError = 'No active service worker registration';
             console.error('[PushService] No service worker registration');
+            return null;
+        }
+
+        if (!this.vapidPublicKey) {
+            this.lastError = 'Push is not configured for this environment (missing VAPID public key)';
+            console.error('[PushService] Missing NEXT_PUBLIC_VAPID_PUBLIC_KEY');
             return null;
         }
 
@@ -136,6 +157,9 @@ class PushNotificationService {
             console.log('[PushService] Subscribed successfully');
             return subscriptionData;
         } catch (error) {
+            this.lastError = error instanceof Error
+                ? `${error.name}: ${error.message}`
+                : String(error);
             console.error('[PushService] Subscription failed:', error);
             return null;
         }

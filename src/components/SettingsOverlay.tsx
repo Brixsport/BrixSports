@@ -97,7 +97,8 @@ export function SettingsOverlay({ onClose }: { onClose: () => void }) {
           setIsSubscribed(true);
           toast.success('Push notifications enabled!');
         } else {
-          toast.error('Failed to subscribe to push service');
+          const reason = pushService.getLastError();
+          toast.error(reason ? `Couldn't enable notifications: ${reason}` : 'Failed to subscribe to push service');
         }
       } else if (permission === 'denied') {
         toast.error('Notifications are blocked by your browser');
