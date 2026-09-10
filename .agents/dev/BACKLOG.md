@@ -12064,17 +12064,27 @@ dedup on its own -- would have surfaced ANY duplicate row from ANY source, not j
 
 ### BACKLOG-358 — `/admin/push-diagnose` Is a Real, Working, Auth-Gated Page With Zero Inbound Links
 
-**Status:** OPEN — filed, not fixed.
-**Priority:** LOW -- confirmed NOT a security gap (checked before filing, not assumed): the page is
-covered by `src/middleware.ts`'s general `/admin/:path*` matcher, which gates on `role === 'admin'`
-with no carve-out for this specific path -- same protection level as any other unlisted `/admin/*`
-page. The issue is purely that no admin nav/sidebar link points to it, so it's effectively dead UI
-reachable only by typing the URL directly.
+**Status:** SHIPPED — 2026-09-10, `tsc --noEmit` clean, not yet live-verified against a running
+deploy.
+**Priority:** LOW -- confirmed NOT a security gap: the page is covered by `src/middleware.ts`'s
+general `/admin/:path*` matcher, same protection level as any other unlisted `/admin/*` page.
 **Found:** full-system product-thinking audit, 2026-09-09 (Admin phase), full report:
 https://claude.ai/code/artifact/d43b4763-3d1d-4e60-af9c-813ca2eea9d7
-**Fix (not built, needs a product decision first):** either add a real nav link (if push-notification
-diagnostics is a capability admins should be able to reach) or delete the page (if it was a one-off
-debugging tool that outlived its purpose) -- Richard's call, not assumed here either way.
+
+**Decision (Richard's call):** link it, don't delete it -- tucked into a related page rather than the
+main admin nav ("deep root page... look for a related page like /notifications, good place").
+
+**Fix:** `src/app/admin/notifications/page.tsx`'s existing "System Diagnostics" section header now
+has an "Advanced Diagnostics" link to `/admin/push-diagnose`, next to the already-embedded
+`PushNotificationDebugger`. No new top-level nav entry.
+
+**Evidence:**
+- Commit: (pending, see commit below)
+- Verified by: `tsc --noEmit` only so far
+- Observed result: n/a -- not yet live-tested
+- Pending items: live-verify on the branch's Vercel preview that the link renders and navigates
+  correctly for an admin session.
+**Files:** `src/app/admin/notifications/page.tsx`.
 
 ---
 
