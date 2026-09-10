@@ -12589,10 +12589,10 @@ render at full size regardless of the minimize state.
 
 ---
 
-### BACKLOG-370 — Admin Match-Ratings Adjust Page: Score Header Card Overflows at 375px
+### ~~BACKLOG-370~~ — Admin Match-Ratings Adjust Page: Score Header Card Overflows at 375px
 
-**Status:** SHIPPED — 2026-09-10, `tsc --noEmit` clean (identical to baseline), not yet
-live-verified against a running deploy.
+**Status:** RESOLVED — 2026-09-10 (commit `4da55a7`), live-verified on
+`brixsports-staging-git-feature-ui-redesign-brixsports-projects.vercel.app`.
 **Priority:** MEDIUM — found during the responsive-audit continuation series (`BACKLOG-336`,
 `343`, `348`, `349`, `350`, `368`), not previously checked.
 
@@ -12614,23 +12614,24 @@ back the larger desktop treatment). Team name labels were already `hidden md:blo
 change needed there.
 
 **Evidence:**
-- Commit: (pending, see commit below)
-- Verified by: `tsc --noEmit` only so far; the overflow itself and its exact source element were
-  confirmed live via DOM measurement (`document.documentElement.scrollWidth` vs `clientWidth`,
-  plus a `getBoundingClientRect()` scan for every off-viewport element) against a real rated match
-  (`F-Oqtj3HKpWjBc35R8k89`, 30 real `player_ratings` rows) before writing the fix — not a guess
-  from reading the JSX alone.
-- Observed result: n/a for the fix itself — not yet re-measured post-fix on a deploy.
-- Pending items: live-verify on the branch's Vercel preview at 375px (confirm `scrollWidth ===
-  clientWidth`) and spot-check 768px/desktop still render the full-size card correctly.
+- Commit: `4da55a7`
+- Verified by: live DOM measurement against the deployed Vercel preview (waited for the real
+  GitHub commit-status check on `4da55a7` to report `success` for the Vercel deployment, not a
+  sleep), against the same real rated match (`F-Oqtj3HKpWjBc35R8k89`)
+- Observed result: at 375px, `document.documentElement.scrollWidth === clientWidth` (375, 0px
+  overflow — was 38px before the fix); the score-header card's own `getBoundingClientRect()`
+  confirmed fully inside the viewport (`left: 82, right: 293` of 375). At 768px,
+  `scrollWidth === clientWidth` (753, 0px overflow, unchanged from before — the fix only touches
+  the mobile base tier, `md:` desktop sizing untouched)
+- Pending items: none
 **Files:** `src/app/admin/match-ratings/[id]/page.tsx`.
 
 ---
 
-### BACKLOG-371 — Admin Push-Diagnose Page: Diagnostic Button Rows Overflow at 375px
+### ~~BACKLOG-371~~ — Admin Push-Diagnose Page: Diagnostic Button Rows Overflow at 375px
 
-**Status:** SHIPPED — 2026-09-10, `tsc --noEmit` clean (identical to baseline), not yet
-live-verified against a running deploy.
+**Status:** RESOLVED — 2026-09-10 (commit `4da55a7`), live-verified on
+`brixsports-staging-git-feature-ui-redesign-brixsports-projects.vercel.app`.
 **Priority:** LOW — internal diagnostic tool, not part of the three critical flows, but still a
 real overflow found in the same audit pass as `BACKLOG-370`.
 
@@ -12648,14 +12649,15 @@ that doesn't need to stay single-line" pattern used elsewhere on this branch. No
 `flex-wrap` is safe at every width and only activates when buttons don't fit.
 
 **Evidence:**
-- Commit: (pending, see commit below)
-- Verified by: `tsc --noEmit` only so far; the overflow itself and its exact source (the two
-  unwrapped button rows, confirmed via `getBoundingClientRect()` plus a computed-style check for
-  the nearest `overflow-x` ancestor to rule out an already-scrollable container) was confirmed live
-  before writing the fix.
-- Observed result: n/a for the fix itself — not yet re-measured post-fix on a deploy.
-- Pending items: live-verify on the branch's Vercel preview at 375px (confirm `scrollWidth ===
-  clientWidth` and the buttons visibly wrap rather than clip).
+- Commit: `4da55a7`
+- Verified by: live DOM measurement against the deployed Vercel preview (waited for the real
+  GitHub commit-status check on `4da55a7` to report `success`, not a sleep)
+- Observed result: at 375px, `document.documentElement.scrollWidth === clientWidth` (375, 0px
+  overflow — was 84px before the fix); the "Run Client Diagnostics"/"Subscribe" buttons stayed on
+  one row (`top: 112`) and "Server Diagnostics" wrapped to a second row (`top: 156`) instead of
+  clipping off-screen — confirmed via each button's own `getBoundingClientRect()`, not just the
+  page-level scroll check. At 768px, `scrollWidth === clientWidth` (768, 0px overflow, unchanged)
+- Pending items: none
 **Files:** `src/components/notifications/PushDiagnosticPage.tsx`.
 
 ---
