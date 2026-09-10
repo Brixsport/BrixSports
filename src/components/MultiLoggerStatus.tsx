@@ -5,8 +5,9 @@
 
 'use client';
 
+import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Users, AlertTriangle, CheckCircle, Wifi, WifiOff, Activity } from 'lucide-react';
+import { Users, AlertTriangle, CheckCircle, Wifi, WifiOff, Activity, ChevronDown, ChevronUp } from 'lucide-react';
 import { EventConflict } from '@/lib/multiLogger';
 
 interface LoggerInfo {
@@ -35,6 +36,15 @@ export function MultiLoggerStatus({
 }: MultiLoggerStatusProps) {
     const unresolvedConflicts = conflicts.filter(c => !c.resolved);
     const isMultiLogger = activeLoggers.length > 0;
+    // Live feedback: this panel had no way to get it out of the way -- it sat
+    // fixed top-right for the entire time multi-logger mode was active, with
+    // no dismiss/collapse, which could sit over other controls during a live
+    // match. Minimizing (not fully hiding) keeps the "you're not logging
+    // solo" awareness alive via a small pill instead of removing it outright
+    // -- same reasoning as UpdatePrompt's snooze-not-silence choice elsewhere
+    // in this app. Conflicts are never collapsed into the pill -- those need
+    // a resolution action, not just awareness.
+    const [isMinimized, setIsMinimized] = useState(false);
 
     if (!isMultiLogger && unresolvedConflicts.length === 0) {
         return null; // Don't show if solo logging with no conflicts
@@ -44,7 +54,23 @@ export function MultiLoggerStatus({
         <div className="fixed top-20 right-4 z-30 space-y-2 max-w-sm">
             {/* Active Loggers Panel */}
             <AnimatePresence>
-                {isMultiLogger && (
+                {isMultiLogger && isMinimized && (
+                    <motion.button
+                        type="button"
+                        onClick={() => setIsMinimized(false)}
+                        initial={{ opacity: 0, x: 20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        exit={{ opacity: 0, x: 20 }}
+                        className="flex items-center gap-2 bg-black/90 backdrop-blur-xl border border-white/10 rounded-full pl-3 pr-2 py-2 ml-auto"
+                    >
+                        <Users size={14} className="text-primary" />
+                        <span className="text-[10px] font-black uppercase tracking-widest">
+                            {activeLoggers.length + 1} Active
+                        </span>
+                        <ChevronDown size={14} className="text-white/40" />
+                    </motion.button>
+                )}
+                {isMultiLogger && !isMinimized && (
                     <motion.div
                         initial={{ opacity: 0, x: 20 }}
                         animate={{ opacity: 1, x: 0 }}
@@ -58,18 +84,28 @@ export function MultiLoggerStatus({
                                     Multi-Logger Mode
                                 </span>
                             </div>
-                            <div className="flex items-center gap-1">
-                                {isConnected ? (
-                                    <Wifi size={14} className="text-green-500" />
-                                ) : (
-                                    <WifiOff size={14} className="text-red-500" />
-                                )}
-                                {syncStatus === 'syncing' && (
-                                    <Activity size={14} className="text-orange-500 animate-pulse" />
-                                )}
-                                {syncStatus === 'synced' && (
-                                    <CheckCircle size={14} className="text-green-500" />
-                                )}
+                            <div className="flex items-center gap-2">
+                                <div className="flex items-center gap-1">
+                                    {isConnected ? (
+                                        <Wifi size={14} className="text-green-500" />
+                                    ) : (
+                                        <WifiOff size={14} className="text-red-500" />
+                                    )}
+                                    {syncStatus === 'syncing' && (
+                                        <Activity size={14} className="text-orange-500 animate-pulse" />
+                                    )}
+                                    {syncStatus === 'synced' && (
+                                        <CheckCircle size={14} className="text-green-500" />
+                                    )}
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => setIsMinimized(true)}
+                                    className="text-white/40 hover:text-white transition-colors"
+                                    title="Minimize"
+                                >
+                                    <ChevronUp size={14} />
+                                </button>
                             </div>
                         </div>
 

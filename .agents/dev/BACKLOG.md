@@ -6595,6 +6595,25 @@ No `clearTimeout` exists anywhere in the file. The effect that sets `stateManage
 
 **Priority, re-set per Richard's explicit call (2026-08-22):** downgraded from the top of the queue — multi-logger sync is not a live blocker (single-logger Flow B is fully unaffected; this only matters the moment two loggers are ever assigned to the same live match simultaneously, which hasn't happened yet in production). Live blockers, instability, and urgent stale-data issues take priority over finishing this verification. Still **Tier 0** on the criticality map, just not first in line right now.
 
+**2026-09-10, picked back up per Richard's explicit ask ("dual logger").** Before attempting a 4th
+live test, fixed the actual root cause attempt #3 found: `ws-server/index.js`'s `getEnvFromOrigin()`
+only matched the literal substring `brixsports-staging.vercel.app` -- every branch/PR preview alias
+(including this session's own `brixsports-staging-git-feature-ui-redesign-brixsports-projects.
+vercel.app`, which does NOT contain that exact substring) fell through to `prod`, got JWT-verified
+against the wrong secret, and had every logger-gated WS emit silently rejected -- exactly attempt
+#3's observed auth-flood. **Fix:** broadened the match to any `.vercel.app` origin, mirroring the
+CORS allowlist's own already-existing `origin.endsWith('.vercel.app')` trust boundary a few lines up
+in the same file -- safe because prod is confirmed (the file's own `ALLOWED_ORIGINS`) to serve
+exclusively from the custom `brixsports.com` domain, never `*.vercel.app`.
+
+**Known limitation, not silently glossed over:** `ws-server/` is deployed separately (Railway,
+tracking whichever branch its own pipeline points at -- not necessarily `feature/ui-redesign`), so
+this fix won't be live on the shared Railway instance until that deploy happens, independent of this
+branch's own Vercel preview. **This means the sub-10s real-time WS push specifically is still not
+re-testable from this session** -- the dual-logger live test that follows targets what CLAUDE.md's
+Live Event Readiness Checklist item actually asks ("do not conflict or overwrite"), using the 10-15s
+REST poll fallback path, which does NOT depend on this WS fix or its deploy timing.
+
 **Problem, three parts, same root cause (`useMultiLogger.ts`/`multiLogger.ts`):**
 1. `broadcastEvent` (`useMultiLogger.ts:178-192`) does not send anything to another device, tab, or the server — it only dispatches a same-tab `window` `CustomEvent('MULTI_LOGGER_EVENT')`, which by definition never leaves the browser tab that dispatched it. Every `broadcastEvent()` call site in both `FootballLogger.tsx:741` and `BasketballLogger.tsx:613` is effectively inert for real cross-device sync.
 2. The **only** actual cross-logger sync mechanism is the periodic poll — 10s (football, `FootballLogger.tsx:667-726`) / 15s (basketball, `BasketballLogger.tsx:439-467`) — which fetches all DB events and merges by exact-ID dedup (`mergeEvents`, `multiLogger.ts:123-145`). Two loggers on the same match only converge once every 10-15 seconds, never in real time.
@@ -12484,5 +12503,35 @@ matching the same pattern already used for team names in this file.
   wrap-to-3-lines visual is gone) and at a larger simulated font scale (confirm the 27px overflow no
   longer reproduces).
 **Files:** `src/app/admin/matches/page.tsx`.
+
+---
+
+### BACKLOG-369 — MultiLoggerStatus Panel Had No Way to Get Out of the Way
+
+**Status:** SHIPPED — 2026-09-10, `tsc --noEmit` clean, not yet live-verified against a running
+deploy.
+**Priority:** MEDIUM -- live feedback from Richard: the panel "keeps showing," should be dismissible
+so it doesn't block the interface, asked to confirm the underlying dual-logger system itself is
+sound (see `BACKLOG-151` for that half).
+
+**Problem:** `src/components/MultiLoggerStatus.tsx`'s "Active Loggers" panel (`fixed top-20 right-4
+z-30`) had zero dismiss/collapse affordance -- it stayed on screen, at full size, for the entire
+time `activeLoggers.length > 0`, with no way to minimize it out of the way of other on-screen
+controls during a live match.
+
+**Fix:** added an `isMinimized` toggle. Minimized state shows a small pill (`{n} Active` +
+chevron) instead of hiding the awareness entirely -- same reasoning as `UpdatePrompt`'s
+snooze-not-silence choice (`BACKLOG-359`) elsewhere in this app: a logger should still know they're
+not logging solo, just not have it block the screen. The Conflicts panel is deliberately never
+folded into the minimized pill -- those need a resolution action, not just awareness, so they always
+render at full size regardless of the minimize state.
+
+**Evidence:**
+- Commit: (pending, see commit below)
+- Verified by: `tsc --noEmit` only so far
+- Observed result: n/a -- not yet live-tested
+- Pending items: live-verify the minimize/restore toggle on the branch's Vercel preview during an
+  actual multi-logger session (see `BACKLOG-151`'s live-test work, same session).
+**Files:** `src/components/MultiLoggerStatus.tsx`.
 
 ---

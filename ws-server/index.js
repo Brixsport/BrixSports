@@ -144,9 +144,25 @@ const io = new Server(httpServer, {
 // staging leaking into prod, not the reverse, so an unmatched origin
 // landing in prod's namespace is the safe default). Shared by the auth
 // middleware below and the connection handler, so both always agree.
+//
+// BACKLOG-151: only matching the literal substring 'brixsports-staging.
+// vercel.app' meant every branch/PR preview alias (e.g.
+// 'brixsports-staging-git-feature-x-brixsports-projects.vercel.app') fell
+// through to 'prod', got verified against JWT_SECRET_PROD, and silently
+// rejected every staging-signed logger token -- this was root-caused as
+// the reason 3 separate live dual-logger test attempts all saw a
+// continuous "Unauthorized: logger authentication required" frame flood
+// with zero real signal about whether the app's own broadcast code
+// actually works. Safe to broaden to any '.vercel.app' origin: prod is
+// confirmed (ALLOWED_ORIGINS above) to serve exclusively from the custom
+// brixsports.com domain, never from *.vercel.app -- this exactly mirrors
+// the CORS allowlist's own existing origin.endsWith('.vercel.app') trust
+// boundary a few lines up, just applied to secret selection too, so a
+// preview-URL origin is never actually "unrecognized" in the way the
+// prod-default above is guarding against.
 function getEnvFromOrigin(socket) {
     const origin = socket.handshake.headers.origin || '';
-    return (origin.includes('staging.brixsports.com') || origin.includes('brixsports-staging.vercel.app'))
+    return (origin.includes('staging.brixsports.com') || origin.includes('brixsports-staging.vercel.app') || origin.endsWith('.vercel.app'))
         ? 'staging'
         : 'prod';
 }
