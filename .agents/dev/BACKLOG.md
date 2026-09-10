@@ -12609,7 +12609,7 @@ render at full size regardless of the minimize state.
 
 ### BACKLOG-370 — University Indicator Added to Team + League Pages (Cross-University Discovery, Follow-up to `BACKLOG-365` Item 4)
 
-**Status:** SHIPPED — 2026-09-10, `tsc --noEmit` clean, not yet live-verified against a running deploy.
+**Status:** RESOLVED — 2026-09-10, `tsc --noEmit` clean, live-verified on the branch's Vercel preview.
 **Priority:** Low-Medium — product direction from Richard, not a bug: `BACKLOG-365` item 4 ("home-university default-view scoping") was put on hold pending more product thought on what "scoping" should mean, but Richard clarified the underlying model in the same breath — per this project's own locked "Google Drive not Shopify" decision (one platform, all universities, scoped by affiliation), the direction is fans should be able to **discover** other universities/leagues/teams, not have them hidden by default. First concrete step: make it visible which university a team or league actually belongs to, since neither page showed it anywhere persistent.
 
 **Problem, two places:**
@@ -12625,8 +12625,8 @@ render at full size regardless of the minimize state.
 **Evidence:**
 - Commit: `0c4b491`
 - Verified by: `tsc --noEmit` clean against both touched files (35 pre-existing `src/db/` errors unrelated); the university-derivation logic was checked against real DB data before writing it (`SELECT DISTINCT team.university` joined through each competition's real matches) — not assumed correct from schema alone
-- Observed result: BUSA LEAGUE BASKETBALL/FOOTBALL and both BUSALYMPICS competitions each resolve to exactly one university ("Bells University of Technology") across their real teams; NPUGA (FOOTBALL/BASKETBALL) each resolve to 10 distinct universities, correctly producing no derived value
-- Pending items: live visual check on the branch's Vercel preview (not yet done this pass); the competitions LIST page and the `hostOrganizationId` backfill, both explicitly out of scope above
+- Observed result: BUSA LEAGUE BASKETBALL/FOOTBALL and both BUSALYMPICS competitions each resolve to exactly one university ("Bells University of Technology") across their real teams; NPUGA (FOOTBALL/BASKETBALL) each resolve to 10 distinct universities, correctly producing no derived value. Live-confirmed on the deployed preview: `/teams/busa-pirates` shows "BELLS UNIVERSITY OF TECHNOLOGY" in the header next to "FOOTBALL TEAM"; `/competitions/9q8LMVqW8KAtF4BJBlyk_` (BUSALYMPICS Football) shows the same pill next to "4 TEAMS REGISTERED"; `/competitions/YnaJKc3VSTiY7f0uqv_9m` (NPUGA Football, genuinely 10 universities) correctly shows no university pill at all, only "10 TEAMS REGISTERED" — confirmed via real page reads, not just code inspection.
+- Pending items: the competitions LIST page and the `hostOrganizationId` backfill, both explicitly out of scope above
 **Files:** `src/app/teams/[id]/TeamDetailClient.tsx`, `src/app/competitions/[id]/page.tsx`.
 
 ---
