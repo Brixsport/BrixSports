@@ -12588,3 +12588,74 @@ render at full size regardless of the minimize state.
 **Files:** `src/components/MultiLoggerStatus.tsx`.
 
 ---
+
+### BACKLOG-370 — Admin Match-Ratings Adjust Page: Score Header Card Overflows at 375px
+
+**Status:** SHIPPED — 2026-09-10, `tsc --noEmit` clean (identical to baseline), not yet
+live-verified against a running deploy.
+**Priority:** MEDIUM — found during the responsive-audit continuation series (`BACKLOG-336`,
+`343`, `348`, `349`, `350`, `368`), not previously checked.
+
+**Root cause, confirmed live via DOM measurement:** `/admin/match-ratings/[id]` (the ratings
+adjust page) had a real 38px page-level overflow at 375px width
+(`document.documentElement.scrollWidth` 413 vs `clientWidth` 375; 0px overflow at 768px). Traced
+via a full-page `getBoundingClientRect().right` scan to the score header card
+(`src/app/admin/match-ratings/[id]/page.tsx` line ~346): `flex items-center gap-12 ... px-12 py-6`
+with two `w-20 h-20` (80px) team logos and a `text-5xl` score — desktop-scale spacing/sizing
+applied unconditionally, no mobile tier at all (same anti-pattern class as `BACKLOG-349`'s
+Live Match Monitor table, `BACKLOG-348`'s pitch markers).
+
+**Fix:** base (mobile) tier now uses `gap-3`, `px-4 py-4`, `w-12 h-12` logos, `text-3xl` score,
+`gap-2` around the score dashes, `min-w-0 truncate` on the competition label, and `shrink-0` on
+both team-logo columns; the desktop-scale spacing/sizing (`gap-12`, `px-12 py-6`, `w-20 h-20`,
+`text-5xl`) is preserved exactly as-is behind `md:` per this branch's established mobile-first
+convention (no width-sensitive style lives bare at `md:` — base tier is the fix, `md:` only adds
+back the larger desktop treatment). Team name labels were already `hidden md:block` pre-fix, so no
+change needed there.
+
+**Evidence:**
+- Commit: (pending, see commit below)
+- Verified by: `tsc --noEmit` only so far; the overflow itself and its exact source element were
+  confirmed live via DOM measurement (`document.documentElement.scrollWidth` vs `clientWidth`,
+  plus a `getBoundingClientRect()` scan for every off-viewport element) against a real rated match
+  (`F-Oqtj3HKpWjBc35R8k89`, 30 real `player_ratings` rows) before writing the fix — not a guess
+  from reading the JSX alone.
+- Observed result: n/a for the fix itself — not yet re-measured post-fix on a deploy.
+- Pending items: live-verify on the branch's Vercel preview at 375px (confirm `scrollWidth ===
+  clientWidth`) and spot-check 768px/desktop still render the full-size card correctly.
+**Files:** `src/app/admin/match-ratings/[id]/page.tsx`.
+
+---
+
+### BACKLOG-371 — Admin Push-Diagnose Page: Diagnostic Button Rows Overflow at 375px
+
+**Status:** SHIPPED — 2026-09-10, `tsc --noEmit` clean (identical to baseline), not yet
+live-verified against a running deploy.
+**Priority:** LOW — internal diagnostic tool, not part of the three critical flows, but still a
+real overflow found in the same audit pass as `BACKLOG-370`.
+
+**Root cause, confirmed live via DOM measurement:** `/admin/push-diagnose` had a real 84px
+page-level overflow at 375px width (`document.documentElement.scrollWidth` 459 vs `clientWidth`
+375; 0px overflow at 768px). Traced to `src/components/notifications/PushDiagnosticPage.tsx`
+(lines 207/218): two `<div className="flex gap-2">` rows of diagnostic buttons ("Run Client
+Diagnostics" / "Subscribe" / "Server Diagnostics", and "Test Direct Send" / "Test Normal API
+Send") with no wrap behavior — the row of three buttons alone measured 460px in a 327px-wide
+content column.
+
+**Fix:** both button rows changed from `flex gap-2` to `flex flex-wrap gap-2` — buttons wrap to a
+second line on narrow viewports instead of overflowing, matching the established "pill/button row
+that doesn't need to stay single-line" pattern used elsewhere on this branch. No `md:` tier needed;
+`flex-wrap` is safe at every width and only activates when buttons don't fit.
+
+**Evidence:**
+- Commit: (pending, see commit below)
+- Verified by: `tsc --noEmit` only so far; the overflow itself and its exact source (the two
+  unwrapped button rows, confirmed via `getBoundingClientRect()` plus a computed-style check for
+  the nearest `overflow-x` ancestor to rule out an already-scrollable container) was confirmed live
+  before writing the fix.
+- Observed result: n/a for the fix itself — not yet re-measured post-fix on a deploy.
+- Pending items: live-verify on the branch's Vercel preview at 375px (confirm `scrollWidth ===
+  clientWidth` and the buttons visibly wrap rather than clip).
+**Files:** `src/components/notifications/PushDiagnosticPage.tsx`.
+
+---
