@@ -12014,25 +12014,46 @@ output. Low effort, not yet scoped to an exact line.
 
 ### BACKLOG-357 — Logger Dashboard Shows the Same Assigned Match Twice
 
-**Status:** OPEN — filed, not fixed. Live-observed, not yet root-caused.
+**Status:** SHIPPED — 2026-09-10, `tsc --noEmit` clean, DB cleanup verified by query, code fix not
+yet live-verified against a running deploy.
 **Priority:** MEDIUM — a real logger's own assignment list showing a duplicate is confusing during
-live match operation, though not itself data-corrupting (no evidence of a duplicate DB row, only a
-duplicate list entry, until re-investigated).
+live match operation.
 **Found:** full-system product-thinking audit, 2026-09-09 (Logger phase), full report:
 https://claude.ai/code/artifact/d43b4763-3d1d-4e60-af9c-813ca2eea9d7 -- confirmed live against a
 real logger session, not source-only.
-**Possibly related to, but NOT confirmed the same root cause as, `~~BUG-008~~`** (duplicate logger
-*assignment* race condition, RESOLVED session 3 via a transaction wrapping the check-then-insert in
-`assign-logger/route.ts`). The audit's own framing called this "live proof of BUG-008," but that
-conclusion wasn't independently re-verified against the current code -- worth treating as an open
-question, not a given, before assuming it's a regression of the old fix rather than a distinct
-client-side rendering/list-dedup bug (e.g. two assignment rows for the same match id, or a render
-key issue). **Next session's first step here: confirm via a direct DB query whether the underlying
-`match_logger_assignments` (or equivalent) table actually has a duplicate row for this
-logger+match, before touching any code** -- that answer determines whether this is a server-side
-regression or a client-only display bug, per this project's own "verify before concluding"
-convention.
-**Files (likely):** the logger dashboard's assigned-matches list component -- not yet located.
+
+**Root cause, confirmed via direct DB query (not assumed):** `match_logger_assignments` had exactly
+one real duplicate `(match_id, logger_id)` pair -- logger "Mariam" (`logger_1767485400566`), a
+FINISHED BUSA League match from 2026-01-14 (`8Mek2CA7KPlnk1EQ647jx`). Both rows `status: 'active'`,
+`role: 'primary'`, identical `assigned_at` (1768404214), `assigned_by: null`. **Not a regression of
+`~~BUG-008~~`'s transaction guard** -- a full grep of every `.insert(matchLoggerAssignments)` call
+site in `src/` found only 2: `assign-logger/route.ts` (transaction-guarded, always sets
+`assignedBy` from the authenticated admin -- ruled out, these rows have `assigned_by: null`) and
+`seed-npuga-special.ts` (hardcodes an unrelated match id -- ruled out). The duplicate predates every
+insert path in the current codebase; it's orphaned data from the original January 2026 bulk-import
+(same era as the pre-existing `/xi` vs `/lineup-builder` split). `getLoggerMatches()` also had zero
+dedup on its own -- would have surfaced ANY duplicate row from ANY source, not just this one.
+
+**Fix:**
+- `src/lib/match-logger-helpers.ts` -- `getLoggerMatches()` now dedupes by `match.id` before
+  returning, so a stray duplicate assignment row (this one or any future one) can never surface as
+  a duplicate card on the dashboard again, independent of root cause.
+- Deleted the confirmed duplicate row (`YAQ5_AcOPY539sizZ_1CB`, kept `AscOsIc85A6_AewU4U_np`) as
+  data cleanup, belt-and-suspenders with the code fix.
+
+**Evidence:**
+- Commit: (pending, see commit below)
+- Verified by: DB query (duplicate confirmed before write, single remaining row confirmed after)
+- Observed result: `inspect-backlog357.mjs` found exactly 1 duplicate pair pre-fix;
+  `cleanup-backlog357.mjs` re-read the pair immediately before deleting (aborted if not exactly 2
+  rows found) and re-read again after, confirming exactly 1 row remained. `tsc --noEmit`: 18,
+  identical to baseline, zero new errors.
+- Pending items: the `getLoggerMatches()` dedupe itself has not been live-tested against a real
+  duplicate scenario on a running deploy (the only known live duplicate was deleted as part of this
+  same fix, so there's nothing left to reproduce against without manufacturing a throwaway one) --
+  next step once this branch's preview picks up the commit.
+**Files:** `src/lib/match-logger-helpers.ts` (fix), `dev/inspect-backlog357.mjs`,
+`dev/inspect-backlog357-context.mjs`, `dev/cleanup-backlog357.mjs` (investigation/cleanup, gitignored).
 
 ---
 

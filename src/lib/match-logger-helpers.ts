@@ -72,13 +72,25 @@ export async function getLoggerMatches(loggerId: string) {
             )
         );
 
-    return assignments
-        .filter(a => a.match !== null && a.match.id !== null)
-        .map(a => ({
-            ...a.match!,
-            role: a.assignment.role,
-            assignedAt: a.assignment.assignedAt,
-        }));
+    // BACKLOG-357: a logger can have more than one 'active' assignment row for the
+    // same match (confirmed live -- one orphaned pair predating the current
+    // transaction-guarded assign-logger flow, assignedBy: null, from the original
+    // bulk-import era). Dedupe by match id defensively here so a stray duplicate
+    // row never surfaces as a duplicate card on the logger's dashboard, regardless
+    // of how it got into the table.
+    const seen = new Set<string>();
+    const deduped: typeof assignments = [];
+    for (const a of assignments) {
+        if (!a.match || !a.match.id || seen.has(a.match.id)) continue;
+        seen.add(a.match.id);
+        deduped.push(a);
+    }
+
+    return deduped.map(a => ({
+        ...a.match!,
+        role: a.assignment.role,
+        assignedAt: a.assignment.assignedAt,
+    }));
 }
 
 /**
