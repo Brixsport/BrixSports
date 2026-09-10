@@ -158,40 +158,33 @@ export async function POST(
             );
         }
 
-        // BUG-196: duplicate-submission guard. Found live during session 48's football
-        // Tier 0 sweep -- two concurrent identical POSTs (a double-tap, or a client retry
-        // after a slow/lost ack) each created a genuine, separate match_events row and,
-        // for a scoring type, each incremented the score independently -- confirmed live,
-        // a real Goal double-submit inflated away_score by 2 instead of 1. Player-attributed
-        // events only (playerId required): a repeat of the identical (match, type, minute,
-        // player) within a short window is treated as the same real-world event and the
-        // original is returned instead of inserting a second row. Player-less event types
-        // (corner, offside, etc.) are intentionally excluded -- those can legitimately repeat
-        // with identical fields moments apart and a false-positive dedup there would silently
-        // drop a real event.
-        if (playerId) {
-            const dedupWindowStart = new Date(Date.now() - 10_000);
-            const [existingEvent] = await db
-                .select()
-                .from(matchEvents)
-                .where(
-                    and(
-                        eq(matchEvents.matchId, matchId),
-                        eq(matchEvents.type, type),
-                        eq(matchEvents.minute, minute),
-                        eq(matchEvents.playerId, playerId),
-                        gt(matchEvents.createdAt, dedupWindowStart)
-                    )
-                )
-                .limit(1);
-            if (existingEvent) {
-                return NextResponse.json({
-                    success: true,
-                    message: 'Duplicate submission ignored — event already recorded',
-                    event: existingEvent,
-                }, { status: 200 });
-            }
-        }
+        // BUG-196 / dual-logger live test (2026-09-10): duplicate-submission guard.
+        // Originally found live during session 48's football Tier 0 sweep -- two
+        // concurrent identical POSTs (a double-tap, or a client retry after a slow/
+        // lost ack) each created a genuine, separate match_events row and, for a
+        // scoring type, each incremented the score independently. Player-attributed
+        // events only (playerId required): a repeat of the identical (match, type,
+        // minute, player) within a short window is treated as the same real-world
+        // event and the original is returned instead of inserting a second row.
+        // Player-less event types (corner, offside, etc.) are intentionally excluded
+        // -- those can legitimately repeat with identical fields moments apart and a
+        // false-positive dedup there would silently drop a real event.
+        //
+        // This check originally ran as a standalone SELECT *before* the
+        // db.transaction() below that does the insert + score update -- which meant
+        // it only protected against a double-tap from the SAME request path, not two
+        // genuinely concurrent requests. Live-tested with two real logger accounts
+        // firing the identical goal via Promise.all (true concurrency, not
+        // sequential): both passed this check (neither had committed yet when the
+        // other's SELECT ran) and both inserted, inflating the score by 2 instead of
+        // 1 -- reproducing exactly BUG-196's original symptom, just from two loggers
+        // instead of one double-tap. Fix: the dedup check now runs *inside* the same
+        // transaction as the insert, the same pattern already proven for the
+        // logger-assignment race (assign-logger/route.ts's check-then-insert,
+        // BUG-008) -- the whole check+insert+score-update is now one atomic unit, so
+        // a second concurrent request's check can no longer run against a
+        // not-yet-committed state.
+        let dedupHit: typeof matchEvents.$inferSelect | undefined;
 
         // Create event
         const eventId = nanoid();
@@ -295,6 +288,27 @@ export async function POST(
         // reverts a different amount than an insert credited.
 
         await db.transaction(async (tx) => {
+            if (playerId) {
+                const dedupWindowStart = new Date(Date.now() - 10_000);
+                const [existingEvent] = await tx
+                    .select()
+                    .from(matchEvents)
+                    .where(
+                        and(
+                            eq(matchEvents.matchId, matchId),
+                            eq(matchEvents.type, type),
+                            eq(matchEvents.minute, minute),
+                            eq(matchEvents.playerId, playerId),
+                            gt(matchEvents.createdAt, dedupWindowStart)
+                        )
+                    )
+                    .limit(1);
+                if (existingEvent) {
+                    dedupHit = existingEvent;
+                    return;
+                }
+            }
+
             await tx.insert(matchEvents).values(newEvent);
 
             if (isScoringEvent && !isPenaltyShootout) {
@@ -339,6 +353,14 @@ export async function POST(
                 newShootoutAwayScore = updated.shootoutAwayScore ?? 0;
             }
         });
+
+        if (dedupHit) {
+            return NextResponse.json({
+                success: true,
+                message: 'Duplicate submission ignored — event already recorded',
+                event: dedupHit,
+            }, { status: 200 });
+        }
 
         // BUG-108/BUG-116: broadcast to live viewers now that the DB write has actually
         // succeeded — previously nothing here ever broadcast at all; the only push a

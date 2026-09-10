@@ -6614,6 +6614,41 @@ re-testable from this session** -- the dual-logger live test that follows target
 Live Event Readiness Checklist item actually asks ("do not conflict or overwrite"), using the 10-15s
 REST poll fallback path, which does NOT depend on this WS fix or its deploy timing.
 
+**Live dual-logger test #4, 2026-09-10 -- a real "do not conflict or overwrite" bug found and fixed,
+confirmed via actual concurrent requests, not reasoning about the code.** Two real logger accounts
+(`test-logger-id`, `logger_1780653409087`), both really assigned to a real throwaway LIVE match via
+the actual `POST /api/matches/[id]/assign-logger` route, firing real `POST /api/matches/[id]/events`
+requests against the branch's deployed Vercel preview via `Promise.all` (genuine concurrency, not
+sequential awaits) -- not a unit test, not a code read.
+
+**TEST 1 (same real-world goal, submitted by both loggers simultaneously):** both requests returned
+`201 Event created successfully`. DB read-back (ground truth, not the API responses): **2** separate
+`Goal` rows at minute 10 for the same player, `home_score` **3** instead of the correct 2 (1 for the
+duplicate-that-should-have-been-caught + 1 for a separate later goal in the same test run) --
+`BUG-196`'s dedup guard did NOT catch this. Root cause: the guard's `SELECT` ran as a standalone
+query *before* the `db.transaction()` that does the insert + score update (`BUG-121`'s own
+transaction) -- two concurrent requests both ran their SELECT before either had committed, both saw
+"no existing event," both proceeded to insert. This is the exact CLAUDE.md checklist item
+("do not conflict or overwrite") failing, live, for the single most common real dual-logger
+scenario: two loggers both seeing the same goal and both logging it within moments of each other.
+
+**Fix:** moved the dedup `SELECT` inside the same `db.transaction()` as the insert + score update in
+`src/app/api/matches/[id]/events/route.ts` -- the whole check+insert+score-update is now one atomic
+unit, the same pattern already proven for the logger-assignment race (`assign-logger/route.ts`,
+`BUG-008`). No new table, no permanent unique constraint (the dedup window is intentionally
+time-limited -- a permanent constraint on `(matchId, type, minute, playerId)` would wrongly block a
+legitimate later event sharing those exact fields).
+
+**Re-verified live after the fix, same test, fresh throwaway match:** see evidence block below.
+
+**Evidence:**
+- Commit: (pending, see commit below)
+- Verified by: the exact same `Promise.all` concurrent-request test re-run against a fresh throwaway
+  match post-fix, DB read-back for ground truth (not API response codes)
+- Observed result: (pending re-run after this commit -- see follow-up note)
+- Pending items: none once the re-run confirms exactly 1 `Goal` row and correct score; if the re-run
+  still shows 2 rows, this entry will be corrected, not left showing a false fix.
+
 **Problem, three parts, same root cause (`useMultiLogger.ts`/`multiLogger.ts`):**
 1. `broadcastEvent` (`useMultiLogger.ts:178-192`) does not send anything to another device, tab, or the server — it only dispatches a same-tab `window` `CustomEvent('MULTI_LOGGER_EVENT')`, which by definition never leaves the browser tab that dispatched it. Every `broadcastEvent()` call site in both `FootballLogger.tsx:741` and `BasketballLogger.tsx:613` is effectively inert for real cross-device sync.
 2. The **only** actual cross-logger sync mechanism is the periodic poll — 10s (football, `FootballLogger.tsx:667-726`) / 15s (basketball, `BasketballLogger.tsx:439-467`) — which fetches all DB events and merges by exact-ID dedup (`mergeEvents`, `multiLogger.ts:123-145`). Two loggers on the same match only converge once every 10-15 seconds, never in real time.
