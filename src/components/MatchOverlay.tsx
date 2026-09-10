@@ -6,6 +6,7 @@ import Image from 'next/image';
 import { Play, X, Trophy, Users, BarChart3, Clock, Star, MapPin, Calendar, Share2, Heart, AlertCircle, MessageSquare, Table } from 'lucide-react';
 import { Team, Player, Match, MatchEvent } from '@/types';
 import { useFavorites } from '@/hooks/useFavorites';
+import { getFollowTeamNotification } from '@/contexts/FavoritesContext';
 import { useNotifications } from './Notifications';
 import LiveMatchStatus from './LiveMatchStatus';
 import LiveMatchTimeline from './LiveMatchTimeline';
@@ -89,11 +90,7 @@ export function MatchOverlay({ match: initialMatch, onClose, onSelectPlayer }: M
   const handleToggleFollow = (team: Team) => {
     const isNowFollowing = !isFavoriteTeam(team.id);
     toggleTeam(team.id);
-    addNotification({
-      title: isNowFollowing ? 'Team Followed' : 'Team Unfollowed',
-      message: isNowFollowing ? `You are now following ${team.name}` : `You have unfollowed ${team.name}`,
-      type: 'match'
-    });
+    addNotification(getFollowTeamNotification(team.name, isNowFollowing));
   };
 
   const is5Aside = (match.sport as string) === 'Five-a-side' ||

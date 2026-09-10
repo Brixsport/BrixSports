@@ -4,6 +4,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { X, Search, Trophy, Users, Star, ArrowRight, Bell, Filter, Heart, ArrowUpDown } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useFavorites } from '@/hooks/useFavorites';
+import { getFollowTeamNotification } from '@/contexts/FavoritesContext';
+import { useNotifications } from '@/components/Notifications';
 
 // Define types based on database schema
 interface Team {
@@ -41,6 +43,15 @@ export function SearchOverlay({ onClose, onSelectTeam, onSelectPlayer }: SearchO
   const [players, setPlayers] = useState<Player[]>([]);
   const [loading, setLoading] = useState(false);
   const { toggleTeam, togglePlayer, isFavoriteTeam, isFavoritePlayer } = useFavorites();
+  const { addNotification } = useNotifications();
+
+  // BACKLOG-365 item 1: consequence note at the moment of favoriting, same
+  // shared message MatchOverlay/MatchDetailClient use.
+  const handleFollowTeam = (team: Team) => {
+    const isNowFollowing = !isFavoriteTeam(String(team.id));
+    toggleTeam(String(team.id));
+    addNotification(getFollowTeamNotification(team.name, isNowFollowing));
+  };
 
   // Fetch search results from API
   useEffect(() => {
@@ -176,7 +187,7 @@ export function SearchOverlay({ onClose, onSelectTeam, onSelectPlayer }: SearchO
                     </div>
                   </button>
                   <button
-                    onClick={() => toggleTeam(String(team.id))}
+                    onClick={() => handleFollowTeam(team)}
                     className={`p-3 rounded-xl transition-colors ${isFavoriteTeam(String(team.id)) ? 'text-primary bg-primary/10' : 'text-white/20 hover:text-white hover:bg-white/10'}`}
                   >
                     <Heart size={20} fill={isFavoriteTeam(String(team.id)) ? "currentColor" : "none"} />

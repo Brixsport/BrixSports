@@ -23,6 +23,26 @@ interface FavoritesContextType {
 
 const FavoritesContext = createContext<FavoritesContextType | undefined>(undefined);
 
+// BACKLOG-365 item 1: the "you'll get alerts" consequence note, at the moment
+// of favoriting -- deferred from Phase 2 (BACKLOG-363, the /favourites toggle
+// itself) because this moment happens away from /favourites, in 3 different
+// call sites (match page, match overlay, search overlay). One shared message
+// here so those 3 don't each drift their own copy, the same duplication that
+// caused BACKLOG-353 in the first place.
+export function getFollowTeamNotification(teamName: string, isNowFollowing: boolean) {
+  return isNowFollowing
+    ? {
+        title: 'Team Followed',
+        message: `You'll get alerts for every ${teamName} match. Turn this off anytime in Favourites.`,
+        type: 'match' as const,
+      }
+    : {
+        title: 'Team Unfollowed',
+        message: `You won't get match alerts for ${teamName} anymore.`,
+        type: 'match' as const,
+      };
+}
+
 // Was a plain hook (src/hooks/useFavorites.ts) with its own state + its own
 // fetch-on-mount effect. It's called from 12 different components (match page,
 // player page, competitions pages, search overlay, GlobalNotificationListener --

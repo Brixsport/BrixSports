@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { FaFutbol } from 'react-icons/fa';
 import { useFavorites } from '@/hooks/useFavorites';
+import { getFollowTeamNotification } from '@/contexts/FavoritesContext';
 import LiveMatchTimeline from '@/components/LiveMatchTimeline';
 import LiveStats from '@/components/LiveStats';
 import BasketballBoxScore from '@/components/BasketballBoxScore';
@@ -123,6 +124,13 @@ export default function MatchDetailClient() {
     const { events: liveEvents, latestEvent } = useMatchEvents(matchId);
     const { time: matchTime, isStale: isMatchTimeStale } = useMatchTimer(matchId);
     const { addNotification } = useNotifications();
+    // BACKLOG-365 item 1: consequence note at the moment of favoriting, same
+    // shared message MatchOverlay/SearchOverlay use.
+    const handleFollowTeam = useCallback((team: { id: string; name: string }) => {
+        const isNowFollowing = !isFavoriteTeam(team.id);
+        toggleTeam(team.id);
+        addNotification(getFollowTeamNotification(team.name, isNowFollowing));
+    }, [isFavoriteTeam, toggleTeam, addNotification]);
     const { toasts, warning, success, removeToast } = useToast();
     const prevConnected = useRef<boolean | null>(null);
     const disconnectToastFired = useRef(false);
@@ -687,7 +695,7 @@ export default function MatchDetailClient() {
                                 stay visible at every viewport width (BUG-214: was nested inside
                                 "hidden sm:block", making it invisible on any real phone). */}
                             <button
-                                onClick={() => toggleTeam(match.homeTeam.id)}
+                                onClick={() => handleFollowTeam(match.homeTeam)}
                                 aria-label={isFavoriteTeam(match.homeTeam.id) ? `Unfollow ${match.homeTeam.name}` : `Follow ${match.homeTeam.name} — get alerts for this team's matches`}
                                 title={isFavoriteTeam(match.homeTeam.id) ? 'Unfollow' : "Follow — get alerts for this team's matches"}
                                 className={`transition-colors ${isFavoriteTeam(match.homeTeam.id) ? 'text-yellow-400' : 'text-white/30 hover:text-white/60'}`}
@@ -771,7 +779,7 @@ export default function MatchDetailClient() {
                             {/* Star sits outside the sm:block name wrapper above -- see the
                                 matching comment on the home-team side (BUG-214). */}
                             <button
-                                onClick={() => toggleTeam(match.awayTeam.id)}
+                                onClick={() => handleFollowTeam(match.awayTeam)}
                                 aria-label={isFavoriteTeam(match.awayTeam.id) ? `Unfollow ${match.awayTeam.name}` : `Follow ${match.awayTeam.name} — get alerts for this team's matches`}
                                 title={isFavoriteTeam(match.awayTeam.id) ? 'Unfollow' : "Follow — get alerts for this team's matches"}
                                 className={`transition-colors ${isFavoriteTeam(match.awayTeam.id) ? 'text-yellow-400' : 'text-white/30 hover:text-white/60'}`}
