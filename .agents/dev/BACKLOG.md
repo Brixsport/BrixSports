@@ -12606,3 +12606,27 @@ render at full size regardless of the minimize state.
 **Files:** `src/components/MultiLoggerStatus.tsx`.
 
 ---
+
+### BACKLOG-370 — University Indicator Added to Team + League Pages (Cross-University Discovery, Follow-up to `BACKLOG-365` Item 4)
+
+**Status:** SHIPPED — 2026-09-10, `tsc --noEmit` clean, not yet live-verified against a running deploy.
+**Priority:** Low-Medium — product direction from Richard, not a bug: `BACKLOG-365` item 4 ("home-university default-view scoping") was put on hold pending more product thought on what "scoping" should mean, but Richard clarified the underlying model in the same breath — per this project's own locked "Google Drive not Shopify" decision (one platform, all universities, scoped by affiliation), the direction is fans should be able to **discover** other universities/leagues/teams, not have them hidden by default. First concrete step: make it visible which university a team or league actually belongs to, since neither page showed it anywhere persistent.
+
+**Problem, two places:**
+1. **Team detail page** (`src/app/teams/[id]/TeamDetailClient.tsx`) — `team.university` was already fetched (used inside a conditional "University Pool" section) but never shown in the always-visible header. The public teams LIST page already does this correctly (`team.university || 'Registered Team'`) — confirmed via a direct grep, not assumed.
+2. **Competition detail page** (`src/app/competitions/[id]/page.tsx`) — the field actually meant for this, `hostOrganizationId`, is unreliable: a direct DB check found it `null` on 5 of 8 real competitions (only the 3 BUSA League rows have it set), and the plain-text `hostOrganization` column is `null` on all 8. Building the indicator directly off that field would show nothing for most leagues.
+
+**Fix:**
+1. Team page: added an always-visible pill next to the existing "{sport} Team" badge in the header, `{team.university}`.
+2. Competition page: derived the university from the standings' own `team.university` values instead of the sparse `hostOrganizationId` — confirmed via a direct DB check that every BUSALYMPICS/BUSA League match's participating teams share exactly one university ("Bells University of Technology"), so `useMemo`-ing `standings.map(s => s.team.university)` down to a single distinct value correctly identifies the league's university with zero schema change. A genuinely inter-university competition (NPUGA: 10 distinct universities across its teams) correctly produces no single value and shows no badge — that's the right behavior for a cross-university league, not a gap to fix.
+
+**Deliberately not done:** the competitions LIST page (`/competitions`) — its `GET /api/competitions` route returns raw competition rows with no team join, so computing this per-card would need a backend change; scoped out of this pass, flagged here rather than silently skipped. Also not done: backfilling `hostOrganizationId` across the other 5 competitions (a real, separate data-completeness gap — `BACKLOG-333` already flagged the admin create-competition flow never setting it) and the actual "default-view scoping" UX itself (still explicitly on hold, per `BACKLOG-365` item 4).
+
+**Evidence:**
+- Commit: `0c4b491`
+- Verified by: `tsc --noEmit` clean against both touched files (35 pre-existing `src/db/` errors unrelated); the university-derivation logic was checked against real DB data before writing it (`SELECT DISTINCT team.university` joined through each competition's real matches) — not assumed correct from schema alone
+- Observed result: BUSA LEAGUE BASKETBALL/FOOTBALL and both BUSALYMPICS competitions each resolve to exactly one university ("Bells University of Technology") across their real teams; NPUGA (FOOTBALL/BASKETBALL) each resolve to 10 distinct universities, correctly producing no derived value
+- Pending items: live visual check on the branch's Vercel preview (not yet done this pass); the competitions LIST page and the `hostOrganizationId` backfill, both explicitly out of scope above
+**Files:** `src/app/teams/[id]/TeamDetailClient.tsx`, `src/app/competitions/[id]/page.tsx`.
+
+---
