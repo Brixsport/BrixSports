@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { TrendingUp, Trophy, Target, Zap, Home, Plane, Shield, Activity } from 'lucide-react';
 import Link from 'next/link';
+import { BackButton } from '@/components/ui/BackButton';
 
 interface TeamStats {
     team: {
@@ -97,7 +98,10 @@ export default function StatsPage() {
                             <TrendingUp size={16} className="text-primary" />
                             <span className="text-[10px] font-black uppercase tracking-widest text-white/40">BUSA League</span>
                         </div>
-                        <h1 className="font-display text-5xl tracking-tighter italic uppercase leading-none">Team Statistics</h1>
+                        <div className="flex items-center gap-2">
+                            <BackButton />
+                            <h1 className="font-display text-5xl tracking-tighter italic uppercase leading-none">Team Statistics</h1>
+                        </div>
                         <p className="text-white/60 mt-2 text-sm">Comprehensive team performance analytics</p>
                     </div>
 

@@ -12950,3 +12950,113 @@ overflowing the page. Not yet stress-tested against a real large competition cou
   if it recurs on other accounts.
 
 ---
+
+### BACKLOG-379 — PWA Back Button: Near-Universal Addition Across Missing Screens
+
+**Status:** SHIPPED — committed, not yet live-verified (per this project's standing rule, local dev
+is never started for this project; verification happens against the branch's Vercel preview).
+**Priority:** LOW — UI-consistency/navigation-affordance work Richard explicitly asked for, not a bug.
+
+**Context:** Richard's scope (given across two messages this session): a back button should be
+near-universal across PWA/standalone-mode screens, **except** the 3 bottom-nav root screens
+(`/`, `/competitions`, `/profile`), which are low priority for one, not forbidden from having one --
+a follow-up correction after an earlier framing suggested roots must not have one. Browser (non-PWA)
+mode is case-by-case, not a blanket add -- the browser chrome already has its own back button there.
+Admin/logger also need this, but held to a looser bar than the viewer-facing side (admin/logger not
+covered by this entry -- see Deferred below).
+
+**Built:**
+- New shared `src/components/ui/BackButton.tsx`. Self-gates on `useAppInstalled()` (the existing,
+  previously-unused hook in `src/hooks/usePWA.ts`) -- renders nothing in plain browser mode by
+  default, matching "browser-mode is case-by-case." A `forceShow` prop opts a specific screen into
+  showing in browser mode too, used only where judged to genuinely need it (see below). A
+  `fallbackHref` prop covers screens with no reliable browser history to return to (deep links, email
+  links) -- `router.back()` is used unless `window.history.length <= 2` (a cold tab with no real app
+  history), in which case it navigates to `fallbackHref` instead. Matches the existing hand-rolled
+  back-button visual pattern already live on `/competitions`, `/teams/[id]`, `/matches/[id]`,
+  `/players/[id]` (ArrowLeft icon, `rounded-full hover:bg-white/10`).
+- Wired into 20 pages that had no back button (via 2 parallel subagents for the bulk mechanical
+  insertion, each independently `tsc`-verified, then independently re-verified here -- diffs read in
+  full, `tsc --noEmit` re-run, and every "skipped, already has one" / "skipped, backscoped stub" claim
+  spot-checked against the actual file, not taken on the agents' word):
+  - No-fallback (`<BackButton />`, in-app navigation covers "back to where"): `about`, `docs`, `news`,
+    `privacy`, `terms`, `stats`, `dashboard`, `draft`, `profile/settings`, `profile/favorites`,
+    `transfers`, `favourites`, `teams` (the last two added directly, not via subagent -- already
+    touched this session for `BACKLOG-378`'s tab-bar work).
+  - Fallback + `forceShow` (commonly reached cold, so needs to work in browser mode too):
+    `login` (→`/`), `signup`/`reset-password`/`forgot-password` (→`/login`).
+  - Fallback only (in-app-reached in the common case, but ambiguous "back to where"):
+    `lineup-builder` (→`/`), `competitions/[id]/register` and `.../registration-success`
+    (→`/competitions/${id}`, using each file's real id variable, not hardcoded).
+
+**Deliberately skipped (verified correct, not just accepted on report):**
+- `scouts`, `predictions`, `fpl`, `fpl/team`, `fpl/transfers`, `nesa-registration` -- all backscoped
+  feature stubs (`notFound()` only, confirmed by reading each file: `BACKLOG-028`/`BACKSCOPE.md`), no
+  header to attach anything to.
+- `news/[slug]` -- confirmed `NewsDetailClient.tsx` already has a deliberate "← Back to News" labeled
+  link, a different (and fine) pattern from the icon-only BackButton; left alone rather than adding a
+  redundant second affordance.
+- `livestream/[id]/page.tsx` -- confirmed a Server Component with no header JSX of its own; the actual
+  back button (`ArrowLeft` + `handleBack`/`router.back()`) already lives in the child
+  `LivestreamView.tsx` it renders. Not touched.
+- `offline` -- excluded by explicit instruction to both subagents; a back button on the PWA offline
+  fallback page is judged not clearly useful (going "back" while offline likely just re-shows the same
+  state) and wasn't part of Richard's ask.
+- `reset-password`/`forgot-password` already had a separate "Back to Sign In" text link at the bottom
+  of the card (a different, deliberate pattern) -- confirmed not a duplicate of the new top-of-card
+  icon button, both left in place.
+
+**Assumptions made (not covered by the original ask):**
+- The 3 bottom-nav roots (`/`, `/competitions`, `/profile`) were left untouched this pass, consistent
+  with "low priority" -- not fixed as in-scope now, not explicitly excluded either; a natural
+  follow-up if Richard wants full coverage.
+- `/competitions`' pre-existing back button (found during the earlier findings-only audit, already
+  live before this session) was left exactly as-is -- Richard's correction confirmed roots having one
+  isn't wrong, just not required, so no change needed there.
+
+**Known bug intersections:** `lineup-builder` is 🔴 High Volatility per `CLAUDE.md` (architecture
+cleanup pending full re-audit, `BACKLOG-220`) -- this change is purely additive (one new element in
+the header row, no write-path/formation/lock logic touched) and doesn't intersect the actual open
+concerns there (dead duplicate rendering code, non-atomic write race, no formation-change confirm).
+
+**Risks / Blockers:** Admin and logger were explicitly scoped by Richard as in-scope too ("has to apply
+also but not as strict as viewer side") but are **not covered by this entry** -- ~30 admin routes plus
+the logger flow are a separate, larger pass given the admin/logger app each has its own separate
+installed PWA shell (`manifest-admin.json`/`manifest-logger.json`, confirmed during the earlier
+findings-only audit). Flagging as deferred, not silently dropped.
+
+**File Structure Delta:**
+- Added: `src/components/ui/BackButton.tsx`
+- Modified (20): `src/app/about/page.tsx`, `src/app/docs/page.tsx`, `src/app/news/page.tsx`,
+  `src/app/privacy/page.tsx`, `src/app/terms/page.tsx`, `src/app/stats/page.tsx`,
+  `src/app/dashboard/page.tsx`, `src/app/draft/page.tsx`, `src/app/profile/settings/page.tsx`,
+  `src/app/profile/favorites/page.tsx`, `src/app/transfers/page.tsx`, `src/app/favourites/page.tsx`,
+  `src/app/teams/page.tsx`, `src/app/login/page.tsx`, `src/app/signup/page.tsx`,
+  `src/app/reset-password/page.tsx`, `src/app/forgot-password/page.tsx`,
+  `src/app/lineup-builder/page.tsx`, `src/app/competitions/[id]/register/page.tsx`,
+  `src/app/competitions/[id]/registration-success/page.tsx`
+
+**Test Scenarios (manual, run against the Vercel preview once deployed):**
+1. Visit any edited page in a normal desktop/mobile browser tab (not installed) -- no back button
+   renders on the no-fallback and fallback-only pages (`useAppInstalled()` is false).
+2. Same, but for `login`/`signup`/`reset-password`/`forgot-password` -- back button DOES render even
+   in plain browser mode (`forceShow`).
+3. Install the app as a PWA (or emulate `display-mode: standalone`) -- back button renders on every
+   edited page.
+4. On an installed/standalone session, navigate in-app to e.g. `/stats` then tap its back button --
+   returns to the actual previous page (`router.back()`), not a hardcoded fallback.
+5. Open `/login` directly as a fresh tab (simulating a cold/deep-link open, `history.length` small) in
+   standalone mode, tap back -- goes to `/`, not a broken `router.back()` with no history.
+6. `/competitions/[id]/register` and `.../registration-success` -- back button's fallback resolves to
+   the real competition's detail page, not a literal `${id}` string.
+7. `tsc --noEmit` -- zero new errors vs. baseline (independently re-run and diffed here, not just
+   taken from the subagents' self-reports).
+
+**Evidence:**
+- Verified by: `tsc --noEmit` (zero new errors, independently confirmed) + full manual diff review of
+  all 20 files + spot-checks of every "skipped" claim against the actual file content.
+- Observed result: not yet live-tested on the Vercel preview.
+- Pending items: live verification of test scenarios 1-6 above; admin/logger coverage (see Risks);
+  the 3 root screens remain untouched (deliberate, low priority).
+
+---

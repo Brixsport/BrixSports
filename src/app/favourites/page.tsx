@@ -7,6 +7,7 @@ import { useFavorites } from '@/hooks/useFavorites';
 import { useAuth } from '@/contexts/AuthContext';
 import { Coachmark } from '@/components/onboarding/Coachmark';
 import { UnderlineTabs, UnderlineTab } from '@/components/ui/UnderlineTabs';
+import { BackButton } from '@/components/ui/BackButton';
 import Link from 'next/link';
 import Image from 'next/image';
 
@@ -177,6 +178,7 @@ export default function FavouritesPage() {
             <div className="sticky top-0 z-40 bg-[#0a0a0a] border-b border-white/10 backdrop-blur-xl">
                 <div className="max-w-7xl mx-auto px-4 py-6">
                     <div className="flex items-center gap-3">
+                        <BackButton />
                         <Heart size={24} className="text-primary fill-primary" />
                         <div>
                             <h1 className="font-display text-3xl tracking-tighter italic uppercase leading-none">

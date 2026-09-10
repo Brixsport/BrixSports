@@ -5,6 +5,7 @@ import { Trophy, Users, TrendingUp, ArrowRight, Loader2, Globe, Building2, Gradu
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { UnderlineTabs, UnderlineTab } from '@/components/ui/UnderlineTabs';
+import { BackButton } from '@/components/ui/BackButton';
 
 interface Team {
     id: string;
@@ -170,6 +171,7 @@ export default function TeamsPage() {
                 <header className="flex flex-col md:flex-row md:items-start justify-between gap-8 border-b border-white/5 pb-8">
                     <div className="flex-1">
                         <div className="flex items-center gap-3 mb-2">
+                            <BackButton />
                             <Users size={16} className="text-primary" />
                             <span className="text-[10px] font-black uppercase tracking-widest text-white/40">Teams Directory</span>
                         </div>
