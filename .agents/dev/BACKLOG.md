@@ -12480,8 +12480,13 @@ indicator) stay `shrink-0`, unchanged.
 
 ### BACKLOG-367 — Push Subscribe Failures Were Silently Swallowed (No Real Error Surfaced)
 
-**Status:** SHIPPED — 2026-09-10, `tsc --noEmit` clean, not yet live-verified against a real
-"permission granted" browser (see below).
+**Status:** RESOLVED — 2026-09-10. Richard retried Enable on the real device after this fix
+deployed: `STATUS: ACTIVE & SUBSCRIBED`, button now shows "Disable" -- push is genuinely working.
+Whatever the original failure mode was (stale browser-level subscription, a since-resolved deploy
+propagation gap, or a transient state) self-resolved on retry; the diagnostic (`getLastError()`)
+never actually got exercised against a real second failure, so the specific original root cause
+stays undetermined -- but the outcome the user needed (working push notifications) is confirmed live.
+The diagnostic fix stays in place as real, permanent value for any future push-subscribe failure.
 **Priority:** MEDIUM -- directly blocks diagnosing a live user report (Richard, real device, feature
 branch preview): Browser Push shows "Permitted but Not Subscribed", tapping Enable does nothing
 visible.
@@ -12659,5 +12664,94 @@ that doesn't need to stay single-line" pattern used elsewhere on this branch. No
   page-level scroll check. At 768px, `scrollWidth === clientWidth` (768, 0px overflow, unchanged)
 - Pending items: none
 **Files:** `src/components/notifications/PushDiagnosticPage.tsx`.
+
+---
+
+### BACKLOG-372 — Team Page "View All" Link 404s (Route Was Never Built)
+
+**Status:** SHIPPED — 2026-09-10, `tsc --noEmit` clean, not yet live-verified against a running
+deploy.
+**Priority:** MEDIUM -- live device report from Richard.
+
+**Problem:** `src/app/teams/[id]/TeamDetailClient.tsx`'s "Recent Activity" section had a "View All"
+link to `/matches?team=${teamId}` -- confirmed `src/app/matches/` has only a `[id]` dynamic route, no
+index page, so this has never resolved to anything but a 404.
+
+**Fix:** changed "View All" from a `Link` to a `button` that switches this same page's own `Fixtures`
+tab (`setActiveTab('fixtures')`), which already shows the team's full match list -- no new route
+needed.
+
+**Evidence:**
+- Commit: (pending, see commit below)
+- Verified by: `tsc --noEmit` only so far
+- Observed result: n/a -- not yet live-tested
+- Pending items: live-verify on the branch's Vercel preview that clicking "View All" switches to the
+  Fixtures tab instead of navigating away.
+**Files:** `src/app/teams/[id]/TeamDetailClient.tsx`.
+
+---
+
+### BACKLOG-373 — Team Page Player Cards: Unrounded REB/AST Overflowed and Overlapped
+
+**Status:** SHIPPED — 2026-09-10, `tsc --noEmit` clean, not yet live-verified against a running
+deploy.
+**Priority:** LOW-MEDIUM -- live device report from Richard (screenshot: repeating-decimal numbers
+like `3.3333333333333335` visually overlapping the neighbouring stat).
+
+**Problem:** `src/app/teams/[id]/TeamDetailClient.tsx`'s basketball player stat cards rendered `PTS`
+with `.toFixed(1)` but `REB`/`AST` raw (`player.stats.reboundsPerGame || 0`, no rounding) -- a
+repeating-decimal per-game average overflowed its column and overlapped the adjacent figure.
+**Fix:** same `.toFixed(1)` applied to `REB`/`AST`, matching `PTS`.
+
+**Evidence:**
+- Commit: (pending, see commit below)
+- Verified by: `tsc --noEmit` only so far
+- Observed result: n/a -- not yet live-tested
+- Pending items: live-verify on the branch's Vercel preview against a real basketball team with a
+  repeating-decimal average.
+**Files:** `src/app/teams/[id]/TeamDetailClient.tsx`.
+
+---
+
+### BACKLOG-374 — Team `standings` Table Undercounts Real Finished Matches (Joga-Bonito Confirmed)
+
+**Status:** OPEN — filed, not fixed, handed to a peer session (see below) alongside a related
+prior-season player-stats report that may share the same root cause.
+**Priority:** HIGH -- a real, confirmed data-integrity bug affecting the public-facing team stats
+card, not a display-only issue.
+
+**Problem, confirmed via live DB query (not assumed):** Joga-Bonito's team page showed "Matches
+Played: 3" / "Goals For: 15". Direct query against `matches` (`WHERE (home_team_id = ? OR
+away_team_id = ?) AND status = 'FINISHED'`) found **6** real finished matches for this team, totaling
+**17** goals for -- not 3 and 15. `src/app/api/teams/[id]/route.ts`'s `useStoredStats` branch reads
+from the `standings` table (`SELECT * FROM standings WHERE team_id = ?`) rather than counting real
+matches directly whenever any standings row exists for the team -- and `standings.played`/
+`goals_for` for this team's BUSA League Football Group A row (`busa-standing-1`) is undercounting by
+roughly half the real matches (`played: 3` vs. 6 real, `goals_for: 15` vs. 17 real).
+
+**Not root-caused to an exact mechanism yet** -- plausible causes, none confirmed: (a) a subset of
+these matches were backfilled via a script that wrote `matches`/`match_events` directly without
+triggering whatever process updates `standings`; (b) `standings` is only updated by the live
+match-completion flow and these specific matches were marked FINISHED some other way (e.g. an admin
+correction, an import); (c) a `standings` recompute genuinely hasn't run since some of these matches
+were added. Needs the same kind of investigation this project's own `football_player_stats` backfill
+work already went through (see the `project_backfill_cumulative_recompute` memory / prior BACKLOG
+entries on that topic) -- the same failure shape (an aggregate table not reflecting a player/team's
+full real history) may share a root cause with a separately-reported "previous season player stats
+not showing" bug.
+
+**Handed off:** messaged to a peer session (`Brixpsorts match page`) alongside the prior-season
+player-stats investigation, since both are the same class of bug (an aggregate/summary table not
+reflecting the full real match history) and worth investigating together rather than fixed in
+isolation by guessing at the standings sync mechanism without first understanding why player stats
+have the same shape of gap.
+
+**Evidence:**
+- Verified by: `dev/inspect-joga-matches-played.mjs` (read-only), direct DB query against `matches`
+  and `standings` for team `busa-joga`
+- Observed result: 6 real finished matches / 17 real goals for vs. `standings`' 3 / 15
+- Pending items: root cause + fix, owned by the peer session this was handed to.
+**Files:** likely `src/app/api/teams/[id]/route.ts` (the read path) and whatever writes/syncs the
+`standings` table (not yet located).
 
 ---

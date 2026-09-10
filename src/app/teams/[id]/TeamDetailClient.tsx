@@ -276,12 +276,19 @@ export default function TeamDetailClient() {
                                                 <Activity className="w-5 h-5 text-primary" />
                                                 Recent Activity
                                             </h2>
-                                            <Link
-                                                href={`/matches?team=${teamId}`}
+                                            {/* Live device report: this linked to /matches?team=..., a
+                                                route that has never existed (src/app/matches/ has only
+                                                a [id] dynamic route, no index page) -- a real 404. This
+                                                same page already has a Fixtures tab showing this team's
+                                                full match list, so switch to it instead of navigating
+                                                to a page that was never built. */}
+                                            <button
+                                                type="button"
+                                                onClick={() => setActiveTab('fixtures')}
                                                 className="text-xs font-bold uppercase tracking-widest text-white/40 hover:text-white transition-colors"
                                             >
                                                 View All
-                                            </Link>
+                                            </button>
                                         </div>
 
                                         <div className="space-y-4">
@@ -448,11 +455,16 @@ export default function TeamDetailClient() {
                                                                             </div>
                                                                             <div className="text-center border-l border-white/5">
                                                                                 <div className="text-[10px] uppercase text-white/30 font-bold">REB</div>
-                                                                                <div className="font-mono font-bold">{player.stats.reboundsPerGame || 0}</div>
+                                                                                {/* Live device report: unlike PTS above, this rendered the raw
+                                                                                    per-game average with no rounding -- a value like
+                                                                                    3.3333333333333335 (a repeating-decimal average, not a data
+                                                                                    bug) overflowed its column and visually overlapped the
+                                                                                    neighbouring AST figure. Same .toFixed(1) as PTS. */}
+                                                                                <div className="font-mono font-bold">{(player.stats.reboundsPerGame || 0).toFixed(1)}</div>
                                                                             </div>
                                                                             <div className="text-center border-l border-white/5">
                                                                                 <div className="text-[10px] uppercase text-white/30 font-bold">AST</div>
-                                                                                <div className="font-mono font-bold">{player.stats.assistsPerGame || 0}</div>
+                                                                                <div className="font-mono font-bold">{(player.stats.assistsPerGame || 0).toFixed(1)}</div>
                                                                             </div>
                                                                         </div>
                                                                     )}
