@@ -29,7 +29,7 @@ const navItems = [
     { icon: <Users size={18} />, label: "Loggers", href: "/admin/loggers" },
     { icon: <Server size={18} />, label: "Infrastructure", href: "/admin/infrastructure", adminOnly: true },
     { icon: <Shield size={18} />, label: "Access Control", href: "/admin/access", adminOnly: true },
-    { icon: <Settings size={18} />, label: "Algorithm Setup", href: "/admin/settings", adminOnly: true },
+    { icon: <Settings size={18} />, label: "System Settings", href: "/admin/settings", adminOnly: true },
 ];
 
 export function AdminSidebar() {

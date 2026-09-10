@@ -12132,18 +12132,20 @@ same limitation the pre-existing single-instance snooze already had, not a new r
 
 ### BACKLOG-360 — Product-Thinking Audit: Minor Findings, Doc Corrections, Not Independently Filed
 
-**Status:** OPEN (doc corrections applied where trivial; the rest genuinely low-priority, bundled
-here rather than given individual numbers).
+**Status:** RESOLVED — 2026-09-10, the two real action items (1, 2) fixed and `tsc --noEmit` clean;
+items 3-4 are informational only, no action needed (see their own notes below).
 **Priority:** LOW.
 **Found:** full-system product-thinking audit, 2026-09-09, full report:
 https://claude.ai/code/artifact/d43b4763-3d1d-4e60-af9c-813ca2eea9d7
 
-1. **Manager Center's "stub" status in an architecture doc is stale** -- the audit confirmed it's
-   live and real, not a stub. Whichever doc says otherwise (not yet identified/corrected) should be
-   updated in a future doc-hygiene pass.
-2. **Settings page is labeled "Algorithm Setup" in the admin sidebar** -- a naming mismatch between
-   the nav label and the page's actual (broader) scope. Cosmetic, one-line fix whenever someone's
-   already touching that sidebar component.
+1. ~~**Manager Center's "stub" status in an architecture doc is stale**~~ -- **FIXED 2026-09-10**.
+   Identified: `.agents/dev/SYSTEM_ARCHITECTURE.md:746`, `🔲 Stub` for `/admin/manager`. Confirmed
+   `src/app/admin/manager/page.tsx` is a real 445-line page before correcting the doc. Updated to
+   `✅ Working` with a note explaining the correction.
+2. ~~**Settings page is labeled "Algorithm Setup" in the admin sidebar**~~ -- **FIXED 2026-09-10**.
+   `src/components/admin/AdminSidebar.tsx:32` relabeled from "Algorithm Setup" to "System Settings",
+   matching the page's own `<h1>` heading (`/admin/settings`'s actual scope is broader than just
+   algorithm config -- system preferences too).
 3. **The documented Super Admin → Competition Admin → Team Manager hierarchy doesn't exist in
    code** -- not a new finding, already known and tracked in `PLATFORM_MODEL.md`; the audit just
    independently re-confirmed it live rather than surfacing anything new.
