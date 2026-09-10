@@ -10461,14 +10461,10 @@ Assigned-Logger truncate caps (`80px`→`60px`, `50px`→`40px`) to buy back the
 
 ### BACKLOG-350 — Admin Responsive Audit: 🔴 High-Volatility Pages, Findings Only (No Fix Applied)
 
-**Status:** PARTIALLY RESOLVED — item 1 (`/admin/access`) fixed 2026-09-09 under Richard's explicit
-one-page go-ahead (see "Update" below); items 2-3 (`/admin/advertisements`, `/admin/transfers`)
-remain OPEN, deliberately not fixed per `CLAUDE.md`'s "Do Not Touch Without Explicit Brief"
-instruction -- no blanket lift of the 🔴 flag, Richard authorized `/admin/access` only.
-**Priority:** LOW for items 2-3 (still unsafe to touch without a dedicated brief; fixing responsive
-bugs here is a separate, scoped task, not a side effect of this audit).
-**Files (not modified, items 2-3 only):** `src/app/admin/advertisements/page.tsx`,
-`src/app/admin/transfers/page.tsx`.
+**Status:** SHIPPED — 2026-09-10, all 3 items now fixed under Richard's explicit go-ahead for items
+2-3 ("lets do 350"). `tsc --noEmit` clean, not yet live-verified against a running deploy.
+**Priority:** was LOW pending authorization; now MEDIUM (real overflow bugs, now fixed).
+**Files:** `src/app/admin/advertisements/page.tsx`, `src/app/admin/transfers/page.tsx`.
 **Found:** session `brixsports-v2-cc`, 2026-09-09, same admin-wide responsive sweep as
 `BACKLOG-349` -- these three pages were live DOM-scanned (mobile 375px + tablet 768px) for
 awareness, per that session's brief, but explicitly NOT fixed since `CLAUDE.md` lists their
@@ -10483,13 +10479,20 @@ underlying features (User Management, Ads, Transfers/news-style page) as 🔴 Hi
    scroll escape hatch at all. Confirmed at both 375px (326px wrapper) and 768px (703px wrapper,
    table still 860px) -- this one does NOT clear at tablet either, unlike the other two below.
    **FIXED, see "Update" below.**
-2. **`/admin/advertisements` -- page-level overflow, ~100px at 375px:** `scrollWidth` 475px vs a
-   375px viewport; clean at 768px tablet. Not yet root-caused to a specific element (findings-only
-   pass, no source dive per the 🔴 no-touch instruction). **Still OPEN, not authorized.**
-3. **`/admin/transfers` -- page-level overflow, ~266px at 375px:** `scrollWidth` 641px vs a 375px
-   viewport, the worst overflow found in this entire audit; clean at 768px tablet. Not yet
-   root-caused to a specific element (findings-only pass, no source dive per the 🔴 no-touch
-   instruction). **Still OPEN, not authorized.**
+2. ~~**`/admin/advertisements` -- page-level overflow, ~100px at 375px**~~ -- **FIXED 2026-09-10.**
+   Root-caused via live DOM scan: the header row (title + "Add Advertisement" button, no wrap) and,
+   the real driver of the 101px, an ad-card row where the title/description block wasn't
+   `min-w-0`/`flex-1` so `truncate` never engaged, pushing the 3 icon buttons (Eye/Edit/Trash) off
+   the card. Fixed: header stacks below `sm:`, title block now `min-w-0 flex-1` with icon buttons
+   `shrink-0`, stats row (Impressions/Clicks/From/To) now `flex-wrap`.
+3. ~~**`/admin/transfers` -- page-level overflow, ~266px at 375px**~~ -- **FIXED 2026-09-10.**
+   Root-caused: a single card row packed 4 unrelated sections (player, transfer-arrow, status/
+   type/fee, 2 action buttons) into one unwrapped flex row with zero shrink handling -- the actual
+   worst offender, confirmed live (`p-2` action buttons at right=641 vs a 375px viewport). Fixed:
+   row stacks vertically below `lg:` (not `md:` -- BACKLOG-349's collision lesson), `min-w-0`+
+   `truncate` on player name/team names, `flex-wrap` on the details row. Also fixed the header
+   (same unwrapped title+button pattern as advertisements) and the status-filter pill row (same
+   `overflow-x-auto scrollbar-hide` treatment as `BACKLOG-343`'s `/admin/matches` filter row).
 
 `/admin/match-lineups` (list page) and `/admin/news` were also spot-checked at both breakpoints
 and found clean (no page-level overflow) -- not filed here since there is nothing to report.
@@ -10529,6 +10532,21 @@ alone (not `sm:`/`md:`) governs both 375px and 768px here, verified clean at bot
   which also fixed a separate, real bug in this same file's Stats cards (unrelated to this entry's
   own overflow fix -- see `BACKLOG-352`).
 - Pending items: none.
+
+**Update, 2026-09-10: items 2-3 authorized and fixed.** Richard gave the explicit brief items 2-3
+were waiting on ("lets do 350"). Both root-caused via the same live DOM technique as `/admin/access`
+above (walk the DOM for `getBoundingClientRect().right` exceeding viewport width, not just measure
+`scrollWidth`) -- see the corrected findings 2-3 above for each page's actual root cause. Fix pattern
+matches this whole session's convention: `min-w-0`+`truncate` on any unbounded text, `shrink-0` on
+fixed-width siblings, `flex-wrap`/`overflow-x-auto scrollbar-hide` on pill rows, multi-section rows
+stacked below `lg:` (never `md:`).
+
+**Evidence:**
+- Commit: (pending, see commit below)
+- Verified by: `tsc --noEmit` only so far (18, identical to baseline, zero new errors)
+- Observed result: n/a -- not yet re-measured live post-fix
+- Pending items: live-verify both pages on the branch's Vercel preview at 375px, confirm
+  `document.documentElement.scrollWidth - clientWidth` is 0 (was 101px and 266px respectively).
 
 ---
 

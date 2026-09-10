@@ -263,20 +263,23 @@ function AdminTransfersPageContent() {
             <ToastContainer toasts={toasts} onClose={removeToast} />
             {/* Header */}
             <div className="border-b border-slate-800 bg-slate-900/50 backdrop-blur-xl sticky top-0 z-40">
+                {/* BACKLOG-350: same header-overflow pattern as /admin/advertisements
+                    -- back link + divider + title + button in one unwrapped row
+                    had no room at 375px. Stacks below sm:. */}
                 <div className="max-w-7xl mx-auto px-6 py-4">
-                    <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-4">
-                            <Link href="/admin" className="text-slate-400 hover:text-white transition-colors">
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                        <div className="flex items-center gap-4 min-w-0">
+                            <Link href="/admin" className="text-slate-400 hover:text-white transition-colors shrink-0">
                                 ← Back to Admin
                             </Link>
-                            <div className="h-6 w-px bg-slate-700" />
-                            <h1 className="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-cyan-400">
+                            <div className="h-6 w-px bg-slate-700 shrink-0" />
+                            <h1 className="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-cyan-400 truncate">
                                 Transfers Management
                             </h1>
                         </div>
                         <button
                             onClick={handleCreate}
-                            className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-blue-500 to-cyan-500 text-white rounded-xl font-semibold hover:shadow-lg hover:shadow-blue-500/50 transition-all"
+                            className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-blue-500 to-cyan-500 text-white rounded-xl font-semibold hover:shadow-lg hover:shadow-blue-500/50 transition-all shrink-0 self-start sm:self-auto"
                         >
                             <Plus className="w-5 h-5" />
                             Add Transfer
@@ -302,13 +305,16 @@ function AdminTransfersPageContent() {
                             />
                         </div>
 
-                        {/* Status Filter */}
-                        <div className="flex gap-2">
+                        {/* Status Filter -- BACKLOG-350: same unwrapped-pill-row
+                            overflow class as /admin/matches's status filter
+                            (BACKLOG-343). Same fix: horizontal scroll instead of
+                            pushing the page width. */}
+                        <div className="flex gap-2 overflow-x-auto scrollbar-hide">
                             {['all', ...TRANSFER_STATUS].map((status) => (
                                 <button
                                     key={status}
                                     onClick={() => setFilterStatus(status)}
-                                    className={`px-4 py-3 rounded-xl font-semibold capitalize transition-all ${filterStatus === status
+                                    className={`shrink-0 whitespace-nowrap px-4 py-3 rounded-xl font-semibold capitalize transition-all ${filterStatus === status
                                         ? 'bg-gradient-to-r from-blue-500 to-cyan-500 text-white shadow-lg shadow-blue-500/50'
                                         : 'bg-slate-800/50 text-slate-300 hover:bg-slate-700/50 border border-slate-700/50'
                                         }`}
@@ -406,10 +412,18 @@ function TransferCard({ transfer, onEdit, onDelete }: {
             exit={{ opacity: 0, y: -20 }}
             className="bg-slate-800/50 backdrop-blur-sm border border-slate-700/50 rounded-2xl p-6 hover:border-blue-500/50 transition-all"
         >
-            <div className="flex items-center gap-6">
+            {/* BACKLOG-350: this row packed four unrelated sections (player,
+                transfer-arrow, status/type/fee, action buttons) into one
+                flex-row with zero wrap and zero shrink handling -- the
+                worst overflow found in the whole admin audit (266px at
+                375px). Stacks vertically below lg: (not md: -- BACKLOG-349's
+                own lesson: md: collides exactly with the 768px tablet test
+                width), matching the "full desktop sizing from lg: up"
+                convention already used elsewhere in this session's fixes. */}
+            <div className="flex flex-col lg:flex-row lg:items-center gap-4 lg:gap-6">
                 {/* Player */}
-                <div className="flex items-center gap-3 flex-1">
-                    <div className="relative w-12 h-12 rounded-full overflow-hidden bg-slate-700">
+                <div className="flex items-center gap-3 lg:flex-1 min-w-0">
+                    <div className="relative w-12 h-12 rounded-full overflow-hidden bg-slate-700 shrink-0">
                         {transfer.player?.image ? (
                             <img src={transfer.player.image} alt={transfer.player.name} className="w-full h-full object-cover" />
                         ) : (
@@ -418,31 +432,31 @@ function TransferCard({ transfer, onEdit, onDelete }: {
                             </div>
                         )}
                     </div>
-                    <div>
-                        <h3 className="text-lg font-bold text-white">{transfer.player?.name || 'Unknown Player'}</h3>
-                        <p className="text-sm text-slate-400">{transfer.player?.position || 'Position TBD'}</p>
+                    <div className="min-w-0">
+                        <h3 className="text-lg font-bold text-white truncate">{transfer.player?.name || 'Unknown Player'}</h3>
+                        <p className="text-sm text-slate-400 truncate">{transfer.player?.position || 'Position TBD'}</p>
                     </div>
                 </div>
 
                 {/* Transfer Arrow */}
                 <div className="flex items-center gap-4">
                     {transfer.fromTeam && (
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 min-w-0">
                             <TeamLogo logo={transfer.fromTeam.logo} name={transfer.fromTeam.name} size="sm" />
-                            <span className="text-sm text-slate-300 hidden md:block">{transfer.fromTeam.name}</span>
+                            <span className="text-sm text-slate-300 hidden md:block truncate">{transfer.fromTeam.name}</span>
                         </div>
                     )}
-                    <ArrowRight className="w-6 h-6 text-blue-400" />
+                    <ArrowRight className="w-6 h-6 text-blue-400 shrink-0" />
                     {transfer.toTeam && (
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 min-w-0">
                             <TeamLogo logo={transfer.toTeam.logo} name={transfer.toTeam.name} size="sm" />
-                            <span className="text-sm text-slate-300 hidden md:block">{transfer.toTeam.name}</span>
+                            <span className="text-sm text-slate-300 hidden md:block truncate">{transfer.toTeam.name}</span>
                         </div>
                     )}
                 </div>
 
                 {/* Details */}
-                <div className="flex items-center gap-6 text-sm text-slate-400">
+                <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-slate-400">
                     <span className={`px-3 py-1 rounded-full border font-semibold capitalize ${getStatusColor(transfer.status)}`}>
                         {transfer.status}
                     </span>
@@ -456,7 +470,7 @@ function TransferCard({ transfer, onEdit, onDelete }: {
                 </div>
 
                 {/* Actions */}
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 shrink-0">
                     <button
                         onClick={onEdit}
                         className="p-2 hover:bg-slate-700 rounded-lg transition-colors"
