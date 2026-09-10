@@ -508,16 +508,27 @@ function AdminMatchesPageContent() {
                                 >
                                     <div className="flex flex-col md:flex-row md:items-center justify-between gap-8">
                                         <div className="flex-1">
-                                            <div className="flex items-center gap-4 mb-6">
-                                                <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${match.status === 'LIVE' ? 'bg-red-500/20 text-red-500 animate-pulse' :
+                                            {/* Live device report: the competition/round label was the
+                                                one span in this header row with no min-w-0/truncate --
+                                                a long "{competition} · {round}" string (e.g. "NPUGA
+                                                (BASKETBALL) · Quarter-Final") rendered at its full
+                                                natural width, pushing the row past the viewport at any
+                                                width tight enough, or at default width once the OS-level
+                                                text-size accessibility setting scales it up (confirmed
+                                                live: 135% font-size reproduces a 27px page overflow here
+                                                that doesn't show at 100%). Same shrink-to-fit pattern as
+                                                the team names below -- min-w-0 on this row so the label
+                                                can shrink, shrink-0 on the three fixed badges before it. */}
+                                            <div className="flex items-center gap-4 mb-6 min-w-0">
+                                                <span className={`shrink-0 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${match.status === 'LIVE' ? 'bg-red-500/20 text-red-500 animate-pulse' :
                                                     match.status === 'UPCOMING' ? 'bg-blue-500/20 text-blue-500' :
                                                         'bg-white/20 text-white/60'
                                                     }`}>
                                                     {match.status}
                                                 </span>
-                                                <span className="text-white/40 text-[10px] font-black uppercase tracking-widest">{match.sport}</span>
-                                                <div className="w-1 h-1 rounded-full bg-white/10" />
-                                                <span className="text-white/40 text-[10px] font-black uppercase tracking-widest">{match.round ? `${match.competition} · ${match.round}` : match.competition}</span>
+                                                <span className="shrink-0 text-white/40 text-[10px] font-black uppercase tracking-widest">{match.sport}</span>
+                                                <div className="shrink-0 w-1 h-1 rounded-full bg-white/10" />
+                                                <span className="min-w-0 truncate text-white/40 text-[10px] font-black uppercase tracking-widest">{match.round ? `${match.competition} · ${match.round}` : match.competition}</span>
                                             </div>
 
                                             {/* BACKLOG-343: these two flex-1 columns had no min-w-0, so

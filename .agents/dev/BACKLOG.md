@@ -12433,3 +12433,38 @@ of a dead end.
 **Files:** `src/lib/notifications/push-service.ts`, `src/components/SettingsOverlay.tsx`.
 
 ---
+
+### BACKLOG-368 — Admin Matches List: Competition/Round Label Overflows At Larger Font Scale
+
+**Status:** SHIPPED — 2026-09-10, `tsc --noEmit` clean, not yet live-verified against a running
+deploy.
+**Priority:** MEDIUM -- reported live by Richard on a real device (screenshot: team name/tab bar
+appearing cut off).
+
+**Root cause, confirmed live (not assumed):** every text element in the match-card header row had a
+`shrink-0`/`min-w-0`+`truncate` guard except the competition/round label
+(`{match.competition} · {match.round}`, e.g. "NPUGA (BASKETBALL) · Quarter-Final") -- the one
+unguarded span. At 375px/100% font it doesn't overflow the page (confirmed via live DOM
+measurement), but simulating a 135% root font-size (a real, common Android "larger text"
+accessibility setting) reproduced a genuine 27px page-level overflow from this exact span, and
+separately -- even without any overflow -- the long label just wraps to 2-3 stacked lines at
+in-between widths, which is what Richard's screenshot actually showed (not literal viewport
+clipping, but ugly multi-line wrap crowding the star/favorite icon).
+
+**Fix:** `src/app/admin/matches/page.tsx` -- the header row (`status pill · sport · round`) now has
+`min-w-0` on the row and the fixed badges are `shrink-0`; the competition/round span gets
+`min-w-0 truncate` so it clips to one line with an ellipsis instead of wrapping or overflowing,
+matching the same pattern already used for team names in this file.
+
+**Evidence:**
+- Commit: (pending, see commit below)
+- Verified by: `tsc --noEmit` only so far; the overflow mechanism itself was confirmed live via DOM
+  measurement (`document.documentElement.scrollWidth` vs `clientWidth`) before writing the fix,
+  including reproducing it with a simulated 135% font-size multiplier
+- Observed result: n/a for the fix itself -- not yet re-measured post-fix on a deploy
+- Pending items: live-verify on the branch's Vercel preview, both at normal font scale (confirm the
+  wrap-to-3-lines visual is gone) and at a larger simulated font scale (confirm the 27px overflow no
+  longer reproduces).
+**Files:** `src/app/admin/matches/page.tsx`.
+
+---
