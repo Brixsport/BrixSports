@@ -5100,3 +5100,58 @@ the existing live "NEW" badge component (nav, next to Lineup Builder) before des
 then extend the same visual language to update/announcement tooltips and a reusable feature-badge
 component. If picked up fresh instead: `BACKLOG-365`'s other 5 items are all independently scoped, none
 blocking each other.
+
+---
+
+### Session 73 continued -- `BACKLOG-365` items 1/2/3/6 closed, `BACKLOG-370`/`371` found and fixed
+
+**Built and shipped, in order:**
+- **Item 2 (badge/tooltip design pass):** `NewFeatureBadge` + `UpdateTooltip` components, consolidated
+  3 drifted inline "NEW" pill copies (desktop nav, mobile menu, bottom nav) onto one canonical style;
+  wired the tooltip onto the desktop Lineup Builder link as the first real usage.
+- **Item 1 (favoriting-consequence note):** shared `getFollowTeamNotification()` toast wired into all
+  real follow-star call sites -- match page, `MatchOverlay`. Found while building it: the "team page"
+  and "search overlay" surfaces named in the original filing don't actually work the way assumed
+  (`TeamDetailClient.tsx` has no follow star at all; `SearchOverlay.tsx` is dead code, never mounted
+  anywhere -- the live header search is a different component, `GlobalSearch.tsx`, with no favoriting).
+- **Item 3 (competition-follow notification targeting):** the `followType:'competition'` audience query
+  this item asked for already existed, shipped and verified session 53 -- the filing was stale. Real gap
+  was an unrestricted event set; added a `COMPETITION_FOLLOW_EVENT_TYPES` gate (start/HT/FT + GOAL,
+  Richard's explicit call to keep goals in). Live-verified both directions with a real throwaway
+  competition/match: a card event correctly excluded, a goal event correctly included.
+- **Item 6 (prod migrations):** both Fan Account Blueprint staging migrations
+  (`userFavorites.notifications_enabled`, `fan_tour_dismissals`) run against prod, confirmed via
+  `PRAGMA`/`sqlite_master` output against the real prod host.
+- **`BACKLOG-370` (new, not in the original list):** Richard's product direction on item 4 --  the
+  "Google Drive not Shopify" model means fans should *discover* other universities, not have them hidden
+  -- concrete first step: added an always-visible university indicator to team pages and competition
+  pages. Competition page derives it from participating teams' `university` values (`hostOrganizationId`
+  is null on 5/8 real competitions, unreliable) rather than a schema change; correctly shows nothing for
+  genuinely inter-university competitions like NPUGA.
+- **`BACKLOG-371` (new, found via Richard's real click-through on item 5):** Google OAuth sign-in to an
+  *existing* account completed with no visible error but the session didn't fully take. Two real,
+  separate bugs, both fixed: (1) the callback is a server redirect and can't write to `localStorage`,
+  which several client paths (`FavoritesContext` etc.) read directly and treat as "logged out" without
+  even trying the cookie -- fixed with a one-time `?oauth_token=` handoff `AuthContext` picks up and
+  strips from the URL; (2) `GET /api/auth/me` ignored the `Authorization` header entirely (cookie-only),
+  which silently broke `AuthContext`'s own documented localStorage-fallback retry -- fixed to check the
+  header first, matching `verifyAuth()`'s existing convention. Live-verified end to end with a real
+  signed JWT delivered only via the handoff (no cookie): 401→removed pre-fix, 200→`Auth SUCCESS` post-fix.
+
+**Process notes:** rebased this worktree onto `origin/feature/ui-redesign`'s tip twice this session (once
+at the start, once mid-session after more peer commits landed) -- both clean, no conflicts except one
+append-only `RUNLOG.md` collision (kept both sides, per this branch's established pattern). One
+force-push was needed after the first rebase (`origin/work/competitions-consolidation` only ever
+contained this session's own prior commits, confirmed via a diff before pushing, so no risk).
+
+**Deferred, Richard's explicit call -- product decision, not scoped by me:** `BACKLOG-365` item 4's
+actual "default-view scoping" behavior (what changes once a fan's home university is known -- default
+homepage filter? something else?) is still undefined. `BACKLOG-370` above covers the *visibility*
+half (you can now see which university a team/league belongs to); the *scoping* half needs Richard's
+own product call before any code gets written -- noted here per his explicit "just log it, it's a
+product decision" instruction, not to be picked up unprompted.
+
+**Next session/turn:** `BACKLOG-365` item 5's real Google-consent-screen leg still needs Richard to
+repeat the actual click-through against the now-fixed code (the app-side handling is proven correct,
+only the provider-side leg is unverified). Otherwise nothing queued -- item 4 is parked pending Richard's
+product decision, everything else in `BACKLOG-365` is closed.
