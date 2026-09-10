@@ -12823,3 +12823,82 @@ have the same shape of gap.
 **Found:** 2026-09-10, while running `dev/investigate-season-stats-bugs.mjs` for `BACKLOG-375`.
 
 ---
+
+### BACKLOG-378 — Tab-Bar Redesign: `/favourites` (Stacked Sections → Tabs) + `/teams` (Pill Chips → Underline Tabs)
+
+**Status:** SHIPPED — committed, not yet live-verified (per this project's standing rule, local dev
+is never started for this project; verification happens against the branch's Vercel preview).
+**Priority:** MEDIUM — UI-consistency work Richard explicitly asked for, not a bug.
+
+**Context:** a findings-only audit this session (Richard's original ask: redesign `/favourites`'
+tab bar to match `/competitions`') found the premise didn't quite hold -- `/favourites` had no tabs
+at all (four always-stacked sections: Matches/Teams/Competitions/Players), and `/competitions` turned
+out to be pill-style itself, not underline-style. The real underline-tab pattern lives on
+`/teams/[id]`, `/matches/[id]`, `/players/[id]`, and `MatchOverlay` -- four separate copy-pasted
+implementations, no shared component. Richard's follow-up correction: he meant the stacked sections
+on `/favourites` should become an actual tab bar (styled like those detail-page underline tabs), and
+confirmed the same treatment should also apply to `/teams`' pill-style competition filter.
+
+**Built:**
+- New shared `src/components/ui/UnderlineTabs.tsx` -- consolidates the underline-tab visual pattern
+  (px-3 py-2, text-[10px] uppercase, animated `h-0.5` bar via `framer-motion` `layoutId`,
+  `overflow-x-auto scrollbar-hide` guard) that was previously duplicated 4 times, so this is the 5th
+  and 6th consumer reusing one implementation instead of a 5th/6th copy.
+- `src/app/favourites/page.tsx` -- the 4 stacked sections (Matches/Teams/Competitions/Players) are now
+  one `UnderlineTabs` bar + a single active panel (`AnimatePresence`/`motion` cross-fade on tab
+  change). Only categories with real data get a tab (an empty category was already hidden outright in
+  the old stacked layout, same behaviour preserved). Default tab: Matches first (most time-sensitive),
+  falling back to the first non-empty category. The existing first-team alert-toggle coachmark
+  (`TOUR_ID = 'favourites-alert-toggle'`) now force-selects the Teams tab when it's due to show, so it
+  still anchors to a mounted element instead of silently never firing on a different default tab.
+- `src/app/teams/page.tsx` -- the 3 categorized pill-chip rows (Internal Leagues / University
+  Competitions / Other Competitions) are now 3 `UnderlineTabs` rows sharing one `layoutId`
+  (`teamsActiveTab`), so the highlight glides between rows when the active competition changes group
+  instead of 3 independently-animating bars. The separate "Browse All Teams" action was deliberately
+  left as its own distinct button (not folded into the tab set) -- it's a different affordance
+  (view everything vs. filter by one competition), not one more tab.
+
+**Assumptions made (not covered by the original ask):**
+- `/favourites` (real data, no tabs) is the actual target, not `/profile/favorites` (has a pill-tab
+  bar but is bound to hardcoded `mockFavorites` -- a pre-existing, unrelated gap, left untouched).
+- Empty categories stay hidden from the tab bar entirely rather than shown disabled/greyed -- matches
+  the prior stacked-sections behaviour of hiding empty sections outright.
+- `/teams`' "Browse All Teams" stays a separate button below the tab groups, not a 4th "All" tab --
+  its own selection state (`activeTab === 'all'`) was already structurally distinct in the original
+  code and folding it in would blur two different user intents.
+
+**Known bug intersections:** none directly, but the underline-tab pattern's `overflow-x-auto
+scrollbar-hide` guard is deliberately preserved on every usage -- this codebase has prior tab-bar
+horizontal-overflow bugs (`BACKLOG-296`, `BACKLOG-336`) and the guard is the established fix for that
+class of bug.
+
+**Risks / blockers:** `/teams`' competition list length is DB-driven and unbounded in principle --
+each group row scrolls horizontally rather than wrapping (matching every other underline-tab usage in
+this codebase), so a very long competition list degrades to "scroll to find it" rather than
+overflowing the page. Not yet stress-tested against a real large competition count.
+
+**File Structure Delta:**
+- Added: `src/components/ui/UnderlineTabs.tsx`
+- Modified: `src/app/favourites/page.tsx`, `src/app/teams/page.tsx`
+
+**Test Scenarios (manual, to run against the Vercel preview once deployed):**
+1. `/favourites` with 2+ favorite categories populated -- tab bar appears, switching tabs shows only
+   that category's content, counts on each tab match the category's real item count.
+2. `/favourites` with exactly 1 favorite category populated -- no tab bar renders, that category's
+   content shows directly (no single-option tab selector).
+3. `/favourites` with zero favorites -- unchanged empty state, no tab bar.
+4. A fresh fan account with team favorites and the tour not yet dismissed -- Teams tab auto-selects,
+   coachmark anchors correctly on the first team's alert-bell.
+5. `/teams` -- clicking a competition in any of the 3 grouped rows highlights it and switches the
+   grid; the animated underline glides correctly when jumping between rows, not just within one row.
+6. `/teams` at a narrow (375px) viewport -- each group row scrolls horizontally within itself rather
+   than causing page-level overflow.
+7. `tsc --noEmit` -- confirmed zero new errors vs. baseline (identical output).
+
+**Evidence:**
+- Verified by: `tsc --noEmit` only so far (diff against pre-change baseline: identical, zero new
+  errors)
+- Observed result: not yet live-tested on the Vercel preview
+- Pending items: live verification of all 7 test scenarios above against the deployed preview
+
+---
