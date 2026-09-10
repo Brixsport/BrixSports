@@ -12763,7 +12763,7 @@ have the same shape of gap.
 
 ### BACKLOG-375 — Team "Season Stats" Card: Knockout Matches Were Silently Dropped, No Season Selector Existed
 
-**Status:** SHIPPED — 2026-09-10, `tsc --noEmit` clean (30 baseline, zero new), pending live verification against the branch's Vercel preview. **Resolves `BACKLOG-374`** (this entry was filed independently by a peer session, then handed off; see that entry for the original report).
+**Status:** RESOLVED — 2026-09-10, `tsc --noEmit` clean (30 baseline, zero new), live-verified against the deployed `feature/ui-redesign` Vercel preview. **Resolves `BACKLOG-374`** (this entry was filed independently by a peer session, then handed off; see that entry for the original report).
 **Priority:** High — directly reported by Richard via a peer session, with a specific real example (Joga-Bonito).
 
 **Origin:** relayed from another Claude session ("Brixpsort season resume") on Richard's behalf: (1) BUSA League player stats reportedly not displaying, with a specific data-integrity claim about Joga-Bonito's team page ("Matches Played: 3 / Goals For: 15" vs. an alleged real 6 matches / 17 goals -- filed by the peer session as `BACKLOG-374`); (2) add a season selector to the team page's Season Stats card, matching the existing selector pattern on `competitions/[id]/page.tsx`.
@@ -12785,7 +12785,12 @@ have the same shape of gap.
 **Evidence:**
 - Root-cause investigation: `dev/investigate-season-stats-bugs.mjs` against `brixsportsv2-staging-brixsports...` -- real query output for Joga-Bonito's matches/standings, full season distribution for both stats tables, `system.season.current` value, multi-season row check (zero found either sport).
 - `tsc --noEmit`: 30 errors, unchanged from this session's baseline, zero new, across all 3 touched files.
-- Pending: live click-through on the branch's Vercel preview (select a season, confirm the card updates; confirm Joga-Bonito's card now shows 6 played / 17 GF under "All Competitions" and gated to just BUSA LEAGUE FOOTBALL 2025/2026 too, since that gate now includes knockouts -- only the old `standings`-sum path showed 3/15).
+- Commit: `aa2f76f`, pushed as a fast-forward onto `origin/feature/ui-redesign` (deployment confirmed `success` via the GitHub commit-status API before testing).
+- Live-verified: direct `GET` against the deployed preview (`brixsports-staging-git-feature-ui-redesign-brixsports-projects.vercel.app`, `x-vercel-protection-bypass` header), not just code/type-check confidence.
+  - Default (`/api/teams/busa-joga`): `stats` = `{played:6, won:5, drawn:1, lost:0, goalsFor:17, goalsAgainst:0, points:16}` -- exactly the real 6 matches (was 3/15 pre-fix, confirmed by re-checking the DB numbers this session). `statsSeasons.selected` resolved to the real `xm1OcBFeugKxLDHH6Xi6p` (BUSA LEAGUE FOOTBALL 2025/2026) competitionId with `matchCount: 6` -- the team's only real competition, correctly auto-selected as the default.
+  - `?statsCompetitionId=all`: same 6/17 (Joga-Bonito has only ever played in one competition, so 'all' and the gated default agree here -- both code paths independently confirmed live, not just one).
+  - Player stats: 19/21 roster players now carry real `.stats` (was 0/21 before this fix -- football got no branch at all). 9 players show non-trivial goals/appearances; sample confirmed real values (`goals: 1`/`2`, `competitionId: null` -- correctly using the fallback-to-any-row path since these are among the 202 un-backfilled rows `BACKLOG-376` covers, proving the fallback isn't just theoretical).
+  - Not independently screenshot-verified: the `<select>` selector's own visual rendering/click behavior in a browser (API-level checks cover the underlying data correctness this entry was actually about; the selector JSX is a small, low-risk addition using an already-proven pattern from `competitions/[id]/page.tsx`).
 
 **Found:** relayed via cross-session message, 2026-09-10, `match-detail-tabs` worktree (fast-forwarded onto `origin/feature/ui-redesign` at session start).
 
