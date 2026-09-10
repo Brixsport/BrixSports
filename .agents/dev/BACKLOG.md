@@ -12715,8 +12715,12 @@ repeating-decimal per-game average overflowed its column and overlapped the adja
 
 ### BACKLOG-374 — Team `standings` Table Undercounts Real Finished Matches (Joga-Bonito Confirmed)
 
-**Status:** OPEN — filed, not fixed, handed to a peer session (see below) alongside a related
-prior-season player-stats report that may share the same root cause.
+**Status:** RESOLVED — 2026-09-10 by the peer session this was handed to (`match-detail-tabs`
+worktree). See `BACKLOG-375` for the full root cause and fix; summary: NOT a data-integrity bug --
+`standings` correctly excludes knockout-round matches per `BACKLOG-275` (a group table shouldn't
+include Cup results), but the team page was presenting that group-stage-only sum as the team's
+whole-season summary. Fixed by reading team season stats from `matches` directly (all rounds
+included) instead of summing `standings`, plus a season/competition selector.
 **Priority:** HIGH -- a real, confirmed data-integrity bug affecting the public-facing team stats
 card, not a display-only issue.
 
@@ -12750,8 +12754,67 @@ have the same shape of gap.
 - Verified by: `dev/inspect-joga-matches-played.mjs` (read-only), direct DB query against `matches`
   and `standings` for team `busa-joga`
 - Observed result: 6 real finished matches / 17 real goals for vs. `standings`' 3 / 15
-- Pending items: root cause + fix, owned by the peer session this was handed to.
+- Pending items: none -- root cause found and fixed under `BACKLOG-375` (`teams/[id]/route.ts` +
+  `standingsService.ts` + `TeamDetailClient.tsx`, commit in that entry).
 **Files:** likely `src/app/api/teams/[id]/route.ts` (the read path) and whatever writes/syncs the
 `standings` table (not yet located).
+
+---
+
+### BACKLOG-375 — Team "Season Stats" Card: Knockout Matches Were Silently Dropped, No Season Selector Existed
+
+**Status:** SHIPPED — 2026-09-10, `tsc --noEmit` clean (30 baseline, zero new), pending live verification against the branch's Vercel preview. **Resolves `BACKLOG-374`** (this entry was filed independently by a peer session, then handed off; see that entry for the original report).
+**Priority:** High — directly reported by Richard via a peer session, with a specific real example (Joga-Bonito).
+
+**Origin:** relayed from another Claude session ("Brixpsort season resume") on Richard's behalf: (1) BUSA League player stats reportedly not displaying, with a specific data-integrity claim about Joga-Bonito's team page ("Matches Played: 3 / Goals For: 15" vs. an alleged real 6 matches / 17 goals -- filed by the peer session as `BACKLOG-374`); (2) add a season selector to the team page's Season Stats card, matching the existing selector pattern on `competitions/[id]/page.tsx`.
+
+**Root-caused against the real staging DB before writing any fix** (`dev/investigate-season-stats-bugs.mjs`), not taken on the peer's word:
+
+1. **Joga-Bonito's numbers were correct, not corrupted** — the peer's claim was wrong in its diagnosis, right that something was misleading. Real data: 6 FINISHED matches, 17 goals for -- 3 Group A matches (7-0, 4-0, 4-0 = 15 goals, exactly matching `standings`) plus a Quarter-Final (1-0), Semifinal (1-0), and Final (0-0) that `standings` correctly excludes per `BACKLOG-275` (knockout results must not count toward a group/league table). The actual bug: `teams/[id]/route.ts` summed `standings` rows and presented that sum AS the team's season stats card -- so a team that reached the Final showed "3 matches played" with the Cup run invisible. Confirmed live, not assumed: `standings` row `busa-standing-1` = played 3 / GF 15, an exact match to the 3 group games alone.
+2. **No second season of player stats exists yet, in either sport** -- `football_player_stats` is 244 rows, 100% `season='2024'`; `basketball_player_stats` is 79 rows, 100% `season='2025/2026'`. Zero players have a second-season row in either table. `system.season.current` (the admin-rollable setting) is already `'2026/2027'`, ahead of all real data -- so any strict `eq(season, CURRENT_SEASON)` read (not the fallback-aware kind `players/[id]/route.ts` already has since session 53) would show empty for effectively every player today, which is plausibly what "previous season not showing" actually referred to.
+
+**Fix (Richard's explicit call via `AskUserQuestion`: Season Stats should include ALL matches in a competition, group + knockout combined, not just the group-stage table -- and per a follow-up mid-session note, must also support an "All Competitions" view spanning every competition the team has played in, friendlies included):**
+
+- `standingsService.ts`: `aggregateTeamRecord()` gained an `includeKnockouts` option (default `false` -- every existing caller, `syncCompetitionStandings`/`syncTeamOverallRecord`, is unchanged). New exports: `getTeamCompetitionStats(teamId, sport, competitionFilter)` (always `includeKnockouts: true`; `competitionFilter` is a specific competitionId, `null` (friendlies only), or `'all'` -- `'all'` already naturally includes friendlies since it applies no `competitionId` condition at all, confirmed by reading the existing query, not new logic) and `getTeamCompetitionSeasons(teamId, sport)` (distinct competitions the team has a real FINISHED match in, sourced from `matches` directly -- not `standings`, so a knockout-only competition with no group-stage `standings` row yet still appears in the selector -- sorted newest-first by real match `startTime`).
+- `teams/[id]/route.ts`: new `statsCompetitionId` query param, deliberately separate from the existing `competitionId` param (that one scopes the unrelated SQUAD roster feature -- conflating them would have silently changed squad-roster behavior for any caller that only meant to scope stats). Resolves a default (most recent competition/season with a real FINISHED match, never calendar-current since season boundaries aren't consistent across competitions in this data; falls back to `'all'` only if the team has none yet) shared between the stats card AND the per-player stats block below it, so both stay in sync. Response gained `statsSeasons: { selected, seasons }`.
+- **Found in the same pass, fixed as directly adjacent (not separately reported)**: `teams/[id]/route.ts`'s per-player stats attachment was Basketball-only -- a football team's roster got zero `player.stats`, confirmed a real gap via code read, not by any prior design decision. Added the football branch. **Deliberately NOT a strict `competitionId` gate** -- see `BACKLOG-376` below for why, and the fallback shape used instead.
+- `TeamDetailClient.tsx`: selector added to the Season Stats card header, same visual pattern as `competitions/[id]/page.tsx`'s season `<select>` (only rendered when `statsSeasons.seasons.length > 0`), `"All Competitions"` as the first option. Re-fetches the whole route with the chosen `statsCompetitionId` on change; card dims (`opacity-50`) during the refetch rather than a full-page loading state. This is a separate, unrelated fix from `BACKLOG-372`/`373` above (the "View All" link and REB/AST rounding, also touching this same file) -- rebased cleanly, no overlap in the regions each touched.
+
+**Deliberately not done:** a selector on the player detail page itself (`players/[id]/route.ts`'s existing `pickEffectiveSeasonRows` fallback already shows real data there; peer only asked for the team page). Backfilling `football_player_stats.competitionId` for the 202 legacy rows -- filed separately as `BACKLOG-376`, a real data-completeness fix, not a display-side one.
+
+**Evidence:**
+- Root-cause investigation: `dev/investigate-season-stats-bugs.mjs` against `brixsportsv2-staging-brixsports...` -- real query output for Joga-Bonito's matches/standings, full season distribution for both stats tables, `system.season.current` value, multi-season row check (zero found either sport).
+- `tsc --noEmit`: 30 errors, unchanged from this session's baseline, zero new, across all 3 touched files.
+- Pending: live click-through on the branch's Vercel preview (select a season, confirm the card updates; confirm Joga-Bonito's card now shows 6 played / 17 GF under "All Competitions" and gated to just BUSA LEAGUE FOOTBALL 2025/2026 too, since that gate now includes knockouts -- only the old `standings`-sum path showed 3/15).
+
+**Found:** relayed via cross-session message, 2026-09-10, `match-detail-tabs` worktree (fast-forwarded onto `origin/feature/ui-redesign` at session start).
+
+---
+
+### BACKLOG-376 — `football_player_stats.competitionId` Never Backfilled for 202 of 244 Rows
+
+**Status:** OPEN — filed 2026-09-10, found while building `BACKLOG-375`.
+**Priority:** Medium -- not user-visible today (the read-side fallback in `BACKLOG-375`'s team-roster fix covers it, and `players/[id]/route.ts` was never gated by competitionId to begin with), but blocks any future feature that legitimately needs to scope football player stats to one specific competition (e.g. a "stats for this Cup run only" view) from working correctly for the majority of existing data.
+
+**Problem:** direct DB check (2026-09-10): `football_player_stats` has 244 rows total. 202 have `competition_id = NULL` (includes literally every current Joga-Bonito player). Only 42 rows -- all from BUSALYMPICS (FOOTBALL) -- have a real `competition_id`. `basketball_player_stats` does not have this problem (all 79 rows correctly tagged to `BUSA LEAGUE BASKETBALL`).
+
+**Why it hasn't bitten yet:** every current football stats reader either has no competitionId filter at all, or (after `BACKLOG-375`) falls back to the player's only/most-recent row when a competition-scoped match isn't found. The moment a second season of football stats exists (so a player has 2+ rows and a strict filter is needed to pick the right one), any un-backfilled row becomes ambiguous or invisible the same way the `BACKLOG-097`-era standings rows were before their own backfill.
+
+**Scope for the actual fix (not started):** for each of the 202 orphaned rows, resolve the real competitionId the same way `BACKLOG-097`'s standings backfill did -- via the player's team's real FINISHED matches in the season the row is tagged with (`season='2024'` for all 202, confirmed) -- and write it back. A `dev/*.mjs` script, staging-first-then-prod per `CLAUDE.md`, logged in `RUNLOG.md`.
+
+**Found:** 2026-09-10, while building `BACKLOG-375`'s football-roster-stats fix.
+
+---
+
+### BACKLOG-377 — One Match Row Has a Millisecond-Epoch `created_at` Instead of Second-Epoch
+
+**Status:** OPEN — filed 2026-09-10, found while investigating `BACKLOG-375`.
+**Priority:** Low -- one confirmed row, no observed display breakage (nothing on the paths touched by `BACKLOG-375` renders this column directly), but same corruption class as `BACKLOG-189`'s 126-row sitemap-crash finding.
+
+**Problem:** `matches.id = 'busa-sf-joga-hammers'` (a real Semifinal, Joga-Bonito 1-0) has `created_at = 1783939438379` -- a 13-digit millisecond-epoch value. Every sibling row checked in the same query (`busa-match-1`, `-9`, `-21`, `-27`, `busa-match-final-2026`) has a normal 10-digit second-epoch value. Drizzle's schema reads this column as integer epoch-seconds, so this one row's `created_at` resolves to a date in the year 58480, not 2026.
+
+**Not fixed here** -- out of scope for `BACKLOG-375`, and a single-row DB write warrants its own confirmation rather than riding along with an unrelated feature commit. Scope for the actual fix: confirm no other columns on this same row share the corruption (check `updated_at` too), then a one-row `UPDATE` dividing the value by 1000, staging-first-then-prod, logged in `RUNLOG.md` -- same shape as `BACKLOG-189`'s `safeDate()` follow-up work, but this is the write-side fix that finding deferred.
+
+**Found:** 2026-09-10, while running `dev/investigate-season-stats-bugs.mjs` for `BACKLOG-375`.
 
 ---

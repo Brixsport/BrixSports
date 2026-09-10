@@ -17,6 +17,14 @@ const TeamStatsChart = dynamic(() => import('@/components/TeamStatsChart'), {
     ssr: false
 });
 
+interface TeamSeasonOption {
+    competitionId: string;
+    name: string;
+    season: string;
+    matchCount: number;
+    latestMatchTime: string | null;
+}
+
 interface TeamData {
     team: any;
     players: any[];
@@ -26,6 +34,7 @@ interface TeamData {
     stats: any;
     form: string[];
     competitions: string[];
+    statsSeasons?: { selected: string; seasons: TeamSeasonOption[] };
 }
 
 export default function TeamDetailClient() {
@@ -35,22 +44,31 @@ export default function TeamDetailClient() {
 
     const [data, setData] = useState<TeamData | null>(null);
     const [loading, setLoading] = useState(true);
+    const [statsLoading, setStatsLoading] = useState(false);
     const [activeTab, setActiveTab] = useState<'overview' | 'players' | 'fixtures' | 'stats'>('overview');
 
     useEffect(() => {
         fetchTeamData();
     }, [teamId]);
 
-    const fetchTeamData = async () => {
+    // BACKLOG-375: `statsCompetitionId` is optional -- omitted on the initial load so
+    // the API resolves its own default (most recent season with real data). Passed
+    // explicitly only when the selector below is changed, so re-selecting the same
+    // default the API would have picked anyway is indistinguishable from the first load.
+    const fetchTeamData = async (statsCompetitionId?: string) => {
         try {
-            setLoading(true);
-            const response = await fetch(`/api/teams/${teamId}`);
+            if (statsCompetitionId) setStatsLoading(true); else setLoading(true);
+            const url = statsCompetitionId
+                ? `/api/teams/${teamId}?statsCompetitionId=${encodeURIComponent(statsCompetitionId)}`
+                : `/api/teams/${teamId}`;
+            const response = await fetch(url);
             const teamData = await response.json();
             setData(teamData);
         } catch (error) {
             console.error('Error fetching team:', error);
         } finally {
             setLoading(false);
+            setStatsLoading(false);
         }
     };
 
@@ -84,7 +102,7 @@ export default function TeamDetailClient() {
         );
     }
 
-    const { team, players = [], universityPlayers = [], recentMatches = [], upcomingMatches = [], stats: rawStats = {}, form = [], competitions = [] } = data;
+    const { team, players = [], universityPlayers = [], recentMatches = [], upcomingMatches = [], stats: rawStats = {}, form = [], competitions = [], statsSeasons } = data;
     const stats = { played: 0, won: 0, drawn: 0, lost: 0, goalsFor: 0, goalsAgainst: 0, goalDifference: 0, ...rawStats };
 
     const getFormColor = (result: string) => {
@@ -359,11 +377,33 @@ export default function TeamDetailClient() {
 
                                     <div className="space-y-6">
                                         <div className="p-6 bg-gradient-to-br from-white/10 to-white/5 rounded-3xl border border-white/10 backdrop-blur-md">
-                                            <h3 className="text-lg font-bold mb-6 flex items-center gap-2">
-                                                <TrendingUp className="w-5 h-5 text-primary" />
-                                                Season Stats
-                                            </h3>
-                                            <div className="space-y-4">
+                                            <div className="flex items-center justify-between mb-6 gap-2">
+                                                <h3 className="text-lg font-bold flex items-center gap-2">
+                                                    <TrendingUp className="w-5 h-5 text-primary" />
+                                                    Season Stats
+                                                </h3>
+                                                {/* BACKLOG-375: same selector pattern as competitions/[id]/page.tsx's
+                                                    season switcher -- only shown once there's an actual choice to make
+                                                    (a team with 0-1 competitions has nothing to switch between). "All
+                                                    Competitions" spans every competition (+ friendlies); each other
+                                                    option gates to just that one competition/season. */}
+                                                {statsSeasons && statsSeasons.seasons.length > 0 && (
+                                                    <select
+                                                        value={statsSeasons.selected}
+                                                        disabled={statsLoading}
+                                                        onChange={(e) => fetchTeamData(e.target.value)}
+                                                        className="text-[10px] font-black uppercase tracking-widest text-white/60 bg-white/5 border border-white/10 rounded-lg px-2 py-1 focus:outline-none focus:border-primary/50 disabled:opacity-50"
+                                                    >
+                                                        <option value="all">All Competitions</option>
+                                                        {statsSeasons.seasons.map((s) => (
+                                                            <option key={s.competitionId} value={s.competitionId}>
+                                                                {s.name} ({s.season})
+                                                            </option>
+                                                        ))}
+                                                    </select>
+                                                )}
+                                            </div>
+                                            <div className={cn("space-y-4 transition-opacity", statsLoading && "opacity-50")}>
                                                 <div className="flex justify-between items-center p-3 bg-black/20 rounded-xl">
                                                     <span className="text-white/60 text-sm">Matches Played</span>
                                                     <span className="font-mono text-xl font-bold">{stats.played}</span>
