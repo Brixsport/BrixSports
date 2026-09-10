@@ -259,6 +259,20 @@ function CompetitionHubContent() {
     }));
   }, [standings]);
 
+  // "Which university does this league belong to" indicator (Richard's
+  // cross-university discovery ask, session continued 2026-09-10). Most
+  // competitions don't reliably set `hostOrganizationId` (confirmed via a
+  // direct DB check -- only 3/8 real competitions have it), so this derives
+  // the answer from the standings' own team data instead: if every
+  // participating team shares the same `university`, that IS the league's
+  // university. A genuinely inter-university competition (NPUGA, BUSA League)
+  // has many distinct values here and correctly shows no badge at all --
+  // that's the right behavior for a cross-university league, not a bug.
+  const singleUniversity = useMemo(() => {
+    const universities = Array.from(new Set(standings.map(s => s.team?.university).filter(Boolean)));
+    return universities.length === 1 ? universities[0] : null;
+  }, [standings]);
+
   // Pos+Team are merged into one sticky first column so they stay visible
   // while P/W/D/L/GD/PTS scroll underneath on narrow viewports -- otherwise
   // the whole table scrolls together and you lose track of which row is
@@ -405,14 +419,23 @@ function CompetitionHubContent() {
                   </span>
                 )}
               </div>
-              {!!selectedComp?.numberOfTeams && (
-                <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-primary/10 border border-primary/20 rounded-lg">
-                  <Users size={12} className="text-primary" />
-                  <span className="text-[10px] font-black uppercase tracking-widest text-primary">
-                    {selectedComp.numberOfTeams} Teams Registered
-                  </span>
-                </div>
-              )}
+              <div className="flex flex-wrap items-center gap-2">
+                {!!selectedComp?.numberOfTeams && (
+                  <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-primary/10 border border-primary/20 rounded-lg">
+                    <Users size={12} className="text-primary" />
+                    <span className="text-[10px] font-black uppercase tracking-widest text-primary">
+                      {selectedComp.numberOfTeams} Teams Registered
+                    </span>
+                  </div>
+                )}
+                {singleUniversity && (
+                  <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-white/5 border border-white/10 rounded-lg">
+                    <span className="text-[10px] font-black uppercase tracking-widest text-white/60">
+                      {singleUniversity}
+                    </span>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 

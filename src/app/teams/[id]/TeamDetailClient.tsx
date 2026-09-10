@@ -166,10 +166,15 @@ export default function TeamDetailClient() {
                                 className="flex-1 text-center md:text-left space-y-4"
                             >
                                 <div>
-                                    <div className="flex items-center gap-3 justify-center md:justify-start mb-2">
+                                    <div className="flex items-center gap-3 justify-center md:justify-start mb-2 flex-wrap">
                                         <span className="px-3 py-1 rounded-full bg-white/5 border border-white/10 text-[10px] font-bold uppercase tracking-widest text-white/60">
                                             {team.sport} Team
                                         </span>
+                                        {team.university && (
+                                            <span className="px-3 py-1 rounded-full bg-primary/10 border border-primary/20 text-[10px] font-bold uppercase tracking-widest text-primary">
+                                                {team.university}
+                                            </span>
+                                        )}
                                         {team.founded && (
                                             <span className="text-xs font-mono text-white/40">{team.founded}</span>
                                         )}
