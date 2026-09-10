@@ -201,12 +201,21 @@ function PlayerDot({
                 </span>
             </div>
 
-            {/* Name + inline status row plain text on the pitch, no chip background) */}
-            <div className="mt-1 flex items-center gap-0.5" style={{ maxWidth: nameRowMaxWidth, textShadow: '0 1px 3px rgba(0,0,0,0.9)' }}>
+            {/* Name + inline status row plain text on the pitch, no chip background).
+                Pitch-marker jersey-name truncation fix (no BACKLOG number assigned):
+                a jersey name longer than the clamped nameRowMaxWidth used to
+                hard-truncate to a single line
+                ("Abdul-jabb...") -- a layout-capacity problem, not a data problem
+                (the full name was always there, just nowhere to put it). Wrapping
+                to 2 lines instead costs vertical space, which formation rows have
+                more slack for than the horizontal space between neighbouring
+                markers, so it doesn't reintroduce the overlap risk the cqw-based
+                width clamp above was already added to prevent. */}
+            <div className="mt-1 flex items-start gap-0.5" style={{ maxWidth: nameRowMaxWidth, textShadow: '0 1px 3px rgba(0,0,0,0.9)' }}>
                 {isCaptain && (
                     <span className="text-yellow-400 text-[8px] font-black shrink-0">(C)</span>
                 )}
-                <span className="min-w-0 text-white text-[10px] sm:text-xs font-medium truncate">
+                <span className="min-w-0 text-white text-[10px] sm:text-xs font-medium line-clamp-2 break-words text-center">
                     {player.jerseyName || player.name}
                 </span>
                 {card === 'yellow' && (
