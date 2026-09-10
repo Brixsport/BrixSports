@@ -12459,7 +12459,7 @@ this project's convention of correcting the label going forward rather than rewr
 - Pending items: none
 4. **Home-university default-view scoping** — not new multi-tenancy work; this project's own locked decision (`SYSTEM_CRITICALITY_MAP.md`: "Google Drive not Shopify — one DB, all universities, scoped by affiliation") already covers the model. The onboarding team-picker's university grouping is the natural seed of a fan's "home university" field; just not wired to anything yet.
 5. **Full human OAuth click-through** (`BACKLOG-362`) — Google-side acceptance is confirmed (no more `redirect_uri_mismatch`), but no session has completed a real consent grant end-to-end with a live account, new-email and existing-email-linking both untested.
-6. **Prod migrations** — `userFavorites.notifications_enabled` and `fan_tour_dismissals` are staging-only; prod needs the same two `dev/*.mjs` scripts run against it once this branch is verified and ready to promote.
+6. ~~**Prod migrations**~~ — **RESOLVED 2026-09-10.** Both `dev/*.mjs` scripts extended with the standard `--env=` flag (same pattern as `add-match-clock-columns.mjs`) and run against prod after Richard's explicit confirmation (auto-mode classifier correctly blocked the first attempt). `user_favorites.notifications_enabled` and `fan_tour_dismissals` now exist on prod (`brixsportv2-brixsports.aws-eu-west-1.turso.io`), matching staging. Full evidence in `.agents/dev/RUNLOG.md`'s 2026-09-10 "prod migration" entry. This item was tracked on `dev`'s own copy of `RUNLOG.md` (commit `5c44edc`) since it's an environment-level operation, not scoped to this feature branch.
 
 **Found:** session `competitions-consolidation`, 2026-09-10, filed as a checkpoint before a session wrap.
 
