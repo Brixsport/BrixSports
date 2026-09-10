@@ -560,7 +560,7 @@ function AdminMatchesPageContent() {
                                             <div className="flex items-center gap-8 text-[10px] font-black uppercase tracking-widest text-white/20">
                                                 <div className="flex items-center gap-2">
                                                     <Calendar size={14} className="text-primary" />
-                                                    <span>{new Date(match.startTime).toLocaleString()}</span>
+                                                    <span>{isNaN(new Date(match.startTime).getTime()) ? '—' : new Date(match.startTime).toLocaleString()}</span>
                                                 </div>
                                                 <div className="flex items-center gap-2">
                                                     <MapPin size={14} className="text-primary" />

@@ -11997,18 +11997,23 @@ Richard asked to bring the Key events view (already confirmed structurally corre
 
 ### BACKLOG-356 — Admin Matches List Still Displays Raw "INVALID DATE" Text
 
-**Status:** OPEN — filed, not fixed.
-**Priority:** LOW-MEDIUM — display-only now; the crash this text used to trigger is already fixed
-(`BACKLOG-351`'s `openEditModal`/`handleUpdate` guards). A match with a corrupted `startTime` no
-longer breaks the Edit flow, but the list row itself still renders the raw invalid value as literal
-text instead of a clean fallback ("—" or similar).
+**Status:** SHIPPED — 2026-09-10, `tsc --noEmit` clean (18, identical to baseline), not yet
+live-verified against a running deploy.
+**Priority:** LOW-MEDIUM — display-only; the crash this text used to trigger is already fixed
+(`BACKLOG-351`'s `openEditModal`/`handleUpdate` guards).
 **Found:** full-system product-thinking audit, 2026-09-09 (Admin phase), full report:
 https://claude.ai/code/artifact/d43b4763-3d1d-4e60-af9c-813ca2eea9d7
-**Files (likely):** `src/app/admin/matches/page.tsx` (wherever the list row formats `match.startTime`
-for display, separate from the two spots the crash guard already covers).
-**Fix (not built):** same `isNaN(new Date(...).getTime())` pattern, but on the display path --
-render a clear fallback string instead of `new Date(...).toString()`'s literal "Invalid Date"
-output. Low effort, not yet scoped to an exact line.
+**Fix:** `src/app/admin/matches/page.tsx:563` -- the list row's `new Date(match.startTime).toLocaleString()`
+had no guard, unlike the two other spots in the same file (`BACKLOG-351`'s edit-modal guards at
+lines 334/411) that already use `isNaN(...getTime())`. Same pattern applied here: renders `—`
+instead of the literal "Invalid Date" string for a corrupted `startTime`.
+**Evidence:**
+- Commit: (pending, see commit below)
+- Verified by: `tsc --noEmit` only so far
+- Observed result: n/a -- not yet live-tested
+- Pending items: live-verify on the branch's Vercel preview against a real corrupted-`startTime`
+  match row (or a throwaway one) to confirm `—` renders instead of "Invalid Date".
+**Files:** `src/app/admin/matches/page.tsx`.
 
 ---
 
