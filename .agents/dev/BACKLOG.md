@@ -13045,11 +13045,26 @@ cleanup pending full re-audit, `BACKLOG-220`) -- this change is purely additive 
 the header row, no write-path/formation/lock logic touched) and doesn't intersect the actual open
 concerns there (dead duplicate rendering code, non-atomic write race, no formation-change confirm).
 
-**Risks / Blockers:** Admin and logger were explicitly scoped by Richard as in-scope too ("has to apply
-also but not as strict as viewer side") but are **not covered by this entry** -- ~30 admin routes plus
-the logger flow are a separate, larger pass given the admin/logger app each has its own separate
-installed PWA shell (`manifest-admin.json`/`manifest-logger.json`, confirmed during the earlier
-findings-only audit). Flagging as deferred, not silently dropped.
+**Admin/logger scope extension, same session (Richard: "extend the scope there"):** investigated
+before mass-editing, rather than mechanically repeating the viewer-side pass on ~30 admin routes --
+"not as strict as viewer side" turned out to mean there's genuinely little to do, not a smaller version
+of the same large task:
+- Admin has its own persistent `AdminSidebar.tsx` covering navigation on every page -- unlike the
+  viewer side's 3-destination bottom nav, so the same "back button adds precision a coarse nav can't"
+  argument doesn't carry over uniformly. Of the 6 admin `[id]` detail routes (the closest admin analog
+  to the viewer detail pages that motivated this whole feature), 4 already had a back button
+  (`competitions/[id]`, `match-ratings/[id]`, `players/[id]`, `teams/[id]`). The real gap was just 2:
+  `competitions/[id]/draw` and `competitions/[id]/knockout` (both sub-pages of the competition detail
+  page, no back affordance to return to it) -- added, `fallbackHref={`/admin/competitions/${competitionId}`}`.
+- Logger: confirmed the live-logging screen (`FootballLogger.tsx`/`BasketballLogger.tsx`, rendered from
+  the single `logger/page.tsx`) already has a real, wired exit control -- `onClick={onExit}` in both
+  components, not a stub. Deliberately did **not** touch this screen at all: it's the Three Critical
+  Flows' live event-logging surface, `CLAUDE.md` requires explicit manual testing for any change here,
+  and there was no actual gap to fix -- adding a second, redundant exit affordance next to an existing
+  wired one on an active live-match screen is exactly the kind of unforced risk not worth taking for a
+  low-priority navigation-consistency pass.
+- Net result: admin/logger coverage is **effectively complete** for the genuine gaps found, not
+  deferred as originally flagged below (superseded) -- 2 files, not ~30.
 
 **File Structure Delta:**
 - Added: `src/components/ui/BackButton.tsx`
@@ -13059,7 +13074,8 @@ findings-only audit). Flagging as deferred, not silently dropped.
   `src/app/profile/settings/page.tsx`, `src/app/profile/favorites/page.tsx`,
   `src/app/transfers/page.tsx`, `src/app/favourites/page.tsx`, `src/app/teams/page.tsx`,
   `src/app/login/page.tsx`, `src/app/signup/page.tsx`, `src/app/lineup-builder/page.tsx`,
-  `src/app/competitions/[id]/register/page.tsx`
+  `src/app/competitions/[id]/register/page.tsx`,
+  `src/app/admin/competitions/[id]/draw/page.tsx`, `src/app/admin/competitions/[id]/knockout/page.tsx`
 - Touched then reverted, net no-op vs. pre-session (button added, then removed on design review --
   left in git history across the 3 commits, not squashed, per this project's "never amend" norm):
   `src/app/reset-password/page.tsx`, `src/app/forgot-password/page.tsx`,
