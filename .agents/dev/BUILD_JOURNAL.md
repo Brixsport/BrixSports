@@ -5100,3 +5100,151 @@ the existing live "NEW" badge component (nav, next to Lineup Builder) before des
 then extend the same visual language to update/announcement tooltips and a reusable feature-badge
 component. If picked up fresh instead: `BACKLOG-365`'s other 5 items are all independently scoped, none
 blocking each other.
+
+---
+
+### Session 74 — 2026-09-10 (`lineup-verify` worktree, checkpoint -- session continuing after this wrap)
+
+**Focus:** resumed from `/start`'s prioritized punch list (`BACKLOG-357`/`359`/`356`/`358`/`360`,
+pitch-marker jersey-name truncation), then `BACKLOG-350` on explicit go-ahead, then a live dual-logger
+test Richard asked for directly, then a stream of live device bug reports mid-session (screenshots)
+that got triaged and fixed or handed off as they came in.
+
+**Built and shipped, roughly in order:**
+- **`BACKLOG-357`** -- logger dashboard duplicate match. Confirmed via direct DB query (not assumed):
+  one real orphaned duplicate row in `match_logger_assignments` predating every current insert path
+  (`assigned_by: null`, doesn't match either of the 2 real insert call sites in `src/`) -- root-caused
+  to the original January 2026 bulk-import, not a `BUG-008` regression. Fixed `getLoggerMatches()` to
+  dedupe by `match.id` defensively regardless of source, deleted the confirmed duplicate row.
+- **`BACKLOG-359`** -- PWA "Update Available" modal re-interrupting on nearly every navigation. Root
+  cause: the "Later" snooze lived only in component-local React state + an in-memory `setTimeout`,
+  both of which reset on any remount (App Router remounts more aggressively than assumed -- e.g.
+  `PWAProvider`'s `shouldSuppress` toggle structurally changes what it renders when crossing the
+  `/admin`|`/logger` boundary). Snooze now also persists to `localStorage`.
+- **Pitch-marker jersey-name truncation** (no BACKLOG number, explicitly scoped by Richard to just this
+  fix) -- `ResponsivePitch.tsx`'s name label now wraps 2 lines instead of single-line-ellipsis
+  truncating. Live-verified against a real match with 3 real long-name players. One residual edge case
+  documented, not fixed: a name sharing the row with BOTH a captain badge and a goal/card icon can
+  still truncate even across 2 lines (too many fixed-width siblings).
+- **`BACKLOG-356`/`368`** -- admin matches list overflow, two rounds. First: raw "Invalid Date" text
+  (same `isNaN(...getTime())` guard already used twice elsewhere in the file). Second, from a real
+  device screenshot mid-session: the competition/round label was the one header-row span with no
+  `min-w-0`/`truncate` -- wrapped to 3 messy lines normally, and reproduced a genuine 27px page
+  overflow under a simulated 135% root font-size (a real Android accessibility setting).
+- **`BACKLOG-367`** -- Richard's live push-notification report ("Permitted but Not Subscribed", Enable
+  does nothing). Investigated live as the reported user: VAPID key confirmed present/correctly
+  formatted in this environment's bundle, forced a real `pushManager.subscribe()` call to rule out the
+  key itself. Couldn't reproduce the exact "permission granted" failure from an automated browser, so
+  shipped a diagnostic instead (`push-service.ts` now tracks and surfaces the real
+  `DOMException`/server error via `getLastError()` instead of a generic toast). **Resolved same
+  session** -- Richard retried after the fix deployed and confirmed `ACTIVE & SUBSCRIBED` live; the
+  original root cause stays undetermined (self-resolved on retry) but the diagnostic stays as
+  permanent value.
+- **`BACKLOG-358`** -- `/admin/push-diagnose` was real/working/auth-gated but had zero inbound links.
+  Richard's call: link it from the related `/admin/notifications` page, not the main admin nav.
+- **`BACKLOG-360`** -- two stale-doc findings from an earlier audit, both fixed: `SYSTEM_ARCHITECTURE.md`
+  said Manager Center was a stub (it's a real 445-line page, confirmed before correcting), and the
+  admin sidebar labeled `/admin/settings` "Algorithm Setup" when the page's own scope is broader.
+- **`BACKLOG-350`** -- `/admin/advertisements` (~101px overflow) and `/admin/transfers` (~266px, worst
+  in the whole prior audit), both authorized this session ("lets do 350"). Root-caused via live DOM
+  walk (`getBoundingClientRect().right` vs. viewport), not guessed: advertisements' overflow traced to
+  an ad-card title block that wasn't `min-w-0`/`flex-1` so `truncate` never engaged; transfers' to a
+  single card row packing 4 unrelated sections into one unwrapped flex row. Both fixed with this
+  session's now-established shrink-to-fit pattern (stack below `lg:`, never `md:` -- `BACKLOG-349`'s
+  collision lesson).
+- **`BACKLOG-369`** -- `MultiLoggerStatus`'s active-loggers panel had no dismiss/collapse, sat fixed
+  on screen the whole time multi-logger mode was active. Added a minimize toggle (collapses to a small
+  pill, same snooze-not-silence reasoning as `BACKLOG-359`). Conflicts panel never collapses -- those
+  need a resolution action.
+- **`BACKLOG-151` -- the significant one.** Richard asked for a real dual-logger live test (never run
+  before; 3 prior attempts in this project's history all blocked by the same WS-origin-detection bug).
+  Fixed that blocker first (`ws-server/index.js`'s `getEnvFromOrigin()` only matched the literal
+  staging domain, so every branch-preview alias fell through to `prod` and got JWT-verified against
+  the wrong secret -- broadened to any `.vercel.app` origin, mirroring the CORS allowlist's own
+  existing trust boundary a few lines up). Then built a real concurrent-request test (2 real logger
+  accounts, a real throwaway match, `Promise.all` against the deployed preview) and **found a real,
+  live, data-corrupting race**: two loggers submitting the identical goal simultaneously both passed
+  `BUG-196`'s dedup guard and both inserted, inflating the score by 2 instead of 1. Root cause: the
+  guard's `SELECT` ran *before* the `db.transaction()` that does the insert + score update, so two
+  concurrent requests both saw "no existing event" before either committed. Fixed by moving the check
+  inside the same transaction (the exact pattern already proven for `BUG-008`'s logger-assignment
+  race). **Proved the fix live**, not assumed: re-ran the identical test on a fresh throwaway match
+  post-deploy -- exactly 1 event, correct score, second logger's duplicate correctly rejected with a
+  `200`. Closes `CLAUDE.md`'s own Live Event Readiness Checklist item ("two simultaneous loggers do
+  not conflict or overwrite") with real evidence. All throwaway data cleaned up and confirmed gone.
+- **Admin responsive audit, 21 pages** (delegated to a background agent, twice -- first attempt hit a
+  session-wide rate limit mid-task, relaunched fresh): 19 clean, 2 real bugs found and fixed
+  (`BACKLOG-370` `/admin/match-ratings/[id]` unconditional desktop spacing, `BACKLOG-371`
+  `/admin/push-diagnose` unwrapped button rows), both live-verified post-deploy.
+- **`BACKLOG-372`/`373`** -- two more live device reports on the team page. "View All" linked to
+  `/matches?team=...`, a route that has never existed (`src/app/matches/` has only a `[id]` dynamic
+  route) -- switched to this same page's own Fixtures tab instead of a dead link. Basketball player
+  cards rendered `REB`/`AST` with no rounding (unlike `PTS`), so a repeating-decimal average like
+  `3.3333333333333335` overflowed its column and overlapped the neighbouring stat -- same
+  `.toFixed(1)` as `PTS`.
+- **`BACKLOG-374`** -- filed, not fixed: live DB query confirmed Joga-Bonito's team page undercounts
+  real matches (`standings` shows `played: 3`/`goals_for: 15`, real count is 6 matches/17 goals).
+  Handed off (see below) alongside a separately-reported "previous season player stats missing" bug,
+  since both look like the same class of gap (an aggregate table not reflecting full real match
+  history) and are worth investigating together rather than guessed at in isolation.
+
+**Bugs encountered, root cause:**
+1. **The dual-logger race (`BACKLOG-151`)** -- see above. Generalizes: any "check for an existing row,
+   then insert" guard is only safe under genuine concurrency if the check and the insert are inside the
+   *same* transaction; a standalone pre-check, however well-intentioned, is a TOCTOU race waiting for
+   two real concurrent requests to find it.
+2. **WS server origin-detection gap** blocked 3 prior live-test attempts across this project's history
+   before this session found and fixed it -- branch/PR preview URLs never matched the literal staging
+   domain substring, so every preview-origin WS connection silently got the wrong JWT secret. Root
+   cause traced by reading the CORS allowlist's own already-broader `.vercel.app` check a few lines
+   above the buggy one -- the fix already existed as a pattern in the same file, just not applied
+   consistently.
+3. **Vercel deployment-protection gate blocks direct `fetch()`/`curl` from Node scripts** against the
+   branch preview -- looks exactly like an app-level 401 (`x-matched-path: /login` in the response
+   headers is the tell) unless `x-vercel-protection-bypass: <VERCEL_AUTOMATION_BYPASS_SECRET>` is sent
+   on every request. Cost real debugging time twice this session before being recognized -- worth
+   checking response headers for this signature immediately on any unexpected 401 against a preview URL.
+4. **A background subagent ran an unplanned `npm install`** in its own isolated worktree while auditing
+   admin pages (it didn't realize this repo's nested worktree layout under `.claude/worktrees/`
+   resolves `node_modules` via Node's normal parent-directory walk-up, no local install ever needed).
+   Fully isolated (own worktree, no commits/pushes affected, confirmed via `git status`/`git log`
+   before and after) -- but alarmed Richard watching the session, and rightly so; explicit "do NOT run
+   npm install, node resolves fine via directory walk-up" guidance is now baked into this project's
+   agent-audit prompt template for next time.
+5. **A real httpOnly `authToken` cookie already set in the Browser pane silently blocks a JS
+   `document.cookie` write for the same name** -- switching from one injected test session (a fan
+   account) to another (an admin account) via `document.cookie = 'authToken=...'` appeared to succeed
+   but the new value never actually took (confirmed via `/api/auth/me` still resolving to the OLD
+   user). Fix: call the real `POST /api/auth/logout` first (clears the httpOnly cookie server-side),
+   then inject the new token.
+6. **Sent a session-handoff message to the wrong peer session** (`Brixsports workk` instead of the
+   intended `Brixpsorts match page`, both named ambiguously and both showing near-identical
+   `lastActivityAt`) -- caught immediately by Richard, corrected by sending the same message to the
+   right session with a note flagging the accidental duplicate for coordination.
+
+**Scope, all explicit or user-redirected:** `BACKLOG-350`'s go-ahead, the dual-logger test, and every
+live-device bug report this session worked were all either directly asked for or triaged in real time
+as Richard sent screenshots mid-session -- nothing built speculatively. Two feature-shaped asks (prior-
+season stats fix + stats-category polish, and a team-stats season selector) were scoped and hand-typed
+into full task briefs but delegated to a peer session rather than built here, given the volume already
+in flight.
+
+**Deferred / handed off:**
+- **Tab bar redesign, findings-only** -- Richard wants `/favourites`' pill-style tab bar (Teams/
+  Players/Competitions/Matches) redesigned to match the nicer underline-tab style already used on
+  `/competitions` and match-detail pages, likely affecting `/teams` and other similar pages too.
+  Explicitly asked for a dedicated agent, findings-only (no fixes) first. **Not yet started** -- next
+  turn's first task.
+- **PWA back button** -- scoped by Richard, not yet built: near-universal across PWA-state screens
+  (every screen except the 3 bottom-nav root tabs), low priority. Browser-mode (non-PWA) needs
+  case-by-case weighing, not a blanket add -- explicitly flagged as "a lot" if done for every page.
+- **Prior-season player stats missing + stats-category "premier app" polish + `BACKLOG-374`'s
+  standings undercount** -- handed to peer session `Brixpsorts match page` with full context (including
+  the Joga-Bonito DB numbers) via `send_message`, in progress there as of this checkpoint.
+- **Team stats season selector** -- handed to the same peer session, same message.
+
+**Next session/turn -- exact first task:** spin up the tab-bar redesign findings-only audit agent
+(Favorites/Teams/other pages using the older pill-tab style, compare against `/competitions`'s
+underline-tab component, report only -- no fixes without a follow-up explicit brief). Then revisit the
+PWA back-button scope with Richard once the tab-bar findings are in, since both are UI-consistency
+passes that may want to land together.
