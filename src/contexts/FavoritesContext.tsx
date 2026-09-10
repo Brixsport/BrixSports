@@ -13,6 +13,11 @@ interface FavoritesContextType {
   isFavoriteTeam: (teamId: string) => boolean;
   isFavoritePlayer: (playerId: string) => boolean;
   isFavoriteCompetition: (competitionId: string) => boolean;
+  // Fan Account Blueprint, ADR-001 Decision 1: per-team alert control,
+  // independent of the favorite/unfavorite star itself. Defaults true for any
+  // team not yet in the map (matches the DB column's own default).
+  isTeamNotificationsEnabled: (teamId: string) => boolean;
+  setTeamNotifications: (teamId: string, enabled: boolean) => Promise<void>;
   loading: boolean;
 }
 
@@ -31,6 +36,7 @@ export function FavoritesProvider({ children }: { children: ReactNode }) {
   const [favoriteTeams, setFavoriteTeams] = useState<string[]>([]);
   const [favoritePlayers, setFavoritePlayers] = useState<string[]>([]);
   const [favoriteCompetitions, setFavoriteCompetitions] = useState<string[]>([]);
+  const [teamNotifications, setTeamNotificationsMap] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(false);
 
   // Re-runs on isAuthenticated flipping (login/logout via the in-app modal, no
@@ -65,7 +71,17 @@ export function FavoritesProvider({ children }: { children: ReactNode }) {
 
         if (teamsRes.ok) {
           const data = await teamsRes.json();
-          if (data.favorites) setFavoriteTeams(data.favorites.map((f: any) => f.favoriteId));
+          if (data.favorites) {
+            setFavoriteTeams(data.favorites.map((f: any) => f.favoriteId));
+            const notifMap: Record<string, boolean> = {};
+            for (const f of data.favorites) {
+              // DB default is true; a legacy pre-migration row (or an
+              // explicit null) also reads as enabled, matching the same
+              // "not explicitly false" rule the send-side query uses.
+              notifMap[f.favoriteId] = f.notificationsEnabled !== false;
+            }
+            setTeamNotificationsMap(notifMap);
+          }
         }
         if (playersRes.ok) {
           const data = await playersRes.json();
@@ -111,6 +127,31 @@ export function FavoritesProvider({ children }: { children: ReactNode }) {
       } catch (error) {
         console.error('Failed to update favorite team:', error);
       }
+    }
+  };
+
+  // Fan Account Blueprint, ADR-001 Decision 1. Independent of toggleTeam --
+  // this never adds/removes the favorite itself, only its alert preference.
+  // Optimistic like the other toggles; no local-storage mirror since this has
+  // no meaning for a logged-out fan (they have no server-side favorite row
+  // for it to attach to in the first place).
+  const setTeamNotifications = async (teamId: string, enabled: boolean) => {
+    const previous = teamNotifications[teamId] ?? true;
+    setTeamNotificationsMap((prev) => ({ ...prev, [teamId]: enabled }));
+
+    const token = localStorage.getItem('authToken');
+    if (!token) return;
+
+    try {
+      const res = await fetch('/api/users/favorites', {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ favoriteType: 'team', favoriteId: teamId, notificationsEnabled: enabled }),
+      });
+      if (!res.ok) throw new Error('Request failed');
+    } catch (error) {
+      console.error('Failed to update team notification preference:', error);
+      setTeamNotificationsMap((prev) => ({ ...prev, [teamId]: previous }));
     }
   };
 
@@ -182,6 +223,8 @@ export function FavoritesProvider({ children }: { children: ReactNode }) {
     isFavoriteTeam: (teamId: string) => favoriteTeams.includes(teamId),
     isFavoritePlayer: (playerId: string) => favoritePlayers.includes(playerId),
     isFavoriteCompetition: (competitionId: string) => favoriteCompetitions.includes(competitionId),
+    isTeamNotificationsEnabled: (teamId: string) => teamNotifications[teamId] ?? true,
+    setTeamNotifications,
     loading,
   };
 

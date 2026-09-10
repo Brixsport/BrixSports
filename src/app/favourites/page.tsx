@@ -2,13 +2,19 @@
 
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Heart, Users, Calendar, TrendingUp, Star, Trophy } from 'lucide-react';
+import { Heart, Users, Calendar, TrendingUp, Star, Trophy, Bell, BellOff } from 'lucide-react';
 import { useFavorites } from '@/hooks/useFavorites';
 import Link from 'next/link';
 import Image from 'next/image';
 
 export default function FavouritesPage() {
-    const { favoriteTeams, favoritePlayers, favoriteCompetitions } = useFavorites();
+    const {
+        favoriteTeams,
+        favoritePlayers,
+        favoriteCompetitions,
+        isTeamNotificationsEnabled,
+        setTeamNotifications,
+    } = useFavorites();
     const [teams, setTeams] = useState<any[]>([]);
     const [players, setPlayers] = useState<any[]>([]);
     const [competitions, setCompetitions] = useState<any[]>([]);
@@ -191,12 +197,30 @@ export default function FavouritesPage() {
                                     </h2>
                                 </div>
                                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                                    {teams.map((team) => (
+                                    {teams.map((team) => {
+                                        const alertsOn = isTeamNotificationsEnabled(team.id);
+                                        return (
                                         <Link
                                             key={team.id}
                                             href={`/teams/${team.id}`}
-                                            className="bg-white/5 hover:bg-white/10 border border-white/10 hover:border-primary/50 rounded-xl p-6 transition-all group"
+                                            className="relative bg-white/5 hover:bg-white/10 border border-white/10 hover:border-primary/50 rounded-xl p-6 transition-all group"
                                         >
+                                            <button
+                                                type="button"
+                                                onClick={(e) => {
+                                                    e.preventDefault();
+                                                    e.stopPropagation();
+                                                    setTeamNotifications(team.id, !alertsOn);
+                                                }}
+                                                aria-label={alertsOn ? `Mute alerts for ${team.shortName}` : `Get alerts for ${team.shortName}`}
+                                                title={alertsOn ? 'Alerts on -- tap to mute' : 'Alerts muted -- tap to enable'}
+                                                className={`absolute top-3 right-3 w-8 h-8 rounded-full flex items-center justify-center transition-colors ${alertsOn
+                                                        ? 'bg-primary/20 text-primary hover:bg-primary/30'
+                                                        : 'bg-white/5 text-white/30 hover:bg-white/10 hover:text-white/50'
+                                                    }`}
+                                            >
+                                                {alertsOn ? <Bell size={14} /> : <BellOff size={14} />}
+                                            </button>
                                             <div className="text-center">
                                                 <div className="text-5xl mb-3">{team.logo}</div>
                                                 <h3 className="font-bold text-sm uppercase tracking-wider mb-1">
@@ -217,7 +241,8 @@ export default function FavouritesPage() {
                                                 )}
                                             </div>
                                         </Link>
-                                    ))}
+                                        );
+                                    })}
                                 </div>
                             </section>
                         )}

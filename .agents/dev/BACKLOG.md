@@ -12216,4 +12216,35 @@ this project's convention of correcting the label going forward rather than rewr
 
 **Found:** session `competitions-consolidation`, 2026-09-09, as `Fan Account Blueprint` spec requirement P0-2.
 
+**Closure, 2026-09-09 -- deployed and confirmed.** Richard cherry-picked all 3 commits directly to `dev` (his explicit call, no fix-branch/PR). Once `brixsports-staging.vercel.app` (the exact domain Google's OAuth client has registered) redeployed: `curl`'d `/api/auth/google` directly and confirmed the real `Location` header now reads `redirect_uri=https://brixsports-staging.vercel.app/api/auth/callback/google` -- correct path, no double slash. Followed that exact URL with a second `curl` straight to `accounts.google.com` and confirmed it resolves to the real `v3/signin/identifier` account-picker page (`app_domain=https://brixsports-staging.vercel.app`), not a `redirect_uri_mismatch` error. Both bugs confirmed fixed against the actual registered domain. Not completed further than this -- finishing a real consent grant needs a human with a real (or throwaway) Google account, not something this session does unprompted. **Status: SHIPPED, deployed, Google-side acceptance confirmed. Full consent-to-session round trip still needs one live human click-through.**
+
+---
+
+### BACKLOG-363 — Fan Account Blueprint Phase 2: Per-Team Notification Toggle on `/favourites`
+
+**Status:** SHIPPED — 2026-09-10, `tsc --noEmit` clean, migration applied to staging, not yet live-verified against a running deploy.
+**Priority:** High (P1, Fan Account Blueprint) — closes the sharpest gap the SofaScore/FotMob/LiveScore competitor scan found: this project had no way for a fan to bookmark a team without silently opting into alerts for it, unlike every comparable app in the category.
+
+**Problem, per `ADR-001` Decision 1 (Fan Account Blueprint):** `userFavorites` (powers `/favourites` and the match-page follow star) had no notification column at all — `sendMatchEventNotification()` treated every favorited team as unconditionally alert-eligible, with the only escape hatch being the global `matchAlerts` mute in `/profile/settings`. `userFollows` already had a working per-row `notificationsEnabled`, but nothing wrote a `followType: 'team'` row through the UI — the match-page star writes to `userFavorites`, confirmed by reading `toggleTeam()` directly.
+
+**Decision (ADR-001):** extend `userFavorites` with its own `notificationsEnabled` column rather than dual-writing into `userFollows` — one relationship per fan-team pair, no risk of the two tables drifting apart (the exact failure class this session's own `useFavorites`/`useAuth` duplication, `BACKLOG-353`/`354`, already proved this codebase is prone to).
+
+**Built:**
+- `dev/add-userfavorites-notifications-column.mjs` — `user_favorites.notifications_enabled INTEGER DEFAULT 1`, applied to staging (`RUNLOG.md`, 2026-09-10). Default `1` matches the pre-migration real behavior exactly (every favorite was already alert-eligible) — zero behavior change on the day it ran, confirmed via a direct `COUNT(*)` on the 32 existing team-favorite rows.
+- `src/db/schema.ts` — added the corresponding Drizzle column to `userFavorites`.
+- `src/lib/notifications/match-notification-service.ts` — the `teamFavorites` audience query now excludes rows with `notificationsEnabled === false`, using `or(ne(..., false), isNull(...))` rather than `eq(..., true)` so a legacy/pre-migration `NULL` row still matches — only an explicit opt-out excludes.
+- `src/app/api/users/favorites/route.ts` — new `PATCH` handler, scoped to `(userId, favoriteType, favoriteId)` same as the existing `POST`/`DELETE`, updates just `notificationsEnabled`.
+- `src/contexts/FavoritesContext.tsx` — `isTeamNotificationsEnabled()`/`setTeamNotifications()`, optimistic with rollback on a failed `PATCH`, no `localStorage` mirror (a logged-out fan has no server-side favorite row for this to attach to).
+- `src/app/favourites/page.tsx` — a Bell/BellOff toggle on each favorited team card, independent of the favorite star itself (`e.preventDefault()`/`stopPropagation()` so it doesn't trigger the card's own `Link` navigation).
+
+**Deliberately not done, this pass:** the inline "you'll get alerts for every {team} match" consequence note at the point of *favoriting* (the spec's P1-adjacent item) — that moment happens on the match page / team page / search overlay, several files away from `/favourites` itself; scoped as its own follow-up rather than bundled in here.
+
+**Evidence:**
+- `tsc --noEmit`: identical error count to baseline (18), zero new errors across the schema, service, route, context, and page changes.
+- Migration applied and confirmed on staging directly (`PRAGMA table_info` before/after, `COUNT(*)` on affected rows) — see `RUNLOG.md`.
+- Not yet live-verified through the actual `/favourites` UI or a real send — this project's convention is the Vercel preview, not local dev.
+- Pending: push, deploy, then confirm a real toggle click persists across a reload and actually changes whether a test event reaches that fan (mirrors `BACKLOG-342`'s own verification shape).
+
+**Found:** session `competitions-consolidation`, 2026-09-10, as `Fan Account Blueprint` spec requirement, Phase 2, item 3–6 of the agreed sequence.
+
 ---

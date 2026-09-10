@@ -5,7 +5,7 @@
 
 import { db } from '@/db';
 import { pushSubscriptions, pushSubscriptionMatches, userFollows, userFavorites, teams, players, users, userPreferences, notificationSendLog } from '@/db/schema';
-import { eq, and, or, inArray } from 'drizzle-orm';
+import { eq, and, or, inArray, ne, isNull } from 'drizzle-orm';
 import webpush from 'web-push';
 import { nanoid } from 'nanoid';
 import type { NotificationKey } from './notification-rules';
@@ -115,6 +115,10 @@ export async function sendMatchEventNotification(event: MatchEventNotification):
             );
 
         // Also get users who have favorited either team via the userFavorites table
+        // Fan Account Blueprint, ADR-001 Decision 1: notificationsEnabled
+        // defaults true and is nullable pre-migration for any row written
+        // before this column existed -- `ne(..., false)` (not `eq(..., true)`)
+        // so a NULL/legacy row still matches, only an explicit false excludes.
         const teamFavorites = await db
             .select({
                 userId: userFavorites.userId,
@@ -127,6 +131,10 @@ export async function sendMatchEventNotification(event: MatchEventNotification):
                     or(
                         eq(userFavorites.favoriteId, event.homeTeamId),
                         eq(userFavorites.favoriteId, event.awayTeamId)
+                    ),
+                    or(
+                        ne(userFavorites.notificationsEnabled, false),
+                        isNull(userFavorites.notificationsEnabled)
                     )
                 )
             );

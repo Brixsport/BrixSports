@@ -536,6 +536,12 @@ export const userFavorites = sqliteTable('user_favorites', {
     favoriteType: text('favorite_type').notNull(),
     favoriteId: text('favorite_id').notNull(),
     createdAt: integer('created_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
+    // Fan Account Blueprint, ADR-001 Decision 1: per-team alert control at the
+    // point of favoriting, mirroring userFollows.notificationsEnabled below.
+    // Default true matches this column's pre-migration real behavior exactly
+    // (every favorite was already unconditionally alert-eligible) -- see
+    // dev/add-userfavorites-notifications-column.mjs, RUNLOG.md 2026-09-10.
+    notificationsEnabled: integer('notifications_enabled', { mode: 'boolean' }).default(true),
 });
 
 // User Follows table

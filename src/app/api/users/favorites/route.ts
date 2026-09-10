@@ -182,6 +182,61 @@ export async function POST(request: NextRequest) {
 }
 
 /**
+ * UPDATE a favorite's notification preference
+ * PATCH /api/users/favorites
+ * Fan Account Blueprint, ADR-001 Decision 1 -- the per-team alert toggle on
+ * /favourites. Scoped to (userId, favoriteType, favoriteId), same identity
+ * triple POST/DELETE already key on -- never trusts a client-passed row id.
+ */
+export async function PATCH(request: NextRequest) {
+    try {
+        const user = await getAuthUser(request);
+
+        if (!user) {
+            return NextResponse.json(
+                { error: 'Unauthorized' },
+                { status: 401 }
+            );
+        }
+
+        const effectiveId = await resolveEffectiveUserId(user);
+        const body = await request.json();
+        const { favoriteType, favoriteId, notificationsEnabled } = body;
+
+        if (!favoriteType || !favoriteId || typeof notificationsEnabled !== 'boolean') {
+            return NextResponse.json(
+                { error: 'Missing required fields' },
+                { status: 400 }
+            );
+        }
+
+        const scope = and(
+            eq(userFavorites.userId, effectiveId),
+            eq(userFavorites.favoriteType, favoriteType),
+            eq(userFavorites.favoriteId, favoriteId)
+        );
+
+        const existing = await db.select({ id: userFavorites.id }).from(userFavorites).where(scope).limit(1);
+        if (existing.length === 0) {
+            return NextResponse.json(
+                { error: 'Favorite not found' },
+                { status: 404 }
+            );
+        }
+
+        await db.update(userFavorites).set({ notificationsEnabled }).where(scope);
+
+        return NextResponse.json({ success: true, notificationsEnabled });
+    } catch (error) {
+        console.error('Error updating favorite notification preference:', error);
+        return NextResponse.json(
+            { error: 'Failed to update favorite' },
+            { status: 500 }
+        );
+    }
+}
+
+/**
  * REMOVE favorite
  * DELETE /api/users/favorites
  */
