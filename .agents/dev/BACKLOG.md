@@ -6570,7 +6570,12 @@ No `clearTimeout` exists anywhere in the file. The effect that sets `stateManage
 
 ### BACKLOG-151 — Multi-Logger Sync Is Poll-Only: Real-Time Broadcast and Conflict Resolution Are Both No-Ops
 
-**Status:** SHIPPED — 2026-08-21 (commit `b00896d`, branch `feature/backlog-151-multilogger-realtime`). Code fixed, **NOT yet live-tested with two real concurrent logger sessions** — do not treat as done. See below for what changed and what live test is still required before this can move to RESOLVED.
+**Status:** PARTIALLY RESOLVED — 2026-09-10. The CLAUDE.md checklist item this is tracked against
+("Two simultaneous loggers do not conflict or overwrite") is now RESOLVED, live-tested, and fixed —
+see "Live dual-logger test #4" below for a real bug found and closed. This ticket's own original,
+broader scope (sub-10s real-time WS push, conflict-resolution UI) is still not fully re-verifiable
+this session -- the WS origin-detection fix earlier in this entry needs a separate Railway deploy
+this branch doesn't control. Do not treat the whole ticket as done; the specific checklist line is.
 
 **Fix, what actually shipped:** discovered mid-fix that the WS server (`ws-server/index.js`) already had the real cross-device channel fully built and working (`logger:join`/`logger:leave`/`logger:broadcast-event`/`logger:event`, plus `sync-response`/`logger-joined`/`logger-left`) — `useMultiLogger.ts` (`src/hooks/useMultiLogger.ts`) simply never called any of it. Rewired the hook to use the app's existing shared socket singleton (`useSocket()` from `useWebSocket.tsx`, no second connection opened): `broadcastEvent` now really emits `logger:broadcast-event` (the old same-tab-only `window.dispatchEvent` is kept alongside it, not removed); `activeLoggers` now updates in real time off `logger-joined`/`logger-left`/`sync-response` instead of only the 10s REST poll (poll kept as a reconciliation fallback, not removed — it also feeds a DB-backed presence view other consumers may rely on). Both `FootballLogger.tsx` and `BasketballLogger.tsx` now pass an `onIncomingEvent` callback so another logger's event is folded into local state (`stateManager.mergeExternalEvents()` for football, direct `setEvents` for basketball) the instant it arrives over the socket, not just at the next 10-15s poll tick.
 
@@ -6639,15 +6644,28 @@ unit, the same pattern already proven for the logger-assignment race (`assign-lo
 time-limited -- a permanent constraint on `(matchId, type, minute, playerId)` would wrongly block a
 legitimate later event sharing those exact fields).
 
-**Re-verified live after the fix, same test, fresh throwaway match:** see evidence block below.
+**Re-verified live after the fix, same test, fresh throwaway match -- fix confirmed closing the
+race, not assumed.** Waited for the fix commit to actually finish deploying (polled the GitHub
+commit-status API for the Vercel preview build, not a fixed sleep), created a second fresh throwaway
+match, re-ran the identical `Promise.all` simultaneous-goal test. Result: Logger A got `201 Event
+created successfully`, Logger B now correctly got `200 Duplicate submission ignored — event already
+recorded` -- the two requests no longer race past each other. DB ground truth: exactly **1** `Goal`
+row at minute 10 (was 2 pre-fix), `home_score` **2** (was 3 pre-fix, correctly `1` for the minute-10
+goal `+ 1` for the separate minute-21 goal in the same test), exactly **1** `Yellow Card` row. TEST 2
+(two genuinely different simultaneous events from each logger) also persisted both correctly with no
+cross-contamination.
 
 **Evidence:**
-- Commit: (pending, see commit below)
-- Verified by: the exact same `Promise.all` concurrent-request test re-run against a fresh throwaway
-  match post-fix, DB read-back for ground truth (not API response codes)
-- Observed result: (pending re-run after this commit -- see follow-up note)
-- Pending items: none once the re-run confirms exactly 1 `Goal` row and correct score; if the re-run
-  still shows 2 rows, this entry will be corrected, not left showing a false fix.
+- Commit: `a51d2fe` (`feature/ui-redesign`)
+- Verified by: `tsc --noEmit` (18, identical to baseline, zero new errors); live re-run of the exact
+  same `Promise.all` concurrent-request test against a fresh throwaway match on the deployed preview
+  (confirmed deployed via the GitHub commit-status API before re-testing, not assumed); DB read-back
+  for ground truth (not API response codes) both before and after cleanup
+- Observed result: pre-fix run showed 2 duplicate `Goal` rows + inflated score (3 instead of 2);
+  post-fix run on a fresh match showed exactly 1 `Goal` row + correct score (2), with the second
+  logger's duplicate request correctly recognized and rejected server-side
+- Pending items: none. All throwaway test data (2 matches, their events, and logger assignments)
+  deleted and confirmed gone via a post-delete existence check (`dev/dual-logger-cleanup.mjs`).
 
 **Problem, three parts, same root cause (`useMultiLogger.ts`/`multiLogger.ts`):**
 1. `broadcastEvent` (`useMultiLogger.ts:178-192`) does not send anything to another device, tab, or the server — it only dispatches a same-tab `window` `CustomEvent('MULTI_LOGGER_EVENT')`, which by definition never leaves the browser tab that dispatched it. Every `broadcastEvent()` call site in both `FootballLogger.tsx:741` and `BasketballLogger.tsx:613` is effectively inert for real cross-device sync.
