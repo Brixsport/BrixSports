@@ -12986,11 +12986,34 @@ covered by this entry -- see Deferred below).
     `privacy`, `terms`, `stats`, `dashboard`, `draft`, `profile/settings`, `profile/favorites`,
     `transfers`, `favourites`, `teams` (the last two added directly, not via subagent -- already
     touched this session for `BACKLOG-378`'s tab-bar work).
-  - Fallback + `forceShow` (commonly reached cold, so needs to work in browser mode too):
-    `login` (→`/`), `signup`/`reset-password`/`forgot-password` (→`/login`).
+  - Fallback, PWA-only (no existing exit and bottom nav is hidden on these routes, so a standalone/iOS
+    session would otherwise have zero way to leave -- but NOT `forceShow`, corrected below):
+    `login` (→`/`), `signup` (→`/login`).
   - Fallback only (in-app-reached in the common case, but ambiguous "back to where"):
-    `lineup-builder` (→`/`), `competitions/[id]/register` and `.../registration-success`
-    (→`/competitions/${id}`, using each file's real id variable, not hardcoded).
+    `lineup-builder` (→`/`), `competitions/[id]/register` (→`/competitions/${id}`, using the real
+    `params.id`).
+
+**Correction, same session, from a live design review (Richard caught it live on `/login` in a plain
+browser tab, then asked for a full page-by-page re-audit rather than a spot fix):**
+- Initially shipped `login`/`signup`/`reset-password`/`forgot-password` with `forceShow` (rendering
+  even in plain browser mode, reasoning: all 4 are commonly reached cold via email/deep link). Richard
+  correctly flagged this live: the browser already has its own back button, so `forceShow` there was
+  redundant chrome, not a real need -- removed from all 4. `login`/`signup` still render (PWA-only, no
+  other exit exists on those two -- bottom nav hidden, real usability gap otherwise); the other two
+  fixed below by removing the button entirely instead.
+- Re-auditing the full list page-by-page (not just the one Richard flagged) surfaced 3 pages where the
+  button was outright redundant with an existing, better-labeled affordance already on the page --
+  removed all 3, don't just default to "keep everything, mechanical pass already ran":
+  - `reset-password`, `forgot-password` -- both already had a "Back to Sign In" text link at the
+    bottom of the card. The new icon-only button at the top added nothing they didn't already have.
+  - `competitions/[id]/registration-success` -- already has explicit "View Competition" (the exact
+    same destination as the new button's fallback) and "Back to Home" CTAs. Worse than merely
+    redundant: an icon back-arrow on a *success* confirmation screen reads as "undo this," the wrong
+    signal right after a completed action.
+  - `competitions/[id]/register` was kept, deliberately -- its own `ArrowLeft`/"Back" buttons
+    (confirmed by reading `CompetitionRegistration.tsx`) are a multi-step form's step-back
+    (`setCurrentStep(1)`), a different action from leaving the page entirely. Not the same
+    redundancy class as the 3 removed above.
 
 **Deliberately skipped (verified correct, not just accepted on report):**
 - `scouts`, `predictions`, `fpl`, `fpl/team`, `fpl/transfers`, `nesa-registration` -- all backscoped
@@ -13030,13 +13053,16 @@ findings-only audit). Flagging as deferred, not silently dropped.
 
 **File Structure Delta:**
 - Added: `src/components/ui/BackButton.tsx`
-- Modified (20): `src/app/about/page.tsx`, `src/app/docs/page.tsx`, `src/app/news/page.tsx`,
-  `src/app/privacy/page.tsx`, `src/app/terms/page.tsx`, `src/app/stats/page.tsx`,
-  `src/app/dashboard/page.tsx`, `src/app/draft/page.tsx`, `src/app/profile/settings/page.tsx`,
-  `src/app/profile/favorites/page.tsx`, `src/app/transfers/page.tsx`, `src/app/favourites/page.tsx`,
-  `src/app/teams/page.tsx`, `src/app/login/page.tsx`, `src/app/signup/page.tsx`,
+- Modified, button present in final state (17): `src/app/about/page.tsx`, `src/app/docs/page.tsx`,
+  `src/app/news/page.tsx`, `src/app/privacy/page.tsx`, `src/app/terms/page.tsx`,
+  `src/app/stats/page.tsx`, `src/app/dashboard/page.tsx`, `src/app/draft/page.tsx`,
+  `src/app/profile/settings/page.tsx`, `src/app/profile/favorites/page.tsx`,
+  `src/app/transfers/page.tsx`, `src/app/favourites/page.tsx`, `src/app/teams/page.tsx`,
+  `src/app/login/page.tsx`, `src/app/signup/page.tsx`, `src/app/lineup-builder/page.tsx`,
+  `src/app/competitions/[id]/register/page.tsx`
+- Touched then reverted, net no-op vs. pre-session (button added, then removed on design review --
+  left in git history across the 3 commits, not squashed, per this project's "never amend" norm):
   `src/app/reset-password/page.tsx`, `src/app/forgot-password/page.tsx`,
-  `src/app/lineup-builder/page.tsx`, `src/app/competitions/[id]/register/page.tsx`,
   `src/app/competitions/[id]/registration-success/page.tsx`
 
 **Test Scenarios (manual, run against the Vercel preview):**
@@ -13044,9 +13070,13 @@ findings-only audit). Flagging as deferred, not silently dropped.
    renders on the no-fallback and fallback-only pages (`useAppInstalled()` is false). **PASS** --
    `/about` in a plain browser tab renders no back button (confirmed via `find` returning zero button
    matches for "Back").
-2. Same, but for `login`/`signup`/`reset-password`/`forgot-password` -- back button DOES render even
-   in plain browser mode (`forceShow`). **PASS** -- `/login` in the same plain browser tab renders the
-   back arrow (confirmed visually and via `find` returning `button "Back"`).
+2. **SUPERSEDED, see the design-review correction above.** Originally: `login`/`signup`/
+   `reset-password`/`forgot-password` should render even in plain browser mode via `forceShow`. That
+   was live-tested and DID pass exactly as written -- which is precisely how Richard caught the
+   problem: it was working as coded, but the code was wrong to show a back button next to the
+   browser's own one. `forceShow` is now unused by any page (kept on the component as a legitimate
+   future escape hatch, not dead-code cruft to remove) -- `login`/`signup` render PWA-only like
+   everything else; `reset-password`/`forgot-password` don't render the button at all anymore.
 3. Install the app as a PWA (or emulate `display-mode: standalone`) -- back button renders on every
    edited page. **NOT VERIFIED LIVE.** Attempted via `window.matchMedia` monkey-patch in the browser
    console, but `useAppInstalled()`'s check runs once in a `useEffect` on mount with no listener for
@@ -13070,12 +13100,12 @@ findings-only audit). Flagging as deferred, not silently dropped.
    back button (not simulated), confirmed `window.location.pathname` became `/` afterward. This is the
    scenario that matters most for correctness (the fallback logic itself) and it's live-proven; #3/#4
    are about the outer visibility gate, which is unmodified pre-existing code.
-6. `/competitions/[id]/register` and `.../registration-success` -- back button's fallback resolves to
-   the real competition's detail page, not a literal `${id}` string. **NOT LIVE-TESTED** -- verified
-   only by reading the diff (`fallbackHref={`/competitions/${params.id}`}`  /
-   `fallbackHref={`/competitions/${competitionId}`}`, both using each file's real param variable, not
-   a hardcoded string) and by the general pattern already proven correct in scenario 5. Worth an actual
+6. `/competitions/[id]/register` -- back button's fallback resolves to the real competition's detail
+   page, not a literal `${id}` string. **NOT LIVE-TESTED** -- verified only by reading the diff
+   (`fallbackHref={`/competitions/${params.id}`}`, using the file's real param variable, not a
+   hardcoded string) and by the general pattern already proven correct in scenario 5. Worth an actual
    click-through next session since this is a dynamic-route case #5 doesn't cover.
+   (`.../registration-success` no longer applies -- button removed there on design review, see above.)
 7. `tsc --noEmit` -- zero new errors vs. baseline. **PASS**, independently re-run and diffed here, not
    just taken from the subagents' self-reports.
 

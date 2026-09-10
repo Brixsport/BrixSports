@@ -4,7 +4,6 @@ import { motion } from 'framer-motion';
 import { CheckCircle, Home, FileText } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { BackButton } from '@/components/ui/BackButton';
 
 export default function RegistrationSuccessPage() {
     const params = useParams();
@@ -17,10 +16,6 @@ export default function RegistrationSuccessPage() {
                 animate={{ opacity: 1, scale: 1 }}
                 className="max-w-2xl w-full bg-white/10 backdrop-blur-md rounded-2xl p-8 md:p-12 shadow-2xl text-center"
             >
-                <div className="flex items-center gap-2 mb-4">
-                    <BackButton fallbackHref={`/competitions/${competitionId}`} />
-                </div>
-
                 <motion.div
                     initial={{ scale: 0 }}
                     animate={{ scale: 1 }}

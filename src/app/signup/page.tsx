@@ -171,7 +171,7 @@ export default function SignupPage() {
 
                 <div className="relative p-8">
                     <div className="flex items-center gap-2 mb-4">
-                        <BackButton fallbackHref="/login" forceShow />
+                        <BackButton fallbackHref="/login" />
                     </div>
 
                     {/* Header */}

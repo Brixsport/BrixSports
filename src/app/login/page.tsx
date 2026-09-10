@@ -147,7 +147,7 @@ function LoginPageContent() {
 
                 <div className="relative p-8">
                     <div className="flex items-center gap-2 mb-4">
-                        <BackButton fallbackHref="/" forceShow />
+                        <BackButton fallbackHref="/" />
                     </div>
 
                     {/* Header */}

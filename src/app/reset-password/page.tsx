@@ -11,7 +11,6 @@ import { Loader2, ArrowLeft, CheckCircle, Lock, Eye, EyeOff } from "lucide-react
 import { toast } from "sonner";
 import Image from "next/image";
 import { getClientErrorMessage } from "@/lib/client-error";
-import { BackButton } from "@/components/ui/BackButton";
 
 const STRENGTH_LABELS = {
     0: "Enter Password",
@@ -294,10 +293,6 @@ export default function ResetPasswordPage() {
                 <div className="relative bg-[#0a0a0a]/80 backdrop-blur-2xl rounded-3xl p-8 border border-white/10 shadow-2xl shadow-[#3b82f6]/5">
                     {/* Top Gradient Line */}
                     <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-[#3b82f6] via-[#8b5cf6] to-[#3b82f6] rounded-t-3xl" />
-
-                    <div className="flex items-center gap-2 mb-4">
-                        <BackButton fallbackHref="/login" forceShow />
-                    </div>
 
                     {/* Logo */}
                     <div className="flex justify-center mb-6">
