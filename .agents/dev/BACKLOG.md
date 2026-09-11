@@ -13240,3 +13240,29 @@ larger, non-cramped `px-6 py-4 text-sm` pattern, not part of this problem.
 `src/app/players/[id]/PlayerDetailClient.tsx`.
 
 ---
+
+### BACKLOG-385 — Profile's "Manage Favorites" Linked to a Dead Mock Page With Hardcoded Fake Data, Not the Real Favorites Hub
+
+**Status:** SHIPPED — 2026-09-11, `tsc --noEmit` unchanged (30, pre-existing baseline for this branch, zero new).
+**Priority:** HIGH — a real, live, user-facing data-integrity bug: real users clicking "Manage Favorites" from their own Profile page never saw or edited their real favorites at all.
+
+**Found:** Richard screenshotted `/profile/favorites` (reached via Profile → "Manage Favorites") showing teams "UNILAG Marines" / "UNIBEN Royals" and asked whether that page and `/favourites` were meaningfully different.
+
+**Root cause:** two separate, never-reconciled favorites pages existed:
+- `src/app/profile/favorites/page.tsx` — an orphaned early prototype. `const mockFavorites = {...}` hardcoded literal data (the exact "UNILAG Marines"/"UNIBEN Royals" values in Richard's screenshot), held in local `useState`, never fetched from any API. Its `removeFavorite()` only mutated local component state — any "remove" a real user performed there vanished on refresh and never touched the DB.
+- `src/app/favourites/page.tsx` — the real page, built out in `BACKLOG-301` (Unified Favorites Hub), wired to the live `useFavorites` hook with real team/player/competition data.
+`src/app/profile/page.tsx`'s "Manage Favorites" quick action linked to `/profile/favorites` (the fake one) — confirmed the only internal reference to that path anywhere in `src/`. Nothing linked to the real `/favourites` from the Profile page at all, and no other route referenced `/favourites` either (grepped `src/` for both paths before touching anything).
+
+**Fix:** consolidated to one real page instead of leaving two. Deleted the dead mock page (`src/app/profile/favorites/page.tsx`, old content), then moved the real page from `src/app/favourites/page.tsx` to `src/app/profile/favorites/page.tsx` (Richard's call: the real favorites page belongs under the `/profile` route hierarchy, not a top-level route) — so the URL `/profile/favorites` now serves the real, DB-backed page. Updated the one internal link (`src/app/profile/page.tsx`) to point there. Updated `src/lib/utils/robots.ts` — removed the now-dead `Disallow: /favourites` line (the path no longer exists; `/profile/favorites` is already covered by the existing broader `Disallow: /profile/` rule, so no new line was needed).
+
+**Related, same pass:** while here, added `forceShow` to this page's `BackButton` (previously hidden outside installed/standalone PWA mode — see `BACKLOG-379`) per Richard's explicit "cover the favourites page even in browser mode" instruction.
+
+**Deliberately not done:** no redirect from the old `/favourites` path — grepped confirmed zero internal references before deleting, and this is a pre-launch internal app with no indexed external inbound links to preserve.
+
+**Evidence:**
+- `tsc --noEmit`: 30 errors both before and after, all in `dev/`/`src/db/`/`src/app/api/squads/*` — none in any file this change touched.
+- Confirmed via grep: exactly one internal reference to `/profile/favorites` (the link itself, now fixed) and zero to `/favourites` anywhere in `src/` after the move.
+- Pending: live click-through on the deployed preview (Profile → Manage Favorites → real data renders, BackButton visible in a normal browser tab) — not yet run this pass.
+**Files:** `src/app/profile/favorites/page.tsx` (deleted then recreated via move — now the real page), `src/app/favourites/page.tsx` (deleted, moved), `src/app/profile/page.tsx`, `src/lib/utils/robots.ts`.
+
+---
