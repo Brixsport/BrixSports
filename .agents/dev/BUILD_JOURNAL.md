@@ -5338,3 +5338,105 @@ close. If resuming this thread: the 64/29 ambiguous `BACKLOG-376` rows are the o
 from this session, and they're not urgent (already correctly handled by the read-side fallback). Session
 74's tab-bar redesign findings-only audit and PWA back-button scope remain the oldest still-open items
 across the branch if nothing newer takes priority.
+
+---
+
+### Session 76 — 2026-09-11 (`lineup-verify` worktree, `feature/ui-redesign`)
+
+**Focus:** Picked up exactly where session 74 left off -- ran the tab-bar findings-only agent, then
+built both UI-consistency passes it scoped: `BACKLOG-378` (tab-bar redesign) and `BACKLOG-379` (PWA
+back button). Also test-drove `graphify` (newly available this session) and, mid-session, corrected a
+real design mistake caught live by Richard rather than defending the first pass.
+
+**Built -- `BACKLOG-378`, tab-bar redesign (RESOLVED, live-verified):**
+- New shared `src/components/ui/UnderlineTabs.tsx` -- consolidates the underline-tab visual pattern
+  that was previously copy-pasted 4 times across `TeamDetailClient.tsx`/`MatchDetailClient.tsx`/
+  `PlayerDetailClient.tsx`/`MatchOverlay.tsx`.
+- `src/app/favourites/page.tsx` -- 4 always-stacked sections (Matches/Teams/Competitions/Players) become
+  one `UnderlineTabs` bar + a single active panel. Only non-empty categories get a tab; the alert-toggle
+  coachmark now force-selects the Teams tab so it still anchors correctly regardless of default tab.
+- `src/app/teams/page.tsx` -- 3 categorized pill-chip rows become 3 `UnderlineTabs` rows sharing one
+  `layoutId` so the highlight glides between groups.
+- Hit a real `BACKLOG-375` number collision with a concurrent peer session mid-push (both filed a
+  `BACKLOG-375` independently) -- resolved via `git pull --rebase` (never merge, per standing project
+  rule) and renumbered to `378`.
+- Live-verified against the deployed Vercel preview using 3 real DB-backed fan accounts (found via a
+  read-only query, not freshly seeded), session injected via `localStorage.authToken` + `document.cookie`
+  (logging out first to clear the httpOnly cookie, per this project's known injection gotcha) -- all
+  scenarios (multi-category, single-category, empty state, coachmark default, cross-group tab switching,
+  375px overflow) passed on real data, not just a UI glance.
+
+**Tried -- graphify (new this session):** copied the pre-built graph from the primary checkout into this
+worktree (worktrees don't get their own auto-rebuilt graph -- the hook only rebuilds the primary
+checkout's canonical `graphify-out/`, confirmed via the skill's own worktree caveat). Used for 2
+orientation queries (PWA standalone-detection files, `BottomNav` component) before the back-button work
+-- real but modest value. Confirmed via `git diff --stat origin/dev...HEAD` (152 files, +11889/-8275)
+that the graph is meaningfully stale for this branch overall, but the specific files queried (`pwa.ts`,
+`usePWA.ts`) had zero diff, so the answers were trustworthy for that narrow purpose. Correctly did NOT
+use it for the bulk BackButton-wiring work afterward -- that was "edit these N known files," not a
+search problem, and graphify adds a step there rather than removing one.
+
+**Built -- `BACKLOG-379`, PWA back button (UNVERIFIED, not RESOLVED -- see below):**
+- New shared `src/components/ui/BackButton.tsx`. Self-gates on `useAppInstalled()` (an existing,
+  previously-unused hook in `usePWA.ts` -- confirmed dead code before wiring it up). Renders nothing in
+  plain browser mode by default (matches Richard's "browser-mode is case-by-case, not blanket"); a
+  `forceShow` prop opts a screen into browser mode too; a `fallbackHref` prop covers screens with no
+  reliable browser history (`router.back()` unless `window.history.length <= 2`, a cold-tab heuristic).
+- Wired into pages missing one via 2 parallel subagents (bulk mechanical insertion, disjoint file lists,
+  explicit git-safety constraints since they share this worktree) plus 2 manual edits (`favourites`,
+  `teams`, already touched this session). Every subagent "skipped" claim was independently spot-checked
+  against the actual file, not taken on report -- all confirmed correct (6 genuine backscoped stubs,
+  `news/[slug]`'s existing labeled back-link, `livestream/[id]`'s existing back button living in its
+  child `LivestreamView.tsx`).
+- Live-verified on the deployed preview: browser-mode correctly hides the button on a plain page;
+  `forceShow` correctly renders it anyway; a genuinely cold fresh tab (`history.length === 2`, confirmed
+  via direct JS check) on `/login` correctly routed to the `fallbackHref` on click, not a broken
+  `router.back()`. **True installed/standalone-mode rendering could not be verified live** -- a
+  `window.matchMedia` monkey-patch doesn't survive the full page navigation needed to load a fresh page
+  component, and `useAppInstalled()` only checks once on mount with no listener for later changes.
+  Filed as `UNVERIFIED`, not `RESOLVED` -- flagged honestly rather than assumed to pass because the
+  underlying hook is old, unmodified code.
+
+**Bug encountered mid-session, root cause: a real design mistake, not a tooling bug.** Richard caught it
+live, on `/login` in a plain (non-PWA) browser tab: the back button was showing there, which was
+*working exactly as coded* (`forceShow` was set) -- the code wasn't broken, the initial judgment call
+was wrong. Root cause: `forceShow` was applied to `login`/`signup`/`reset-password`/`forgot-password` on
+the reasoning "these are commonly reached cold via deep link," without weighing that the browser already
+has its own back button, making a second one redundant chrome. Richard's ask afterward -- "validate it as
+a product designer" across every page touched, not just the one flagged -- surfaced 3 more genuine
+redundancies on re-audit, not just the one spot: `reset-password`/`forgot-password` already had their own
+"Back to Sign In" link; `competitions/[id]/registration-success` already had "View Competition" (the same
+destination) + "Back to Home" CTAs, and a back-arrow on a *success* screen reads as "undo this" -- the
+wrong signal. Fixed: `forceShow` removed from `login`/`signup` (button stays, PWA-only -- bottom nav is
+hidden on both with no other exit, a real gap `forceShow` was solving for the wrong environment); the
+button removed entirely from the other 3. `competitions/[id]/register` was deliberately kept -- its own
+existing "Back" buttons are a multi-step form's step-back (`setCurrentStep(1)`), a different action from
+leaving the page, not the same redundancy class.
+
+**Scope extension, same session (Richard: "extend the scope there" to admin/logger):** investigated
+before mass-editing ~30 admin routes. Admin has its own persistent `AdminSidebar.tsx` covering
+navigation everywhere -- the viewer-side "near-universal" argument doesn't carry over uniformly. Of the
+6 admin `[id]` detail routes, 4 already had a back button; the real gap was just 2:
+`admin/competitions/[id]/draw` and `.../knockout` -- added. Logger's live-logging screen
+(`FootballLogger.tsx`/`BasketballLogger.tsx`) already has a real, wired `onClick={onExit}` control --
+deliberately not touched: no gap existed, and it's the Three Critical Flows' live-logging surface,
+where `CLAUDE.md` requires explicit manual testing for any change, not something to touch inside a
+low-priority navigation-consistency pass.
+
+**Deferred:**
+- `BACKLOG-379`'s standalone/PWA-mode rendering itself, and the `competitions/[id]/register` dynamic-route
+  fallback click-through -- both need a real installed PWA or DevTools device-emulation session, not
+  available through current tooling. Flagged in `BACKLOG-379`, not silently dropped.
+- 🔴 High Volatility admin features (Ads, Lineup Builder, `/admin/transfers`, User management, News
+  admin) -- Richard asked to extend back-button coverage further; per `CLAUDE.md` these require an
+  explicit brief before any touch, not started this session. This is the real next candidate, not Tier 4.
+- **Correction, not a task:** Richard's "next time, wire the volatile/Tier 4 features too" doesn't apply
+  to Tier 4 as written -- FPL/Predictions/Polls/Scouts/NESA registration are all fully backscoped
+  (`notFound()` stubs, zero rendered UI, confirmed while skipping them this session). There's nothing to
+  wire until those features are un-backscoped; it's blocked, not deferred. The 🔴 High Volatility set
+  above is the actual next candidate with real UI to touch.
+
+**Next session/turn -- exact first task:** get Richard's explicit brief on which 🔴 High Volatility admin
+surfaces (if any) should get back-button coverage, since `CLAUDE.md` blocks touching them without one --
+then wire whichever are approved. Separately, whenever a real device or DevTools standalone-mode test is
+convenient, close `BACKLOG-379`'s one remaining live-verification gap (scenarios 3/4 in that entry).
