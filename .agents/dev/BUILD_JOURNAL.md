@@ -5248,3 +5248,93 @@ in flight.
 underline-tab component, report only -- no fixes without a follow-up explicit brief). Then revisit the
 PWA back-button scope with Richard once the tab-bar findings are in, since both are UI-consistency
 passes that may want to land together.
+
+---
+
+### Session 75 — 2026-09-10/11 (`match-detail-tabs` worktree, fast-forwarded onto `origin/feature/ui-redesign`)
+
+**Focus:** picked up the cross-session handoff from session 74's own last checkpoint (`BACKLOG-374`'s
+Joga-Bonito standings claim + a related prior-season player-stats report + a team stats season
+selector ask), root-caused both before writing any fix, then a follow-up round fixing `BACKLOG-376`/
+`377` (found while building the first fix, not separately assigned).
+
+**Built:**
+- **`BACKLOG-375`** (renumbered from `372` on rebase -- origin had already taken 372/373 for an
+  unrelated concurrent commit, and 374 for the original filing of this same bug): `standingsService.ts`
+  -- `aggregateTeamRecord()` gained an `includeKnockouts` option (default `false`, every existing
+  caller unchanged); new exports `getTeamCompetitionStats()` and `getTeamCompetitionSeasons()`.
+  `teams/[id]/route.ts` -- new `statsCompetitionId` param (kept deliberately separate from the
+  existing `competitionId` param, which scopes the unrelated squad-roster feature), resolves a
+  default (most recent season with real data, `'all'` fallback). `TeamDetailClient.tsx` -- season
+  selector on the Season Stats card, same visual pattern as `competitions/[id]/page.tsx`'s existing
+  selector. Also fixed in the same pass: football team rosters got zero per-player `.stats` at all
+  (Basketball-only branch) -- real gap, not season-related, fixed with a prefer-scoped-fallback-to-any
+  read (not a strict gate -- see `BACKLOG-376` below for why). Commits `aa2f76f`, `a236ae7`.
+- **`BACKLOG-376`**: backfilled `football_player_stats.competitionId` for every row that resolves
+  unambiguously via the player's team's real FINISHED matches (same method `BACKLOG-097`'s standings
+  backfill used) -- 138/202 staging, 2/31 prod. Left 64 (staging) / 29 (prod) NULL rather than guess --
+  those rows are players affiliated with 2 teams playing in 2 different real competitions, so the one
+  stats row already holds a total *blended* across both; a metadata write would misattribute real data.
+- **`BACKLOG-377`**: filed as 1 row, scanned and found real scope was 5348 rows (staging) / 5124 rows
+  (prod) across 6 table/column pairs (`matches`, `players`, `match_events` -- ~4959 alone, almost
+  certainly one bulk-import batch, `football_player_stats.updated_at`, `player_team_affiliations`) --
+  a bulk-write script had written raw `Date.now()` (milliseconds) into columns Drizzle reads as
+  epoch-seconds. Fixed on both staging and prod (`col/1000`, rounded, guarded to genuinely-integer
+  values only -- SQLite ranks TEXT above INTEGER regardless of value, so a naive comparison
+  false-positived on the pre-existing `BACKLOG-189` TEXT-timestamp drift; caught before trusting it).
+  Commit `1079d96` (docs + scripts; the `dev/*.mjs` scripts themselves are gitignored, not committed).
+
+**Bugs encountered, root cause:**
+1. **The Joga-Bonito report itself was a real UX complaint with a wrong diagnosis** -- the peer session
+   (and by extension the original Richard report) assumed `standings`' 3-played/15-goals was data
+   corruption. It wasn't: `standings` correctly excludes knockout rounds per `BACKLOG-275` (a group
+   table shouldn't show Cup results), but nothing else on the team page showed the other 3 matches
+   (Quarter-Final/Semifinal/Final) either -- so a team that reached the Final looked like it had played
+   3 games. Root cause was architectural (wrong data source for a "season summary" card), not a bug in
+   `standings` itself.
+2. **BACKLOG number collision, live during a push** -- origin had moved (another concurrent session's
+   commit `39987be`, itself titled `BACKLOG-372,373` for an unrelated View All/REB-AST fix, plus its
+   own filing of `374` for the *same* Joga-Bonito report as its own `BACKLOG-374`). Rebased cleanly
+   (the two sessions' `TeamDetailClient.tsx` edits landed in different regions of the file, auto-merged
+   with no conflict; only `BACKLOG.md` conflicted, resolved by renumbering mine to 375/376/377 and
+   marking the peer's `374` RESOLVED pointing at `375`).
+3. **A second, unrelated push race mid-session** -- `feature/ui-redesign` moved again (`BACKLOG-378`,
+   tab-bar redesign) while writing up `376`/`377`'s evidence; fetched, rebased (clean, no conflict this
+   time), then pushed.
+4. **`.env.production` was not present in this worktree** -- copied from the main repo root for the
+   prod runs, deleted again immediately after (gitignored either way, but no reason to leave a second
+   copy of a prod secret lying around).
+5. **Cross-session messaging tool (`mcp__ccd_session_mgmt__send_message`) could not resolve a peer
+   session's display name to a real session_id** -- consistent with this project's own prior-logged
+   finding that no working `SendMessage`-to-a-peer mechanism exists in this environment. `BACKLOG.md`/
+   `RUNLOG.md` (already pushed, shared branch) is the durable, actually-working handoff channel here,
+   not a live message.
+
+**Resolved:** `BACKLOG-375` (RESOLVED, live-verified against the deployed `feature/ui-redesign`
+preview: Joga-Bonito's card now shows 6 played / 17 GF, was 3/15; 19/21 roster players now carry real
+`.stats`, was 0/21). `BACKLOG-376` (RESOLVED, partial by design -- the unambiguous subset only, the
+ambiguous rows are a real separate problem, documented not silently dropped). `BACKLOG-377` (RESOLVED,
+both DBs, 0 remaining affected rows on every one of the 6 targets). `BACKLOG-374` (the peer session's
+original filing) closed out pointing to `375`.
+
+**Deferred, explicit:**
+- The 64 (staging) / 29 (prod) ambiguous `football_player_stats` rows `BACKLOG-376` left NULL -- a
+  real, harder problem (needs a from-scratch `match_events` recompute per competition to split a
+  blended stats row correctly, not a metadata write). Not scoped or started.
+- A browser screenshot of `BACKLOG-375`'s new `<select>` selector -- deliberately skipped to avoid
+  embedding the Vercel deployment-protection bypass secret in a URL that could end up rendered in the
+  session transcript. The API-level checks already cover the data-correctness half of the fix.
+- The standing `feature/ui-redesign` -> `dev` promotion decision -- still not made, still not this
+  session's call, recurring across many sessions now without being picked up.
+- Session 74's own still-open items (tab-bar redesign findings-only audit, PWA back button) --
+  untouched this session, not this session's focus.
+
+**Scope creep / rejected:** none rejected -- `BACKLOG-376`/`377`'s scope growing far past their
+original 1-row/202-row filings was disclosed via `AskUserQuestion` before either prod write, not
+silently expanded.
+
+**Next session/turn -- exact first task:** no explicit BrixSports task queued by Richard as of this
+close. If resuming this thread: the 64/29 ambiguous `BACKLOG-376` rows are the only real open item
+from this session, and they're not urgent (already correctly handled by the read-side fallback). Session
+74's tab-bar redesign findings-only audit and PWA back-button scope remain the oldest still-open items
+across the branch if nothing newer takes priority.
