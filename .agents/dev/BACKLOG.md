@@ -13266,3 +13266,22 @@ larger, non-cramped `px-6 py-4 text-sm` pattern, not part of this problem.
 **Files:** `src/app/profile/favorites/page.tsx` (deleted then recreated via move — now the real page), `src/app/favourites/page.tsx` (deleted, moved), `src/app/profile/page.tsx`, `src/lib/utils/robots.ts`.
 
 ---
+
+### BACKLOG-386 — Match Overview Shows "Not Started" for Finished Matches
+
+**Status:** SHIPPED — 2026-09-11, staging data backfilled and verified (37→0), code fix `tsc --noEmit` unchanged (30, pre-existing baseline, zero new). Prod data not touched, Richard's explicit call (see below).
+**Priority:** HIGH — Flow C (Public Livescore) correctness issue, live and widespread (37/115 matches on staging affected).
+
+**Root cause:** `MatchDetailClient.tsx`'s `displayPeriod = (!isMatchTimeStale && matchTime?.period) ? matchTime.period : (match.currentPeriod ?? match.status)` never falls through to `match.status` because `currentPeriod` holds the schema default literal string `'NOT_STARTED'`, not `null`/`undefined` — the `??` operator only catches nullish values. Any match whose `current_period` was never explicitly written (bulk-imported/backfilled matches inserted with `status: 'FINISHED'` directly, skipping the live status-transition flow that normally keeps the two fields in sync) permanently shows "Not Started" in the match detail page's Match Overview panel and top status badge, regardless of the real `status`. DB confirmed: 37 of 115 matches on staging (`status='FINISHED'`, `current_period='NOT_STARTED'`) — all from two bulk-import batches (4 BUSALYMPICS basketball matches, the full NPUGA competition: 12 basketball + 17 football games) created after `BUG-100`'s one-time historical backfill ran, so never covered by it. Confirmed `MatchCard.tsx`/homepage list cards are unaffected — they derive `isLive`/`isFinished`/`isUpcoming` directly from `match.status`, never from `currentPeriod`, so this is isolated to the match detail page.
+
+**Fix:** `displayPeriod` now treats `status === 'FINISHED'` as authoritative, overriding a stale/default `currentPeriod` — a finished match's period is never actually ambiguous, so there's no correctness tradeoff versus the existing DB-fallback pattern (`BUG-063`) for in-progress matches, which is untouched. Backfilled the 37 known-affected staging rows to `current_period='FINISHED'` (`dev/backfill-finished-current-period.mjs`) as belt-and-suspenders data cleanup, same pattern as `BUG-100`'s original fix.
+
+**Deliberately not done:** prod data backfill — no `.env.production` present in this worktree or any other checkout reached this session; declined to guess/construct prod credentials. Richard's explicit call was to skip prod for now, since the code fix alone already masks the display issue for every viewer regardless of the raw `current_period` value in either DB.
+
+**Evidence:**
+- DB-confirmed via `dev/check-match-status-mismatch.mjs`/`check-match-status-mismatch2.mjs`: 37 mismatched rows before, 0 after `dev/backfill-finished-current-period.mjs` ran against staging (user-approved via `AskUserQuestion` after the auto-mode classifier correctly blocked the first unconfirmed write attempt).
+- `tsc --noEmit`: 30 errors both before and after, identical set, none in the touched file.
+- Pending: live click-through on the deployed preview against one of the 37 previously-affected matches (e.g. `npuga-bb-final`) — not yet run this pass.
+**Files:** `src/app/matches/[id]/MatchDetailClient.tsx`.
+
+---

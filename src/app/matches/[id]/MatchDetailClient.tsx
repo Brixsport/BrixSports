@@ -596,7 +596,17 @@ export default function MatchDetailClient() {
     // ?? forever, even after the 10s polling fallback (BUG-080) refreshes match.* with
     // a newer DB-persisted checkpoint. DB fields (match.minute/extraTime/currentPeriod)
     // are the fallback for initial page load, no logger connected, and any stale WS value.
-    const displayPeriod = (!isMatchTimeStale && matchTime?.period) ? matchTime.period : (match.currentPeriod ?? match.status);
+    // BACKLOG-386: currentPeriod defaults to the literal string 'NOT_STARTED' in the
+    // schema, so `match.currentPeriod ?? match.status` never falls through to status
+    // for a match whose currentPeriod was never updated (bulk-imported/backfilled
+    // matches inserted with status: 'FINISHED' but no currentPeriod write) — it shows
+    // "Not Started" forever regardless of the real status. A FINISHED match's period
+    // is never ambiguous, so status wins outright once the match is actually over.
+    const displayPeriod = (!isMatchTimeStale && matchTime?.period)
+        ? matchTime.period
+        : match.status === 'FINISHED'
+            ? 'FINISHED'
+            : (match.currentPeriod ?? match.status);
     const liveMinute = (!isMatchTimeStale && matchTime?.minute != null) ? matchTime.minute : match.minute;
     const liveExtraTime = (!isMatchTimeStale && matchTime?.extraTime != null) ? matchTime.extraTime : match.extraTime;
 
