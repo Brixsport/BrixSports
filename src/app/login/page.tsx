@@ -9,6 +9,7 @@ import * as z from "zod";
 import { motion, AnimatePresence } from "framer-motion";
 import { Loader2, Mail, Lock, CheckCircle2, Eye, EyeOff } from "lucide-react";
 import { toast } from "sonner";
+import { BackButton } from "@/components/ui/BackButton";
 
 const formSchema = z.object({
     email: z.string().email({
@@ -145,6 +146,10 @@ function LoginPageContent() {
                 </div>
 
                 <div className="relative p-8">
+                    <div className="flex items-center gap-2 mb-4">
+                        <BackButton fallbackHref="/" />
+                    </div>
+
                     {/* Header */}
                     <div className="text-center mb-8">
                         <div className="w-16 h-16 bg-primary rounded-2xl flex items-center justify-center font-display text-3xl -skew-x-12 text-black mx-auto mb-4 shadow-lg shadow-primary/20">

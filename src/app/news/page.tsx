@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
+import { BackButton } from '@/components/ui/BackButton';
 
 interface NewsArticle {
     id: string;
@@ -120,9 +121,12 @@ export default function NewsPage() {
                     animate={{ opacity: 1, y: 0 }}
                     className="mb-8"
                 >
-                    <h1 className="text-4xl font-display font-bold text-white mb-2">
-                        LATEST NEWS
-                    </h1>
+                    <div className="flex items-center gap-2 mb-2">
+                        <BackButton />
+                        <h1 className="text-4xl font-display font-bold text-white">
+                            LATEST NEWS
+                        </h1>
+                    </div>
                     <p className="text-white/60 text-lg">
                         Stay updated with the latest sports news and transfers
                     </p>

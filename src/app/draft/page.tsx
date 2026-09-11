@@ -5,6 +5,7 @@ import { motion } from 'framer-motion';
 import { Star, TrendingUp, Award, Target, Zap, Users } from 'lucide-react';
 import Link from 'next/link';
 import { getPrimaryTeam } from '@/lib/player-affiliation-utils';
+import { BackButton } from '@/components/ui/BackButton';
 
 interface Player {
     id: string;
@@ -77,7 +78,10 @@ export default function DraftPage() {
                             <Star size={16} className="text-primary" />
                             <span className="text-[10px] font-black uppercase tracking-widest text-white/40">BUSA League</span>
                         </div>
-                        <h1 className="font-display text-5xl tracking-tighter italic uppercase leading-none">Draft Prospects</h1>
+                        <div className="flex items-center gap-2">
+                            <BackButton />
+                            <h1 className="font-display text-5xl tracking-tighter italic uppercase leading-none">Draft Prospects</h1>
+                        </div>
                         <p className="text-white/60 mt-2 text-sm">Top performing athletes ranked by Eye Points</p>
                     </div>
 

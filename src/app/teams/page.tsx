@@ -4,6 +4,8 @@ import { motion } from 'framer-motion';
 import { Trophy, Users, TrendingUp, ArrowRight, Loader2, Globe, Building2, GraduationCap, LayoutGrid } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { UnderlineTabs, UnderlineTab } from '@/components/ui/UnderlineTabs';
+import { BackButton } from '@/components/ui/BackButton';
 
 interface Team {
     id: string;
@@ -140,29 +142,25 @@ export default function TeamsPage() {
     const universityComps = getCompetitionsByLevel('inter-university');
     const otherComps = competitions.filter(c => !['busa-league', 'inter-university'].includes(c.level || ''));
 
-    // Render a section of tabs
+    // Render one grouped row of underline tabs (one competition = one tab).
+    // A shared layoutId across all groups lets the highlight glide between
+    // rows when the active competition changes group, instead of 3
+    // independently-animating bars.
     const renderCompTabs = (title: string, comps: Competition[], icon: any) => {
         if (comps.length === 0) return null;
+        const tabs: UnderlineTab[] = comps.map((c) => ({ id: c.name, label: c.name }));
         return (
             <div className="mb-4">
-                <div className="flex items-center gap-2 mb-2 px-1">
+                <div className="flex items-center gap-2 mb-1 px-1">
                     {icon}
                     <span className="text-[10px] font-black uppercase tracking-widest text-white/40">{title}</span>
                 </div>
-                <div className="flex flex-wrap gap-2">
-                    {comps.map((comp) => (
-                        <button
-                            key={comp.id}
-                            onClick={() => handleTabChange(comp.name)}
-                            className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all border ${activeTab === comp.name
-                                    ? 'bg-primary text-black border-primary shadow-lg shadow-primary/20'
-                                    : 'bg-white/5 text-white/40 border-white/10 hover:text-white hover:border-white/20'
-                                }`}
-                        >
-                            {comp.name}
-                        </button>
-                    ))}
-                </div>
+                <UnderlineTabs
+                    tabs={tabs}
+                    activeId={activeTab}
+                    onChange={handleTabChange}
+                    layoutId="teamsActiveTab"
+                />
             </div>
         );
     };
@@ -173,6 +171,7 @@ export default function TeamsPage() {
                 <header className="flex flex-col md:flex-row md:items-start justify-between gap-8 border-b border-white/5 pb-8">
                     <div className="flex-1">
                         <div className="flex items-center gap-3 mb-2">
+                            <BackButton />
                             <Users size={16} className="text-primary" />
                             <span className="text-[10px] font-black uppercase tracking-widest text-white/40">Teams Directory</span>
                         </div>

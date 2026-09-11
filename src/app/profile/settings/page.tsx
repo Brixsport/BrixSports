@@ -10,6 +10,7 @@ import { useTheme } from 'next-themes';
 import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';
 import { getClientErrorMessage } from '@/lib/client-error';
+import { BackButton } from '@/components/ui/BackButton';
 
 export default function SettingsPage() {
     const { user, loading: authLoading } = useAuth();
@@ -192,7 +193,10 @@ export default function SettingsPage() {
                         <Settings size={16} className="text-primary" />
                         <span className="text-[10px] font-black uppercase tracking-widest text-foreground/40">Preferences</span>
                     </div>
-                    <h1 className="font-display text-5xl tracking-tighter italic uppercase leading-none">Settings</h1>
+                    <div className="flex items-center gap-2">
+                        <BackButton />
+                        <h1 className="font-display text-5xl tracking-tighter italic uppercase leading-none">Settings</h1>
+                    </div>
                 </div>
 
                 {/* Settings Sections */}

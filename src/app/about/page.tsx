@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { BackButton } from '@/components/ui/BackButton';
 import { StructuredData, FAQSection } from '@/components/seo';
 import { 
     generateHomepageEntityGraph,
@@ -60,9 +61,12 @@ export default function AboutPage() {
                 {/* Hero Section */}
                 <section className="py-20 px-4 md:px-12">
                     <div className="max-w-4xl mx-auto text-center">
-                        <h1 className="text-4xl md:text-6xl font-display italic uppercase tracking-tight mb-6">
-                            About Brixsport
-                        </h1>
+                        <div className="flex items-center justify-center gap-2 mb-6">
+                            <BackButton />
+                            <h1 className="text-4xl md:text-6xl font-display italic uppercase tracking-tight">
+                                About Brixsport
+                            </h1>
+                        </div>
                         <p className="text-xl text-white/60 leading-relaxed">
                             Nigeria&apos;s premier digital platform bringing university sports to life. 
                             Founded at Bells University of Technology, we started with internal leagues 

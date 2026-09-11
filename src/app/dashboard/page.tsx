@@ -7,6 +7,7 @@ import {
     Star, Zap, Award, Clock, ArrowRight, Filter, Bell
 } from 'lucide-react';
 import Link from 'next/link';
+import { BackButton } from '@/components/ui/BackButton';
 
 // Mock data - will be replaced with real API calls
 const mockDashboardData = {
@@ -142,9 +143,12 @@ export default function DashboardPage() {
                         </span>
                     </div>
                     <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                        <h1 className="font-display text-5xl tracking-tighter italic uppercase leading-none">
-                            Dashboard
-                        </h1>
+                        <div className="flex items-center gap-2">
+                            <BackButton />
+                            <h1 className="font-display text-5xl tracking-tighter italic uppercase leading-none">
+                                Dashboard
+                            </h1>
+                        </div>
                         <Link
                             href="/profile"
                             className="px-6 py-3 bg-white/5 border border-white/10 rounded-2xl hover:bg-white/10 transition-all flex items-center gap-2 text-sm font-black uppercase tracking-widest w-fit"

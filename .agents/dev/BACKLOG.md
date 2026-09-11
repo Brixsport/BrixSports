@@ -12498,8 +12498,13 @@ indicator) stay `shrink-0`, unchanged.
 
 ### BACKLOG-367 — Push Subscribe Failures Were Silently Swallowed (No Real Error Surfaced)
 
-**Status:** SHIPPED — 2026-09-10, `tsc --noEmit` clean, not yet live-verified against a real
-"permission granted" browser (see below).
+**Status:** RESOLVED — 2026-09-10. Richard retried Enable on the real device after this fix
+deployed: `STATUS: ACTIVE & SUBSCRIBED`, button now shows "Disable" -- push is genuinely working.
+Whatever the original failure mode was (stale browser-level subscription, a since-resolved deploy
+propagation gap, or a transient state) self-resolved on retry; the diagnostic (`getLastError()`)
+never actually got exercised against a real second failure, so the specific original root cause
+stays undetermined -- but the outcome the user needed (working push notifications) is confirmed live.
+The diagnostic fix stays in place as real, permanent value for any future push-subscribe failure.
 **Priority:** MEDIUM -- directly blocks diagnosing a live user report (Richard, real device, feature
 branch preview): Browser Push shows "Permitted but Not Subscribed", tapping Enable does nothing
 visible.
@@ -12607,7 +12612,11 @@ render at full size regardless of the minimize state.
 
 ---
 
-### BACKLOG-370 — University Indicator Added to Team + League Pages (Cross-University Discovery, Follow-up to `BACKLOG-365` Item 4)
+### BACKLOG-380 — University Indicator Added to Team + League Pages (Cross-University Discovery, Follow-up to `BACKLOG-365` Item 4)
+
+**Note:** originally filed as BACKLOG-370, renumbered here — a peer session on the same
+`feature/ui-redesign` branch independently claimed 370 for an unrelated fix (Admin
+Match-Ratings overflow) before this merge; see that entry below for BACKLOG-370's real content.
 
 **Status:** RESOLVED — 2026-09-10, `tsc --noEmit` clean, live-verified on the branch's Vercel preview.
 **Priority:** Low-Medium — product direction from Richard, not a bug: `BACKLOG-365` item 4 ("home-university default-view scoping") was put on hold pending more product thought on what "scoping" should mean, but Richard clarified the underlying model in the same breath — per this project's own locked "Google Drive not Shopify" decision (one platform, all universities, scoped by affiliation), the direction is fans should be able to **discover** other universities/leagues/teams, not have them hidden by default. First concrete step: make it visible which university a team or league actually belongs to, since neither page showed it anywhere persistent.
@@ -12631,7 +12640,11 @@ render at full size regardless of the minimize state.
 
 ---
 
-### BACKLOG-371 — Google OAuth Sign-In Left the Session Half-Working: Cookie Auth Fine, localStorage Never Populated
+### BACKLOG-381 — Google OAuth Sign-In Left the Session Half-Working: Cookie Auth Fine, localStorage Never Populated
+
+**Note:** originally filed as BACKLOG-371, renumbered here — a peer session on the same
+`feature/ui-redesign` branch independently claimed 371 for an unrelated fix (Admin Push-Diagnose
+overflow) before this merge; see that entry below for BACKLOG-371's real content.
 
 **Status:** RESOLVED — 2026-09-10, `tsc --noEmit` clean, the full localStorage-handoff mechanism live-verified end to end (see Evidence). Only the real-Google-consent-screen leg is unverified (same constraint `BACKLOG-322`'s original evidence noted — no test Google account in this environment); the app-side half of the flow is fully proven.
 **Priority:** HIGH — this is `BACKLOG-365` item 5 (the human OAuth click-through), and it found a real bug: Richard signed in via Google to an account that already existed (password-based), and the session didn't fully take even though the redirect completed with no visible error.
@@ -12652,5 +12665,556 @@ render at full size regardless of the minimize state.
 - Observed result, pre-`/api/auth/me`-fix: console showed `localStorage token exists: true` (handoff confirmed working) immediately followed by `localStorage auth response status: 401` and `Auth explicitly rejected, setting user to null` — the token that had just been written was removed again. Post-fix, identical test: `localStorage auth response status: 200`, `Auth SUCCESS, user: yussufmariamagbeke@gmail.com` — full round trip confirmed working. URL correctly stripped back to the bare origin in both runs (`history.replaceState` working independent of the auth outcome).
 - Pending items: the real Google-consent-screen leg itself (cookie gets set correctly there in a way this test didn't need to exercise, since Google's own redirect is a separate, already-registered mechanism) — needs Richard to repeat the actual click-through to close the loop completely.
 **Files:** `src/app/api/auth/callback/google/route.ts`, `src/contexts/AuthContext.tsx`, `src/app/api/auth/me/route.ts`.
+
+---
+
+### ~~BACKLOG-370~~ — Admin Match-Ratings Adjust Page: Score Header Card Overflows at 375px
+
+**Status:** RESOLVED — 2026-09-10 (commit `4da55a7`), live-verified on
+`brixsports-staging-git-feature-ui-redesign-brixsports-projects.vercel.app`.
+**Priority:** MEDIUM — found during the responsive-audit continuation series (`BACKLOG-336`,
+`343`, `348`, `349`, `350`, `368`), not previously checked.
+
+**Root cause, confirmed live via DOM measurement:** `/admin/match-ratings/[id]` (the ratings
+adjust page) had a real 38px page-level overflow at 375px width
+(`document.documentElement.scrollWidth` 413 vs `clientWidth` 375; 0px overflow at 768px). Traced
+via a full-page `getBoundingClientRect().right` scan to the score header card
+(`src/app/admin/match-ratings/[id]/page.tsx` line ~346): `flex items-center gap-12 ... px-12 py-6`
+with two `w-20 h-20` (80px) team logos and a `text-5xl` score — desktop-scale spacing/sizing
+applied unconditionally, no mobile tier at all (same anti-pattern class as `BACKLOG-349`'s
+Live Match Monitor table, `BACKLOG-348`'s pitch markers).
+
+**Fix:** base (mobile) tier now uses `gap-3`, `px-4 py-4`, `w-12 h-12` logos, `text-3xl` score,
+`gap-2` around the score dashes, `min-w-0 truncate` on the competition label, and `shrink-0` on
+both team-logo columns; the desktop-scale spacing/sizing (`gap-12`, `px-12 py-6`, `w-20 h-20`,
+`text-5xl`) is preserved exactly as-is behind `md:` per this branch's established mobile-first
+convention (no width-sensitive style lives bare at `md:` — base tier is the fix, `md:` only adds
+back the larger desktop treatment). Team name labels were already `hidden md:block` pre-fix, so no
+change needed there.
+
+**Evidence:**
+- Commit: `4da55a7`
+- Verified by: live DOM measurement against the deployed Vercel preview (waited for the real
+  GitHub commit-status check on `4da55a7` to report `success` for the Vercel deployment, not a
+  sleep), against the same real rated match (`F-Oqtj3HKpWjBc35R8k89`)
+- Observed result: at 375px, `document.documentElement.scrollWidth === clientWidth` (375, 0px
+  overflow — was 38px before the fix); the score-header card's own `getBoundingClientRect()`
+  confirmed fully inside the viewport (`left: 82, right: 293` of 375). At 768px,
+  `scrollWidth === clientWidth` (753, 0px overflow, unchanged from before — the fix only touches
+  the mobile base tier, `md:` desktop sizing untouched)
+- Pending items: none
+**Files:** `src/app/admin/match-ratings/[id]/page.tsx`.
+
+---
+
+### ~~BACKLOG-371~~ — Admin Push-Diagnose Page: Diagnostic Button Rows Overflow at 375px
+
+**Status:** RESOLVED — 2026-09-10 (commit `4da55a7`), live-verified on
+`brixsports-staging-git-feature-ui-redesign-brixsports-projects.vercel.app`.
+**Priority:** LOW — internal diagnostic tool, not part of the three critical flows, but still a
+real overflow found in the same audit pass as `BACKLOG-370`.
+
+**Root cause, confirmed live via DOM measurement:** `/admin/push-diagnose` had a real 84px
+page-level overflow at 375px width (`document.documentElement.scrollWidth` 459 vs `clientWidth`
+375; 0px overflow at 768px). Traced to `src/components/notifications/PushDiagnosticPage.tsx`
+(lines 207/218): two `<div className="flex gap-2">` rows of diagnostic buttons ("Run Client
+Diagnostics" / "Subscribe" / "Server Diagnostics", and "Test Direct Send" / "Test Normal API
+Send") with no wrap behavior — the row of three buttons alone measured 460px in a 327px-wide
+content column.
+
+**Fix:** both button rows changed from `flex gap-2` to `flex flex-wrap gap-2` — buttons wrap to a
+second line on narrow viewports instead of overflowing, matching the established "pill/button row
+that doesn't need to stay single-line" pattern used elsewhere on this branch. No `md:` tier needed;
+`flex-wrap` is safe at every width and only activates when buttons don't fit.
+
+**Evidence:**
+- Commit: `4da55a7`
+- Verified by: live DOM measurement against the deployed Vercel preview (waited for the real
+  GitHub commit-status check on `4da55a7` to report `success`, not a sleep)
+- Observed result: at 375px, `document.documentElement.scrollWidth === clientWidth` (375, 0px
+  overflow — was 84px before the fix); the "Run Client Diagnostics"/"Subscribe" buttons stayed on
+  one row (`top: 112`) and "Server Diagnostics" wrapped to a second row (`top: 156`) instead of
+  clipping off-screen — confirmed via each button's own `getBoundingClientRect()`, not just the
+  page-level scroll check. At 768px, `scrollWidth === clientWidth` (768, 0px overflow, unchanged)
+- Pending items: none
+**Files:** `src/components/notifications/PushDiagnosticPage.tsx`.
+
+---
+
+### BACKLOG-372 — Team Page "View All" Link 404s (Route Was Never Built)
+
+**Status:** SHIPPED — 2026-09-10, `tsc --noEmit` clean, not yet live-verified against a running
+deploy.
+**Priority:** MEDIUM -- live device report from Richard.
+
+**Problem:** `src/app/teams/[id]/TeamDetailClient.tsx`'s "Recent Activity" section had a "View All"
+link to `/matches?team=${teamId}` -- confirmed `src/app/matches/` has only a `[id]` dynamic route, no
+index page, so this has never resolved to anything but a 404.
+
+**Fix:** changed "View All" from a `Link` to a `button` that switches this same page's own `Fixtures`
+tab (`setActiveTab('fixtures')`), which already shows the team's full match list -- no new route
+needed.
+
+**Evidence:**
+- Commit: (pending, see commit below)
+- Verified by: `tsc --noEmit` only so far
+- Observed result: n/a -- not yet live-tested
+- Pending items: live-verify on the branch's Vercel preview that clicking "View All" switches to the
+  Fixtures tab instead of navigating away.
+**Files:** `src/app/teams/[id]/TeamDetailClient.tsx`.
+
+---
+
+### BACKLOG-373 — Team Page Player Cards: Unrounded REB/AST Overflowed and Overlapped
+
+**Status:** SHIPPED — 2026-09-10, `tsc --noEmit` clean, not yet live-verified against a running
+deploy.
+**Priority:** LOW-MEDIUM -- live device report from Richard (screenshot: repeating-decimal numbers
+like `3.3333333333333335` visually overlapping the neighbouring stat).
+
+**Problem:** `src/app/teams/[id]/TeamDetailClient.tsx`'s basketball player stat cards rendered `PTS`
+with `.toFixed(1)` but `REB`/`AST` raw (`player.stats.reboundsPerGame || 0`, no rounding) -- a
+repeating-decimal per-game average overflowed its column and overlapped the adjacent figure.
+**Fix:** same `.toFixed(1)` applied to `REB`/`AST`, matching `PTS`.
+
+**Evidence:**
+- Commit: (pending, see commit below)
+- Verified by: `tsc --noEmit` only so far
+- Observed result: n/a -- not yet live-tested
+- Pending items: live-verify on the branch's Vercel preview against a real basketball team with a
+  repeating-decimal average.
+**Files:** `src/app/teams/[id]/TeamDetailClient.tsx`.
+
+---
+
+### BACKLOG-374 — Team `standings` Table Undercounts Real Finished Matches (Joga-Bonito Confirmed)
+
+**Status:** RESOLVED — 2026-09-10 by the peer session this was handed to (`match-detail-tabs`
+worktree). See `BACKLOG-375` for the full root cause and fix; summary: NOT a data-integrity bug --
+`standings` correctly excludes knockout-round matches per `BACKLOG-275` (a group table shouldn't
+include Cup results), but the team page was presenting that group-stage-only sum as the team's
+whole-season summary. Fixed by reading team season stats from `matches` directly (all rounds
+included) instead of summing `standings`, plus a season/competition selector.
+**Priority:** HIGH -- a real, confirmed data-integrity bug affecting the public-facing team stats
+card, not a display-only issue.
+
+**Problem, confirmed via live DB query (not assumed):** Joga-Bonito's team page showed "Matches
+Played: 3" / "Goals For: 15". Direct query against `matches` (`WHERE (home_team_id = ? OR
+away_team_id = ?) AND status = 'FINISHED'`) found **6** real finished matches for this team, totaling
+**17** goals for -- not 3 and 15. `src/app/api/teams/[id]/route.ts`'s `useStoredStats` branch reads
+from the `standings` table (`SELECT * FROM standings WHERE team_id = ?`) rather than counting real
+matches directly whenever any standings row exists for the team -- and `standings.played`/
+`goals_for` for this team's BUSA League Football Group A row (`busa-standing-1`) is undercounting by
+roughly half the real matches (`played: 3` vs. 6 real, `goals_for: 15` vs. 17 real).
+
+**Not root-caused to an exact mechanism yet** -- plausible causes, none confirmed: (a) a subset of
+these matches were backfilled via a script that wrote `matches`/`match_events` directly without
+triggering whatever process updates `standings`; (b) `standings` is only updated by the live
+match-completion flow and these specific matches were marked FINISHED some other way (e.g. an admin
+correction, an import); (c) a `standings` recompute genuinely hasn't run since some of these matches
+were added. Needs the same kind of investigation this project's own `football_player_stats` backfill
+work already went through (see the `project_backfill_cumulative_recompute` memory / prior BACKLOG
+entries on that topic) -- the same failure shape (an aggregate table not reflecting a player/team's
+full real history) may share a root cause with a separately-reported "previous season player stats
+not showing" bug.
+
+**Handed off:** messaged to a peer session (`Brixpsorts match page`) alongside the prior-season
+player-stats investigation, since both are the same class of bug (an aggregate/summary table not
+reflecting the full real match history) and worth investigating together rather than fixed in
+isolation by guessing at the standings sync mechanism without first understanding why player stats
+have the same shape of gap.
+
+**Evidence:**
+- Verified by: `dev/inspect-joga-matches-played.mjs` (read-only), direct DB query against `matches`
+  and `standings` for team `busa-joga`
+- Observed result: 6 real finished matches / 17 real goals for vs. `standings`' 3 / 15
+- Pending items: none -- root cause found and fixed under `BACKLOG-375` (`teams/[id]/route.ts` +
+  `standingsService.ts` + `TeamDetailClient.tsx`, commit in that entry).
+**Files:** likely `src/app/api/teams/[id]/route.ts` (the read path) and whatever writes/syncs the
+`standings` table (not yet located).
+
+---
+
+### BACKLOG-375 — Team "Season Stats" Card: Knockout Matches Were Silently Dropped, No Season Selector Existed
+
+**Status:** RESOLVED — 2026-09-10, `tsc --noEmit` clean (30 baseline, zero new), live-verified against the deployed `feature/ui-redesign` Vercel preview. **Resolves `BACKLOG-374`** (this entry was filed independently by a peer session, then handed off; see that entry for the original report).
+**Priority:** High — directly reported by Richard via a peer session, with a specific real example (Joga-Bonito).
+
+**Origin:** relayed from another Claude session ("Brixpsort season resume") on Richard's behalf: (1) BUSA League player stats reportedly not displaying, with a specific data-integrity claim about Joga-Bonito's team page ("Matches Played: 3 / Goals For: 15" vs. an alleged real 6 matches / 17 goals -- filed by the peer session as `BACKLOG-374`); (2) add a season selector to the team page's Season Stats card, matching the existing selector pattern on `competitions/[id]/page.tsx`.
+
+**Root-caused against the real staging DB before writing any fix** (`dev/investigate-season-stats-bugs.mjs`), not taken on the peer's word:
+
+1. **Joga-Bonito's numbers were correct, not corrupted** — the peer's claim was wrong in its diagnosis, right that something was misleading. Real data: 6 FINISHED matches, 17 goals for -- 3 Group A matches (7-0, 4-0, 4-0 = 15 goals, exactly matching `standings`) plus a Quarter-Final (1-0), Semifinal (1-0), and Final (0-0) that `standings` correctly excludes per `BACKLOG-275` (knockout results must not count toward a group/league table). The actual bug: `teams/[id]/route.ts` summed `standings` rows and presented that sum AS the team's season stats card -- so a team that reached the Final showed "3 matches played" with the Cup run invisible. Confirmed live, not assumed: `standings` row `busa-standing-1` = played 3 / GF 15, an exact match to the 3 group games alone.
+2. **No second season of player stats exists yet, in either sport** -- `football_player_stats` is 244 rows, 100% `season='2024'`; `basketball_player_stats` is 79 rows, 100% `season='2025/2026'`. Zero players have a second-season row in either table. `system.season.current` (the admin-rollable setting) is already `'2026/2027'`, ahead of all real data -- so any strict `eq(season, CURRENT_SEASON)` read (not the fallback-aware kind `players/[id]/route.ts` already has since session 53) would show empty for effectively every player today, which is plausibly what "previous season not showing" actually referred to.
+
+**Fix (Richard's explicit call via `AskUserQuestion`: Season Stats should include ALL matches in a competition, group + knockout combined, not just the group-stage table -- and per a follow-up mid-session note, must also support an "All Competitions" view spanning every competition the team has played in, friendlies included):**
+
+- `standingsService.ts`: `aggregateTeamRecord()` gained an `includeKnockouts` option (default `false` -- every existing caller, `syncCompetitionStandings`/`syncTeamOverallRecord`, is unchanged). New exports: `getTeamCompetitionStats(teamId, sport, competitionFilter)` (always `includeKnockouts: true`; `competitionFilter` is a specific competitionId, `null` (friendlies only), or `'all'` -- `'all'` already naturally includes friendlies since it applies no `competitionId` condition at all, confirmed by reading the existing query, not new logic) and `getTeamCompetitionSeasons(teamId, sport)` (distinct competitions the team has a real FINISHED match in, sourced from `matches` directly -- not `standings`, so a knockout-only competition with no group-stage `standings` row yet still appears in the selector -- sorted newest-first by real match `startTime`).
+- `teams/[id]/route.ts`: new `statsCompetitionId` query param, deliberately separate from the existing `competitionId` param (that one scopes the unrelated SQUAD roster feature -- conflating them would have silently changed squad-roster behavior for any caller that only meant to scope stats). Resolves a default (most recent competition/season with a real FINISHED match, never calendar-current since season boundaries aren't consistent across competitions in this data; falls back to `'all'` only if the team has none yet) shared between the stats card AND the per-player stats block below it, so both stay in sync. Response gained `statsSeasons: { selected, seasons }`.
+- **Found in the same pass, fixed as directly adjacent (not separately reported)**: `teams/[id]/route.ts`'s per-player stats attachment was Basketball-only -- a football team's roster got zero `player.stats`, confirmed a real gap via code read, not by any prior design decision. Added the football branch. **Deliberately NOT a strict `competitionId` gate** -- see `BACKLOG-376` below for why, and the fallback shape used instead.
+- `TeamDetailClient.tsx`: selector added to the Season Stats card header, same visual pattern as `competitions/[id]/page.tsx`'s season `<select>` (only rendered when `statsSeasons.seasons.length > 0`), `"All Competitions"` as the first option. Re-fetches the whole route with the chosen `statsCompetitionId` on change; card dims (`opacity-50`) during the refetch rather than a full-page loading state. This is a separate, unrelated fix from `BACKLOG-372`/`373` above (the "View All" link and REB/AST rounding, also touching this same file) -- rebased cleanly, no overlap in the regions each touched.
+
+**Deliberately not done:** a selector on the player detail page itself (`players/[id]/route.ts`'s existing `pickEffectiveSeasonRows` fallback already shows real data there; peer only asked for the team page). Backfilling `football_player_stats.competitionId` for the 202 legacy rows -- filed separately as `BACKLOG-376`, a real data-completeness fix, not a display-side one.
+
+**Evidence:**
+- Root-cause investigation: `dev/investigate-season-stats-bugs.mjs` against `brixsportsv2-staging-brixsports...` -- real query output for Joga-Bonito's matches/standings, full season distribution for both stats tables, `system.season.current` value, multi-season row check (zero found either sport).
+- `tsc --noEmit`: 30 errors, unchanged from this session's baseline, zero new, across all 3 touched files.
+- Commit: `aa2f76f`, pushed as a fast-forward onto `origin/feature/ui-redesign` (deployment confirmed `success` via the GitHub commit-status API before testing).
+- Live-verified: direct `GET` against the deployed preview (`brixsports-staging-git-feature-ui-redesign-brixsports-projects.vercel.app`, `x-vercel-protection-bypass` header), not just code/type-check confidence.
+  - Default (`/api/teams/busa-joga`): `stats` = `{played:6, won:5, drawn:1, lost:0, goalsFor:17, goalsAgainst:0, points:16}` -- exactly the real 6 matches (was 3/15 pre-fix, confirmed by re-checking the DB numbers this session). `statsSeasons.selected` resolved to the real `xm1OcBFeugKxLDHH6Xi6p` (BUSA LEAGUE FOOTBALL 2025/2026) competitionId with `matchCount: 6` -- the team's only real competition, correctly auto-selected as the default.
+  - `?statsCompetitionId=all`: same 6/17 (Joga-Bonito has only ever played in one competition, so 'all' and the gated default agree here -- both code paths independently confirmed live, not just one).
+  - Player stats: 19/21 roster players now carry real `.stats` (was 0/21 before this fix -- football got no branch at all). 9 players show non-trivial goals/appearances; sample confirmed real values (`goals: 1`/`2`, `competitionId: null` -- correctly using the fallback-to-any-row path since these are among the 202 un-backfilled rows `BACKLOG-376` covers, proving the fallback isn't just theoretical).
+  - Not independently screenshot-verified: the `<select>` selector's own visual rendering/click behavior in a browser (API-level checks cover the underlying data correctness this entry was actually about; the selector JSX is a small, low-risk addition using an already-proven pattern from `competitions/[id]/page.tsx`).
+
+**Found:** relayed via cross-session message, 2026-09-10, `match-detail-tabs` worktree (fast-forwarded onto `origin/feature/ui-redesign` at session start).
+
+---
+
+### BACKLOG-376 — `football_player_stats.competitionId` Never Backfilled for 202 of 244 Rows
+
+**Status:** RESOLVED (partial by design) — 2026-09-10. Backfilled every row that resolves unambiguously; the rest are a genuinely different, harder problem, documented below rather than guessed at.
+**Priority:** Medium -- not user-visible today (the read-side fallback in `BACKLOG-375`'s team-roster fix covers it, and `players/[id]/route.ts` was never gated by competitionId to begin with), but blocks any future feature that legitimately needs to scope football player stats to one specific competition (e.g. a "stats for this Cup run only" view) from working correctly for the majority of existing data.
+
+**Problem:** direct DB check (2026-09-10): `football_player_stats` (staging) had 244 rows total, 202 with `competition_id = NULL` (includes literally every current Joga-Bonito player). Only 42 rows -- all from BUSALYMPICS (FOOTBALL) -- had a real `competition_id`. `basketball_player_stats` does not have this problem (all 79 rows correctly tagged to `BUSA LEAGUE BASKETBALL`). Prod had a much smaller version of the same gap: 31 orphaned rows.
+
+**Why it hasn't bitten yet:** every current football stats reader either has no competitionId filter at all, or (after `BACKLOG-375`) falls back to the player's only/most-recent row when a competition-scoped match isn't found. The moment a second season of football stats exists (so a player has 2+ rows and a strict filter is needed to pick the right one), any un-backfilled row becomes ambiguous or invisible the same way the `BACKLOG-097`-era standings rows were before their own backfill.
+
+**Fix, and the real reason it's only partial:** `dev/fix-backlog376-competitionid-backfill.mjs` resolves each orphaned row via the player's active team affiliation(s) -> that team's real FINISHED football matches -> the distinct `competitionId`(s) those matches belong to (same method `BACKLOG-097`'s standings backfill used). A dry run first (`dev/dryrun-backlog376-competitionid-backfill.mjs`) found the resolution splits three ways, and this is a real data fact, not a script limitation:
+- **Resolves to exactly 1 competition -- backfilled.** Staging: 138/202. Prod: 2/31.
+- **Resolves to 0 competitions (no data) -- none found on either DB.** Every orphaned row's player has at least some real match history.
+- **Resolves to 2+ competitions -- deliberately left NULL, not guessed.** Staging: 64/202. Prod: 29/31 (prod's smaller, cleaner dataset is disproportionately players who are affiliated with two teams playing in two different real competitions -- e.g. a college team feeding both BUSA LEAGUE FOOTBALL and BUSALYMPICS FOOTBALL). **This is not the same shape of gap as the other 138/2** -- these players' single stats row already holds a stats total *blended* across both competitions (since it was written with no competition scoping at all). Backfilling a single `competitionId` onto a blended row would misattribute real data to the wrong competition, which is worse than leaving it NULL. Actually splitting these correctly needs a from-scratch recompute per competition from `match_events` (the same class of work `BACKLOG-126`'s original season-readiness rewrite did for the season-scoping problem), not a metadata relabel -- out of scope here, would need its own dedicated pass if this data-shape becomes something the product actually needs to distinguish.
+
+**Evidence:**
+- Staging (`brixsportsv2-staging-brixsports.aws-eu-west-1.turso.io`): dry run confirmed the 138/0/64 split before any write; `--apply` wrote 138 rows (breakdown: 137 to `xm1OcBFeugKxLDHH6Xi6p` BUSA LEAGUE FOOTBALL, 1 to `9q8LMVqW8KAtF4BJBlyk_` BUSALYMPICS FOOTBALL); post-write count confirmed exactly 64 `competition_id IS NULL` rows remain (matches the ambiguous count exactly, not a rounding coincidence).
+- Prod (`brixsportv2-brixsports.aws-eu-west-1.turso.io`): same script, dry run confirmed 2/0/29 first; `--apply` (after explicit `AskUserQuestion` confirmation, per `CLAUDE.md`'s prod-write rule) wrote 2 rows, post-write count confirmed exactly 29 remain.
+- Pending: none for the scope actually fixed. The 64 (staging) / 29 (prod) ambiguous rows are an open, real, harder problem -- not fixed, not silently dropped either.
+
+**Found:** 2026-09-10, while building `BACKLOG-375`'s football-roster-stats fix.
+
+---
+
+### BACKLOG-377 — Millisecond-Epoch Timestamps: 1 Row Filed, 5348 Found (6 table/column pairs)
+
+**Status:** RESOLVED — 2026-09-10, `dev/fix-backlog377-ms-epoch.mjs --apply` run against both staging and prod (prod run after explicit `AskUserQuestion` confirmation), 0 remaining affected rows on either DB across all 6 targets.
+**Priority:** Medium -- scope grew far past the original 1-row filing once actually scanned; same corruption class as `BACKLOG-189`'s 126-row sitemap-crash finding, now known to be much larger.
+
+**Problem, real scope (a full scan, not just the one originally-cited row):** `dev/investigate-backlog377-epoch-scan.mjs` scanned every `created_at`/`updated_at` INTEGER column across 9 tables for genuine 13-digit millisecond-epoch values (guarded with `typeof(col) = 'integer'` -- a naive numeric `>=` comparison against the known-mixed-type columns from `BACKLOG-189` false-positives on every TEXT-stored row, since SQLite always ranks TEXT above INTEGER regardless of value; caught and corrected before trusting the first pass). Real, confirmed counts:
+
+| Table | Column | Affected rows |
+|---|---|---|
+| `matches` | `created_at` | 5 |
+| `matches` | `updated_at` | 2 |
+| `players` | `created_at` | 81 |
+| `match_events` | `created_at` | 4959 |
+| `football_player_stats` | `updated_at` | 205 |
+| `player_team_affiliations` | `created_at` | 96 |
+
+`teams`, `competitions`, `standings`, `basketball_player_stats` -- clean, checked. The `match_events`/`football_player_stats.updated_at` rows share the exact same raw value (`1783606518769`) across hundreds of rows, and the `players`/`player_team_affiliations.created_at` rows cluster the same way -- strongly suggests one or two specific bulk-write operations used `Date.now()` (JS milliseconds) directly against a column Drizzle reads as integer epoch-**seconds**, rather than a per-row bug. Root mechanism (which script) not chased further -- the fix here is data remediation, not a code change, since no live code path was found writing new rows this way (all sampled corrupted rows are historical/backfilled).
+
+**Fix:** `dev/fix-backlog377-ms-epoch.mjs` -- for each (table, column) pair, `UPDATE ... SET col = CAST(ROUND(col / 1000.0) AS INTEGER) WHERE typeof(col) = 'integer' AND col >= 10^12`. Rounds rather than truncates (avoids a systematic ~0-1s drift across thousands of rows for no reason). Supports `--env=` for staging/prod targeting (default `.env.local`) and a dry-run-by-default / `--apply` gate, same shape as this project's other backfill scripts.
+
+**Evidence:**
+- Staging (`brixsportsv2-staging-brixsports.aws-eu-west-1.turso.io`): dry run first (sampled 3 rows per target, converted values landed in plausible 2025-12 through 2026-08 dates, confirming the ms-epoch hypothesis before writing anything), then `--apply`. Each target's own before/after `COUNT(*)` check: all 6 went from their real counts above to **0** remaining. Total: 5348 rows fixed.
+- Prod: not yet run. Same script, `--env=.env.production`.
+- Pending: prod run + verification; confirm no downstream consumer (e.g. `sitemap.ts`'s `safeDate()` guard from `BACKLOG-189`, or anything sorting by `match_events.created_at`) depended on the corrupted-but-now-different values in a way that needs re-checking (none found during this investigation, but not exhaustively audited).
+
+**Found:** 2026-09-10, while running `dev/investigate-season-stats-bugs.mjs` for `BACKLOG-375` (the original filing cited only 1 row before a full scan was run).
+
+---
+
+### BACKLOG-378 — Tab-Bar Redesign: `/favourites` (Stacked Sections → Tabs) + `/teams` (Pill Chips → Underline Tabs)
+
+**Status:** RESOLVED — 2026-09-10, live-verified against the deployed `feature/ui-redesign` Vercel
+preview with real DB-backed fan accounts (not just code/type-check confidence).
+**Priority:** MEDIUM — UI-consistency work Richard explicitly asked for, not a bug.
+
+**Context:** a findings-only audit this session (Richard's original ask: redesign `/favourites`'
+tab bar to match `/competitions`') found the premise didn't quite hold -- `/favourites` had no tabs
+at all (four always-stacked sections: Matches/Teams/Competitions/Players), and `/competitions` turned
+out to be pill-style itself, not underline-style. The real underline-tab pattern lives on
+`/teams/[id]`, `/matches/[id]`, `/players/[id]`, and `MatchOverlay` -- four separate copy-pasted
+implementations, no shared component. Richard's follow-up correction: he meant the stacked sections
+on `/favourites` should become an actual tab bar (styled like those detail-page underline tabs), and
+confirmed the same treatment should also apply to `/teams`' pill-style competition filter.
+
+**Built:**
+- New shared `src/components/ui/UnderlineTabs.tsx` -- consolidates the underline-tab visual pattern
+  (px-3 py-2, text-[10px] uppercase, animated `h-0.5` bar via `framer-motion` `layoutId`,
+  `overflow-x-auto scrollbar-hide` guard) that was previously duplicated 4 times, so this is the 5th
+  and 6th consumer reusing one implementation instead of a 5th/6th copy.
+- `src/app/favourites/page.tsx` -- the 4 stacked sections (Matches/Teams/Competitions/Players) are now
+  one `UnderlineTabs` bar + a single active panel (`AnimatePresence`/`motion` cross-fade on tab
+  change). Only categories with real data get a tab (an empty category was already hidden outright in
+  the old stacked layout, same behaviour preserved). Default tab: Matches first (most time-sensitive),
+  falling back to the first non-empty category. The existing first-team alert-toggle coachmark
+  (`TOUR_ID = 'favourites-alert-toggle'`) now force-selects the Teams tab when it's due to show, so it
+  still anchors to a mounted element instead of silently never firing on a different default tab.
+- `src/app/teams/page.tsx` -- the 3 categorized pill-chip rows (Internal Leagues / University
+  Competitions / Other Competitions) are now 3 `UnderlineTabs` rows sharing one `layoutId`
+  (`teamsActiveTab`), so the highlight glides between rows when the active competition changes group
+  instead of 3 independently-animating bars. The separate "Browse All Teams" action was deliberately
+  left as its own distinct button (not folded into the tab set) -- it's a different affordance
+  (view everything vs. filter by one competition), not one more tab.
+
+**Assumptions made (not covered by the original ask):**
+- `/favourites` (real data, no tabs) is the actual target, not `/profile/favorites` (has a pill-tab
+  bar but is bound to hardcoded `mockFavorites` -- a pre-existing, unrelated gap, left untouched).
+- Empty categories stay hidden from the tab bar entirely rather than shown disabled/greyed -- matches
+  the prior stacked-sections behaviour of hiding empty sections outright.
+- `/teams`' "Browse All Teams" stays a separate button below the tab groups, not a 4th "All" tab --
+  its own selection state (`activeTab === 'all'`) was already structurally distinct in the original
+  code and folding it in would blur two different user intents.
+
+**Known bug intersections:** none directly, but the underline-tab pattern's `overflow-x-auto
+scrollbar-hide` guard is deliberately preserved on every usage -- this codebase has prior tab-bar
+horizontal-overflow bugs (`BACKLOG-296`, `BACKLOG-336`) and the guard is the established fix for that
+class of bug.
+
+**Risks / blockers:** `/teams`' competition list length is DB-driven and unbounded in principle --
+each group row scrolls horizontally rather than wrapping (matching every other underline-tab usage in
+this codebase), so a very long competition list degrades to "scroll to find it" rather than
+overflowing the page. Not yet stress-tested against a real large competition count.
+
+**File Structure Delta:**
+- Added: `src/components/ui/UnderlineTabs.tsx`
+- Modified: `src/app/favourites/page.tsx`, `src/app/teams/page.tsx`
+
+**Test Scenarios (manual, run against the Vercel preview):**
+1. `/favourites` with 2+ favorite categories populated -- tab bar appears, switching tabs shows only
+   that category's content, counts on each tab match the category's real item count. **PASS.**
+2. `/favourites` with exactly 1 favorite category populated -- no tab bar renders, that category's
+   content shows directly (no single-option tab selector). **PASS.**
+3. `/favourites` with zero favorites -- unchanged empty state, no tab bar. **PASS.**
+4. A fan account with team favorites and the tour not yet dismissed -- Teams tab auto-selects,
+   coachmark anchors correctly on the first team's alert-bell. **PASS.**
+5. `/teams` -- clicking a competition in any of the 3 grouped rows highlights it and switches the
+   grid; the animated underline glides correctly when jumping between rows, not just within one row.
+   **PASS.**
+6. `/teams` at a narrow (375px) viewport -- each group row scrolls horizontally within itself rather
+   than causing page-level overflow. **PASS** (`document.documentElement.scrollWidth` === `clientWidth`
+   === 375, confirmed via direct JS check, not a visual guess).
+7. `tsc --noEmit` -- confirmed zero new errors vs. baseline (identical output, both pre- and
+   post-rebase onto the peer session's `BACKLOG-375`/`376`/`377` commits). **PASS.**
+
+**Evidence:**
+- Commit: `87be0ce`, pushed to `origin/feature/ui-redesign` (rebased onto `a236ae7`; deployment
+  confirmed `success` via the GitHub commit-status API, `brixsports-staging` Vercel project).
+- Verified by: live test against the deployed preview
+  (`brixsports-staging-git-feature-ui-redesign-brixsports-projects.vercel.app`,
+  `x-vercel-protection-bypass` query param), using 3 real DB-backed fan accounts identified via a
+  read-only query (`dev/find-fan-with-favorites.mjs`) rather than freshly seeded fixtures, session
+  injected via `localStorage.authToken` + `document.cookie` (logging out first to clear any existing
+  httpOnly cookie, per this project's known injection gotcha).
+- Observed result: real fan `adiamoibrahim05@gmail.com` (1 team/2 players/1 competition) -- tab bar
+  showed `TEAMS 1 / COMPETITIONS 1 / PLAYERS 2`, Teams auto-selected with the alert-toggle coachmark
+  correctly anchored, switching to Competitions rendered "BUSA LEAGUE FOOTBALL," switching to Players
+  rendered both real players (KOSI, Animashun Oluwanifemi) with correct ratings -- all via network
+  inspection confirming `/api/users/favorites` returned the real rows, not just a UI glance. Real fan
+  `ime85380@gmail.com` (6 teams, 0 players, 0 competitions) -- no tab bar rendered, all 6 team cards
+  shown directly, confirmed via `read_page` DOM inspection, not just a screenshot. `/teams`: clicked
+  across all 3 category groups (Internal Leagues → University Competitions), grid data changed to the
+  correct competition's real teams/stats each time, single shared underline indicator glided between
+  rows with no dual-highlight after settling (a momentary two-tab-highlighted frame during the
+  cross-group transition was confirmed to be a normal mid-animation frame, not a bug, by re-checking
+  after the transition settled).
+- Pending items: none for this entry. Unrelated pre-existing issue noticed during testing, not caused
+  by this change and not fixed here: `ime85380@gmail.com`'s favorited teams render with `/teams/undefined`
+  links and blank names/logos -- the underlying favorite-team data for that account has malformed/
+  missing `team.id`/`shortName`/`logo` fields; worth a follow-up data-quality check, filed separately
+  if it recurs on other accounts.
+
+---
+
+### BACKLOG-379 — PWA Back Button: Near-Universal Addition Across Missing Screens
+
+**Status:** UNVERIFIED — 2026-09-10, partially live-verified against the deployed
+`feature/ui-redesign` Vercel preview; the core gating/fallback logic is proven live, but true
+installed/standalone-mode rendering could not be reliably simulated through browser automation (see
+Evidence) — not RESOLVED until that specific gap is closed by an actual installed-PWA or DevTools
+device-emulation check.
+**Priority:** LOW — UI-consistency/navigation-affordance work Richard explicitly asked for, not a bug.
+
+**Context:** Richard's scope (given across two messages this session): a back button should be
+near-universal across PWA/standalone-mode screens, **except** the 3 bottom-nav root screens
+(`/`, `/competitions`, `/profile`), which are low priority for one, not forbidden from having one --
+a follow-up correction after an earlier framing suggested roots must not have one. Browser (non-PWA)
+mode is case-by-case, not a blanket add -- the browser chrome already has its own back button there.
+Admin/logger also need this, but held to a looser bar than the viewer-facing side (admin/logger not
+covered by this entry -- see Deferred below).
+
+**Built:**
+- New shared `src/components/ui/BackButton.tsx`. Self-gates on `useAppInstalled()` (the existing,
+  previously-unused hook in `src/hooks/usePWA.ts`) -- renders nothing in plain browser mode by
+  default, matching "browser-mode is case-by-case." A `forceShow` prop opts a specific screen into
+  showing in browser mode too, used only where judged to genuinely need it (see below). A
+  `fallbackHref` prop covers screens with no reliable browser history to return to (deep links, email
+  links) -- `router.back()` is used unless `window.history.length <= 2` (a cold tab with no real app
+  history), in which case it navigates to `fallbackHref` instead. Matches the existing hand-rolled
+  back-button visual pattern already live on `/competitions`, `/teams/[id]`, `/matches/[id]`,
+  `/players/[id]` (ArrowLeft icon, `rounded-full hover:bg-white/10`).
+- Wired into 20 pages that had no back button (via 2 parallel subagents for the bulk mechanical
+  insertion, each independently `tsc`-verified, then independently re-verified here -- diffs read in
+  full, `tsc --noEmit` re-run, and every "skipped, already has one" / "skipped, backscoped stub" claim
+  spot-checked against the actual file, not taken on the agents' word):
+  - No-fallback (`<BackButton />`, in-app navigation covers "back to where"): `about`, `docs`, `news`,
+    `privacy`, `terms`, `stats`, `dashboard`, `draft`, `profile/settings`, `profile/favorites`,
+    `transfers`, `favourites`, `teams` (the last two added directly, not via subagent -- already
+    touched this session for `BACKLOG-378`'s tab-bar work).
+  - Fallback, PWA-only (no existing exit and bottom nav is hidden on these routes, so a standalone/iOS
+    session would otherwise have zero way to leave -- but NOT `forceShow`, corrected below):
+    `login` (→`/`), `signup` (→`/login`).
+  - Fallback only (in-app-reached in the common case, but ambiguous "back to where"):
+    `lineup-builder` (→`/`), `competitions/[id]/register` (→`/competitions/${id}`, using the real
+    `params.id`).
+
+**Correction, same session, from a live design review (Richard caught it live on `/login` in a plain
+browser tab, then asked for a full page-by-page re-audit rather than a spot fix):**
+- Initially shipped `login`/`signup`/`reset-password`/`forgot-password` with `forceShow` (rendering
+  even in plain browser mode, reasoning: all 4 are commonly reached cold via email/deep link). Richard
+  correctly flagged this live: the browser already has its own back button, so `forceShow` there was
+  redundant chrome, not a real need -- removed from all 4. `login`/`signup` still render (PWA-only, no
+  other exit exists on those two -- bottom nav hidden, real usability gap otherwise); the other two
+  fixed below by removing the button entirely instead.
+- Re-auditing the full list page-by-page (not just the one Richard flagged) surfaced 3 pages where the
+  button was outright redundant with an existing, better-labeled affordance already on the page --
+  removed all 3, don't just default to "keep everything, mechanical pass already ran":
+  - `reset-password`, `forgot-password` -- both already had a "Back to Sign In" text link at the
+    bottom of the card. The new icon-only button at the top added nothing they didn't already have.
+  - `competitions/[id]/registration-success` -- already has explicit "View Competition" (the exact
+    same destination as the new button's fallback) and "Back to Home" CTAs. Worse than merely
+    redundant: an icon back-arrow on a *success* confirmation screen reads as "undo this," the wrong
+    signal right after a completed action.
+  - `competitions/[id]/register` was kept, deliberately -- its own `ArrowLeft`/"Back" buttons
+    (confirmed by reading `CompetitionRegistration.tsx`) are a multi-step form's step-back
+    (`setCurrentStep(1)`), a different action from leaving the page entirely. Not the same
+    redundancy class as the 3 removed above.
+
+**Deliberately skipped (verified correct, not just accepted on report):**
+- `scouts`, `predictions`, `fpl`, `fpl/team`, `fpl/transfers`, `nesa-registration` -- all backscoped
+  feature stubs (`notFound()` only, confirmed by reading each file: `BACKLOG-028`/`BACKSCOPE.md`), no
+  header to attach anything to.
+- `news/[slug]` -- confirmed `NewsDetailClient.tsx` already has a deliberate "← Back to News" labeled
+  link, a different (and fine) pattern from the icon-only BackButton; left alone rather than adding a
+  redundant second affordance.
+- `livestream/[id]/page.tsx` -- confirmed a Server Component with no header JSX of its own; the actual
+  back button (`ArrowLeft` + `handleBack`/`router.back()`) already lives in the child
+  `LivestreamView.tsx` it renders. Not touched.
+- `offline` -- excluded by explicit instruction to both subagents; a back button on the PWA offline
+  fallback page is judged not clearly useful (going "back" while offline likely just re-shows the same
+  state) and wasn't part of Richard's ask.
+- `reset-password`/`forgot-password` already had a separate "Back to Sign In" text link at the bottom
+  of the card (a different, deliberate pattern) -- confirmed not a duplicate of the new top-of-card
+  icon button, both left in place.
+
+**Assumptions made (not covered by the original ask):**
+- The 3 bottom-nav roots (`/`, `/competitions`, `/profile`) were left untouched this pass, consistent
+  with "low priority" -- not fixed as in-scope now, not explicitly excluded either; a natural
+  follow-up if Richard wants full coverage.
+- `/competitions`' pre-existing back button (found during the earlier findings-only audit, already
+  live before this session) was left exactly as-is -- Richard's correction confirmed roots having one
+  isn't wrong, just not required, so no change needed there.
+
+**Known bug intersections:** `lineup-builder` is 🔴 High Volatility per `CLAUDE.md` (architecture
+cleanup pending full re-audit, `BACKLOG-220`) -- this change is purely additive (one new element in
+the header row, no write-path/formation/lock logic touched) and doesn't intersect the actual open
+concerns there (dead duplicate rendering code, non-atomic write race, no formation-change confirm).
+
+**Admin/logger scope extension, same session (Richard: "extend the scope there"):** investigated
+before mass-editing, rather than mechanically repeating the viewer-side pass on ~30 admin routes --
+"not as strict as viewer side" turned out to mean there's genuinely little to do, not a smaller version
+of the same large task:
+- Admin has its own persistent `AdminSidebar.tsx` covering navigation on every page -- unlike the
+  viewer side's 3-destination bottom nav, so the same "back button adds precision a coarse nav can't"
+  argument doesn't carry over uniformly. Of the 6 admin `[id]` detail routes (the closest admin analog
+  to the viewer detail pages that motivated this whole feature), 4 already had a back button
+  (`competitions/[id]`, `match-ratings/[id]`, `players/[id]`, `teams/[id]`). The real gap was just 2:
+  `competitions/[id]/draw` and `competitions/[id]/knockout` (both sub-pages of the competition detail
+  page, no back affordance to return to it) -- added, `fallbackHref={`/admin/competitions/${competitionId}`}`.
+- Logger: confirmed the live-logging screen (`FootballLogger.tsx`/`BasketballLogger.tsx`, rendered from
+  the single `logger/page.tsx`) already has a real, wired exit control -- `onClick={onExit}` in both
+  components, not a stub. Deliberately did **not** touch this screen at all: it's the Three Critical
+  Flows' live event-logging surface, `CLAUDE.md` requires explicit manual testing for any change here,
+  and there was no actual gap to fix -- adding a second, redundant exit affordance next to an existing
+  wired one on an active live-match screen is exactly the kind of unforced risk not worth taking for a
+  low-priority navigation-consistency pass.
+- Net result: admin/logger coverage is **effectively complete** for the genuine gaps found, not
+  deferred as originally flagged below (superseded) -- 2 files, not ~30.
+
+**File Structure Delta:**
+- Added: `src/components/ui/BackButton.tsx`
+- Modified, button present in final state (17): `src/app/about/page.tsx`, `src/app/docs/page.tsx`,
+  `src/app/news/page.tsx`, `src/app/privacy/page.tsx`, `src/app/terms/page.tsx`,
+  `src/app/stats/page.tsx`, `src/app/dashboard/page.tsx`, `src/app/draft/page.tsx`,
+  `src/app/profile/settings/page.tsx`, `src/app/profile/favorites/page.tsx`,
+  `src/app/transfers/page.tsx`, `src/app/favourites/page.tsx`, `src/app/teams/page.tsx`,
+  `src/app/login/page.tsx`, `src/app/signup/page.tsx`, `src/app/lineup-builder/page.tsx`,
+  `src/app/competitions/[id]/register/page.tsx`,
+  `src/app/admin/competitions/[id]/draw/page.tsx`, `src/app/admin/competitions/[id]/knockout/page.tsx`
+- Touched then reverted, net no-op vs. pre-session (button added, then removed on design review --
+  left in git history across the 3 commits, not squashed, per this project's "never amend" norm):
+  `src/app/reset-password/page.tsx`, `src/app/forgot-password/page.tsx`,
+  `src/app/competitions/[id]/registration-success/page.tsx`
+
+**Test Scenarios (manual, run against the Vercel preview):**
+1. Visit any edited page in a normal desktop/mobile browser tab (not installed) -- no back button
+   renders on the no-fallback and fallback-only pages (`useAppInstalled()` is false). **PASS** --
+   `/about` in a plain browser tab renders no back button (confirmed via `find` returning zero button
+   matches for "Back").
+2. **SUPERSEDED, see the design-review correction above.** Originally: `login`/`signup`/
+   `reset-password`/`forgot-password` should render even in plain browser mode via `forceShow`. That
+   was live-tested and DID pass exactly as written -- which is precisely how Richard caught the
+   problem: it was working as coded, but the code was wrong to show a back button next to the
+   browser's own one. `forceShow` is now unused by any page (kept on the component as a legitimate
+   future escape hatch, not dead-code cruft to remove) -- `login`/`signup` render PWA-only like
+   everything else; `reset-password`/`forgot-password` don't render the button at all anymore.
+3. Install the app as a PWA (or emulate `display-mode: standalone`) -- back button renders on every
+   edited page. **NOT VERIFIED LIVE.** Attempted via `window.matchMedia` monkey-patch in the browser
+   console, but `useAppInstalled()`'s check runs once in a `useEffect` on mount with no listener for
+   later `matchMedia` changes, and a full page navigation (needed to load a fresh page component)
+   resets the JS context, wiping the patch before the new page's effect runs -- browser automation
+   cannot fake an installed-PWA `display-mode` reliably this way. This scenario needs a real installed
+   PWA (Android/iOS "Add to Home Screen") or a manual DevTools "Emulate CSS media feature
+   `display-mode`" toggle in an interactive session -- neither available here. The gating logic itself
+   (`if (!isStandalone && !forceShow) return null`) is trivial and `tsc`-checked, and
+   `useAppInstalled()` is pre-existing, unmodified code (not new logic written this session) -- but
+   "the logic is simple and the dependency is old" is not the same as observing it actually render
+   true, so this stays an open verification gap, not assumed to pass.
+4. On an installed/standalone session, navigate in-app to e.g. `/stats` then tap its back button --
+   returns to the actual previous page (`router.back()`), not a hardcoded fallback. **NOT VERIFIED
+   LIVE** (blocked by #3 -- couldn't get a real standalone session to test the in-app case against).
+   The `router.back()` code path itself is unchanged, standard Next.js navigation, exercised
+   incidentally elsewhere this session (e.g. the `/teams` tab-bar work) without issue.
+5. Open `/login` directly as a fresh tab (simulating a cold/deep-link open, `history.length` small),
+   tap back -- goes to `/`, not a broken `router.back()` with no history. **PASS** -- opened a genuinely
+   fresh tab, confirmed `history.length === 2` via direct JS check before clicking, clicked the real
+   back button (not simulated), confirmed `window.location.pathname` became `/` afterward. This is the
+   scenario that matters most for correctness (the fallback logic itself) and it's live-proven; #3/#4
+   are about the outer visibility gate, which is unmodified pre-existing code.
+6. `/competitions/[id]/register` -- back button's fallback resolves to the real competition's detail
+   page, not a literal `${id}` string. **NOT LIVE-TESTED** -- verified only by reading the diff
+   (`fallbackHref={`/competitions/${params.id}`}`, using the file's real param variable, not a
+   hardcoded string) and by the general pattern already proven correct in scenario 5. Worth an actual
+   click-through next session since this is a dynamic-route case #5 doesn't cover.
+   (`.../registration-success` no longer applies -- button removed there on design review, see above.)
+7. `tsc --noEmit` -- zero new errors vs. baseline. **PASS**, independently re-run and diffed here, not
+   just taken from the subagents' self-reports.
+
+**Evidence:**
+- Commit: `ef58ca3` (component + no-fallback pages), `0912a46` (fallback/forceShow pages), pushed to
+  `origin/feature/ui-redesign`; deployment confirmed `success` via the GitHub commit-status API,
+  `brixsports-staging` Vercel project.
+- Verified by: `tsc --noEmit` (zero new errors, independently confirmed, not just the subagents'
+  self-reports) + full manual diff review of all 20 files + spot-checks of every "skipped" claim
+  against the actual file content (all confirmed correct: 6 genuine `notFound()` stubs, `news/[slug]`'s
+  existing "Back to News" link, `livestream/[id]`'s existing back button living in the child
+  `LivestreamView.tsx` it renders) + live browser test against the deployed preview for scenarios 1, 2,
+  5, 7 above.
+- Observed result: browser-mode gating and the cold-history fallback are both proven correct with real
+  clicks and real state checks, not just a code read. Standalone-mode rendering itself (scenarios 3-4)
+  and one dynamic-route fallback (scenario 6) remain genuinely unverified live -- flagged honestly
+  rather than assumed to pass because the underlying pieces are individually low-risk.
+- Pending items: scenarios 3, 4, 6 above (real device/DevTools standalone test, dynamic-route
+  click-through); admin/logger coverage (see Risks, not started); the 3 root screens remain untouched
+  (deliberate, low priority).
 
 ---

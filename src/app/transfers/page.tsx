@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
+import { BackButton } from '@/components/ui/BackButton';
 
 interface Transfer {
     id: string;
@@ -143,9 +144,12 @@ export default function TransfersPage() {
                     animate={{ opacity: 1, y: 0 }}
                     className="mb-8"
                 >
-                    <h1 className="text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-cyan-400 to-teal-400 mb-2">
-                        Transfer Center
-                    </h1>
+                    <div className="flex items-center gap-2 mb-2">
+                        <BackButton />
+                        <h1 className="text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-cyan-400 to-teal-400">
+                            Transfer Center
+                        </h1>
+                    </div>
                     <p className="text-slate-400 text-lg">
                         Track all player movements, transfers, and rumors
                     </p>

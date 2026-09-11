@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { BackButton } from '@/components/ui/BackButton';
 
 export const metadata: Metadata = {
     title: 'Terms of Service',
@@ -11,9 +12,12 @@ export default function TermsOfServicePage() {
         <div className="min-h-screen bg-[#050505] text-white">
             <section className="py-16 px-4 md:px-12">
                 <div className="max-w-3xl mx-auto">
-                    <h1 className="text-4xl md:text-5xl font-display italic uppercase tracking-tight mb-4">
-                        Terms of Service
-                    </h1>
+                    <div className="flex items-center gap-2 mb-4">
+                        <BackButton />
+                        <h1 className="text-4xl md:text-5xl font-display italic uppercase tracking-tight">
+                            Terms of Service
+                        </h1>
+                    </div>
                     <p className="text-white/40 text-sm mb-12">Last updated: 27 July 2026</p>
 
                     <div className="prose prose-invert max-w-none space-y-10 text-white/70 leading-relaxed">

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { CheckCircle, AlertCircle, AlertTriangle, Send } from 'lucide-react';
 import { TeamLogo } from '@/lib/utils/team-logo';
+import { BackButton } from '@/components/ui/BackButton';
 import { suggestSeedPairings } from '@/lib/competitionDraw';
 
 interface Team {
@@ -154,7 +155,10 @@ export default function KnockoutBracketPage() {
 
     return (
         <div className="min-h-screen bg-neutral-950 text-white p-6 max-w-3xl mx-auto">
-            <h1 className="text-2xl font-bold mb-1">Knockout Bracket</h1>
+            <div className="flex items-center gap-2 mb-1">
+                <BackButton fallbackHref={`/admin/competitions/${competitionId}`} />
+                <h1 className="text-2xl font-bold">Knockout Bracket</h1>
+            </div>
             <p className="text-white/50 text-sm mb-6">Top 8 → Quarter-Finals → Semi-Finals → 3rd Place / Final.</p>
 
             {message && (

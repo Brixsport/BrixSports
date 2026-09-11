@@ -16,6 +16,7 @@ import { PlayerSelectorPopup, type PlayerSelectorCandidate } from '@/components/
 import { useLineupPlacement, type PlacementEntry } from '@/components/lineup/useLineupPlacement';
 import { getFormationsForAdmin, getFormation } from '@/lib/lineup/formations';
 import { seedPlacementsFromLegacy } from '@/lib/lineup/placement';
+import { BackButton } from '@/components/ui/BackButton';
 
 declare module 'downloadjs';
 
@@ -267,11 +268,14 @@ export default function LineupBuilderPage() {
         <div className="min-h-screen bg-[#050505] text-white p-6 md:p-12">
             <div className="max-w-[1400px] mx-auto space-y-6">
                 <div className="flex flex-wrap items-center justify-between gap-4">
-                    <div>
-                        <h1 className="font-display text-4xl tracking-tighter italic uppercase leading-none mb-2">
-                            Lineup Builder
-                        </h1>
-                        <p className="text-sm text-white/60">Build your dream XI from any team, any player.</p>
+                    <div className="flex items-center gap-2">
+                        <BackButton fallbackHref="/" />
+                        <div>
+                            <h1 className="font-display text-4xl tracking-tighter italic uppercase leading-none mb-2">
+                                Lineup Builder
+                            </h1>
+                            <p className="text-sm text-white/60">Build your dream XI from any team, any player.</p>
+                        </div>
                     </div>
                     <Link
                         href="/lineup-builder/gallery"

@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Heart, Star, Trophy, Users, Activity, X, Plus } from 'lucide-react';
+import { BackButton } from '@/components/ui/BackButton';
 
 // Mock favorites data
 const mockFavorites = {
@@ -53,7 +54,10 @@ export default function FavoritesPage() {
                         <Heart size={16} className="text-primary" />
                         <span className="text-[10px] font-black uppercase tracking-widest text-white/40">Your Collection</span>
                     </div>
-                    <h1 className="font-display text-5xl tracking-tighter italic uppercase leading-none">Favorites</h1>
+                    <div className="flex items-center gap-2">
+                        <BackButton />
+                        <h1 className="font-display text-5xl tracking-tighter italic uppercase leading-none">Favorites</h1>
+                    </div>
                 </div>
 
                 {/* Tabs */}

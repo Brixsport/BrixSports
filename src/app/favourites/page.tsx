@@ -1,13 +1,17 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
-import { motion } from 'framer-motion';
+import { useState, useEffect, useRef, useMemo } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Heart, Users, Calendar, TrendingUp, Star, Trophy, Bell, BellOff } from 'lucide-react';
 import { useFavorites } from '@/hooks/useFavorites';
 import { useAuth } from '@/contexts/AuthContext';
 import { Coachmark } from '@/components/onboarding/Coachmark';
+import { UnderlineTabs, UnderlineTab } from '@/components/ui/UnderlineTabs';
+import { BackButton } from '@/components/ui/BackButton';
 import Link from 'next/link';
 import Image from 'next/image';
+
+type FavTabId = 'matches' | 'teams' | 'competitions' | 'players';
 
 const TOUR_ID = 'favourites-alert-toggle';
 
@@ -55,6 +59,7 @@ export default function FavouritesPage() {
     }, [isAuthenticated, user?.id]);
     const [upcomingMatches, setUpcomingMatches] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
+    const [activeTab, setActiveTab] = useState<FavTabId | ''>('');
 
     useEffect(() => {
         fetchFavoriteData();
@@ -125,6 +130,37 @@ export default function FavouritesPage() {
         }
     };
 
+    const isEmpty = teams.length === 0 && players.length === 0 && competitions.length === 0;
+
+    // Only categories with real data get a tab -- an empty category isn't
+    // worth a selector option (matches the old stacked-sections behaviour,
+    // which hid empty sections outright).
+    const tabs: UnderlineTab[] = useMemo(() => {
+        const t: UnderlineTab[] = [];
+        if (upcomingMatches.length > 0) t.push({ id: 'matches', label: 'Matches', icon: <Calendar size={12} />, count: upcomingMatches.length });
+        if (teams.length > 0) t.push({ id: 'teams', label: 'Teams', icon: <Users size={12} />, count: teams.length });
+        if (competitions.length > 0) t.push({ id: 'competitions', label: 'Competitions', icon: <Trophy size={12} />, count: competitions.length });
+        if (players.length > 0) t.push({ id: 'players', label: 'Players', icon: <Star size={12} />, count: players.length });
+        return t;
+    }, [upcomingMatches.length, teams.length, competitions.length, players.length]);
+
+    // Default to the first available tab (Matches first -- it's the most
+    // time-sensitive), and re-target if the active tab's data disappears.
+    useEffect(() => {
+        if (loading) return;
+        const ids = tabs.map((t) => t.id);
+        if (!ids.includes(activeTab)) {
+            setActiveTab((ids[0] as FavTabId) || '');
+        }
+    }, [loading, tabs, activeTab]);
+
+    // The team-alert-toggle coachmark anchors inside the Teams panel -- jump
+    // there so a first-time viewer actually sees it instead of it silently
+    // never mounting on whichever tab happened to be active.
+    useEffect(() => {
+        if (showTour && teams.length > 0) setActiveTab('teams');
+    }, [showTour, teams.length]);
+
     if (loading) {
         return (
             <div className="min-h-screen bg-[#050505] text-white flex items-center justify-center">
@@ -136,14 +172,13 @@ export default function FavouritesPage() {
         );
     }
 
-    const isEmpty = teams.length === 0 && players.length === 0 && competitions.length === 0;
-
     return (
         <div className="min-h-screen bg-[#050505] text-white pb-24 md:pb-12">
             {/* Header */}
             <div className="sticky top-0 z-40 bg-[#0a0a0a] border-b border-white/10 backdrop-blur-xl">
                 <div className="max-w-7xl mx-auto px-4 py-6">
                     <div className="flex items-center gap-3">
+                        <BackButton />
                         <Heart size={24} className="text-primary fill-primary" />
                         <div>
                             <h1 className="font-display text-3xl tracking-tighter italic uppercase leading-none">
@@ -185,16 +220,28 @@ export default function FavouritesPage() {
                         </div>
                     </motion.div>
                 ) : (
-                    <div className="space-y-8">
+                    <div>
+                        {tabs.length > 1 && (
+                            <UnderlineTabs
+                                tabs={tabs}
+                                activeId={activeTab}
+                                onChange={(id) => setActiveTab(id as FavTabId)}
+                                layoutId="favouritesActiveTab"
+                                className="mb-8"
+                            />
+                        )}
+
+                        <AnimatePresence mode="wait">
+                        <motion.div
+                            key={activeTab}
+                            initial={{ opacity: 0, y: 8 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: -8 }}
+                            transition={{ duration: 0.15 }}
+                        >
                         {/* Upcoming Matches */}
-                        {upcomingMatches.length > 0 && (
+                        {activeTab === 'matches' && upcomingMatches.length > 0 && (
                             <section>
-                                <div className="flex items-center gap-2 mb-4">
-                                    <Calendar size={18} className="text-primary" />
-                                    <h2 className="text-xl font-bold uppercase tracking-wider">
-                                        Upcoming Matches
-                                    </h2>
-                                </div>
                                 <div className="space-y-3">
                                     {upcomingMatches.slice(0, 5).map((match) => (
                                         <Link
@@ -223,14 +270,8 @@ export default function FavouritesPage() {
                         )}
 
                         {/* Favorite Teams */}
-                        {teams.length > 0 && (
+                        {activeTab === 'teams' && teams.length > 0 && (
                             <section>
-                                <div className="flex items-center gap-2 mb-4">
-                                    <Users size={18} className="text-primary" />
-                                    <h2 className="text-xl font-bold uppercase tracking-wider">
-                                        Favorite Teams ({teams.length})
-                                    </h2>
-                                </div>
                                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                                     {teams.map((team, index) => {
                                         const alertsOn = isTeamNotificationsEnabled(team.id);
@@ -293,14 +334,8 @@ export default function FavouritesPage() {
                         )}
 
                         {/* Favorite Competitions */}
-                        {competitions.length > 0 && (
+                        {activeTab === 'competitions' && competitions.length > 0 && (
                             <section>
-                                <div className="flex items-center gap-2 mb-4">
-                                    <Trophy size={18} className="text-primary" />
-                                    <h2 className="text-xl font-bold uppercase tracking-wider">
-                                        Favorite Competitions ({competitions.length})
-                                    </h2>
-                                </div>
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     {competitions.map((competition) => (
                                         <Link
@@ -322,14 +357,8 @@ export default function FavouritesPage() {
                         )}
 
                         {/* Favorite Players */}
-                        {players.length > 0 && (
+                        {activeTab === 'players' && players.length > 0 && (
                             <section>
-                                <div className="flex items-center gap-2 mb-4">
-                                    <Star size={18} className="text-primary" />
-                                    <h2 className="text-xl font-bold uppercase tracking-wider">
-                                        Favorite Players ({players.length})
-                                    </h2>
-                                </div>
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     {players.map((player) => (
                                         <Link
@@ -356,6 +385,8 @@ export default function FavouritesPage() {
                                 </div>
                             </section>
                         )}
+                        </motion.div>
+                        </AnimatePresence>
                     </div>
                 )}
             </div>
