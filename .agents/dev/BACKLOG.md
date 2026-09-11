@@ -12612,11 +12612,12 @@ render at full size regardless of the minimize state.
 
 ---
 
-### BACKLOG-380 — University Indicator Added to Team + League Pages (Cross-University Discovery, Follow-up to `BACKLOG-365` Item 4)
+### BACKLOG-383 — University Indicator Added to Team + League Pages (Cross-University Discovery, Follow-up to `BACKLOG-365` Item 4)
 
-**Note:** originally filed as BACKLOG-370, renumbered here — a peer session on the same
-`feature/ui-redesign` branch independently claimed 370 for an unrelated fix (Admin
-Match-Ratings overflow) before this merge; see that entry below for BACKLOG-370's real content.
+**Note:** originally filed as BACKLOG-370, then renumbered to 380 after a peer session independently
+claimed 370 first (Admin Match-Ratings overflow) -- renumbered AGAIN here, to 383, after a second peer
+session independently claimed 380 too (this time for a homepage Lineup Builder link fix). See
+`BACKLOG-370` and `BACKLOG-380` below for their real, unrelated content.
 
 **Status:** RESOLVED — 2026-09-10, `tsc --noEmit` clean, live-verified on the branch's Vercel preview.
 **Priority:** Low-Medium — product direction from Richard, not a bug: `BACKLOG-365` item 4 ("home-university default-view scoping") was put on hold pending more product thought on what "scoping" should mean, but Richard clarified the underlying model in the same breath — per this project's own locked "Google Drive not Shopify" decision (one platform, all universities, scoped by affiliation), the direction is fans should be able to **discover** other universities/leagues/teams, not have them hidden by default. First concrete step: make it visible which university a team or league actually belongs to, since neither page showed it anywhere persistent.
@@ -12640,11 +12641,12 @@ Match-Ratings overflow) before this merge; see that entry below for BACKLOG-370'
 
 ---
 
-### BACKLOG-381 — Google OAuth Sign-In Left the Session Half-Working: Cookie Auth Fine, localStorage Never Populated
+### BACKLOG-384 — Google OAuth Sign-In Left the Session Half-Working: Cookie Auth Fine, localStorage Never Populated
 
-**Note:** originally filed as BACKLOG-371, renumbered here — a peer session on the same
-`feature/ui-redesign` branch independently claimed 371 for an unrelated fix (Admin Push-Diagnose
-overflow) before this merge; see that entry below for BACKLOG-371's real content.
+**Note:** originally filed as BACKLOG-371, then renumbered to 381 after a peer session independently
+claimed 371 first (Admin Push-Diagnose overflow) -- renumbered AGAIN here, to 384, after a second peer
+session independently claimed 381 too (this time for an H2H tab logo-rendering fix). See `BACKLOG-371`
+and `BACKLOG-381` below for their real, unrelated content.
 
 **Status:** RESOLVED — 2026-09-10, `tsc --noEmit` clean, the full localStorage-handoff mechanism live-verified end to end (see Evidence). Only the real-Google-consent-screen leg is unverified (same constraint `BACKLOG-322`'s original evidence noted — no test Google account in this environment); the app-side half of the flow is fully proven.
 **Priority:** HIGH — this is `BACKLOG-365` item 5 (the human OAuth click-through), and it found a real bug: Richard signed in via Google to an account that already existed (password-based), and the session didn't fully take even though the redirect completed with no visible error.

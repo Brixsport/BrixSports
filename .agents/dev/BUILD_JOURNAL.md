@@ -5103,7 +5103,10 @@ blocking each other.
 
 ---
 
-### Session 73 continued -- `BACKLOG-365` items 1/2/3/6 closed, `BACKLOG-380`/`381` found and fixed
+### Session 73 continued -- `BACKLOG-365` items 1/2/3/6 closed, `BACKLOG-383`/`384` found and fixed
+(numbered 370/371 when this entry was first written, then 380/381, finally 383/384 -- renumbered twice
+more as this branch's concurrent peer sessions independently claimed each number first; see Session 77
+below for the full account)
 (originally numbered 370/371 in this session's own commits -- renumbered here after a merge conflict
 surfaced that a peer session on this same branch had independently claimed both numbers first; see
 `BACKLOG.md` for the renumbered entries and the peer's real 370/371)
@@ -5125,13 +5128,13 @@ surfaced that a peer session on this same branch had independently claimed both 
 - **Item 6 (prod migrations):** both Fan Account Blueprint staging migrations
   (`userFavorites.notifications_enabled`, `fan_tour_dismissals`) run against prod, confirmed via
   `PRAGMA`/`sqlite_master` output against the real prod host.
-- **`BACKLOG-380` (new, not in the original list):** Richard's product direction on item 4 --  the
+- **`BACKLOG-383` (new, not in the original list):** Richard's product direction on item 4 --  the
   "Google Drive not Shopify" model means fans should *discover* other universities, not have them hidden
   -- concrete first step: added an always-visible university indicator to team pages and competition
   pages. Competition page derives it from participating teams' `university` values (`hostOrganizationId`
   is null on 5/8 real competitions, unreliable) rather than a schema change; correctly shows nothing for
   genuinely inter-university competitions like NPUGA.
-- **`BACKLOG-381` (new, found via Richard's real click-through on item 5):** Google OAuth sign-in to an
+- **`BACKLOG-384` (new, found via Richard's real click-through on item 5):** Google OAuth sign-in to an
   *existing* account completed with no visible error but the session didn't fully take. Two real,
   separate bugs, both fixed: (1) the callback is a server redirect and can't write to `localStorage`,
   which several client paths (`FavoritesContext` etc.) read directly and treat as "logged out" without
@@ -5149,7 +5152,7 @@ contained this session's own prior commits, confirmed via a diff before pushing,
 
 **Deferred, Richard's explicit call -- product decision, not scoped by me:** `BACKLOG-365` item 4's
 actual "default-view scoping" behavior (what changes once a fan's home university is known -- default
-homepage filter? something else?) is still undefined. `BACKLOG-380` above covers the *visibility*
+homepage filter? something else?) is still undefined. `BACKLOG-383` above covers the *visibility*
 half (you can now see which university a team/league belongs to); the *scoping* half needs Richard's
 own product call before any code gets written -- noted here per his explicit "just log it, it's a
 product decision" instruction, not to be picked up unprompted.
@@ -5445,6 +5448,21 @@ needed).
 missed in the first pass since only the docs files were checked. Fixed to `BACKLOG-381` in the same
 close-out pass; re-grepped after to confirm zero remaining. Commit messages/git history are left as-is
 (immutable, not worth rewriting).
+
+**Addendum, same session, immediately after:** fetching once more before the intended fast-forward to
+`feature/ui-redesign` found the branch had moved a *third* time -- 3 more peer commits, including their
+own independent `BACKLOG-380` and `BACKLOG-381` (a homepage Lineup Builder link fix and an H2H-tab
+logo-rendering fix, respectively), colliding with the exact numbers this session had just renumbered
+into. This merge auto-resolved with zero conflicts (the two peer entries landed at a different line
+range than this session's own, so git's line-diff saw no overlap) -- which is exactly why the
+duplicate-ID scan has to run after *every* merge on this branch regardless of whether git reports a
+conflict: a semantic ID collision doesn't require a textual one. Renumbered a third time,
+`BACKLOG-380`/`381` -> `BACKLOG-383`/`384` (confirmed free via a fresh full-file scan, zero new
+duplicates beyond the same 9 pre-existing ones), across `BACKLOG.md`, `BUILD_JOURNAL.md`, and this
+time the 3 live code comments too (checked upfront, not missed a second time). This branch's peer
+traffic tonight is high enough that a fourth collision on the next fetch wouldn't be surprising --
+worth a fresh `git fetch` + duplicate-scan immediately before trusting any number this session already
+claimed, not just before filing a new one.
 
 ---
 

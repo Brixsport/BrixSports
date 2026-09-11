@@ -131,7 +131,7 @@ export async function GET(request: NextRequest) {
 
         const token = generateToken(userId, email.toLowerCase(), role);
 
-        // BACKLOG-381: a server-side redirect can set the httpOnly cookie fine,
+        // BACKLOG-384: a server-side redirect can set the httpOnly cookie fine,
         // but has no way to write to localStorage -- and a lot of this app's
         // client code (FavoritesContext, push-service, etc.) reads
         // localStorage.getItem('authToken') directly and treats its absence as

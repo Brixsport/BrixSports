@@ -120,7 +120,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     // Initial auth check
     useEffect(() => {
-        // BACKLOG-381: pick up the one-time token handoff from the Google OAuth
+        // BACKLOG-384: pick up the one-time token handoff from the Google OAuth
         // callback (src/app/api/auth/callback/google/route.ts) -- a server
         // redirect can set the httpOnly cookie but can't touch localStorage,
         // and several client paths (FavoritesContext, push-service) read
