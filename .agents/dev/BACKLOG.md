@@ -13218,3 +13218,76 @@ of the same large task:
   (deliberate, low priority).
 
 ---
+
+### BACKLOG-380 — Homepage "Lineup Builder" Link Pointed at a Nonexistent `/lineups` Route
+
+**Status:** SHIPPED — 2026-09-11, `tsc --noEmit` clean (30 baseline, zero new), pending live verification.
+**Priority:** Medium -- a real, reachable 404 on a prominent nav link (desktop nav, mobile menu), reported live by Richard.
+
+**Problem:** `src/app/page.tsx`'s desktop nav link and mobile menu link both pointed to `/lineups` --
+confirmed no such route exists (`src/app/lineup-builder/page.tsx` is the real page). `BottomNav.tsx`'s
+`hiddenRoutes` list had the same stale `/lineups` string, so the bottom nav was never actually being
+hidden on the real `/lineup-builder` page either (a `startsWith` check against a route prefix that
+never matched).
+
+**Fix:** both `page.tsx` links changed to `/lineup-builder`; `BottomNav.tsx`'s `hiddenRoutes` entry
+corrected to `/lineup-builder` to match.
+
+**Evidence:**
+- `tsc --noEmit`: 30 errors, unchanged, zero new.
+- Pending: live click-through on the deployed preview.
+**Files:** `src/app/page.tsx`, `src/components/BottomNav.tsx`.
+
+---
+
+### BACKLOG-381 — H2H Tab: Team Logos Rendered as Raw URL Text Instead of Images
+
+**Status:** SHIPPED — 2026-09-11, `tsc --noEmit` clean (30 baseline, zero new), pending live verification.
+**Priority:** Medium -- visibly broken on the match-detail page's H2H tab, reported live by Richard.
+
+**Problem:** `src/components/HeadToHead.tsx` rendered `{team1.logo}`/`{team2.logo}` directly inside a
+`text-5xl` div -- treating the field as literal display text, not an image source. `/api/head-to-head`
+(confirmed by reading the route) returns the raw `teams` table row for both teams, so `logo` is the
+real Cloudinary URL string every other team-display surface in this codebase renders through the
+shared `TeamLogo` component (`lib/utils/team-logo.tsx`) -- this was the one place still printing that
+URL as giant text instead of an `<img>`.
+
+**Fix:** imported and used `TeamLogo` (`size="lg"`, passing `color` for its initials-fallback) in both
+team slots, matching the pattern already used everywhere else (`competitions/[id]/page.tsx` standings,
+etc.). Widened `HeadToHeadData`'s `team1`/`team2` types to include the optional `color` field
+`TeamLogo` accepts.
+
+**Evidence:**
+- `tsc --noEmit`: 30 errors, unchanged, zero new.
+- Pending: live check against a real match with two teams that have real (non-empty) logo URLs.
+**Files:** `src/components/HeadToHead.tsx`.
+
+---
+
+### BACKLOG-382 — Detail-Page Tab Bars Had No Desktop Sizing (Mobile-Only `text-[10px]`/`px-3`)
+
+**Status:** SHIPPED — 2026-09-11, `tsc --noEmit` clean (30 baseline, zero new), pending live verification.
+**Priority:** Low-Medium -- cosmetic, but affects every match/player detail page and the newly-shared
+`UnderlineTabs` component on desktop, reported live by Richard right after `BACKLOG-378`'s tab-bar
+redesign shipped.
+
+**Problem:** the underline-tab pattern used across `MatchDetailClient.tsx` (9 tabs), `PlayerDetailClient.tsx`,
+and the new shared `UnderlineTabs.tsx` (`BACKLOG-378`, now backing `/favourites` and `/teams`) all
+hardcoded the same mobile-only sizing (`px-3 py-2 text-[10px]`) with zero `md:` breakpoint -- correct
+for a narrow viewport, but identically cramped at desktop width instead of scaling up like the rest of
+this codebase's established `text-[10px] md:text-xs` / `px-N md:px-N+1` convention (confirmed against
+~10 existing call sites, e.g. `admin/players/page.tsx`, `profile/page.tsx`).
+
+**Fix:** applied the same established responsive pairing to all three: `text-[10px] md:text-xs`,
+`px-3 md:px-4 py-2 md:py-2.5`, `gap-1.5 md:gap-2` (or the file's own existing gap value bumped one
+step). `TeamDetailClient.tsx`'s own tab bar was checked and left untouched -- it already uses a
+larger, non-cramped `px-6 py-4 text-sm` pattern, not part of this problem.
+
+**Evidence:**
+- `tsc --noEmit`: 30 errors, unchanged, zero new, across all 3 touched files.
+- Pending: live visual check at a real desktop viewport width on `/matches/[id]`, `/players/[id]`,
+  `/favourites`, `/teams`.
+**Files:** `src/components/ui/UnderlineTabs.tsx`, `src/app/matches/[id]/MatchDetailClient.tsx`,
+`src/app/players/[id]/PlayerDetailClient.tsx`.
+
+---

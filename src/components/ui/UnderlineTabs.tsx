@@ -40,7 +40,7 @@ export function UnderlineTabs({ tabs, activeId, onChange, layoutId, className }:
                         onClick={() => onChange(tab.id)}
                         aria-current={active ? 'true' : undefined}
                         className={cn(
-                            'px-3 py-2 text-[10px] font-bold uppercase tracking-wider transition-all relative whitespace-nowrap flex items-center gap-1.5 shrink-0',
+                            'px-3 md:px-4 py-2 md:py-2.5 text-[10px] md:text-xs font-bold uppercase tracking-wider transition-all relative whitespace-nowrap flex items-center gap-1.5 md:gap-2 shrink-0',
                             active ? 'text-primary' : 'text-white/60 hover:text-white'
                         )}
                     >

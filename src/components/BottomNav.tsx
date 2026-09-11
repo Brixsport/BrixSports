@@ -50,7 +50,7 @@ export function BottomNav() {
     };
 
     // Hide bottom nav on specific routes
-    const hiddenRoutes = ['/login', '/signup', '/admin', '/reset-password', '/forgot-password', '/lineups', '/logger'];
+    const hiddenRoutes = ['/login', '/signup', '/admin', '/reset-password', '/forgot-password', '/lineup-builder', '/logger'];
     if (hiddenRoutes.some(route => pathname.startsWith(route))) {
         return null;
     }

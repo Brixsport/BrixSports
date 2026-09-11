@@ -2,6 +2,7 @@
 
 import { motion } from 'framer-motion';
 import { Trophy, TrendingUp, Calendar } from 'lucide-react';
+import { TeamLogo } from '@/lib/utils/team-logo';
 
 export interface HeadToHeadData {
     team1: {
@@ -9,12 +10,14 @@ export interface HeadToHeadData {
         name: string;
         logo: string;
         shortName?: string;
+        color?: string | null;
     };
     team2: {
         id: string;
         name: string;
         logo: string;
         shortName?: string;
+        color?: string | null;
     };
     headToHead: {
         totalMatches: number;
@@ -56,7 +59,7 @@ export function HeadToHeadComparison({ data, showRecentMatches = true }: HeadToH
             <div className="grid grid-cols-3 gap-4 items-center">
                 {/* Team 1 */}
                 <div className="text-center">
-                    <div className="text-5xl mb-2">{team1.logo}</div>
+                    <TeamLogo logo={team1.logo} name={team1.name} color={team1.color} size="lg" className="mx-auto mb-2" />
                     <p className="text-sm font-black uppercase tracking-tight">{team1.shortName || team1.name}</p>
                 </div>
 
@@ -71,7 +74,7 @@ export function HeadToHeadComparison({ data, showRecentMatches = true }: HeadToH
 
                 {/* Team 2 */}
                 <div className="text-center">
-                    <div className="text-5xl mb-2">{team2.logo}</div>
+                    <TeamLogo logo={team2.logo} name={team2.name} color={team2.color} size="lg" className="mx-auto mb-2" />
                     <p className="text-sm font-black uppercase tracking-tight">{team2.shortName || team2.name}</p>
                 </div>
             </div>
