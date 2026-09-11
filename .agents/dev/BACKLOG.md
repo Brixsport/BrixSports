@@ -13147,7 +13147,7 @@ of the same large task:
 
 ### BACKLOG-380 — Homepage "Lineup Builder" Link Pointed at a Nonexistent `/lineups` Route
 
-**Status:** SHIPPED — 2026-09-11, `tsc --noEmit` clean (30 baseline, zero new), pending live verification.
+**Status:** RESOLVED — 2026-09-11, `tsc --noEmit` clean (30 baseline, zero new), live-verified against the deployed preview.
 **Priority:** Medium -- a real, reachable 404 on a prominent nav link (desktop nav, mobile menu), reported live by Richard.
 
 **Problem:** `src/app/page.tsx`'s desktop nav link and mobile menu link both pointed to `/lineups` --
@@ -13161,7 +13161,11 @@ corrected to `/lineup-builder` to match.
 
 **Evidence:**
 - `tsc --noEmit`: 30 errors, unchanged, zero new.
-- Pending: live click-through on the deployed preview.
+- Commit `8e599a1`, deployment confirmed `success` via the GitHub commit-status API.
+- Live-verified: direct `GET /` against the deployed preview -- the only `/lineup*` href present in
+  the returned HTML is `href="/lineup-builder"`, the stale `/lineups` string is gone. This link is a
+  static server-rendered `<Link>`, so a raw HTML fetch is real evidence here (unlike `BACKLOG-381`/
+  `382` below, both inside client-rendered, data-gated components -- see their own notes).
 **Files:** `src/app/page.tsx`, `src/components/BottomNav.tsx`.
 
 ---
@@ -13185,7 +13189,19 @@ etc.). Widened `HeadToHeadData`'s `team1`/`team2` types to include the optional 
 
 **Evidence:**
 - `tsc --noEmit`: 30 errors, unchanged, zero new.
-- Pending: live check against a real match with two teams that have real (non-empty) logo URLs.
+- Commit `609eb42`, deployment confirmed `success` via the GitHub commit-status API.
+- Data confirmed real: `GET /api/head-to-head?team1=busa-joga&team2=busa-pirates` on the deployed
+  preview returns real, non-empty Cloudinary URLs for both teams
+  (`.../busa-joga.jpg`, `.../busa-pirates.jpg`) -- exactly the string shape that was previously being
+  printed as literal text.
+- **Not confirmed:** the actual hydrated DOM (does `TeamLogo` render a real `<img>` where the text used
+  to be). `HeadToHeadComparison` is inside a `'use client'` page that only mounts this markup after its
+  own `fetch` resolves, so a raw HTTP fetch of the page only ever returns the pre-hydration loading
+  state -- it cannot see this. A real DOM check needs the Browser pane past Vercel's deployment
+  protection, which needs the bypass secret in the navigate URL itself; skipped for the same reason
+  `BACKLOG-375`'s evidence block gave (avoiding that secret appearing in a visible tool-call). `TeamLogo`
+  itself is an already-proven, already-used-everywhere-else component (read directly before reuse, not
+  assumed) -- the only real unknown is wiring, which is a 2-line, code-reviewed change.
 **Files:** `src/components/HeadToHead.tsx`.
 
 ---
@@ -13211,8 +13227,15 @@ larger, non-cramped `px-6 py-4 text-sm` pattern, not part of this problem.
 
 **Evidence:**
 - `tsc --noEmit`: 30 errors, unchanged, zero new, across all 3 touched files.
-- Pending: live visual check at a real desktop viewport width on `/matches/[id]`, `/players/[id]`,
-  `/favourites`, `/teams`.
+- Commit `43ae3fb`, deployment confirmed `success` via the GitHub commit-status API.
+- **Not confirmed live:** attempted a raw HTML fetch of `/matches/[id]` and `/favourites` first --
+  neither contains the tab-bar markup at all (confirmed by grepping the raw response for `px-3`,
+  present nowhere), because both pages render their tab bar only after a client-side data fetch
+  resolves; the server-sent HTML is just the loading state. A real check needs the Browser pane's DOM
+  past Vercel's deployment protection, same bypass-secret-in-URL tradeoff noted on `BACKLOG-381` --
+  skipped for the same reason. This is a pure Tailwind class change (no logic, no new component
+  behavior), code-reviewed against ~10 existing same-pattern call sites in this codebase before
+  applying, but genuinely unverified live.
 **Files:** `src/components/ui/UnderlineTabs.tsx`, `src/app/matches/[id]/MatchDetailClient.tsx`,
 `src/app/players/[id]/PlayerDetailClient.tsx`.
 
