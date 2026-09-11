@@ -9,7 +9,7 @@ import { env } from '@/lib/env';
 // GET /api/auth/me - Get current authenticated user
 export async function GET(request: NextRequest) {
     try {
-        // BACKLOG-371: this route used to read the cookie only, ignoring any
+        // BACKLOG-381: this route used to read the cookie only, ignoring any
         // Authorization header entirely -- which silently broke AuthContext's
         // own documented cookie-fails-try-localStorage fallback (checkAuth()
         // retries this exact endpoint with `Authorization: Bearer <token>`

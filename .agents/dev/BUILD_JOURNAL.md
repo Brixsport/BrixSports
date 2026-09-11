@@ -5396,3 +5396,49 @@ close. If resuming this thread: the 64/29 ambiguous `BACKLOG-376` rows are the o
 from this session, and they're not urgent (already correctly handled by the read-side fallback). Session
 74's tab-bar redesign findings-only audit and PWA back-button scope remain the oldest still-open items
 across the branch if nothing newer takes priority.
+
+---
+
+### Session 76 — 2026-09-11 (`competitions-consolidation` worktree, full close)
+
+**Focus:** wrapping Session 73's continuation. Richard asked to coordinate with the peer session(s)
+working this same `feature/ui-redesign` branch concurrently about BACKLOG numbering and anything else
+that could conflict, before closing out.
+
+**Built:** nothing new feature-wise -- this session's remaining work was git/doc coordination only.
+
+**Bugs encountered, root cause:** no `SendMessage` tool is loaded in this session (checked via
+`ToolSearch`, not assumed), so direct peer-to-peer messaging Richard asked for wasn't actually possible
+here -- surfaced to Richard rather than silently skipped. Used the practical substitute this whole
+session has already relied on: the shared branch itself. Fetching `origin/feature/ui-redesign` found
+it had moved to `8dde7c5` (peer commits through `BACKLOG-379`) since the last rebase. A straight rebase
+hit a real, confirmed numbering collision: this session's own `BACKLOG-370` (university indicator) and
+`BACKLOG-371` (Google OAuth session fix) both collided with a peer session's own unrelated `BACKLOG-370`
+(Admin Match-Ratings overflow) and `BACKLOG-371` (Admin Push-Diagnose overflow) -- filed independently,
+same numbers, different fixes.
+
+**Resolved:** rebasing would have required re-resolving the same renumbering conflict at every one of
+this session's ~8 subsequent commits (the number appears in multiple follow-up evidence/docs commits,
+not just the filing commit) -- switched to a single `git merge origin/feature/ui-redesign` instead, one
+resolution pass rather than eight. Renumbered this session's `BACKLOG-370`/`371` -> `BACKLOG-380`/`381`
+in both `BACKLOG.md` and `BUILD_JOURNAL.md`, with a note on each entry pointing to the real 370/371 for
+anyone who finds the old numbers referenced elsewhere (git history, this session's own earlier
+messages). Ran the established full-file duplicate-ID scan after resolving -- confirmed zero new
+duplicates beyond the same 9 pre-existing ones already flagged in earlier sessions as out of scope.
+`RUNLOG.md`'s conflict was the same append-only shape seen throughout this branch's history -- kept
+both sessions' entries. `TeamDetailClient.tsx` auto-merged cleanly with zero manual intervention: this
+session's university-badge header addition and the peer's season-selector stats-card addition sit in
+different regions of the same file, both present and working post-merge (spot-checked via a targeted
+grep for both `team.university` and `statsSeasons` in the merged file). `tsc --noEmit`: 35, identical to
+baseline, zero new errors from either side. Merge commit `8655e76`, pushed clean (fast-forward, no force
+needed).
+
+**Deferred:** nothing new -- `BACKLOG-365` item 4 remains parked pending Richard's product decision
+(unchanged from the prior entry); item 5's real Google-consent-screen click-through still needs Richard.
+
+**Next session/turn:** whatever Richard brings. A follow-up `grep -r "BACKLOG-370\|BACKLOG-371"` across
+`src/` found 3 live code comments still carrying the stale numbers (`AuthContext.tsx`,
+`api/auth/me/route.ts`, `api/auth/callback/google/route.ts`) -- these predated the renumbering and were
+missed in the first pass since only the docs files were checked. Fixed to `BACKLOG-381` in the same
+close-out pass; re-grepped after to confirm zero remaining. Commit messages/git history are left as-is
+(immutable, not worth rewriting).
