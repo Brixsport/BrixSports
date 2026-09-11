@@ -394,7 +394,7 @@ export default function Home() {
                   Teams
                 </Link>
                 <UpdateTooltip message="New: build and share your matchday starting XI">
-                  <Link href="/lineups" className="px-3 py-1.5 text-xs font-bold uppercase tracking-wider text-white/60 hover:text-primary hover:bg-white/5 rounded transition-colors relative">
+                  <Link href="/lineup-builder" className="px-3 py-1.5 text-xs font-bold uppercase tracking-wider text-white/60 hover:text-primary hover:bg-white/5 rounded transition-colors relative">
                     Lineup Builder
                     <NewFeatureBadge className="absolute -top-1 -right-1" />
                   </Link>
@@ -832,7 +832,7 @@ export default function Home() {
                 )}
               </div>
 
-              <Link href="/lineups" className="text-white/60 hover:text-white transition-colors flex items-center gap-2" onClick={() => setIsMenuOpen(false)}>
+              <Link href="/lineup-builder" className="text-white/60 hover:text-white transition-colors flex items-center gap-2" onClick={() => setIsMenuOpen(false)}>
                 Lineup Builder
                 <NewFeatureBadge />
               </Link>
