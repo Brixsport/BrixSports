@@ -269,7 +269,7 @@ export default function LineupBuilderPage() {
             <div className="max-w-[1400px] mx-auto space-y-6">
                 <div className="flex flex-wrap items-center justify-between gap-4">
                     <div className="flex items-center gap-2">
-                        <BackButton fallbackHref="/" />
+                        <BackButton fallbackHref="/" forceShow />
                         <div>
                             <h1 className="font-display text-4xl tracking-tighter italic uppercase leading-none mb-2">
                                 Lineup Builder

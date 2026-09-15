@@ -24,6 +24,7 @@ import {
 import { toast } from 'sonner';
 import MobileImageUpload from '@/components/ui/mobile-image-upload';
 import { FeatureGate } from '@/components/admin/FeatureGate';
+import { BackButton } from '@/components/ui/BackButton';
 
 // Payment tiers with allowed positions and sizes
 const PAYMENT_TIERS = {
@@ -293,9 +294,12 @@ function AdvertisementsAdminContent() {
           hatch. Stacks vertically below sm:, matches the header pattern
           already used elsewhere in this admin section. */}
       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-6">
-        <div>
-          <h1 className="text-2xl font-bold">Advertisements</h1>
-          <p className="text-muted-foreground">Manage banner ads across the platform</p>
+        <div className="flex items-center gap-2">
+          <BackButton fallbackHref="/admin" forceShow />
+          <div>
+            <h1 className="text-2xl font-bold">Advertisements</h1>
+            <p className="text-muted-foreground">Manage banner ads across the platform</p>
+          </div>
         </div>
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogTrigger asChild>

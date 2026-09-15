@@ -13125,6 +13125,22 @@ of the same large task:
 7. `tsc --noEmit` -- zero new errors vs. baseline. **PASS**, independently re-run and diffed here, not
    just taken from the subagents' self-reports.
 
+**Extension, 2026-09-15 -- `forceShow` now actually used, correcting the earlier "unused by any page"
+note above:** Richard explicitly asked to extend coverage to the 5 🔴 High Volatility admin surfaces
+(`CLAUDE.md`) plus browser-mode (not just standalone) visibility on the favourites page -- a deliberate,
+explicit exception to both this entry's original "browser-mode is case-by-case" default AND its own
+"admin coverage is effectively complete, 2 files not ~30" conclusion above. That conclusion still holds
+for the general admin case (`AdminSidebar` navigation); this is a narrower, separately-justified addition
+scoped only to the 5 named high-volatility pages, not a reopening of the broader admin sweep.
+- `forceShow` added: `src/app/admin/advertisements/page.tsx`, `src/app/lineup-builder/page.tsx`
+  (already had `BackButton`, just missing the prop), `src/app/admin/transfers/page.tsx`,
+  `src/app/admin/access/page.tsx`, `src/app/admin/news/page.tsx` (`fallbackHref="/admin"` on the 4 new
+  ones with no prior `BackButton`; `transfers`/`news` keep their existing "← Back to Admin"/"← Back"
+  text links alongside it rather than removing a working affordance).
+- `favourites`/`profile/favorites` -- see `BACKLOG-385` (route consolidation + `forceShow`, same pass).
+- **Not yet done:** live verification of any of the 5 new additions -- `tsc --noEmit` run, not yet
+  confirmed clean at time of writing (see this entry's own commit for the actual result).
+
 **Evidence:**
 - Commit: `ef58ca3` (component + no-fallback pages), `0912a46` (fallback/forceShow pages), pushed to
   `origin/feature/ui-redesign`; deployment confirmed `success` via the GitHub commit-status API,
@@ -13283,5 +13299,25 @@ larger, non-cramped `px-6 py-4 text-sm` pattern, not part of this problem.
 - `tsc --noEmit`: 30 errors both before and after, identical set, none in the touched file.
 - Pending: live click-through on the deployed preview against one of the 37 previously-affected matches (e.g. `npuga-bb-final`) — not yet run this pass.
 **Files:** `src/app/matches/[id]/MatchDetailClient.tsx`.
+
+---
+
+### BACKLOG-387 — Homepage Has No Cache: Every Remount Shows a Full Skeleton and Refetches, Even Seconds Later
+
+**Status:** SHIPPED — 2026-09-15, `tsc --noEmit` clean (18, pre-existing baseline, zero new). Pending live verification on the deployed preview.
+**Priority:** MEDIUM — UX/perceived-performance issue (Richard-approved fix, not a correctness bug).
+
+**Context:** peer session (`lineup-verify`) diagnosed this and proposed the fix; Richard approved it and asked this session to build it.
+
+**Root cause:** `src/app/page.tsx`'s matches fetch (`fetchAllMatches`) is plain component `useState`, no persistence layer at all — confirmed via a full repo grep, zero `sessionStorage`/cache module/SWR/React Query anywhere in this codebase. Every remount of `/` (tap into a match, tap back to Fixtures) re-ran the full `showLoadingState: true` path — full skeleton, full refetch — even when the page was visited seconds earlier and the data is still fresh by the app's own 15s poll cadence.
+
+**Fix:** module-level stale-while-revalidate cache (`matchesCache`, `MATCHES_CACHE_TTL_MS = 15000` — matches the existing poll interval exactly, not picked independently). Lives outside the component function, so it survives unmount/remount within the same client-side session (a full page reload still starts cold, unaffected). On mount: if a cache entry exists and is younger than 15s, render it immediately (`setLoading(false)`, no skeleton) and kick off a background revalidation fetch (`showLoadingState: false`); otherwise falls through to the original full-loading fetch. `fetchAllMatches` now writes to `matchesCache` on every successful fetch (including poll ticks), so the cache never goes stale relative to what's on screen.
+
+**Deliberately not done:** no new dependency (SWR/React Query) — the existing 15s poll already re-fetches indefinitely regardless of cache, so a real library's request-deduplication/revalidation-on-focus features would be solving a problem this page doesn't actually have; the module-level variable is the smaller, sufficient fix for the specific symptom reported.
+
+**Evidence:**
+- `tsc --noEmit`: 18 both before and after (this worktree's real tracked-code baseline — the earlier 30 count was gitignored `dev/*.ts` scripts from a deleted-and-recreated worktree, not tracked code), zero new errors, none in `page.tsx`.
+- Pending: live click-through on the deployed preview (load `/`, tap into a match, tap back within 15s, confirm no skeleton flash) — not yet run this pass.
+**Files:** `src/app/page.tsx`.
 
 ---

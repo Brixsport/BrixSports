@@ -16,6 +16,7 @@ import {
     CheckCircle2,
     XCircle
 } from 'lucide-react';
+import { BackButton } from '@/components/ui/BackButton';
 
 interface User {
     id: string;
@@ -148,13 +149,16 @@ function AccessControlPageContent() {
         <div className="p-6 lg:p-12">
             <div className="max-w-7xl mx-auto space-y-8">
                 {/* Header */}
-                <div>
-                    <h1 className="font-display text-4xl tracking-tight italic uppercase leading-none mb-2">
-                        Access Control
-                    </h1>
-                    <p className="text-white/40 text-xs font-bold uppercase tracking-widest">
-                        User roles & permissions management
-                    </p>
+                <div className="flex items-center gap-2">
+                    <BackButton fallbackHref="/admin" forceShow />
+                    <div>
+                        <h1 className="font-display text-4xl tracking-tight italic uppercase leading-none mb-2">
+                            Access Control
+                        </h1>
+                        <p className="text-white/40 text-xs font-bold uppercase tracking-widest">
+                            User roles & permissions management
+                        </p>
+                    </div>
                 </div>
 
                 {/* Stats */}

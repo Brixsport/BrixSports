@@ -23,6 +23,7 @@ import {
     Image as ImageIcon,
 } from 'lucide-react';
 import Link from 'next/link';
+import { BackButton } from '@/components/ui/BackButton';
 import { useToast } from '@/hooks/useToast';
 import { TeamLogo } from '@/lib/utils/team-logo';
 import { ToastContainer } from '@/components/admin/Toast';
@@ -269,6 +270,7 @@ function AdminTransfersPageContent() {
                 <div className="max-w-7xl mx-auto px-6 py-4">
                     <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                         <div className="flex items-center gap-4 min-w-0">
+                            <BackButton fallbackHref="/admin" forceShow />
                             <Link href="/admin" className="text-slate-400 hover:text-white transition-colors shrink-0">
                                 ← Back to Admin
                             </Link>
