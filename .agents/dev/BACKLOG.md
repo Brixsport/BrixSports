@@ -13321,3 +13321,21 @@ larger, non-cramped `px-6 py-4 text-sm` pattern, not part of this problem.
 **Files:** `src/app/page.tsx`.
 
 ---
+
+### BACKLOG-388 — BottomNav Only Reaches Fixtures/Competitions/Profile; Teams/Lineup Builder/News Have No Global Nav Entry
+
+**Status:** SHIPPED — 2026-09-15, `tsc --noEmit` clean (0 new errors, none in `BottomNav.tsx`). Pending live 375px overflow verification on the deployed preview.
+**Priority:** MEDIUM — UI-consistency/navigation-affordance work Richard explicitly asked for, not a bug.
+
+**Context:** peer session (`lineup-verify`) diagnosed this while scoping a "hamburger menu" request: no shared hamburger component exists anywhere — only two unrelated one-offs (the homepage's own mobile nav overlay, `page.tsx`'s `isMenuOpen` state, which does reach Teams/Lineup Builder/News but only from the homepage itself; and `/docs`' own page-local TOC sidebar, unrelated). `BottomNav.tsx`, the actual global nav present on every non-hidden route, only ever had 3 items. Richard's call: extend `BottomNav`, don't build a separate hamburger component.
+
+**Fix:** added 3 items to `BottomNav.tsx`'s `navItems` (Teams → `/teams`, Lineups → `/lineup-builder`, News → `/news`), between Competitions and Profile. Changed the row layout from `flex justify-around` + fixed `min-w-[70px]` per item to `grid grid-cols-6` with `min-w-0` — 6 items at the old fixed width need 420px, more than a 375px viewport has; equal-width grid columns instead. Shortened "Competitions"'s nav-specific label to "Comps" (10px text of the full word doesn't fit a ~60px column) and reduced label font 10px→9px with `truncate` as a safety net against any future long label. Icons: `Users` (Teams), `ListChecks` (Lineups), `Newspaper` (News) — all already-available `lucide-react` exports, no new dependency.
+
+**Deliberately not done:** no change to `lineup-builder`'s presence in `BottomNav`'s own `hiddenRoutes` list — it still hides the nav bar while you're actually on that page (consistent with `/admin`/`/logger`, a focused-tool pattern), it's just now reachable *from* other pages, which is the actual gap that was reported.
+
+**Evidence:**
+- `tsc --noEmit`: clean, zero errors in `BottomNav.tsx`.
+- Pending: live 375px `scrollWidth` vs `clientWidth` check on the deployed preview (this project's own established verification method for exactly this failure class, per `BACKLOG-370`/`371`) — not yet run this pass, doing so before considering this fully closed.
+**Files:** `src/components/BottomNav.tsx`.
+
+---
